@@ -65,3 +65,13 @@ export function supportHref(): string {
   const number = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ?? '').replace(/\D/g, '');
   return number ? `https://wa.me/${number}` : 'https://wa.me/';
 }
+
+/** O catálogo (sub-onda 2B) ainda não existe: "Cadastrar produtos" só aparece quando a rota existir. */
+export const CATALOG_READY = false;
+export const NEW_PRODUCT_PATH = '/lojista/produtos/novo';
+
+/** Documento do dono mascarado na revisão: só os 4 últimos caracteres (minimização). */
+export function maskedDocument(value: string | null): string {
+  if (!value) return '';
+  return `${'•'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+}

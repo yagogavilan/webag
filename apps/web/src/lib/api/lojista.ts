@@ -89,8 +89,6 @@ export interface CepResult {
   state: string;
   lat: number | null;
   lng: number | null;
-  /** `false` quando a cidade não está entre as regiões ativas (WB-051 C3). */
-  served: boolean;
 }
 
 export interface UploadPolicy {

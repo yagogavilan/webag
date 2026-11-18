@@ -36,6 +36,13 @@
       "when": 1795003094494,
       "tag": "0004_payments_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795003931237,
+      "tag": "0005_onda2_stores_catalog",
+      "breakpoints": true
     }
   ]
 }

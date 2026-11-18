@@ -25,6 +25,15 @@ export const ADMIN_PERMISSIONS = {
   'legal:write': [SUPER],
   'audit:read': [SUPER],
   'admins:manage': [SUPER],
+  // Lojas (RN-13, WB-103/104/218): operação e super decidem e veem documentos; financeiro e suporte só leem.
+  'stores:read': [SUPER, OPS, FIN, SUP],
+  'stores:write': [SUPER, OPS],
+  'stores:decide': [SUPER, OPS],
+  'stores:documents': [SUPER, OPS],
+  'products:read': [SUPER, OPS, FIN, SUP],
+  'products:moderate': [SUPER, OPS],
+  'moderation:read': [SUPER, OPS],
+  'moderation:write': [SUPER, OPS],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
 } as const satisfies Record<string, readonly AdminProfile[]>;
@@ -36,11 +45,13 @@ export function adminHasPermission(profile: AdminProfile, permission: AdminPermi
 }
 
 /** Permissões que o dono da loja pode marcar para funcionários (RN-13). */
-export const STAFF_ASSIGNABLE_PERMISSIONS = ['orders', 'catalog', 'exchanges', 'coupons', 'reviews'] as const;
+export const STAFF_ASSIGNABLE_PERMISSIONS = ['orders', 'catalog', 'exchanges', 'coupons', 'reviews', 'sales_values'] as const;
 /** Só o dono: financeiro, conta de recebimento, equipe e configurações (RN-13). */
 export const OWNER_ONLY_PERMISSIONS = ['finance', 'payment_account', 'team', 'settings'] as const;
 
+/** `member`: qualquer membro da loja (dono ou funcionário), para telas sem dado sensível. */
 export type StorePermissionName =
+  | 'member'
   | (typeof STAFF_ASSIGNABLE_PERMISSIONS)[number]
   | (typeof OWNER_ONLY_PERMISSIONS)[number];
 
@@ -48,7 +59,7 @@ export function memberHasStorePermission(
   member: { role: 'owner' | 'staff'; permissions: readonly string[] },
   permission: StorePermissionName,
 ): boolean {
-  if (member.role === 'owner') return true;
+  if (member.role === 'owner' || permission === 'member') return true;
   if ((OWNER_ONLY_PERMISSIONS as readonly string[]).includes(permission)) return false;
   return member.permissions.includes(permission);
 }

@@ -141,3 +141,53 @@ export function breakGlassOverrideEmail(targetEmail: string): Body {
   const line = `ATENÇÃO: o acesso da conta ${targetEmail} foi redefinido pelo procedimento de emergência no servidor MESMO existindo outro super admin ativo (--override-other-super-admins). Confirme se isso era esperado.`;
   return { subject: 'ALERTA: redefinição de emergência com override no painel Webag', text: `${line}\n\n${footer}`, html: html('Redefinição de emergência com override', [line]) };
 }
+
+/** SEC-048: aviso ao dono (e, resumido, aos super admins) quando a conta de recebimento muda ou é desconectada. */
+export function paymentAccountChangedEmail(storeName?: string, toAdmin = false): Body {
+  const line = toAdmin
+    ? `A conta de recebimento da loja ${storeName ?? ''} foi alterada ou desconectada. Confira se era esperado.`
+    : 'A conta de recebimento da sua loja foi alterada ou desconectada. Se não foi você, entre em contato com o suporte agora.';
+  return { subject: toAdmin ? 'Conta de recebimento de loja alterada' : 'Sua conta de recebimento no Webag mudou', text: `${line}\n\n${footer}`, html: html('Conta de recebimento alterada', [line]) };
+}
+
+export function paymentAccountUnderReviewEmail(): Body {
+  const line = 'O titular da conta conectada é diferente do cadastro da loja. Aguarde a análise ou conecte outra conta. A venda só começa depois da liberação.';
+  return { subject: 'Sua conta de recebimento está em análise', text: `${line}\n\n${footer}`, html: html('Conta em análise', [line]) };
+}
+
+/** Decisões sobre a loja (WB-103/104): aprovada, correção pedida, recusada, suspensa, reativada. */
+export function storeDecisionEmail(kind: 'approved' | 'correction' | 'rejected' | 'suspended' | 'reactivated', storeName: string, detail?: string): Body {
+  const titles = {
+    approved: 'Sua loja foi aprovada',
+    correction: 'Sua loja precisa de correções',
+    rejected: 'Sua loja não foi aprovada',
+    suspended: 'Sua loja foi suspensa',
+    reactivated: 'Sua loja foi reativada',
+  } as const;
+  const lines = {
+    approved: [`A loja ${storeName} foi aprovada. Ela aparece para os clientes quando tiver a conta de recebimento ativa e 1 produto ativo.`],
+    correction: [`Pedimos ajustes na loja ${storeName}. Veja os itens no painel, corrija só o que foi pedido e reenvie.`, ...(detail ? [detail] : [])],
+    rejected: [`A loja ${storeName} não foi aprovada.`, ...(detail ? [`Motivo: ${detail}`] : []), 'Para um novo cadastro, fale com o suporte.'],
+    suspended: [`A loja ${storeName} foi suspensa e não aparece para os clientes.`, ...(detail ? [`Motivo: ${detail}`] : []), 'Fale com o suporte para entender o próximo passo.'],
+    reactivated: [`A loja ${storeName} foi reativada.`],
+  } as const;
+  return { subject: titles[kind], text: `${lines[kind].join('\n')}\n\n${footer}`, html: html(titles[kind], [...lines[kind]]) };
+}
+
+export function productRemovedEmail(productName: string, reason: string, action: 'removed' | 'paused'): Body {
+  const line = `O produto "${productName}" foi ${action === 'removed' ? 'removido' : 'pausado'} pela moderação. Motivo: ${reason}. Para contestar, escreva ao suporte.`;
+  return { subject: `Produto ${action === 'removed' ? 'removido' : 'pausado'} pela moderação`, text: `${line}\n\n${footer}`, html: html('Moderação de produto', [line]) };
+}
+
+export function lowStockEmail(productName: string, variantLabel: string, available: number): Body {
+  const line = `Estoque baixo: ${productName}${variantLabel ? ` (${variantLabel})` : ''} tem ${available} unidade(s) disponível(is).`;
+  return { subject: 'Estoque baixo na sua loja', text: `${line}\n\n${footer}`, html: html('Estoque baixo', [line]) };
+}
+
+export function staffInviteEmail(link: string, storeName: string, days: number): Body {
+  return {
+    subject: `Convite para a equipe da loja ${storeName}`,
+    text: `Você foi convidado para a equipe da loja ${storeName}. Crie sua senha: ${link}\nO link vale por ${days} dias e só pode ser usado uma vez.\n\n${footer}`,
+    html: html('Convite para a equipe', [`Você foi convidado para a equipe da loja ${storeName}: <a href="${link}">criar minha senha</a>.`, `O link vale por ${days} dias e só pode ser usado uma vez.`]),
+  };
+}

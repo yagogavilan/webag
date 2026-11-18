@@ -566,6 +566,11 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   // -------------------------------------------------------------------------- admin
 
+  /** Alerta de conciliação/risco para o painel do financeiro (também usado pelo módulo de lojas, SEC-047/048). */
+  async raiseAlert(attemptId: string | null, kind: string, details: Record<string, unknown>): Promise<void> {
+    await this.alert(attemptId, kind, details);
+  }
+
   private async alert(attemptId: string | null, kind: string, details: Record<string, unknown>): Promise<void> {
     // Não duplica o mesmo alerta aberto da mesma tentativa e tipo.
     const [open] = await this.db

@@ -35,6 +35,6 @@ import { TotpService } from './totp.service.js';
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [SessionService, PasswordService],
+  exports: [SessionService, PasswordService, PrincipalService],
 })
 export class IdentityModule {}

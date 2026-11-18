@@ -6,6 +6,8 @@ export const DEV_AUTH_HMAC_KEY = 'dev-only-insecure-hmac-key-0123456789abcdef-ch
 export const DEV_FAKE_WEBHOOK_SECRET = 'dev-only-fake-webhook-secret';
 export const DEV_CODE_HMAC_KEY = 'dev-only-insecure-code-hmac-key-0123456789abcdef-change-me';
 export const DEV_RECOVERY_HMAC_KEY = 'dev-only-insecure-recovery-hmac-key-0123456789abcdef-change-me';
+/** 32 bytes em base64 (só desenvolvimento): cifra dos tokens OAuth do provedor (SEC-046). */
+export const DEV_PAYMENT_TOKEN_ENC_KEY = Buffer.alloc(32, 9).toString('base64');
 export const DEV_MFA_ENC_KEY = 'dev-only-insecure-mfa-key-0123456789abcdef-change-me';
 
 const csv = z
@@ -63,6 +65,8 @@ export const envSchema = z
     REFRESH_ABSOLUTE_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(90),
     /** Janela em que o reuso do refresh devolve o mesmo par (retry em 3G, SEC-011). */
     REFRESH_REUSE_WINDOW_SECONDS: z.coerce.number().int().min(0).max(120).default(30),
+    /** URL pública da API (base do `redirect_uri` do OAuth de pagamentos; vem de configuração, SEC-045). */
+    API_PUBLIC_URL: z.url().default('http://localhost:3000'),
     /** Prefixo de links enviados por e-mail (convite de admin, etc.). */
     ADMIN_WEB_URL: z.url().default('http://localhost:3001'),
 
@@ -78,7 +82,21 @@ export const envSchema = z
     FAKE_PAYMENT_WEBHOOK_SECRET: z.string().min(16).default(DEV_FAKE_WEBHOOK_SECRET),
     MP_ACCESS_TOKEN: z.string().optional(),
     MP_WEBHOOK_SECRET: z.string().optional(),
-    PAYMENT_TOKEN_ENC_KEY: z.string().optional(),
+    PAYMENT_TOKEN_ENC_KEY: z.string().default(DEV_PAYMENT_TOKEN_ENC_KEY),
+
+    // --- Armazenamento S3 (ADR-005): RustFS no dev, R2/S3 em produção. `memory` só para testes. ---
+    STORAGE_DRIVER: z.enum(['s3', 'memory']).default('s3'),
+    S3_ENDPOINT: z.string().default('http://localhost:9000'),
+    S3_REGION: z.string().default('us-east-1'),
+    S3_ACCESS_KEY: z.string().default('webag-dev'),
+    S3_SECRET_KEY: z.string().default('webag-dev-secret-only'),
+    S3_BUCKET_PUBLIC: z.string().default('webag-public'),
+    S3_BUCKET_PRIVATE: z.string().default('webag-private'),
+    S3_PUBLIC_URL: z.string().default('http://localhost:9000/webag-public'),
+    S3_FORCE_PATH_STYLE: optionalBool,
+
+    // --- Geocodificação de CEP (ADR-008) ---
+    GEOCODING_PROVIDER: z.enum(['fake', 'http']).default('fake'),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== 'production') return;
@@ -118,9 +136,13 @@ export const envSchema = z
       if (!env.MP_ACCESS_TOKEN) fail('MP_ACCESS_TOKEN', 'obrigatório com Mercado Pago ativo');
       if (env.MP_ACCESS_TOKEN?.startsWith('TEST-'))
         fail('MP_ACCESS_TOKEN', 'credencial de teste não é aceita em produção');
-      if (!env.PAYMENT_TOKEN_ENC_KEY || Buffer.from(env.PAYMENT_TOKEN_ENC_KEY, 'base64').length !== 32)
-        fail('PAYMENT_TOKEN_ENC_KEY', 'obrigatória em produção: 32 bytes em base64');
     }
+    if (env.PAYMENT_TOKEN_ENC_KEY === DEV_PAYMENT_TOKEN_ENC_KEY || Buffer.from(env.PAYMENT_TOKEN_ENC_KEY, 'base64').length !== 32)
+      fail('PAYMENT_TOKEN_ENC_KEY', 'obrigatória em produção, diferente da de desenvolvimento: 32 bytes em base64');
+    if (env.STORAGE_DRIVER === 'memory') fail('STORAGE_DRIVER', 'o armazenamento em memória não sobe em produção');
+    if (env.S3_ACCESS_KEY === 'webag-dev' || env.S3_SECRET_KEY === 'webag-dev-secret-only')
+      fail('S3_SECRET_KEY', 'credencial de desenvolvimento não é aceita em produção');
+    if (env.GEOCODING_PROVIDER === 'fake') fail('GEOCODING_PROVIDER', 'o geocodificador fake não sobe em produção');
   });
 
 export type Env = z.infer<typeof envSchema>;

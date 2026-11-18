@@ -3,3 +3,6 @@ export * from '../../modules/identity/db/schema.js';
 export * from '../../modules/users/db/schema.js';
 export * from '../../modules/admin/db/schema.js';
 export * from '../../modules/payments/db/schema.js';
+export * from '../../modules/media/db/schema.js';
+export * from '../../modules/stores/db/schema.js';
+export * from '../../modules/catalog/db/schema.js';

@@ -45,6 +45,9 @@ describe('validateEnv', () => {
       MP_ACCESS_TOKEN: 'APP_USR-123',
       MP_WEBHOOK_SECRET: 'segredo-do-webhook-123456',
       PAYMENT_TOKEN_ENC_KEY: Buffer.alloc(32, 7).toString('base64'),
+      S3_ACCESS_KEY: 'prod-access',
+      S3_SECRET_KEY: 'prod-secret-long',
+      GEOCODING_PROVIDER: 'http',
     };
 
     it('aceita uma configuração de produção completa', () => {

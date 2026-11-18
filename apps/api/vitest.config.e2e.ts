@@ -19,6 +19,7 @@ export default defineConfig({
       DATABASE_URL: TEST_ENV.databaseUrl,
       REDIS_URL: TEST_ENV.redisUrl,
       TRUST_PROXY: '1',
+      STORAGE_DRIVER: 'memory',
       // Mais rápido nos testes que exercitam o fluxo de retry de rede; o comportamento é o mesmo.
       REFRESH_REUSE_WINDOW_SECONDS: '30',
     },
