@@ -5356,3 +5356,285 @@ export const GetSearchSuggestionsResponse = zod.object({
   "name": zod.string()
 }))
 })
+
+
+/**
+ * Loja visível (aprovada, conta de recebimento ativa, 1+ produto ativo); qualquer outra, inexistente ou id inválido responde 404. Loja fechada é visível e navegável (DEC-022): `open=false` com `opensAt` (próxima abertura, nulo se pausada sem prazo) e `hoursToday`. Com `lat`/`lng` (juntas), `delivery` traz a entrega para aquela posição pela mesma conta do checkout (`available=false` = 'Não entrega no seu endereço'; `pickup.offered` diz se vale mostrar 'Retirar na loja': loja com retirada a até `retirada_distancia_max_km`); sem elas, `delivery.available` e `feeCents` vêm nulos. `supplier` traz a identificação do fornecedor com documento mascarado. Nota 'Novo' (`rating.isNew`) abaixo de 3 avaliações.
+ * @summary Página pública da loja (WB-016)
+ */
+export const GetBrowseStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getBrowseStoreQueryLatMin = -90;
+export const getBrowseStoreQueryLatMax = 90;
+
+export const getBrowseStoreQueryLngMin = -180;
+export const getBrowseStoreQueryLngMax = 180;
+
+
+
+export const GetBrowseStoreQueryParams = zod.object({
+  "lat": zod.number().min(getBrowseStoreQueryLatMin).max(getBrowseStoreQueryLatMax).optional(),
+  "lng": zod.number().min(getBrowseStoreQueryLngMin).max(getBrowseStoreQueryLngMax).optional()
+})
+
+export const GetBrowseStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "cover": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "mainCategoryId": zod.uuid().nullable(),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "hoursToday": zod.array(zod.object({
+  "start": zod.string(),
+  "end": zod.string()
+})),
+  "delivery": zod.object({
+  "available": zod.boolean().nullable().describe('Nulo sem posição'),
+  "distanceM": zod.int().nullable(),
+  "feeCents": zod.int().nullable(),
+  "freeShipping": zod.boolean(),
+  "freeAboveCents": zod.int(),
+  "minOrderCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "acceptsDelivery": zod.boolean()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "offered": zod.boolean(),
+  "address": zod.string().nullable(),
+  "instructions": zod.string().nullable(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int().describe('0 = não aceita troca voluntária; arrependimento (7 dias) e defeito são piso legal fixo'),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int()
+}),
+  "supplier": zod.object({
+  "name": zod.string(),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "documentMasked": zod.string(),
+  "address": zod.object({
+  "street": zod.string().nullish(),
+  "number": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish()
+})
+}),
+  "sections": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}))
+})
+
+
+/**
+ * Disponíveis primeiro, na ordem das seções da loja e dos produtos; sem estoque ao final com `available=false` ('Indisponível'). Só produto ativo e não pausado/removido pela moderação. Filtro por seção; paginação por cursor.
+ * @summary Vitrine da loja (WB-016 C2)
+ */
+export const ListBrowseStoreProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listBrowseStoreProductsQueryCursorMax = 200;
+
+export const listBrowseStoreProductsQueryLimitDefault = 20;
+export const listBrowseStoreProductsQueryLimitMax = 50;
+
+
+
+export const ListBrowseStoreProductsQueryParams = zod.object({
+  "sectionId": zod.uuid().optional(),
+  "cursor": zod.string().max(listBrowseStoreProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listBrowseStoreProductsQueryLimitMax).default(listBrowseStoreProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListBrowseStoreProductsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "sectionId": zod.uuid().nullable(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "discountPercent": zod.int().nullable(),
+  "available": zod.boolean()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Só leitura: mais recentes primeiro, 10 por página (`limit` até 50), só publicadas. `summary.average` nula antes de 3 avaliações ('Novo'); os comentários existentes aparecem. Nome do autor reduzido ('Maria S.').
+ * @summary Avaliações da loja (WB-018)
+ */
+export const ListBrowseStoreReviewsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listBrowseStoreReviewsQueryCursorMax = 200;
+
+export const listBrowseStoreReviewsQueryLimitDefault = 10;
+export const listBrowseStoreReviewsQueryLimitMax = 50;
+
+
+
+export const ListBrowseStoreReviewsQueryParams = zod.object({
+  "cursor": zod.string().max(listBrowseStoreReviewsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listBrowseStoreReviewsQueryLimitMax).default(listBrowseStoreReviewsQueryLimitDefault)
+})
+
+export const listBrowseStoreReviewsResponseDataItemRatingMax = 5;
+
+
+
+export const ListBrowseStoreReviewsResponse = zod.object({
+  "summary": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "rating": zod.int().min(1).max(listBrowseStoreReviewsResponseDataItemRatingMax),
+  "comment": zod.string().nullable(),
+  "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
+  "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "storeReply": zod.string().nullable(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Variações com estoque próprio: `available=false` não é selecionável; `lastUnits` (1 a 3) mostra 'Últimas X unidades'; `maxQuantity` é o teto da quantidade (disponível limitado por `item_qtd_max`). O estoque exato nunca sai. Preço vigente por variação (promoção do produto herdada por percentual). Produto pausado ou removido pela moderação responde 200 com `available=false`, `unavailableReason` (`PAUSED`, `MODERATED`) e só `store` (atalho para a loja); rascunho, arquivado, inexistente ou de loja invisível responde 404.
+ * @summary Página pública do produto (WB-017)
+ */
+export const GetBrowseProductParams = zod.object({
+  "productId": zod.uuid()
+})
+
+export const GetBrowseProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "categoryId": zod.uuid().nullish(),
+  "available": zod.boolean(),
+  "unavailableReason": zod.union([zod.literal('PAUSED'),zod.literal('MODERATED'),zod.literal('SOLD_OUT'),zod.literal(null)]).nullish(),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).optional(),
+  "discountPercent": zod.int().nullish(),
+  "variantAttributes": zod.array(zod.string()).optional(),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "discountPercent": zod.int().nullable(),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int().describe('Teto da quantidade desta variação'),
+  "lastUnits": zod.int().nullable().describe('1 a 3 quando restam poucas (\'Últimas X unidades\')')
+})).optional(),
+  "images": zod.array(zod.object({
+  "id": zod.uuid(),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.url())
+})).optional(),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}).optional(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "hoursToday": zod.array(zod.object({
+  "start": zod.string().optional(),
+  "end": zod.string().optional()
+}))
+})
+})
+
+
+/**
+ * Igual às da loja, para o produto.
+ * @summary Avaliações do produto (WB-018)
+ */
+export const ListBrowseProductReviewsParams = zod.object({
+  "productId": zod.uuid()
+})
+
+export const listBrowseProductReviewsQueryCursorMax = 200;
+
+export const listBrowseProductReviewsQueryLimitDefault = 10;
+export const listBrowseProductReviewsQueryLimitMax = 50;
+
+
+
+export const ListBrowseProductReviewsQueryParams = zod.object({
+  "cursor": zod.string().max(listBrowseProductReviewsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listBrowseProductReviewsQueryLimitMax).default(listBrowseProductReviewsQueryLimitDefault)
+})
+
+export const listBrowseProductReviewsResponseDataItemRatingMax = 5;
+
+
+
+export const ListBrowseProductReviewsResponse = zod.object({
+  "summary": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "rating": zod.int().min(1).max(listBrowseProductReviewsResponseDataItemRatingMax),
+  "comment": zod.string().nullable(),
+  "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
+  "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "storeReply": zod.string().nullable(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})

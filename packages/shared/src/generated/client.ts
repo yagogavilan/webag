@@ -2570,6 +2570,231 @@ export interface SearchSuggestions {
 }
 
 /**
+ * Largura em pixels para a URL WebP; vazio se sem imagem
+ */
+export type ImageUrlsUrls = {[key: string]: string};
+
+export interface ImageUrls {
+  /** Largura em pixels para a URL WebP; vazio se sem imagem */
+  urls: ImageUrlsUrls;
+}
+
+export type BrowseStoreHoursTodayItem = {
+  start: string;
+  end: string;
+};
+
+export type BrowseStoreDelivery = {
+  /**
+     * Nulo sem posição
+     * @nullable
+     */
+  available: boolean | null;
+  /** @nullable */
+  distanceM: number | null;
+  /** @nullable */
+  feeCents: number | null;
+  freeShipping: boolean;
+  freeAboveCents: number;
+  minOrderCents: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  acceptsDelivery: boolean;
+};
+
+export type BrowseStorePickup = {
+  enabled: boolean;
+  offered: boolean;
+  /** @nullable */
+  address: string | null;
+  /** @nullable */
+  instructions: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+};
+
+export type BrowseStoreExchangePolicy = {
+  /** 0 = não aceita troca voluntária; arrependimento (7 dias) e defeito são piso legal fixo */
+  voluntaryDays: number;
+  collectionFeeCents: number;
+  version: number;
+};
+
+export type BrowseStoreSupplierDocumentType = typeof BrowseStoreSupplierDocumentType[keyof typeof BrowseStoreSupplierDocumentType];
+
+
+export const BrowseStoreSupplierDocumentType = {
+  cpf: 'cpf',
+  cnpj: 'cnpj',
+} as const;
+
+export type BrowseStoreSupplierAddress = {
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  number?: string | null;
+  /** @nullable */
+  neighborhood?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+};
+
+export type BrowseStoreSupplier = {
+  name: string;
+  documentType: BrowseStoreSupplierDocumentType;
+  documentMasked: string;
+  address: BrowseStoreSupplierAddress;
+};
+
+export type BrowseStoreSectionsItem = {
+  id: string;
+  name: string;
+};
+
+export interface BrowseStore {
+  id: string;
+  name: string;
+  /** @nullable */
+  description: string | null;
+  logo: ImageUrls;
+  cover: ImageUrls;
+  /** @nullable */
+  mainCategoryId: string | null;
+  rating: Rating;
+  open: boolean;
+  /** @nullable */
+  opensAt: string | null;
+  hoursToday: BrowseStoreHoursTodayItem[];
+  delivery: BrowseStoreDelivery;
+  pickup: BrowseStorePickup;
+  exchangePolicy: BrowseStoreExchangePolicy;
+  supplier: BrowseStoreSupplier;
+  sections: BrowseStoreSectionsItem[];
+}
+
+export interface BrowseProductItem {
+  id: string;
+  name: string;
+  /** @nullable */
+  sectionId: string | null;
+  image: ImageUrls;
+  price: Money;
+  originalPrice: Money | null;
+  /** @nullable */
+  discountPercent: number | null;
+  available: boolean;
+}
+
+export interface BrowseProductPage {
+  data: BrowseProductItem[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type BrowseVariantAttributes = {[key: string]: string};
+
+export interface BrowseVariant {
+  id: string;
+  attributes: BrowseVariantAttributes;
+  price: Money;
+  originalPrice: Money | null;
+  /** @nullable */
+  discountPercent: number | null;
+  available: boolean;
+  /** Teto da quantidade desta variação */
+  maxQuantity: number;
+  /**
+     * 1 a 3 quando restam poucas ('Últimas X unidades')
+     * @nullable
+     */
+  lastUnits: number | null;
+}
+
+export type BrowseStoreSummaryHoursTodayItem = {
+  start?: string;
+  end?: string;
+};
+
+export interface BrowseStoreSummary {
+  id: string;
+  name: string;
+  open: boolean;
+  /** @nullable */
+  opensAt: string | null;
+  hoursToday: BrowseStoreSummaryHoursTodayItem[];
+}
+
+/**
+ * @nullable
+ */
+export type BrowseProductUnavailableReason = typeof BrowseProductUnavailableReason[keyof typeof BrowseProductUnavailableReason] | null;
+
+
+export const BrowseProductUnavailableReason = {
+  PAUSED: 'PAUSED',
+  MODERATED: 'MODERATED',
+  SOLD_OUT: 'SOLD_OUT',
+} as const;
+
+export type BrowseProductImagesItemUrls = {[key: string]: string};
+
+export type BrowseProductImagesItem = {
+  id: string;
+  position: number;
+  urls: BrowseProductImagesItemUrls;
+};
+
+export interface BrowseProduct {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  categoryId?: string | null;
+  available: boolean;
+  /** @nullable */
+  unavailableReason?: BrowseProductUnavailableReason;
+  price?: Money;
+  originalPrice?: Money | null;
+  /** @nullable */
+  discountPercent?: number | null;
+  variantAttributes?: string[];
+  variants?: BrowseVariant[];
+  images?: BrowseProductImagesItem[];
+  rating?: Rating;
+  store: BrowseStoreSummary;
+}
+
+export interface Review {
+  id: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  /** @nullable */
+  comment: string | null;
+  /** Primeiro nome e inicial do último ('Maria S.') */
+  reviewer: string;
+  /** 'Compra verificada' */
+  verifiedPurchase: boolean;
+  createdAt: string;
+  /** @nullable */
+  storeReply: string | null;
+  /** @nullable */
+  storeRepliedAt: string | null;
+}
+
+export interface ReviewPage {
+  summary: Rating;
+  data: Review[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+/**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
 export type ValidationErrorResponse = Problem;
@@ -3026,6 +3251,60 @@ export type GetSearchSuggestionsParams = {
   lng: LngParameter;
   /** @maxLength 80 */
   q: string;
+};
+
+export type GetBrowseStoreParams = {
+  /**
+   * @minimum -90
+   * @maximum 90
+   */
+  lat?: number;
+  /**
+   * @minimum -180
+   * @maximum 180
+   */
+  lng?: number;
+};
+
+export type ListBrowseStoreProductsParams = {
+  sectionId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListBrowseStoreReviewsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
+};
+
+export type ListBrowseProductReviewsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -11571,6 +11850,307 @@ export const getGetSearchSuggestionsUrl = (params: GetSearchSuggestionsParams,) 
 export const getSearchSuggestions = async (params: GetSearchSuggestionsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getSearchSuggestionsResponse> => {
 
   return apiFetch<getSearchSuggestionsResponse>(getGetSearchSuggestionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getBrowseStoreResponse200 = {
+  data: BrowseStore
+  status: 200
+}
+
+export type getBrowseStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getBrowseStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getBrowseStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getBrowseStoreResponseSuccess = (getBrowseStoreResponse200) & {
+  headers: Headers;
+};
+export type getBrowseStoreResponseError = (getBrowseStoreResponse400 | getBrowseStoreResponse404 | getBrowseStoreResponse429) & {
+  headers: Headers;
+};
+
+export type getBrowseStoreResponse = (getBrowseStoreResponseSuccess | getBrowseStoreResponseError)
+
+export const getGetBrowseStoreUrl = (storeId: string,
+    params?: GetBrowseStoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/browse/stores/${storeId}?${stringifiedParams}` : `/v1/browse/stores/${storeId}`
+}
+
+/**
+ * Loja visível (aprovada, conta de recebimento ativa, 1+ produto ativo); qualquer outra, inexistente ou id inválido responde 404. Loja fechada é visível e navegável (DEC-022): `open=false` com `opensAt` (próxima abertura, nulo se pausada sem prazo) e `hoursToday`. Com `lat`/`lng` (juntas), `delivery` traz a entrega para aquela posição pela mesma conta do checkout (`available=false` = 'Não entrega no seu endereço'; `pickup.offered` diz se vale mostrar 'Retirar na loja': loja com retirada a até `retirada_distancia_max_km`); sem elas, `delivery.available` e `feeCents` vêm nulos. `supplier` traz a identificação do fornecedor com documento mascarado. Nota 'Novo' (`rating.isNew`) abaixo de 3 avaliações.
+ * @summary Página pública da loja (WB-016)
+ */
+export const getBrowseStore = async (storeId: string,
+    params?: GetBrowseStoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<getBrowseStoreResponse> => {
+
+  return apiFetch<getBrowseStoreResponse>(getGetBrowseStoreUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listBrowseStoreProductsResponse200 = {
+  data: BrowseProductPage
+  status: 200
+}
+
+export type listBrowseStoreProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listBrowseStoreProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listBrowseStoreProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listBrowseStoreProductsResponseSuccess = (listBrowseStoreProductsResponse200) & {
+  headers: Headers;
+};
+export type listBrowseStoreProductsResponseError = (listBrowseStoreProductsResponse400 | listBrowseStoreProductsResponse404 | listBrowseStoreProductsResponse429) & {
+  headers: Headers;
+};
+
+export type listBrowseStoreProductsResponse = (listBrowseStoreProductsResponseSuccess | listBrowseStoreProductsResponseError)
+
+export const getListBrowseStoreProductsUrl = (storeId: string,
+    params?: ListBrowseStoreProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/browse/stores/${storeId}/products?${stringifiedParams}` : `/v1/browse/stores/${storeId}/products`
+}
+
+/**
+ * Disponíveis primeiro, na ordem das seções da loja e dos produtos; sem estoque ao final com `available=false` ('Indisponível'). Só produto ativo e não pausado/removido pela moderação. Filtro por seção; paginação por cursor.
+ * @summary Vitrine da loja (WB-016 C2)
+ */
+export const listBrowseStoreProducts = async (storeId: string,
+    params?: ListBrowseStoreProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listBrowseStoreProductsResponse> => {
+
+  return apiFetch<listBrowseStoreProductsResponse>(getListBrowseStoreProductsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listBrowseStoreReviewsResponse200 = {
+  data: ReviewPage
+  status: 200
+}
+
+export type listBrowseStoreReviewsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listBrowseStoreReviewsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listBrowseStoreReviewsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listBrowseStoreReviewsResponseSuccess = (listBrowseStoreReviewsResponse200) & {
+  headers: Headers;
+};
+export type listBrowseStoreReviewsResponseError = (listBrowseStoreReviewsResponse400 | listBrowseStoreReviewsResponse404 | listBrowseStoreReviewsResponse429) & {
+  headers: Headers;
+};
+
+export type listBrowseStoreReviewsResponse = (listBrowseStoreReviewsResponseSuccess | listBrowseStoreReviewsResponseError)
+
+export const getListBrowseStoreReviewsUrl = (storeId: string,
+    params?: ListBrowseStoreReviewsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/browse/stores/${storeId}/reviews?${stringifiedParams}` : `/v1/browse/stores/${storeId}/reviews`
+}
+
+/**
+ * Só leitura: mais recentes primeiro, 10 por página (`limit` até 50), só publicadas. `summary.average` nula antes de 3 avaliações ('Novo'); os comentários existentes aparecem. Nome do autor reduzido ('Maria S.').
+ * @summary Avaliações da loja (WB-018)
+ */
+export const listBrowseStoreReviews = async (storeId: string,
+    params?: ListBrowseStoreReviewsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listBrowseStoreReviewsResponse> => {
+
+  return apiFetch<listBrowseStoreReviewsResponse>(getListBrowseStoreReviewsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getBrowseProductResponse200 = {
+  data: BrowseProduct
+  status: 200
+}
+
+export type getBrowseProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getBrowseProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getBrowseProductResponseSuccess = (getBrowseProductResponse200) & {
+  headers: Headers;
+};
+export type getBrowseProductResponseError = (getBrowseProductResponse404 | getBrowseProductResponse429) & {
+  headers: Headers;
+};
+
+export type getBrowseProductResponse = (getBrowseProductResponseSuccess | getBrowseProductResponseError)
+
+export const getGetBrowseProductUrl = (productId: string,) => {
+
+
+
+
+  return `/v1/browse/products/${productId}`
+}
+
+/**
+ * Variações com estoque próprio: `available=false` não é selecionável; `lastUnits` (1 a 3) mostra 'Últimas X unidades'; `maxQuantity` é o teto da quantidade (disponível limitado por `item_qtd_max`). O estoque exato nunca sai. Preço vigente por variação (promoção do produto herdada por percentual). Produto pausado ou removido pela moderação responde 200 com `available=false`, `unavailableReason` (`PAUSED`, `MODERATED`) e só `store` (atalho para a loja); rascunho, arquivado, inexistente ou de loja invisível responde 404.
+ * @summary Página pública do produto (WB-017)
+ */
+export const getBrowseProduct = async (productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getBrowseProductResponse> => {
+
+  return apiFetch<getBrowseProductResponse>(getGetBrowseProductUrl(productId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listBrowseProductReviewsResponse200 = {
+  data: ReviewPage
+  status: 200
+}
+
+export type listBrowseProductReviewsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listBrowseProductReviewsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listBrowseProductReviewsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listBrowseProductReviewsResponseSuccess = (listBrowseProductReviewsResponse200) & {
+  headers: Headers;
+};
+export type listBrowseProductReviewsResponseError = (listBrowseProductReviewsResponse400 | listBrowseProductReviewsResponse404 | listBrowseProductReviewsResponse429) & {
+  headers: Headers;
+};
+
+export type listBrowseProductReviewsResponse = (listBrowseProductReviewsResponseSuccess | listBrowseProductReviewsResponseError)
+
+export const getListBrowseProductReviewsUrl = (productId: string,
+    params?: ListBrowseProductReviewsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/browse/products/${productId}/reviews?${stringifiedParams}` : `/v1/browse/products/${productId}/reviews`
+}
+
+/**
+ * Igual às da loja, para o produto.
+ * @summary Avaliações do produto (WB-018)
+ */
+export const listBrowseProductReviews = async (productId: string,
+    params?: ListBrowseProductReviewsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listBrowseProductReviewsResponse> => {
+
+  return apiFetch<listBrowseProductReviewsResponse>(getListBrowseProductReviewsUrl(productId,params),
   {
     ...options,
     method: 'GET'

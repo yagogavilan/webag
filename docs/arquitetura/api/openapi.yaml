@@ -52,6 +52,8 @@ tags:
     description: Banners e seções da home do app do cliente (descoberta)
   - name: search
     description: Busca pública de produtos e lojas por posição, com filtros e ordenação
+  - name: browse
+    description: Loja e produto públicos para o cliente (vitrine, variações, avaliações lidas)
 security:
   - bearerAuth: []
 paths:
@@ -3925,6 +3927,118 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/browse/stores/{storeId}:
+    get:
+      tags: [browse]
+      operationId: getBrowseStore
+      summary: Página pública da loja (WB-016)
+      description: "Loja visível (aprovada, conta de recebimento ativa, 1+ produto ativo); qualquer outra, inexistente ou id inválido responde 404. Loja fechada é visível e navegável (DEC-022): `open=false` com `opensAt` (próxima abertura, nulo se pausada sem prazo) e `hoursToday`. Com `lat`/`lng` (juntas), `delivery` traz a entrega para aquela posição pela mesma conta do checkout (`available=false` = 'Não entrega no seu endereço'; `pickup.offered` diz se vale mostrar 'Retirar na loja': loja com retirada a até `retirada_distancia_max_km`); sem elas, `delivery.available` e `feeCents` vêm nulos. `supplier` traz a identificação do fornecedor com documento mascarado. Nota 'Novo' (`rating.isNew`) abaixo de 3 avaliações."
+      security: []
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: lat, in: query, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: lng, in: query, schema: { type: number, minimum: -180, maximum: 180 } }
+      responses:
+        '200':
+          description: Loja
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BrowseStore' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/browse/stores/{storeId}/products:
+    get:
+      tags: [browse]
+      operationId: listBrowseStoreProducts
+      summary: Vitrine da loja (WB-016 C2)
+      description: "Disponíveis primeiro, na ordem das seções da loja e dos produtos; sem estoque ao final com `available=false` ('Indisponível'). Só produto ativo e não pausado/removido pela moderação. Filtro por seção; paginação por cursor."
+      security: []
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: sectionId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Produtos da loja
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BrowseProductPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/browse/stores/{storeId}/reviews:
+    get:
+      tags: [browse]
+      operationId: listBrowseStoreReviews
+      summary: Avaliações da loja (WB-018)
+      description: "Só leitura: mais recentes primeiro, 10 por página (`limit` até 50), só publicadas. `summary.average` nula antes de 3 avaliações ('Novo'); os comentários existentes aparecem. Nome do autor reduzido ('Maria S.')."
+      security: []
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200':
+          description: Avaliações
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/browse/products/{productId}:
+    get:
+      tags: [browse]
+      operationId: getBrowseProduct
+      summary: Página pública do produto (WB-017)
+      description: "Variações com estoque próprio: `available=false` não é selecionável; `lastUnits` (1 a 3) mostra 'Últimas X unidades'; `maxQuantity` é o teto da quantidade (disponível limitado por `item_qtd_max`). O estoque exato nunca sai. Preço vigente por variação (promoção do produto herdada por percentual). Produto pausado ou removido pela moderação responde 200 com `available=false`, `unavailableReason` (`PAUSED`, `MODERATED`) e só `store` (atalho para a loja); rascunho, arquivado, inexistente ou de loja invisível responde 404."
+      security: []
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BrowseProduct' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/browse/products/{productId}/reviews:
+    get:
+      tags: [browse]
+      operationId: listBrowseProductReviews
+      summary: Avaliações do produto (WB-018)
+      description: "Igual às da loja, para o produto."
+      security: []
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200':
+          description: Avaliações
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -6473,3 +6587,172 @@ components:
         products: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }
         stores: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }
         categories: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }
+    ImageUrls:
+      type: object
+      required: [urls]
+      properties:
+        urls: { type: object, additionalProperties: { type: string, format: uri }, description: 'Largura em pixels para a URL WebP; vazio se sem imagem' }
+    BrowseStore:
+      type: object
+      required: [id, name, description, logo, cover, mainCategoryId, rating, open, opensAt, hoursToday, delivery, pickup, exchangePolicy, supplier, sections]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        logo: { $ref: '#/components/schemas/ImageUrls' }
+        cover: { $ref: '#/components/schemas/ImageUrls' }
+        mainCategoryId: { type: [string, 'null'], format: uuid }
+        rating: { $ref: '#/components/schemas/Rating' }
+        open: { type: boolean }
+        opensAt: { type: [string, 'null'], format: date-time }
+        hoursToday:
+          type: array
+          items:
+            type: object
+            required: [start, end]
+            properties:
+              start: { type: string, example: '08:00' }
+              end: { type: string, example: '18:00' }
+        delivery:
+          type: object
+          required: [available, distanceM, feeCents, freeShipping, freeAboveCents, minOrderCents, etaMinMinutes, etaMaxMinutes, acceptsDelivery]
+          properties:
+            available: { type: [boolean, 'null'], description: 'Nulo sem posição' }
+            distanceM: { type: [integer, 'null'] }
+            feeCents: { type: [integer, 'null'] }
+            freeShipping: { type: boolean }
+            freeAboveCents: { type: integer }
+            minOrderCents: { type: integer }
+            etaMinMinutes: { type: integer }
+            etaMaxMinutes: { type: integer }
+            acceptsDelivery: { type: boolean }
+        pickup:
+          type: object
+          required: [enabled, offered, address, instructions, prepMinMinutes, prepMaxMinutes]
+          properties:
+            enabled: { type: boolean }
+            offered: { type: boolean }
+            address: { type: [string, 'null'] }
+            instructions: { type: [string, 'null'] }
+            prepMinMinutes: { type: integer }
+            prepMaxMinutes: { type: integer }
+        exchangePolicy:
+          type: object
+          required: [voluntaryDays, collectionFeeCents, version]
+          properties:
+            voluntaryDays: { type: integer, description: '0 = não aceita troca voluntária; arrependimento (7 dias) e defeito são piso legal fixo' }
+            collectionFeeCents: { type: integer }
+            version: { type: integer }
+        supplier:
+          type: object
+          required: [name, documentType, documentMasked, address]
+          properties:
+            name: { type: string }
+            documentType: { type: string, enum: [cpf, cnpj] }
+            documentMasked: { type: string }
+            address:
+              type: object
+              properties:
+                street: { type: [string, 'null'] }
+                number: { type: [string, 'null'] }
+                neighborhood: { type: [string, 'null'] }
+                city: { type: [string, 'null'] }
+                state: { type: [string, 'null'] }
+        sections:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+    BrowseProductItem:
+      type: object
+      required: [id, name, sectionId, image, price, originalPrice, discountPercent, available]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        sectionId: { type: [string, 'null'], format: uuid }
+        image: { $ref: '#/components/schemas/ImageUrls' }
+        price: { $ref: '#/components/schemas/Money' }
+        originalPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        discountPercent: { type: [integer, 'null'] }
+        available: { type: boolean }
+    BrowseProductPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/BrowseProductItem' } }
+        nextCursor: { type: [string, 'null'] }
+    BrowseVariant:
+      type: object
+      required: [id, attributes, price, originalPrice, discountPercent, available, maxQuantity, lastUnits]
+      properties:
+        id: { type: string, format: uuid }
+        attributes: { type: object, additionalProperties: { type: string }, example: { Tamanho: M } }
+        price: { $ref: '#/components/schemas/Money' }
+        originalPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        discountPercent: { type: [integer, 'null'] }
+        available: { type: boolean }
+        maxQuantity: { type: integer, description: Teto da quantidade desta variação }
+        lastUnits: { type: [integer, 'null'], description: "1 a 3 quando restam poucas ('Últimas X unidades')" }
+    BrowseStoreSummary:
+      type: object
+      required: [id, name, open, opensAt, hoursToday]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        open: { type: boolean }
+        opensAt: { type: [string, 'null'], format: date-time }
+        hoursToday:
+          type: array
+          items:
+            type: object
+            properties:
+              start: { type: string }
+              end: { type: string }
+    BrowseProduct:
+      type: object
+      required: [id, name, available, store]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        categoryId: { type: [string, 'null'], format: uuid }
+        available: { type: boolean }
+        unavailableReason: { type: [string, 'null'], enum: [PAUSED, MODERATED, SOLD_OUT, null] }
+        price: { $ref: '#/components/schemas/Money' }
+        originalPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        discountPercent: { type: [integer, 'null'] }
+        variantAttributes: { type: array, items: { type: string } }
+        variants: { type: array, items: { $ref: '#/components/schemas/BrowseVariant' } }
+        images:
+          type: array
+          items:
+            type: object
+            required: [id, position, urls]
+            properties:
+              id: { type: string, format: uuid }
+              position: { type: integer }
+              urls: { type: object, additionalProperties: { type: string, format: uri } }
+        rating: { $ref: '#/components/schemas/Rating' }
+        store: { $ref: '#/components/schemas/BrowseStoreSummary' }
+    Review:
+      type: object
+      required: [id, rating, comment, reviewer, verifiedPurchase, createdAt, storeReply, storeRepliedAt]
+      properties:
+        id: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: [string, 'null'] }
+        reviewer: { type: string, description: "Primeiro nome e inicial do último ('Maria S.')" }
+        verifiedPurchase: { type: boolean, description: "'Compra verificada'" }
+        createdAt: { type: string, format: date-time }
+        storeReply: { type: [string, 'null'] }
+        storeRepliedAt: { type: [string, 'null'], format: date-time }
+    ReviewPage:
+      type: object
+      required: [summary, data, nextCursor]
+      properties:
+        summary: { $ref: '#/components/schemas/Rating' }
+        data: { type: array, items: { $ref: '#/components/schemas/Review' } }
+        nextCursor: { type: [string, 'null'] }
