@@ -17,6 +17,7 @@ import { sessionStore, useSession } from '../src/api/session';
 import { addressStore, useAddresses } from '../src/features/address/store';
 import { syncAddresses } from '../src/features/address/sync';
 import { ToastProvider, useToast } from '../src/components/Toast';
+import { registerCartCleanup, useMergeGuestCart } from '../src/features/cart/hooks';
 import { cartActions, cartStore } from '../src/features/cart/store';
 import { modeStore } from '../src/features/catalog/queries';
 import { registerFavoritesCleanup } from '../src/features/favorites/hooks';
@@ -32,6 +33,7 @@ const FONT_TIMEOUT_MS = 2_000;
 
 const queryClient = createQueryClient();
 registerFavoritesCleanup(queryClient);
+registerCartCleanup(queryClient);
 
 /** Sacola parada há 7 dias é esvaziada ao abrir o app, com aviso único (onda-4 S1 Vazio). */
 function CartExpiredNotice({ expired }: { expired: boolean }) {
@@ -39,6 +41,13 @@ function CartExpiredNotice({ expired }: { expired: boolean }) {
   useEffect(() => {
     if (expired) toast.show(t('cart.expired'));
   }, [expired, toast]);
+  return null;
+}
+
+/** Entrou na conta: a sacola de visitante vai para o servidor; se a da conta é de outra loja, ela fica e o usuário é avisado. */
+function CartMerge() {
+  const toast = useToast();
+  useMergeGuestCart(toast.show);
   return null;
 }
 
@@ -93,6 +102,7 @@ export default function RootLayout() {
         <ToastProvider>
           <StatusBar style="dark" />
           <CartExpiredNotice expired={cartExpired} />
+          <CartMerge />
           <Stack
             screenOptions={{
               headerShown: false,

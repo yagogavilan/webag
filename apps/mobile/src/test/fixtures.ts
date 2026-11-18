@@ -113,3 +113,37 @@ export async function seedAddress(precision: 'approx' | 'full' = 'full'): Promis
     longitude: -46.74,
   });
 }
+
+const money = (amount: number) => ({ amount, currency: 'BRL' as const });
+
+/** Item da sacola do servidor (`GET /v1/cart`). */
+export const serverCartItem = (over: Record<string, unknown> = {}) => ({
+  id: 'ci1',
+  variantId: 'v40',
+  productId: 'p1',
+  name: 'Tênis Corrida Veloz',
+  attributes: { Tamanho: '40' },
+  image: { urls: {} },
+  quantity: 2,
+  unitPrice: money(8990),
+  originalUnitPrice: null,
+  lineTotal: money(17980),
+  available: true,
+  maxQuantity: 5,
+  warnings: [],
+  ...over,
+});
+
+/** Sacola do servidor (resumo coerente com os itens: o app não calcula, só mostra). */
+export const serverCart = (over: Record<string, unknown> = {}) => ({
+  id: 'cart1',
+  revision: 3,
+  store: { id: 's1', name: 'Casa Bela', logo: { urls: {} }, open: true, opensAt: null, etaMinMinutes: 30, etaMaxMinutes: 45, minOrder: money(2000) },
+  items: [serverCartItem()],
+  coupon: null,
+  delivery: { mode: 'delivery', addressId: null, available: true, distanceM: 1200, feeFromCents: 500, estimated: false },
+  summary: { subtotal: money(17980), delivery: money(500), deliveryEstimated: false, freeShipping: false, serviceFee: money(200), discount: money(0), total: money(18680), minimumTotalApplied: false, platformDiscountCapped: false, missingForMinimum: null },
+  checkout: { canCheckout: true, blockers: [], opensAt: null },
+  notices: [],
+  ...over,
+});

@@ -167,7 +167,7 @@ describe('Início (D5)', () => {
   });
 
   it('a sacola mostra o contador de itens e descreve no rótulo', async () => {
-    await cartActions.add('s1', 'Casa Bela', { productId: 'p1', variantId: null, name: 'Tênis', variantLabel: null, urls: {}, unitPriceCents: 8990, originalPriceCents: null, quantity: 2, maxQuantity: 5 });
+    await cartActions.add('s1', 'Casa Bela', { productId: 'p1', variantId: 'v-local', name: 'Tênis', variantLabel: null, urls: {}, unitPriceCents: 8990, originalPriceCents: null, quantity: 2, maxQuantity: 5 });
     await renderScreen(<CustomerHome />);
     expect(await screen.findByLabelText('Abrir sacola, 2 itens')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('home.cart'));

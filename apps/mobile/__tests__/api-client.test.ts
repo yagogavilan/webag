@@ -169,6 +169,22 @@ describe('login do cliente (1 passo)', () => {
     expect(sessionStore.getState().status).toBe('anonymous');
   });
 
+  it('SEC-121: admin sem TOTP (mfaSetupRequired) não fica com sessão: logout no servidor e credencial errada', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        json(200, {
+          user: { id: 'a1', email: 'admin@webag.test', emailVerified: true, name: 'Admin' },
+          tokens: { accessToken: 'acc', refreshToken: 'ref-'.padEnd(40, 'z'), expiresIn: 900, tokenType: 'Bearer' },
+          mfaSetupRequired: true,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(signIn({ email: 'admin@webag.test', password: 'qualquer123' })).rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
+    expect(String(callOf(1)[0])).toContain('/v1/auth/logout');
+    expect(sessionStore.getState().status).toBe('anonymous');
+    expect(store.get('webag.session.v1')).toBeUndefined();
+  });
+
   it('entra e guarda a sessão no SecureStore', async () => {
     fetchMock.mockResolvedValueOnce(
       json(200, {

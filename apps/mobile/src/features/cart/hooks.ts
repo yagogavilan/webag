@@ -23,6 +23,10 @@ export interface CartHook {
   /** Primeira carga da sacola da conta. */
   isLoading: boolean;
   isError: boolean;
+  /** Já havia sacola na tela e a conferência com o servidor falhou: segue editável, com aviso. */
+  checkFailed: boolean;
+  /** Conferindo de novo com o servidor (preço e estoque). */
+  isChecking: boolean;
   refetch: () => void;
   authed: boolean;
 }
@@ -35,9 +39,9 @@ export function useCartView(): CartHook {
   const local = useLocalCart();
   const query = useQuery({ queryKey: cartKey(params), queryFn: ({ signal }) => fetchCart(params, signal), enabled: authed, staleTime: 15_000 });
   if (authed) {
-    return { view: query.data ? fromServer(query.data) : null, isLoading: query.isLoading, isError: query.isError && !query.data, refetch: () => void query.refetch(), authed };
+    return { view: query.data ? fromServer(query.data) : null, isLoading: query.isLoading, isError: query.isError && !query.data, checkFailed: query.isError && Boolean(query.data), isChecking: query.isFetching && Boolean(query.data), refetch: () => void query.refetch(), authed };
   }
-  return { view: fromLocal(local), isLoading: false, isError: false, refetch: () => undefined, authed };
+  return { view: fromLocal(local), isLoading: false, isError: false, checkFailed: false, isChecking: false, refetch: () => undefined, authed };
 }
 
 export function useCartCount(): number {
@@ -72,8 +76,7 @@ export function useCartActions() {
 
   const currentQuantity = useCallback(
     async (variantId: string): Promise<number> => {
-      let cached = client.getQueryData<Cart>(key);
-      cached ??= await client.fetchQuery({ queryKey: key, queryFn: () => fetchCart(params), staleTime: 5_000 });
+      const cached = client.getQueryData<Cart>(key) ?? (await client.fetchQuery<Cart>({ queryKey: key, queryFn: () => fetchCart(params), staleTime: 5_000 }));
       return cached.items.find((i) => i.variantId === variantId)?.quantity ?? 0;
     },
     [client, key, params],

@@ -81,7 +81,7 @@ describe('Produto (D9)', () => {
   });
 
   it('item de outra loja pede confirmação: "Manter minha sacola" não muda nada', async () => {
-    await cartActions.add('s2', 'Outra Loja', { productId: 'x', variantId: null, name: 'Camiseta', variantLabel: null, urls: {}, unitPriceCents: 3000, originalPriceCents: null, quantity: 3, maxQuantity: 10 });
+    await cartActions.add('s2', 'Outra Loja', { productId: 'x', variantId: 'v-local', name: 'Camiseta', variantLabel: null, urls: {}, unitPriceCents: 3000, originalPriceCents: null, quantity: 3, maxQuantity: 10 });
     await renderScreen(<ProductScreen />);
     await fireEvent.press(await screen.findByTestId('product.variant-Tamanho-40'));
     await fireEvent.press(screen.getByTestId('product.add'));
@@ -93,7 +93,7 @@ describe('Produto (D9)', () => {
   });
 
   it('"Esvaziar e continuar" troca a sacola para a loja nova', async () => {
-    await cartActions.add('s2', 'Outra Loja', { productId: 'x', variantId: null, name: 'Camiseta', variantLabel: null, urls: {}, unitPriceCents: 3000, originalPriceCents: null, quantity: 1, maxQuantity: 10 });
+    await cartActions.add('s2', 'Outra Loja', { productId: 'x', variantId: 'v-local', name: 'Camiseta', variantLabel: null, urls: {}, unitPriceCents: 3000, originalPriceCents: null, quantity: 1, maxQuantity: 10 });
     await renderScreen(<ProductScreen />);
     await fireEvent.press(await screen.findByTestId('product.variant-Tamanho-40'));
     await fireEvent.press(screen.getByTestId('product.add'));

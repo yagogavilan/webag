@@ -100,6 +100,12 @@ export async function signIn(input: SignInInput): Promise<void> {
     throw new ApiError({ kind: 'problem', status: 401, code: 'INVALID_CREDENTIALS' });
   }
   await sessionStore.setSession(toStored(result.user, result.tokens));
+  // SEC-121: admin sem TOTP (`mfaSetupRequired`) não pode ficar com sessão no app do cliente: revoga no servidor, apaga daqui
+  // e responde como credencial errada.
+  if (result.mfaSetupRequired) {
+    await signOut();
+    throw new ApiError({ kind: 'problem', status: 401, code: 'INVALID_CREDENTIALS' });
+  }
 }
 
 export async function signOut(): Promise<void> {

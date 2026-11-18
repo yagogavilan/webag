@@ -83,7 +83,7 @@ describe('Loja (D8)', () => {
   });
 
   it('barra "Ver sacola" só aparece com itens desta loja', async () => {
-    await cartActions.add('s1', 'Casa Bela', { productId: 'a', variantId: null, name: 'A', variantLabel: null, urls: {}, unitPriceCents: 4500, originalPriceCents: null, quantity: 2, maxQuantity: 9 });
+    await cartActions.add('s1', 'Casa Bela', { productId: 'a', variantId: 'v-local', name: 'A', variantLabel: null, urls: {}, unitPriceCents: 4500, originalPriceCents: null, quantity: 2, maxQuantity: 9 });
     await renderScreen(<StoreScreen />);
     expect(await screen.findByRole('button', { name: 'Ver sacola, 2 itens, total R$ 90,00' })).toBeOnTheScreen();
   });
