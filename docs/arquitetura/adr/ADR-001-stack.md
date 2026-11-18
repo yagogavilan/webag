@@ -29,7 +29,10 @@ Brief §6 fixa a direção (monorepo pnpm + Turborepo, Expo, Next.js, NestJS, Po
 | Estilo mobile | **StyleSheet + tema tipado gerado dos tokens** | Zero plugin de build; melhor em Android de 2–3 GB | Menos açúcar sintático |
 | | NativeWind 4.2 (Tailwind 3) / 5.0 RC | Mesma linguagem do web | v4 preso ao Tailwind 3; v5 ainda RC [V] |
 | | Unistyles 3.8 | Rápido, temas | Dependência nativa a mais |
-| Estilo web | **Tailwind CSS 4 com variáveis CSS geradas dos tokens** | Produtivo para painéis | — |
+| Estilo web | **Tailwind CSS 4 com variáveis CSS geradas dos tokens** | Produtivo para painéis | Mapeamento `@theme` → `--wb-*` a fazer pelo mobile-dev (esqueleto usa só as variáveis) |
+| | CSS Modules + variáveis `--wb-*` puras | Zero dependência | Mais CSS manual em telas densas (tabelas, filtros) |
+| Painéis web | **Um app `apps/web` com áreas `/lojista` e `/admin`** (DEC-005) | Um deploy, um design system web, uma sessão | Bundle de uma área não pode vazar dados da outra: guarda por área + autorização na API |
+| | Dois apps (`apps/admin` + `apps/merchant`) | Isolamento total | Dobra build, deploy e configuração; rejeitado pelo fundador (DEC-005) |
 
 ## Decisão
 | Camada | Escolha (versão fixada) |
@@ -49,6 +52,15 @@ Brief §6 fixa a direção (monorepo pnpm + Turborepo, Expo, Next.js, NestJS, Po
 | Testes | Vitest 4 (api, web, shared), jest-expo + RNTL 14 (mobile), Testcontainers, Playwright, Maestro, k6 (ADR-006) |
 | Observabilidade | pino (JSON, `requestId`), Sentry plugável por DSN (`@sentry/nestjs`, `@sentry/nextjs`, `@sentry/react-native`) |
 | Infra | Docker Compose no dev; imagens de produção por app; GitHub Actions |
+
+### Estrutura do monorepo (DEC-005)
+| Pasta | Conteúdo | Observação |
+|---|---|---|
+| `apps/api` | NestJS (REST `/v1`, `/health`, `/docs`, WebSocket) | Módulos em ADR-007 |
+| `apps/web` | Next.js com **duas áreas separadas no mesmo app**: `/lojista/*` (painel da loja) e `/admin/*` (plataforma) | Substitui o `apps/admin` do `CLAUDE.md` §3. Cada área tem layout, navegação e guarda de acesso próprios (papel `merchant` + vínculo com a loja; papel `admin` + perfil). A autorização real é sempre na API (ADR-003); a guarda do web só evita renderizar a área errada. Hospeda também a página do Card Payment Brick (ADR-002) |
+| `apps/mobile` | Expo Router, **só o app do cliente** (lojista e admin são web, DEC-005) | Grupos `(auth)` e `(customer)` |
+| `packages/shared` | Tipos, Zod e cliente gerados do OpenAPI (Orval) | Fonte: `docs/arquitetura/api/openapi.yaml` |
+| `packages/tokens` | Design tokens (dono: product-designer) | Web: CSS vars `--wb-*`; mobile: `@webag/tokens/native` |
 
 Regra: **uma única versão de React no monorepo** (a fixada pelo Expo SDK, 19.3.0); Next.js se alinha a ela.
 
