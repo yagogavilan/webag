@@ -19,6 +19,7 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly transporter: Transporter;
   private readonly from: string;
+  private readonly inflight = new Set<Promise<void>>();
   protected retryDelaysMs = [1_000, 4_000, 15_000, 60_000, 300_000];
 
   constructor(config: ConfigService<Env, true>) {
@@ -34,7 +35,13 @@ export class MailService {
 
   /** Dispara sem esperar (resposta da API não depende do SMTP, SEC-003 tempo igual). Nunca lança. */
   enqueue(message: MailMessage): void {
-    void this.sendWithRetry(message, 0);
+    const sending = this.sendWithRetry(message, 0).finally(() => this.inflight.delete(sending));
+    this.inflight.add(sending);
+  }
+
+  /** Espera os envios em andamento (a CLI termina o processo logo depois; sem isto os e-mails se perdem). */
+  async flush(timeoutMs = 15_000): Promise<void> {
+    await Promise.race([Promise.allSettled([...this.inflight]), new Promise((resolve) => setTimeout(resolve, timeoutMs).unref())]);
   }
 
   /** Envio direto, com um erro propagado. Útil em jobs e testes. */

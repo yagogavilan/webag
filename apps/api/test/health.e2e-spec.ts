@@ -88,6 +88,15 @@ describe('GET /health/ready com dependências fora do ar', () => {
       error: { database: { status: 'down' }, redis: { status: 'down' } },
     });
   });
+
+  it('não expõe host, porta, usuário nem a mensagem do driver (endpoint público)', async () => {
+    const response = await request(app.getHttpServer()).get('/health/ready').expect(503);
+    const text = JSON.stringify(response.body);
+
+    expect(text).not.toMatch(/127\.0\.0\.1|ECONNREFUSED|nobody|localhost|:1\b|timeout/i);
+    expect(response.body.error.database.message).toBe('indisponível');
+    expect(response.body.error.redis.message).toBe('indisponível');
+  });
 });
 
 // Precisa de PostgreSQL e Redis reais (docker compose up -d postgres redis, ou services do CI).

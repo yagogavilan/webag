@@ -28,10 +28,11 @@ Stack e versões: `docs/arquitetura/adr/ADR-001-stack.md`.
 
 ```bash
 pnpm install
-cp infra/env.example .env          # Windows PowerShell: Copy-Item infra/env.example .env
-docker compose up -d postgres redis
+pnpm run setup                     # .env a partir de infra/env.example, docker compose (Postgres, Redis, Mailpit, storage), migrações e seed
 pnpm dev                           # API, web e Metro em paralelo
 ```
+
+Use `pnpm run setup` (ou `pnpm bootstrap`): o `pnpm setup` sem `run` é um comando embutido do próprio pnpm e não faz isto. O script é idempotente e nunca sobrescreve um `.env` existente. Sem Docker: `SKIP_DOCKER=1 pnpm run setup` com Postgres 16+ (PostGIS) e Redis próprios. Manualmente: `cp infra/env.example .env` (Windows PowerShell: `Copy-Item infra/env.example .env`) e `docker compose up -d postgres redis`.
 
 - API: http://localhost:3000/health e contrato em http://localhost:3000/docs
 - Painéis: http://localhost:3001/lojista e http://localhost:3001/admin

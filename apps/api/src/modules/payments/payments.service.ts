@@ -67,7 +67,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   /** Fila durável no Postgres: processa eventos vencidos e concilia pendentes (SEC-042). Desligado em teste. */
   onApplicationBootstrap(): void {
-    if (process.env.NODE_ENV === 'test') return;
+    if (process.env.NODE_ENV === 'test' || process.env.WEBAG_CLI === '1') return;
     this.timers.push(setInterval(() => void this.processDue().catch((e: Error) => this.logger.error(e.message)), 15_000).unref());
     this.timers.push(setInterval(() => void this.reconcile().catch((e: Error) => this.logger.error(e.message)), 5 * 60_000).unref());
   }

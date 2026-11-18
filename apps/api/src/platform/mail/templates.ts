@@ -135,3 +135,9 @@ export function accessResetNoticeEmail(targetEmail: string, origin: 'super_admin
     : `O acesso da conta ${targetEmail} ao painel foi redefinido ${how}. Se isso não era esperado, investigue.`;
   return { subject: 'Acesso ao painel Webag redefinido', text: `${line}\n\n${footer}`, html: html('Acesso redefinido', [line]) };
 }
+
+/** SEC-094: alerta extra quando o break-glass ignora a existência de outro super admin. */
+export function breakGlassOverrideEmail(targetEmail: string): Body {
+  const line = `ATENÇÃO: o acesso da conta ${targetEmail} foi redefinido pelo procedimento de emergência no servidor MESMO existindo outro super admin ativo (--override-other-super-admins). Confirme se isso era esperado.`;
+  return { subject: 'ALERTA: redefinição de emergência com override no painel Webag', text: `${line}\n\n${footer}`, html: html('Redefinição de emergência com override', [line]) };
+}

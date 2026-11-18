@@ -2,7 +2,13 @@ packages:
   - apps/*
   - packages/*
 
-# pnpm 10 bloqueia scripts de instalação por padrão; liberar só o necessário.
+auditConfig:
+  ignoreCves:
+    - CVE-2026-112366
+
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+
 onlyBuiltDependencies:
   - '@nestjs/core'
   - '@swc/core'
@@ -10,7 +16,3 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
-
-# Telemetria do swagger-ui-dist; não precisa rodar.
-ignoredBuiltDependencies:
-  - '@scarf/scarf'

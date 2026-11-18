@@ -9,6 +9,7 @@ import { AdminUsersController, AdminTotpController } from './admin-users.control
 import { AdminUsersService } from './admin-users.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
+import { BreakGlassService } from './break-glass.service.js';
 import { AuthService } from './auth.service.js';
 import { CodeService } from './code.service.js';
 import { PasswordService } from './password.service.js';
@@ -23,6 +24,7 @@ import { TotpService } from './totp.service.js';
   providers: [
     AuthService,
     AdminUsersService,
+    BreakGlassService,
     CodeService,
     PasswordService,
     PrincipalService,

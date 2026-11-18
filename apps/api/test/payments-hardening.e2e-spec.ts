@@ -41,7 +41,7 @@ describe('Pagamentos: endurecimento (review I2-I6)', () => {
     const pid = (await row(pix.id)).providerPaymentId!;
     await fake.simulate(pid, { outcome: 'approved' });
     const n = fake.signedNotification(pid, 'payment.updated');
-    const db = ctx.app.get(DRIZZLE) as unknown as { insert: (...a: unknown[]) => unknown };
+    const db = ctx.app.get<{ insert: (...a: unknown[]) => unknown }>(DRIZZLE);
     const original = db.insert.bind(db);
     let failed = false;
     vi.spyOn(db, 'insert').mockImplementation(((table: unknown) => {
@@ -171,7 +171,7 @@ describe('Pagamentos: endurecimento (review I2-I6)', () => {
   });
 
   it('I5: só uma instância concilia por vez (advisory lock)', async () => {
-    const db = ctx.app.get(DRIZZLE) as unknown as { transaction: (fn: (tx: { execute: (q: unknown) => Promise<unknown> }) => Promise<unknown>) => Promise<unknown> };
+    const db = ctx.app.get<{ transaction: (fn: (tx: { execute: (q: unknown) => Promise<unknown> }) => Promise<unknown>) => Promise<unknown> }>(DRIZZLE);
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
     const holder = db.transaction(async (tx) => {

@@ -91,9 +91,9 @@ paths:
                 info:
                   redis: { status: up }
                 error:
-                  database: { status: down, message: connect ECONNREFUSED }
+                  database: { status: down, message: indisponível }
                 details:
-                  database: { status: down, message: connect ECONNREFUSED }
+                  database: { status: down, message: indisponível }
                   redis: { status: up }
   /v1/auth/register:
     post:

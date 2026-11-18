@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
@@ -19,8 +19,15 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'erro desconhecido';
+/**
+ * `/health/ready` é público (o orquestrador o consulta): nunca devolve a mensagem do driver, que traz host, porta e
+ * usuário do banco/Redis (ex.: `connect ECONNREFUSED 10.0.0.5:5432`). O motivo real vai para o log do servidor.
+ */
+const PUBLIC_DOWN_MESSAGE = 'indisponível';
+const logger = new Logger('Health');
+function failure(key: string, error: unknown): { message: string } {
+  logger.warn(`${key} indisponível: ${error instanceof Error ? error.message : 'erro desconhecido'}`);
+  return { message: PUBLIC_DOWN_MESSAGE };
 }
 
 @Injectable()
@@ -36,7 +43,7 @@ export class DatabaseHealthIndicator {
       await withTimeout(this.pool.query('SELECT 1'), CHECK_TIMEOUT_MS);
       return session.up();
     } catch (error) {
-      return session.down({ message: errorMessage(error) });
+      return session.down(failure(key, error));
     }
   }
 }
@@ -57,7 +64,7 @@ export class RedisHealthIndicator {
       await withTimeout(this.redis.ping(), CHECK_TIMEOUT_MS);
       return session.up();
     } catch (error) {
-      return session.down({ message: errorMessage(error) });
+      return session.down(failure(key, error));
     }
   }
 }
