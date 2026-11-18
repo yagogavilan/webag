@@ -8,3 +8,7 @@
 4. [x] N1: auditar estorno concluído pela conciliação (antes da Onda 4A).
 5. [ ] I9 / DT-021 (retenção de dados): antes do G4.
 6. [ ] DT-028 a DT-034 conforme o plano.
+
+## Acrescentado pelo CEO após o QA da Onda 2 (DEC-031)
+7. [ ] BUG-009 (Média, bloqueia G4): WB-225, limite de exposição de loja nova (R$ 500, 30 dias ou 20 pedidos, parâmetros em RN-02) com lógica no pedido/pagamento e API para a tela do admin/lojista. Entra na Onda 4A.
+8. [ ] BUG-010 / I8: teto de concorrência no processamento de imagens (sharp).
