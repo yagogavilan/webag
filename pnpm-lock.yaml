@@ -60,7 +60,7 @@ importers:
         specifier: 5.11.1
         version: 5.11.1
       mercadopago:
-        specifier: ^3.6.2
+        specifier: 3.6.2
         version: 3.6.2
       nestjs-pino:
         specifier: 5.3.2
