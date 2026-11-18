@@ -1,6 +1,6 @@
 # Plano de Execução — Webag 1.0
 
-Dono: project-manager | Data: 2026-11-18 | Escopo: 134 histórias (DEC-013, sem corte para M1)
+Dono: project-manager | Data: 2026-11-18 (revisado após a Onda 1 e a Onda 2 parcial) | Escopo: 134 histórias (DEC-013, sem corte para M1)
 Fontes: `docs/produto/backlog.md` (ondas e dependências), `docs/00-visao/brief.md`, `docs/decisoes.md`. Status vivo: `board.md`.
 
 ## 1. Premissas e regras de operação
@@ -12,6 +12,7 @@ Fontes: `docs/produto/backlog.md` (ondas e dependências), `docs/00-visao/brief.
 | O container pode reiniciar a qualquer momento | Onda pequena (4 a 8 histórias), commit + push a cada marco (ver §2); o `board.md` é o ponto de retomada |
 | Sem prazos em semanas | O plano mede progresso por ondas e critérios de saída, não por calendário. Estimativa em pontos é dos devs na DoR |
 | Sem aparelho real e rede bloqueada para docs externas | Mobile validado em Expo Web/emulação e testes automatizados; fontes externas marcadas `[HIPÓTESE]`; validação em aparelho vira pendência para G4/G5 |
+| Limites de uso de 5 h (R-04, materializado: 3 ocorrências em 2026-11-18) | Tarefas de 1 a 3 histórias (marco pequeno), commit e push a cada marco, tarefa em curso termina antes de parar, retomada pela primeira tarefa não Aceita do board |
 | Backlog tem 109 Must | Não corto (DEC-013). A ordem das ondas já põe o que é lei, dinheiro e loja de apps antes do acabamento. Se os limites de uso acabarem, cai primeiro o que está no §5 do backlog |
 
 ### Protocolo anti-reinício (vale para todo agente)
@@ -46,7 +47,7 @@ Legenda de paralelismo: BE = backend-dev, MB = mobile-dev (web e app), DS = prod
 
 Pré-requisito de toda onda: threat model feito para histórias marcadas TM (SEC, `docs/seguranca/`), spec de tela do DS e contrato OpenAPI do BE (DoR). Para manter o fluxo, **DS e SEC trabalham uma onda à frente** dos devs.
 
-### Onda 0 — Fundação técnica (ATUAL)
+### Onda 0 — Fundação técnica (CONCLUÍDA)
 | Item | Detalhe |
 |---|---|
 | Paralelo | BE + MB (esqueleto web/mobile) + DS (specs das ondas 1 e 2) |
@@ -55,7 +56,7 @@ Pré-requisito de toda onda: threat model feito para histórias marcadas TM (SEC
 | Critério de saída | CI verde no `main`; ADRs pendentes (stack, auth, storage, e-mail) aceitos pelo TL; threat model de auth (SEC) e de pagamento disponíveis |
 | Revisão | TL (PR de fundação) |
 
-### Onda 1 — Identidade, configuração e base de dinheiro (backlog onda 0)
+### Onda 1 — Identidade, configuração e base de dinheiro (backlog onda 0) (CONCLUÍDA com ressalvas, DEC-029; ressalvas no board)
 Sub-onda 1A (admin e configuração): WB-100, 123, 101, 119, 120, 118, 106, 117. BE + MB(web admin) + DS(specs 1B/2A).
 Sub-onda 1B (contas, consentimento, pagamento base): WB-194, 210, 211, 006, 007, 008, 009, 050, 150, 155, 153. BE + MB(mobile cadastro/login + web lojista cadastro) + SEC(revisão auth).
 | Item | Detalhe |
@@ -65,7 +66,7 @@ Sub-onda 1B (contas, consentimento, pagamento base): WB-194, 210, 211, 006, 007,
 | Critério de saída | Testes de auth, RBAC e auditoria verdes; SEC aprova auth (sem Crítico/Alto aberto); ADR-155 aceito |
 | Revisão | TL ao fim de 1A e 1B; SEC em 1B; QA smoke |
 
-### Onda 2 — Oferta: lojista, aprovação e catálogo (backlog onda 1)
+### Onda 2 — Oferta: lojista, aprovação e catálogo (backlog onda 1) (EM ANDAMENTO: API e web de 2A, API de 2B, web de configuração e seed entregues; falta web do catálogo e revisões)
 Sub-onda 2A (onboarding e aprovação): WB-051, 052, 218, 053, 103, 054, 104, 075. BE + MB(web lojista e admin) + SEC(upload e documentos).
 Sub-onda 2B (loja e catálogo): WB-055, 056, 057, 058, 059, 060, 061, 062, 064, 107, 063. BE + MB(web lojista) + DS(specs onda 3).
 | Entregável | Lojista cadastra loja e documentos, admin aprova; lojista configura horários, raio, taxa, retirada, política de troca e publica produto com fotos, variações, estoque e promoção; moderação funciona |
@@ -74,7 +75,7 @@ Sub-onda 2B (loja e catálogo): WB-055, 056, 057, 058, 059, 060, 061, 062, 064, 
 
 ### Onda 3 — Descoberta do cliente (backlog onda 2)
 Sub-onda 3A (local e navegação): WB-035, 001, 002, 005, 003, 115, 011, 032. BE + MB(mobile; web admin para 115) + SEC(localização/CEP).
-Sub-onda 3B (loja, produto, busca, carrinho): WB-016, 017, 012, 013, 014, 020, 021, 018, 015, 004, 019, 036. BE + MB(mobile) + QA.
+Sub-onda 3B (loja, produto, busca, sacola): WB-016, 017, 012, 013, 014, 020, 021, 022, 018, 015, 004, 019, 036. BE + MB(mobile) + QA. A sacola (WB-020/021/022) está na 3B por DEC-022 (WB-022 saiu da 5A); depende do contrato de carrinho (A-02). Também na 3A: `/v1/me/addresses` (DEC-028 c) e as ressalvas SEC-121/122/123/126. Tarefas em `board.md`.
 | Entregável | No app: escolhe cidade/bairro, navega sem login, vê home, loja, produto, busca com filtros e monta carrinho de uma loja só com aviso de troca |
 | Critério de saída | Estados (skeleton, vazio, erro, offline) em todas as telas; busca geográfica por raio correta (PostGIS) com teste; Maestro/emulação do fluxo "explorar até carrinho" |
 | Revisão | TL; QA contra critérios de aceite; DS revisa fidelidade visual |
@@ -89,7 +90,7 @@ Sub-onda 4C (acompanhamento e alertas): WB-027, 191, 192, 028, 029, 030, 070, 07
 | Revisão | TL em cada sub-onda; SEC em 4A e 4B; QA regressão total das ondas 1 a 4 |
 
 ### Onda 5 — Pós-venda, dinheiro do lojista e gestão (backlog onda 4)
-Sub-onda 5A (avaliação e cupons): WB-031, 074, 073, 116, 022, 033, 034. BE + MB.
+Sub-onda 5A (avaliação e cupons): WB-031, 074, 073, 116, 033, 034 (WB-022 foi para a 3B, DEC-022). BE + MB.
 Sub-onda 5B (trocas "Retira Troca"): WB-170, 171, 172, 173, 174, 175, 178, 177, 193, 037. BE + MB + SEC(TM de trocas).
 Sub-onda 5C (financeiro e admin): WB-076, 077, 078, 108, 109, 110, 176, 112, 113, 102, 159. BE + MB(web) + SEC(repasses).
 | Entregável | Fluxo completo de troca com prazos automáticos e piso legal (DEC-011); admin intervém e media; repasses e conciliação com divergência detectada; lojista vê financeiro |
