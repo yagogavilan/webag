@@ -98,6 +98,12 @@ export function catalogErrorMessage(error: unknown, fallback = 'Não foi possív
       return detail ?? 'Esse código já está em uso em outro produto da loja.';
     case 'TOO_MANY_IMAGES':
       return 'O máximo é 8 fotos por produto.';
+    case 'BULK_BLOCKED':
+      return detail ?? 'Algum preço sairia da faixa permitida. Nada foi alterado. Ajuste o valor e tente de novo.';
+    case 'IMPORT_FILE_INVALID':
+      return detail ?? 'Use o modelo do Webag, em CSV.';
+    case 'PRODUCT_INCOMPLETE':
+      return detail ?? 'Faltam informações para publicar.';
     case 'REAUTH_REQUIRED':
       return 'Confirme sua senha para continuar.';
     default:

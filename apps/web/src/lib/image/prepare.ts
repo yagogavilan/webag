@@ -163,8 +163,29 @@ export async function compressImage(file: Blob, quarter: Quarter = 0): Promise<P
   return finish(canvas);
 }
 
-export async function finish(canvas: HTMLCanvasElement): Promise<Prepared> {
-  const blob = await canvasToJpeg(canvas);
+/**
+ * Teto de bytes da foto de produto (onda-2 K2: saída até 300 KB). Baixa a qualidade do JPEG por degraus e, se ainda
+ * passar, reduz o lado em 15% e repete; para no mínimo de 480 px para a foto não virar borrão.
+ */
+export const PRODUCT_PHOTO_MAX_BYTES = 300 * 1024;
+export const PRODUCT_PHOTO_MAX_SIDE = 1600;
+const QUALITY_STEPS = [JPEG_QUALITY, 0.72, 0.62, 0.52] as const;
+
+export async function encodeWithin(canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob> {
+  let current = canvas;
+  for (;;) {
+    let blob = await canvasToJpeg(current, QUALITY_STEPS[0]);
+    for (const quality of QUALITY_STEPS.slice(1)) {
+      if (blob.size <= maxBytes) break;
+      blob = await canvasToJpeg(current, quality);
+    }
+    if (blob.size <= maxBytes || Math.max(current.width, current.height) <= 480) return blob;
+    current = cropToCanvas(current, { x: 0, y: 0, width: current.width, height: current.height }, Math.round(Math.max(current.width, current.height) * 0.85));
+  }
+}
+
+export async function finish(canvas: HTMLCanvasElement, maxBytes?: number): Promise<Prepared> {
+  const blob = maxBytes ? await encodeWithin(canvas, maxBytes) : await canvasToJpeg(canvas);
   return { blob, width: canvas.width, height: canvas.height, dark: isDark(canvas) };
 }
 

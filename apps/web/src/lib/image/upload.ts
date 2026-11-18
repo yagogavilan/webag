@@ -61,7 +61,7 @@ export interface UploadedImage {
 }
 
 /** Logo ou capa: mesmo caminho do documento (política, armazenamento, confirmação), sem vincular a slot; o id vai no perfil. */
-export async function uploadStoreImage(storeId: string, purpose: 'store_logo' | 'store_cover', blob: Blob, fileName: string, hooks: UploadHooks = {}): Promise<UploadedImage> {
+export async function uploadStoreImage(storeId: string, purpose: 'store_logo' | 'store_cover' | 'product_image', blob: Blob, fileName: string, hooks: UploadHooks = {}): Promise<UploadedImage> {
   const policy = await merchantApi.createUpload({ storeId, purpose, contentType: blob.type || 'image/jpeg', sizeBytes: blob.size });
   await postToStorage(policy, blob, fileName, hooks);
   const asset = await merchantApi.completeUpload(policy.uploadId);

@@ -149,6 +149,8 @@ interface ApiStore {
   decisionReason: string | null;
   createdAt: string;
   role?: 'owner' | 'staff';
+  /** Hoje só o dono recebe a lista; quando a API devolver a do funcionário, o painel passa a usá-la. */
+  permissions?: string[];
   settings?: { hours: { weekday: number; intervals: unknown[] }[] };
 }
 interface ApiOnboarding {
@@ -207,7 +209,7 @@ async function loadStore(): Promise<MerchantStore | null> {
     id: view.id,
     status: view.status,
     role: owner ? 'owner' : 'staff',
-    permissions: [],
+    permissions: store.permissions ?? [],
     step: stepsDone(missing, payout.status === 'connected', true),
     legalType: view.documentType,
     document: view.document,
@@ -274,7 +276,7 @@ export const merchantApi = {
     return loadStore();
   },
   cep: (cep: string) => apiRequest<CepResult>('lojista', `cep/${cep}`),
-  createUpload: (body: { storeId: string; purpose: 'store_document' | 'store_logo' | 'store_cover'; contentType: string; sizeBytes: number }) =>
+  createUpload: (body: { storeId: string; purpose: 'store_document' | 'store_logo' | 'store_cover' | 'product_image'; contentType: string; sizeBytes: number }) =>
     apiRequest<{ id: string; upload: { url: string; fields: Record<string, string> } }>('lojista', 'uploads', { method: 'POST', body }).then((created): UploadPolicy => ({ uploadId: created.id, url: created.upload.url, fields: created.upload.fields })),
   completeUpload: (uploadId: string) => apiRequest<{ id: string; status: string; urls: Record<string, string> | null; rejectionReason: string | null }>('lojista', `uploads/${uploadId}/complete`, { method: 'POST' }),
   attachDocument: (storeId: string, kind: DocumentKind, uploadId: string) => apiRequest<void>('lojista', `stores/${storeId}/documents`, { method: 'POST', body: { kind, uploadId } }),
