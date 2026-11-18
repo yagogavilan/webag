@@ -32,6 +32,10 @@ export interface Principal {
   adminProfile: AdminProfile | null;
   totpConfigured: boolean;
   mfaVerified: boolean;
+  /** SEC-113: fator dado na abertura da sessão. Só `recovery` reconfigura um TOTP perdido. */
+  mfaFactor: 'totp' | 'recovery' | null;
+  /** SEC-113: admin que usou código de recuperação e ainda não reconfigurou o TOTP. */
+  totpReenrollRequired: boolean;
   reauthAt: Date | null;
 }
 

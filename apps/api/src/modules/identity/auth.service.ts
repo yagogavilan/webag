@@ -11,11 +11,11 @@ import { AuditService, FeatureFlagsService, ParametersService } from '../admin/i
 import { UsersService, type DocumentRef } from '../users/index.js';
 import type { z } from 'zod';
 import { CodeService } from './code.service.js';
-import { accessLog, adminProfiles, userRoles, users } from './db/schema.js';
+import { accessLog, adminProfiles, CODE_PURPOSES, userRoles, users } from './db/schema.js';
 import { PasswordService } from './password.service.js';
 import { SessionService, type TokenPair } from './session.service.js';
 import { TicketService } from './ticket.service.js';
-import { TotpService, type VerifiedFactor } from './totp.service.js';
+import { hasSecondFactor, TotpService, type VerifiedFactor } from './totp.service.js';
 import type { registerSchema } from './auth.schemas.js';
 import { isUniqueViolation } from '../admin/util.js';
 
@@ -144,7 +144,9 @@ export class AuthService {
       if (isUniqueViolation(error)) throw errors.conflict('EMAIL_ALREADY_REGISTERED', 'Esse e-mail já tem conta');
       throw error;
     }
-    await this.codes.invalidateActive(user.id, 'verify_email');
+    // SEC-124: código de QUALQUER finalidade e ticket aberto enviados ao endereço errado deixam de valer.
+    for (const purpose of CODE_PURPOSES) await this.codes.invalidateActive(user.id, purpose);
+    await this.tickets.invalidateAll(user.id);
     await this.sendVerificationCode({ ...user, email: newEmail }, ctx);
   }
 
@@ -163,17 +165,20 @@ export class AuthService {
     const ip = ctx.ip ?? 'unknown';
     const failKey = `lf:${sha256Hex(input.email)}:${ip}`;
 
-    const state = await this.limiter.peek(failKey);
-    if (state.count >= maxFails) {
-      throw errors.tooMany(state.ttlSeconds || waitSeconds, 'Muitas tentativas. Tente em 15 minutos ou redefina a senha.');
+    // SEC-117: conta antes de conferir (INCR atômico); só as `maxFails` primeiras tentativas simultâneas conferem a senha.
+    const attempt = await this.limiter.hit(failKey, waitSeconds);
+    if (attempt.count > maxFails) {
+      throw errors.tooMany(attempt.ttlSeconds || waitSeconds, 'Muitas tentativas. Tente em 15 minutos ou redefina a senha.');
     }
 
     const [user] = await this.db.select().from(users).where(eq(users.email, input.email));
     const passwordOk = await this.passwords.verify(user?.passwordHash ?? null, input.password);
     if (!user || !passwordOk) {
-      await this.registerFailure(failKey, user ?? null, maxFails, waitSeconds, ctx);
+      await this.registerFailure(failKey, user ?? null, maxFails, waitSeconds, ctx, attempt.count);
       throw INVALID_CREDENTIALS();
     }
+    // Senha certa: devolve a contagem. Falha de 2º fator (caminho legado) volta a contar em registerFailure.
+    await this.limiter.release(failKey);
 
     if (user.status !== 'active') {
       throw new AppError(403, 'ACCOUNT_BLOCKED', 'Conta indisponível', { detail: 'Conta indisponível. Fale com o suporte.' });
@@ -182,7 +187,7 @@ export class AuthService {
     // Step-up: muitas falhas na conta (de qualquer origem) pedem um código enviado ao e-mail.
     const accountFails = await this.limiter.peek(`lfa:${user.id}`);
     const stepUpLimit = await this.params.getNumber('login_stepup_falhas_h');
-    const needsStepUp = accountFails.count > stepUpLimit;
+    const needsStepUp = accountFails.count >= stepUpLimit;
     if (needsStepUp) {
       if (!input.code) {
         await this.codes.enforceSendLimits(user.id, 'login_stepup', user.email, ctx);
@@ -195,7 +200,13 @@ export class AuthService {
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
     const activeAdmin = admin?.active ? admin : null;
     let factor: VerifiedFactor | null = null;
-    if (activeAdmin?.totpConfirmedAt) {
+    if (activeAdmin && !hasSecondFactor(activeAdmin) && activeAdmin.totpSetupDeadlineAt.getTime() <= Date.now()) {
+      // SEC-113 (5): nunca configurou o 2º fator e o prazo de 48 h do convite/reativação acabou: senha sozinha não abre sessão.
+      throw new AppError(403, 'ENROLLMENT_EXPIRED', 'Prazo de configuração vencido', {
+        detail: 'O prazo para configurar o autenticador acabou. Peça um novo convite a um super admin.',
+      });
+    }
+    if (activeAdmin && hasSecondFactor(activeAdmin)) {
       if (!input.totpCode) {
         // SEC-090: 2 passos. A senha certa devolve só um token opaco; sessão só depois do código.
         const mfaToken = await this.tickets.issue('mfa_login', user.id, MFA_TOKEN_TTL_SECONDS);
@@ -211,7 +222,7 @@ export class AuthService {
     }
     await this.limiter.reset(failKey);
     if (needsStepUp) await this.limiter.reset(`lfa:${user.id}`);
-    return this.openSession(user, activeAdmin?.profile ?? null, activeAdmin?.totpConfirmedAt != null ? factor : null, ctx);
+    return this.openSession(user, activeAdmin?.profile ?? null, factor, ctx);
   }
 
   /**
@@ -233,22 +244,29 @@ export class AuthService {
   }
 
   private async openSession(user: UserRow, adminProfile: string | null, factor: VerifiedFactor | null, ctx: RequestContext): Promise<AuthResult> {
-    // Código de recuperação entra uma vez e força reconfigurar o TOTP (WB-222 C5): sessão sem MFA concluído.
+    // SEC-113: código de recuperação abre sessão SEM MFA concluído (só reconfigura o TOTP) e fica marcada `recovery`.
     const mfaVerified = factor?.kind === 'totp';
     const mfaSetupRequired = adminProfile !== null && !mfaVerified;
     const { tokens } = await this.db.transaction(async (tx) => {
       await tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       await tx.insert(accessLog).values({ userId: user.id, event: 'login', ip: ctx.ip, userAgent: ctx.userAgent });
-      return this.sessions.createSession(tx, user.id, ctx, { mfaVerified, reauth: true });
+      return this.sessions.createSession(tx, user.id, ctx, { mfaVerified, mfaFactor: factor?.kind ?? null, reauth: true });
     });
     if (adminProfile) {
-      await this.audit.recordStandalone(ctx, { action: 'admin.login', actorId: user.id, actorRole: adminProfile, targetType: 'user', targetId: user.id, after: { mfaVerified } });
+      await this.audit.recordStandalone(ctx, { action: 'admin.login', actorId: user.id, actorRole: adminProfile, targetType: 'user', targetId: user.id, after: { mfaVerified, factor: factor?.kind ?? null } });
     }
     return { user: this.summary(user), tokens, mfaSetupRequired };
   }
 
-  private async registerFailure(failKey: string, user: UserRow | null, maxFails: number, waitSeconds: number, ctx: RequestContext): Promise<void> {
-    const { count } = await this.limiter.hit(failKey, waitSeconds);
+  private async registerFailure(
+    failKey: string,
+    user: UserRow | null,
+    maxFails: number,
+    waitSeconds: number,
+    ctx: RequestContext,
+    alreadyCounted?: number,
+  ): Promise<void> {
+    const count = alreadyCounted ?? (await this.limiter.hit(failKey, waitSeconds)).count;
     if (count >= maxFails) await this.limiter.setWindow(failKey, waitSeconds);
     if (!user) return;
     await this.limiter.hit(`lfa:${user.id}`, 3600);
@@ -315,7 +333,13 @@ export class AuthService {
     // 1º passo, sempre: o código do e-mail. Errado, vencido ou usado: 400 sem tocar no limite do 2º fator (B1).
     await this.codes.verify(user.id, 'reset_password', input.code);
 
-    if (admin?.active && admin.totpConfirmedAt) {
+    if (admin?.active && !hasSecondFactor(admin)) {
+      // SEC-113 / SEC-095: admin que nunca configurou o 2º fator não tem reset por e-mail; pede novo convite.
+      throw new AppError(403, 'ADMIN_INVITE_REQUIRED', 'Peça um novo convite', {
+        detail: 'Esta conta ainda não configurou o autenticador. Peça um novo convite a um super admin.',
+      });
+    }
+    if (admin?.active) {
       const resetTicket = await this.tickets.issue('password_reset', user.id, RESET_TICKET_TTL_SECONDS, { emailVerified: true });
       if (!input.totpCode) return { tokens: null, mfaRequired: true, resetTicket, expiresIn: RESET_TICKET_TTL_SECONDS };
       // Compatibilidade: cliente antigo manda o TOTP na mesma chamada. Passa pelo mesmo ticket.
@@ -400,7 +424,13 @@ export class AuthService {
     if (principal.adminProfile && principal.totpConfigured) {
       if (!input.totpCode) throw errors.validation([{ field: 'totpCode', message: 'Informe o código do autenticador.' }]);
       await this.limiter.enforce(`rl:reauth:${user.id}`, 10, 900);
-      if (!(await this.totp.verifyWithLimits(user.id, input.totpCode, ctx, false))) throw INVALID_CREDENTIALS();
+      if (!(await this.totp.verifyWithLimits(user.id, input.totpCode, ctx, false))) {
+        // SEC-091(d) / SEC-118: no 5º erro do 2º fator a sessão é encerrada.
+        if ((await this.limiter.peek(`mfa:15:${user.id}`, false)).count >= 5) {
+          await this.sessions.revokeSessions(this.db, user.id, 'mfa_reauth_failures', { onlySessionId: principal.sessionId });
+        }
+        throw INVALID_CREDENTIALS();
+      }
     } else {
       if (!input.password) throw errors.validation([{ field: 'password', message: 'Informe sua senha.' }]);
       await this.assertPassword(user, input.password, ctx, 'reauth');
@@ -431,10 +461,10 @@ export class AuthService {
     const maxFails = await this.params.getNumber('login_falhas');
     const waitSeconds = (await this.params.getNumber('login_espera_min')) * 60;
     const key = `lf:${scope}:${user.id}:${ctx.ip ?? 'unknown'}`;
-    const state = await this.limiter.peek(key);
-    if (state.count >= maxFails) throw errors.tooMany(state.ttlSeconds || waitSeconds, 'Muitas tentativas. Tente novamente mais tarde.');
+    // SEC-117: conta antes de conferir.
+    const { count, ttlSeconds } = await this.limiter.hit(key, waitSeconds);
+    if (count > maxFails) throw errors.tooMany(ttlSeconds || waitSeconds, 'Muitas tentativas. Tente novamente mais tarde.');
     if (!(await this.passwords.verify(user.passwordHash, password))) {
-      const { count } = await this.limiter.hit(key, waitSeconds);
       if (count >= maxFails) await this.limiter.setWindow(key, waitSeconds);
       throw errors.forbidden('INVALID_PASSWORD', 'Senha incorreta.');
     }

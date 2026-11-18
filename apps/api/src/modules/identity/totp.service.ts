@@ -38,6 +38,11 @@ export interface VerifiedFactor {
   remaining: number;
 }
 
+/** SEC-113: o admin já teve (ou tem) 2º fator: o acesso NUNCA abre só com a senha. */
+export function hasSecondFactor(admin: { totpConfirmedAt: Date | null; totpReenrollRequiredAt: Date | null }): boolean {
+  return admin.totpConfirmedAt !== null || admin.totpReenrollRequiredAt !== null;
+}
+
 export type ResetOrigin = 'super_admin' | 'cli' | 'cli_override';
 
 /** TOTP obrigatório para todo admin (SEC-015, WB-222, SEC-090..SEC-093). */
@@ -73,9 +78,7 @@ export class TotpService {
   async setup(principal: Principal): Promise<{ secret: string; otpauthUri: string }> {
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, principal.userId));
     if (!admin?.active) throw errors.forbidden();
-    if (admin.totpConfirmedAt) {
-      throw errors.conflict('TOTP_ALREADY_CONFIGURED', 'TOTP já configurado', 'Use um código de recuperação ou peça a redefinição a outro super admin.');
-    }
+    this.assertMaySetup(admin, principal);
     const secret = generateTotpSecret();
     await this.db
       .update(adminProfiles)
@@ -90,8 +93,32 @@ export class TotpService {
     return { secret, otpauthUri: otpauthUri(principal.email, secret) };
   }
 
+  /**
+   * SEC-113: quem pode (re)configurar o TOTP.
+   * - TOTP já ativo: ninguém (usa recuperação ou pede a redefinição a outro super admin);
+   * - reenrolamento (usou código de recuperação): SÓ a sessão aberta por código de recuperação;
+   * - primeiro enrolamento (convite/reativação): dentro de 48 h; depois, só com novo convite.
+   */
+  private assertMaySetup(admin: typeof adminProfiles.$inferSelect, principal: Principal): void {
+    if (admin.totpConfirmedAt) {
+      throw errors.conflict('TOTP_ALREADY_CONFIGURED', 'TOTP já configurado', 'Use um código de recuperação ou peça a redefinição a outro super admin.');
+    }
+    if (admin.totpReenrollRequiredAt) {
+      if (principal.mfaFactor !== 'recovery') {
+        throw errors.forbidden('RECOVERY_SESSION_REQUIRED', 'Entre com um código de recuperação para reconfigurar o autenticador.');
+      }
+      return;
+    }
+    if (admin.totpSetupDeadlineAt.getTime() <= Date.now()) {
+      throw errors.forbidden('ENROLLMENT_EXPIRED', 'O prazo para configurar o autenticador acabou. Peça um novo convite a um super admin.');
+    }
+  }
+
   /** Confirma com um código, libera a sessão e mostra os 10 códigos de recuperação UMA vez (WB-222 C2). */
   async confirm(principal: Principal, code: string, ctx: RequestContext): Promise<{ recoveryCodes: string[] }> {
+    const [current] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, principal.userId));
+    if (!current?.active) throw errors.forbidden();
+    this.assertMaySetup(current, principal);
     // A tentativa é contada ANTES de conferir o código, numa operação atômica: 10 requisições paralelas não passam de 10.
     const [admin] = await this.db
       .update(adminProfiles)
@@ -116,7 +143,7 @@ export class TotpService {
     await this.db.transaction(async (tx) => {
       await tx
         .update(adminProfiles)
-        .set({ totpConfirmedAt: new Date(), totpLastStep: check.step, totpSetupStartedAt: null, totpSetupAttempts: 0, updatedAt: new Date() })
+        .set({ totpConfirmedAt: new Date(), totpReenrollRequiredAt: null, totpLastStep: check.step, totpSetupStartedAt: null, totpSetupAttempts: 0, updatedAt: new Date() })
         .where(eq(adminProfiles.userId, principal.userId));
       await tx.delete(adminRecoveryCodes).where(eq(adminRecoveryCodes.userId, principal.userId));
       await tx.insert(adminRecoveryCodes).values(
@@ -175,20 +202,22 @@ export class TotpService {
    * Só é alcançável por quem já tem a senha: não vira bloqueio da conta por terceiros.
    */
   async verifyWithLimits(userId: string, input: string, ctx: RequestContext, allowRecovery = true): Promise<VerifiedFactor | null> {
-    const window = await this.limiter.peek(`mfa:15:${userId}`);
-    if (window.count >= 5) {
+    // SEC-117: a tentativa é contada ANTES de conferir (INCR atômico). Requisições paralelas recebem números
+    // distintos; só as 5 primeiras conferem o código, as demais levam 429 sem conferir. Acerto devolve a contagem.
+    const fifteen = await this.limiter.hit(`mfa:15:${userId}`, 900);
+    if (fifteen.count > 5) {
       throw new AppError(429, 'MFA_RATE_LIMITED', 'Muitas tentativas do código', {
         detail: 'Muitas tentativas do código de verificação. Tente novamente mais tarde.',
-        retryAfterSeconds: window.ttlSeconds || 900,
+        retryAfterSeconds: fifteen.ttlSeconds || 900,
       });
     }
     const factor = await this.verifyLoginCode(userId, input, allowRecovery);
     if (factor) {
+      await this.limiter.release(`mfa:15:${userId}`);
       if (factor.kind === 'recovery') await this.onRecoveryUsed(userId, factor.remaining, ctx);
       return factor;
     }
 
-    const fifteen = await this.limiter.hit(`mfa:15:${userId}`, 900);
     const day = await this.limiter.hit(`mfa:24:${userId}`, 86_400);
     const email = await this.emailOf(userId);
     if (fifteen.count === 3 && (await this.limiter.hit(`mfa:mail:${userId}`, 3600, false)).count === 1) {
@@ -218,14 +247,16 @@ export class TotpService {
   }
 
   /**
-   * Aceita TOTP (6 dígitos) ou código de recuperação (uso único). Recuperação força reconfigurar o TOTP (WB-222 C5):
-   * o segredo é descartado e a sessão sai sem MFA concluído (escopo `mfa_setup`).
+   * Aceita TOTP (6 dígitos) ou código de recuperação (uso único). SEC-113: usar um código de recuperação NÃO apaga
+   * o enrolamento: o segredo antigo é invalidado, os códigos restantes seguem válidos e `totp_reenroll_required_at`
+   * marca que o acesso continua exigindo o 2º fator (nunca só a senha) até o TOTP ser reconfigurado.
    */
   async verifyLoginCode(userId: string, input: string, allowRecovery = true): Promise<VerifiedFactor | null> {
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, userId));
-    if (!admin?.totpSecretEnc || !admin.totpConfirmedAt) return null;
+    if (!admin || !hasSecondFactor(admin)) return null;
 
     if (/^\d{6}$/.test(input)) {
+      if (!admin.totpSecretEnc || !admin.totpConfirmedAt) return null;
       return this.db.transaction(async (tx) => {
         const [locked] = await tx.select().from(adminProfiles).where(eq(adminProfiles.userId, userId)).for('update');
         if (!locked?.totpSecretEnc) return null;
@@ -237,25 +268,30 @@ export class TotpService {
     }
 
     if (!allowRecovery || normalizeRecoveryCode(input).length !== 16) return null;
-    const used = await this.db
-      .update(adminRecoveryCodes)
-      .set({ usedAt: new Date() })
-      .where(and(eq(adminRecoveryCodes.userId, userId), eq(adminRecoveryCodes.codeHash, this.recoveryHash(userId, input)), isNull(adminRecoveryCodes.usedAt)))
-      .returning({ id: adminRecoveryCodes.id });
-    if (used.length === 0) return null;
-    const remaining = await this.recoveryRemaining(userId);
-    await this.clear(userId);
-    return { kind: 'recovery', remaining };
-  }
-
-  /** Remove segredo e códigos; o admin precisa configurar de novo no próximo acesso. */
-  private async clear(userId: string): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
+      const used = await tx
+        .update(adminRecoveryCodes)
+        .set({ usedAt: new Date() })
+        .where(and(eq(adminRecoveryCodes.userId, userId), eq(adminRecoveryCodes.codeHash, this.recoveryHash(userId, input)), isNull(adminRecoveryCodes.usedAt)))
+        .returning({ id: adminRecoveryCodes.id });
+      if (used.length === 0) return null;
+      const [left] = await tx
+        .select({ total: count() })
+        .from(adminRecoveryCodes)
+        .where(and(eq(adminRecoveryCodes.userId, userId), isNull(adminRecoveryCodes.usedAt)));
       await tx
         .update(adminProfiles)
-        .set({ totpSecretEnc: null, totpConfirmedAt: null, totpLastStep: null, totpSetupStartedAt: null, totpSetupAttempts: 0, updatedAt: new Date() })
+        .set({
+          totpSecretEnc: null,
+          totpConfirmedAt: null,
+          totpLastStep: null,
+          totpSetupStartedAt: null,
+          totpSetupAttempts: 0,
+          totpReenrollRequiredAt: sql`coalesce(${adminProfiles.totpReenrollRequiredAt}, now())`,
+          updatedAt: new Date(),
+        })
         .where(eq(adminProfiles.userId, userId));
-      await tx.delete(adminRecoveryCodes).where(eq(adminRecoveryCodes.userId, userId));
+      return { kind: 'recovery' as const, remaining: left?.total ?? 0 };
     });
   }
 
@@ -299,7 +335,7 @@ export class TotpService {
       if (!user) throw errors.notFound('Admin não encontrado.');
       await tx
         .update(adminProfiles)
-        .set({ totpSecretEnc: null, totpConfirmedAt: null, totpLastStep: null, totpSetupStartedAt: null, totpSetupAttempts: 0, updatedAt: new Date() })
+        .set({ totpSecretEnc: null, totpConfirmedAt: null, totpReenrollRequiredAt: null, totpLastStep: null, totpSetupStartedAt: null, totpSetupAttempts: 0, updatedAt: new Date() })
         .where(eq(adminProfiles.userId, input.targetUserId));
       await tx.delete(adminRecoveryCodes).where(eq(adminRecoveryCodes.userId, input.targetUserId));
       await tx.update(users).set({ passwordHash: null, updatedAt: new Date() }).where(eq(users.id, input.targetUserId));

@@ -1,5 +1,5 @@
-import { and, eq } from 'drizzle-orm';
-import { adminProfiles, auditLog, authTickets, invitations, sessions, users } from '../src/platform/database/schema.js';
+import { and, eq, isNull } from 'drizzle-orm';
+import { adminProfiles, adminRecoveryCodes, auditLog, authTickets, invitations, sessions, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, totpAt, uniqueEmail, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureLegalDocs, loginAdmin, type TestAdmin } from './helpers/fixtures.js';
 
@@ -113,23 +113,47 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       expect(res.body.code).toBe('INVALID_CREDENTIALS');
     });
 
-    it('código de recuperação vale uma vez e força reconfigurar o TOTP (WB-222 C5)', async () => {
+    it('SEC-113: código de recuperação vale uma vez, NÃO dispensa o 2º fator e mantém os demais códigos (WB-222 C5)', async () => {
       const admin = await createAdmin(ctx, 'operations', { totp: false });
       const pending = bearer(admin.accessToken);
       const setup = await ctx.http.post('/v1/admin/totp/setup').set(pending).expect(201);
       const confirm = await ctx.http.post('/v1/admin/totp/confirm').set(pending).send({ code: totpAt(setup.body.secret) }).expect(200);
-      const [recovery] = confirm.body.recoveryCodes as string[];
+      const [recovery, second] = confirm.body.recoveryCodes as string[];
 
       const login = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: recovery }).expect(200);
       // entrou, mas sem MFA concluído: só a tela de configurar
       await ctx.http.get('/v1/admin/regions/cities').set(bearer(login.body.tokens.accessToken)).expect(403);
       expect(login.body.mfaSetupRequired).toBe(true);
-      // o mesmo código não vale de novo
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: recovery }).expect(200).then((r) => {
-        expect(r.body.mfaSetupRequired).toBe(true); // TOTP foi zerado: não há mais como usar recuperação antiga
-      });
-      const [again] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
-      expect(again?.totpConfirmedAt).toBeNull();
+
+      // o enrolamento NÃO foi apagado: marca de reenrolamento, 9 códigos restantes
+      const [after] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
+      expect(after?.totpReenrollRequiredAt).not.toBeNull();
+      expect(after?.totpSecretEnc).toBeNull();
+      expect(await ctx.db.select().from(adminRecoveryCodes).where(and(eq(adminRecoveryCodes.userId, admin.userId), isNull(adminRecoveryCodes.usedAt)))).toHaveLength(9);
+
+      // a senha sozinha NÃO abre sessão: devolve o desafio, sem tokens
+      const passwordOnly = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password }).expect(200);
+      expect(passwordOnly.body).toMatchObject({ mfaRequired: true });
+      expect(passwordOnly.body.tokens).toBeUndefined();
+      // o código já usado não vale de novo; o TOTP antigo (sem segredo) também não
+      await ctx.http.post('/v1/auth/mfa/verify').set('X-Forwarded-For', randomIp()).send({ mfaToken: passwordOnly.body.mfaToken, code: recovery }).expect(401);
+      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
+      const again = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password }).expect(200);
+      await ctx.http.post('/v1/auth/mfa/verify').set('X-Forwarded-For', randomIp()).send({ mfaToken: again.body.mfaToken, code: totpAt(setup.body.secret) }).expect(401);
+
+      // outro código de recuperação abre a sessão de reconfiguração (e só ela)
+      const third = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password }).expect(200);
+      const verified = await ctx.http.post('/v1/auth/mfa/verify').set('X-Forwarded-For', randomIp()).send({ mfaToken: third.body.mfaToken, code: second }).expect(200);
+      expect(verified.body.mfaSetupRequired).toBe(true);
+      const recoverySession = bearer(verified.body.tokens.accessToken);
+      await ctx.http.get('/v1/admin/regions/cities').set(recoverySession).expect(403);
+      const reSetup = await ctx.http.post('/v1/admin/totp/setup').set(recoverySession).expect(201);
+      const reConfirm = await ctx.http.post('/v1/admin/totp/confirm').set(recoverySession).send({ code: totpAt(reSetup.body.secret) }).expect(200);
+      expect(reConfirm.body.recoveryCodes).toHaveLength(10);
+      await ctx.http.get('/v1/admin/regions/cities').set(recoverySession).expect(200);
+      const [done] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
+      expect(done?.totpReenrollRequiredAt).toBeNull();
+      expect(done?.totpConfirmedAt).not.toBeNull();
     });
 
     it('WB-100 C3: 30 min sem atividade expira a sessão do admin', async () => {

@@ -84,6 +84,13 @@ export const adminProfiles = pgTable('admin_profiles', {
   /** Segredo pendente vale 10 min e aceita no máximo 10 erros (SEC-090). */
   totpSetupStartedAt: timestamp({ withTimezone: true }),
   totpSetupAttempts: integer().notNull().default(0),
+  /**
+   * SEC-113: preenchido quando um código de recuperação foi usado. O segredo antigo morreu, mas os códigos restantes
+   * continuam valendo e o login continua exigindo o 2º fator (nunca só a senha) até reconfigurar o TOTP.
+   */
+  totpReenrollRequiredAt: timestamp({ withTimezone: true }),
+  /** SEC-113 (5): prazo para o PRIMEIRO enrolamento (convite/reativação). Vencido, a senha sozinha não abre sessão. */
+  totpSetupDeadlineAt: timestamp({ withTimezone: true }).notNull().default(sql`now() + interval '48 hours'`),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -122,6 +129,8 @@ export const sessions = pgTable(
     mfaVerifiedAt: timestamp({ withTimezone: true }),
     /** Última reautenticação (SEC-016). */
     reauthAt: timestamp({ withTimezone: true }),
+    /** SEC-113: como o 2º fator foi dado. `recovery` é a única sessão que pode reconfigurar o TOTP. */
+    mfaFactor: text({ enum: ['totp', 'recovery'] }),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
 );

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseTrustProxy } from '../http/client-ip.js';
 
 /** Valores de desenvolvimento (infra/env.example). Em produção o boot falha se algum deles for usado (SEC-080). */
 export const DEV_JWT_ACCESS_SECRET = 'dev-only-insecure-change-me-0123456789abcdef';
@@ -38,11 +39,21 @@ export const envSchema = z
       .default('info'),
     CORS_ORIGINS: csv,
     /**
-     * Quantos proxies confiáveis existem na frente da API (nginx = 1). 0 = usa o IP do socket. Em produção NÃO tem
+     * Proxies confiáveis na frente da API: número de saltos (nginx = 1; 0 = IP do socket) OU lista de IP/CIDR
+     * ("127.0.0.1,10.0.0.0/8"), preferível porque só quem está na lista pode declarar o IP (SEC-114). Em produção NÃO tem
      * padrão: sem ele todo `req.ip` vira o IP do proxy e o limite por conta+IP passa a valer para o mundo inteiro
      * (review I8). Fora de produção, o padrão é 0.
      */
-    TRUST_PROXY: z.coerce.number().int().min(0).max(5).optional(),
+    TRUST_PROXY: z
+      .string()
+      .optional()
+      .transform((raw, ctx) => {
+        const parsed = parseTrustProxy(raw);
+        if (parsed.error) ctx.addIssue({ code: 'custom', message: parsed.error });
+        return parsed.value;
+      }),
+    /** SEC-114: segredo que o BFF do painel manda com `X-Webag-Client-IP`. Sem ele, o IP vindo do BFF é ignorado. */
+    BFF_SHARED_SECRET: z.string().min(32).optional(),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     /** Caminho do contrato OpenAPI servido em /docs. Padrão: procura docs/arquitetura/api/openapi.yaml subindo a partir do cwd. */

@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import { bffClientIp } from './platform/http/client-ip.js';
 import type { Env } from './platform/config/env.js';
 import { findContractPath, loadContract, setupContractDocs } from './platform/openapi/contract-docs.js';
 
@@ -13,6 +14,8 @@ export function configureApp(app: NestExpressApplication): void {
   app.disable('x-powered-by');
   // IP real atrás do proxy (rate limit, auditoria). 0 = usa o IP do socket.
   app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }) ?? 0);
+  // SEC-114: IP do navegador informado pelo BFF do painel, aceito só com o segredo compartilhado.
+  app.use(bffClientIp(config.get('BFF_SHARED_SECRET', { infer: true })));
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');

@@ -146,7 +146,7 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
 
     it('SEC-004: 20 falhas distribuídas na conta exigem código por e-mail (step-up) mesmo com a senha certa', async () => {
       const user = await registerUser(ctx);
-      for (let i = 0; i < 21; i++) {
+      for (let i = 0; i < 20; i++) {
         await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(401);
       }
       const ip = randomIp();
@@ -256,5 +256,37 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
       await ctx.http.get('/v1/me').set(bearer(aliceSecond.body.tokens.accessToken)).expect(401);
       await ctx.http.get('/v1/me').set(bearer(alice.accessToken)).expect(200);
     });
+  });
+});
+
+describe('SEC-114: IP informado pelo BFF só vale com o segredo', () => {
+  let ctx: TestContext;
+  beforeAll(async () => {
+    ctx = await createTestApp();
+    await ensureLegalDocs(ctx);
+  });
+  afterAll(async () => {
+    await ctx.close();
+  });
+  const SECRET = 'test-bff-shared-secret-0123456789abcdef';
+
+  it('com o segredo, o limite por conta+IP vale para o IP do navegador mesmo se o X-Forwarded-For mudar', async () => {
+    const user = await registerUser(ctx);
+    const browserIp = `198.51.100.${Math.floor(Math.random() * 250)}`;
+    for (let i = 0; i < 5; i++) {
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).set('X-Webag-BFF-Secret', SECRET).set('X-Webag-Client-IP', browserIp).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(401);
+    }
+    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).set('X-Webag-BFF-Secret', SECRET).set('X-Webag-Client-IP', browserIp).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(429);
+  });
+
+  it('sem o segredo (ou com segredo errado), X-Webag-Client-IP é ignorado: não dá para escolher o IP', async () => {
+    const user = await registerUser(ctx);
+    const fixed = `198.51.100.${Math.floor(Math.random() * 250)}`;
+    const ip = randomIp();
+    // 6 tentativas do MESMO IP real (XFF) com um IP falso diferente a cada vez: a 6ª continua sendo barrada
+    for (let i = 0; i < 5; i++) {
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).set('X-Webag-BFF-Secret', 'segredo-errado-0123456789abcdef0123456789').set('X-Webag-Client-IP', `${fixed.slice(0, -1)}${i}`).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(401);
+    }
+    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).set('X-Webag-Client-IP', '203.0.113.99').send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(429);
   });
 });

@@ -103,7 +103,7 @@ export class SessionService {
     executor: DbOrTx,
     userId: string,
     ctx: RequestContext,
-    options: { mfaVerified: boolean; reauth?: boolean },
+    options: { mfaVerified: boolean; mfaFactor?: 'totp' | 'recovery' | null; reauth?: boolean },
   ): Promise<{ sessionId: string; tokens: TokenPair }> {
     const absolute = new Date(Date.now() + this.config.get('REFRESH_ABSOLUTE_TTL_DAYS', { infer: true }) * 86_400_000);
     const [session] = await executor
@@ -115,6 +115,7 @@ export class SessionService {
         deviceId: ctx.deviceId,
         absoluteExpiresAt: absolute,
         mfaVerifiedAt: options.mfaVerified ? new Date() : null,
+        mfaFactor: options.mfaFactor ?? null,
         reauthAt: options.reauth ? new Date() : null,
       })
       .returning({ id: sessions.id });
@@ -233,7 +234,7 @@ export class SessionService {
   }
 
   async markMfaVerified(sessionId: string): Promise<void> {
-    await this.db.update(sessions).set({ mfaVerifiedAt: new Date() }).where(eq(sessions.id, sessionId));
+    await this.db.update(sessions).set({ mfaVerifiedAt: new Date(), mfaFactor: 'totp' }).where(eq(sessions.id, sessionId));
   }
 
   async touch(sessionId: string): Promise<void> {

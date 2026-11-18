@@ -49,6 +49,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
             paths: [
               'req.headers.authorization',
               'req.headers.cookie',
+              'req.headers["x-webag-bff-secret"]',
               'res.headers["set-cookie"]',
               'req.body',
             ],

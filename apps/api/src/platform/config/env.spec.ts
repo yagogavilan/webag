@@ -85,6 +85,12 @@ describe('validateEnv', () => {
       }
     });
 
+    it('TRUST_PROXY aceita lista de IP/CIDR e recusa CIDR que confia na internet (SEC-114)', () => {
+      expect(validateEnv({ ...prod, TRUST_PROXY: '127.0.0.1,10.0.0.0/8' }).TRUST_PROXY).toEqual(['127.0.0.1', '10.0.0.0/8']);
+      expect(() => validateEnv({ ...prod, TRUST_PROXY: '0.0.0.0/0' })).toThrow(/TRUST_PROXY/);
+      expect(() => validateEnv({ ...prod, BFF_SHARED_SECRET: 'curto' })).toThrow(/BFF_SHARED_SECRET/);
+    });
+
     it('fora de produção os padrões de desenvolvimento são aceitos', () => {
       expect(() => validateEnv(base)).not.toThrow();
     });

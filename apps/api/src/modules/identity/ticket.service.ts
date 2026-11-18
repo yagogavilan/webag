@@ -63,6 +63,11 @@ export class TicketService {
     return rows.length === 1;
   }
 
+  /** Invalida todos os tickets abertos do usuário (ex.: e-mail corrigido, SEC-124). */
+  async invalidateAll(userId: string): Promise<void> {
+    await this.db.update(authTickets).set({ usedAt: new Date() }).where(and(eq(authTickets.userId, userId), isNull(authTickets.usedAt)));
+  }
+
   async markMfa(id: string, kind: 'totp' | 'recovery'): Promise<void> {
     await this.db.update(authTickets).set({ mfaVerifiedAt: new Date(), mfaKind: kind }).where(eq(authTickets.id, id));
   }

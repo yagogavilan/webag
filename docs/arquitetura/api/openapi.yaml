@@ -158,7 +158,7 @@ paths:
       tags: [auth]
       operationId: login
       summary: Entrar com e-mail e senha
-      description: "Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. Código de recuperação também vale uma vez e força reconfigurar o TOTP."
+      description: "Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. SEC-113: admin que já teve 2º fator (TOTP ativo OU em reenrolamento após usar código de recuperação) NUNCA abre sessão só com a senha: sempre recebe o `mfaToken`. Código de recuperação vale uma vez, invalida o segredo antigo, MANTÉM os demais códigos e abre sessão sem MFA concluído (`mfaSetupRequired: true`, só reconfigura o TOTP). Admin que nunca configurou o TOTP entra só dentro de 48 h do convite/reativação; depois, 403 `ENROLLMENT_EXPIRED` (peça novo convite). Cliente de admin deve usar os 2 passos; `totpCode` no login será removido assim que o painel web migrar (SEC-115)."
       security: []
       requestBody:
         required: true
@@ -317,7 +317,7 @@ paths:
       tags: [auth]
       operationId: resetPassword
       summary: Redefinir a senha com o código
-      description: "Confirma o e-mail, revoga TODAS as sessões e envia aviso \"Sua senha foi alterada\". O código do e-mail é conferido primeiro. Admin com TOTP não troca a senha aqui: a resposta é `{ tokens: null, mfaRequired: true, resetTicket }` e a troca termina em `/auth/password/reset/complete` (SEC-095). Admin não recebe sessão (`tokens: null`)."
+      description: "Confirma o e-mail, revoga TODAS as sessões e envia aviso \"Sua senha foi alterada\". O código do e-mail é conferido primeiro. Admin com TOTP não troca a senha aqui: a resposta é `{ tokens: null, mfaRequired: true, resetTicket }` e a troca termina em `/auth/password/reset/complete` (SEC-095). Admin não recebe sessão (`tokens: null`). Admin que nunca configurou o TOTP não tem reset por e-mail: 403 `ADMIN_INVITE_REQUIRED` (pede novo convite, SEC-113). Admin em reenrolamento só conclui com código de recuperação restante."
       security: []
       requestBody:
         required: true
@@ -704,7 +704,7 @@ paths:
       tags: [admin-users]
       operationId: setupTotp
       summary: Iniciar a configuração do TOTP
-      description: "Única área liberada a um admin sem segundo fator. 409 se já configurado."
+      description: "Única área liberada a um admin sem segundo fator. 409 se já configurado. SEC-113: se o TOTP foi perdido (usou código de recuperação), só a sessão aberta por código de recuperação pode reconfigurar (403 `RECOVERY_SESSION_REQUIRED` nas demais); no primeiro enrolamento vale o prazo de 48 h (403 `ENROLLMENT_EXPIRED`)."
       responses:
         '201':
           description: Segredo e URI para o app autenticador

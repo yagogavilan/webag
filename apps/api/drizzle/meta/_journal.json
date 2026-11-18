@@ -43,6 +43,13 @@
       "when": 1795003931237,
       "tag": "0005_onda2_stores_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795020874232,
+      "tag": "0006_sec113_recovery_reenroll",
+      "breakpoints": true
     }
   ]
 }

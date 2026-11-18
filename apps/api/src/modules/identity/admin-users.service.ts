@@ -115,6 +115,11 @@ export class AdminUsersService {
         if (payload.reactivateUserId) {
           // SEC-093: reativação de admin existente (senha nova + TOTP novo), sessão sem MFA concluído.
           await tx.update(users).set({ passwordHash, passwordChangedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, payload.reactivateUserId));
+          // SEC-113 (5): 48 h, a partir de agora, para configurar o TOTP novo; depois, só com novo convite.
+          await tx
+            .update(adminProfiles)
+            .set({ totpReenrollRequiredAt: null, totpSetupDeadlineAt: new Date(Date.now() + ADMIN_INVITE_HOURS * 3_600_000), updatedAt: new Date() })
+            .where(eq(adminProfiles.userId, payload.reactivateUserId));
           await tx.update(invitations).set({ usedAt: new Date() }).where(eq(invitations.id, invite.id));
           await this.audit.record(tx, ctx, { action: 'admin.access_reactivated', actorId: payload.reactivateUserId, actorRole: profile, targetType: 'user', targetId: payload.reactivateUserId });
           const session = await this.sessions.createSession(tx, payload.reactivateUserId, ctx, { mfaVerified: false, reauth: true });
@@ -125,7 +130,7 @@ export class AdminUsersService {
           .values({ email: invite.email, name: invite.name, passwordHash, emailVerifiedAt: new Date(), passwordChangedAt: new Date() })
           .returning();
         if (!user) throw new Error('Falha ao criar admin');
-        await tx.insert(adminProfiles).values({ userId: user.id, profile });
+        await tx.insert(adminProfiles).values({ userId: user.id, profile, totpSetupDeadlineAt: new Date(Date.now() + ADMIN_INVITE_HOURS * 3_600_000) });
         await tx.insert(userRoles).values({ userId: user.id, role: 'customer' }).onConflictDoNothing();
         await tx.update(invitations).set({ usedAt: new Date() }).where(eq(invitations.id, invite.id));
         await this.audit.record(tx, ctx, {

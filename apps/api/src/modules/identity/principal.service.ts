@@ -43,6 +43,8 @@ export class PrincipalService {
         adminProfile: activeAdmin?.profile ?? null,
         totpConfigured: activeAdmin?.totpConfirmedAt != null,
         mfaVerified: session.mfaVerifiedAt !== null,
+        mfaFactor: session.mfaFactor,
+        totpReenrollRequired: activeAdmin?.totpReenrollRequiredAt != null,
         reauthAt: session.reauthAt,
       },
     };

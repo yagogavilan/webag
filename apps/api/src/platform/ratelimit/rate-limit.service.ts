@@ -53,6 +53,19 @@ export class RateLimitService {
     }
   }
 
+  /**
+   * Desfaz uma contagem (usado quando o evento contado era legítimo, p.ex. 2º fator certo). Nunca passa de zero (a chave some ao zerar).
+   * Padrão "conta antes, confere depois" (SEC-117): só assim requisições paralelas não furam o teto.
+   */
+  async release(key: string): Promise<void> {
+    try {
+      await this.ready();
+      await this.redis.eval("local v = redis.call('GET', KEYS[1]) if v and tonumber(v) > 1 then return redis.call('DECR', KEYS[1]) end if v then redis.call('DEL', KEYS[1]) end return 0", 1, key);
+    } catch (error) {
+      this.logger.warn(`Redis indisponível ao devolver contagem: ${(error as Error).message}`);
+    }
+  }
+
   /** Encurta/estende a janela de uma chave existente (usado quando o limite é atingido). */
   async setWindow(key: string, windowSeconds: number): Promise<void> {
     try {
