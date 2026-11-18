@@ -23,6 +23,7 @@ const T = (id: string) => tid('auditoria', id);
 export interface AuditInitial {
   targetType?: string;
   targetId?: string;
+  actorId?: string;
 }
 
 function Detail({ row, who }: { row: AuditRow; who: string }) {
@@ -52,9 +53,9 @@ function Detail({ row, who }: { row: AuditRow; who: string }) {
 export function AuditPage({ initial = {} }: { initial?: AuditInitial }) {
   const { canView } = useSession();
   const online = useOnline();
-  const [period, setPeriod] = useState<Period>(initial.targetId ? 'all' : '7d');
+  const [period, setPeriod] = useState<Period>(initial.targetId || initial.actorId ? 'all' : '7d');
   const [custom, setCustom] = useState({ from: '', to: '' });
-  const [actorId, setActorId] = useState('');
+  const [actorId, setActorId] = useState(initial.actorId ?? '');
   const [action, setAction] = useState('');
   const [target, setTarget] = useState(initial.targetId ?? '');
   const [selected, setSelected] = useState<AuditRow | null>(null);
