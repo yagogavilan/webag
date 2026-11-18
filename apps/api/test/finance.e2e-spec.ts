@@ -5,8 +5,9 @@ import { CommissionService } from '../src/modules/finance/commission.service.js'
 import { LedgerService } from '../src/modules/finance/ledger.service.js';
 import { computeOrderFinance } from '../src/modules/finance/domain/commission.js';
 import { ledgerEntries, ledgerTransactions } from '../src/modules/finance/db/schema.js';
-import { createTestApp, type TestContext } from './helpers/app.js';
-import { ensureCategory, insertStoreRow, registerUser, ensureLegalDocs } from './helpers/fixtures.js';
+import { auditLog } from '../src/platform/database/schema.js';
+import { bearer, createTestApp, type TestContext } from './helpers/app.js';
+import { createAdmin, ensureCategory, ensureLegalDocs, insertStoreRow, registerUser, type TestAdmin } from './helpers/fixtures.js';
 
 /** O Drizzle embrulha o erro do Postgres em `Failed query`; a mensagem do banco está em `cause`. */
 async function dbRejects(promise: PromiseLike<unknown>, pattern: RegExp): Promise<void> {
@@ -139,6 +140,54 @@ describe('Finanças: comissão por loja/categoria e ledger de dupla entrada (WB-
         /não fecha/,
       );
       await expect(ctx.db.execute(sql`insert into ledger_entries (transaction_id, account, direction, amount_cents) values (gen_random_uuid(), 'provider_clearing', 'debit', 0)`)).rejects.toThrow();
+    });
+  });
+
+  describe('API admin de comissões (WB-105)', () => {
+    let finance: TestAdmin;
+    let support: TestAdmin;
+    let operations: TestAdmin;
+    beforeAll(async () => {
+      finance = await createAdmin(ctx, 'finance');
+      support = await createAdmin(ctx, 'support');
+      operations = await createAdmin(ctx, 'operations');
+    });
+
+    it('financeiro define a comissão da loja; a efetiva e o histórico mudam e a ação é auditada com motivo', async () => {
+      const store = await insertStoreRow(ctx, (await registerUser(ctx)).userId);
+      const base = await ctx.http.get(`/v1/admin/stores/${store.id}/commission`).set(bearer(finance.accessToken)).expect(200);
+      expect(base.body.effective).toEqual({ pct: 10, source: 'default' });
+      const res = await ctx.http.put(`/v1/admin/stores/${store.id}/commission`).set(bearer(finance.accessToken)).send({ pct: 7.5, reason: 'loja âncora do bairro' }).expect(200);
+      expect(res.body.effective).toEqual({ pct: 7.5, source: 'store' });
+      expect(res.body.history[0]).toMatchObject({ pct: 7.5, reason: 'loja âncora do bairro' });
+      const [entry] = await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, store.id));
+      expect(entry).toMatchObject({ action: 'commission.store.set', reason: 'loja âncora do bairro' });
+      // remover o override devolve ao padrão
+      const removed = await ctx.http.put(`/v1/admin/stores/${store.id}/commission`).set(bearer(finance.accessToken)).send({ pct: null, reason: 'fim da negociação' }).expect(200);
+      expect(removed.body.effective.source).toBe('default');
+    });
+
+    it('suporte e operação não acessam (403); sem token 401; validação 400; loja inexistente 404', async () => {
+      const storeId = (await insertStoreRow(ctx, (await registerUser(ctx)).userId)).id;
+      for (const admin of [support, operations]) {
+        await ctx.http.get(`/v1/admin/stores/${storeId}/commission`).set(bearer(admin.accessToken)).expect(403);
+        await ctx.http.put(`/v1/admin/stores/${storeId}/commission`).set(bearer(admin.accessToken)).send({ pct: 5, reason: 'tentativa' }).expect(403);
+      }
+      await ctx.http.get(`/v1/admin/stores/${storeId}/commission`).expect(401);
+      await ctx.http.put(`/v1/admin/stores/${storeId}/commission`).set(bearer(finance.accessToken)).send({ pct: 31, reason: 'acima do teto' }).expect(400);
+      await ctx.http.put(`/v1/admin/stores/${storeId}/commission`).set(bearer(finance.accessToken)).send({ pct: 5, reason: '' }).expect(400);
+      await ctx.http.put(`/v1/admin/stores/${storeId}/commission`).set(bearer(finance.accessToken)).send({ pct: 5.123, reason: 'três casas' }).expect(400);
+      await ctx.http.put(`/v1/admin/stores/${storeId}/commission`).set(bearer(finance.accessToken)).send({ pct: 5, reason: 'campo extra', extra: 1 }).expect(400);
+      await ctx.http.get(`/v1/admin/stores/${randomUUID()}/commission`).set(bearer(finance.accessToken)).expect(404);
+      await ctx.http.put(`/v1/admin/stores/${randomUUID()}/commission`).set(bearer(finance.accessToken)).send({ pct: 5, reason: 'loja fantasma' }).expect(404);
+    });
+
+    it('comissão por categoria: define e lista o histórico', async () => {
+      const categoryId = await ensureCategory(ctx);
+      const res = await ctx.http.put(`/v1/admin/categories/${categoryId}/commission`).set(bearer(finance.accessToken)).send({ pct: 6, reason: 'incentivo hortifruti' }).expect(200);
+      expect(res.body.history[0]).toMatchObject({ pct: 6 });
+      await ctx.http.get(`/v1/admin/categories/${categoryId}/commission`).set(bearer(support.accessToken)).expect(403);
+      await ctx.http.get(`/v1/admin/categories/${randomUUID()}/commission`).set(bearer(finance.accessToken)).expect(404);
     });
   });
 });

@@ -48,6 +48,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'products:moderate': null,
   'moderation:read': null,
   'moderation:write': null,
+  'commissions:read': null,
+  'commissions:write': null,
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
 };

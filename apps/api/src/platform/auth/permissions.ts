@@ -37,6 +37,9 @@ export const ADMIN_PERMISSIONS = {
   'products:moderate': [SUPER, OPS],
   'moderation:read': [SUPER, OPS],
   'moderation:write': [SUPER, OPS],
+  /** WB-105/111: comissão por loja e categoria; financeiro e super admin. */
+  'commissions:read': [SUPER, FIN],
+  'commissions:write': [SUPER, FIN],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
 } as const satisfies Record<string, readonly AdminProfile[]>;

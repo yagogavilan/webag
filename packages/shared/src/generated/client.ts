@@ -892,6 +892,59 @@ export interface PaymentAlert {
   resolvedAt: string | null;
 }
 
+export interface CommissionRateInput {
+  /**
+     * Percentual (8.5 = 8,50%). null = remove o override.
+     * @minimum 0
+     * @maximum 30
+     * @nullable
+     */
+  pct: number | null;
+  /** Padrão: agora. Futuro só vale a partir da data. */
+  startsAt?: string;
+  /** @nullable */
+  endsAt?: string | null;
+  /**
+     * @minLength 3
+     * @maxLength 300
+     */
+  reason: string;
+}
+
+export interface CommissionRate {
+  id: string;
+  /** @nullable */
+  pct: number | null;
+  startsAt: string;
+  /** @nullable */
+  endsAt: string | null;
+  reason: string;
+  createdAt: string;
+}
+
+export interface CategoryCommission {
+  history: CommissionRate[];
+}
+
+export type StoreCommissionEffectiveSource = typeof StoreCommissionEffectiveSource[keyof typeof StoreCommissionEffectiveSource];
+
+
+export const StoreCommissionEffectiveSource = {
+  store: 'store',
+  category: 'category',
+  default: 'default',
+} as const;
+
+export type StoreCommissionEffective = {
+  pct: number;
+  source: StoreCommissionEffectiveSource;
+};
+
+export interface StoreCommission {
+  effective: StoreCommissionEffective;
+  history: CommissionRate[];
+}
+
 export interface PaymentAlertPage {
   data: PaymentAlert[];
   /** @nullable */
@@ -7290,6 +7343,234 @@ export const receivePaymentWebhook = async (provider: string,
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type getStoreCommissionResponse200 = {
+  data: StoreCommission
+  status: 200
+}
+
+export type getStoreCommissionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreCommissionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreCommissionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreCommissionResponseSuccess = (getStoreCommissionResponse200) & {
+  headers: Headers;
+};
+export type getStoreCommissionResponseError = (getStoreCommissionResponse401 | getStoreCommissionResponse403 | getStoreCommissionResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreCommissionResponse = (getStoreCommissionResponseSuccess | getStoreCommissionResponseError)
+
+export const getGetStoreCommissionUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/commission`
+}
+
+/**
+ * Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros.
+ * @summary Comissão efetiva da loja e histórico
+ */
+export const getStoreCommission = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreCommissionResponse> => {
+
+  return apiFetch<getStoreCommissionResponse>(getGetStoreCommissionUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setStoreCommissionResponse200 = {
+  data: StoreCommission
+  status: 200
+}
+
+export type setStoreCommissionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreCommissionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreCommissionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreCommissionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreCommissionResponseSuccess = (setStoreCommissionResponse200) & {
+  headers: Headers;
+};
+export type setStoreCommissionResponseError = (setStoreCommissionResponse400 | setStoreCommissionResponse401 | setStoreCommissionResponse403 | setStoreCommissionResponse404) & {
+  headers: Headers;
+};
+
+export type setStoreCommissionResponse = (setStoreCommissionResponseSuccess | setStoreCommissionResponseError)
+
+export const getSetStoreCommissionUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/commission`
+}
+
+/**
+ * Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo.
+ * @summary Definir comissão (linha nova; não retroativa)
+ */
+export const setStoreCommission = async (storeId: string,
+    commissionRateInput: CommissionRateInput, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreCommissionResponse> => {
+
+  return apiFetch<setStoreCommissionResponse>(getSetStoreCommissionUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(commissionRateInput)
+  }
+);}
+
+
+
+export type getCategoryCommissionResponse200 = {
+  data: CategoryCommission
+  status: 200
+}
+
+export type getCategoryCommissionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCategoryCommissionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getCategoryCommissionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getCategoryCommissionResponseSuccess = (getCategoryCommissionResponse200) & {
+  headers: Headers;
+};
+export type getCategoryCommissionResponseError = (getCategoryCommissionResponse401 | getCategoryCommissionResponse403 | getCategoryCommissionResponse404) & {
+  headers: Headers;
+};
+
+export type getCategoryCommissionResponse = (getCategoryCommissionResponseSuccess | getCategoryCommissionResponseError)
+
+export const getGetCategoryCommissionUrl = (categoryId: string,) => {
+
+
+
+
+  return `/v1/admin/categories/${categoryId}/commission`
+}
+
+/**
+ * Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros.
+ * @summary Histórico de comissão da categoria
+ */
+export const getCategoryCommission = async (categoryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getCategoryCommissionResponse> => {
+
+  return apiFetch<getCategoryCommissionResponse>(getGetCategoryCommissionUrl(categoryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setCategoryCommissionResponse200 = {
+  data: CategoryCommission
+  status: 200
+}
+
+export type setCategoryCommissionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setCategoryCommissionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setCategoryCommissionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setCategoryCommissionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setCategoryCommissionResponseSuccess = (setCategoryCommissionResponse200) & {
+  headers: Headers;
+};
+export type setCategoryCommissionResponseError = (setCategoryCommissionResponse400 | setCategoryCommissionResponse401 | setCategoryCommissionResponse403 | setCategoryCommissionResponse404) & {
+  headers: Headers;
+};
+
+export type setCategoryCommissionResponse = (setCategoryCommissionResponseSuccess | setCategoryCommissionResponseError)
+
+export const getSetCategoryCommissionUrl = (categoryId: string,) => {
+
+
+
+
+  return `/v1/admin/categories/${categoryId}/commission`
+}
+
+/**
+ * Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo.
+ * @summary Definir comissão (linha nova; não retroativa)
+ */
+export const setCategoryCommission = async (categoryId: string,
+    commissionRateInput: CommissionRateInput, options?: Parameters<typeof apiFetch>[1]): Promise<setCategoryCommissionResponse> => {
+
+  return apiFetch<setCategoryCommissionResponse>(getSetCategoryCommissionUrl(categoryId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(commissionRateInput)
   }
 );}
 

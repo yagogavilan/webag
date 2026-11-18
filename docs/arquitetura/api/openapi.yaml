@@ -34,6 +34,8 @@ tags:
     description: Termos de uso, termos do lojista e política de privacidade versionados
   - name: audit
     description: Trilha de auditoria append-only
+  - name: finance
+    description: Comissão, taxa de serviço e ledger (admin financeiro)
   - name: payments
     description: Webhook do provedor de pagamento e alertas de conciliação
   - name: admin-stores
@@ -1378,6 +1380,104 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/stores/{storeId}/commission:
+    get:
+      tags: [finance]
+      operationId: getStoreCommission
+      summary: Comissão efetiva da loja e histórico
+      description: "Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Comissão
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCommission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [finance]
+      operationId: setStoreCommission
+      summary: Definir comissão (linha nova; não retroativa)
+      description: "Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommissionRateInput'
+      responses:
+        '200':
+          description: Comissão atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCommission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /v1/admin/categories/{categoryId}/commission:
+    get:
+      tags: [finance]
+      operationId: getCategoryCommission
+      summary: Histórico de comissão da categoria
+      description: "Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros."
+      parameters:
+        - { name: categoryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Comissão
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryCommission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [finance]
+      operationId: setCategoryCommission
+      summary: Definir comissão (linha nova; não retroativa)
+      description: "Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo."
+      parameters:
+        - { name: categoryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommissionRateInput'
+      responses:
+        '200':
+          description: Comissão atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryCommission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/ValidationError'
   /v1/admin/payments/alerts:
     get:
       tags: [payments]
@@ -5315,6 +5415,45 @@ components:
         details: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
+    CommissionRateInput:
+      type: object
+      additionalProperties: false
+      required: [pct, reason]
+      properties:
+        pct: { type: [number, 'null'], minimum: 0, maximum: 30, multipleOf: 0.01, description: 'Percentual (8.5 = 8,50%). null = remove o override.' }
+        startsAt: { type: string, format: date-time, description: 'Padrão: agora. Futuro só vale a partir da data.' }
+        endsAt: { type: [string, 'null'], format: date-time }
+        reason: { type: string, minLength: 3, maxLength: 300 }
+    CommissionRate:
+      type: object
+      required: [id, pct, startsAt, endsAt, reason, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        pct: { type: [number, 'null'] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+    CategoryCommission:
+      type: object
+      required: [history]
+      properties:
+        history:
+          type: array
+          items: { $ref: '#/components/schemas/CommissionRate' }
+    StoreCommission:
+      type: object
+      required: [effective, history]
+      properties:
+        effective:
+          type: object
+          required: [pct, source]
+          properties:
+            pct: { type: number }
+            source: { type: string, enum: [store, category, default] }
+        history:
+          type: array
+          items: { $ref: '#/components/schemas/CommissionRate' }
     PaymentAlertPage:
       type: object
       required: [data, nextCursor]

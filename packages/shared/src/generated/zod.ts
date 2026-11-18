@@ -1318,6 +1318,126 @@ export const ReceivePaymentWebhookResponse = zod.object({
 
 
 /**
+ * Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros.
+ * @summary Comissão efetiva da loja e histórico
+ */
+export const GetStoreCommissionParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreCommissionResponse = zod.object({
+  "effective": zod.object({
+  "pct": zod.number(),
+  "source": zod.enum(['store', 'category', 'default'])
+}),
+  "history": zod.array(zod.object({
+  "id": zod.uuid(),
+  "pct": zod.number().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo.
+ * @summary Definir comissão (linha nova; não retroativa)
+ */
+export const SetStoreCommissionParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStoreCommissionBodyPctMin = 0;
+export const setStoreCommissionBodyPctMax = 30;
+export const setStoreCommissionBodyPctMultipleOf = 0.01;
+
+export const setStoreCommissionBodyReasonMin = 3;
+export const setStoreCommissionBodyReasonMax = 300;
+
+
+
+export const SetStoreCommissionBody = zod.object({
+  "pct": zod.number().min(setStoreCommissionBodyPctMin).max(setStoreCommissionBodyPctMax).multipleOf(setStoreCommissionBodyPctMultipleOf).nullable().describe('Percentual (8.5 = 8,50%). null = remove o override.'),
+  "startsAt": zod.iso.datetime({"offset":true}).optional().describe('Padrão: agora. Futuro só vale a partir da data.'),
+  "endsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "reason": zod.string().min(setStoreCommissionBodyReasonMin).max(setStoreCommissionBodyReasonMax)
+})
+
+export const SetStoreCommissionResponse = zod.object({
+  "effective": zod.object({
+  "pct": zod.number(),
+  "source": zod.enum(['store', 'category', 'default'])
+}),
+  "history": zod.array(zod.object({
+  "id": zod.uuid(),
+  "pct": zod.number().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros.
+ * @summary Histórico de comissão da categoria
+ */
+export const GetCategoryCommissionParams = zod.object({
+  "categoryId": zod.uuid()
+})
+
+export const GetCategoryCommissionResponse = zod.object({
+  "history": zod.array(zod.object({
+  "id": zod.uuid(),
+  "pct": zod.number().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo.
+ * @summary Definir comissão (linha nova; não retroativa)
+ */
+export const SetCategoryCommissionParams = zod.object({
+  "categoryId": zod.uuid()
+})
+
+export const setCategoryCommissionBodyPctMin = 0;
+export const setCategoryCommissionBodyPctMax = 30;
+export const setCategoryCommissionBodyPctMultipleOf = 0.01;
+
+export const setCategoryCommissionBodyReasonMin = 3;
+export const setCategoryCommissionBodyReasonMax = 300;
+
+
+
+export const SetCategoryCommissionBody = zod.object({
+  "pct": zod.number().min(setCategoryCommissionBodyPctMin).max(setCategoryCommissionBodyPctMax).multipleOf(setCategoryCommissionBodyPctMultipleOf).nullable().describe('Percentual (8.5 = 8,50%). null = remove o override.'),
+  "startsAt": zod.iso.datetime({"offset":true}).optional().describe('Padrão: agora. Futuro só vale a partir da data.'),
+  "endsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "reason": zod.string().min(setCategoryCommissionBodyReasonMin).max(setCategoryCommissionBodyReasonMax)
+})
+
+export const SetCategoryCommissionResponse = zod.object({
+  "history": zod.array(zod.object({
+  "id": zod.uuid(),
+  "pct": zod.number().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
  * Permissão de admin: `payments:alerts:read` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alertas de conciliação e divergência
  */
