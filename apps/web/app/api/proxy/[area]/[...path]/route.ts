@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { clearedCookies, cookieNames, isSessionArea, sessionCookies, writeCookies, type SessionArea, type TokenPair } from '@/server/cookies';
+import { clearedCookies, clearedPendingCookie, cookieNames, pendingCookie, pendingCookieName, isSessionArea, sessionCookies, writeCookies, type SessionArea, type TokenPair } from '@/server/cookies';
 import { csrfProblem } from '@/server/csrf';
+import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { refreshSession } from '@/server/refresh';
 import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/upstream';
@@ -10,7 +11,7 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
  * deixa passar o que cada área usa. A autorização de verdade é da API.
  */
 const ALLOWED: Record<SessionArea, RegExp> = {
-  admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset))|legal\/[a-z_]+)$/,
+  admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
     /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,5})$/,
 };
@@ -22,6 +23,7 @@ const ENDS_SESSION = new Set(['auth/logout-all']);
 async function handle(request: NextRequest, context: { params: Promise<{ area: string; path: string[] }> }) {
   const { area, path } = await context.params;
   if (!isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (!areaAllowedOnHost(area, request.headers)) return problem(404, 'NOT_FOUND', 'Não encontrado');
   const joined = path.join('/');
   if (path.some((s) => s === '..' || s === '.' || s === '') || !ALLOWED[area].test(joined)) {
     return problem(404, 'NOT_FOUND', 'Não encontrado');
@@ -30,7 +32,15 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
 
   const names = cookieNames(area);
   const hints = clientHints(request.headers);
-  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
+  let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
+  const completesReset = area === 'admin' && joined === 'auth/password/reset/complete';
+  if (completesReset) {
+    // SEC-115/095: o `resetTicket` vive em cookie HttpOnly; o navegador manda só TOTP/recuperação e a senha nova.
+    const ticket = request.cookies.get(pendingCookieName('reset'))?.value;
+    const sent = parseJson<{ totpCode?: unknown; newPassword?: unknown }>(body ?? '');
+    if (!ticket || !sent) return problem(401, 'MFA_INVALID', 'Código incorreto ou vencido', 'Código incorreto ou vencido.');
+    body = JSON.stringify({ resetTicket: ticket, totpCode: sent.totpCode, newPassword: sent.newPassword });
+  }
   const query = request.nextUrl.search;
 
   let access = request.cookies.get(names.access)?.value ?? null;
@@ -47,9 +57,20 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
 
   if (!access) await renew();
   let result: UpstreamResult = await send();
-  if (result.status === 401 && refresh && !renewed && (await renew())) result = await send();
+  if (!completesReset && result.status === 401 && refresh && !renewed && (await renew())) result = await send();
+
+  // Reset de senha do admin com TOTP: a API devolve `resetTicket`; ele vai para cookie e sai do corpo (SEC-095).
+  if (area === 'admin' && joined === 'auth/password/reset' && result.status === 200) {
+    const ticket = parseJson<{ resetTicket?: string; expiresIn?: number }>(result.text);
+    if (ticket?.resetTicket) {
+      const pending = NextResponse.json({ mfaRequired: true }, { headers: { 'cache-control': 'no-store' } });
+      writeCookies(pending.cookies, [pendingCookie('reset', ticket.resetTicket, ticket.expiresIn)]);
+      return pending;
+    }
+  }
 
   const response = respond(result);
+  if (completesReset && result.status < 400) writeCookies(response.cookies, [clearedPendingCookie('reset')]);
   if (renewed) writeCookies(response.cookies, sessionCookies(area, renewed));
   if (result.status === 401 && !renewed && refresh) writeCookies(response.cookies, clearedCookies(area));
   if (result.status < 400 && ENDS_SESSION.has(joined)) writeCookies(response.cookies, clearedCookies(area));

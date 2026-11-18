@@ -155,6 +155,8 @@ const publicUser = (u) => ({ id: u.id, email: u.email, emailVerified: true, name
 const routes = [];
 const route = (method, pattern, opts, handler) => routes.push({ method, regex: new RegExp(`^${pattern.replace(/:[a-zA-Z]+/g, '([^/]+)')}$`), opts, handler });
 
+const mfaTokens = new Map();
+const resetTickets = new Map();
 route('POST', '/v1/auth/login', { public: true }, async (req, res, ctx) => {
   const body = ctx.body;
   const key = `${body.email}`;
@@ -168,24 +170,53 @@ route('POST', '/v1/auth/login', { public: true }, async (req, res, ctx) => {
     return problem(res, 401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', 'E-mail ou senha incorretos.');
   };
   if (!user || user.password !== body.password) return fail();
-  let mfaVerified = false;
   let mfaSetupRequired = false;
   if (user.profile && user.active) {
     if (user.totpConfirmed) {
-      if (!body.totpCode) return problem(res, 401, 'TOTP_REQUIRED', 'Informe o código do autenticador', 'Informe o código do app autenticador.');
-      const normalized = String(body.totpCode).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-      if (/^\d{6}$/.test(body.totpCode) && (body.totpCode === totpNow(user.totpSecret) || body.totpCode === totpNow(user.totpSecret, Date.now() - 30_000))) mfaVerified = true;
-      else if (user.recovery.includes(normalized)) {
-        user.recovery = user.recovery.filter((c) => c !== normalized);
-        user.totpSecret = null;
-        user.totpConfirmed = false;
-        mfaSetupRequired = true;
-      } else return fail();
-    } else mfaSetupRequired = true;
+      // 2 passos (SEC-090): a senha certa devolve só o desafio; o código vai em /v1/auth/mfa/verify.
+      if (body.totpCode !== undefined) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+      const mfaToken = randomBytes(32).toString('base64url');
+      mfaTokens.set(mfaToken, { userId: user.id, attempts: 0, until: Date.now() + 300_000 });
+      attempts.delete(key);
+      return json(res, 200, { mfaRequired: true, mfaToken, expiresIn: 300 });
+    }
+    mfaSetupRequired = true;
   }
   attempts.delete(key);
-  const { tokens } = newSession(user, { mfaVerified });
-  if (user.profile) record(req, { user }, { action: 'admin.login', targetType: 'user', targetId: user.id, after: { mfaVerified } });
+  const { tokens } = newSession(user, { mfaVerified: false });
+  if (user.profile) record(req, { user }, { action: 'admin.login', targetType: 'user', targetId: user.id, after: { mfaVerified: false } });
+  json(res, 200, { user: publicUser(user), tokens, mfaSetupRequired });
+});
+/** Confere TOTP ou código de recuperação (uso único). Retorna 'totp' | 'recovery' | null. */
+function checkFactor(user, raw) {
+  const value = String(raw ?? '');
+  const normalized = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (/^\d{6}$/.test(value) && (value === totpNow(user.totpSecret) || value === totpNow(user.totpSecret, Date.now() - 30_000))) return 'totp';
+  if (user.recovery.includes(normalized)) {
+    user.recovery = user.recovery.filter((c) => c !== normalized);
+    return 'recovery';
+  }
+  return null;
+}
+route('POST', '/v1/auth/mfa/verify', { public: true }, (req, res, ctx) => {
+  const invalid = () => problem(res, 401, 'MFA_INVALID', 'Código incorreto ou vencido', 'Código incorreto ou vencido.');
+  const entry = mfaTokens.get(ctx.body.mfaToken);
+  if (!entry || entry.until < Date.now() || entry.attempts >= 5) return invalid();
+  const user = users.get(entry.userId);
+  const factor = user && checkFactor(user, ctx.body.code);
+  if (!factor) {
+    entry.attempts += 1;
+    return invalid();
+  }
+  mfaTokens.delete(ctx.body.mfaToken);
+  let mfaSetupRequired = false;
+  if (factor === 'recovery') {
+    user.totpSecret = null;
+    user.totpConfirmed = false;
+    mfaSetupRequired = true;
+  }
+  const { tokens } = newSession(user, { mfaVerified: factor === 'totp' });
+  record(req, { user }, { action: 'admin.login', targetType: 'user', targetId: user.id, after: { mfaVerified: factor === 'totp' } });
   json(res, 200, { user: publicUser(user), tokens, mfaSetupRequired });
 });
 route('POST', '/v1/auth/refresh', { public: true }, (req, res, ctx) => {
@@ -212,7 +243,27 @@ route('POST', '/v1/auth/password/forgot', { public: true }, (req, res) => json(r
 route('POST', '/v1/auth/password/reset', { public: true }, (req, res, ctx) => {
   if (ctx.body.code !== '123456') return problem(res, 401, 'CODE_INVALID', 'Código inválido', 'Código incorreto ou vencido.');
   const user = [...users.values()].find((u) => u.email === ctx.body.email);
+  if (user?.profile && user.totpConfirmed) {
+    // SEC-095: admin com TOTP só troca a senha depois do 2º fator, no mesmo ticket.
+    const resetTicket = randomBytes(32).toString('base64url');
+    resetTickets.set(resetTicket, { userId: user.id, attempts: 0, until: Date.now() + 600_000 });
+    return json(res, 200, { tokens: null, mfaRequired: true, resetTicket, expiresIn: 600 });
+  }
   if (user) user.password = ctx.body.newPassword;
+  json(res, 200, { tokens: null });
+});
+route('POST', '/v1/auth/password/reset/complete', { public: true }, (req, res, ctx) => {
+  const invalid = () => problem(res, 401, 'MFA_INVALID', 'Código incorreto ou vencido', 'Código incorreto ou vencido.');
+  const entry = resetTickets.get(ctx.body.resetTicket);
+  if (!entry || entry.until < Date.now() || entry.attempts >= 5) return invalid();
+  const user = users.get(entry.userId);
+  if (!user || !checkFactor(user, ctx.body.totpCode)) {
+    entry.attempts += 1;
+    return invalid();
+  }
+  resetTickets.delete(ctx.body.resetTicket);
+  user.password = ctx.body.newPassword;
+  revokeAll(user.id);
   json(res, 200, { tokens: null });
 });
 route('POST', '/v1/auth/invitations/accept', { public: true }, (req, res, ctx) => {

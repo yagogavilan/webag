@@ -35,7 +35,7 @@ export function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [blocked, setBlocked] = useState<{ title: string; text: string } | null>(null);
 
-  async function submit(extra: { totpCode?: string; code?: string } = {}) {
+  async function submit(extra: { code?: string } = {}) {
     setError(null);
     setBlocked(null);
     const errors: typeof fieldErrors = {};
@@ -48,8 +48,16 @@ export function LoginForm() {
     }
     setBusy(true);
     try {
-      const [result] = await Promise.all([sessionRequest<{ mfaSetupRequired: boolean }>('admin', 'login', { email: email.trim(), password, ...extra }), wait(MIN_WAIT_MS)]);
-      router.replace((result.mfaSetupRequired ? '/admin/verificacao' : (safeNext(params.get('next')) ?? '/admin')) as never);
+      const [result] = await Promise.all([sessionRequest<{ mfaRequired?: boolean; mfaSetupRequired?: boolean }>('admin', 'login', { email: email.trim(), password, ...extra }), wait(MIN_WAIT_MS)]);
+      // 2 passos (SEC-090/115): senha certa de admin com TOTP devolve só o desafio; o `mfaToken` fica em cookie HttpOnly.
+      if (result.mfaRequired) {
+        setStep('totp');
+        setCode('');
+        setRecovery('');
+        setBusy(false);
+        return;
+      }
+      enter(result);
     } catch (caught) {
       await wait(MIN_WAIT_MS);
       handleError(caught);
@@ -57,21 +65,40 @@ export function LoginForm() {
     }
   }
 
+  /** 2º passo: TOTP ou código de recuperação. O token do 1º passo já está no cookie; aqui só vai o código. */
+  async function submitMfa(value: string) {
+    setError(null);
+    setBlocked(null);
+    setBusy(true);
+    try {
+      const result = await sessionRequest<{ mfaSetupRequired?: boolean }>('admin', 'mfa', { code: value });
+      enter(result);
+    } catch (caught) {
+      handleError(caught);
+      setBusy(false);
+    }
+  }
+
+  function enter(result: { mfaSetupRequired?: boolean }) {
+    router.replace((result.mfaSetupRequired ? '/admin/verificacao' : (safeNext(params.get('next')) ?? '/admin')) as never);
+  }
+
   function handleError(caught: unknown) {
     if (!(caught instanceof ApiError)) return setError('Não foi possível entrar. Tente de novo.');
     switch (caught.code) {
-      case 'TOTP_REQUIRED':
-        setStep('totp');
-        setCode('');
-        return;
       case 'LOGIN_CODE_REQUIRED':
         setStep('email-code');
         setCode('');
         return;
+      case 'MFA_INVALID':
       case 'INVALID_CREDENTIALS':
         setCode('');
         setRecovery('');
         return setError(step === 'totp' || step === 'email-code' ? 'Código incorreto ou vencido.' : step === 'recovery' ? 'Código incorreto ou já usado.' : 'E-mail ou senha incorretos.');
+      case 'MFA_RATE_LIMITED':
+        setCode('');
+        setRecovery('');
+        return setError(caught.retryAfterSeconds ? `Muitas tentativas. Tente de novo às ${clockAfterSeconds(caught.retryAfterSeconds)}.` : 'Muitas tentativas. Tente de novo em alguns minutos.');
       case 'RATE_LIMITED':
         return setBlocked({ title: 'Muitas tentativas', text: caught.retryAfterSeconds ? `Tente de novo às ${clockAfterSeconds(caught.retryAfterSeconds)} ou redefina a senha.` : 'Tente de novo em alguns minutos ou redefina a senha.' });
       case 'ACCOUNT_BLOCKED':
@@ -86,8 +113,8 @@ export function LoginForm() {
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (step === 'credentials') void submit();
-    else if (step === 'recovery') void submit({ totpCode: recovery.trim() });
-    else if (code.length === 6) void submit(step === 'email-code' ? { code } : { totpCode: code });
+    else if (step === 'recovery') void submitMfa(recovery.trim());
+    else if (code.length === 6) void (step === 'email-code' ? submit({ code }) : submitMfa(code));
   }
 
   const banner =
@@ -118,7 +145,7 @@ export function LoginForm() {
           <p className="wb-text-body" style={{ margin: 0 }}>
             {emailStep ? 'Enviamos um código de 6 dígitos para o seu e-mail.' : 'Digite o código de 6 dígitos do seu app autenticador.'}
           </p>
-          <OtpInput value={code} onChange={setCode} onComplete={(value) => void submit(emailStep ? { code: value } : { totpCode: value })} invalid={Boolean(error)} disabled={busy} autoFocus testId="admin.login.totp-input" />
+          <OtpInput value={code} onChange={setCode} onComplete={(value) => void (emailStep ? submit({ code: value }) : submitMfa(value))} invalid={Boolean(error)} disabled={busy} autoFocus testId="admin.login.totp-input" />
           {error ? <Banner tone="danger" testId="admin.login.error">{error}</Banner> : null}
           {busy ? <p className="wb-text-caption" role="status" style={{ margin: 0 }}>Verificando…</p> : null}
           <div className={s.links}>

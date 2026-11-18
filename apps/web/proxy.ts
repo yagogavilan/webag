@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { cookieNames, sessionCookies } from '@/server/cookies';
+import { clearedCookies, cookieNames, sessionCookies } from '@/server/cookies';
 import { refreshSession } from '@/server/refresh';
+import { areaAllowedOnHost } from '@/server/hosts';
+import { clientHints } from '@/server/upstream';
 
 /**
  * Proxy (antigo middleware) dos painéis admin e lojista (cada área com o seu par de cookies, SEC-106):
@@ -51,6 +53,11 @@ export async function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const policy = csp(nonce);
 
+  // SEC-116: cada painel só responde no seu host.
+  if (!areaAllowedOnHost(area, request.headers)) {
+    return new NextResponse('Não encontrado', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+  }
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('content-security-policy', policy);
@@ -60,11 +67,7 @@ export async function proxy(request: NextRequest) {
   const refreshToken = request.cookies.get(RT)?.value;
 
   if (!hasSession && refreshToken) {
-    const pair = await refreshSession(refreshToken, {
-      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
-      userAgent: request.headers.get('user-agent'),
-      deviceId: null,
-    });
+    const pair = await refreshSession(refreshToken, { ...clientHints(request.headers), deviceId: null });
     if (pair) {
       refreshed = sessionCookies(area, pair);
       hasSession = true;
@@ -87,7 +90,7 @@ export async function proxy(request: NextRequest) {
     response = NextResponse.redirect(url);
     if (refreshToken) {
       // Refresh recusado: limpa para não tentar de novo a cada requisição.
-      response.cookies.set({ name: RT, value: '', maxAge: 0, path: '/' });
+      for (const c of clearedCookies(area)) if (c.name === RT) response.cookies.set(c);
     }
   } else {
     response = NextResponse.next({ request: { headers: requestHeaders } });

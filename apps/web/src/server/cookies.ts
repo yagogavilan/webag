@@ -11,7 +11,8 @@ export function isSessionArea(value: string): value is SessionArea {
 export function cookieNames(area: SessionArea) {
   return {
     access: `${COOKIE_SECURE ? '__Host-' : ''}wb_${area}_at`,
-    refresh: `${COOKIE_SECURE ? '__Secure-' : ''}wb_${area}_rt`,
+    // __Host-: sem Domain, só no host que gravou. Um subdomínio irmão não consegue sobrescrever (cookie tossing, SEC-116).
+    refresh: `${COOKIE_SECURE ? '__Host-' : ''}wb_${area}_rt`,
   };
 }
 
@@ -27,7 +28,7 @@ interface CookieSpec {
   value: string;
   httpOnly: true;
   secure: boolean;
-  sameSite: 'lax';
+  sameSite: 'lax' | 'strict';
   path: '/';
   maxAge: number;
 }
@@ -49,6 +50,24 @@ export function clearedCookies(area: SessionArea): CookieSpec[] {
     { ...base, name: names.access },
     { ...base, name: names.refresh },
   ];
+}
+
+/** Credenciais de 1 uso do login/reset do admin em 2 passos: ficam em cookie HttpOnly, nunca no JavaScript da página (SEC-115). */
+export type PendingKind = 'mfa' | 'reset';
+const PENDING_MAX_AGE_S: Record<PendingKind, number> = { mfa: 300, reset: 600 };
+
+export function pendingCookieName(kind: PendingKind): string {
+  return `${COOKIE_SECURE ? '__Host-' : ''}wb_admin_${kind}`;
+}
+
+export function pendingCookie(kind: PendingKind, value: string, expiresIn?: number): CookieSpec {
+  const max = PENDING_MAX_AGE_S[kind];
+  const ttl = expiresIn && expiresIn > 0 ? Math.min(expiresIn, max) : max;
+  return { name: pendingCookieName(kind), value, httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: '/', maxAge: ttl };
+}
+
+export function clearedPendingCookie(kind: PendingKind): CookieSpec {
+  return { ...pendingCookie(kind, ''), maxAge: 0 };
 }
 
 export interface CookieWriter {

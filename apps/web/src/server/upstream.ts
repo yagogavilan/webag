@@ -1,5 +1,6 @@
 import 'server-only';
-import { API_URL } from './config';
+import { API_URL, IS_PROD, bffSecret, clientIpHeader, trustedProxyHops } from './config';
+import { resolveClientIp } from './client-ip';
 
 export interface ClientHints {
   ip: string | null;
@@ -7,11 +8,21 @@ export interface ClientHints {
   deviceId: string | null;
 }
 
-/** IP e aparelho reais seguem para a API (limite de tentativas e auditoria dependem deles). Exige TRUST_PROXY=1 na API. */
+let warnedNoProxy = false;
+
+/**
+ * IP e aparelho seguem para a API (limite de tentativas e auditoria dependem deles). O IP NUNCA vem direto do
+ * X-Forwarded-For do navegador (SEC-114): ver `resolveClientIp`. Configure `WEB_TRUSTED_PROXY_HOPS` ou `WEB_CLIENT_IP_HEADER`.
+ */
 export function clientHints(headers: Headers): ClientHints {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const header = clientIpHeader();
+  const hops = trustedProxyHops();
+  if (IS_PROD && !header && hops === 0 && !warnedNoProxy) {
+    warnedNoProxy = true;
+    console.warn('[web] WEB_TRUSTED_PROXY_HOPS/WEB_CLIENT_IP_HEADER não definidos: o IP do cliente não será enviado à API (limites por IP ficam no IP do BFF).');
+  }
   return {
-    ip: forwarded || headers.get('x-real-ip'),
+    ip: resolveClientIp(headers, { hops, header }),
     userAgent: headers.get('user-agent'),
     deviceId: headers.get('x-device-id'),
   };
@@ -36,6 +47,9 @@ export async function callApi(path: string, init: UpstreamInit = {}): Promise<Up
   const headers = new Headers({ accept: 'application/json' });
   if (init.body !== undefined) headers.set('content-type', 'application/json');
   if (init.accessToken) headers.set('authorization', `Bearer ${init.accessToken}`);
+  // Só o BFF, com o segredo, pode declarar o IP do cliente (a API ignora o X-Forwarded-For sem ele).
+  const secret = bffSecret();
+  if (secret) headers.set('x-webag-bff-secret', secret);
   if (init.hints?.ip) headers.set('x-forwarded-for', init.hints.ip);
   if (init.hints?.userAgent) headers.set('user-agent', init.hints.userAgent);
   if (init.hints?.deviceId) headers.set('x-device-id', init.hints.deviceId);

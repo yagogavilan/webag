@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { isSessionArea, sessionCookies, writeCookies, type TokenPair } from '@/server/cookies';
 import { csrfProblem } from '@/server/csrf';
+import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { callApi, clientHints, parseJson } from '@/server/upstream';
 
@@ -14,6 +15,7 @@ const bodySchema = z.strictObject({ token: z.string().min(20).max(200), password
 export async function POST(request: NextRequest, context: { params: Promise<{ area: string }> }) {
   const { area } = await context.params;
   if (!isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (!areaAllowedOnHost(area, request.headers)) return problem(404, 'NOT_FOUND', 'Não encontrado');
   if (csrfProblem(request)) return problem(403, 'CSRF', 'Requisição recusada');
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));

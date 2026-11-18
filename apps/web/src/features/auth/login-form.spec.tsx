@@ -51,33 +51,60 @@ describe('LoginForm (AC1, AC3)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('pede o código do autenticador no passo 2 e entra no 6º dígito', async () => {
-    fetchMock.mockResolvedValueOnce(problem(401, 'TOTP_REQUIRED')).mockResolvedValueOnce(new Response(JSON.stringify({ mfaSetupRequired: false }), { status: 200 }));
+  const challenge = () => new Response(JSON.stringify({ mfaRequired: true }), { status: 200 });
+  const sessionOk = (mfaSetupRequired = false) => new Response(JSON.stringify({ mfaSetupRequired }), { status: 200 });
+  const call = (n: number) => ({ url: String(fetchMock.mock.calls[n]![0]), body: JSON.parse((fetchMock.mock.calls[n]![1] as RequestInit).body as string) });
+
+  it('2 passos: senha certa abre o passo do código e o código segue para /mfa sem repetir a senha (SEC-115)', async () => {
+    fetchMock.mockResolvedValueOnce(challenge()).mockResolvedValueOnce(sessionOk());
     render(<LoginForm />);
     await fillCredentials();
     expect(await screen.findByRole('heading', { name: 'Verificação em duas etapas' })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Dígito 1 de 6'), '123456');
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/admin'));
-    const body = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string);
-    expect(body).toMatchObject({ email: 'admin@webag.local', totpCode: '123456' });
+    expect(call(0).url).toBe('/api/session/admin/login');
+    expect(call(0).body).toEqual({ email: 'admin@webag.local', password: 'segredo-123' });
+    expect(call(1).url).toBe('/api/session/admin/mfa');
+    expect(call(1).body).toEqual({ code: '123456' });
   });
 
   it('código errado no passo 2 mostra "Código incorreto ou vencido."', async () => {
-    fetchMock.mockResolvedValueOnce(problem(401, 'TOTP_REQUIRED')).mockResolvedValueOnce(problem(401, 'INVALID_CREDENTIALS'));
+    fetchMock.mockResolvedValueOnce(challenge()).mockResolvedValueOnce(problem(401, 'MFA_INVALID'));
     render(<LoginForm />);
     await fillCredentials();
     await userEvent.type(await screen.findByLabelText('Dígito 1 de 6'), '000000');
     expect(await screen.findByText('Código incorreto ou vencido.')).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
   });
 
-  it('abre o fluxo de código de recuperação e a recuperação leva à configuração do 2º fator', async () => {
-    fetchMock.mockResolvedValueOnce(problem(401, 'TOTP_REQUIRED')).mockResolvedValueOnce(new Response(JSON.stringify({ mfaSetupRequired: true }), { status: 200 }));
+  it('muitas tentativas no 2º fator mostram o horário no próprio passo', async () => {
+    fetchMock.mockResolvedValueOnce(challenge()).mockResolvedValueOnce(problem(429, 'MFA_RATE_LIMITED', { 'retry-after': '900' }));
+    render(<LoginForm />);
+    await fillCredentials();
+    await userEvent.type(await screen.findByLabelText('Dígito 1 de 6'), '000000');
+    expect(await screen.findByText(/Muitas tentativas\. Tente de novo às \d{2}:\d{2}/)).toBeInTheDocument();
+  });
+
+  it('código de recuperação usa o mesmo 2º passo e leva à configuração do 2º fator', async () => {
+    fetchMock.mockResolvedValueOnce(challenge()).mockResolvedValueOnce(sessionOk(true));
     render(<LoginForm />);
     await fillCredentials();
     await userEvent.click(await screen.findByTestId('admin.login.recovery-link'));
     await userEvent.type(screen.getByLabelText('Código de recuperação'), 'ABCDE-12345');
     await userEvent.click(screen.getByTestId('admin.recovery.submit'));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/admin/verificacao'));
+    expect(call(1)).toEqual({ url: '/api/session/admin/mfa', body: { code: 'ABCDE-12345' } });
+  });
+
+  it('admin com muitas falhas: código do e-mail no login e depois o 2º fator', async () => {
+    fetchMock.mockResolvedValueOnce(problem(403, 'LOGIN_CODE_REQUIRED')).mockResolvedValueOnce(challenge()).mockResolvedValueOnce(sessionOk());
+    render(<LoginForm />);
+    await fillCredentials();
+    await userEvent.type(await screen.findByLabelText('Dígito 1 de 6'), '654321');
+    expect(await screen.findByRole('heading', { name: 'Verificação em duas etapas' })).toBeInTheDocument();
+    expect(call(1).body).toEqual({ email: 'admin@webag.local', password: 'segredo-123', code: '654321' });
+    await userEvent.type(screen.getByLabelText('Dígito 1 de 6'), '123456');
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/admin'));
   });
 
   it('espera por tentativas mostra o horário, não contagem regressiva', async () => {

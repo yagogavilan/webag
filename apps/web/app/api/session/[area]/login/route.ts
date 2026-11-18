@@ -1,34 +1,40 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import type { Me } from '@/lib/session-types';
-import { isSessionArea, writeCookies, sessionCookies, type TokenPair } from '@/server/cookies';
+import { clearedPendingCookie, isSessionArea, pendingCookie, writeCookies, sessionCookies, type TokenPair } from '@/server/cookies';
 import { csrfProblem } from '@/server/csrf';
+import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { callApi, clientHints, parseJson } from '@/server/upstream';
 
 const bodySchema = z.strictObject({
   email: z.string().trim().min(3).max(254),
   password: z.string().min(1).max(1000),
-  totpCode: z.string().trim().min(6).max(32).optional(),
   /** Código enviado por e-mail quando a conta teve muitas falhas (SEC-004). */
   code: z.string().trim().regex(/^\d{6}$/).optional(),
 });
 
+/** Resposta do `/v1/auth/login`: sessão aberta, ou desafio do 2º fator (admin com TOTP, SEC-090). */
 interface LoginResponse {
-  tokens: TokenPair;
-  mfaSetupRequired: boolean;
+  tokens?: TokenPair;
+  mfaSetupRequired?: boolean;
+  mfaRequired?: boolean;
+  mfaToken?: string;
+  expiresIn?: number;
 }
 
 const INVALID = () => problem(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', 'E-mail ou senha incorretos.');
 
 /**
- * Login do painel. Os tokens ficam em cookie HttpOnly; o corpo da resposta só diz o que o navegador precisa saber.
+ * Login do painel em 2 passos para admin com TOTP (SEC-115): a senha certa devolve `{ mfaRequired: true }` e o `mfaToken`
+ * fica em cookie HttpOnly de 5 min; o código segue para `/api/session/admin/mfa`. Os tokens ficam em cookie HttpOnly; o corpo da resposta só diz o que o navegador precisa saber.
  * Quem não pode abrir a área (admin no painel do lojista, não-admin no admin) recebe a MESMA mensagem de senha errada e a
  * sessão recém-criada é revogada (WB-100 C4, SEC-106).
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ area: string }> }) {
   const { area } = await context.params;
   if (!isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (!areaAllowedOnHost(area, request.headers)) return problem(404, 'NOT_FOUND', 'Não encontrado');
   const csrf = csrfProblem(request);
   if (csrf) return problem(403, 'CSRF', 'Requisição recusada');
 
@@ -48,18 +54,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   const body = parseJson<LoginResponse>(login.text);
   if (!body) return problem(502, 'BAD_UPSTREAM', 'Resposta inesperada da API');
 
-  if (!body.mfaSetupRequired) {
-    const me = await callApi('/v1/me', { accessToken: body.tokens.accessToken, hints });
+  if (body.mfaRequired === true) {
+    // Só o admin tem 2º fator; credencial de admin no painel do lojista responde como senha errada (SEC-106, SEC-121).
+    if (area !== 'admin' || !body.mfaToken) return INVALID();
+    const challenge = NextResponse.json({ mfaRequired: true }, { headers: { 'cache-control': 'no-store' } });
+    writeCookies(challenge.cookies, [pendingCookie('mfa', body.mfaToken, body.expiresIn)]);
+    return challenge;
+  }
+  if (!body.tokens) return problem(502, 'BAD_UPSTREAM', 'Resposta inesperada da API');
+  const tokens = body.tokens;
+  const mfaSetupRequired = body.mfaSetupRequired === true;
+
+  // SEC-121: admin sem TOTP não deve ficar com sessão `mfa_setup` no painel do lojista.
+  if (area === 'lojista' && mfaSetupRequired) {
+    await callApi('/v1/auth/logout', { method: 'POST', accessToken: tokens.accessToken, hints });
+    return INVALID();
+  }
+  if (!mfaSetupRequired) {
+    const me = await callApi('/v1/me', { accessToken: tokens.accessToken, hints });
     const user = parseJson<Me>(me.text);
     // Lojista: cliente sem loja também entra (vê "Você ainda não tem uma loja", onda-1b E7); credencial de admin, não.
     const allowed = user && (area === 'admin' ? user.adminProfile !== null : user.adminProfile === null);
     if (!allowed) {
-      await callApi('/v1/auth/logout', { method: 'POST', accessToken: body.tokens.accessToken, hints });
+      await callApi('/v1/auth/logout', { method: 'POST', accessToken: tokens.accessToken, hints });
       return INVALID();
     }
   }
 
-  const response = NextResponse.json({ mfaSetupRequired: body.mfaSetupRequired }, { headers: { 'cache-control': 'no-store' } });
-  writeCookies(response.cookies, sessionCookies(area, body.tokens));
+  const response = NextResponse.json({ mfaSetupRequired }, { headers: { 'cache-control': 'no-store' } });
+  writeCookies(response.cookies, sessionCookies(area, tokens));
+  if (area === 'admin') writeCookies(response.cookies, [clearedPendingCookie('mfa')]);
   return response;
 }

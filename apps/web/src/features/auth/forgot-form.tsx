@@ -18,11 +18,12 @@ export function ForgotForm({ area = 'admin' }: { area?: 'admin' | 'lojista' }) {
   const router = useRouter();
   const t = area === 'admin' ? tid : ltid;
   const loginHref = `/${area}/entrar` as const;
-  const [stage, setStage] = useState<'email' | 'reset' | 'done'>('email');
+  const [stage, setStage] = useState<'email' | 'reset' | 'mfa' | 'done'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [factor, setFactor] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
@@ -52,15 +53,47 @@ export function ForgotForm({ area = 'admin' }: { area?: 'admin' | 'lojista' }) {
     setFieldError(undefined);
     setBusy(true);
     try {
-      await apiRequest(area, 'auth/password/reset', { method: 'POST', body: { email: email.trim(), code, newPassword: password } });
+      const result = await apiRequest<{ mfaRequired?: boolean } | undefined>(area, 'auth/password/reset', { method: 'POST', body: { email: email.trim(), code, newPassword: password } });
       if (area === 'lojista') return router.replace('/lojista');
-      setStage('done');
+      // Admin com TOTP: o código do e-mail já valeu; falta o 2º fator (o ticket fica em cookie HttpOnly, SEC-095/115).
+      setStage(result?.mfaRequired ? 'mfa' : 'done');
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 422) setFieldError(caught.fieldMessage('newPassword') ?? caught.detail ?? 'Essa senha é muito comum. Escolha outra.');
       else setError('Código incorreto ou vencido.');
     } finally {
       setBusy(false);
     }
+  }
+
+  async function completeReset(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (factor.trim().length < 6) return setError('Digite o código do autenticador ou um código de recuperação.');
+    setBusy(true);
+    try {
+      await apiRequest(area, 'auth/password/reset/complete', { method: 'POST', body: { totpCode: factor.trim(), newPassword: password } });
+      setStage('done');
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 429) setError('Muitas tentativas. Espere alguns minutos e tente de novo.');
+      else if (caught instanceof ApiError && caught.status === 422) setError(caught.fieldMessage('newPassword') ?? caught.detail ?? 'Essa senha é muito comum. Volte e escolha outra.');
+      else setError('Código incorreto ou vencido.');
+      setFactor('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (stage === 'mfa') {
+    return (
+      <AuthCard area={area} title="Confirme que é você">
+        <form onSubmit={completeReset} className={ui.stack} noValidate>
+          <p className="wb-text-body" style={{ margin: 0 }}>O código do e-mail está certo. Digite o código de 6 dígitos do seu app autenticador ou um código de recuperação.</p>
+          <TextField label="Código do autenticador ou de recuperação" value={factor} onChange={(e) => setFactor(e.target.value)} autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false} data-testid={t('forgot', 'factor-input')} />
+          {error ? <Banner tone="danger" testId={t('forgot', 'factor-error')}>{error}</Banner> : null}
+          <Button type="submit" size="lg" loading={busy} loadingLabel="Salvando…" data-testid={t('forgot', 'factor-submit')}>Redefinir senha</Button>
+        </form>
+      </AuthCard>
+    );
   }
 
   if (stage === 'done') {
