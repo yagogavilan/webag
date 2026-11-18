@@ -3221,6 +3221,11 @@ export interface CreateOrderRequest {
   addressId?: string;
   /** `revision` da sacola que o cliente viu */
   cartRevision: number;
+  /**
+     * Total (centavos) que o cliente viu. Opcional; se diferir do calculado pelo servidor: 409 CART_CHANGED
+     * @minimum 0
+     */
+  expectedTotalCents?: number;
   paymentMethod: CreateOrderRequestPaymentMethod;
   /** Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão. */
   card?: CreateOrderRequestCard;
@@ -14245,11 +14250,11 @@ export const getCreateOrderUrl = () => {
 }
 
 /**
- * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO (Onda 4). Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
+ * Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
  *
- * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+ * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
  *
- * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. Se a sacola mudou ou se preço, estoque, horário ou frete mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+ * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (opcional) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
@@ -14309,7 +14314,7 @@ export const getListOrdersUrl = (params?: ListOrdersParams,) => {
 }
 
 /**
- * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
+ * Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
  * @summary Meus pedidos (WB-030)
  */
 export const listOrders = async (params?: ListOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listOrdersResponse> => {
@@ -14358,7 +14363,7 @@ export const getGetOrderUrl = (orderId: string,) => {
 }
 
 /**
- * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Fonte da verdade do estado: o app também ouve o canal em tempo real do pedido (Socket.IO, ADR-004), mas SEMPRE pode recuperar tudo por esta rota ao reabrir ou perder eventos. Pedido de outra conta responde 404 (SEC-020). `allowedActions` diz o que o cliente pode fazer agora. `pickup.code` (4 dígitos) só aparece depois de pago.
+ * Fonte da verdade do estado: o app também ouve o canal em tempo real do pedido (Socket.IO, ADR-004), mas SEMPRE pode recuperar tudo por esta rota ao reabrir ou perder eventos. Pedido de outra conta responde 404 (SEC-020). `allowedActions` diz o que o cliente pode fazer agora. `pickup.code` (4 dígitos) só aparece depois de pago.
  * @summary Detalhe e acompanhamento do pedido (WB-027)
  */
 export const getOrder = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getOrderResponse> => {
@@ -14422,7 +14427,7 @@ export const getCancelOrderUrl = (orderId: string,) => {
 }
 
 /**
- * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404.
+ * Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404.
  * @summary Cancelar o pedido (WB-028, RN-08)
  */
 export const cancelOrder = async (orderId: string,
@@ -14472,7 +14477,7 @@ export const getGetOrderPaymentUrl = (orderId: string,) => {
 }
 
 /**
- * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Para o app reabrir a tela do PIX (copia e cola, QR, validade) e acompanhar a aprovação quando o evento em tempo real não chegar (polling a cada poucos segundos, com recuo). Somente leitura: o status vem do provedor por webhook assinado e da conciliação, nunca de uma chamada do cliente (SEC-035). Pedido de outra conta responde 404.
+ * Para o app reabrir a tela do PIX (copia e cola, QR, validade) e acompanhar a aprovação quando o evento em tempo real não chegar (polling a cada poucos segundos, com recuo). Somente leitura: o status vem do provedor por webhook assinado e da conciliação, nunca de uma chamada do cliente (SEC-035). Pedido de outra conta responde 404.
  * @summary Estado do pagamento do pedido (WB-024, WB-158)
  */
 export const getOrderPayment = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getOrderPaymentResponse> => {

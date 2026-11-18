@@ -15,6 +15,10 @@ export interface CreateProviderPaymentInput {
   installments: number;
   /** Token de cartão gerado pelo Brick/checkout do provedor. Nunca número de cartão (regra inviolável nº 2). */
   cardToken?: string;
+  /** Dados do pagador pedidos pelo provedor (e-mail; CPF só quando exigido). Não são gravados pelo Webag. */
+  payer?: { email: string; document?: string };
+  /** Dados do cartão que o checkout do provedor informa junto do token (`payment_method_id`, `issuer_id`). */
+  card?: { paymentMethodId?: string; issuerId?: string };
   expiresAt?: Date;
 }
 
@@ -32,6 +36,8 @@ export interface ProviderPayment {
   /** Tarifa cobrada pelo provedor (`fee_details`), quando já conhecida; alimenta o ledger. */
   providerFeeCents?: number;
   pixCopyPaste?: string;
+  /** PNG do QR em base64 (o MP devolve `qr_code_base64`); a falta não impede o copia e cola. */
+  pixQrBase64?: string;
   threeDsUrl?: string;
   declineReason?: string;
 }
@@ -62,6 +68,8 @@ export interface PaymentProvider {
     idempotencyKey: string,
     context: { storeId: string | null },
   ): Promise<{ providerRefundId: string; amountCents: number }>;
+  /** O provedor exige o CPF do pagador neste método? (`PAYER_DOCUMENT_REQUIRED`). Ausente = não exige. */
+  requiresPayerDocument?(method: PaymentMethod): boolean;
   /** Conta de recebimento esperada para a loja (conferida na re-consulta, SEC-034). */
   expectedReceiverId(storeId: string | null): string | null;
   /** Valida a assinatura e extrai o evento. Lança `AppError` 401 se inválida. */

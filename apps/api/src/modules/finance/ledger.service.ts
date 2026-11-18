@@ -36,6 +36,11 @@ export class LedgerService {
     return true;
   }
 
+  async hasSale(orderId: string, exec: DbOrTx = this.db): Promise<boolean> {
+    const [row] = await exec.select({ id: ledgerTransactions.id }).from(ledgerTransactions).where(and(eq(ledgerTransactions.orderId, orderId), eq(ledgerTransactions.kind, 'sale')));
+    return row !== undefined;
+  }
+
   /** Venda: pagamento aprovado. O `finance` (percentuais congelados) fica no `meta` e sustenta os estornos. */
   recordSale(tx: DbOrTx, input: { orderId: string; storeId: string; attemptId: string | null; finance: OrderFinance }): Promise<boolean> {
     return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'sale', dedupeKey: `sale:${input.orderId}`, meta: { finance: input.finance } }, saleLines(input.finance));

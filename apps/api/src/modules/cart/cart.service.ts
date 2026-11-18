@@ -8,6 +8,7 @@ import { ParametersService } from '../admin/index.js';
 import { productImages, products, productVariants } from '../catalog/db/schema.js';
 import { effectivePrice } from '../catalog/domain/price.js';
 import { storeMembers } from '../identity/db/schema.js';
+import { CommissionService, computeOrderFinance } from '../finance/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { stores, storeSettings } from '../stores/db/schema.js';
@@ -57,6 +58,7 @@ export class CartService {
     private readonly addresses: AddressesService,
     private readonly media: MediaService,
     private readonly purchases: PurchaseHistoryPort,
+    private readonly commissions: CommissionService,
   ) {}
 
   // ------------------------------------------------------------------ leitura
@@ -107,13 +109,26 @@ export class CartService {
     };
   }
 
-  /** Monta a sacola com valores vigentes. `couponOverride` testa um cupom antes de gravá-lo (aplicar). */
   private async build(principal: Principal, ctx: CartContext, notices: Notice[], couponOverride?: string | null) {
+    return (await this.buildFull(principal, ctx, notices, couponOverride)).view;
+  }
+
+  /**
+   * Fotografia do checkout (Onda 4): a MESMA conta da sacola, com os dados internos que o pedido congela (categoria e
+   * comissão por item, cupom e endereço). O que a sacola mostra é o que o pedido cobra.
+   */
+  async quote(principal: Principal, ctx: CartContext) {
+    await this.expireIfStale(principal.userId);
+    return this.buildFull(principal, ctx, []);
+  }
+
+  /** Monta a sacola com valores vigentes. `couponOverride` testa um cupom antes de gravá-lo (aplicar). */
+  private async buildFull(principal: Principal, ctx: CartContext, notices: Notice[], couponOverride?: string | null) {
     const userId = principal.userId;
     // Endereço de outra conta é 404 em qualquer estado da sacola (não revela existência, SEC-020).
     if (ctx.addressId) await this.addresses.get(userId, ctx.addressId);
     const [cart] = await this.db.select().from(carts).where(eq(carts.userId, userId));
-    if (!cart?.storeId) return this.emptyView(cart?.id ?? null, cart?.revision ?? 0, notices);
+    if (!cart?.storeId) return { view: this.emptyView(cart?.id ?? null, cart?.revision ?? 0, notices), quote: null };
 
     const rows = await this.db
       .select({ item: cartItems, variant: productVariants, product: products })
@@ -122,7 +137,7 @@ export class CartService {
       .innerJoin(products, eq(products.id, cartItems.productId))
       .where(eq(cartItems.cartId, cart.id))
       .orderBy(asc(cartItems.createdAt), asc(cartItems.id));
-    if (rows.length === 0) return this.emptyView(cart.id, cart.revision, notices);
+    if (rows.length === 0) return { view: this.emptyView(cart.id, cart.revision, notices), quote: null };
 
     const [storeRow] = await this.db
       .select({
@@ -133,11 +148,12 @@ export class CartService {
       .from(stores)
       .innerJoin(storeSettings, eq(storeSettings.storeId, stores.id))
       .where(eq(stores.id, cart.storeId));
-    if (!storeRow) return this.emptyView(cart.id, cart.revision, notices);
+    if (!storeRow) return { view: this.emptyView(cart.id, cart.revision, notices), quote: null };
     const { store, settings } = storeRow;
     const now = new Date();
     const maxQty = await this.params.getNumber('item_qtd_max');
     const covers = await this.covers(rows.map((r) => r.product.id));
+    const categoryOf = new Map(rows.map((r) => [r.product.id, r.product.categoryId]));
 
     // ---- itens: o que vale agora
     let subtotal = 0;
@@ -177,11 +193,13 @@ export class CartService {
     if (!storeRow.visible) blockers.push('STORE_UNAVAILABLE');
     let deliveryFee = 0;
     let deliveryEstimated = false;
+    let deliveryAddress: Awaited<ReturnType<CartService['addressFor']>> = null;
     const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false };
     if (ctx.mode === 'pickup') {
       if (!settings.pickupEnabled) blockers.push('PICKUP_UNAVAILABLE');
     } else {
       const address = await this.addressFor(userId, ctx.addressId);
+      deliveryAddress = address;
       const tiers = await this.settings.tiers(store.id);
       delivery.feeFromCents = startingFee(settings.feeMode, settings.feeFixedCents, tiers);
       if (!address) {
@@ -213,6 +231,10 @@ export class CartService {
       }
     }
 
+    // Comissão efetiva por item (loja > categoria > padrão): o teto do cupom da plataforma usa a comissão REAL do pedido.
+    const priced = items.filter((i) => i.quantity > 0);
+    const rates = await this.commissions.resolveForItems(store.id, priced.map((i) => categoryOf.get(i.productId) ?? null), now);
+    const commissionCapCents = computeOrderFinance({ items: priced.map((i, index) => ({ subtotalCents: i.lineTotal.amount, pctBp: rates[index]!.pctBp })), storeCouponCents: 0, platformDiscountCents: 0, deliveryFeeCents: 0, serviceFeeCents: 0 }).commissionCents;
     const serviceFee = serviceFeeCents(String(await this.params.get('taxa_servico_tipo')), await this.params.getNumber('taxa_servico_valor'), subtotal);
     const result = summarize({
       subtotalCents: subtotal,
@@ -220,6 +242,7 @@ export class CartService {
       serviceFeeCents: serviceFee,
       coupon: appliedCoupon ? { kind: appliedCoupon.kind, scope: appliedCoupon.scope, value: appliedCoupon.value, percentCapCents: appliedCoupon.percentCapCents } : null,
       commissionPct: await this.params.getNumber('comissao_padrao_pct'),
+      commissionCapCents,
       minTotalCents: await this.params.getNumber('cupom_total_minimo_cents'),
     });
 
@@ -233,7 +256,7 @@ export class CartService {
     if (subtotal === 0) blockers.unshift('EMPTY');
 
     const [logo] = store.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
-    return {
+    const view = {
       id: cart.id,
       revision: cart.revision,
       store: {
@@ -253,6 +276,22 @@ export class CartService {
       checkout: { canCheckout: blockers.length === 0, blockers, opensAt: opening.opensAt },
       notices,
     };
+    const quote = {
+      cartId: cart.id,
+      cartRevision: cart.revision,
+      mode: ctx.mode,
+      store,
+      settings,
+      opening,
+      address: deliveryAddress,
+      coupon: appliedCoupon,
+      result,
+      blockers,
+      priced: priced.map((i, index) => ({ variantId: i.variantId, productId: i.productId, categoryId: categoryOf.get(i.productId) ?? null, name: i.name, attributes: i.attributes, image: i.image.urls, quantity: i.quantity, unitPriceCents: i.unitPrice.amount, commissionPctBp: rates[index]!.pctBp })),
+      hasWarnings: items.some((i) => i.warnings.length > 0),
+      changes: items.flatMap((i) => i.warnings.map((w) => ({ variantId: i.variantId, name: i.name, warning: w }))),
+    };
+    return { view, quote };
   }
 
   private async openingOf(storeId: string, settings: typeof storeSettings.$inferSelect, now: Date) {

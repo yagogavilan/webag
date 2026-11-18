@@ -51,6 +51,9 @@ export const paymentAttempts = pgTable(
     installments: integer().notNull().default(1),
     /** PIX copia e cola / QR e data de expiração. */
     pixCopyPaste: text(),
+    pixQrBase64: text(),
+    /** Desafio 3DS do cartão (URL do provedor); só enquanto `pending_3ds`. */
+    threeDsUrl: text(),
     expiresAt: timestamp({ withTimezone: true }),
     declineReason: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

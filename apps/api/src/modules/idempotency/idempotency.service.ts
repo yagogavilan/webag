@@ -39,7 +39,7 @@ export class IdempotencyService {
    * repetição durante a execução é 409 (o app tenta de novo). Falha de `fn` libera a chave (a tentativa pode se repetir).
    * Sem chave (`key = null`), só executa.
    */
-  async run<T>(scope: string, key: string | null, payload: unknown, fn: () => Promise<T>): Promise<T> {
+  async run<T>(scope: string, key: string | null, payload: unknown, fn: () => Promise<T>, options: { reusedStatus?: number } = {}): Promise<T> {
     if (!key) return fn();
     const requestHash = hashRequest(payload);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -57,7 +57,7 @@ export class IdempotencyService {
         continue;
       }
       if (row.requestHash !== requestHash) {
-        throw errors.unprocessable('IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro conteúdo', {
+        throw new AppError(options.reusedStatus ?? 422, 'IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro conteúdo', {
           detail: 'Use uma nova Idempotency-Key para uma requisição diferente.',
         });
       }

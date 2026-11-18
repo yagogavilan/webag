@@ -1,4 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Inject, Injectable, Module } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AdminModule } from '../admin/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { MediaModule } from '../media/index.js';
@@ -8,17 +10,30 @@ import { CatalogService, ProductOrdersPort } from './catalog.service.js';
 import { InventoryService } from './inventory.service.js';
 import { ModerationService } from './moderation.service.js';
 
-/** Enquanto não há pedidos (Onda 4), nenhum produto tem pedido em andamento. */
-class NoOpenOrders extends ProductOrdersPort {
-  hasOpenOrders(): Promise<boolean> {
-    return Promise.resolve(false);
+/**
+ * Pedido em andamento de um produto (WB-060 C5). Leitura direta e só de leitura nas tabelas do pedido, para o catálogo não
+ * depender do módulo de pedidos (que depende dele pela reserva de estoque): exceção registrada no ADR-007.
+ */
+@Injectable()
+class SqlOpenOrders extends ProductOrdersPort {
+  constructor(@Inject(DRIZZLE) private readonly db: Db) {
+    super();
+  }
+
+  async hasOpenOrders(productId: string): Promise<boolean> {
+    const result = await this.db.execute(sql`
+      select 1 from order_items oi join orders o on o.id = oi.order_id
+      where oi.product_id = ${productId}
+        and o.status in ('awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup')
+      limit 1`);
+    return result.rows.length > 0;
   }
 }
 
 @Module({
   imports: [AdminModule, IdentityModule, MediaModule, StoresModule],
   controllers: [CatalogController, AdminModerationController],
-  providers: [CatalogService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: NoOpenOrders }],
+  providers: [CatalogService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: SqlOpenOrders }],
   exports: [CatalogService, InventoryService, ModerationService, ProductOrdersPort],
 })
 export class CatalogModule {}

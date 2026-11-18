@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { FinanceModule } from '../finance/index.js';
 import { AddressesModule } from '../addresses/index.js';
 import { AdminModule } from '../admin/index.js';
 import { MediaModule } from '../media/index.js';
@@ -14,7 +15,7 @@ class NoPaidOrdersYet extends PurchaseHistoryPort {
 }
 
 @Module({
-  imports: [AdminModule, AddressesModule, MediaModule, StoresModule],
+  imports: [AdminModule, AddressesModule, FinanceModule, MediaModule, StoresModule],
   controllers: [CartController],
   providers: [CartService, { provide: PurchaseHistoryPort, useClass: NoPaidOrdersYet }],
   exports: [CartService, PurchaseHistoryPort],

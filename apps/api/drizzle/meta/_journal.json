@@ -120,6 +120,13 @@
       "when": 1795044366690,
       "tag": "0016_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795044606454,
+      "tag": "0017_payment_attempt_pix_qr_3ds",
+      "breakpoints": true
     }
   ]
 }

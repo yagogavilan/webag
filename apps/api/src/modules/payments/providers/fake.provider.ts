@@ -23,7 +23,14 @@ export interface SimulateOptions {
   reportedReference?: string;
   reportedReceiverId?: string;
   reportedFeeCents?: number;
+  /** Tarifa do provedor (`fee_details`) informada na aprovação; por padrão, a estimativa do PRD. */
+  reportedProviderFeeCents?: number;
 }
+
+/** Tokens de texto documentados no README (WB-150 C3): resultado do cartão sem decorar sufixos. */
+const FAKE_TOKENS: Record<string, string> = { fake_tok_approved: '0000', fake_tok_insufficient: '0001', fake_tok_3ds: '0002', fake_tok_timeout: '0003' };
+/** Tarifa simulada (`fee_details`): PIX 0,99% e cartão 4,98%, as estimativas do PRD (HIP-016). */
+const feeOf = (payment: ProviderPayment, method: 'pix' | 'card'): number => Math.round((payment.amountCents * (method === 'pix' ? 99 : 498)) / 10_000);
 
 const KEY = (id: string): string => `fake-provider:payment:${id}`;
 const IDEM_CREATE = (attemptId: string): string => `fake-provider:idem:create:${attemptId}`;
@@ -78,9 +85,9 @@ export class FakePaymentProvider implements PaymentProvider {
       // Código "copia e cola" falso, mas com o formato de um BR Code (começa com 000201).
       base.pixCopyPaste = `00020126580014br.gov.bcb.pix0136${randomUUID()}5204000053039865802BR5909WEBAG FAKE6009SAO PAULO62070503***6304FAKE`;
     } else {
-      const last4 = (input.cardToken ?? '').slice(-4);
+      const last4 = FAKE_TOKENS[input.cardToken ?? ''] ?? (input.cardToken ?? '').slice(-4);
       if (last4 === '0003') throw new ProviderTimeoutError();
-      if (last4 === '0000') base.status = 'approved';
+      if (last4 === '0000') Object.assign(base, { status: 'approved', providerFeeCents: feeOf(base, 'card') });
       else if (last4 === '0001') Object.assign(base, { status: 'declined', declineReason: 'insufficient_funds' });
       else if (last4 === '0002') Object.assign(base, { status: 'pending_3ds', threeDsUrl: `https://fake-3ds.webag.local/challenge/${id}` });
       else Object.assign(base, { status: 'declined', declineReason: 'invalid_card' });
@@ -121,6 +128,7 @@ export class FakePaymentProvider implements PaymentProvider {
     if (!payment) throw new AppError(404, 'PROVIDER_PAYMENT_NOT_FOUND', 'Pagamento não encontrado no provedor');
     payment.status = options.outcome === 'approved' ? 'approved' : options.outcome === 'declined' ? 'declined' : 'expired';
     if (options.outcome === 'declined') payment.declineReason = 'rejected_by_issuer';
+    if (options.outcome === 'approved') payment.providerFeeCents = options.reportedProviderFeeCents ?? feeOf(payment, payment.pixCopyPaste ? 'pix' : 'card');
     if (options.reportedAmountCents !== undefined) payment.amountCents = options.reportedAmountCents;
     if (options.reportedReference !== undefined) payment.externalReference = options.reportedReference;
     if (options.reportedReceiverId !== undefined) payment.receiverId = options.reportedReceiverId;

@@ -21,6 +21,8 @@ export interface PricingInput {
   coupon: PricingCoupon | null;
   /** Comissão padrão em % (RN-10); limita o desconto de cupom da plataforma (DEC-016). */
   commissionPct: number;
+  /** Comissão REAL do pedido (por item: loja > categoria > padrão); quando informada, vale como teto do cupom da plataforma. */
+  commissionCapCents?: number;
   /** `cupom_total_minimo_cents` (HIP-037): com cupom o total nunca fica abaixo disso. */
   minTotalCents: number;
 }
@@ -65,7 +67,7 @@ export function summarize(input: PricingInput): PricingResult {
   let platformDiscountCapped = false;
   if (coupon?.scope === 'platform') {
     // No split o desconto da plataforma não passa da comissão do pedido (WB-116 C6); a base é o subtotal (sem cupom de loja aqui).
-    const cap = commissionCents(subtotalCents, input.commissionPct);
+    const cap = input.commissionCapCents ?? commissionCents(subtotalCents, input.commissionPct);
     if (discount > cap) {
       discount = cap;
       platformDiscountCapped = true;

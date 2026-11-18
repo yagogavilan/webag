@@ -10,20 +10,6 @@ import { ORDER_STATUSES } from '../domain/state.js';
 export const STOCK_STATES = ['reserved', 'sold', 'released'] as const;
 export type StockState = (typeof STOCK_STATES)[number];
 
-/** Endereço de entrega congelado no pedido (o cadastro do cliente pode mudar depois). Dado pessoal: só dono, loja e admin leem. */
-export interface AddressSnapshot {
-  label: string | null;
-  cep: string;
-  street: string;
-  number: string;
-  complement: string | null;
-  neighborhood: string;
-  cityName: string;
-  state: string;
-  lat: number;
-  lng: number;
-}
-
 /**
  * Pedido (RN-05/06/07). Valores são SNAPSHOT do momento da criação (preço, taxas, comissão, política de trocas): mudar o
  * produto ou a configuração depois não altera pedido existente. Dinheiro em centavos inteiros; a conta fechada pelo
@@ -40,7 +26,8 @@ export const orders = pgTable(
     status: text({ enum: ORDER_STATUSES }).notNull().default('awaiting_payment'),
     mode: text({ enum: ['delivery', 'pickup'] }).notNull(),
     cartRevision: integer().notNull(),
-    address: jsonb().$type<AddressSnapshot | null>(),
+    /** Endereço de entrega congelado no pedido, no formato do contrato (o cadastro do cliente pode mudar depois). Dado pessoal: só dono, loja e admin leem. */
+    address: jsonb().$type<Record<string, unknown> | null>(),
     etaMinMinutes: integer().notNull(),
     etaMaxMinutes: integer().notNull(),
     pickup: jsonb().$type<{ address: string; instructions: string | null; prepMinMinutes: number; prepMaxMinutes: number } | null>(),

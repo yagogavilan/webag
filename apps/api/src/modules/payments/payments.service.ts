@@ -27,6 +27,8 @@ export type PaymentAttempt = typeof paymentAttempts.$inferSelect;
  */
 export interface PaymentListener {
   onAttemptTransition?(tx: Tx, attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void>;
+  /** Depois do commit (chamadas ao provedor, push): falha aqui não desfaz a transição. */
+  afterTransition?(attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void>;
   onRefundConfirmed?(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string; reason: string; refundedTotalCents: number }): Promise<void>;
 }
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
@@ -39,6 +41,9 @@ export interface CreatePaymentInput {
   applicationFeeCents?: number;
   installments?: number;
   cardToken?: string;
+  payer?: { email: string; document?: string };
+  card?: { paymentMethodId?: string; issuerId?: string };
+  /** Validade do PIX em minutos; por padrão `pix_expiracao_min`. */
 }
 
 /** Retentativa exponencial do processamento de webhook (WB-153 C3): 5 s, 10 s, 20 s... até 1 h; depois, "falhas". */
@@ -82,6 +87,16 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   private async notifyTransition(tx: Tx, attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void> {
     for (const listener of this.listeners) await listener.onAttemptTransition?.(tx, attempt, from, remote);
+  }
+
+  private async notifyAfter(attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void> {
+    for (const listener of this.listeners) {
+      try {
+        await listener.afterTransition?.(attempt, from, remote);
+      } catch (error) {
+        this.logger.error(`gancho pós-commit do pagamento ${attempt.id}: ${safeErrorMessage(error)}`);
+      }
+    }
   }
 
   /** Fila durável no Postgres: processa eventos vencidos e concilia pendentes (SEC-042). Desligado em teste. */
@@ -156,6 +171,8 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         storeId: input.storeId,
         installments,
         cardToken: input.cardToken,
+        payer: input.payer,
+        card: input.card,
         expiresAt,
       });
     } catch (error) {
@@ -182,6 +199,8 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
           providerPaymentId: remote.providerPaymentId,
           status: remote.status,
           pixCopyPaste: remote.pixCopyPaste ?? null,
+          pixQrBase64: remote.pixQrBase64 ?? null,
+          threeDsUrl: remote.threeDsUrl ?? null,
           declineReason: remote.declineReason ?? null,
           updatedAt: new Date(),
         })
@@ -190,8 +209,51 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       if (updated && remote.status !== 'pending') await this.notifyTransition(tx, updated, 'creating', remote);
       return updated;
     });
-    if (attempt) return attempt;
+    if (attempt) {
+      if (remote.status !== 'pending') await this.notifyAfter(attempt, 'creating', remote);
+      return attempt;
+    }
     return this.getAttempt(attemptId);
+  }
+
+  /** Soma dos estornos concluídos e em andamento (a conta que limita novos estornos). */
+  async refundedOrPendingCents(tx: Tx | Db, attemptId: string): Promise<number> {
+    const [row] = await tx
+      .select({ total: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
+      .from(paymentRefundIntents)
+      .where(and(eq(paymentRefundIntents.attemptId, attemptId), ne(paymentRefundIntents.status, 'failed')));
+    return row?.total ?? 0;
+  }
+
+  /** Tentativa mais recente do pedido (`external_reference`), para o app reabrir o PIX. */
+  async latestForReference(reference: string): Promise<PaymentAttempt | null> {
+    const [row] = await this.db.select().from(paymentAttempts).where(eq(paymentAttempts.externalReference, reference)).orderBy(desc(paymentAttempts.createdAt)).limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * PIX vencido: re-consulta o provedor e expira o que ainda estiver pendente (o pedido libera o estoque pelo gancho).
+   * Roda a cada poucos segundos; a conciliação de 5 min fica como rede de segurança.
+   */
+  async expireDue(now = new Date()): Promise<number> {
+    const due = await this.db
+      .select()
+      .from(paymentAttempts)
+      .where(and(eq(paymentAttempts.provider, this.provider.name), inArray(paymentAttempts.status, ['pending', 'pending_3ds']), isNotNull(paymentAttempts.providerPaymentId), isNotNull(paymentAttempts.expiresAt), lte(paymentAttempts.expiresAt, now)))
+      .orderBy(asc(paymentAttempts.expiresAt))
+      .limit(100);
+    let expired = 0;
+    for (const attempt of due) {
+      try {
+        const remote = await this.provider.getPayment(attempt.providerPaymentId!, { storeId: attempt.storeId });
+        if (!remote) continue;
+        await this.sync(attempt, remote.status === 'pending' ? { ...remote, status: 'expired' } : remote);
+        expired++;
+      } catch (error) {
+        this.logger.warn(`expiração do pagamento ${attempt.id} falhou: ${safeErrorMessage(error)}`);
+      }
+    }
+    return expired;
   }
 
   async getAttempt(id: string): Promise<PaymentAttempt> {
@@ -337,15 +399,17 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     }
     if (!canTransition(attempt.status, remote.status)) return; // repetido ou regressivo: sem efeito
 
-    await this.db.transaction(async (tx) => {
+    const changed = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(paymentAttempts)
-        .set({ status: remote.status, declineReason: remote.declineReason ?? attempt.declineReason, updatedAt: new Date() })
+        .set({ status: remote.status, declineReason: remote.declineReason ?? attempt.declineReason, threeDsUrl: remote.status === 'pending_3ds' ? (remote.threeDsUrl ?? attempt.threeDsUrl) : null, updatedAt: new Date() })
         .where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, attempt.status)))
         .returning();
       // Só quem de fato mudou o estado dispara o gancho (evento repetido ou concorrente não repete o efeito no pedido).
       if (updated) await this.notifyTransition(tx, updated, attempt.status, remote);
+      return updated;
     });
+    if (changed) await this.notifyAfter(changed, attempt.status, remote);
   }
 
   private mismatches(attempt: PaymentAttempt, remote: ProviderPayment): string[] {
@@ -373,6 +437,54 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     });
   }
 
+  /**
+   * Fase 1 do estorno, na transação de quem chama: trava a tentativa, confere estado e soma e grava a INTENÇÃO (`pending`).
+   * O pedido usa isto para cancelar e agendar o estorno na MESMA transação: se o processo cair depois do commit, a
+   * conciliação (`recoverRefundIntents`) conclui o estorno com a mesma chave.
+   */
+  async reserveRefundIntent(
+    tx: Tx,
+    attemptId: string,
+    amountCents: number,
+    reason: string,
+    idempotencyKey: string,
+    actor: { actorId: string | null; actorRole: string | null; requestId: string | null },
+  ): Promise<{ kind: 'already' } | { kind: 'go'; attempt: PaymentAttempt }> {
+    const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
+    if (!attempt) throw errors.notFound('Pagamento não encontrado.');
+    const [existing] = await tx
+      .select()
+      .from(paymentRefundIntents)
+      .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+    if (existing) {
+      if (existing.amountCents !== amountCents) {
+        throw errors.unprocessable('IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro valor', { detail: 'Use outra chave para outro estorno.' });
+      }
+      if (existing.status === 'done') return { kind: 'already' as const };
+      if (existing.status === 'failed') {
+        await tx.update(paymentRefundIntents).set({ status: 'pending', updatedAt: new Date() }).where(eq(paymentRefundIntents.id, existing.id));
+      }
+      return { kind: 'go' as const, attempt };
+    }
+
+    const [{ total } = { total: 0 }] = await tx
+      .select({ total: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
+      .from(paymentRefundIntents)
+      .where(and(eq(paymentRefundIntents.attemptId, attemptId), ne(paymentRefundIntents.status, 'failed')));
+    const refundable = attempt.status === 'approved' || attempt.status === 'expired' || attempt.status === 'cancelled';
+    if (!refundable || !attempt.providerPaymentId) throw errors.conflict('PAYMENT_NOT_REFUNDABLE', 'Pagamento não pode ser estornado');
+    if (total + amountCents > attempt.amountCents) {
+      throw errors.unprocessable('REFUND_EXCEEDS_PAID', 'Estorno maior que o valor pago');
+    }
+    await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason, actorId: actor.actorId, actorRole: actor.actorRole, requestId: actor.requestId });
+    return { kind: 'go' as const, attempt };
+  }
+
+  /** Conclui, fora de transação, um estorno já agendado por `reserveRefundIntent` (mesma chave; repetir não estorna de novo). */
+  async executeScheduledRefund(attemptId: string, amountCents: number, reason: string, idempotencyKey: string): Promise<void> {
+    await this.refundBySystem(attemptId, amountCents, reason, idempotencyKey);
+  }
+
   /** Estorno do sistema (pedido cancelado/recusado/expirado, PIX tardio): ator nulo, trilha com `actorRole = system`. */
   async refundBySystem(attemptId: string, amountCents: number, reason: string, idempotencyKey: string): Promise<void> {
     await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, { actorId: null, actorRole: 'system', requestId: null });
@@ -393,36 +505,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
   ): Promise<{ providerRefundId: string } | null> {
     if (!Number.isInteger(amountCents) || amountCents <= 0) throw errors.validation([{ field: 'amountCents', message: 'Valor inválido.' }]);
 
-    const phase1 = await this.db.transaction(async (tx) => {
-      const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
-      if (!attempt) throw errors.notFound('Pagamento não encontrado.');
-      const [existing] = await tx
-        .select()
-        .from(paymentRefundIntents)
-        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
-      if (existing) {
-        if (existing.amountCents !== amountCents) {
-          throw errors.unprocessable('IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro valor', { detail: 'Use outra chave para outro estorno.' });
-        }
-        if (existing.status === 'done') return { kind: 'already' as const };
-        if (existing.status === 'failed') {
-          await tx.update(paymentRefundIntents).set({ status: 'pending', updatedAt: new Date() }).where(eq(paymentRefundIntents.id, existing.id));
-        }
-        return { kind: 'go' as const, attempt };
-      }
-
-      const [{ total } = { total: 0 }] = await tx
-        .select({ total: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
-        .from(paymentRefundIntents)
-        .where(and(eq(paymentRefundIntents.attemptId, attemptId), ne(paymentRefundIntents.status, 'failed')));
-      const refundable = attempt.status === 'approved' || attempt.status === 'expired' || attempt.status === 'cancelled';
-      if (!refundable || !attempt.providerPaymentId) throw errors.conflict('PAYMENT_NOT_REFUNDABLE', 'Pagamento não pode ser estornado');
-      if (total + amountCents > attempt.amountCents) {
-        throw errors.unprocessable('REFUND_EXCEEDS_PAID', 'Estorno maior que o valor pago');
-      }
-      await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason, actorId: actor.actorId, actorRole: actor.actorRole, requestId: actor.requestId });
-      return { kind: 'go' as const, attempt };
-    });
+    const phase1 = await this.db.transaction((tx) => this.reserveRefundIntent(tx, attemptId, amountCents, reason, idempotencyKey, actor));
     if (phase1.kind === 'already') return null;
     const { attempt } = phase1;
 
