@@ -3160,6 +3160,54 @@ export interface CartStoreConflictProblem {
   itemCount: number;
 }
 
+export interface ReasonRequest {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+}
+
+export type AdvanceOrderRequestStatus = typeof AdvanceOrderRequestStatus[keyof typeof AdvanceOrderRequestStatus];
+
+
+export const AdvanceOrderRequestStatus = {
+  in_preparation: 'in_preparation',
+  out_for_delivery: 'out_for_delivery',
+  ready_for_pickup: 'ready_for_pickup',
+  delivered: 'delivered',
+} as const;
+
+export interface AdvanceOrderRequest {
+  status: AdvanceOrderRequestStatus;
+  /**
+     * Obrigatório ao concluir uma retirada: o código que o cliente informa
+     * @pattern ^\d{4}$
+     */
+  pickupCode?: string;
+}
+
+export type StoreOrderAction = typeof StoreOrderAction[keyof typeof StoreOrderAction];
+
+
+export const StoreOrderAction = {
+  accept: 'accept',
+  refuse: 'refuse',
+  prepare: 'prepare',
+  dispatch: 'dispatch',
+  ready: 'ready',
+  complete: 'complete',
+  cancel: 'cancel',
+} as const;
+
+export type StoreOrderSummaryMode = typeof StoreOrderSummaryMode[keyof typeof StoreOrderSummaryMode];
+
+
+export const StoreOrderSummaryMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
 /**
  * Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.
  */
@@ -3178,6 +3226,176 @@ export const OrderStatus = {
   refused: 'refused',
   expired: 'expired',
 } as const;
+
+export interface StoreOrderSummary {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: StoreOrderSummaryMode;
+  createdAt: string;
+  /** @nullable */
+  paidAt: string | null;
+  /**
+     * Só em `received`: a loja tem até aqui para aceitar
+     * @nullable
+     */
+  acceptDeadlineAt: string | null;
+  customerFirstName: string;
+  itemCount: number;
+  firstItemName: string;
+  /** Nulo sem a permissão `sales_values` */
+  total: Money | null;
+  allowedActions: StoreOrderAction[];
+}
+
+export interface StoreOrderPage {
+  data: StoreOrderSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface StoreOrderCounts {
+  new: number;
+  in_progress: number;
+  history: number;
+}
+
+export type StoreOrderMode = typeof StoreOrderMode[keyof typeof StoreOrderMode];
+
+
+export const StoreOrderMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type StoreOrderCustomer = {
+  firstName: string;
+  /**
+     * Só enquanto o pedido de entrega está em andamento (LGPD: minimização)
+     * @nullable
+     */
+  phone: string | null;
+};
+
+export type StoreOrderItemsItemAttributes = {[key: string]: string};
+
+export type StoreOrderItemsItem = {
+  name: string;
+  attributes: StoreOrderItemsItemAttributes;
+  image: ImageUrls;
+  quantity: number;
+  unitPrice: Money | null;
+  lineTotal: Money | null;
+};
+
+export type StoreOrderDeliveryAddress = { [key: string]: unknown };
+
+export type StoreOrderDelivery = {
+  address: StoreOrderDeliveryAddress;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+} | null;
+
+export type StoreOrderPickup = {
+  address: string;
+  /** @nullable */
+  instructions: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+} | null;
+
+export type StoreOrderValues = {
+  subtotal: Money;
+  delivery: Money;
+  storeDiscount: Money;
+  total: Money;
+  commission: Money;
+  netBeforeProviderFee: Money;
+} | null;
+
+export type StoreOrderCancellationBy = typeof StoreOrderCancellationBy[keyof typeof StoreOrderCancellationBy];
+
+
+export const StoreOrderCancellationBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type StoreOrderCancellation = {
+  by: StoreOrderCancellationBy;
+  /** @nullable */
+  reason: string | null;
+  at: string;
+} | null;
+
+export type OrderTimelineEntryActor = typeof OrderTimelineEntryActor[keyof typeof OrderTimelineEntryActor];
+
+
+export const OrderTimelineEntryActor = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export interface OrderTimelineEntry {
+  status: OrderStatus;
+  at: string;
+  actor: OrderTimelineEntryActor;
+  /** @nullable */
+  reason: string | null;
+}
+
+export interface StoreOrder {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: StoreOrderMode;
+  createdAt: string;
+  /** @nullable */
+  paidAt: string | null;
+  /** @nullable */
+  acceptedAt: string | null;
+  /** @nullable */
+  acceptDeadlineAt: string | null;
+  customer: StoreOrderCustomer;
+  items: StoreOrderItemsItem[];
+  delivery: StoreOrderDelivery;
+  pickup: StoreOrderPickup;
+  values: StoreOrderValues;
+  /** @nullable */
+  couponCode: string | null;
+  timeline: OrderTimelineEntry[];
+  cancellation: StoreOrderCancellation;
+  allowedActions: StoreOrderAction[];
+}
+
+export type StoreOrderTicketMode = typeof StoreOrderTicketMode[keyof typeof StoreOrderTicketMode];
+
+
+export const StoreOrderTicketMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type StoreOrderTicketItemsItemAttributes = {[key: string]: string};
+
+export type StoreOrderTicketItemsItem = {
+  quantity: number;
+  name: string;
+  attributes: StoreOrderTicketItemsItemAttributes;
+};
+
+export interface StoreOrderTicket {
+  number: string;
+  mode: StoreOrderTicketMode;
+  createdAt: string;
+  customerFirstName: string;
+  destination: string;
+  items: StoreOrderTicketItemsItem[];
+}
 
 export type CreateOrderRequestMode = typeof CreateOrderRequestMode[keyof typeof CreateOrderRequestMode];
 
@@ -3357,24 +3575,6 @@ export interface OrderPayment {
      */
   declineReason: string | null;
   updatedAt: string;
-}
-
-export type OrderTimelineEntryActor = typeof OrderTimelineEntryActor[keyof typeof OrderTimelineEntryActor];
-
-
-export const OrderTimelineEntryActor = {
-  customer: 'customer',
-  store: 'store',
-  system: 'system',
-  admin: 'admin',
-} as const;
-
-export interface OrderTimelineEntry {
-  status: OrderStatus;
-  at: string;
-  actor: OrderTimelineEntryActor;
-  /** @nullable */
-  reason: string | null;
 }
 
 export type OrderMode = typeof OrderMode[keyof typeof OrderMode];
@@ -4144,6 +4344,35 @@ export type MergeCartParams = {
   /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
   addressId?: CartAddressIdParameter;
 };
+
+export type ListStoreOrdersParams = {
+  scope?: ListStoreOrdersScope;
+  /**
+   * Busca pelo código do pedido
+   * @pattern ^WB-[A-Za-z0-9]{5}$
+   */
+  number?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListStoreOrdersScope = typeof ListStoreOrdersScope[keyof typeof ListStoreOrdersScope];
+
+
+export const ListStoreOrdersScope = {
+  new: 'new',
+  in_progress: 'in_progress',
+  history: 'history',
+} as const;
 
 export type ListOrdersParams = {
   scope?: ListOrdersScope;
@@ -14182,6 +14411,527 @@ export const mergeCart = async (mergeCartRequest: MergeCartRequest,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(mergeCartRequest)
+  }
+);}
+
+
+
+export type listStoreOrdersResponse200 = {
+  data: StoreOrderPage
+  status: 200
+}
+
+export type listStoreOrdersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listStoreOrdersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreOrdersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreOrdersResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreOrdersResponseSuccess = (listStoreOrdersResponse200) & {
+  headers: Headers;
+};
+export type listStoreOrdersResponseError = (listStoreOrdersResponse400 | listStoreOrdersResponse401 | listStoreOrdersResponse403 | listStoreOrdersResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreOrdersResponse = (listStoreOrdersResponseSuccess | listStoreOrdersResponseError)
+
+export const getListStoreOrdersUrl = (storeId: string,
+    params?: ListStoreOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/orders?${stringifiedParams}` : `/v1/stores/${storeId}/orders`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `scope`: `new` (recebidos), `in_progress` (aceito a pronto) e `history` (entregue, cancelado, recusado). Mais recentes primeiro, por cursor. Preços só com a permissão `sales_values`.
+ * @summary Pedidos da loja (painel, WB-067)
+ */
+export const listStoreOrders = async (storeId: string,
+    params?: ListStoreOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreOrdersResponse> => {
+
+  return apiFetch<listStoreOrdersResponse>(getListStoreOrdersUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type countStoreOrdersResponse200 = {
+  data: StoreOrderCounts
+  status: 200
+}
+
+export type countStoreOrdersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type countStoreOrdersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type countStoreOrdersResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type countStoreOrdersResponseSuccess = (countStoreOrdersResponse200) & {
+  headers: Headers;
+};
+export type countStoreOrdersResponseError = (countStoreOrdersResponse401 | countStoreOrdersResponse403 | countStoreOrdersResponse404) & {
+  headers: Headers;
+};
+
+export type countStoreOrdersResponse = (countStoreOrdersResponseSuccess | countStoreOrdersResponseError)
+
+export const getCountStoreOrdersUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/counts`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS.
+ * @summary Contagem por grupo (badge de novos)
+ */
+export const countStoreOrders = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<countStoreOrdersResponse> => {
+
+  return apiFetch<countStoreOrdersResponse>(getCountStoreOrdersUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreOrderResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type getStoreOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreOrderResponseSuccess = (getStoreOrderResponse200) & {
+  headers: Headers;
+};
+export type getStoreOrderResponseError = (getStoreOrderResponse401 | getStoreOrderResponse403 | getStoreOrderResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreOrderResponse = (getStoreOrderResponseSuccess | getStoreOrderResponseError)
+
+export const getGetStoreOrderUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Cliente só com o primeiro nome; telefone só enquanto o pedido está em andamento e é de entrega. O código de retirada NUNCA aparece aqui. `values` e preços unitários só com `sales_values` (senão `null`).
+ * @summary Detalhe do pedido na loja (WB-068)
+ */
+export const getStoreOrder = async (storeId: string,
+    orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreOrderResponse> => {
+
+  return apiFetch<getStoreOrderResponse>(getGetStoreOrderUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreOrderTicketResponse200 = {
+  data: StoreOrderTicket
+  status: 200
+}
+
+export type getStoreOrderTicketResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreOrderTicketResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreOrderTicketResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreOrderTicketResponseSuccess = (getStoreOrderTicketResponse200) & {
+  headers: Headers;
+};
+export type getStoreOrderTicketResponseError = (getStoreOrderTicketResponse401 | getStoreOrderTicketResponse403 | getStoreOrderTicketResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreOrderTicketResponse = (getStoreOrderTicketResponseSuccess | getStoreOrderTicketResponseError)
+
+export const getGetStoreOrderTicketUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/ticket`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Sem preços: o que a separação precisa.
+ * @summary Comanda para impressão (WB-069)
+ */
+export const getStoreOrderTicket = async (storeId: string,
+    orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreOrderTicketResponse> => {
+
+  return apiFetch<getStoreOrderTicketResponse>(getGetStoreOrderTicketUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type acceptOrderResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type acceptOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acceptOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type acceptOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type acceptOrderResponseSuccess = (acceptOrderResponse200) & {
+  headers: Headers;
+};
+export type acceptOrderResponseError = (acceptOrderResponse401 | acceptOrderResponse403 | acceptOrderResponse404 | acceptOrderResponse409 | acceptOrderResponse429) & {
+  headers: Headers;
+};
+
+export type acceptOrderResponse = (acceptOrderResponseSuccess | acceptOrderResponseError)
+
+export const getAcceptOrderUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/accept`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `received` para `accepted`; cancela o prazo de aceite (`loja_aceite_timeout_min`). Idempotente: aceitar de novo devolve 200. Outro estado: 409 `INVALID_TRANSITION`.
+ * @summary Aceitar o pedido (RN-07)
+ */
+export const acceptOrder = async (storeId: string,
+    orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<acceptOrderResponse> => {
+
+  return apiFetch<acceptOrderResponse>(getAcceptOrderUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type refuseOrderResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type refuseOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type refuseOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type refuseOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type refuseOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type refuseOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type refuseOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type refuseOrderResponseSuccess = (refuseOrderResponse200) & {
+  headers: Headers;
+};
+export type refuseOrderResponseError = (refuseOrderResponse400 | refuseOrderResponse401 | refuseOrderResponse403 | refuseOrderResponse404 | refuseOrderResponse409 | refuseOrderResponse429) & {
+  headers: Headers;
+};
+
+export type refuseOrderResponse = (refuseOrderResponseSuccess | refuseOrderResponseError)
+
+export const getRefuseOrderUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/refuse`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Só em `received`. Motivo obrigatório (3 a 200). Estorno total automático (agendado na mesma transação e concluído em seguida; a conciliação refaz se o provedor falhar), estoque devolvido, cupom liberado. Idempotente.
+ * @summary Recusar o pedido com motivo (RN-08)
+ */
+export const refuseOrder = async (storeId: string,
+    orderId: string,
+    reasonRequest: ReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<refuseOrderResponse> => {
+
+  return apiFetch<refuseOrderResponse>(getRefuseOrderUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(reasonRequest)
+  }
+);}
+
+
+
+export type advanceOrderResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type advanceOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type advanceOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type advanceOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type advanceOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type advanceOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type advanceOrderResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type advanceOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type advanceOrderResponseSuccess = (advanceOrderResponse200) & {
+  headers: Headers;
+};
+export type advanceOrderResponseError = (advanceOrderResponse400 | advanceOrderResponse401 | advanceOrderResponse403 | advanceOrderResponse404 | advanceOrderResponse409 | advanceOrderResponse422 | advanceOrderResponse429) & {
+  headers: Headers;
+};
+
+export type advanceOrderResponse = (advanceOrderResponseSuccess | advanceOrderResponseError)
+
+export const getAdvanceOrderUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/status`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `out_for_delivery` (só entrega), `ready_for_pickup` (só retirada) e `delivered`. Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente.
+ * @summary Andamento do pedido (separação, saída, pronto, entregue)
+ */
+export const advanceOrder = async (storeId: string,
+    orderId: string,
+    advanceOrderRequest: AdvanceOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<advanceOrderResponse> => {
+
+  return apiFetch<advanceOrderResponse>(getAdvanceOrderUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(advanceOrderRequest)
+  }
+);}
+
+
+
+export type cancelOrderByStoreResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type cancelOrderByStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type cancelOrderByStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelOrderByStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type cancelOrderByStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type cancelOrderByStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type cancelOrderByStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type cancelOrderByStoreResponseSuccess = (cancelOrderByStoreResponse200) & {
+  headers: Headers;
+};
+export type cancelOrderByStoreResponseError = (cancelOrderByStoreResponse400 | cancelOrderByStoreResponse401 | cancelOrderByStoreResponse403 | cancelOrderByStoreResponse404 | cancelOrderByStoreResponse409 | cancelOrderByStoreResponse429) & {
+  headers: Headers;
+};
+
+export type cancelOrderByStoreResponse = (cancelOrderByStoreResponseSuccess | cancelOrderByStoreResponseError)
+
+export const getCancelOrderByStoreUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/cancel`
+}
+
+/**
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation`, `out_for_delivery` ou `ready_for_pickup`. Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
+ * @summary Loja cancela depois do aceite (RN-08)
+ */
+export const cancelOrderByStore = async (storeId: string,
+    orderId: string,
+    reasonRequest: ReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelOrderByStoreResponse> => {
+
+  return apiFetch<cancelOrderByStoreResponse>(getCancelOrderByStoreUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(reasonRequest)
   }
 );}
 

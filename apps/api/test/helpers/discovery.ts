@@ -81,6 +81,8 @@ export interface TestStore {
   id: string;
   ownerUserId: string;
   productIds: string[];
+  /** Dono da loja, com sessão aberta (token), para testar o painel do lojista. */
+  owner: Awaited<ReturnType<typeof registerUser>>;
 }
 
 /** Loja visível (RN-03) inserida direto no banco: aprovada, conta de recebimento ativa, produto ativo com estoque. */
@@ -155,7 +157,7 @@ export async function makeStore(ctx: TestContext, options: TestStoreOptions): Pr
     const reviewer = await registerUser(ctx);
     await ctx.db.insert(reviews).values({ storeId: row.id, userId: reviewer.userId, rating, comment: `Nota ${rating}` });
   }
-  return { id: row.id, ownerUserId: owner.userId, productIds };
+  return { id: row.id, ownerUserId: owner.userId, productIds, owner };
 }
 
 export const clearFeedCache = async (ctx: TestContext): Promise<void> => {

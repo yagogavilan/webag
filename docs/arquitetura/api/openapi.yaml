@@ -61,7 +61,7 @@ tags:
   - name: cart
     description: Sacola da conta no servidor (uma loja por pedido, cupom, resumo de valores)
   - name: orders
-    description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento). Contrato publicado na Onda 3; implementação na Onda 4 (operações com `x-planned`)"
+    description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento) e painel de pedidos da loja (lista, detalhe, comanda, aceitar, recusar, andamento, cancelar)"
 security:
   - bearerAuth: []
 paths:
@@ -4465,6 +4465,217 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/orders:
+    get:
+      tags: [orders]
+      operationId: listStoreOrders
+      summary: Pedidos da loja (painel, WB-067)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `scope`: `new` (recebidos), `in_progress` (aceito a pronto) e `history` (entregue, cancelado, recusado). Mais recentes primeiro, por cursor. Preços só com a permissão `sales_values`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: scope, in: query, schema: { type: string, enum: [new, in_progress, history] } }
+        - { name: number, in: query, schema: { type: string, pattern: '^WB-[A-Za-z0-9]{5}$' }, description: Busca pelo código do pedido }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrderPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/counts:
+    get:
+      tags: [orders]
+      operationId: countStoreOrders
+      summary: Contagem por grupo (badge de novos)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrderCounts' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}:
+    get:
+      tags: [orders]
+      operationId: getStoreOrder
+      summary: Detalhe do pedido na loja (WB-068)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Cliente só com o primeiro nome; telefone só enquanto o pedido está em andamento e é de entrega. O código de retirada NUNCA aparece aqui. `values` e preços unitários só com `sales_values` (senão `null`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrder' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}/ticket:
+    get:
+      tags: [orders]
+      operationId: getStoreOrderTicket
+      summary: Comanda para impressão (WB-069)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Sem preços: o que a separação precisa."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrderTicket' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}/accept:
+    post:
+      tags: [orders]
+      operationId: acceptOrder
+      summary: Aceitar o pedido (RN-07)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `received` para `accepted`; cancela o prazo de aceite (`loja_aceite_timeout_min`). Idempotente: aceitar de novo devolve 200. Outro estado: 409 `INVALID_TRANSITION`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrder' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}/refuse:
+    post:
+      tags: [orders]
+      operationId: refuseOrder
+      summary: Recusar o pedido com motivo (RN-08)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Só em `received`. Motivo obrigatório (3 a 200). Estorno total automático (agendado na mesma transação e concluído em seguida; a conciliação refaz se o provedor falhar), estoque devolvido, cupom liberado. Idempotente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrder' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}/status:
+    post:
+      tags: [orders]
+      operationId: advanceOrder
+      summary: Andamento do pedido (separação, saída, pronto, entregue)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `out_for_delivery` (só entrega), `ready_for_pickup` (só retirada) e `delivered`. Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdvanceOrderRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrder' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/orders/{orderId}/cancel:
+    post:
+      tags: [orders]
+      operationId: cancelOrderByStore
+      summary: Loja cancela depois do aceite (RN-08)
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation`, `out_for_delivery` ou `ready_for_pickup`. Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreOrder' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/orders:
     post:
       tags: [orders]
@@ -7567,6 +7778,143 @@ components:
         currentStore: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
         newStore: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
         itemCount: { type: integer }
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    AdvanceOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [in_preparation, out_for_delivery, ready_for_pickup, delivered] }
+        pickupCode: { type: string, pattern: '^\d{4}$', description: 'Obrigatório ao concluir uma retirada: o código que o cliente informa' }
+    StoreOrderAction:
+      type: string
+      enum: [accept, refuse, prepare, dispatch, ready, complete, cancel]
+    StoreOrderSummary:
+      type: object
+      required: [id, number, status, mode, createdAt, paidAt, acceptDeadlineAt, customerFirstName, itemCount, firstItemName, total, allowedActions]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        mode: { type: string, enum: [delivery, pickup] }
+        createdAt: { type: string, format: date-time }
+        paidAt: { type: [string, 'null'], format: date-time }
+        acceptDeadlineAt: { type: [string, 'null'], format: date-time, description: 'Só em `received`: a loja tem até aqui para aceitar' }
+        customerFirstName: { type: string }
+        itemCount: { type: integer }
+        firstItemName: { type: string }
+        total: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: 'Nulo sem a permissão `sales_values`' }
+        allowedActions: { type: array, items: { $ref: '#/components/schemas/StoreOrderAction' } }
+    StoreOrderPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StoreOrderSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    StoreOrderCounts:
+      type: object
+      required: [new, in_progress, history]
+      properties:
+        new: { type: integer }
+        in_progress: { type: integer }
+        history: { type: integer }
+    StoreOrder:
+      type: object
+      required: [id, number, status, mode, createdAt, paidAt, acceptedAt, acceptDeadlineAt, customer, items, delivery, pickup, values, couponCode, timeline, cancellation, allowedActions]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        mode: { type: string, enum: [delivery, pickup] }
+        createdAt: { type: string, format: date-time }
+        paidAt: { type: [string, 'null'], format: date-time }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+        acceptDeadlineAt: { type: [string, 'null'], format: date-time }
+        customer:
+          type: object
+          required: [firstName, phone]
+          properties:
+            firstName: { type: string }
+            phone: { type: [string, 'null'], description: 'Só enquanto o pedido de entrega está em andamento (LGPD: minimização)' }
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, attributes, image, quantity, unitPrice, lineTotal]
+            properties:
+              name: { type: string }
+              attributes: { type: object, additionalProperties: { type: string } }
+              image: { $ref: '#/components/schemas/ImageUrls' }
+              quantity: { type: integer }
+              unitPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+              lineTotal: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        delivery:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [address, etaMinMinutes, etaMaxMinutes]
+              properties:
+                address: { type: object, additionalProperties: true }
+                etaMinMinutes: { type: integer }
+                etaMaxMinutes: { type: integer }
+        pickup:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [address, instructions, prepMinMinutes, prepMaxMinutes]
+              properties:
+                address: { type: string }
+                instructions: { type: [string, 'null'] }
+                prepMinMinutes: { type: integer }
+                prepMaxMinutes: { type: integer }
+        values:
+          oneOf:
+            - type: 'null'
+            - type: object
+              description: Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).
+              required: [subtotal, delivery, storeDiscount, total, commission, netBeforeProviderFee]
+              properties:
+                subtotal: { $ref: '#/components/schemas/Money' }
+                delivery: { $ref: '#/components/schemas/Money' }
+                storeDiscount: { $ref: '#/components/schemas/Money' }
+                total: { $ref: '#/components/schemas/Money' }
+                commission: { $ref: '#/components/schemas/Money' }
+                netBeforeProviderFee: { $ref: '#/components/schemas/Money' }
+        couponCode: { type: [string, 'null'] }
+        timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' } }
+        cancellation:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [by, reason, at]
+              properties:
+                by: { type: string, enum: [customer, store, system, admin] }
+                reason: { type: [string, 'null'] }
+                at: { type: string, format: date-time }
+        allowedActions: { type: array, items: { $ref: '#/components/schemas/StoreOrderAction' } }
+    StoreOrderTicket:
+      type: object
+      required: [number, mode, createdAt, customerFirstName, destination, items]
+      properties:
+        number: { type: string }
+        mode: { type: string, enum: [delivery, pickup] }
+        createdAt: { type: string, format: date-time }
+        customerFirstName: { type: string }
+        destination: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [quantity, name, attributes]
+            properties:
+              quantity: { type: integer }
+              name: { type: string }
+              attributes: { type: object, additionalProperties: { type: string } }
     OrderStatus:
       type: string
       description: "Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma."
