@@ -12,12 +12,12 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| Onda 3 back-end: endereços, descoberta PostGIS, home, loja/produto, busca, favoritos, sacola e contrato de pedido | backend-dev | Em andamento |
-| Web do catálogo do lojista + moderação no admin (2B) | mobile-dev | Em andamento |
-| Revisão independente da Onda 2 e adendo da Onda 1 | tech-lead | Em andamento |
+| Fila do tech-lead + Onda 4A/4B/4C back-end (comissão, ledger, PIX/cartão, Mercado Pago, pedido, tempo real) | backend-dev | Em andamento |
+| QA da Onda 2 contra a API real (cadastrar/aprovar loja, moderação, regressão I1-I4) | qa-engineer | Em andamento |
+| App do cliente: início, loja, produto, busca, favoritos, sacola | mobile-dev | Em andamento |
 
-Concluídos: design system e tokens; 84 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 129; planos de teste (337 casos). **Onda 1 fechada** (Security: aprovado com ressalvas, veto DEC-029 retirado). **Onda 2**: API de lojas, aprovação e documentos privados; API de catálogo (variações, estoque, promoção, importação CSV, moderação) e configuração da loja; seed com 7 lojas e 42 produtos de Francisco Morato e Franco da Rocha; web do lojista (onboarding, configuração, equipe) e fila de aprovação do admin. Base do app do cliente (cadastro, login, endereço). Decisões DEC-001 a DEC-029.
-Incidentes: 1 reinício do container e 3 limites de uso de 5 h (06:50, 11:50 e 16:50 UTC). O que estava commitado sobreviveu em todos.
+Concluídos: design e 84 telas; PRDs (144 histórias); SEC-001 a 129; planos de teste (337 casos). **Onda 1 fechada** (Security e tech-lead: aprovado com ressalvas). **Onda 2** pronta (API e web: aprovação de lojas, documentos, catálogo, configuração, moderação, seed); revisão do tech-lead aprovada com ressalvas; QA em andamento. **Onda 3 back-end pronta**: endereços, descoberta PostGIS, home, busca com filtros, loja e produto públicos, favoritos, sacola e contrato de pedido. Decisões DEC-001 a DEC-030.
+Incidentes: 1 reinício do container e 4 limites de uso de 5 h (06:50, 11:50, 16:50 e 18:10 UTC); o que estava commitado sobreviveu.
 
 ## Falta (plano de fases)
 1. Fundação (acima)
