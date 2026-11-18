@@ -406,6 +406,24 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     await this.bus.emit(result.event);
   }
 
+  /**
+   * Transição que não encerra o pedido (aceite, separação, saída, entrega). Valida ator e modo, grava horário e evento.
+   * Repetir o mesmo destino é idempotente (toque duplo, retry de rede): devolve `null` e nada muda.
+   */
+  async advance(tx: Tx, order: OrderRow, to: OrderStatus, actor: OrderActor, actorUserId: string | null, reason: string | null = null): Promise<OrderEvent | null> {
+    if (order.status === to) return null;
+    if (!canTransition(order.status, to, actor, order.mode)) {
+      throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', `O pedido está em "${order.status}" e não pode ir para "${to}".`, { currentStatus: order.status });
+    }
+    const now = new Date();
+    await tx
+      .update(orders)
+      .set({ status: to, updatedAt: now, ...(to === 'accepted' ? { acceptedAt: now, acceptDeadlineAt: null } : {}), ...(to === 'delivered' ? { deliveredAt: now } : {}) })
+      .where(eq(orders.id, order.id));
+    await tx.insert(orderEvents).values({ orderId: order.id, fromStatus: order.status, toStatus: to, actor, actorUserId, reason: reason?.slice(0, 200) ?? null });
+    return this.eventOf(order, to, actor, reason, now);
+  }
+
   // =================================================================== pagamento (ganchos)
 
   /** Roda na transação do pagamento: aprovado paga o pedido; recusado/expirado devolve o estoque. */
