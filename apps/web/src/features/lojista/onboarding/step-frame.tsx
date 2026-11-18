@@ -10,6 +10,8 @@ import s from '../lojista.module.css';
 interface Props {
   /** 1 a 4; a revisão não tem número. */
   step?: 1 | 2 | 3 | 4;
+  /** Texto no lugar de "Etapa X de 4" (revisão e correção). */
+  label?: string;
   screen: string;
   title: string;
   /** Último salvamento ("Salvo às 14:32"). */
@@ -27,7 +29,7 @@ interface Props {
 }
 
 /** Moldura das etapas (L3 a L7): "Etapa X de 4" + barra de progresso, título com foco, rodapé com Voltar e o botão principal. */
-export function StepFrame({ step, screen, title, savedAt, backHref, submitLabel, busyLabel = 'Salvando…', busy, onSubmit, error, children, extraAction }: Props) {
+export function StepFrame({ step, label, screen, title, savedAt, backHref, submitLabel, busyLabel = 'Salvando…', busy, onSubmit, error, children, extraAction }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -38,7 +40,7 @@ export function StepFrame({ step, screen, title, savedAt, backHref, submitLabel,
       <div className={s.stepHeader}>
         <div className={s.stepMeta}>
           <span className="wb-text-label" data-testid={ltid(screen, 'step-label')}>
-            {step ? `Etapa ${step} de 4` : 'Última conferência'}
+            {step ? `Etapa ${step} de 4` : (label ?? 'Última conferência')}
           </span>
           {savedAt ? (
             <span className={cx('wb-text-caption', s.saved)} role="status" data-testid={ltid(screen, 'saved')}>

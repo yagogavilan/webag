@@ -47,9 +47,8 @@ export function Step2({ store, next, backHref }: Props) {
   // CEP completo (8 dígitos): preenche rua, bairro e cidade.
   useEffect(() => {
     const digits = onlyDigits(address.cep);
-    if (digits.length !== 8 || cepState === 'found') return;
+    if (digits.length !== 8 || cepState !== 'loading') return;
     let alive = true;
-    setCepState('loading');
     merchantApi
       .cep(digits)
       .then((found) => {
@@ -64,8 +63,7 @@ export function Step2({ store, next, backHref }: Props) {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara só quando o CEP completa
-  }, [address.cep]);
+  }, [address.cep, cepState]);
 
   function patch(change: Partial<StoreAddress>) {
     setAddress((current) => ({ ...current, ...change }));
@@ -73,7 +71,7 @@ export function Step2({ store, next, backHref }: Props) {
 
   function onCep(value: string) {
     const masked = maskCep(value);
-    setCepState('idle');
+    setCepState(onlyDigits(masked).length === 8 ? 'loading' : 'idle');
     setAddress({ ...EMPTY, number: address.number, noNumber: address.noNumber, complement: address.complement, cep: masked });
   }
 

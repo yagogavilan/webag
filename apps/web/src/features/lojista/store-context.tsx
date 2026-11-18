@@ -16,7 +16,13 @@ interface Value {
 const Context = createContext<Value | null>(null);
 
 export function StoreProvider({ user, children }: { user: Me; children: ReactNode }) {
-  const store = useQuery({ queryKey: STORE_KEY, queryFn: merchantApi.store, staleTime: 15_000 });
+  const store = useQuery({
+    queryKey: STORE_KEY,
+    queryFn: merchantApi.store,
+    staleTime: 15_000,
+    // Loja em análise: a resposta do Webag chega sem o lojista recarregar a tela.
+    refetchInterval: (query) => (query.state.data?.status === 'in_review' ? 60_000 : false),
+  });
   return <Context.Provider value={{ user, store }}>{children}</Context.Provider>;
 }
 

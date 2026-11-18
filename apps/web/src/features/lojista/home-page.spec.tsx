@@ -1,0 +1,130 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { json, mockFetch } from '../../../test/render';
+import { fakeStore, renderLojista } from '../../../test/lojista';
+import type { MerchantStore } from '@/lib/api/lojista';
+import { LojistaHome } from './home-page';
+
+const push = vi.fn();
+const replace = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }), usePathname: () => '/lojista' }));
+
+const T = (id: string) => screen.getByTestId(`lojista.inicio.${id}`);
+
+function setup(store: MerchantStore | null, extra: Parameters<typeof mockFetch> = []) {
+  const { impl, calls } = mockFetch(
+    ...extra,
+    (url) => (url.pathname.endsWith('/me/store') ? (store ? json(store) : json({ code: 'STORE_NOT_FOUND', title: 'x', status: 404 }, 404)) : undefined),
+  );
+  vi.stubGlobal('fetch', impl);
+  renderLojista(<LojistaHome />);
+  return calls;
+}
+
+beforeEach(() => {
+  push.mockReset();
+  replace.mockReset();
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('L8: acompanhar a aprovação', () => {
+  it('em análise: linha do tempo de 3 passos, prazo da configuração e data de envio', async () => {
+    setup(fakeStore({ status: 'in_review', step: 4, name: 'Casa Bela', legalType: 'cpf', document: '52998224725', submittedAt: '2026-11-18T13:15:00Z', slaBusinessDays: 2 }));
+    expect(await screen.findByRole('heading', { name: 'Sua loja está em análise' })).toBeInTheDocument();
+    const steps = screen.getByRole('list', { name: 'Andamento da análise' });
+    expect(steps).toHaveTextContent('Enviada');
+    expect(steps).toHaveTextContent('Em análise');
+    expect(steps).toHaveTextContent('Resposta');
+    expect(screen.getByText('Respondemos em até 2 dias úteis.')).toBeInTheDocument();
+    expect(screen.getByText(/Enviado em 18 nov, 10:15\./)).toBeInTheDocument();
+    expect(T('summary')).toBeInTheDocument();
+  });
+
+  it('rascunho ou sem loja: leva direto à etapa em que parou', async () => {
+    setup(fakeStore({ status: 'draft', step: 2 }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/lojista/onboarding/3'));
+  });
+
+  it('funcionário vê o status mas não o resumo do cadastro', async () => {
+    setup(fakeStore({ status: 'in_review', role: 'staff', step: 4 }));
+    await screen.findByRole('heading', { name: 'Sua loja está em análise' });
+    expect(screen.queryByTestId('lojista.inicio.summary')).toBeNull();
+  });
+
+  it('correção pedida: motivo por item, "Corrigir" em cada um; reenviar com item pendente rola ao primeiro e diz o que falta', async () => {
+    const calls = setup(
+      fakeStore({
+        status: 'correction_requested',
+        step: 4,
+        corrections: [
+          { id: 'c1', target: { type: 'document', kind: 'id_back' }, message: 'A foto do verso está cortada. Tire outra foto.', fixed: false },
+          { id: 'c2', target: { type: 'store_data' }, message: 'O WhatsApp não funciona.', fixed: true },
+        ],
+      }),
+    );
+    expect(await screen.findByText('Precisamos de uma correção.')).toBeInTheDocument();
+    expect(T('correction-c1')).toHaveTextContent('A foto do verso está cortada.');
+    expect(T('correction-c2')).toHaveTextContent('Corrigido');
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    await userEvent.click(T('resubmit'));
+    expect(T('missing')).toHaveTextContent('Falta corrigir: A foto do verso está cortada.');
+    expect(calls.some((c) => c.url.pathname.endsWith('/resubmit'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Corrigir' }));
+    expect(push).toHaveBeenCalledWith('/lojista/correcao');
+  });
+
+  it('correção toda feita: reenvia para análise', async () => {
+    const calls = setup(
+      fakeStore({ status: 'correction_requested', step: 4, corrections: [{ id: 'c1', target: { type: 'document', kind: 'id_back' }, message: 'x', fixed: true }] }),
+      [(url) => (url.pathname.endsWith('/store/resubmit') ? json(fakeStore({ status: 'in_review', step: 4 })) : undefined)],
+    );
+    await userEvent.click(await screen.findByTestId('lojista.inicio.resubmit'));
+    await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/store/resubmit'))).toBe(true));
+  });
+
+  it('recusada: motivo do admin e suporte', async () => {
+    setup(fakeStore({ status: 'rejected', step: 4, decisionReason: 'Documento inválido.' }));
+    expect(await screen.findByRole('heading', { name: 'Sua loja não foi aprovada.' })).toBeInTheDocument();
+    expect(screen.getByText('Documento inválido.')).toBeInTheDocument();
+    expect(T('support-link')).toHaveTextContent('Falar com o suporte');
+  });
+
+  it('aprovada, ainda fora do ar: 3 verificações e as tarefas com progresso', async () => {
+    setup(fakeStore({ status: 'approved', step: 4, hasActiveProduct: false, hasHours: true, payout: { status: 'not_connected', maskedAccount: null, simulated: true } }));
+    expect(await screen.findByRole('heading', { name: 'Sua loja foi aprovada.' })).toBeInTheDocument();
+    expect(screen.getByText('Falta pouco para aparecer no app')).toBeInTheDocument();
+    expect(screen.getByText('Loja aprovada (feito)')).toBeInTheDocument();
+    expect(screen.getByText('Cadastre 1 produto')).toBeInTheDocument();
+    expect(screen.getByText('Conecte o Mercado Pago')).toBeInTheDocument();
+    expect(screen.getByText('Primeiros passos · 1 de 3')).toBeInTheDocument();
+    expect(T('no-product')).toHaveTextContent('Cadastre 1 produto para aparecer no app.');
+  });
+
+  it('no ar: banner de sucesso dispensável', async () => {
+    setup(fakeStore({ status: 'live', step: 4 }));
+    expect(await screen.findByText('Sua loja está no ar.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Dispensar' }));
+    expect(screen.queryByText('Sua loja está no ar.')).toBeNull();
+  });
+
+  it('suspensa: banner de erro com o motivo e suporte', async () => {
+    setup(fakeStore({ status: 'suspended', step: 4, decisionReason: 'Muitas reclamações.' }));
+    expect(await screen.findByText('Sua loja foi suspensa.')).toBeInTheDocument();
+    expect(screen.getByText(/Muitas reclamações\./)).toBeInTheDocument();
+  });
+
+  it('erro de rede: "Tentar de novo" e sem acesso (403) usa o estado de acesso', async () => {
+    const { impl } = mockFetch((url) => (url.pathname.endsWith('/me/store') ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<LojistaHome />);
+    expect(await screen.findByText('Não conseguimos carregar agora')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
+  });
+
+  it('carregando: skeleton acessível', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
+    renderLojista(<LojistaHome />);
+    expect(screen.getByRole('status', { name: 'Carregando o andamento' })).toBeInTheDocument();
+  });
+});

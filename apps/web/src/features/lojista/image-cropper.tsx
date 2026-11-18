@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowClockwise, Minus, Plus } from '@phosphor-icons/react';
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Button, Dialog, ui } from '@/components/ui';
 import { canvasToJpeg, clampOffset, cropRect, cropToCanvas, decodeImage, displayScale, drawRotated, finish, zoomAround, type CropView, type Prepared, type Quarter } from '@/lib/image/prepare';
 import { ltid } from '@/lib/testid';
@@ -25,7 +25,6 @@ interface Props {
  */
 export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAccept, onCancel }: Props) {
   const frameHeight = Math.round(FRAME_WIDTH / aspect);
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
   const [quarter, setQuarter] = useState<Quarter>(0);
   const [url, setUrl] = useState<string | null>(null);
@@ -44,14 +43,18 @@ export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAcce
     };
   }, [source]);
 
-  useEffect(() => {
-    if (!bitmap) return;
-    const rotated = drawRotated(bitmap, quarter);
-    setCanvas(rotated);
+  const canvas = useMemo(() => (bitmap ? drawRotated(bitmap, quarter) : null), [bitmap, quarter]);
+
+  const rotate = useCallback(() => {
+    setQuarter((q) => ((q + 1) % 4) as Quarter);
     setView({ zoom: 1, offsetX: 0, offsetY: 0 });
+  }, []);
+
+  useEffect(() => {
+    if (!canvas) return;
     let alive = true;
     let objectUrl: string | null = null;
-    void canvasToJpeg(rotated, 0.7).then((blob) => {
+    void canvasToJpeg(canvas, 0.7).then((blob) => {
       if (!alive) return;
       objectUrl = URL.createObjectURL(blob);
       setUrl(objectUrl);
@@ -60,9 +63,9 @@ export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAcce
       alive = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [bitmap, quarter]);
+  }, [canvas]);
 
-  const full = canvas ? { imageWidth: canvas.width, imageHeight: canvas.height, frameWidth: FRAME_WIDTH, frameHeight, ...view } : null;
+  const full = useMemo(() => (canvas ? { imageWidth: canvas.width, imageHeight: canvas.height, frameWidth: FRAME_WIDTH, frameHeight, ...view } : null), [canvas, frameHeight, view]);
 
   const move = useCallback(
     (dx: number, dy: number) => {
@@ -97,7 +100,7 @@ export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAcce
       '+': () => setZoom(view.zoom + 0.25),
       '=': () => setZoom(view.zoom + 0.25),
       '-': () => setZoom(view.zoom - 0.25),
-      r: () => setQuarter((q) => ((q + 1) % 4) as Quarter),
+      r: rotate,
     };
     const action = keys[event.key];
     if (action) {
@@ -166,7 +169,7 @@ export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAcce
           <button type="button" className={ui.iconButton} onClick={() => setZoom(view.zoom + 0.25)} aria-label="Aproximar" data-testid={ltid('crop', 'crop-zoom-in')}>
             <Plus size={24} aria-hidden="true" />
           </button>
-          <Button variant="secondary" size="sm" icon={<ArrowClockwise size={20} aria-hidden="true" />} onClick={() => setQuarter((q) => ((q + 1) % 4) as Quarter)} data-testid={ltid('crop', 'crop-rotate')}>
+          <Button variant="secondary" size="sm" icon={<ArrowClockwise size={20} aria-hidden="true" />} onClick={rotate} data-testid={ltid('crop', 'crop-rotate')}>
             Girar
           </Button>
         </div>
