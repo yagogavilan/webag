@@ -88,7 +88,7 @@ QA e Security têm **poder de veto** em G4 e G5. Só o fundador pode derrubar um
 
 ### Como você descobre o seu papel
 O time roda de dois jeitos, e as regras são as mesmas:
-- **Subagente** (sessão do Claude Code com `.claude/agents/` carregado): seu papel e suas skills já vêm carregados.
+- **Subagente** (sessão do Claude Code com `.claude/agents/` carregado): seu papel e suas skills já vêm carregados. Nesse modo, o CEO garante que o trabalho aprovado chegue ao `main` ao fim de cada entrega (commit, PR e merge via `gh`, ou push direto no `main`), para a próxima sessão já começar do estado atual. O fundador não precisa aprovar PR.
 - **Thread de um Projeto do Claude Code** (o canal do fundador): subagentes e skills do repositório NÃO são carregados. O coordenador (CEO) começa a tarefa com `PAPEL: <nome>`. Antes de qualquer coisa, leia `.claude/agents/<nome>.md` e, só deles, os arquivos `.claude/skills/<skill>/SKILL.md` listados no campo `skills:`. Atue exatamente como esse papel. Uma thread = um papel, salvo se o CEO pedir outro.
   - Se a tarefa vier sem `PAPEL:`, deduza o papel pela tabela acima e diga qual assumiu na primeira linha do retorno.
   - Ao terminar: commit com Conventional Commits e abra o PR. **Documentos:** faça o merge você mesmo (squash). **Código:** deixe o PR aberto e informe o número; o `tech-lead` e depois o `qa-engineer` trabalham no mesmo branch e registram seus pareceres nele, e **a thread do `qa-engineer` faz o merge** quando ambos estiverem APROVADOS. Assim o `main` sempre reflete o estado atual e o fundador não precisa aprovar nada.
