@@ -41,7 +41,7 @@ describe('Loja e produto públicos (WB-016, WB-017, WB-018, DEC-022)', () => {
       exchangePolicy: { voluntaryDays: 7 },
     });
     expect(res.body.delivery.distanceM).toBeGreaterThan(900);
-    expect(res.body.hoursToday).toEqual([{ start: '00:00', end: '23:59' }]);
+    expect(res.body.hoursToday).toEqual([{ start: '00:00', end: '24:00' }]);
     expect(res.body.sections.map((s: { name: string }) => s.name)).toEqual(['Destaques', 'Outros']);
     expect(res.body.supplier.documentMasked).toMatch(/^\*+\d{2}$/);
     expect(JSON.stringify(res.body)).not.toMatch(/documentNumber|passwordHash|ownerUserId/);
