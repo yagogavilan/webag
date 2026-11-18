@@ -15,5 +15,5 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "test", "vitest.config.ts", "vitest.config.e2e.ts"]
+  "include": ["src", "test", "seed", "drizzle.config.ts", "vitest.config.ts", "vitest.config.e2e.ts"]
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Redis } from 'ioredis';
@@ -7,11 +8,12 @@ import pg from 'pg';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
+import type { Env } from '../../src/platform/config/env.js';
 import { PG_POOL } from '../../src/platform/database/database.module.js';
 import * as schema from '../../src/platform/database/schema.js';
 import { MailService, type MailMessage } from '../../src/platform/mail/mail.service.js';
 import { REDIS } from '../../src/platform/redis/redis.module.js';
-import { hotp } from '../../src/modules/identity/totp.js';
+import { base32Decode, hotp } from '../../src/modules/identity/totp.js';
 
 /** Captura os e-mails em memória (nos testes o SMTP real/Mailpit não é usado). */
 export class MemoryMailService extends MailService {
@@ -50,11 +52,11 @@ export async function createTestApp(): Promise<TestContext> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(MailService)
     .useFactory({
-      factory: (config: never) => {
+      factory: (config: ConfigService<Env, true>) => {
         mail.current = new MemoryMailService(config);
         return mail.current;
       },
-      inject: [(await import('@nestjs/config')).ConfigService],
+      inject: [ConfigService],
     })
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
@@ -65,8 +67,8 @@ export async function createTestApp(): Promise<TestContext> {
   await redis.connect().catch(() => undefined);
   return {
     app,
-    http: request(app.getHttpServer()) as unknown as ReturnType<typeof request>,
-    mail: mail.current as MemoryMailService,
+    http: request(app.getHttpServer()),
+    mail: mail.current!,
     db: drizzle(pool, { schema, casing: 'snake_case' }),
     pool,
     redis,
@@ -83,13 +85,7 @@ export const randomIp = (): string => `10.${Math.floor(Math.random() * 250)}.${M
 
 export const bearer = (token: string): { Authorization: string } => ({ Authorization: `Bearer ${token}` });
 
-/** Código TOTP para um deslocamento de passos (o servidor aceita ±1 e recusa reuso do mesmo passo). */
+/** Código TOTP de um passo deslocado (o servidor aceita ±1 e recusa reuso do mesmo passo). */
 export function totpAt(secretBase32: string, stepOffset = 0): string {
-  const { base32Decode } = require_totp();
   return hotp(base32Decode(secretBase32), Math.floor(Date.now() / 30_000) + stepOffset);
-}
-
-import * as totpModule from '../../src/modules/identity/totp.js';
-function require_totp(): typeof totpModule {
-  return totpModule;
 }

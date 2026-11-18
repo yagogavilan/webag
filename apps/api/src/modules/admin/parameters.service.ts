@@ -81,6 +81,7 @@ export class ParametersService {
   async update(key: string, value: unknown, reason: string, ctx: RequestContext): Promise<ParameterView> {
     const definition = PARAMETER_BY_KEY.get(key);
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
+    if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
     const problem = validateParameterValue(definition, value);
     if (problem) throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: problem, errors: [{ field: 'value', message: problem }] });
     await this.write(definition, value as string | number, reason, ctx, 'parameter.update');
@@ -91,6 +92,7 @@ export class ParametersService {
   async reset(key: string, reason: string, ctx: RequestContext): Promise<ParameterView> {
     const definition = PARAMETER_BY_KEY.get(key);
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
+    if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
     await this.write(definition, definition.default, reason, ctx, 'parameter.reset');
     return this.view(key);
   }

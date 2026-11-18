@@ -9,7 +9,7 @@ import { IdentityModule } from './modules/identity/index.js';
 import { UsersModule } from './modules/users/index.js';
 import { ProblemFilter } from './platform/http/problem.filter.js';
 import { MailModule } from './platform/mail/mail.module.js';
-import { RateLimitService } from './platform/ratelimit/rate-limit.service.js';
+import { RateLimitModule } from './platform/ratelimit/rate-limit.module.js';
 import { validateEnv, type Env } from './platform/config/env.js';
 import { DatabaseModule } from './platform/database/database.module.js';
 import { RedisModule } from './platform/redis/redis.module.js';
@@ -63,12 +63,12 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     DatabaseModule,
     RedisModule,
     MailModule,
+    RateLimitModule,
     HealthModule,
     AdminModule,
     UsersModule,
     IdentityModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: ProblemFilter }, RateLimitService],
-  exports: [RateLimitService],
+  providers: [{ provide: APP_FILTER, useClass: ProblemFilter }],
 })
 export class AppModule {}

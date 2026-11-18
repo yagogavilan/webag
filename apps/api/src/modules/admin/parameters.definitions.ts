@@ -9,7 +9,7 @@ interface Base {
   description: string;
   /** Referência de origem (HIP/WB) para rastrear a hipótese. */
   ref: string;
-  /** Piso legal (WB-119 C5): a tela avisa o risco jurídico. */
+  /** Piso legal fixo (DEC-011/DEC-023): ninguém edita, nem o super admin. */
   legalFloor?: boolean;
 }
 
@@ -39,8 +39,8 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('auto_conclusao_entrega_h', 24, 6, 72, 'Conclusão automática da entrega sem reclamação (h)', 'HIP-038'),
   { key: 'repasse_periodicidade', type: 'enum', default: 'semanal', values: ['semanal', 'quinzenal'], description: 'Periodicidade do repasse', ref: 'HIP-015' },
   int('repasse_carencia_dias', 7, 0, 30, 'Carência do repasse após a entrega (dias)', 'HIP-015'),
-  int('troca_arrependimento_dias', 7, 7, 30, 'Prazo de arrependimento (piso legal CDC art. 49: 7 dias)', 'HIP-017', true),
-  int('troca_defeito_dias', 30, 30, 90, 'Prazo para troca por defeito (piso legal: 30 dias)', 'HIP-017', true),
+  int('troca_arrependimento_dias', 7, 7, 7, 'Prazo de arrependimento (piso legal CDC art. 49, fixo)', 'DEC-011', true),
+  int('troca_defeito_dias', 30, 30, 30, 'Prazo para troca por defeito (piso legal, fixo)', 'DEC-011', true),
   int('troca_voluntaria_dias_padrao', 7, 0, 30, 'Prazo padrão de troca por tamanho/cor (dias; 0 = não aceita)', 'HIP-017'),
   int('taxa_coleta_max_cents', 3000, 0, 10000, 'Teto da taxa de coleta da troca voluntária (centavos)', 'HIP-018'),
   int('troca_resposta_h', 48, 12, 120, 'Prazo da loja para responder à troca (h)', 'HIP-019'),

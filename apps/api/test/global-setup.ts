@@ -1,13 +1,11 @@
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { runMigrations } from '../src/platform/database/migrate.js';
+import { TEST_ENV } from './test-env.js';
 
 /** Recria o banco de teste, aplica as migrações do zero (prova que `migrate` funciona) e limpa o Redis de teste. */
 export default async function setup(): Promise<void> {
-  const adminUrl = process.env.WEBAG_ADMIN_DATABASE_URL;
-  const testUrl = process.env.DATABASE_URL;
-  const redisUrl = process.env.REDIS_URL;
-  if (!adminUrl || !testUrl || !redisUrl) throw new Error('Variáveis de teste ausentes');
+  const { adminDatabaseUrl: adminUrl, databaseUrl: testUrl, redisUrl } = TEST_ENV;
 
   const dbName = new URL(testUrl).pathname.slice(1);
   if (!dbName.endsWith('_test')) throw new Error(`Banco de teste inesperado: ${dbName}`);

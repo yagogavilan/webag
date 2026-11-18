@@ -19,9 +19,9 @@ export const encodeCursor = (payload: Record<string, string | number>): string =
   Buffer.from(JSON.stringify(payload)).toString('base64url');
 
 export function decodeCursor<T extends Record<string, string | number>>(cursor: unknown): T | null {
-  if (cursor === undefined || cursor === '') return null;
+  if (typeof cursor !== 'string' || cursor === '') return null;
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as T;
   } catch {
     // cai no erro abaixo
