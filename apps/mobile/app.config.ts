@@ -18,6 +18,8 @@ const config: ExpoConfig = {
   android: {
     // Edge-to-edge é obrigatório no SDK atual: telas usam safe areas.
     package: 'br.com.webag.app',
+    // Só localização aproximada, só durante o uso (SEC-084, minimização). Revisar se o MapPinPicker exigir ponto preciso.
+    blockedPermissions: ['android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_BACKGROUND_LOCATION'],
   },
   plugins: [
     'expo-router',

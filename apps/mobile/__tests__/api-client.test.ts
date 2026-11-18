@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { configureApiClient, getMe } from '@webag/shared';
 import * as SecureStore from 'expo-secure-store';
+import { signIn } from '../src/api/auth-api';
 import { ApiError } from '../src/api/problem';
 import { request } from '../src/api/http';
 import { sessionStore } from '../src/api/session';
@@ -158,5 +159,27 @@ describe('sessão: armazenamento seguro (SEC-012, MASVS-STORAGE)', () => {
     store.set('webag.session.v1', '{lixo');
     await sessionStore.bootstrap();
     expect(sessionStore.getState().status).toBe('anonymous');
+  });
+});
+
+describe('login do cliente (1 passo)', () => {
+  it('conta de admin (resposta MfaChallenge) é tratada como credencial errada no app', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { mfaRequired: true, mfaToken: 'x'.repeat(30), expiresIn: 300 }));
+    await expect(signIn({ email: 'admin@webag.test', password: 'qualquer123' })).rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
+    expect(sessionStore.getState().status).toBe('anonymous');
+  });
+
+  it('entra e guarda a sessão no SecureStore', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(200, {
+        user: { id: 'u1', email: 'maria@gmail.com', emailVerified: false, name: 'Maria' },
+        tokens: { accessToken: 'acc', refreshToken: 'ref-'.padEnd(40, 'z'), expiresIn: 900, tokenType: 'Bearer' },
+        mfaSetupRequired: false,
+      }),
+    );
+    await signIn({ email: ' Maria@Gmail.com ', password: 'Cachorro2024' });
+    expect(JSON.parse(String(callOf(0)[1].body))).toEqual({ email: 'maria@gmail.com', password: 'Cachorro2024' });
+    expect(sessionStore.getState()).toMatchObject({ status: 'authenticated', user: { emailVerified: false } });
+    expect(store.get('webag.session.v1')).toContain('ref-');
   });
 });

@@ -15,6 +15,7 @@ import {
   type TokenPair,
 } from '@webag/shared';
 import { request } from './http';
+import { ApiError } from './problem';
 import { sessionStore } from './session';
 import type { StoredSession } from './session-storage';
 
@@ -93,6 +94,11 @@ export async function signIn(input: SignInInput): Promise<void> {
       ),
     { auth: 'none' },
   );
+  // Conta de admin pede 2º fator (MfaChallenge). O app do cliente não tem esse fluxo (admin é só web, DEC-018) e não revela
+  // que a conta existe: responde igual a credencial errada.
+  if ('mfaRequired' in result) {
+    throw new ApiError({ kind: 'problem', status: 401, code: 'INVALID_CREDENTIALS' });
+  }
   await sessionStore.setSession(toStored(result.user, result.tokens));
 }
 
