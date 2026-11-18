@@ -104,3 +104,43 @@ Nenhum (lint limpo; sem problema de nome ou import).
 ## Lista para o backend-dev (ordem)
 
 1. **B1** (bloqueante) + teste. 2. I1, I2, I8 (pequenos). 3. I7. 4. I3, I4, I5, I6 antes de a Onda 4A começar o checkout. 5. S1 a S6. Dívida nova registrada: DT-021 a DT-023 em `docs/arquitetura/divida-tecnica.md`.
+
+---
+
+# Adendo: reverificação no código (2026-11-18, `f88bd77`)
+
+Revisor: tech-lead. Releitura do código atual (não das mensagens de commit) e dos testes que cobrem cada item. Rodado nesta base: lint e typecheck de `api` e `shared` limpos; `test:unit` 118 OK; e2e com Postgres 16 e Redis reais, 241 OK e 3 falhas, todas da Onda 3 em andamento (ver `review-onda2-api.md`, seção Verificado).
+
+## Parecer final da Onda 1: APROVADO COM RESSALVAS
+
+O bloqueante B1 está corrigido e tem teste; I1 a I8 estão corrigidos no código. Restam as ressalvas abaixo, nenhuma impede o QA nem o G4 por si só, mas I9 (retenção) continua sendo condição do G4 pelo SEC-075.
+
+| Item | Situação | Evidência no código | Teste |
+|---|---|---|---|
+| B1 reset anônimo travava o MFA do admin | **Corrigido** | `auth.service.ts:325`: `codes.verify` (e-mail) é a primeira checagem; o TOTP só é avaliado em `completeReset` (`:344-350`), com `resetTicket` emitido depois do código, de uso limitado (`MFA_TOKEN_MAX_ATTEMPTS`). Sem código de e-mail válido o 2º fator nem é contado. DT-026 removeu o `totpCode` do reset de 1 passo | `admin-mfa-2step.e2e-spec.ts:20-50` reproduz o ataque (10 resets anônimos, `mfa:15`/`mfa:24` nulos, senha igual, login do admin segue) |
+| I1 refresh de admin sem inatividade | **Corrigido** | `session.service.ts:142-192`: lê `admin_inatividade_min` antes da transação, confere `lastUsedAt` do admin ativo dentro dela, devolve `SESSION_IDLE` e revoga só a sessão | `admin-mfa-2step.e2e-spec.ts:150-168` (31 min recusa; menos renova; cliente não é afetado) |
+| I2 antirreplay antes do insert | **Corrigido** | `payments.service.ts:192-210`: Redis só leitura; `INSERT ... ON CONFLICT DO NOTHING` primeiro; chave do Redis marcada depois. Falha de insert devolve 500 sem marcar e a reentrega processa | `payments-hardening.e2e-spec.ts:39` |
+| I3 cobrar antes de gravar | **Corrigido** | `payments.service.ts:114-155`: grava `creating` com o `attemptId` e só então chama o provedor; timeout vira 504 e a conciliação (`recoverCreating`) completa com a mesma chave; erro definitivo cancela | `payments-hardening.e2e-spec.ts:75, 98` |
+| I4 estorno | **Corrigido**, com uma lacuna nova (N1 abaixo) | `:358-435`: três fases (intenção `pending` sob lock; provedor fora da transação; confirmação + auditoria na mesma transação). Mesma chave com valor diferente é 422 `IDEMPOTENCY_KEY_REUSED`; o fake honra a chave (`fake.provider.ts:98-101`); soma de intenções não falhas limita o total | `payments-hardening.e2e-spec.ts:105-153` |
+| I5 conciliação | **Corrigido** | `:464-531`: `pg_try_advisory_xact_lock` entre instâncias, `try/catch` por candidato com contagem de falhas e alerta acima de 50%, `ORDER BY updated_at, id`, `updated_at` marca "visto" | `payments-hardening.e2e-spec.ts:155, 173` |
+| I6 tipo de notificação | **Corrigido** | `:190`: `type !== 'payment'` responde 200 sem enfileirar | `payments-hardening.e2e-spec.ts:66` |
+| I7 parte 1: avisar os outros super admins | **Corrigido** | `totp.service.ts:370-372`: o alvo e todos os super admins ativos (exceto o alvo) recebem o e-mail; acima de 3 reativações por dia por super admin, alerta extra (`:308-313`) | `admin-mfa-2step.e2e-spec.ts:170-190` |
+| I7 parte 2: links de reativação antigos continuam válidos? | **Não: só o mais novo vale** | `totp.service.ts:343-347`: na mesma transação do reset, todo convite `kind='admin'` do mesmo e-mail, sem uso e sem revogação, recebe `revokedAt`. O aceite (`admin-users.service.ts:141`) recusa convite revogado com 410 | O mesmo teste: o primeiro link devolve 410, o segundo 200, e não sobra convite pendente. Observação: a revogação é por e-mail e inclui convite de admin novo ainda pendente para o mesmo endereço, o que é o comportamento desejado |
+| I8 `TRUST_PROXY` | **Corrigido** | `env.ts:138-139`: em produção a variável é obrigatória (sem padrão); lista de IP/CIDR aceita e CIDR que confia na internet (`0.0.0.0/0`) é recusado (`env.spec.ts:91-93`) | `env.spec.ts:66` ("TRUST_PROXY ausente") |
+| I9 retenção (SEC-075) | **Aberta** | Nenhum job de retenção no código (`grep` por retenção só acha parâmetros). DT-021 segue "Aberta" | Sem teste. **Continua condição do G4** |
+| I10 chave única | **Corrigido** | `env.ts:74`: `MFA_ENC_KEY` própria, separada da `AUTH_HMAC_KEY` (DT-018 fechada) | `production-boot` cobre as chaves de desenvolvimento |
+
+## Pontos novos achados na reverificação (não bloqueiam a aprovação)
+
+| # | Onde | Observação | Ação |
+|---|---|---|---|
+| N1 | `payments.service.ts:341-348` e `:439-450` | O estorno confirmado pela conciliação (`recoverRefundIntents`) chama `refundInternal` **sem** `onConfirmed`, então o `payment.refund` não entra na auditoria: só o estorno que fechou na primeira chamada audita. Um estorno manual que deu timeout e foi concluído pela conciliação fica sem trilha (SEC-074). Intenção grava o motivo, mas não o ator | Persistir `actor_id`/`request` na intenção e auditar na fase 3 também no caminho de recuperação. Antes da Onda 4A (o endpoint de estorno nasce lá) |
+| N2 | `payments.service.ts:466-470` | `reconcile` segura uma conexão do pool (`lockTx`) durante todo o laço, que usa outras conexões do pool para o trabalho. Com pool pequeno e várias instâncias isso pode esgotar o pool | Sugestão: lock por conexão dedicada com `pg_try_advisory_lock` e liberar ao fim, ou `max` do pool com folga. Acompanhar no teste de carga |
+| N3 | `auth.service.ts:316` | `rl:reset-confirm` (10 por e-mail em 15 min) permite que um anônimo gaste o limite de confirmação de qualquer e-mail e atrase por 15 min a recuperação legítima. Não afeta o login nem o MFA (B1 segue fechado). É compromisso aceitável entre DoS e força bruta do código de 6 dígitos | Registrar como risco aceito; o Security decide se quer limite por IP + e-mail em vez de só por e-mail |
+| N4 | `admin-mfa-2step.e2e-spec.ts:195` | Comentário do teste com texto de rascunho ("não ao que executou?") | Trivial, limpar quando tocar no arquivo |
+
+## Decisão sobre a lista original do review
+
+- B1 e I1 a I8: fechados. I10: fechado. I9: aberto (DT-021, G4).
+- S1 a S11: não reverificados aqui (sugestões); S1 (corrida do contador do MFA), S2 (guards globais dentro de `IdentityModule`) e S3 (acesso direto ao `db` em `account.controller.ts`) continuam valendo e entram no backlog da Onda 4A.
+- O QA e o Security já podem tratar a Onda 1 como aceita (DEC-026), com I9 como condição de G4 e N1 como condição da Onda 4A.
