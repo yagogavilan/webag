@@ -1,8 +1,10 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { cities } from '../../admin/db/schema.js';
 import { users } from '../../identity/db/schema.js';
+import { products } from '../../catalog/db/schema.js';
 import { mediaAssets } from '../../media/db/schema.js';
+import { stores } from '../../stores/db/schema.js';
 
 export const BANNER_DESTINATIONS = ['store', 'category', 'product', 'coupon', 'none'] as const;
 export type BannerDestination = (typeof BANNER_DESTINATIONS)[number];
@@ -32,4 +34,72 @@ export const banners = pgTable(
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('banners_active_idx').on(t.active, t.startsAt, t.endsAt), check('banners_period', sql`${t.endsAt} > ${t.startsAt}`)],
+);
+
+export const REVIEW_STATUSES = ['published', 'removed'] as const;
+
+/**
+ * Avaliação (RN-12, WB-018). Nesta onda só LEITURA pública: quem grava é a Onda 5A (WB-031), que também liga `orderId`
+ * ao pedido (FK) e exige pedido ENTREGUE. `productId` nulo = avaliação da loja. A média pública só aparece a partir
+ * de `avaliacao_min_exibicao` avaliações. Remoção pelo admin é `status = 'removed'` (nunca apaga a linha).
+ */
+export const reviews = pgTable(
+  'reviews',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    storeId: uuid()
+      .notNull()
+      .references(() => stores.id),
+    productId: uuid().references(() => products.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    /** Sem FK até a Onda 4 criar `orders`. */
+    orderId: uuid(),
+    rating: smallint().notNull(),
+    comment: varchar({ length: 500 }),
+    storeReply: varchar({ length: 500 }),
+    storeRepliedAt: timestamp({ withTimezone: true }),
+    status: text({ enum: REVIEW_STATUSES }).notNull().default('published'),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('reviews_rating_range', sql`${t.rating} between 1 and 5`),
+    index('reviews_store_idx').on(t.storeId, t.createdAt),
+    index('reviews_product_idx').on(t.productId, t.createdAt),
+  ],
+);
+
+/** Favoritos (WB-019): de loja OU de produto, sincronizado entre aparelhos. Dado pessoal: só o dono lê. */
+export const favorites = pgTable(
+  'favorites',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    storeId: uuid().references(() => stores.id, { onDelete: 'cascade' }),
+    productId: uuid().references(() => products.id, { onDelete: 'cascade' }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('favorites_one_target', sql`(${t.storeId} is null) <> (${t.productId} is null)`),
+    uniqueIndex('favorites_store_uq').on(t.userId, t.storeId).where(sql`${t.storeId} is not null`),
+    uniqueIndex('favorites_product_uq').on(t.userId, t.productId).where(sql`${t.productId} is not null`),
+    index('favorites_user_idx').on(t.userId, t.createdAt),
+  ],
+);
+
+/** Histórico de buscas da conta (WB-015): últimos 10 termos distintos; apagável (LGPD). `termKey` = sem acento, minúsculo. */
+export const searchHistory = pgTable(
+  'search_history',
+  {
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    termKey: varchar({ length: 80 }).notNull(),
+    term: varchar({ length: 80 }).notNull(),
+    searchedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.termKey] }), index('search_history_user_idx').on(t.userId, t.searchedAt)],
 );

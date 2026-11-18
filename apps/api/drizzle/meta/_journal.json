@@ -71,6 +71,13 @@
       "when": 1795023197607,
       "tag": "0009_onda3_addresses_banners",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795026078640,
+      "tag": "0010_onda3_discovery",
+      "breakpoints": true
     }
   ]
 }

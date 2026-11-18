@@ -5,6 +5,6 @@ export { StoreSettingsService } from './store-settings.service.js';
 export { type Actor } from './store-settings.service.js';
 export { presentStore, uuidParam } from './stores.controllers.js';
 export { isStoreVisible } from './domain/visibility.js';
-export { isOpenNow } from './domain/hours.js';
-export { deliveryFee } from './domain/delivery.js';
+export { isOpenNow, type WeeklyHours } from './domain/hours.js';
+export { deliveryFee, type Tier } from './domain/delivery.js';
 export { GEOCODING_PROVIDER, type GeocodingProvider, type CepResult } from './geocoding.js';
