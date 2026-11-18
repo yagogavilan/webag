@@ -4,9 +4,10 @@ import type { AdminProfile } from './session-types';
  * Matriz de menu e edição do admin (onda-1b-contas.md §AD0, alinhada a `permissions.ts` da API).
  * Só decide o que desenhar; quem barra de verdade é a API (403).
  */
-export type AdminSection = 'regioes' | 'categorias' | 'parametros' | 'flags' | 'termos' | 'auditoria' | 'admins';
+export type AdminSection = 'lojas' | 'regioes' | 'categorias' | 'parametros' | 'flags' | 'termos' | 'auditoria' | 'admins';
 
 const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
+  lojas: ['super_admin', 'operations', 'support'],
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
   parametros: ['super_admin'],
@@ -17,6 +18,7 @@ const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
 };
 
 const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
+  lojas: ['super_admin', 'operations'],
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
   parametros: ['super_admin'],
@@ -32,6 +34,11 @@ export function canView(profile: AdminProfile | null, section: AdminSection): bo
 
 export function canEdit(profile: AdminProfile | null, section: AdminSection): boolean {
   return profile !== null && EDIT[section].includes(profile);
+}
+
+/** Documentos de identidade das lojas (WB-218 C1): só super admin e operação; o suporte vê os dados sem a aba Documentos. */
+export function canOpenStoreDocuments(profile: AdminProfile | null): boolean {
+  return profile === 'super_admin' || profile === 'operations';
 }
 
 export const PROFILE_LABEL: Record<AdminProfile, string> = {
@@ -55,6 +62,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
+  { section: 'lojas', label: 'Lojas', href: '/admin/lojas' },
   { section: 'regioes', label: 'Regiões', href: '/admin/regioes' },
   { section: 'categorias', label: 'Categorias', href: '/admin/categorias' },
   { section: 'parametros', label: 'Parâmetros', href: '/admin/parametros' },

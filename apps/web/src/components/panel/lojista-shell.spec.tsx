@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MerchantStore } from '@/lib/api/lojista';
 import type { Me } from '@/lib/session-types';
-import { json, mockFetch } from '../../../test/render';
+import { mockFetch } from '../../../test/render';
 import { fakeStore, storeHandlers } from '../../../test/lojista';
 import { LojistaShell } from './lojista-shell';
 

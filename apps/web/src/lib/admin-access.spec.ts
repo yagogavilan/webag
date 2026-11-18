@@ -1,22 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { canEdit, canView, safeNext, visibleNav } from './admin-access';
+import { canEdit, canOpenStoreDocuments, canView, safeNext, visibleNav } from './admin-access';
 
 describe('matriz de menu do admin (onda-1b §AD0)', () => {
   it('super admin vê tudo e edita o que é editável', () => {
-    expect(visibleNav('super_admin').map((i) => i.section)).toEqual(['regioes', 'categorias', 'parametros', 'flags', 'termos', 'auditoria', 'admins']);
+    expect(visibleNav('super_admin').map((i) => i.section)).toEqual(['lojas', 'regioes', 'categorias', 'parametros', 'flags', 'termos', 'auditoria', 'admins']);
     expect(canEdit('super_admin', 'parametros')).toBe(true);
     expect(canEdit('super_admin', 'auditoria')).toBe(false);
   });
 
   it('operação edita regiões e categorias, só lê termos e não vê parâmetros, flags nem admins', () => {
-    expect(visibleNav('operations').map((i) => i.section)).toEqual(['regioes', 'categorias', 'termos']);
+    expect(visibleNav('operations').map((i) => i.section)).toEqual(['lojas', 'regioes', 'categorias', 'termos']);
     expect(canEdit('operations', 'regioes')).toBe(true);
     expect(canView('operations', 'termos')).toBe(true);
     expect(canEdit('operations', 'termos')).toBe(false);
   });
 
-  it.each(['finance', 'support'] as const)('%s não vê nenhuma área de configuração', (profile) => {
-    expect(visibleNav(profile)).toEqual([]);
+  it('suporte vê as lojas sem decidir; financeiro não vê a fila', () => {
+    expect(visibleNav('support').map((i) => i.section)).toEqual(['lojas']);
+    expect(canEdit('support', 'lojas')).toBe(false);
+    expect(canOpenStoreDocuments('support')).toBe(false);
+    expect(canOpenStoreDocuments('operations')).toBe(true);
+    expect(visibleNav('finance')).toEqual([]);
   });
 
   it('sem perfil não vê nada', () => {

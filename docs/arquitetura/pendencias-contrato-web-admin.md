@@ -34,3 +34,17 @@ Variáveis do web (servidor; nenhuma é pública). Incluir em `infra/env.example
 | `WEB_TRUST_FORWARDED_HOST` | `true` só se o proxy sobrescreve `X-Forwarded-Host` | conforme o proxy | vazio |
 
 Sem nenhuma das duas variáveis de IP em produção o web não envia IP e a API vê o IP do BFF: os limites por IP viram globais (não burláveis, mas grossos) e o web avisa no log. Cookies de sessão usam `__Host-` (sem `Domain`) em produção, então admin e lojista em hosts distintos não compartilham nem sobrescrevem cookies.
+
+## Onda 2: fila de aprovação e lojas (web, 2026-11-18)
+
+> Origem: mobile-dev (web), telas A1 a A3 de `docs/design/telas/onda-2-lojista-admin.md`. O web usa o módulo provisório `apps/web/src/lib/api/admin-stores.ts` (DT-014), espelho de `admin-stores.controller.ts`.
+
+| # | Pendência | Impacto na tela |
+|---|---|---|
+| 8 | `GET /admin/stores`: devolver `origin` (`new` ou `resubmitted`), dias de atraso e "vence hoje", e aceitar `q` (nome, cidade, final do CPF/CNPJ) e `createdFrom` | A1 mostra só "No prazo", "Atrasada" e "Prazo pausado"; chips "Novas" e "Reenviadas" e a coluna Origem ficam de fora; a busca é feita só nas lojas já carregadas |
+| 9 | `GET /admin/stores`: devolver `sameDocument` (duplicidade) por linha | Selo "CNPJ repetido" só aparece dentro do caso, não na fila |
+| 10 | Registrar na auditoria o "Revelar" de dado pessoal (documento, WhatsApp, e-mail do responsável) e devolver esses campos mascarados por padrão (hoje `GET /admin/stores/:id` já devolve o CPF/CNPJ inteiro) | O mascaramento é só visual no navegador; o acesso não fica registrado, e a tela não diz que ficou |
+| 11 | `GET /admin/stores/:id`: incluir celular do responsável e o nome de quem decidiu | A2 mostra só nome e e-mail; o conflito usa o texto "Já decidida por ..." da API |
+| 12 | Resumo da loja (A3): pedidos em andamento e saldo a receber (financeiro) | Aba Resumo sem esses dois números; o diálogo de suspender não conta pedidos em andamento |
+| 13 | Moderação de produtos (A4, WB-107): endpoints de fila, ação e regras (palavras e categorias proibidas) | Tela construída contra contrato provisório e fora do menu até a API existir (`MODERATION_READY`) |
+| 14 | "Conferir tudo" e as marcações da checklist não vão à API; só `request-correction` guarda os itens com motivo | Sem registro de quais itens foram conferidos antes da aprovação |

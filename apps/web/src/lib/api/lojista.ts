@@ -1,5 +1,4 @@
 import { apiRequest } from './client';
-import type { Page } from './admin';
 
 /**
  * Lojista (Onda 2A). Os endpoints de `stores`, `uploads` e `cep` já existem em `apps/api` mas ainda não estão no

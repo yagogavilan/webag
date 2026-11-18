@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardText, FileText, Flag, List, MapPin, SidebarSimple, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
+import { ClipboardText, FileText, Flag, List, MapPin, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ import s from './shell.module.css';
 type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'duotone'; 'aria-hidden'?: boolean | 'true' }>;
 
 const ICONS: Record<AdminSection, IconType> = {
+  lojas: Storefront,
   regioes: MapPin,
   categorias: Tag,
   parametros: SlidersHorizontal,
