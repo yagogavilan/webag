@@ -25,6 +25,12 @@ export class ProblemFilter implements ExceptionFilter {
     const res = http.getResponse<Response>();
     const req = http.getRequest<Request>();
 
+    // /health segue o contrato próprio do Terminus (HealthStatus), não o RFC 9457.
+    if (exception instanceof HttpException && req.path.startsWith('/health')) {
+      res.status(exception.getStatus()).json(exception.getResponse());
+      return;
+    }
+
     let status = 500;
     let code = 'INTERNAL_ERROR';
     let title = 'Erro interno';

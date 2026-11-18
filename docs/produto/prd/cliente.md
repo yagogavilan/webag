@@ -84,7 +84,7 @@ Como cliente, quero guardar vários endereços, para pedir para casa, trabalho o
 ### WB-004 Região não atendida e lista de espera — Should — dep: WB-118
 Como visitante fora da área, quero saber que ainda não chegaram aí e ser avisado, para não achar que o app está quebrado.
 - **C1** Dado cidade/bairro inativo, então vejo "Ainda não chegamos em [bairro]" e a opção de ver lojas de uma cidade atendida.
-- **C2** Dado que toco "Avisar quando chegar" e dou consentimento explícito (e-mail), então guardo e-mail, cidade e bairro e confirmo "Anotado".
+- **C2** Dado que toco "Avisar quando chegar" e dou consentimento explícito (e-mail), então guardo e-mail, cidade e bairro e confirmo "Anotado". Modelo `[HIPÓTESE]`: **1 inscrição por e-mail e por bairro** (repetir o mesmo par não duplica nem acusa erro); o consentimento é próprio e fica registrado por inscrição (WB-211); quem se inscreve em 2 bairros tem 2 inscrições, cada uma revogável.
 - **C3** Dado e-mail inválido, então vejo erro no campo e nada é salvo.
 - **C4** Dado que o admin ativa o bairro depois, então os inscritos ficam disponíveis para push/e-mail segmentado (WB-197), respeitando o consentimento.
 
@@ -97,9 +97,10 @@ Como visitante, quero explorar lojas, produtos e preços sem criar conta, para d
 ### WB-006 Cadastro de conta — Must — dep: WB-210
 Como visitante, quero criar conta com poucos campos, para finalizar a compra.
 - **C1** Dado a tela de cadastro, então peço nome, e-mail, celular (máscara (11) 99999-9999), senha, confirmação da senha e aceite de termos/privacidade, e declaração de 18+ (HIP-026); não peço CPF, endereço nem data de nascimento.
-- **C2** Dado senha com menos de `senha_min` caracteres, ou comum/vazada, quando digito, então o medidor mostra "Fraca" e o botão Continuar fica inativo; com 8+ e score >= médio, "Boa". Medidor do app: zxcvbn, nota 0-4 (0-1 "Fraca", 2 "Média", 3-4 "Boa"); "Continuar" fica ativo só com nota >= 2 **e** senha fora da lista de senhas comuns/vazadas (>= 10 mil entradas, SEC-001). O servidor repete a validação e decide de verdade; o medidor é só orientação (R-05).
+- **C2** Dado senha com menos de `senha_min` caracteres, ou comum/vazada, quando digito, então o medidor mostra "Fraca"; com 8+ e score >= médio, "Boa". Medidor do app: zxcvbn, nota 0-4 (0-1 "Fraca", 2 "Média", 3-4 "Boa"). O botão "Continuar" **fica sempre ativo** (RN-17, DEC-024d): ao tocar com senha de nota < 2 **ou** presente na lista de senhas comuns/vazadas (>= 10 mil entradas, SEC-001), **não envia**, foca o campo da senha e mostra o motivo ("Escolha uma senha mais forte: [dica]"). O servidor repete a validação e decide de verdade; o medidor é só orientação (R-05).
 - **C3** Dado e-mail já cadastrado, então vejo "Esse e-mail já tem conta. Entrar?" sem revelar se a conta foi confirmada. Esta rota (e `exists`) é enumeração de e-mail conhecida, risco **aceito** na 1.0 (DEC-017) e limitada por rate limit (SEC-005); o teste de QA verifica os limites, e o Security registra o parecer (R-31).
-- **C4** Dado termos não marcados, então o botão fica inativo e o texto de privacidade abre em tela própria (link visível).
+- **C4** Dado termos (ou a declaração de 18+) não marcados, quando toco "Continuar" (botão sempre ativo, RN-17), então **não envia**, mostra "Aceite os termos para continuar" junto à caixa e leva o foco até ela; o texto de privacidade abre em tela própria (link visível).
+- **C7** Dado o cadastro, então **nenhum consentimento de marketing é pedido nele** (DEC-024f): a oferta de "Ofertas e novidades" aparece só depois do 1º pedido pago e em Conta > Notificações (WB-196 C6); recusar ou ignorar não afeta nada.
 - **C5** Dado o cadastro concluído, então a conta fica "não confirmada" até WB-007, mas **posso finalizar o 1º pedido pago antes de confirmar** (DEC-014/015); os limites de uma conta não confirmada (2º pedido, cupom, exportação etc.) estão em WB-224.
 - **C6** Dado e-mail com domínio provavelmente errado (ex.: "gmial.com"), então vejo a sugestão "Você quis dizer gmail.com?" e posso aceitar ou manter (WB-224 C5).
 
@@ -210,7 +211,7 @@ Como cliente, quero ver e ajustar meu carrinho, para revisar antes de pagar.
 - **C2** Dado quantidade maior que o estoque disponível, então ajusta ao máximo e avisa "Só temos X unidades".
 - **C3** Dado item que ficou indisponível ou mudou de preço desde que adicionei, então vejo aviso por item e o total recalculado antes de continuar (RN-05).
 - **C4** Dado carrinho vazio, então vejo "Seu carrinho está vazio" e botão para explorar.
-- **C5** Dado subtotal abaixo do pedido mínimo, então vejo "Faltam R$ X para o pedido mínimo" e o botão de finalizar fica inativo.
+- **C5** Dado subtotal abaixo do pedido mínimo, então vejo "Faltam R$ X para o pedido mínimo" e o botão principal vira "Adicionar mais itens" (leva à loja); não há botão de finalizar desabilitado (RN-17).
 - **C6** Dado carrinho parado por mais de `carrinho_validade_dias` (7), então é esvaziado.
 
 ### WB-021 Aviso ao trocar de loja — Must — dep: WB-020
@@ -320,7 +321,7 @@ Como cliente, quero ver cupons disponíveis, para usar antes de vencer.
 
 ### WB-034 Ajuda e suporte — Should — dep: WB-119
 Como cliente, quero achar ajuda rápido, para resolver sem depender do acaso.
-- **C1** Dado "Ajuda", então vejo perguntas frequentes (pedido, pagamento, troca, conta), com texto editável pelo admin, e o contato do suporte Webag (WhatsApp e e-mail).
+- **C1** Dado "Ajuda", então vejo perguntas frequentes (pedido, pagamento, troca, conta), com texto editável pelo admin, e o contato do suporte Webag (WhatsApp e e-mail) e o horário de atendimento. WhatsApp, e-mail, horário (texto até 60) e e-mail do encarregado são **configuração de conteúdo editável no admin sem deploy** (operação e super admin, auditado; tela AJ3), não constantes no código; a mesma configuração alimenta a Ajuda do lojista (WB-227) e WB-217 C1.
 - **C2** Dado pedido selecionado, então "Ajuda com este pedido" leva ao suporte com o número do pedido preenchido.
 - **C3** Dado links de termos e privacidade, então abrem a versão vigente (WB-117).
 

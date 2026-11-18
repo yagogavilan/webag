@@ -1,6 +1,6 @@
 # PRD: Área do Lojista (painel web responsivo)
 
-Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-050 a WB-079
+Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-050 a WB-079 e WB-227
 Regras: `docs/produto/regras-de-negocio.md`; hipóteses: `docs/decisoes.md`. Origem: brief §3.2. Nota: o lojista usa o **painel web** (celular e computador do balcão), não o app (DEC-005); o CLAUDE.md §2 cita app mobile para lojista e foi superado pelo brief.
 
 ## Problema
@@ -41,6 +41,7 @@ App nativo do lojista; integração com ERP/PDV; emissão de nota fiscal; impres
 | RF-LOJ-06 | Cupons, avaliações, equipe | 073-075 |
 | RF-LOJ-07 | Financeiro e painel inicial | 076-078 |
 | RF-LOJ-08 | Segurança de acesso | 079 |
+| RF-LOJ-09 | Ajuda e diagnóstico dos alertas | 227 |
 
 ## Regras de negócio
 RN-03, RN-04, RN-05, RN-06, RN-07, RN-08, RN-09, RN-10, RN-11, RN-12, RN-13; HIP-030 (visibilidade), HIP-031 (CPF/CNPJ), HIP-034 (limites de catálogo).
@@ -261,12 +262,14 @@ Como lojista, quero responder avaliações, para mostrar atenção.
 
 ### WB-075 Equipe e permissões — Must — dep: WB-050
 Como dono, quero convidar funcionários com permissões, para dividir o trabalho sem dar acesso ao dinheiro.
-- **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações. A conta criada pelo link **nasce com o e-mail confirmado** (o clique prova a posse; não cai em SEC-008b). Reenviar o convite invalida o anterior (R-09b, R-09e).
+- **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações e **valores de venda** (C7; desligada por padrão). A conta criada pelo link **nasce com o e-mail confirmado** (o clique prova a posse; não cai em SEC-008b). Reenviar o convite invalida o anterior (R-09b, R-09e).
 - **C2** Dado funcionário, então nunca vê financeiro, conta de recebimento, equipe nem configurações da loja (RN-13).
 - **C3** Dado remover funcionário, então as sessões e renovações dele terminam e a conexão em tempo real do painel é derrubada em até 5 s (WB-219); a próxima requisição com o acesso antigo recebe 401.
 - **C4** Dado e-mail já vinculado a uma loja, então a mensagem é a genérica "Não foi possível convidar este e-mail", sem revelar o motivo (anti-enumeração, SEC-017). Funcionário em duas lojas continua proibido na 1.0, para simplificar o RBAC (registrado; R-09a, R-09c).
 - **C6** Dado o dono, então ele **não pode se remover** da própria loja; transferência de propriedade fica fora da 1.0 (R-09d).
 - **C5** Dado alterar permissões, então valem na próxima requisição; tudo fica no log da loja.
+- **C7** Dado a permissão **"Ver valores de venda"** (`vendas_valores`, DEC-024c), então: **desligada por padrão** em todo convite; só o dono liga ou desliga; a caixa traz a frase "Libera ver quanto a loja vendeu (valores em R$, ticket médio e gráfico). Não libera financeiro, repasses nem conta de recebimento." Sem a permissão, o funcionário vê no painel inicial (WB-078) só as pendências das permissões dele e **contagens** (pedidos, unidades, mais vendidos por unidade), nunca vendas em R$, ticket médio nem gráfico de vendas; a API **não devolve** esses campos (autorização no servidor, não só na tela). Com a permissão, vê esses números do painel inicial, **nunca** o financeiro (WB-076, só dono, C2). Valores de itens e total **dentro de um pedido** continuam visíveis a quem tem "pedidos" (necessário para atender) `[HIPÓTESE]`.
+- **C8** Dado o dono em Equipe > pessoa > Atividade, então vê a lista somente leitura "Quem fez o quê" (pessoa, ação, hora), filtrável por pessoa e período, sem dados do cliente além do número do pedido; vazio: "Sem atividade ainda" (tela EQ1, mesma fonte do log de C5).
 
 ### WB-076 Financeiro: resumo, a receber e repasses — Must — dep: WB-156
 Como dono, quero ver quanto vendi, quanto é comissão e quando recebo, para confiar nos números.
@@ -288,6 +291,7 @@ Como lojista, quero ver como a loja está indo, para decidir o dia.
 - **C2** Dado loja nova sem vendas, então vejo estado vazio com próximo passo ("Cadastre seu 1º produto").
 - **C3** Dado os números, então seguem RN-15 (pedidos que chegaram a RECEBIDO, sem cancelados).
 - **C4** Dado pendências (pedido sem aceite, troca aguardando, estoque baixo, loja pausada), então aparecem no topo.
+- **C5** Dado funcionário **sem** a permissão "Ver valores de venda" (WB-075 C7, padrão), então o painel mostra só as pendências das permissões dele e contagens; os KPIs em R$ (vendas de hoje e 7 dias, ticket médio) e o gráfico de vendas não aparecem nem são devolvidos pela API. O dono sempre vê tudo.
 
 ### WB-079 Segurança de acesso do lojista (2FA opcional) — Should — dep: WB-050
 Como dono, quero proteger minha conta, para ninguém mexer no meu dinheiro.
@@ -295,6 +299,14 @@ Como dono, quero proteger minha conta, para ninguém mexer no meu dinheiro.
 - **C2** Dado perder o aparelho, então posso usar códigos de recuperação gerados na ativação (10 códigos de uso único).
 - **C3** *(movido para WB-053 C4, Must: reautenticação e aviso na troca da conta de recebimento)*.
 - **Nota:** o 2FA do dono é opcional na 1.0 (SEC-015); sobe de Could para Should. O 2FA do admin é obrigatório (WB-222).
+
+### WB-227 Ajuda do lojista e diagnóstico dos alertas — Should — dep: WB-067, WB-192, WB-034
+Como lojista ou funcionário, quero conferir se os alertas de pedido vão tocar e achar ajuda, para não perder venda (tela AJ2, `onda-6-conformidade.md`; nova, sem história até DEC-024).
+- **C1** Dado o menu Ajuda, então vejo o diagnóstico com 4 linhas, cada uma com ícone **e** texto (nunca só cor): **Som** (ligado/desligado), **Avisos do navegador** (Web Push ligado/desligado, com "Ativar"), **Conexão** (tempo desde a última sincronização) e **Tela acesa**.
+- **C2** Dado "Testar alertas agora", então toca o som e mostra o modal "Este é um teste" **sem criar pedido**; depois pergunta "Você ouviu o som?"; "Não, ajudar" abre os passos de correção.
+- **C3** Dado navegador sem suporte a manter a tela acesa (Wake Lock) `[HIPÓTESE]`, então a linha "Tela acesa" mostra só a dica de texto "Deixe a tela ligada para não perder pedidos"; nada quebra.
+- **C4** Dado a seção de ajuda, então vejo perguntas frequentes da loja (Pedidos, Produtos, Trocas, Dinheiro, Equipe) com busca, o cartão "Falar com o Webag" (WhatsApp e e-mail, horário) lidos da configuração de WB-034 C1, e links para Termos do Lojista e Política de privacidade.
+- **C5** Dado funcionário, então vê a tela inteira (o teste de som é essencial para ele); busca sem resultado mostra "Nada para '[termo]'" com o contato; sem conexão, o diagnóstico mostra "Sem conexão" e as perguntas vêm do cache.
 
 ## Dependências e riscos
 | Item | Tipo | Mitigação |

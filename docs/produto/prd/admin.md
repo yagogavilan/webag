@@ -151,13 +151,14 @@ Como operação/financeiro, quero cancelar e estornar um pedido, para corrigir p
 - **C6** Dado falha do provedor no estorno, então o pedido fica "Estorno pendente" e há tentativa automática; o admin vê o erro e pode reprocessar (WB-153).
 - **C7** Dado qualquer intervenção, então cliente e loja são notificados e a ação vai à auditoria.
 - **C8** Dado estorno, então exige reautenticação com TOTP vigente (5 min; WB-222) além do motivo.
+- **C9** Dado estorno no split que falhou por saldo insuficiente do lojista (WB-154 C6), então **só o super admin** vê a ação "Cobrir com saldo do Webag", limitada a `estorno_cobertura_teto_cents` por pedido (R$ 300,00 `[HIPÓTESE]`, DEC-020a); exige motivo e TOTP vigente, registra o valor como **dívida do lojista** no ledger (cobrança pelos Termos do Lojista, minuta pendente de jurídico) e vai à auditoria. Acima do teto ou sem saldo na conta Webag, a ação não aparece e o texto diz o motivo. Viabilidade de pagar o estorno com saldo próprio no MP: backend-dev confirma no sandbox; se inviável, a ação sai da 1.0 e fica só suspensão + cobrança.
 
 ### WB-110 Mediar trocas e disputas — Must — dep: WB-172, WB-037
 Como operação, quero decidir trocas contestadas e disputas "não recebi", para resolver com justiça e prazo.
 - **C1** Dado a fila "Em mediação" ordenada por prazo (`mediacao_dias_uteis`), então vejo pedido, motivo, fotos, mensagens, política da loja e histórico.
 - **C2** Dado decisão "A favor do cliente" ou "A favor da loja" com justificativa obrigatória, então o fluxo continua (troca aprovada/estorno ou recusa final) e as partes são notificadas.
 - **C3** Dado arrependimento (7 dias) ou defeito dentro do prazo, então o sistema alerta que a recusa da loja não é permitida por lei e sugere aprovar.
-- **C4** Dado disputa "não recebi", então posso estornar total (a partir da conta do lojista, WB-154 C6), confirmar entrega ou pedir comprovante à loja; no modo centralizado o repasse do pedido fica retido até a decisão, no split não há retenção e a ação é o estorno e, se for o caso, a suspensão da loja (DEC-016).
+- **C4** Dado disputa "não recebi", então posso estornar total (a partir da conta do lojista, WB-154 C6), confirmar entrega ou pedir comprovante à loja (prazo de resposta da loja `disputa_comprovante_h`, 48 h `[HIPÓTESE]`; sem resposta, a disputa segue sem o comprovante); no modo centralizado o repasse do pedido fica retido até a decisão, no split não há retenção e a ação é o estorno e, se for o caso, a suspensão da loja (DEC-016).
 - **C5** Dado prazo estourado, então o item sobe para "Atrasado".
 
 ### WB-111 Comissões padrão e taxa de serviço — Must — dep: WB-119
@@ -192,7 +193,7 @@ Como financeiro, quero exportar relatórios, para fechar o mês.
 
 ### WB-115 Banners e destaques — Must — dep: WB-118
 Como operação, quero publicar banners e destaques, para promover sem deploy.
-- **C1** Dado novo banner, então envio imagem (proporção 16:9, até 5 MB, recorte e compressão), título opcional, destino (loja, categoria, produto, cupom), cidades alvo, início/fim, ordem e ativo.
+- **C1** Dado novo banner, então envio imagem (proporção **2:1**, a mesma exibida no app; DEC-024a; até 5 MB; o recorte fixo em 2:1 impede subir outra proporção; compressão no navegador), título opcional, destino (loja, categoria, produto, cupom), cidades alvo, início/fim, ordem e ativo.
 - **C2** Dado destino inexistente ou inativo, então erro e o banner não publica; dado destino que ficar inativo depois, então o banner some do app.
 - **C3** Dado período, então publica e despublica sozinho no horário.
 - **C4** Dado destaques de lojas/produtos (fixados na home), então escolho item, cidade e período; aparecem antes dos critérios automáticos (RN-03).
@@ -240,6 +241,8 @@ Como super admin, quero ligar e desligar funções, para reagir a problemas.
 - **C2** Dado desligar cartão ou PIX, então o checkout deixa de mostrá-lo na próxima abertura; pedidos já criados seguem.
 - **C3** Dado a flag desligada mantendo a função em andamento (ex.: trocas já abertas), então processos existentes terminam normalmente.
 - **C4** Dado mudança, então é auditada e o app obtém o valor em até 60 s (cache curto).
+- **C5** Dado tentar desligar **PIX e cartão ao mesmo tempo**, então a ação é **bloqueada** com "Pelo menos uma forma de pagamento precisa ficar ligada. Para parar as vendas, use o modo manutenção." (WB-121); a API também recusa (409). Decisão `[HIPÓTESE]` mais segura que a proposta do Designer (só avisar): evita app sem como pagar por engano e é trivial de testar.
+- **C6** Dado qualquer tela do admin, então o cabeçalho mostra o selo **"Pagamentos: simulado"** (provedor `fake`, WB-150) ou **"Pagamentos: real"** (Mercado Pago), com ícone e texto, lido do servidor (não editável); em produção o selo "simulado" nunca aparece (WB-160 C5). Serve para não tomar um estorno de teste por real.
 
 ### WB-121 Modo manutenção — Should — dep: WB-120
 Como super admin, quero pôr o sistema em manutenção, para atualizar com segurança.

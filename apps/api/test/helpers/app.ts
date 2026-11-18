@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import type { Type } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DiscoveryService, MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
+import { IS_PUBLIC } from '../../src/platform/auth/decorators.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Redis } from 'ioredis';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -47,9 +50,9 @@ export interface TestContext {
   close: () => Promise<void>;
 }
 
-export async function createTestApp(): Promise<TestContext> {
+export async function createTestApp(options: { controllers?: Type<unknown>[] } = {}): Promise<TestContext> {
   const mail = { current: undefined as MemoryMailService | undefined };
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule], controllers: options.controllers ?? [] })
     .overrideProvider(MailService)
     .useFactory({
       factory: (config: ConfigService<Env, true>) => {
@@ -88,4 +91,33 @@ export const bearer = (token: string): { Authorization: string } => ({ Authoriza
 /** Código TOTP de um passo deslocado (o servidor aceita ±1 e recusa reuso do mesmo passo). */
 export function totpAt(secretBase32: string, stepOffset = 0): string {
   return hotp(base32Decode(secretBase32), Math.floor(Date.now() / 30_000) + stepOffset);
+}
+
+/** Lista as rotas HTTP registradas (método, caminho com placeholders e se são públicas). Base da matriz de RBAC. */
+export function listRoutes(app: NestExpressApplication): { method: string; path: string; isPublic: boolean }[] {
+  const discovery = new DiscoveryService(app.get(ModulesContainer));
+  const scanner = new MetadataScanner();
+  const reflector = new Reflector();
+  const routes: { method: string; path: string; isPublic: boolean }[] = [];
+  const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+  for (const wrapper of discovery.getControllers()) {
+    const { instance, metatype } = wrapper;
+    if (!instance || !metatype) continue;
+    const prefix = String(Reflect.getMetadata('path', metatype) ?? '');
+    const proto = Object.getPrototypeOf(instance) as object;
+    for (const name of scanner.getAllMethodNames(proto)) {
+      const handler = (proto as Record<string, () => unknown>)[name];
+      if (!handler) continue;
+      const methodIndex = Reflect.getMetadata('method', handler) as number | undefined;
+      if (methodIndex === undefined) continue;
+      const sub = String(Reflect.getMetadata('path', handler) ?? '');
+      const path = `/${[prefix, sub].map((part) => part.replace(/^\/|\/$/g, '')).filter(Boolean).join('/')}`;
+      routes.push({
+        method: methods[methodIndex] ?? 'GET',
+        path,
+        isPublic: reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC, [handler, metatype]) === true,
+      });
+    }
+  }
+  return routes;
 }

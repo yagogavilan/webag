@@ -22,7 +22,7 @@ Transformar a troca em vantagem: pedido no app, regra clara, acompanhamento e co
 Frete reverso integrado (transportadora/correios) e etiqueta; coleta por entregador Webag (fase 2); crédito na loja/vale-troca; troca por produto de **valor diferente** com cobrança/devolução da diferença (só mesmo produto em outra variação, ou reembolso); troca entre lojas; garantia estendida/contratual; peritagem técnica; chat na troca (usa WhatsApp).
 
 ## Usuários e cenários
-1. Carla pediu 38, cabe 37: abre o pedido entregue, "Pedir troca", motivo "tamanho errado", foto da etiqueta, paga a taxa de coleta de R$ 5,00; a loja aprova, coleta amanhã, envia o 37.
+1. Carla pediu 38, cabe 37: abre o pedido entregue, "Pedir troca", motivo "tamanho errado", foto da etiqueta, escolhe "Coleta em casa" (vê "taxa R$ 5,00, cobrada só se a loja aprovar"); a loja aprova, Carla paga a taxa, a loja coleta amanhã e envia o 37.
 2. Carla se arrepende em 3 dias: "arrependimento" sem custo, reembolso.
 3. Produto com defeito: foto obrigatória; loja contesta; admin media.
 4. Marcos recebe a fila, aprova, agenda coleta, confere e marca recebido.

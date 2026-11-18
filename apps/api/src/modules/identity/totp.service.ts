@@ -89,30 +89,30 @@ export class TotpService {
    * Aceita TOTP (6 dígitos) ou código de recuperação (uso único). Recuperação força reconfigurar o TOTP (WB-222 C5):
    * o segredo é descartado e a sessão sai sem MFA concluído.
    */
-  async verifyLoginCode(userId: string, input: string): Promise<boolean> {
+  async verifyLoginCode(userId: string, input: string, allowRecovery = true): Promise<'totp' | 'recovery' | null> {
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, userId));
-    if (!admin?.totpSecretEnc || !admin.totpConfirmedAt) return false;
+    if (!admin?.totpSecretEnc || !admin.totpConfirmedAt) return null;
 
     if (/^\d{6}$/.test(input)) {
       return this.db.transaction(async (tx) => {
         const [locked] = await tx.select().from(adminProfiles).where(eq(adminProfiles.userId, userId)).for('update');
-        if (!locked?.totpSecretEnc) return false;
+        if (!locked?.totpSecretEnc) return null;
         const check = verifyTotp(this.open(userId, locked.totpSecretEnc), input, Date.now(), locked.totpLastStep);
-        if (!check.ok) return false;
+        if (!check.ok) return null;
         await tx.update(adminProfiles).set({ totpLastStep: check.step }).where(eq(adminProfiles.userId, userId));
-        return true;
+        return 'totp' as const;
       });
     }
 
-    if (normalizeRecoveryCode(input).length !== 16) return false;
+    if (!allowRecovery || normalizeRecoveryCode(input).length !== 16) return null;
     const used = await this.db
       .update(adminRecoveryCodes)
       .set({ usedAt: new Date() })
       .where(and(eq(adminRecoveryCodes.userId, userId), eq(adminRecoveryCodes.codeHash, this.recoveryHash(userId, input)), isNull(adminRecoveryCodes.usedAt)))
       .returning({ id: adminRecoveryCodes.id });
-    if (used.length === 0) return false;
+    if (used.length === 0) return null;
     await this.clear(userId);
-    return true;
+    return 'recovery';
   }
 
   /** Remove segredo e códigos; o admin precisa configurar de novo no próximo acesso. */

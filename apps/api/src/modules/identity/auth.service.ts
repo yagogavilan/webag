@@ -181,13 +181,15 @@ export class AuthService {
     if (activeAdmin) {
       if (activeAdmin.totpConfirmedAt) {
         if (!input.totpCode) throw new AppError(401, 'TOTP_REQUIRED', 'Informe o código do autenticador', { detail: 'Informe o código do app autenticador.' });
-        const ok = await this.totp.verifyLoginCode(user.id, input.totpCode);
-        if (!ok) {
+        const kind = await this.totp.verifyLoginCode(user.id, input.totpCode);
+        if (!kind) {
           // WB-222 C4: não diz qual passo falhou; conta no mesmo limite de falhas.
           await this.registerFailure(failKey, user, maxFails, waitSeconds, ctx);
           throw INVALID_CREDENTIALS();
         }
-        mfaVerified = true;
+        // Código de recuperação entra uma vez e força reconfigurar o TOTP (WB-222 C5): sessão sem MFA concluído.
+        mfaVerified = kind === 'totp';
+        mfaSetupRequired = kind === 'recovery';
       } else {
         mfaSetupRequired = true;
       }
@@ -310,7 +312,7 @@ export class AuthService {
     if (principal.adminProfile && principal.totpConfigured) {
       if (!input.totpCode) throw errors.validation([{ field: 'totpCode', message: 'Informe o código do autenticador.' }]);
       await this.limiter.enforce(`rl:reauth:${user.id}`, 10, 900);
-      if (!(await this.totp.verifyLoginCode(user.id, input.totpCode))) throw INVALID_CREDENTIALS();
+      if (!(await this.totp.verifyLoginCode(user.id, input.totpCode, false))) throw INVALID_CREDENTIALS();
     } else {
       if (!input.password) throw errors.validation([{ field: 'password', message: 'Informe sua senha.' }]);
       await this.assertPassword(user, input.password, ctx, 'reauth');
