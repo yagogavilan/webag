@@ -14,6 +14,10 @@ export interface ScreenProps {
   scroll?: boolean;
   showOfflineBanner?: boolean;
   keyboardShouldPersistTaps?: ScrollViewProps['keyboardShouldPersistTaps'];
+  /** Padding e espaçamento padrão do conteúdo. `false` para telas cuja lista (FlashList) cuida do próprio espaçamento. */
+  padded?: boolean;
+  /** `false` dentro das abas: a barra de abas já cuida da área segura de baixo. */
+  bottomInset?: boolean;
   testID?: string;
 }
 
@@ -28,6 +32,8 @@ export function Screen({
   scroll = true,
   showOfflineBanner = true,
   keyboardShouldPersistTaps = 'handled',
+  padded = true,
+  bottomInset = true,
   testID,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
@@ -35,14 +41,14 @@ export function Screen({
   const column = tablet ? styles.column : undefined;
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safe} testID={testID}>
+    <SafeAreaView edges={bottomInset ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={styles.safe} testID={testID}>
       <KeyboardAvoidingView behavior="padding" style={styles.flex}>
         <View style={[styles.flex, column]}>
           {header}
           {showOfflineBanner ? <OfflineBanner /> : null}
           {scroll ? (
             <ScrollView
-              contentContainerStyle={styles.content}
+              contentContainerStyle={padded ? styles.content : styles.grow}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps={keyboardShouldPersistTaps}
               style={styles.flex}
@@ -51,7 +57,7 @@ export function Screen({
               {tablet ? footer : null}
             </ScrollView>
           ) : (
-            <View style={[styles.flex, styles.content]}>{children}</View>
+            <View style={[styles.flex, padded && styles.content]}>{children}</View>
           )}
           {tablet && !scroll && footer ? <View style={styles.footer}>{footer}</View> : null}
           {!tablet && footer ? <View style={styles.footer}>{footer}</View> : null}
@@ -65,6 +71,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.surface.background },
   flex: { flex: 1 },
   column: { width: '100%', maxWidth: theme.layout.formMaxWidth, alignSelf: 'center' },
+  grow: { flexGrow: 1 },
   content: { padding: theme.layout.screenPaddingX, gap: theme.space[4], flexGrow: 1 },
   footer: {
     paddingHorizontal: theme.layout.screenPaddingX,

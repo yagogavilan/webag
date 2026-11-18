@@ -44,3 +44,27 @@ jest.mock('expo-location', () => ({
   reverseGeocodeAsync: jest.fn(async () => []),
   geocodeAsync: jest.fn(async () => []),
 }));
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+jest.mock('@shopify/flash-list', () => require('./src/test/flash-list-mock'));
+
+// expo-image é nativo: nos testes vira uma <Image> do RN (o cache e a transição são do módulo, não do app)
+jest.mock('expo-image', () => {
+  const { Image } = jest.requireActual('react-native');
+  return { Image };
+});
+
+jest.mock('expo-router', () => {
+  const router = { replace: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
+  return {
+    __router: router,
+    useRouter: () => router,
+    useLocalSearchParams: jest.fn(() => ({})),
+    useNavigation: () => ({ addListener: () => () => undefined, isFocused: () => true }),
+    useFocusEffect: (cb: () => void) => cb(),
+    Redirect: () => null,
+    Stack: Object.assign(() => null, { Screen: () => null }),
+    Tabs: Object.assign(() => null, { Screen: () => null }),
+    Link: () => null,
+  };
+});
