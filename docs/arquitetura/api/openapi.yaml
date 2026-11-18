@@ -3357,7 +3357,7 @@ components:
       type: object
       required: [id, name, email, profile, reactivation, expired, invitedByName, createdAt, expiresAt]
       properties:
-        id: { type: string, format: uuid, description: ID do convite (para revogar em DELETE /admin/admins/invitations/{invitationId}) }
+        id: { type: string, format: uuid, description: 'ID do convite (revogar em DELETE /admin/admins/invitations/{invitationId})' }
         name: { type: string }
         email: { type: string, format: email }
         profile: { $ref: '#/components/schemas/AdminProfile' }

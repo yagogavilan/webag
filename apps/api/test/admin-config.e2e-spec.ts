@@ -234,8 +234,9 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
   });
 
   describe('auditoria (WB-123, SEC-074)', () => {
-    it('só super admin lê; filtra por ator e ação; pagina por cursor', async () => {
-      await ctx.http.get('/v1/admin/audit-log').set(bearer(operations.accessToken)).expect(403);
+    it('super admin lê tudo e filtra por ator e ação; os demais perfis só veem as próprias ações; pagina por cursor', async () => {
+      const own = await ctx.http.get('/v1/admin/audit-log').set(bearer(operations.accessToken)).query({ limit: '50' }).expect(200);
+      expect((own.body.data as { actorId: string }[]).every((row) => row.actorId === operations.userId)).toBe(true);
       const first = await ctx.http.get('/v1/admin/audit-log').query({ actorId: operations.userId, limit: '1' }).set(sa()).expect(200);
       expect(first.body.data).toHaveLength(1);
       expect(first.body.nextCursor).not.toBeNull();

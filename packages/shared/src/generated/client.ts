@@ -422,10 +422,37 @@ export interface AdminView {
   profile: AdminProfile;
   active: boolean;
   totpConfigured: boolean;
+  /**
+     * Último login com sucesso
+     * @nullable
+     */
+  lastLoginAt?: string | null;
+}
+
+export interface PendingAdminInvitation {
+  /** ID do convite (revogar em DELETE /admin/admins/invitations/{invitationId}) */
+  id: string;
+  name: string;
+  email: string;
+  profile: AdminProfile;
+  /** Link de reativação (redefinição de acesso) */
+  reactivation: boolean;
+  expired: boolean;
+  /** @nullable */
+  invitedByName: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface TotpStatus {
+  configured: boolean;
+  recoveryCodesRemaining: number;
+  recoveryCodesLow: boolean;
 }
 
 export interface AdminList {
   data: AdminView[];
+  pendingInvitations?: PendingAdminInvitation[];
   /** @nullable */
   nextCursor: string | null;
 }
@@ -448,6 +475,12 @@ export interface InviteAdminResponse {
 export interface UpdateAdminRequest {
   profile?: AdminProfile;
   active?: boolean;
+  /**
+     * Motivo da mudança (vai à auditoria)
+     * @minLength 5
+     * @maxLength 300
+     */
+  reason?: string;
 }
 
 /**
@@ -689,6 +722,11 @@ export interface UpdateParameterRequest {
      * @maxLength 300
      */
   reason: string;
+  /**
+     * Versão que o painel viu (`updatedAt` do parâmetro; null = nunca editado). Se outro admin alterou antes, 409 `PARAMETER_CONFLICT`. Omitido = sem controle de versão.
+     * @nullable
+     */
+  expectedUpdatedAt?: string | null;
 }
 
 export interface ResetParameterRequest {
@@ -697,6 +735,8 @@ export interface ResetParameterRequest {
      * @maxLength 300
      */
   reason: string;
+  /** @nullable */
+  expectedUpdatedAt?: string | null;
 }
 
 export interface FlagView {
@@ -715,6 +755,12 @@ export interface FlagList {
 
 export interface SetFlagRequest {
   enabled: boolean;
+  /**
+     * Motivo (vai à auditoria)
+     * @minLength 5
+     * @maxLength 300
+     */
+  reason?: string;
 }
 
 export type PublicFlagsFlags = {[key: string]: boolean};
@@ -724,6 +770,21 @@ export interface PublicFlags {
 }
 
 export interface LegalDocument {
+  /**
+     * O que mudou nesta versão
+     * @nullable
+     */
+  changeSummary?: string | null;
+  /**
+     * Nome de quem publicou (só nas rotas de admin)
+     * @nullable
+     */
+  publishedByName?: string | null;
+  /**
+     * Quantos usuários aceitaram esta versão (só nas rotas de admin)
+     * @nullable
+     */
+  acceptances?: number | null;
   id: string;
   type: LegalDocumentType;
   version: number;
@@ -754,6 +815,12 @@ export interface PublishLegalRequest {
   content: string;
   effectiveAt: string;
   relevantChange?: boolean;
+  /**
+     * O que mudou (mostrado ao usuário no aceite)
+     * @minLength 5
+     * @maxLength 500
+     */
+  changeSummary?: string;
 }
 
 /**
@@ -767,6 +834,16 @@ export type AuditEntryBefore = { [key: string]: unknown } | null;
 export type AuditEntryAfter = { [key: string]: unknown } | null;
 
 export interface AuditEntry {
+  /**
+     * Nome do ator no cadastro
+     * @nullable
+     */
+  actorName?: string | null;
+  /**
+     * Rótulo curto do aparelho
+     * @nullable
+     */
+  device?: string | null;
   id: number;
   at: string;
   /** @nullable */
@@ -1640,6 +1717,18 @@ export type ListAuditLogParams = {
    * @maximum 50
    */
   limit?: LimitParameter;
+};
+
+export type ExportAuditLogParams = {
+  actorId?: string;
+  /** @maxLength 80 */
+  action?: string;
+  /** @maxLength 40 */
+  targetType?: string;
+  /** @maxLength 80 */
+  targetId?: string;
+  from?: string;
+  to?: string;
 };
 
 export type ReceivePaymentWebhookParams = {
@@ -3358,6 +3447,109 @@ export const setupTotp = async ( options?: Parameters<typeof apiFetch>[1]): Prom
 
 
 
+export type regenerateRecoveryCodesResponse200 = {
+  data: TotpConfirmResponse
+  status: 200
+}
+
+export type regenerateRecoveryCodesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type regenerateRecoveryCodesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type regenerateRecoveryCodesResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type regenerateRecoveryCodesResponseSuccess = (regenerateRecoveryCodesResponse200) & {
+  headers: Headers;
+};
+export type regenerateRecoveryCodesResponseError = (regenerateRecoveryCodesResponse401 | regenerateRecoveryCodesResponse403 | regenerateRecoveryCodesResponse409) & {
+  headers: Headers;
+};
+
+export type regenerateRecoveryCodesResponse = (regenerateRecoveryCodesResponseSuccess | regenerateRecoveryCodesResponseError)
+
+export const getRegenerateRecoveryCodesUrl = () => {
+
+
+
+
+  return `/v1/admin/totp/recovery-codes`
+}
+
+/**
+ * Exige TOTP ativo e reautenticação recente (403 `REAUTH_REQUIRED`). Os 10 códigos novos aparecem uma única vez; os anteriores deixam de valer e o titular recebe e-mail. 409 `TOTP_NOT_CONFIGURED` sem TOTP.
+ * @summary Gerar novos códigos de recuperação (SEC-092)
+ */
+export const regenerateRecoveryCodes = async ( options?: Parameters<typeof apiFetch>[1]): Promise<regenerateRecoveryCodesResponse> => {
+
+  return apiFetch<regenerateRecoveryCodesResponse>(getRegenerateRecoveryCodesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getTotpStatusResponse200 = {
+  data: TotpStatus
+  status: 200
+}
+
+export type getTotpStatusResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getTotpStatusResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getTotpStatusResponseSuccess = (getTotpStatusResponse200) & {
+  headers: Headers;
+};
+export type getTotpStatusResponseError = (getTotpStatusResponse401 | getTotpStatusResponse403) & {
+  headers: Headers;
+};
+
+export type getTotpStatusResponse = (getTotpStatusResponseSuccess | getTotpStatusResponseError)
+
+export const getGetTotpStatusUrl = () => {
+
+
+
+
+  return `/v1/admin/totp/status`
+}
+
+/**
+ * Quantos códigos de recuperação restam; `recoveryCodesLow` é verdadeiro com 3 ou menos (o painel pede novos).
+ * @summary Estado do 2º fator do próprio admin
+ */
+export const getTotpStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getTotpStatusResponse> => {
+
+  return apiFetch<getTotpStatusResponse>(getGetTotpStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type confirmTotpResponse200 = {
   data: TotpConfirmResponse
   status: 200
@@ -4181,6 +4373,11 @@ export type updateParameterResponse404 = {
   status: 404
 }
 
+export type updateParameterResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
 export type updateParameterResponse422 = {
   data: UnprocessableResponse
   status: 422
@@ -4189,7 +4386,7 @@ export type updateParameterResponse422 = {
 export type updateParameterResponseSuccess = (updateParameterResponse200) & {
   headers: Headers;
 };
-export type updateParameterResponseError = (updateParameterResponse400 | updateParameterResponse401 | updateParameterResponse403 | updateParameterResponse404 | updateParameterResponse422) & {
+export type updateParameterResponseError = (updateParameterResponse400 | updateParameterResponse401 | updateParameterResponse403 | updateParameterResponse404 | updateParameterResponse409 | updateParameterResponse422) & {
   headers: Headers;
 };
 
@@ -4204,7 +4401,7 @@ export const getUpdateParameterUrl = (key: string,) => {
 }
 
 /**
- * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alterar parâmetro
  */
 export const updateParameter = async (key: string,
@@ -4246,6 +4443,11 @@ export type resetParameterResponse404 = {
   status: 404
 }
 
+export type resetParameterResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
 export type resetParameterResponse422 = {
   data: UnprocessableResponse
   status: 422
@@ -4254,7 +4456,7 @@ export type resetParameterResponse422 = {
 export type resetParameterResponseSuccess = (resetParameterResponse200) & {
   headers: Headers;
 };
-export type resetParameterResponseError = (resetParameterResponse400 | resetParameterResponse401 | resetParameterResponse403 | resetParameterResponse404 | resetParameterResponse422) & {
+export type resetParameterResponseError = (resetParameterResponse400 | resetParameterResponse401 | resetParameterResponse403 | resetParameterResponse404 | resetParameterResponse409 | resetParameterResponse422) & {
   headers: Headers;
 };
 
@@ -4646,12 +4848,78 @@ export const getListAuditLogUrl = (params?: ListAuditLogParams,) => {
 }
 
 /**
- * Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Permissão de admin: `audit:read` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Super admin vê tudo; os demais perfis veem só as PRÓPRIAS ações (o filtro `actorId` é forçado no servidor). Permissão de admin: `audit:own` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Trilha de auditoria
  */
 export const listAuditLog = async (params?: ListAuditLogParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAuditLogResponse> => {
 
   return apiFetch<listAuditLogResponse>(getListAuditLogUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportAuditLogResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportAuditLogResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportAuditLogResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportAuditLogResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportAuditLogResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportAuditLogResponseSuccess = (exportAuditLogResponse200) & {
+  headers: Headers;
+};
+export type exportAuditLogResponseError = (exportAuditLogResponse400 | exportAuditLogResponse401 | exportAuditLogResponse403 | exportAuditLogResponse429) & {
+  headers: Headers;
+};
+
+export type exportAuditLogResponse = (exportAuditLogResponseSuccess | exportAuditLogResponseError)
+
+export const getExportAuditLogUrl = (params?: ExportAuditLogParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/audit-log/export?${stringifiedParams}` : `/v1/admin/audit-log/export`
+}
+
+/**
+ * Mesmos filtros da listagem (sem cursor), até 5.000 linhas mais recentes; `X-Export-Truncated: true` quando há mais. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo (sem execução em planilha). A exportação é registrada na auditoria (`audit.export`). Limite de 10 por minuto. Permissão de admin: `audit:own`.
+ * @summary Exportar a auditoria em CSV
+ */
+export const exportAuditLog = async (params?: ExportAuditLogParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportAuditLogResponse> => {
+
+  return apiFetch<exportAuditLogResponse>(getExportAuditLogUrl(params),
   {
     ...options,
     method: 'GET'

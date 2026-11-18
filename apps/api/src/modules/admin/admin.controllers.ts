@@ -309,7 +309,7 @@ const CSV_COLUMNS = ['id', 'at', 'actorName', 'actorId', 'actorRole', 'action', 
 /** Escapa para CSV e neutraliza fórmulas de planilha (`=`, `+`, `-`, `@`) para o texto não executar no Excel. */
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  let text = value instanceof Date ? value.toISOString() : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  let text = value instanceof Date ? value.toISOString() : typeof value === 'string' ? value : JSON.stringify(value);
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }

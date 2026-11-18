@@ -500,8 +500,20 @@ export const ListAdminsResponse = zod.object({
   "email": zod.email(),
   "profile": zod.enum(['super_admin', 'operations', 'finance', 'support']),
   "active": zod.boolean(),
-  "totpConfigured": zod.boolean()
+  "totpConfigured": zod.boolean(),
+  "lastLoginAt": zod.iso.datetime({"offset":true}).nullish().describe('Último login com sucesso')
 })),
+  "pendingInvitations": zod.array(zod.object({
+  "id": zod.uuid().describe('ID do convite (revogar em DELETE /admin/admins/invitations/{invitationId})'),
+  "name": zod.string(),
+  "email": zod.email(),
+  "profile": zod.enum(['super_admin', 'operations', 'finance', 'support']),
+  "reactivation": zod.boolean().describe('Link de reativação (redefinição de acesso)'),
+  "expired": zod.boolean(),
+  "invitedByName": zod.string().nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "expiresAt": zod.iso.datetime({"offset":true})
+})).optional(),
   "nextCursor": zod.string().nullable()
 })
 
@@ -546,9 +558,15 @@ export const UpdateAdminParams = zod.object({
   "userId": zod.uuid().describe('ID do usuário admin')
 })
 
+export const updateAdminBodyReasonMin = 5;
+export const updateAdminBodyReasonMax = 300;
+
+
+
 export const UpdateAdminBody = zod.object({
   "profile": zod.enum(['super_admin', 'operations', 'finance', 'support']).optional(),
-  "active": zod.boolean().optional()
+  "active": zod.boolean().optional(),
+  "reason": zod.string().min(updateAdminBodyReasonMin).max(updateAdminBodyReasonMax).optional().describe('Motivo da mudança (vai à auditoria)')
 })
 
 export const UpdateAdminResponse = zod.void()
@@ -582,6 +600,31 @@ export const ResetAdminTotpResponse = zod.void()
 export const SetupTotpResponse = zod.object({
   "secret": zod.string().describe('Segredo base32 para digitar no app autenticador'),
   "otpauthUri": zod.string().describe('URI para gerar o QR code')
+})
+
+
+/**
+ * Exige TOTP ativo e reautenticação recente (403 `REAUTH_REQUIRED`). Os 10 códigos novos aparecem uma única vez; os anteriores deixam de valer e o titular recebe e-mail. 409 `TOTP_NOT_CONFIGURED` sem TOTP.
+ * @summary Gerar novos códigos de recuperação (SEC-092)
+ */
+export const regenerateRecoveryCodesResponseRecoveryCodesMin = 10;
+export const regenerateRecoveryCodesResponseRecoveryCodesMax = 10;
+
+
+
+export const RegenerateRecoveryCodesResponse = zod.object({
+  "recoveryCodes": zod.array(zod.string().describe('Mostrado uma única vez; cada código vale uma vez')).min(regenerateRecoveryCodesResponseRecoveryCodesMin).max(regenerateRecoveryCodesResponseRecoveryCodesMax)
+})
+
+
+/**
+ * Quantos códigos de recuperação restam; `recoveryCodesLow` é verdadeiro com 3 ou menos (o painel pede novos).
+ * @summary Estado do 2º fator do próprio admin
+ */
+export const GetTotpStatusResponse = zod.object({
+  "configured": zod.boolean(),
+  "recoveryCodesRemaining": zod.int(),
+  "recoveryCodesLow": zod.boolean()
 })
 
 
@@ -968,7 +1011,7 @@ export const ListParametersResponse = zod.object({
 
 
 /**
- * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alterar parâmetro
  */
 export const UpdateParameterParams = zod.object({
@@ -984,7 +1027,8 @@ export const updateParameterBodyReasonMax = 300;
 
 export const UpdateParameterBody = zod.object({
   "value": zod.union([zod.number(),zod.string().max(updateParameterBodyValueTwoMax)]),
-  "reason": zod.string().min(updateParameterBodyReasonMin).max(updateParameterBodyReasonMax)
+  "reason": zod.string().min(updateParameterBodyReasonMin).max(updateParameterBodyReasonMax),
+  "expectedUpdatedAt": zod.iso.datetime({"offset":true}).nullish().describe('Versão que o painel viu (`updatedAt` do parâmetro; null = nunca editado). Se outro admin alterou antes, 409 `PARAMETER_CONFLICT`. Omitido = sem controle de versão.')
 })
 
 export const UpdateParameterResponse = zod.object({
@@ -1016,7 +1060,8 @@ export const resetParameterBodyReasonMax = 300;
 
 
 export const ResetParameterBody = zod.object({
-  "reason": zod.string().min(resetParameterBodyReasonMin).max(resetParameterBodyReasonMax)
+  "reason": zod.string().min(resetParameterBodyReasonMin).max(resetParameterBodyReasonMax),
+  "expectedUpdatedAt": zod.iso.datetime({"offset":true}).nullish()
 })
 
 export const ResetParameterResponse = zod.object({
@@ -1065,8 +1110,14 @@ export const SetFeatureFlagParams = zod.object({
   "key": zod.string().describe('Chave da flag')
 })
 
+export const setFeatureFlagBodyReasonMin = 5;
+export const setFeatureFlagBodyReasonMax = 300;
+
+
+
 export const SetFeatureFlagBody = zod.object({
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "reason": zod.string().min(setFeatureFlagBodyReasonMin).max(setFeatureFlagBodyReasonMax).optional().describe('Motivo (vai à auditoria)')
 })
 
 export const SetFeatureFlagResponse = zod.object({
@@ -1086,6 +1137,9 @@ export const GetCurrentLegalDocumentParams = zod.object({
 })
 
 export const GetCurrentLegalDocumentResponse = zod.object({
+  "changeSummary": zod.string().nullish().describe('O que mudou nesta versão'),
+  "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
+  "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
   "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
   "version": zod.int(),
@@ -1107,6 +1161,9 @@ export const ListLegalVersionsParams = zod.object({
 
 export const ListLegalVersionsResponse = zod.object({
   "data": zod.array(zod.object({
+  "changeSummary": zod.string().nullish().describe('O que mudou nesta versão'),
+  "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
+  "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
   "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
   "version": zod.int(),
@@ -1135,15 +1192,23 @@ export const publishLegalDocumentBodyContentMin = 20;
 export const publishLegalDocumentBodyContentMax = 200000;
 
 export const publishLegalDocumentBodyRelevantChangeDefault = false;
+export const publishLegalDocumentBodyChangeSummaryMin = 5;
+export const publishLegalDocumentBodyChangeSummaryMax = 500;
+
+
 
 export const PublishLegalDocumentBody = zod.object({
   "title": zod.string().min(publishLegalDocumentBodyTitleMin).max(publishLegalDocumentBodyTitleMax),
   "content": zod.string().min(publishLegalDocumentBodyContentMin).max(publishLegalDocumentBodyContentMax),
   "effectiveAt": zod.iso.datetime({"offset":true}),
-  "relevantChange": zod.boolean().default(publishLegalDocumentBodyRelevantChangeDefault)
+  "relevantChange": zod.boolean().default(publishLegalDocumentBodyRelevantChangeDefault),
+  "changeSummary": zod.string().min(publishLegalDocumentBodyChangeSummaryMin).max(publishLegalDocumentBodyChangeSummaryMax).optional().describe('O que mudou (mostrado ao usuário no aceite)')
 })
 
 export const PublishLegalDocumentResponse = zod.object({
+  "changeSummary": zod.string().nullish().describe('O que mudou nesta versão'),
+  "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
+  "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
   "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
   "version": zod.int(),
@@ -1156,7 +1221,7 @@ export const PublishLegalDocumentResponse = zod.object({
 
 
 /**
- * Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Permissão de admin: `audit:read` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Super admin vê tudo; os demais perfis veem só as PRÓPRIAS ações (o filtro `actorId` é forçado no servidor). Permissão de admin: `audit:own` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Trilha de auditoria
  */
 export const listAuditLogQueryActionMax = 80;
@@ -1185,6 +1250,8 @@ export const ListAuditLogQueryParams = zod.object({
 
 export const ListAuditLogResponse = zod.object({
   "data": zod.array(zod.object({
+  "actorName": zod.string().nullish().describe('Nome do ator no cadastro'),
+  "device": zod.string().nullish().describe('Rótulo curto do aparelho'),
   "id": zod.int(),
   "at": zod.iso.datetime({"offset":true}),
   "actorId": zod.uuid().nullable(),
@@ -1200,6 +1267,30 @@ export const ListAuditLogResponse = zod.object({
 })),
   "nextCursor": zod.string().nullable()
 })
+
+
+/**
+ * Mesmos filtros da listagem (sem cursor), até 5.000 linhas mais recentes; `X-Export-Truncated: true` quando há mais. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo (sem execução em planilha). A exportação é registrada na auditoria (`audit.export`). Limite de 10 por minuto. Permissão de admin: `audit:own`.
+ * @summary Exportar a auditoria em CSV
+ */
+export const exportAuditLogQueryActionMax = 80;
+
+export const exportAuditLogQueryTargetTypeMax = 40;
+
+export const exportAuditLogQueryTargetIdMax = 80;
+
+
+
+export const ExportAuditLogQueryParams = zod.object({
+  "actorId": zod.uuid().optional(),
+  "action": zod.string().max(exportAuditLogQueryActionMax).optional(),
+  "targetType": zod.string().max(exportAuditLogQueryTargetTypeMax).optional(),
+  "targetId": zod.string().max(exportAuditLogQueryTargetIdMax).optional(),
+  "from": zod.iso.datetime({"offset":true}).optional(),
+  "to": zod.iso.datetime({"offset":true}).optional()
+})
+
+export const ExportAuditLogResponse = zod.unknown()
 
 
 /**
