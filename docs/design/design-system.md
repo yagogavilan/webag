@@ -1,6 +1,6 @@
 # Design System Webag
 
-> Autor: product-designer. Data: 2026-11-18. Versão 0.2.0 (0.2.0: PasswordField com confirmação por DEC-012; §3.3 componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
+> Autor: product-designer. Data: 2026-11-18. Versão 0.2.0 (0.2.0: PasswordField com confirmação por DEC-012; §3.1b componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
 > Alvos: app Expo (cliente) e web Next.js (lojista e admin). Mesma linguagem, componentes implementados nos dois, comportamento nativo de cada plataforma quando divergir (§8).
 
 ## 1. Princípios
@@ -94,7 +94,7 @@ Todo componente interativo tem **alvo ≥ 48**, rótulo de acessibilidade, anel 
 
 **Regra do som (lojista):** navegadores bloqueiam áudio automático até haver um toque do usuário [M, política de autoplay]. O painel pede **uma vez por turno**: banner "Ligar alertas sonoros" (1 toque) e depois mostra o ícone "Som ligado". Sem isso, o lojista perde pedidos. Além do som: título da aba, notificação do navegador (com permissão) e, no celular, manter a tela acesa na página de Pedidos (Wake Lock, **[HIPÓTESE]** conforme suporte do navegador). Teste de alerta no onboarding ("Tocar som de teste").
 
-### 3.3 Componentes adicionados nas ondas 2 a 4 (v0.2.0)
+### 3.1b Componentes adicionados nas ondas 2 a 4 (v0.2.0)
 
 Cada um é composto de tokens e componentes já existentes; nenhum cria cor, raio ou sombra nova. Estados: seguem a §3.2 (padrão, pressionado, desabilitado, carregando, erro, foco) mais os listados.
 
@@ -113,7 +113,7 @@ Cada um é composto de tokens e componentes já existentes; nenhum cria cor, rai
 | **BulkActionBar** | Lista de produtos, DataTable | Barra de ações com contagem ("3 selecionados"), ações e "Cancelar seleção"; rodapé no celular, topo da tabela no desktop. A confirmação repete a contagem no botão ("Pausar 12 produtos") |
 | **ReorderList** | Seções da vitrine, fotos | Alça de arrastar **e** botões "Subir" e "Descer" (ou "Mover para o início"); nunca só gesto (2.5.7) |
 | **OrderCard** (lojista) | Painel de pedidos | Número, hora, tempo desde a chegada ("há 2 min", em alerta a partir de 5 min e em erro a partir de 8, sempre com ícone), tipo (selo), itens (2 linhas + "+N"), total, selo "Pago" e a ação do estado (Aceitar e Recusar nos novos; StatusAction nos demais). Desktop ≥ 1280: número em `display`, total em `title1`, 3 colunas |
-| **PanelStatusBar** | Painel de pedidos | Som ("Som ligado" / "Som desligado" + "Tocar som de teste") e conexão ("Sincronizado há 3 s"). Estados de erro viram faixa vermelha persistente (som bloqueado, sem conexão), sempre com ícone e texto |
+| **PanelStatusBar** | Painel de pedidos | Som ("Som ligado" / "Som desligado" + "Tocar som de teste") e conexão ("Sincronizado há 3 s"). Estados de erro viram Banner de erro persistente (som bloqueado, sem conexão): fundo `danger.subtle`, borda `danger.border`, texto `text.danger`, ícone `WarningCircle` 24 e texto em `bodyStrong`; nunca some sozinho enquanto o problema existir |
 | **SecureCardForm** | Checkout (cartão) | Campos do provedor dentro de um cartão com fio: número, validade, código, nome, parcelas (folha com rádio mostrando o **total com juros**). Rótulos visíveis, teclado numérico. Aparência configurada com os tokens até onde o provedor permitir. Nenhum dado de cartão em log nem em estado do app |
 | **OrderTimer / PixCountdown** | PIX, alerta de pedido | Contagem em `numeral`; mudança para alerta (ícone + texto) abaixo de 2 min; nunca lida a cada segundo (anuncia em 5:00, 1:00, 0:30 e ao vencer) |
 
@@ -232,7 +232,7 @@ Seção sem conteúdo suficiente é **ocultada**, nunca mostrada vazia (HIP-032;
 | Celular | (00) 00000-0000 | telefone | `tel` | 11 dígitos, DDD válido |
 | E-mail | n/a | e-mail, sem capitalizar | `email` | Sugestão de domínio ("gmail.com?") |
 | Nome | n/a | texto, capitalizar palavras | `name` | ≥ 2 palavras recomendado (não obrigatório) |
-| Senha | n/a | texto | `new-password` / `current-password` | ≥ 8 caracteres, medidor; permite colar |
+| Senha | n/a | texto | `new-password` / `current-password` | ≥ 8 caracteres, medidor; permite colar. Senha nova sempre com "Confirmar senha" (DEC-012): "As senhas não são iguais." |
 | Código | 6 dígitos | numérico | `one-time-code` | Verifica ao completar o 6º dígito |
 | Moeda | R$ 0,00 | numérico | n/a | Aceita vírgula; > 0 |
 

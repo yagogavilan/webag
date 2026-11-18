@@ -312,7 +312,7 @@ stateDiagram-v2
 
 ### A3. Loja no admin: detalhe, suspender, reativar, editar (WB-104)
 
-**Objetivo:** corrigir ou proteger clientes. **Ação principal:** "Editar dados" (loja no ar); "Reativar loja" (suspensa); "Analisar a mais antiga" não se aplica aqui.
+**Objetivo:** corrigir ou proteger clientes. **Ação principal:** "Editar dados" (loja no ar) ou "Reativar loja" (loja suspensa).
 
 | Breakpoint | Layout |
 |---|---|
