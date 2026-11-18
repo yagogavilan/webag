@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../../platform/config/env.js';
 import { AppError } from '../../../platform/http/app-error.js';
 import type {
-  CreateProviderPaymentInput,
   PaymentProvider,
   ProviderPayment,
   WebhookNotification,
@@ -32,7 +31,7 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     return storeId;
   }
 
-  createPayment(_input: CreateProviderPaymentInput): Promise<ProviderPayment> {
+  createPayment(): Promise<ProviderPayment> {
     return Promise.reject(NOT_IMPLEMENTED('Criar pagamento'));
   }
 

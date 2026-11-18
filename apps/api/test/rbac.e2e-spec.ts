@@ -38,7 +38,7 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'legal:write': null,
   'audit:read': { method: 'get', path: '/v1/admin/audit-log' },
   'admins:manage': { method: 'get', path: '/v1/admin/admins' },
-  'payments:alerts:read': null,
+  'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
 };
 
@@ -83,6 +83,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'POST /v1/auth/password/reset',
         'POST /v1/auth/refresh',
         'POST /v1/auth/register',
+        'POST /v1/webhooks/:provider',
       ].sort(),
     );
     // Rotas públicas de pagamento entram no teste de pagamentos (webhook assinado).

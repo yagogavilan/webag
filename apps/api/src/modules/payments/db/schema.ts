@@ -67,11 +67,16 @@ export const paymentRefunds = pgTable(
       .notNull()
       .references(() => paymentAttempts.id),
     providerRefundId: text().notNull(),
+    /** Chave de idempotência do estorno (SEC-031): repetir a mesma chave não estorna de novo. */
+    idempotencyKey: text().notNull(),
     amountCents: integer().notNull(),
     reason: text().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('payment_refunds_attempt_idx').on(t.attemptId)],
+  (t) => [
+    index('payment_refunds_attempt_idx').on(t.attemptId),
+    uniqueIndex('payment_refunds_idempotency_uq').on(t.attemptId, t.idempotencyKey),
+  ],
 );
 
 export const WEBHOOK_STATUSES = ['pending', 'processed', 'failed', 'discarded'] as const;

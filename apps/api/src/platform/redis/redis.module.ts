@@ -5,6 +5,7 @@ import {
   Logger,
   Module,
   type OnApplicationShutdown,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
@@ -15,8 +16,15 @@ export const REDIS = Symbol('REDIS');
 const logger = new Logger('Redis');
 
 @Injectable()
-class RedisLifecycle implements OnApplicationShutdown {
+class RedisLifecycle implements OnModuleInit, OnApplicationShutdown {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
+
+  /** Conecta ao subir (rate limit e antirreplay dependem disso); falha só gera aviso e o ioredis retenta. */
+  onModuleInit(): void {
+    if (this.redis.status === 'wait') {
+      this.redis.connect().catch((error: Error) => logger.warn(`Redis indisponível no boot: ${error.message}`));
+    }
+  }
 
   onApplicationShutdown(): void {
     this.redis.disconnect();

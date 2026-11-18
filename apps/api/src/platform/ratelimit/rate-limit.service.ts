@@ -19,9 +19,15 @@ export class RateLimitService {
 
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
+  /** Conecta sob demanda (o cliente é `lazyConnect`). */
+  private async ready(): Promise<void> {
+    if (this.redis.status === 'wait') await this.redis.connect();
+  }
+
   /** Conta um evento na chave e devolve o total da janela. */
   async hit(key: string, windowSeconds: number, failClosed = true): Promise<HitResult> {
     try {
+      await this.ready();
       const results = await this.redis
         .multi()
         .set(key, 0, 'EX', windowSeconds, 'NX')
@@ -39,6 +45,7 @@ export class RateLimitService {
   /** Lê o contador sem incrementar. */
   async peek(key: string, failClosed = true): Promise<HitResult> {
     try {
+      await this.ready();
       const [raw, pttl] = await Promise.all([this.redis.get(key), this.redis.pttl(key)]);
       return { count: Number(raw ?? 0), ttlSeconds: pttl > 0 ? Math.ceil(pttl / 1000) : 0 };
     } catch (error) {
