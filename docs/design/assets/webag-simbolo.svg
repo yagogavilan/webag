@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Webag">
+  <title>Webag</title>
+  <path d="M22 24V19a10 10 0 0 1 20 0v5" fill="none" stroke="#00696F" stroke-width="5" stroke-linecap="round"/>
+  <rect x="8" y="22" width="48" height="34" rx="8" fill="#00696F"/>
+  <path d="M19 33l6.5 14 6.5-10 6.5 10 6.5-14" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

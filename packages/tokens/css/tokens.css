@@ -1,0 +1,234 @@
+/* GERADO por scripts/build.mjs a partir de tokens.json. Nao edite a mao. */
+/* Regerar: pnpm --filter @webag/tokens build */
+:root {
+  color-scheme: light;
+  --wb-color-brand-50: #E6F3F3;
+  --wb-color-brand-100: #CBE6E6;
+  --wb-color-brand-200: #9FD0D1;
+  --wb-color-brand-300: #6FB9BC;
+  --wb-color-brand-400: #3A9DA2;
+  --wb-color-brand-500: #00838A;
+  --wb-color-brand-600: #00696F;
+  --wb-color-brand-700: #005A5F;
+  --wb-color-brand-800: #004A4F;
+  --wb-color-brand-900: #00363A;
+  --wb-color-neutral-0: #FFFFFF;
+  --wb-color-neutral-50: #F7F5F2;
+  --wb-color-neutral-100: #EFEBE6;
+  --wb-color-neutral-200: #E2DDD6;
+  --wb-color-neutral-300: #CFC9C0;
+  --wb-color-neutral-400: #A8A199;
+  --wb-color-neutral-500: #7D766E;
+  --wb-color-neutral-600: #5E5851;
+  --wb-color-neutral-700: #433E39;
+  --wb-color-neutral-800: #2B2724;
+  --wb-color-neutral-900: #1A1816;
+  --wb-color-feedback-success-base: #1B6E3C;
+  --wb-color-feedback-success-subtle: #E5F4EA;
+  --wb-color-feedback-success-border: #9ED1AE;
+  --wb-color-feedback-warning-base: #7A4E00;
+  --wb-color-feedback-warning-subtle: #FFF3D6;
+  --wb-color-feedback-warning-border: #E9B949;
+  --wb-color-feedback-danger-base: #B3261E;
+  --wb-color-feedback-danger-subtle: #FCEAE8;
+  --wb-color-feedback-danger-border: #E8A29D;
+  --wb-color-feedback-info-base: #28569E;
+  --wb-color-feedback-info-subtle: #E8F0FB;
+  --wb-color-feedback-info-border: #9DB8E3;
+  --wb-color-rating-star: #B76E00;
+  --wb-color-surface-background: #F7F5F2;
+  --wb-color-surface-card: #FFFFFF;
+  --wb-color-surface-sunken: #EFEBE6;
+  --wb-color-surface-brand-subtle: #E6F3F3;
+  --wb-color-surface-inverse: #1A1816;
+  --wb-color-text-primary: #1A1816;
+  --wb-color-text-secondary: #5E5851;
+  --wb-color-text-on-brand: #FFFFFF;
+  --wb-color-text-brand: #005A5F;
+  --wb-color-text-link: #005A5F;
+  --wb-color-text-inverse: #FFFFFF;
+  --wb-color-text-inverse-action: #9FD0D1;
+  --wb-color-text-disabled: #A8A199;
+  --wb-color-text-success: #1B6E3C;
+  --wb-color-text-warning: #7A4E00;
+  --wb-color-text-danger: #B3261E;
+  --wb-color-text-info: #28569E;
+  --wb-color-border-subtle: #E2DDD6;
+  --wb-color-border-default: #CFC9C0;
+  --wb-color-border-strong: #7D766E;
+  --wb-color-border-focus: #00696F;
+  --wb-color-border-danger: #B3261E;
+  --wb-color-action-primary: #00696F;
+  --wb-color-action-primary-hover: #005A5F;
+  --wb-color-action-primary-pressed: #004A4F;
+  --wb-color-action-primary-subtle: #E6F3F3;
+  --wb-color-action-primary-subtle-pressed: #CBE6E6;
+  --wb-color-action-secondary-border: #00696F;
+  --wb-color-action-destructive: #B3261E;
+  --wb-color-action-destructive-pressed: #8C1D18;
+  --wb-color-action-disabled-fill: #E2DDD6;
+  --wb-color-action-disabled-text: #7D766E;
+  --wb-color-overlay-scrim: rgba(26, 24, 22, 0.72);
+  --wb-color-overlay-backdrop: rgba(26, 24, 22, 0.48);
+  --wb-color-skeleton-base: #E2DDD6;
+  --wb-color-skeleton-highlight: #EFEBE6;
+  --wb-font-family-web: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --wb-font-size-xs: 12px;
+  --wb-font-size-sm: 14px;
+  --wb-font-size-md: 16px;
+  --wb-font-size-lg: 20px;
+  --wb-font-size-xl: 24px;
+  --wb-font-size-2xl: 32px;
+  --wb-font-size-3xl: 40px;
+  --wb-font-weight-regular: 400;
+  --wb-font-weight-semibold: 600;
+  --wb-font-weight-bold: 700;
+  --wb-font-line-height-xs: 16px;
+  --wb-font-line-height-sm: 20px;
+  --wb-font-line-height-md: 24px;
+  --wb-font-line-height-lg: 28px;
+  --wb-font-line-height-xl: 32px;
+  --wb-font-line-height-2xl: 40px;
+  --wb-font-line-height-3xl: 48px;
+  --wb-space-0: 0px;
+  --wb-space-1: 4px;
+  --wb-space-2: 8px;
+  --wb-space-3: 12px;
+  --wb-space-4: 16px;
+  --wb-space-5: 20px;
+  --wb-space-6: 24px;
+  --wb-space-8: 32px;
+  --wb-space-10: 40px;
+  --wb-space-12: 48px;
+  --wb-space-16: 64px;
+  --wb-size-touch-min: 48px;
+  --wb-size-control-sm: 40px;
+  --wb-size-control-md: 48px;
+  --wb-size-control-lg: 56px;
+  --wb-size-icon-sm: 20px;
+  --wb-size-icon-md: 24px;
+  --wb-size-icon-lg: 32px;
+  --wb-size-icon-empty: 64px;
+  --wb-size-header-height: 56px;
+  --wb-size-tab-bar-height: 64px;
+  --wb-size-avatar-md: 56px;
+  --wb-size-thumb: 96px;
+  --wb-radius-sm: 4px;
+  --wb-radius-md: 8px;
+  --wb-radius-lg: 16px;
+  --wb-radius-xl: 24px;
+  --wb-radius-full: 999px;
+  --wb-border-width-hairline: 1px;
+  --wb-border-width-strong: 2px;
+  --wb-shadow-none: none;
+  --wb-shadow-sm: 0 1px 2px rgba(26, 24, 22, 0.08);
+  --wb-shadow-md: 0 4px 12px rgba(26, 24, 22, 0.10);
+  --wb-shadow-lg: 0 8px 24px rgba(26, 24, 22, 0.14);
+  --wb-motion-duration-fast: 150ms;
+  --wb-motion-duration-base: 250ms;
+  --wb-motion-duration-slow: 400ms;
+  --wb-motion-duration-shimmer: 1200ms;
+  --wb-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --wb-motion-easing-enter: cubic-bezier(0, 0, 0, 1);
+  --wb-motion-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --wb-opacity-disabled: 0.38;
+  --wb-opacity-hover: 0.08;
+  --wb-opacity-pressed: 0.12;
+  --wb-breakpoint-sm: 640px;
+  --wb-breakpoint-md: 1024px;
+  --wb-breakpoint-lg: 1280px;
+  --wb-breakpoint-xl: 1536px;
+  --wb-layout-screen-padding-x: 16px;
+  --wb-layout-gutter: 16px;
+  --wb-layout-content-max-width: 1200px;
+  --wb-layout-form-max-width: 480px;
+  --wb-z-index-base: 0;
+  --wb-z-index-sticky: 10;
+  --wb-z-index-sheet: 20;
+  --wb-z-index-toast: 30;
+  --wb-z-index-modal: 40;
+}
+
+/* Movimento reduzido: sem animacao de deslocamento; so troca de estado. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wb-motion-duration-fast: 0ms;
+    --wb-motion-duration-base: 0ms;
+    --wb-motion-duration-slow: 0ms;
+  }
+}
+
+/* Estilos de texto (equivalentes aos textStyle do app). */
+.wb-text-display {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 700;
+}
+
+.wb-text-title1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+}
+
+.wb-text-title2 {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.wb-text-body {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+.wb-text-body-strong {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.wb-text-label {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.wb-text-caption {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.wb-text-caption-strong {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.wb-text-micro {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.wb-text-price {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-text-numeral {
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Anel de foco padrao (WCAG 2.4.7). Aplicar em todo controle interativo. */
+.wb-focus-ring:focus-visible {
+  outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus);
+  outline-offset: 2px;
+}
