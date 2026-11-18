@@ -1,24 +1,51 @@
 openapi: 3.1.0
 info:
   title: Webag API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Contrato da API do Webag (fonte da verdade — ver skill `contrato-api` e ADR-007).
+    Contrato da API do Webag (fonte da verdade, ver skill `contrato-api` e ADR-007).
     Recursos de negócio ficam sob `/v1`. Endpoints operacionais (`/health`) ficam fora do versionamento.
-    Erros seguem RFC 9457 (`application/problem+json`).
+    Erros seguem RFC 9457 (`application/problem+json`) com `code` estável.
+    Autenticação: `Authorization: Bearer <accessToken>` (JWT de 15 min) + refresh opaco rotativo.
+    Toda rota exige autenticação, exceto as marcadas com `security: []` (SEC-021: nega por padrão).
+    Dinheiro sempre em centavos inteiros (`Money`). Listas paginadas: `{ data, nextCursor }`, `limit` máx. 50.
+    A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
+    Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
+    Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
 servers:
   - url: http://localhost:3000
     description: Desenvolvimento local
 tags:
   - name: ops
     description: Endpoints operacionais
+  - name: auth
+    description: Cadastro, login, sessão, códigos por e-mail e reset de senha
+  - name: me
+    description: Perfil, senha, papel de lojista, sessões, termos e consentimentos do próprio usuário
+  - name: admin-users
+    description: Gestão de admins, convites e TOTP (super admin)
+  - name: regions
+    description: Cidades e bairros atendidos
+  - name: categories
+    description: Categorias de 2 níveis
+  - name: config
+    description: Parâmetros do negócio e feature flags
+  - name: legal
+    description: Termos de uso, termos do lojista e política de privacidade versionados
+  - name: audit
+    description: Trilha de auditoria append-only
+  - name: payments
+    description: Webhook do provedor de pagamento e alertas de conciliação
+security:
+  - bearerAuth: []
 paths:
   /health:
     get:
       tags: [ops]
       operationId: getHealth
-      summary: Liveness — o processo está de pé
+      summary: Liveness, o processo está de pé
       description: Não consulta dependências. Usado pelo orquestrador para reiniciar o processo.
+      security: []
       responses:
         '200':
           description: Processo ativo
@@ -35,7 +62,8 @@ paths:
     get:
       tags: [ops]
       operationId: getReadiness
-      summary: Readiness — dependências (PostgreSQL e Redis) respondem
+      summary: Readiness, dependências (PostgreSQL e Redis) respondem
+      security: []
       responses:
         '200':
           description: Pronto para receber tráfego
@@ -67,7 +95,1297 @@ paths:
                 details:
                   database: { status: down, message: connect ECONNREFUSED }
                   redis: { status: up }
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Cadastrar conta de cliente
+      description: "Cria a conta com aceite versionado de termos e privacidade, envia o código de confirmação por e-mail e já abre a sessão (a confirmação do e-mail não bloqueia a 1ª compra, DEC-014). 429 por IP (20/h) e por dispositivo (3/dia)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/email-exists:
+    post:
+      tags: [auth]
+      operationId: emailExists
+      summary: Consulta "e-mail primeiro"
+      description: "Devolve só `exists`. Limite de 10/min por IP e 50/dia por dispositivo (SEC-005)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailExistsRequest'
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailExistsResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Entrar com e-mail e senha
+      description: "Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin: 401 `TOTP_REQUIRED` pede o `totpCode`; código de recuperação também vale uma vez e força reconfigurar o TOTP."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sessão aberta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Renovar a sessão (refresh rotativo)
+      description: "Cada uso troca o refresh por um novo. Repetir o mesmo token em até 30 s devolve o mesmo novo par (retry de rede). Reuso fora da janela revoga a sessão inteira (401 `REFRESH_REUSED`)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Novo par de tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Encerrar a sessão atual
+      responses:
+        '204':
+          description: Sessão encerrada; o access token deixa de valer na hora
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutAll
+      summary: Sair de todos os dispositivos
+      responses:
+        '204':
+          description: Todas as sessões encerradas
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/auth/email/verify:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: Confirmar o e-mail com o código de 6 dígitos
+      description: "Código com validade de 10 min, 5 tentativas e uso único. Erros 400: `CODE_INVALID`, `CODE_EXPIRED`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: E-mail confirmado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/auth/email/resend:
+    post:
+      tags: [auth]
+      operationId: resendEmailCode
+      summary: Reenviar o código de confirmação
+      description: "No máximo 1 envio a cada 60 s e 5 por hora (429 com `Retry-After`). O código anterior deixa de valer."
+      responses:
+        '204':
+          description: Código enviado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/email/correct:
+    post:
+      tags: [auth]
+      operationId: correctEmail
+      summary: Corrigir o e-mail ainda não confirmado
+      description: "Exige a senha. O código anterior deixa de valer e o novo e-mail recebe um código novo."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectEmailRequest'
+      responses:
+        '204':
+          description: E-mail corrigido e código enviado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/password/forgot:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      summary: Pedir código de redefinição de senha
+      description: "Resposta e tempo iguais para e-mail existente ou não (SEC-003). Limites por e-mail e por IP."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Se o e-mail existir, enviamos um código
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/password/reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Redefinir a senha com o código
+      description: "Confirma o e-mail, revoga TODAS as sessões e envia aviso \"Sua senha foi alterada\". Admin não recebe sessão (`tokens: null`)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Senha redefinida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/reauth:
+    post:
+      tags: [auth]
+      operationId: reauth
+      summary: Reautenticar (janela de 5 min para ações sensíveis)
+      description: "Cliente e lojista: `password`. Admin com TOTP: `totpCode` (só o código de 6 dígitos, não o de recuperação)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReauthRequest'
+      responses:
+        '204':
+          description: Reautenticado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/invitations/accept:
+    post:
+      tags: [auth]
+      operationId: acceptAdminInvitation
+      summary: Aceitar convite de admin
+      description: "Cria a conta de admin (e-mail já confirmado pelo convite) e abre uma sessão limitada: só a configuração do TOTP fica liberada. 410 `INVITATION_INVALID` para convite usado, revogado ou vencido (48 h)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitationRequest'
+      responses:
+        '200':
+          description: Convite aceito
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptInvitationResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Meu perfil
+      description: "`pendingTerms` lista documentos a aceitar (primeiro aceite ou mudança relevante, WB-210)."
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [me]
+      operationId: updateMe
+      summary: Atualizar nome e celular
+      description: "Só `name` e `phone`; qualquer outro campo (role, status, email...) responde 400."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: Perfil atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/password:
+    post:
+      tags: [me]
+      operationId: changePassword
+      summary: Trocar a senha (logado)
+      description: "Pede a senha atual (403 `INVALID_PASSWORD`), revoga todas as sessões e devolve uma sessão nova."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Senha trocada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me/merchant-role:
+    post:
+      tags: [me]
+      operationId: becomeMerchant
+      summary: Adicionar o papel de lojista à conta
+      description: "Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`), flag `cadastro_lojista` ligada (403 `MERCHANT_SIGNUP_DISABLED`) e aceite dos Termos do Lojista vigentes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRoleRequest'
+      responses:
+        '204':
+          description: Papel concedido
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/me/sessions:
+    get:
+      tags: [me]
+      operationId: listMySessions
+      summary: Minhas sessões ativas
+      responses:
+        '200':
+          description: Sessões
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/sessions/{sessionId}:
+    delete:
+      tags: [me]
+      operationId: revokeMySession
+      summary: Encerrar uma sessão minha
+      description: "Sessão de outro usuário responde 404."
+      parameters:
+        - { name: sessionId, in: path, required: true, description: ID da sessão, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Sessão encerrada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/terms:
+    get:
+      tags: [me]
+      operationId: getMyPendingTerms
+      summary: Termos pendentes de aceite
+      responses:
+        '200':
+          description: Pendentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingTermsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/terms/accept:
+    post:
+      tags: [me]
+      operationId: acceptTerms
+      summary: Aceitar a versão vigente dos termos
+      description: "Versão desatualizada responde 409 `TERMS_OUTDATED`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptTermsRequest'
+      responses:
+        '200':
+          description: Aceite registrado (IP e plataforma gravados)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingTermsResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/me/consents:
+    get:
+      tags: [me]
+      operationId: getMyConsents
+      summary: Meus consentimentos
+      responses:
+        '200':
+          description: Estado atual de cada finalidade
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/consents/{purpose}:
+    put:
+      tags: [me]
+      operationId: setMyConsent
+      summary: Conceder ou revogar um consentimento
+      description: "Vale na hora; cada mudança grava um evento (tipo, versão do texto, canal, data/hora)."
+      parameters:
+        - { name: purpose, in: path, required: true, description: Finalidade, schema: { type: string, enum: [marketing_push, marketing_email, precise_location, waitlist] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetConsentRequest'
+      responses:
+        '200':
+          description: Estado atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentsResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/admins:
+    get:
+      tags: [admin-users]
+      operationId: listAdmins
+      summary: Listar admins
+      description: "Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      responses:
+        '200':
+          description: Admins
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin-users]
+      operationId: inviteAdmin
+      summary: Convidar admin
+      description: "Convite de 256 bits, uso único, ligado ao e-mail, válido por 48 h. Exige reautenticação recente (403 `REAUTH_REQUIRED`). Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteAdminRequest'
+      responses:
+        '201':
+          description: Convite criado e enviado por e-mail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteAdminResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/admins/invitations/{invitationId}:
+    delete:
+      tags: [admin-users]
+      operationId: revokeAdminInvitation
+      summary: Revogar convite de admin
+      description: "Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: invitationId, in: path, required: true, description: ID do convite, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Convite revogado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/admins/{userId}:
+    patch:
+      tags: [admin-users]
+      operationId: updateAdmin
+      summary: Mudar perfil ou ativar/desativar admin
+      description: "Vale na hora e encerra as sessões do alvo. 409 `LAST_SUPER_ADMIN` impede remover o último super admin. Exige reautenticação recente. Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: userId, in: path, required: true, description: ID do usuário admin, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminRequest'
+      responses:
+        '204':
+          description: Atualizado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/admins/{userId}/totp/reset:
+    post:
+      tags: [admin-users]
+      operationId: resetAdminTotp
+      summary: Redefinir o acesso de outro admin
+      description: "Só super admin, nunca o próprio. Exige motivo e o canal da conferência de identidade (SEC-093). Apaga TOTP e códigos de recuperação, invalida a senha, revoga as sessões e envia link de reativação (48 h, uso único) só ao e-mail cadastrado. Exige reautenticação recente. Permissão de admin: `admins:manage`."
+      parameters:
+        - { name: userId, in: path, required: true, description: ID do usuário admin, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetAdminAccessRequest'
+      responses:
+        '204':
+          description: TOTP redefinido
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/totp/setup:
+    post:
+      tags: [admin-users]
+      operationId: setupTotp
+      summary: Iniciar a configuração do TOTP
+      description: "Única área liberada a um admin sem segundo fator. 409 se já configurado."
+      responses:
+        '201':
+          description: Segredo e URI para o app autenticador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpSetupResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/totp/confirm:
+    post:
+      tags: [admin-users]
+      operationId: confirmTotp
+      summary: Confirmar o TOTP e receber os códigos de recuperação
+      description: "Os 10 códigos de recuperação aparecem uma única vez."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpConfirmRequest'
+      responses:
+        '200':
+          description: TOTP ativo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpConfirmResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/regions:
+    get:
+      tags: [regions]
+      operationId: listRegions
+      summary: Cidades e bairros ativos (público)
+      security: []
+      responses:
+        '200':
+          description: Regiões ativas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicRegionList'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/regions/cities:
+    get:
+      tags: [regions]
+      operationId: listCitiesAdmin
+      summary: Cidades e bairros (admin)
+      description: "Permissão de admin: `regions:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      responses:
+        '200':
+          description: Cidades com bairros
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CityList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [regions]
+      operationId: createCity
+      summary: Criar cidade
+      description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCityRequest'
+      responses:
+        '201':
+          description: Cidade criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/regions/cities/{cityId}:
+    patch:
+      tags: [regions]
+      operationId: updateCity
+      summary: Editar ou ativar/inativar cidade
+      description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: cityId, in: path, required: true, description: ID da cidade, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegionRequest'
+      responses:
+        '200':
+          description: Cidade atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/regions/cities/{cityId}/neighborhoods:
+    post:
+      tags: [regions]
+      operationId: createNeighborhood
+      summary: Criar bairro
+      description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: cityId, in: path, required: true, description: ID da cidade, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNeighborhoodRequest'
+      responses:
+        '201':
+          description: Bairro criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Neighborhood'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/regions/neighborhoods/{neighborhoodId}:
+    patch:
+      tags: [regions]
+      operationId: updateNeighborhood
+      summary: Editar ou ativar/inativar bairro
+      description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: neighborhoodId, in: path, required: true, description: ID do bairro, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegionRequest'
+      responses:
+        '200':
+          description: Bairro atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Neighborhood'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/categories:
+    get:
+      tags: [categories]
+      operationId: listCategories
+      summary: Árvore de categorias ativas (público)
+      security: []
+      responses:
+        '200':
+          description: Categorias ativas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTree'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/categories:
+    get:
+      tags: [categories]
+      operationId: listCategoriesAdmin
+      summary: Árvore de categorias (admin) e ícones disponíveis
+      description: "Permissão de admin: `categories:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      responses:
+        '200':
+          description: Categorias
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTreeAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [categories]
+      operationId: createCategory
+      summary: Criar categoria ou subcategoria
+      description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/categories/order:
+    put:
+      tags: [categories]
+      operationId: reorderCategories
+      summary: Reordenar categorias do mesmo nível
+      description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderCategoriesRequest'
+      responses:
+        '204':
+          description: Ordem salva
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/categories/{categoryId}:
+    patch:
+      tags: [categories]
+      operationId: updateCategory
+      summary: Editar, ativar ou inativar categoria
+      description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: categoryId, in: path, required: true, description: ID da categoria, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags: [categories]
+      operationId: deleteCategory
+      summary: Excluir categoria sem vínculos
+      description: "409 `CATEGORY_IN_USE` se houver subcategorias (e, nas próximas ondas, produtos ou lojas). Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: categoryId, in: path, required: true, description: ID da categoria, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Excluída
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/parameters:
+    get:
+      tags: [config]
+      operationId: listParameters
+      summary: Parâmetros do negócio
+      description: "Permissão de admin: `parameters:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      responses:
+        '200':
+          description: Parâmetros com valor, padrão, faixa e descrição
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/parameters/{key}:
+    put:
+      tags: [config]
+      operationId: updateParameter
+      summary: Alterar parâmetro
+      description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: key, in: path, required: true, description: Chave do parâmetro, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateParameterRequest'
+      responses:
+        '200':
+          description: Parâmetro atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterView'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/parameters/{key}/reset:
+    post:
+      tags: [config]
+      operationId: resetParameter
+      summary: Restaurar o padrão do parâmetro
+      description: "Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: key, in: path, required: true, description: Chave do parâmetro, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetParameterRequest'
+      responses:
+        '200':
+          description: Parâmetro restaurado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParameterView'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/config/flags:
+    get:
+      tags: [config]
+      operationId: getPublicFlags
+      summary: Feature flags para o app (público, cache de 60 s)
+      security: []
+      responses:
+        '200':
+          description: Mapa chave → ligada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicFlags'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/feature-flags:
+    get:
+      tags: [config]
+      operationId: listFeatureFlags
+      summary: Feature flags (admin)
+      description: "Permissão de admin: `flags:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      responses:
+        '200':
+          description: Flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/feature-flags/{key}:
+    put:
+      tags: [config]
+      operationId: setFeatureFlag
+      summary: Ligar ou desligar feature flag
+      description: "Permissão de admin: `flags:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: key, in: path, required: true, description: Chave da flag, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetFlagRequest'
+      responses:
+        '200':
+          description: Flag atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagView'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/legal/{type}:
+    get:
+      tags: [legal]
+      operationId: getCurrentLegalDocument
+      summary: Versão vigente do documento (público)
+      description: "Alimenta as páginas /termos e /privacidade e os links do app."
+      security: []
+      parameters:
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+      responses:
+        '200':
+          description: Documento vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalDocument'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/legal/{type}:
+    get:
+      tags: [legal]
+      operationId: listLegalVersions
+      summary: Versões publicadas do documento
+      description: "Permissão de admin: `legal:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+      responses:
+        '200':
+          description: Versões (a mais nova primeiro)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalDocumentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [legal]
+      operationId: publishLegalDocument
+      summary: Publicar nova versão
+      description: "Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishLegalRequest'
+      responses:
+        '201':
+          description: Versão publicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalDocument'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/audit-log:
+    get:
+      tags: [audit]
+      operationId: listAuditLog
+      summary: Trilha de auditoria
+      description: "Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Permissão de admin: `audit:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: targetType, in: query, schema: { type: string, maxLength: 40 } }
+        - { name: targetId, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Registros (mais recentes primeiro)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditPage'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/webhooks/{provider}:
+    post:
+      tags: [payments]
+      operationId: receivePaymentWebhook
+      summary: Webhook do provedor de pagamento
+      description: "Público, mas só processa notificação com `x-signature` válida (HMAC, tolerância de 300 s); o `data.id` vem da QUERY (o corpo não é assinado). Responde 2xx rápido; o processamento é assíncrono, idempotente por `x-request-id` (24 h) e re-consulta o pagamento no provedor. Sem assinatura (IPN legado): 401. Nenhum endpoint do cliente muda o estado do pagamento."
+      security: []
+      parameters:
+        - { name: provider, in: path, required: true, description: Provedor configurado (fake ou mercadopago), schema: { type: string } }
+        - { name: data.id, in: query, required: true, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: x-signature, in: header, required: true, schema: { type: string } }
+        - { name: x-request-id, in: header, schema: { type: string } }
+      responses:
+        '200':
+          description: Recebida (ou duplicada)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/payments/alerts:
+    get:
+      tags: [payments]
+      operationId: listPaymentAlerts
+      summary: Alertas de conciliação e divergência
+      description: "Permissão de admin: `payments:alerts:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: openOnly, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Alertas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAlertPage'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/payments/webhook-events/{eventId}/reprocess:
+    post:
+      tags: [payments]
+      operationId: reprocessWebhookEvent
+      summary: Reprocessar evento de webhook
+      description: "Mesma idempotência do processamento normal; auditado. Permissão de admin: `payments:webhooks:reprocess` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '204':
+          description: Reprocessado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Cursor opaco devolvido em `nextCursor`
+      schema: { type: string, maxLength: 200 }
+    Limit:
+      name: limit
+      in: query
+      description: Itens por página (padrão 20, máximo 50)
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+  responses:
+    ValidationError:
+      description: Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Não autenticado, token inválido ou sessão encerrada
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Não encontrado (também para recurso de outro usuário, sem revelar existência)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Conflito de estado ou duplicidade
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Gone:
+      description: Convite inválido, usado, revogado ou vencido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: Regra de negócio violada (senha fraca, fora da faixa...)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Limite de tentativas. Header `Retry-After` em segundos.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
   schemas:
     HealthIndicator:
       type: object
@@ -136,3 +1454,611 @@ components:
                 type: string
               message:
                 type: string
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+    LegalDocumentType:
+      type: string
+      enum: [customer_terms, merchant_terms, privacy]
+    DocumentRef:
+      type: object
+      required: [type, version]
+      properties:
+        type: { $ref: '#/components/schemas/LegalDocumentType' }
+        version: { type: integer, minimum: 1 }
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, tokenType]
+      properties:
+        accessToken: { type: string, description: JWT HS256 de 15 min }
+        refreshToken: { type: string, description: Token opaco de 256 bits, rotativo }
+        expiresIn: { type: integer, description: Segundos de validade do access token, example: 900 }
+        tokenType: { type: string, enum: [Bearer] }
+    UserSummary:
+      type: object
+      required: [id, email, emailVerified, name]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailVerified: { type: boolean }
+        name: { type: string }
+    AuthResult:
+      type: object
+      required: [user, tokens, mfaSetupRequired]
+      properties:
+        user: { $ref: '#/components/schemas/UserSummary' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+        mfaSetupRequired: { type: boolean, description: Admin sem TOTP configurado (ou que usou código de recuperação). Só a configuração do TOTP fica liberada. }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, phone, password, adultDeclaration, acceptedDocuments]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, description: 'Celular brasileiro, ex.: (11) 99999-9999' }
+        password: { type: string, description: '8 a 128 caracteres, fora da lista de senhas comuns (422 WEAK_PASSWORD)' }
+        adultDeclaration: { type: boolean, enum: [true], description: Declaração de ter 18 anos ou mais }
+        acceptedDocuments:
+          type: array
+          minItems: 1
+          maxItems: 5
+          description: Versões exibidas ao usuário. Devem ser as vigentes de customer_terms e privacy (409 TERMS_OUTDATED).
+          items: { $ref: '#/components/schemas/DocumentRef' }
+    EmailExistsRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    EmailExistsResponse:
+      type: object
+      required: [exists]
+      properties:
+        exists: { type: boolean }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        totpCode: { type: string, minLength: 6, maxLength: 32, description: Admin; TOTP de 6 dígitos ou código de recuperação }
+        code: { type: string, pattern: '^[0-9]{6}$', description: Step-up por e-mail }
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 20, maxLength: 200 }
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    CorrectEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [newEmail, password]
+      properties:
+        newEmail: { type: string, format: email }
+        password: { type: string }
+    ForgotPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email, code, newPassword]
+      properties:
+        email: { type: string, format: email }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+        newPassword: { type: string }
+        totpCode: { type: string, minLength: 6, maxLength: 32, description: 'Obrigatório para admin com TOTP: o segundo fator vale na mesma chamada (SEC-095)' }
+    ResetPasswordResponse:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          oneOf:
+            - { $ref: '#/components/schemas/TokenPair' }
+            - { type: 'null' }
+    ReauthRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        password: { type: string }
+        totpCode: { type: string, minLength: 6, maxLength: 32 }
+    AcceptInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        password: { type: string }
+    AcceptInvitationResponse:
+      type: object
+      required: [tokens, mfaSetupRequired]
+      properties:
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+        mfaSetupRequired: { type: boolean, enum: [true] }
+    PendingTerm:
+      type: object
+      required: [type, documentId, version, title, reason]
+      properties:
+        type: { $ref: '#/components/schemas/LegalDocumentType' }
+        documentId: { type: string, format: uuid }
+        version: { type: integer }
+        title: { type: string }
+        reason: { type: string, enum: [first, relevant_change] }
+    PendingTermsResponse:
+      type: object
+      required: [pending]
+      properties:
+        pending:
+          type: array
+          items: { $ref: '#/components/schemas/PendingTerm' }
+    Me:
+      type: object
+      required: [id, email, emailVerified, name, phone, roles, adminProfile, pendingTerms]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        emailVerified: { type: boolean }
+        name: { type: string }
+        phone: { type: [string, 'null'] }
+        roles:
+          type: array
+          items: { type: string, enum: [customer, merchant] }
+        adminProfile: { type: [string, 'null'], enum: [super_admin, operations, finance, support, null] }
+        pendingTerms:
+          type: array
+          items: { $ref: '#/components/schemas/PendingTerm' }
+    UpdateMeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        phone: { type: string }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string }
+        newPassword: { type: string }
+    ChangePasswordResponse:
+      type: object
+      required: [tokens]
+      properties:
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+    MerchantRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [acceptedDocuments]
+      properties:
+        acceptedDocuments:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: '#/components/schemas/DocumentRef' }
+    SessionView:
+      type: object
+      required: [id, current, createdAt, lastUsedAt, userAgent, ip]
+      properties:
+        id: { type: string, format: uuid }
+        current: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time }
+        userAgent: { type: [string, 'null'] }
+        ip: { type: [string, 'null'] }
+    SessionList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/SessionView' }
+        nextCursor: { type: [string, 'null'] }
+    AcceptTermsRequest:
+      type: object
+      additionalProperties: false
+      required: [acceptedDocuments]
+      properties:
+        acceptedDocuments:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: '#/components/schemas/DocumentRef' }
+    ConsentPurpose:
+      type: string
+      enum: [marketing_push, marketing_email, precise_location, waitlist]
+    ConsentsResponse:
+      type: object
+      required: [consents]
+      properties:
+        consents:
+          type: object
+          description: Estado atual por finalidade (desmarcado por padrão)
+          required: [marketing_push, marketing_email, precise_location, waitlist]
+          properties:
+            marketing_push: { type: boolean }
+            marketing_email: { type: boolean }
+            precise_location: { type: boolean }
+            waitlist: { type: boolean }
+    SetConsentRequest:
+      type: object
+      additionalProperties: false
+      required: [granted]
+      properties:
+        granted: { type: boolean }
+    AdminProfile:
+      type: string
+      enum: [super_admin, operations, finance, support]
+    AdminView:
+      type: object
+      required: [userId, name, email, profile, active, totpConfigured]
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        profile: { $ref: '#/components/schemas/AdminProfile' }
+        active: { type: boolean }
+        totpConfigured: { type: boolean }
+    AdminList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AdminView' }
+        nextCursor: { type: [string, 'null'] }
+    InviteAdminRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, profile]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email }
+        profile: { $ref: '#/components/schemas/AdminProfile' }
+    InviteAdminResponse:
+      type: object
+      required: [invitationId, expiresAt]
+      properties:
+        invitationId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+    UpdateAdminRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        profile: { $ref: '#/components/schemas/AdminProfile' }
+        active: { type: boolean }
+    ResetAdminAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, verifiedChannel]
+      properties:
+        reason: { type: string, minLength: 20, maxLength: 500 }
+        verifiedChannel: { type: string, enum: [video_call, in_person, registered_phone], description: Canal em que a identidade foi conferida fora do sistema }
+    TotpSetupResponse:
+      type: object
+      required: [secret, otpauthUri]
+      properties:
+        secret: { type: string, description: Segredo base32 para digitar no app autenticador }
+        otpauthUri: { type: string, description: URI para gerar o QR code }
+    TotpConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    TotpConfirmResponse:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items: { type: string, description: 'Mostrado uma única vez; cada código vale uma vez' }
+    Neighborhood:
+      type: object
+      required: [id, cityId, name, active, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        cityId: { type: string, format: uuid }
+        name: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    City:
+      type: object
+      required: [id, name, state, slug, active, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        state: { type: string, example: SP }
+        slug: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CityWithNeighborhoods:
+      allOf:
+        - { $ref: '#/components/schemas/City' }
+        - type: object
+          required: [neighborhoods]
+          properties:
+            neighborhoods:
+              type: array
+              items: { $ref: '#/components/schemas/Neighborhood' }
+    CityList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/CityWithNeighborhoods' }
+        nextCursor: { type: [string, 'null'] }
+    PublicCity:
+      type: object
+      required: [id, name, state, slug, neighborhoods]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        state: { type: string }
+        slug: { type: string }
+        neighborhoods:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+    PublicRegionList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PublicCity' }
+        nextCursor: { type: [string, 'null'] }
+    CreateCityRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        state: { type: string, minLength: 2, maxLength: 2, default: SP }
+        active: { type: boolean, default: false }
+    UpdateRegionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        active: { type: boolean }
+    CreateNeighborhoodRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        active: { type: boolean, default: true }
+    Category:
+      type: object
+      required: [id, parentId, name, icon, position, active, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        parentId: { type: [string, 'null'], format: uuid }
+        name: { type: string, maxLength: 30 }
+        icon: { type: string, description: Nome do ícone da biblioteca fixa }
+        position: { type: integer }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CategoryNode:
+      allOf:
+        - { $ref: '#/components/schemas/Category' }
+        - type: object
+          required: [children]
+          properties:
+            children:
+              type: array
+              items: { $ref: '#/components/schemas/Category' }
+    CategoryTree:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryNode' }
+        nextCursor: { type: [string, 'null'] }
+    CategoryTreeAdmin:
+      type: object
+      required: [data, icons, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryNode' }
+        icons:
+          type: array
+          description: Biblioteca fixa de ícones
+          items: { type: string }
+        nextCursor: { type: [string, 'null'] }
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [name, icon]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 30 }
+        icon: { type: string, maxLength: 40 }
+        parentId: { type: [string, 'null'], format: uuid, default: null }
+        position: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+        active: { type: boolean, default: true }
+    UpdateCategoryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 30 }
+        icon: { type: string, maxLength: 40 }
+        position: { type: integer, minimum: 0, maximum: 10000 }
+        active: { type: boolean }
+    ReorderCategoriesRequest:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
+    ParameterView:
+      type: object
+      required: [key, value, default, type, min, max, values, description, ref, legalFloor, updatedAt]
+      properties:
+        key: { type: string }
+        value: { oneOf: [{ type: number }, { type: string }] }
+        default: { oneOf: [{ type: number }, { type: string }] }
+        type: { type: string, enum: [int, decimal, enum, window] }
+        min: { type: [number, 'null'] }
+        max: { type: [number, 'null'] }
+        values: { type: [array, 'null'], items: { type: string } }
+        description: { type: string }
+        ref: { type: string, description: 'Origem da regra (HIP, WB, DEC)' }
+        legalFloor: { type: boolean, description: Piso legal fixo (ninguém edita) }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    ParameterList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ParameterView' }
+        nextCursor: { type: [string, 'null'] }
+    UpdateParameterRequest:
+      type: object
+      additionalProperties: false
+      required: [value, reason]
+      properties:
+        value: { oneOf: [{ type: number }, { type: string, maxLength: 40 }] }
+        reason: { type: string, minLength: 5, maxLength: 300 }
+    ResetParameterRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 5, maxLength: 300 }
+    FlagView:
+      type: object
+      required: [key, enabled, description, updatedAt]
+      properties:
+        key: { type: string }
+        enabled: { type: boolean }
+        description: { type: string }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    FlagList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/FlagView' }
+        nextCursor: { type: [string, 'null'] }
+    SetFlagRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    PublicFlags:
+      type: object
+      required: [flags]
+      properties:
+        flags:
+          type: object
+          additionalProperties: { type: boolean }
+          example: { pix: true, cartao: true, login_social: false }
+    LegalDocument:
+      type: object
+      required: [id, type, version, title, content, effectiveAt, relevantChange, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/LegalDocumentType' }
+        version: { type: integer }
+        title: { type: string }
+        content: { type: string, description: Texto simples; clientes devem exibir como texto puro }
+        effectiveAt: { type: string, format: date-time }
+        relevantChange: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    LegalDocumentList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LegalDocument' }
+        nextCursor: { type: [string, 'null'] }
+    PublishLegalRequest:
+      type: object
+      additionalProperties: false
+      required: [title, content, effectiveAt]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 120 }
+        content: { type: string, minLength: 20, maxLength: 200000 }
+        effectiveAt: { type: string, format: date-time }
+        relevantChange: { type: boolean, default: false }
+    AuditEntry:
+      type: object
+      required: [id, at, actorId, actorRole, action, targetType, targetId, before, after, ip, requestId, reason]
+      properties:
+        id: { type: integer }
+        at: { type: string, format: date-time }
+        actorId: { type: [string, 'null'], format: uuid }
+        actorRole: { type: [string, 'null'] }
+        action: { type: string, example: parameter.update }
+        targetType: { type: [string, 'null'] }
+        targetId: { type: [string, 'null'] }
+        before: { type: [object, 'null'], additionalProperties: true }
+        after: { type: [object, 'null'], additionalProperties: true }
+        ip: { type: [string, 'null'] }
+        requestId: { type: [string, 'null'] }
+        reason: { type: [string, 'null'] }
+    AuditPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AuditEntry' }
+        nextCursor: { type: [string, 'null'] }
+    WebhookAck:
+      type: object
+      required: [received, duplicate]
+      properties:
+        received: { type: boolean }
+        duplicate: { type: boolean, description: Evento já recebido antes (sem novo efeito) }
+    PaymentAlert:
+      type: object
+      required: [id, attemptId, kind, details, createdAt, resolvedAt]
+      properties:
+        id: { type: string, format: uuid }
+        attemptId: { type: [string, 'null'], format: uuid }
+        kind: { type: string, example: conciliation_mismatch }
+        details: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+    PaymentAlertPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PaymentAlert' }
+        nextCursor: { type: [string, 'null'] }

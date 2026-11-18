@@ -193,15 +193,76 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       await ctx.db.update(adminProfiles).set({ active: true }).where(eq(adminProfiles.userId, superAdmin.userId));
     });
 
-    it('super admin redefine o TOTP de OUTRO admin (auditado); o próprio não', async () => {
+    it('SEC-093: super admin redefine o acesso de OUTRO admin (motivo + canal), invalida a senha e manda link de reativação; o próprio não', async () => {
       const target = await createAdmin(ctx, 'finance');
-      await ctx.http.post(`/v1/admin/admins/${superAdmin.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).expect(403);
-      await ctx.http.post(`/v1/admin/admins/${target.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).expect(204);
+      const body = { reason: 'Perdeu o aparelho; identidade conferida por vídeo', verifiedChannel: 'video_call' };
+      await ctx.http.post(`/v1/admin/admins/${superAdmin.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).send(body).expect(403);
+      await ctx.http.post(`/v1/admin/admins/${target.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).send({ reason: 'curto', verifiedChannel: 'video_call' }).expect(400);
+      await ctx.http.post(`/v1/admin/admins/${target.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).send({ ...body, verifiedChannel: 'chat' }).expect(400);
+      await ctx.http.post(`/v1/admin/admins/${target.userId}/totp/reset`).set(bearer(superAdmin.accessToken)).send(body).expect(204);
+
       const [profile] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, target.userId));
       expect(profile?.totpConfirmedAt).toBeNull();
+      const [user] = await ctx.db.select().from(users).where(eq(users.id, target.userId));
+      expect(user?.passwordHash).toBeNull(); // senha invalidada
       await ctx.http.get('/v1/admin/regions/cities').set(bearer(target.accessToken)).expect(401);
-      const [row] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, target.userId), eq(auditLog.action, 'admin.totp_reset')));
-      expect(row?.actorId).toBe(superAdmin.userId);
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: target.email, password: target.password }).expect(401);
+      const [row] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, target.userId), eq(auditLog.action, 'admin.access_reset')));
+      expect(row).toMatchObject({ actorId: superAdmin.userId, reason: body.reason, after: { verifiedChannel: 'video_call' } });
+
+      // o link vai só ao e-mail do alvo (o super admin nunca o vê) e reativa com senha nova + TOTP novo
+      const token = tokenFromInviteMail(target.email);
+      const reactivated = await ctx.http.post('/v1/auth/invitations/accept').set('X-Forwarded-For', randomIp()).send({ token, password: 'senha-nova-reativada-77' }).expect(200);
+      expect(reactivated.body.mfaSetupRequired).toBe(true);
+      await ctx.http.get('/v1/admin/regions/cities').set(bearer(reactivated.body.tokens.accessToken)).expect(403);
+      await ctx.http.post('/v1/auth/invitations/accept').set('X-Forwarded-For', randomIp()).send({ token, password: 'senha-nova-reativada-77' }).expect(410);
+    });
+
+    it('SEC-091: 5 erros do 2º fator na conta (de IPs diferentes) põem o passo em espera, mesmo com o código certo', async () => {
+      const admin = await createAdmin(ctx, 'operations');
+      for (let i = 0; i < 5; i++) {
+        await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }).expect(401);
+      }
+      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
+      const wait = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: totpAt(admin.totpSecret!) }).expect(429);
+      expect(wait.body.code).toBe('MFA_RATE_LIMITED');
+      expect(Number(wait.headers['retry-after'])).toBeGreaterThan(0);
+      // 3 erros avisam o titular por e-mail
+      expect(ctx.mail.to(admin.email).some((m) => m.subject.includes('código errou'))).toBe(true);
+    });
+
+    it('SEC-091(c): 10 erros em 24 h invalidam a senha, derrubam sessões e alertam titular e super admins', async () => {
+      const admin = await createAdmin(ctx, 'finance');
+      for (let batch = 0; batch < 2; batch++) {
+        for (let i = 0; i < 5; i++) {
+          await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }).expect(401);
+        }
+        await ctx.redis.del(`mfa:15:${admin.userId}`); // simula a passagem dos 15 min
+      }
+      const [user] = await ctx.db.select().from(users).where(eq(users.id, admin.userId));
+      expect(user?.passwordHash).toBeNull();
+      await ctx.http.get('/v1/admin/regions/cities').set(bearer(admin.accessToken)).expect(401);
+      expect(ctx.mail.to(admin.email).some((m) => m.subject.includes('segundo fator'))).toBe(true);
+      expect(ctx.mail.to(superAdmin.email).some((m) => m.subject.includes('segundo fator'))).toBe(true);
+      const [log] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, admin.userId), eq(auditLog.action, 'mfa_bruteforce_suspected')));
+      expect(log).toBeDefined();
+    });
+
+    it('SEC-095: "esqueci a senha" de admin com TOTP exige o 2º fator na mesma chamada; senha só muda com os dois', async () => {
+      const admin = await createAdmin(ctx, 'support');
+      await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email: admin.email }).expect(202);
+      const code = ctx.mail.lastCode(admin.email);
+      const newPassword = 'senha-nova-do-admin-88';
+      const reset = (extra: Record<string, unknown>) =>
+        ctx.http.post('/v1/auth/password/reset').set('X-Forwarded-For', randomIp()).send({ email: admin.email, code, newPassword, ...extra });
+      const missing = await reset({}).expect(401);
+      expect(missing.body.code).toBe('TOTP_REQUIRED');
+      await reset({ totpCode: '000000' }).expect(401);
+      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
+      const ok = await reset({ totpCode: totpAt(admin.totpSecret!) }).expect(200);
+      expect(ok.body.tokens).toBeNull(); // admin nunca ganha sessão pelo reset: precisa do login com TOTP
+      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: newPassword, totpCode: totpAt(admin.totpSecret!) }).expect(200);
     });
 
     it('a lista de admins não vaza hash de senha nem segredo de TOTP', async () => {

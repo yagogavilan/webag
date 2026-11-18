@@ -5,9 +5,13 @@ import type { Principal, RequestContext } from '../../platform/auth/decorators.j
 import type { Env } from '../../platform/config/env.js';
 import { decryptSecret, encryptSecret, hmacHex } from '../../platform/crypto/crypto.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
-import { errors } from '../../platform/http/app-error.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
+import { MailService } from '../../platform/mail/mail.service.js';
+import { accessResetEmail, mfaBruteforceEmail, mfaThreeErrorsEmail } from '../../platform/mail/templates.js';
+import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js';
 import { AuditService } from '../admin/index.js';
-import { adminProfiles, adminRecoveryCodes, users } from './db/schema.js';
+import { randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
+import { adminProfiles, adminRecoveryCodes, invitations, users } from './db/schema.js';
 import { SessionService } from './session.service.js';
 import {
   generateRecoveryCode,
@@ -18,6 +22,9 @@ import {
 } from './totp.js';
 
 const RECOVERY_CODE_COUNT = 10;
+/** SEC-093 / SEC-017: link de reativação com as regras do convite de admin. */
+export const ACCESS_RESET_HOURS = 48;
+export const RESET_CHANNELS = ['video_call', 'in_person', 'registered_phone'] as const;
 
 /** TOTP obrigatório para todo admin (SEC-015, WB-222). */
 @Injectable()
@@ -27,6 +34,8 @@ export class TotpService {
     private readonly config: ConfigService<Env, true>,
     private readonly sessions: SessionService,
     private readonly audit: AuditService,
+    private readonly limiter: RateLimitService,
+    private readonly mail: MailService,
   ) {}
 
   private get key(): string {
@@ -86,6 +95,48 @@ export class TotpService {
   }
 
   /**
+   * SEC-091: limite do 2º fator POR CONTA, de qualquer IP. 5 erros em 15 min colocam o passo em espera (sem conferir o
+   * código); 3 erros avisam o titular; 10 erros em 24 h invalidam a senha, revogam as sessões e alertam os super admins.
+   * Só é alcançável por quem já tem a senha: não vira bloqueio da conta por terceiros.
+   */
+  async verifyWithLimits(userId: string, input: string, ctx: RequestContext, allowRecovery = true): Promise<'totp' | 'recovery' | null> {
+    const window = await this.limiter.peek(`mfa:15:${userId}`);
+    if (window.count >= 5) {
+      throw new AppError(429, 'MFA_RATE_LIMITED', 'Muitas tentativas do código', {
+        detail: 'Muitas tentativas do código de verificação. Tente novamente mais tarde.',
+        retryAfterSeconds: window.ttlSeconds || 900,
+      });
+    }
+    const kind = await this.verifyLoginCode(userId, input, allowRecovery);
+    if (kind) return kind;
+
+    const fifteen = await this.limiter.hit(`mfa:15:${userId}`, 900);
+    const day = await this.limiter.hit(`mfa:24:${userId}`, 86_400);
+    const email = await this.emailOf(userId);
+    if (fifteen.count === 3 && (await this.limiter.hit(`mfa:mail:${userId}`, 3600, false)).count === 1) {
+      this.mail.enqueue({ to: email, ...mfaThreeErrorsEmail() });
+    }
+    if (day.count === 10) await this.suspectBruteforce(userId, email, ctx);
+    return null;
+  }
+
+  /** SEC-091(c): invalida a senha, derruba sessões, avisa titular e super admins, audita. */
+  private async suspectBruteforce(userId: string, email: string, ctx: RequestContext): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash: null, updatedAt: new Date() }).where(eq(users.id, userId));
+      await this.sessions.revokeSessions(tx, userId, 'mfa_bruteforce_suspected');
+      await this.audit.record(tx, ctx, { action: 'mfa_bruteforce_suspected', actorId: userId, targetType: 'user', targetId: userId });
+    });
+    this.mail.enqueue({ to: email, ...mfaBruteforceEmail(email, true) });
+    const supers = await this.db
+      .select({ email: users.email })
+      .from(adminProfiles)
+      .innerJoin(users, eq(users.id, adminProfiles.userId))
+      .where(and(eq(adminProfiles.profile, 'super_admin'), eq(adminProfiles.active, true)));
+    for (const superAdmin of supers) this.mail.enqueue({ to: superAdmin.email, ...mfaBruteforceEmail(email, false) });
+  }
+
+  /**
    * Aceita TOTP (6 dígitos) ou código de recuperação (uso único). Recuperação força reconfigurar o TOTP (WB-222 C5):
    * o segredo é descartado e a sessão sai sem MFA concluído.
    */
@@ -123,17 +174,43 @@ export class TotpService {
     });
   }
 
-  /** Super admin redefine o TOTP de OUTRO admin (auditado); as sessões dele caem. */
-  async resetFor(actor: Principal, targetUserId: string, ctx: RequestContext): Promise<void> {
-    if (actor.userId === targetUserId) throw errors.forbidden('CANNOT_RESET_OWN_TOTP', 'Você não pode redefinir o seu próprio TOTP.');
-    await this.db.transaction(async (tx) => {
-      const [target] = await tx.select().from(adminProfiles).where(eq(adminProfiles.userId, targetUserId)).for('update');
-      if (!target) throw errors.notFound('Admin não encontrado.');
+  /**
+   * SEC-093: super admin redefine o acesso de OUTRO admin (nunca o próprio). Exige motivo e o canal em que a
+   * identidade foi conferida fora do sistema. Apaga TOTP e códigos de recuperação, INVALIDA a senha, revoga as
+   * sessões e manda um link de reativação (48 h, uso único) só ao e-mail cadastrado. O super admin nunca vê o link.
+   */
+  async resetFor(actor: Principal, targetUserId: string, input: { reason: string; verifiedChannel: (typeof RESET_CHANNELS)[number] }, ctx: RequestContext): Promise<void> {
+    if (actor.userId === targetUserId) throw errors.forbidden('CANNOT_RESET_OWN_TOTP', 'Você não pode redefinir o seu próprio acesso.');
+    const token = randomToken(32);
+    const target = await this.db.transaction(async (tx) => {
+      const [admin] = await tx.select().from(adminProfiles).where(eq(adminProfiles.userId, targetUserId)).for('update');
+      if (!admin) throw errors.notFound('Admin não encontrado.');
+      const [user] = await tx.select().from(users).where(eq(users.id, targetUserId));
+      if (!user) throw errors.notFound('Admin não encontrado.');
       await tx.update(adminProfiles).set({ totpSecretEnc: null, totpConfirmedAt: null, totpLastStep: null, updatedAt: new Date() }).where(eq(adminProfiles.userId, targetUserId));
       await tx.delete(adminRecoveryCodes).where(eq(adminRecoveryCodes.userId, targetUserId));
-      await this.sessions.revokeSessions(tx, targetUserId, 'totp_reset');
-      await this.audit.record(tx, ctx, { action: 'admin.totp_reset', targetType: 'user', targetId: targetUserId });
+      await tx.update(users).set({ passwordHash: null, updatedAt: new Date() }).where(eq(users.id, targetUserId));
+      await this.sessions.revokeSessions(tx, targetUserId, 'access_reset');
+      await tx.insert(invitations).values({
+        kind: 'admin',
+        email: user.email,
+        name: user.name,
+        tokenHash: sha256Hex(token),
+        payload: { profile: admin.profile, reactivateUserId: targetUserId },
+        invitedBy: actor.userId,
+        expiresAt: new Date(Date.now() + ACCESS_RESET_HOURS * 3_600_000),
+      });
+      await this.audit.record(tx, ctx, {
+        action: 'admin.access_reset',
+        targetType: 'user',
+        targetId: targetUserId,
+        reason: input.reason,
+        after: { verifiedChannel: input.verifiedChannel },
+      });
+      return user;
     });
+    const link = `${this.config.get('ADMIN_WEB_URL', { infer: true })}/convite?token=${token}`;
+    this.mail.enqueue({ to: target.email, ...accessResetEmail(link, ACCESS_RESET_HOURS) });
   }
 
   async emailOf(userId: string): Promise<string> {

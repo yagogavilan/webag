@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put } from '@nestjs/common';
 import { z } from 'zod';
 import { Ctx, CurrentPrincipal, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
@@ -29,6 +29,7 @@ export class UsersController {
   }
 
   @Post('terms/accept')
+  @HttpCode(200)
   async accept(
     @CurrentPrincipal() principal: Principal,
     @Ctx() ctx: RequestContext,

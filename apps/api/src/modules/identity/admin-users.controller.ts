@@ -12,7 +12,7 @@ import {
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { AdminUsersService } from './admin-users.service.js';
-import { inviteAdminSchema, totpConfirmSchema, updateAdminSchema } from './auth.schemas.js';
+import { inviteAdminSchema, resetAdminAccessSchema, totpConfirmSchema, updateAdminSchema } from './auth.schemas.js';
 import { TotpService } from './totp.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,8 +67,13 @@ export class AdminUsersController {
   @RequireReauth()
   @HttpCode(204)
   @Post(':userId/totp/reset')
-  async resetTotp(@CurrentPrincipal() principal: Principal, @Param('userId') userId: string, @Ctx() ctx: RequestContext): Promise<void> {
-    await this.totp.resetFor(principal, uuid(userId), ctx);
+  async resetTotp(
+    @CurrentPrincipal() principal: Principal,
+    @Param('userId') userId: string,
+    @Body(new ZodPipe(resetAdminAccessSchema)) body: z.infer<typeof resetAdminAccessSchema>,
+    @Ctx() ctx: RequestContext,
+  ): Promise<void> {
+    await this.totp.resetFor(principal, uuid(userId), body, ctx);
   }
 }
 

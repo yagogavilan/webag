@@ -66,3 +66,33 @@ export function emailChangedNoticeEmail(): Body {
     html: html('Troca de e-mail da conta', ['Foi pedida a troca do e-mail da sua conta.', 'Se não foi você, redefina sua senha.']),
   };
 }
+
+/** SEC-091(b): senha certa, código errado 3 vezes. */
+export function mfaThreeErrorsEmail(): Body {
+  return {
+    subject: 'Alerta de segurança: sua senha Webag foi digitada corretamente, mas o código errou',
+    text: `Sua senha foi digitada corretamente, mas o código de verificação em duas etapas errou. Se não foi você, troque sua senha e avise o suporte.\n\n${footer}`,
+    html: html('Código de verificação errado', ['Sua senha foi digitada corretamente, mas o código de verificação em duas etapas errou.', 'Se não foi você, troque sua senha e avise o suporte.']),
+  };
+}
+
+/** SEC-091(c): 10 erros em 24 h, a senha foi invalidada. */
+export function mfaBruteforceEmail(email: string, toOwner: boolean): Body {
+  const line = toOwner
+    ? 'Detectamos muitas tentativas erradas do código de verificação. Por segurança, sua senha foi invalidada e suas sessões encerradas. Use "Esqueci a senha" (com o app autenticador) para voltar.'
+    : `Possível ataque de força bruta ao segundo fator da conta ${email}. A senha dela foi invalidada e as sessões encerradas.`;
+  return {
+    subject: 'Alerta de segurança: tentativas suspeitas no segundo fator',
+    text: `${line}\n\n${footer}`,
+    html: html('Tentativas suspeitas no segundo fator', [line]),
+  };
+}
+
+/** SEC-093: link de reativação enviado só ao e-mail cadastrado. */
+export function accessResetEmail(link: string, hours: number): Body {
+  return {
+    subject: 'Reative seu acesso ao painel administrativo Webag',
+    text: `Um super admin redefiniu o seu acesso ao painel. Crie uma senha nova e configure a verificação em duas etapas: ${link}\nO link vale por ${hours} horas e só pode ser usado uma vez.\n\n${footer}`,
+    html: html('Reative seu acesso', [`Crie uma senha nova e configure a verificação em duas etapas: <a href="${link}">reativar acesso</a>.`, `O link vale por ${hours} horas e só pode ser usado uma vez.`]),
+  };
+}

@@ -52,7 +52,17 @@ export const emailExistsSchema = z.strictObject({ email: emailSchema });
 export const verifyEmailSchema = z.strictObject({ code: codeSchema });
 export const correctEmailSchema = z.strictObject({ newEmail: emailSchema, password: passwordSchema });
 export const forgotPasswordSchema = z.strictObject({ email: emailSchema });
-export const resetPasswordSchema = z.strictObject({ email: emailSchema, code: codeSchema, newPassword: passwordSchema });
+export const resetPasswordSchema = z.strictObject({
+  email: emailSchema,
+  code: codeSchema,
+  newPassword: passwordSchema,
+  /** Admin com TOTP: o 2º fator vale na mesma chamada (SEC-095). */
+  totpCode: z.string().trim().min(6).max(32).optional(),
+});
+export const resetAdminAccessSchema = z.strictObject({
+  reason: z.string().trim().min(20, 'Descreva o motivo (mínimo 20 caracteres).').max(500),
+  verifiedChannel: z.enum(['video_call', 'in_person', 'registered_phone']),
+});
 export const changePasswordSchema = z.strictObject({ currentPassword: passwordSchema, newPassword: passwordSchema });
 export const reauthSchema = z.strictObject({
   password: passwordSchema.optional(),

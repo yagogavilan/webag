@@ -181,7 +181,7 @@ export class AuthService {
     if (activeAdmin) {
       if (activeAdmin.totpConfirmedAt) {
         if (!input.totpCode) throw new AppError(401, 'TOTP_REQUIRED', 'Informe o código do autenticador', { detail: 'Informe o código do app autenticador.' });
-        const kind = await this.totp.verifyLoginCode(user.id, input.totpCode);
+        const kind = await this.totp.verifyWithLimits(user.id, input.totpCode, ctx);
         if (!kind) {
           // WB-222 C4: não diz qual passo falhou; conta no mesmo limite de falhas.
           await this.registerFailure(failKey, user, maxFails, waitSeconds, ctx);
@@ -260,7 +260,7 @@ export class AuthService {
    * SEC-006: nova senha pela política, código de reset, confirma o e-mail, revoga TODAS as sessões e avisa por e-mail.
    * Admin não ganha sessão aqui (o TOTP continua exigido no login).
    */
-  async resetPassword(input: { email: string; code: string; newPassword: string }, ctx: RequestContext): Promise<{ tokens: TokenPair | null }> {
+  async resetPassword(input: { email: string; code: string; newPassword: string; totpCode?: string }, ctx: RequestContext): Promise<{ tokens: TokenPair | null }> {
     const [user] = await this.db.select().from(users).where(eq(users.email, input.email));
     await this.limiter.enforce(`rl:reset-confirm:${sha256Hex(input.email)}`, 10, 900);
     if (!user) {
@@ -268,10 +268,15 @@ export class AuthService {
       throw new AppError(400, 'CODE_INVALID', 'Código incorreto', { detail: 'Confira o código ou peça um novo.' });
     }
     this.passwords.assertPolicy(input.newPassword, await this.params.getNumber('senha_min'));
+    const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
+    // SEC-095: admin com TOTP nunca troca a senha só com o código do e-mail: o 2º fator vale na MESMA chamada.
+    if (admin?.active && admin.totpConfirmedAt) {
+      if (!input.totpCode) throw new AppError(401, 'TOTP_REQUIRED', 'Informe o código do autenticador', { detail: 'Informe o código do app autenticador.' });
+      if (!(await this.totp.verifyWithLimits(user.id, input.totpCode, ctx))) throw INVALID_CREDENTIALS();
+    }
     await this.codes.verify(user.id, 'reset_password', input.code);
 
     const passwordHash = await this.passwords.hash(input.newPassword);
-    const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
     const tokens = await this.db.transaction(async (tx) => {
       await tx
         .update(users)
@@ -312,7 +317,7 @@ export class AuthService {
     if (principal.adminProfile && principal.totpConfigured) {
       if (!input.totpCode) throw errors.validation([{ field: 'totpCode', message: 'Informe o código do autenticador.' }]);
       await this.limiter.enforce(`rl:reauth:${user.id}`, 10, 900);
-      if (!(await this.totp.verifyLoginCode(user.id, input.totpCode, false))) throw INVALID_CREDENTIALS();
+      if (!(await this.totp.verifyWithLimits(user.id, input.totpCode, ctx, false))) throw INVALID_CREDENTIALS();
     } else {
       if (!input.password) throw errors.validation([{ field: 'password', message: 'Informe sua senha.' }]);
       await this.assertPassword(user, input.password, ctx, 'reauth');

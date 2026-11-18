@@ -17,7 +17,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "setup": "node scripts/setup.mjs",
+    "db:migrate": "pnpm --filter @webag/api db:migrate",
+    "db:seed": "pnpm --filter @webag/api db:seed",
+    "bootstrap": "node scripts/setup.mjs"
   },
   "devDependencies": {
     "prettier": "3.10.1",

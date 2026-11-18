@@ -212,7 +212,7 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
       expect(pending).toEqual([expect.objectContaining({ type: 'customer_terms', version: relevant.body.version, reason: 'relevant_change' })]);
 
       await ctx.http.post('/v1/me/terms/accept').set(bearer(user.accessToken)).send({ acceptedDocuments: [{ type: 'customer_terms', version: cur }] }).expect(409);
-      await ctx.http.post('/v1/me/terms/accept').set(bearer(user.accessToken)).send({ acceptedDocuments: [{ type: 'customer_terms', version: relevant.body.version }] }).expect(201);
+      await ctx.http.post('/v1/me/terms/accept').set(bearer(user.accessToken)).send({ acceptedDocuments: [{ type: 'customer_terms', version: relevant.body.version }] }).expect(200);
       expect((await me()).pendingTerms).toEqual([]);
       // quem se cadastra depois da publicação precisa aceitar a versão vigente
       await ctx.http.post('/v1/auth/register').set('X-Forwarded-For', randomIp())

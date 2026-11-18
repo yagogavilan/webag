@@ -110,7 +110,16 @@ export class AdminUsersService {
       return await this.db.transaction(async (tx) => {
         const [invite] = await tx.select().from(invitations).where(eq(invitations.tokenHash, sha256Hex(token))).for('update');
         if (!invite || invite.kind !== 'admin' || invite.usedAt || invite.revokedAt || invite.expiresAt <= new Date()) throw gone();
-        const profile = (invite.payload as { profile: AdminProfile }).profile;
+        const payload = invite.payload as { profile: AdminProfile; reactivateUserId?: string };
+        const profile = payload.profile;
+        if (payload.reactivateUserId) {
+          // SEC-093: reativação de admin existente (senha nova + TOTP novo), sessão sem MFA concluído.
+          await tx.update(users).set({ passwordHash, passwordChangedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, payload.reactivateUserId));
+          await tx.update(invitations).set({ usedAt: new Date() }).where(eq(invitations.id, invite.id));
+          await this.audit.record(tx, ctx, { action: 'admin.access_reactivated', actorId: payload.reactivateUserId, actorRole: profile, targetType: 'user', targetId: payload.reactivateUserId });
+          const session = await this.sessions.createSession(tx, payload.reactivateUserId, ctx, { mfaVerified: false, reauth: true });
+          return { tokens: session.tokens, userId: payload.reactivateUserId };
+        }
         const [user] = await tx
           .insert(users)
           .values({ email: invite.email, name: invite.name, passwordHash, emailVerifiedAt: new Date(), passwordChangedAt: new Date() })
