@@ -12,12 +12,12 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| B1 + endurecimento da Onda 1, DT-018 e back-end da Onda 2 (lojista, aprovação, catálogo) | backend-dev | Retomado após limite de uso |
-| Web do admin, Onda 1A (shell, login, regiões e categorias já commitados) | mobile-dev | Retomado após limite de uso |
-| App do cliente: base, cadastro, login, endereço | mobile-dev | Retomado após limite de uso |
+| SEC-113 (veto), contrato 2 passos, endurecimento Onda 1, Onda 2B (loja, catálogo, seed) | backend-dev | Retomado após limite de uso |
+| SEC-114/115 no web (BFF e login em 2 passos) | mobile-dev | Retomado |
+| Área do lojista: onboarding, fila de aprovação, configuração da loja | mobile-dev | Retomado |
 
-Concluídos: design system e tokens; 44 + 40 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 096; plano de 16 sub-ondas; planos de teste (337 casos); back-end da Onda 1 (117 testes de integração, OpenAPI 57 operações), revisado pelo tech-lead (reprovado por 1 bloqueante, B1, em correção). Decisões DEC-001 a DEC-027.
-Incidentes: 1 reinício do container e 2 limites de uso de 5 h (06:50 e 11:50 UTC). O que estava commitado sobreviveu.
+Concluídos: design system e tokens; 84 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 123; planos de teste (337 casos); Onda 1: back-end (117 testes de integração), web do admin 1A, base do app do cliente (cadastro, login, endereço); Onda 2A: API de lojas e aprovação, onboarding do lojista no web. **Onda 1 com veto do Security (DEC-029): fecha quando SEC-113 e SEC-114 forem corrigidos e reverificados.** Decisões DEC-001 a DEC-029.
+Incidentes: 1 reinício do container e 3 limites de uso de 5 h (06:50, 11:50 e 16:50 UTC). O que estava commitado sobreviveu em todos.
 
 ## Falta (plano de fases)
 1. Fundação (acima)
