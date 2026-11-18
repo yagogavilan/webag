@@ -12,11 +12,12 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| Concluir esqueleto do monorepo e fechar ADRs (Onda 0) | tech-lead | Em andamento |
-| Threat model de autenticação e pagamento | security-engineer | Em andamento |
-| Specs de tela das ondas 2 a 4 | product-designer | Em andamento |
+| Onda 1: auth, RBAC, admin config, pagamento fake | backend-dev | Reiniciado após limite de uso |
+| Estratégia e planos de teste (ondas 1 e 2) | qa-engineer | Reiniciado após limite de uso |
+| Specs de tela onda 1B, 5 e 6 | product-designer | Reiniciado após limite de uso |
 
-Concluídos: design system e tokens, PRDs e backlog (134 histórias), plano de 16 sub-ondas com board e RAID (`docs/gestao/plano-execucao.md`). Um reinício do container derrubou 3 agentes; o que estava commitado sobreviveu e o trabalho foi redisparado.
+Concluídos: design system e tokens; PRDs e backlog (142 histórias); plano de 16 sub-ondas; threat model (70 SEC); ADRs 001-008; esqueleto do monorepo com CI; specs de tela das ondas 2 a 4 (44 telas). Decisões DEC-001 a DEC-022.
+Incidentes: reinício do container (1x) e limite de uso de 5 h (1x, 06:50 UTC) derrubaram agentes; o que estava commitado sobreviveu.
 
 ## Falta (plano de fases)
 1. Fundação (acima)
