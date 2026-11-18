@@ -46,6 +46,10 @@ tags:
     description: Moderação de produtos e listas de categorias proibidas e palavras suspeitas (admin)
   - name: uploads
     description: Upload de arquivos em 2 passos (POST pré-assinado + complete), validado por magic bytes
+  - name: addresses
+    description: Endereços salvos do cliente (`/v1/me/addresses`, até 8, um padrão)
+  - name: home
+    description: Banners e seções da home do app do cliente (descoberta)
 security:
   - bearerAuth: []
 paths:
@@ -1466,7 +1470,7 @@ paths:
       - uploads
       operationId: createUpload
       summary: Pedir um upload (POST pré-assinado)
-      description: "A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404."
+      description: "A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído."
       requestBody:
         required: true
         content:
@@ -3612,6 +3616,211 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/me/addresses:
+    get:
+      tags: [addresses]
+      operationId: listAddresses
+      summary: Meus endereços salvos
+      description: "Padrão primeiro, depois do mais antigo ao mais novo. No máximo `enderecos_max` (8) por conta; a lista cabe numa página. Dado pessoal (LGPD): só o dono lê."
+      responses:
+        '200':
+          description: Endereços da conta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [addresses]
+      operationId: createAddress
+      summary: Salvar endereço
+      description: "A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAddressRequest' }
+      responses:
+        '200':
+          description: O endereço já estava salvo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '201':
+          description: Endereço salvo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me/addresses/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [addresses]
+      operationId: getAddress
+      summary: Um endereço meu
+      description: "Endereço de outra conta responde 404 (não revela existência, SEC-020)."
+      responses:
+        '200':
+          description: Endereço
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [addresses]
+      operationId: updateAddress
+      summary: Editar endereço
+      description: "Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAddressRequest' }
+      responses:
+        '200':
+          description: Endereço atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [addresses]
+      operationId: deleteAddress
+      summary: Apagar endereço
+      description: "Apagar o padrão promove o mais antigo restante. Pedidos já feitos guardam a própria cópia do endereço."
+      responses:
+        '204':
+          description: Apagado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/banners:
+    get:
+      tags: [home]
+      operationId: listBanners
+      summary: Banners vigentes da home (público)
+      description: "Até 10, por posição. Com `cityId`: os da cidade e os de todas as cidades; sem: só os de todas. Cache de 60 s (`Cache-Control: public, max-age=60`). Imagem 2:1 em variantes WebP por largura."
+      security: []
+      parameters:
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Banners
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BannerList' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/banners:
+    get:
+      tags: [home]
+      operationId: listAdminBanners
+      summary: Todos os banners (admin)
+      description: "Permissão de admin: `banners:read`. Inclui inativos e vencidos; `live` diz se está no ar agora."
+      responses:
+        '200':
+          description: Banners
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminBannerList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [home]
+      operationId: createBanner
+      summary: Criar banner (admin)
+      description: "Permissão de admin: `banners:write`. A imagem vem de `POST /v1/uploads` com `purpose: banner` (sem `storeId`, 2:1) concluído. Destino `store`, `category` ou `product` exige o ID existente; `coupon` exige o código; `none` não leva destino. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBannerRequest' }
+      responses:
+        '201':
+          description: Banner criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Banner' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/banners/{bannerId}:
+    parameters:
+      - { name: bannerId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [home]
+      operationId: updateBanner
+      summary: Editar banner (admin)
+      description: "Permissão de admin: `banners:write`. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateBannerRequest' }
+      responses:
+        '200':
+          description: Banner atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Banner' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags: [home]
+      operationId: deleteBanner
+      summary: Apagar banner (admin)
+      description: "Permissão de admin: `banners:write`. Auditado."
+      responses:
+        '204':
+          description: Apagado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -4410,7 +4619,6 @@ components:
       type: object
       additionalProperties: false
       required:
-      - storeId
       - purpose
       - contentType
       - sizeBytes
@@ -4418,6 +4626,7 @@ components:
         storeId:
           type: string
           format: uuid
+          description: Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`)
         purpose:
           type: string
           enum:
@@ -4425,6 +4634,7 @@ components:
           - store_cover
           - product_image
           - store_document
+          - banner
         contentType:
           type: string
           example: image/jpeg
@@ -4474,6 +4684,7 @@ components:
           - store_cover
           - product_image
           - store_document
+          - banner
         status:
           type: string
           enum:
@@ -5919,3 +6130,133 @@ components:
       properties:
         kind: { type: string, enum: [forbidden_category, suspect_word] }
         value: { type: string, minLength: 1, maxLength: 80 }
+    Address:
+      type: object
+      required: [id, label, cep, street, number, complement, neighborhood, city, state, cityId, lat, lng, isDefault, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: [string, 'null'], enum: [home, work, other, null] }
+        cep: { type: string, description: 8 dígitos, sem hífen }
+        street: { type: string }
+        number: { type: string, description: '"S/N" quando não há número' }
+        complement: { type: [string, 'null'] }
+        neighborhood: { type: string }
+        city: { type: string }
+        state: { type: string, example: SP }
+        cityId: { type: [string, 'null'], format: uuid, description: Região atendida resolvida na gravação }
+        lat: { type: number }
+        lng: { type: number }
+        isDefault: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AddressList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Address' } }
+        nextCursor: { type: 'null' }
+    CreateAddressRequest:
+      type: object
+      additionalProperties: false
+      required: [cep, street, number, neighborhood, city]
+      properties:
+        label: { type: [string, 'null'], enum: [home, work, other, null] }
+        cep: { type: string, pattern: '^\d{5}-?\d{3}$' }
+        street: { type: string, minLength: 1, maxLength: 120 }
+        number: { type: string, minLength: 1, maxLength: 20 }
+        complement: { type: [string, 'null'], maxLength: 80 }
+        neighborhood: { type: string, minLength: 1, maxLength: 80 }
+        city: { type: string, minLength: 1, maxLength: 80 }
+        state: { type: string, minLength: 2, maxLength: 2, default: SP }
+        lat: { type: number, minimum: -90, maximum: 90, description: Junto com `lng`; vem do GPS do aparelho }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        isDefault: { type: boolean }
+    UpdateAddressRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        label: { type: [string, 'null'], enum: [home, work, other, null] }
+        cep: { type: string, pattern: '^\d{5}-?\d{3}$' }
+        street: { type: string, minLength: 1, maxLength: 120 }
+        number: { type: string, minLength: 1, maxLength: 20 }
+        complement: { type: [string, 'null'], maxLength: 80 }
+        neighborhood: { type: string, minLength: 1, maxLength: 80 }
+        city: { type: string, minLength: 1, maxLength: 80 }
+        state: { type: string, minLength: 2, maxLength: 2 }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        isDefault: { type: boolean, enum: [true] }
+    BannerDestination:
+      type: object
+      required: [type, id, code]
+      properties:
+        type: { type: string, enum: [store, category, product, coupon, none] }
+        id: { type: [string, 'null'], format: uuid }
+        code: { type: [string, 'null'], description: Código do cupom }
+    Banner:
+      type: object
+      required: [id, title, image, destination, position]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        image:
+          type: object
+          required: [urls]
+          properties:
+            urls: { type: object, additionalProperties: { type: string, format: uri }, description: 'Largura em pixels para a URL pública WebP' }
+        destination: { $ref: '#/components/schemas/BannerDestination' }
+        position: { type: integer }
+    BannerList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Banner' } }
+        nextCursor: { type: 'null' }
+    AdminBanner:
+      allOf:
+        - { $ref: '#/components/schemas/Banner' }
+        - type: object
+          required: [cityId, startsAt, endsAt, active, live]
+          properties:
+            cityId: { type: [string, 'null'], format: uuid, description: Nulo = todas as cidades }
+            startsAt: { type: string, format: date-time }
+            endsAt: { type: string, format: date-time }
+            active: { type: boolean }
+            live: { type: boolean }
+    AdminBannerList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminBanner' } }
+        nextCursor: { type: 'null' }
+    CreateBannerRequest:
+      type: object
+      additionalProperties: false
+      required: [title, imageAssetId, destinationType, startsAt, endsAt]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 80 }
+        imageAssetId: { type: string, format: uuid }
+        cityId: { type: [string, 'null'], format: uuid }
+        destinationType: { type: string, enum: [store, category, product, coupon, none] }
+        destinationId: { type: [string, 'null'], format: uuid }
+        destinationCode: { type: [string, 'null'], minLength: 1, maxLength: 20 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        position: { type: integer, minimum: 0, maximum: 999 }
+        active: { type: boolean }
+    UpdateBannerRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 80 }
+        imageAssetId: { type: string, format: uuid }
+        cityId: { type: [string, 'null'], format: uuid }
+        destinationType: { type: string, enum: [store, category, product, coupon, none] }
+        destinationId: { type: [string, 'null'], format: uuid }
+        destinationCode: { type: [string, 'null'], minLength: 1, maxLength: 20 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        position: { type: integer, minimum: 0, maximum: 999 }
+        active: { type: boolean }

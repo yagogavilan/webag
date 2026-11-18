@@ -906,10 +906,12 @@ export const UploadCreateRequestPurpose = {
   store_cover: 'store_cover',
   product_image: 'product_image',
   store_document: 'store_document',
+  banner: 'banner',
 } as const;
 
 export interface UploadCreateRequest {
-  storeId: string;
+  /** Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`) */
+  storeId?: string;
   purpose: UploadCreateRequestPurpose;
   contentType: string;
   /** @minimum 1 */
@@ -937,6 +939,7 @@ export const MediaAssetPurpose = {
   store_cover: 'store_cover',
   product_image: 'product_image',
   store_document: 'store_document',
+  banner: 'banner',
 } as const;
 
 export type MediaAssetStatus = typeof MediaAssetStatus[keyof typeof MediaAssetStatus];
@@ -2130,6 +2133,313 @@ export interface ModerationTermRequest {
 }
 
 /**
+ * @nullable
+ */
+export type AddressLabel = typeof AddressLabel[keyof typeof AddressLabel] | null;
+
+
+export const AddressLabel = {
+  home: 'home',
+  work: 'work',
+  other: 'other',
+} as const;
+
+export interface Address {
+  id: string;
+  /** @nullable */
+  label: AddressLabel;
+  /** 8 dígitos */
+  cep: string;
+  street: string;
+  /** "S/N" quando não há número */
+  number: string;
+  /** @nullable */
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  state: string;
+  /**
+     * Região atendida resolvida na gravação
+     * @nullable
+     */
+  cityId: string | null;
+  lat: number;
+  lng: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddressList {
+  data: Address[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+/**
+ * @nullable
+ */
+export type CreateAddressRequestLabel = typeof CreateAddressRequestLabel[keyof typeof CreateAddressRequestLabel] | null;
+
+
+export const CreateAddressRequestLabel = {
+  home: 'home',
+  work: 'work',
+  other: 'other',
+} as const;
+
+export interface CreateAddressRequest {
+  /** @nullable */
+  label?: CreateAddressRequestLabel;
+  /** @pattern ^\d{5}-?\d{3}$ */
+  cep: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  street: string;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     */
+  number: string;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  complement?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  neighborhood: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  city: string;
+  /**
+     * @minLength 2
+     * @maxLength 2
+     */
+  state?: string;
+  /**
+     * Junto com `lng`; vem do GPS do aparelho
+     * @minimum -90
+     * @maximum 90
+     */
+  lat?: number;
+  /**
+     * @minimum -180
+     * @maximum 180
+     */
+  lng?: number;
+  isDefault?: boolean;
+}
+
+/**
+ * @nullable
+ */
+export type UpdateAddressRequestLabel = typeof UpdateAddressRequestLabel[keyof typeof UpdateAddressRequestLabel] | null;
+
+
+export const UpdateAddressRequestLabel = {
+  home: 'home',
+  work: 'work',
+  other: 'other',
+} as const;
+
+export interface UpdateAddressRequest {
+  /** @nullable */
+  label?: UpdateAddressRequestLabel;
+  /** @pattern ^\d{5}-?\d{3}$ */
+  cep?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  street?: string;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     */
+  number?: string;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  complement?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  neighborhood?: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  city?: string;
+  /**
+     * @minLength 2
+     * @maxLength 2
+     */
+  state?: string;
+  /**
+     * @minimum -90
+     * @maximum 90
+     */
+  lat?: number;
+  /**
+     * @minimum -180
+     * @maximum 180
+     */
+  lng?: number;
+  isDefault?: true;
+}
+
+export type BannerDestinationType = typeof BannerDestinationType[keyof typeof BannerDestinationType];
+
+
+export const BannerDestinationType = {
+  store: 'store',
+  category: 'category',
+  product: 'product',
+  coupon: 'coupon',
+  none: 'none',
+} as const;
+
+export interface BannerDestination {
+  type: BannerDestinationType;
+  /** @nullable */
+  id: string | null;
+  /**
+     * Código do cupom
+     * @nullable
+     */
+  code: string | null;
+}
+
+/**
+ * Largura em pixels para a URL pública WebP
+ */
+export type BannerImageUrls = {[key: string]: string};
+
+export type BannerImage = {
+  /** Largura em pixels para a URL pública WebP */
+  urls: BannerImageUrls;
+};
+
+export interface Banner {
+  id: string;
+  title: string;
+  image: BannerImage;
+  destination: BannerDestination;
+  position: number;
+}
+
+export interface BannerList {
+  data: Banner[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export type AdminBanner = Banner & ({
+  /**
+     * Nulo = todas as cidades
+     * @nullable
+     */
+  cityId: string | null;
+  startsAt: string;
+  endsAt: string;
+  active: boolean;
+  live: boolean;
+});
+
+export interface AdminBannerList {
+  data: AdminBanner[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export type CreateBannerRequestDestinationType = typeof CreateBannerRequestDestinationType[keyof typeof CreateBannerRequestDestinationType];
+
+
+export const CreateBannerRequestDestinationType = {
+  store: 'store',
+  category: 'category',
+  product: 'product',
+  coupon: 'coupon',
+  none: 'none',
+} as const;
+
+export interface CreateBannerRequest {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  title: string;
+  imageAssetId: string;
+  /** @nullable */
+  cityId?: string | null;
+  destinationType: CreateBannerRequestDestinationType;
+  /** @nullable */
+  destinationId?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     * @nullable
+     */
+  destinationCode?: string | null;
+  startsAt: string;
+  endsAt: string;
+  /**
+     * @minimum 0
+     * @maximum 999
+     */
+  position?: number;
+  active?: boolean;
+}
+
+export type UpdateBannerRequestDestinationType = typeof UpdateBannerRequestDestinationType[keyof typeof UpdateBannerRequestDestinationType];
+
+
+export const UpdateBannerRequestDestinationType = {
+  store: 'store',
+  category: 'category',
+  product: 'product',
+  coupon: 'coupon',
+  none: 'none',
+} as const;
+
+export interface UpdateBannerRequest {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  title?: string;
+  imageAssetId?: string;
+  /** @nullable */
+  cityId?: string | null;
+  destinationType?: UpdateBannerRequestDestinationType;
+  /** @nullable */
+  destinationId?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     * @nullable
+     */
+  destinationCode?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  /**
+     * @minimum 0
+     * @maximum 999
+     */
+  position?: number;
+  active?: boolean;
+}
+
+/**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
 export type ValidationErrorResponse = Problem;
@@ -2389,6 +2699,10 @@ export const AdminListProductsStatus = {
   paused: 'paused',
   archived: 'archived',
 } as const;
+
+export type ListBannersParams = {
+  cityId?: string;
+};
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -5861,7 +6175,7 @@ export const getCreateUploadUrl = () => {
 }
 
 /**
- * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404.
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído.
  * @summary Pedir um upload (POST pré-assinado)
  */
 export const createUpload = async (uploadCreateRequest: UploadCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createUploadResponse> => {
@@ -10145,6 +10459,570 @@ export const getRemoveModerationTermUrl = (termId: string,) => {
 export const removeModerationTerm = async (termId: string, options?: Parameters<typeof apiFetch>[1]): Promise<removeModerationTermResponse> => {
 
   return apiFetch<removeModerationTermResponse>(getRemoveModerationTermUrl(termId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listAddressesResponse200 = {
+  data: AddressList
+  status: 200
+}
+
+export type listAddressesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAddressesResponseSuccess = (listAddressesResponse200) & {
+  headers: Headers;
+};
+export type listAddressesResponseError = (listAddressesResponse401) & {
+  headers: Headers;
+};
+
+export type listAddressesResponse = (listAddressesResponseSuccess | listAddressesResponseError)
+
+export const getListAddressesUrl = () => {
+
+
+
+
+  return `/v1/me/addresses`
+}
+
+/**
+ * Padrão primeiro, depois do mais antigo ao mais novo. No máximo `enderecos_max` (8) por conta; a lista cabe numa página. Dado pessoal (LGPD): só o dono lê.
+ * @summary Meus endereços salvos
+ */
+export const listAddresses = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listAddressesResponse> => {
+
+  return apiFetch<listAddressesResponse>(getListAddressesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createAddressResponse200 = {
+  data: Address
+  status: 200
+}
+
+export type createAddressResponse201 = {
+  data: Address
+  status: 201
+}
+
+export type createAddressResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createAddressResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createAddressResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createAddressResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createAddressResponseSuccess = (createAddressResponse200 | createAddressResponse201) & {
+  headers: Headers;
+};
+export type createAddressResponseError = (createAddressResponse400 | createAddressResponse401 | createAddressResponse422 | createAddressResponse429) & {
+  headers: Headers;
+};
+
+export type createAddressResponse = (createAddressResponseSuccess | createAddressResponseError)
+
+export const getCreateAddressUrl = () => {
+
+
+
+
+  return `/v1/me/addresses`
+}
+
+/**
+ * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
+ * @summary Salvar endereço
+ */
+export const createAddress = async (createAddressRequest: CreateAddressRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createAddressResponse> => {
+
+  return apiFetch<createAddressResponse>(getCreateAddressUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createAddressRequest)
+  }
+);}
+
+
+
+export type getAddressResponse200 = {
+  data: Address
+  status: 200
+}
+
+export type getAddressResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAddressResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAddressResponseSuccess = (getAddressResponse200) & {
+  headers: Headers;
+};
+export type getAddressResponseError = (getAddressResponse401 | getAddressResponse404) & {
+  headers: Headers;
+};
+
+export type getAddressResponse = (getAddressResponseSuccess | getAddressResponseError)
+
+export const getGetAddressUrl = (id: string,) => {
+
+
+
+
+  return `/v1/me/addresses/${id}`
+}
+
+/**
+ * Endereço de outra conta responde 404 (não revela existência, SEC-020).
+ * @summary Um endereço meu
+ */
+export const getAddress = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAddressResponse> => {
+
+  return apiFetch<getAddressResponse>(getGetAddressUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateAddressResponse200 = {
+  data: Address
+  status: 200
+}
+
+export type updateAddressResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateAddressResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateAddressResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateAddressResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateAddressResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateAddressResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type updateAddressResponseSuccess = (updateAddressResponse200) & {
+  headers: Headers;
+};
+export type updateAddressResponseError = (updateAddressResponse400 | updateAddressResponse401 | updateAddressResponse404 | updateAddressResponse409 | updateAddressResponse422 | updateAddressResponse429) & {
+  headers: Headers;
+};
+
+export type updateAddressResponse = (updateAddressResponseSuccess | updateAddressResponseError)
+
+export const getUpdateAddressUrl = (id: string,) => {
+
+
+
+
+  return `/v1/me/addresses/${id}`
+}
+
+/**
+ * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu.
+ * @summary Editar endereço
+ */
+export const updateAddress = async (id: string,
+    updateAddressRequest: UpdateAddressRequest, options?: Parameters<typeof apiFetch>[1]): Promise<updateAddressResponse> => {
+
+  return apiFetch<updateAddressResponse>(getUpdateAddressUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateAddressRequest)
+  }
+);}
+
+
+
+export type deleteAddressResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAddressResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteAddressResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteAddressResponseSuccess = (deleteAddressResponse204) & {
+  headers: Headers;
+};
+export type deleteAddressResponseError = (deleteAddressResponse401 | deleteAddressResponse404) & {
+  headers: Headers;
+};
+
+export type deleteAddressResponse = (deleteAddressResponseSuccess | deleteAddressResponseError)
+
+export const getDeleteAddressUrl = (id: string,) => {
+
+
+
+
+  return `/v1/me/addresses/${id}`
+}
+
+/**
+ * Apagar o padrão promove o mais antigo restante. Pedidos já feitos guardam a própria cópia do endereço.
+ * @summary Apagar endereço
+ */
+export const deleteAddress = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteAddressResponse> => {
+
+  return apiFetch<deleteAddressResponse>(getDeleteAddressUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listBannersResponse200 = {
+  data: BannerList
+  status: 200
+}
+
+export type listBannersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listBannersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listBannersResponseSuccess = (listBannersResponse200) & {
+  headers: Headers;
+};
+export type listBannersResponseError = (listBannersResponse400 | listBannersResponse429) & {
+  headers: Headers;
+};
+
+export type listBannersResponse = (listBannersResponseSuccess | listBannersResponseError)
+
+export const getListBannersUrl = (params?: ListBannersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/banners?${stringifiedParams}` : `/v1/banners`
+}
+
+/**
+ * Até 10, por posição. Com `cityId`: os da cidade e os de todas as cidades; sem: só os de todas. Cache de 60 s (`Cache-Control: public, max-age=60`). Imagem 2:1 em variantes WebP por largura.
+ * @summary Banners vigentes da home (público)
+ */
+export const listBanners = async (params?: ListBannersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listBannersResponse> => {
+
+  return apiFetch<listBannersResponse>(getListBannersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAdminBannersResponse200 = {
+  data: AdminBannerList
+  status: 200
+}
+
+export type listAdminBannersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminBannersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminBannersResponseSuccess = (listAdminBannersResponse200) & {
+  headers: Headers;
+};
+export type listAdminBannersResponseError = (listAdminBannersResponse401 | listAdminBannersResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminBannersResponse = (listAdminBannersResponseSuccess | listAdminBannersResponseError)
+
+export const getListAdminBannersUrl = () => {
+
+
+
+
+  return `/v1/admin/banners`
+}
+
+/**
+ * Permissão de admin: `banners:read`. Inclui inativos e vencidos; `live` diz se está no ar agora.
+ * @summary Todos os banners (admin)
+ */
+export const listAdminBanners = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listAdminBannersResponse> => {
+
+  return apiFetch<listAdminBannersResponse>(getListAdminBannersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createBannerResponse201 = {
+  data: Banner
+  status: 201
+}
+
+export type createBannerResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createBannerResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createBannerResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createBannerResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createBannerResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createBannerResponseSuccess = (createBannerResponse201) & {
+  headers: Headers;
+};
+export type createBannerResponseError = (createBannerResponse400 | createBannerResponse401 | createBannerResponse403 | createBannerResponse404 | createBannerResponse422) & {
+  headers: Headers;
+};
+
+export type createBannerResponse = (createBannerResponseSuccess | createBannerResponseError)
+
+export const getCreateBannerUrl = () => {
+
+
+
+
+  return `/v1/admin/banners`
+}
+
+/**
+ * Permissão de admin: `banners:write`. A imagem vem de `POST /v1/uploads` com `purpose: banner` (sem `storeId`, 2:1) concluído. Destino `store`, `category` ou `product` exige o ID existente; `coupon` exige o código; `none` não leva destino. Auditado.
+ * @summary Criar banner (admin)
+ */
+export const createBanner = async (createBannerRequest: CreateBannerRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createBannerResponse> => {
+
+  return apiFetch<createBannerResponse>(getCreateBannerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createBannerRequest)
+  }
+);}
+
+
+
+export type updateBannerResponse200 = {
+  data: Banner
+  status: 200
+}
+
+export type updateBannerResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateBannerResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateBannerResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateBannerResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateBannerResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateBannerResponseSuccess = (updateBannerResponse200) & {
+  headers: Headers;
+};
+export type updateBannerResponseError = (updateBannerResponse400 | updateBannerResponse401 | updateBannerResponse403 | updateBannerResponse404 | updateBannerResponse422) & {
+  headers: Headers;
+};
+
+export type updateBannerResponse = (updateBannerResponseSuccess | updateBannerResponseError)
+
+export const getUpdateBannerUrl = (bannerId: string,) => {
+
+
+
+
+  return `/v1/admin/banners/${bannerId}`
+}
+
+/**
+ * Permissão de admin: `banners:write`. Auditado.
+ * @summary Editar banner (admin)
+ */
+export const updateBanner = async (bannerId: string,
+    updateBannerRequest: UpdateBannerRequest, options?: Parameters<typeof apiFetch>[1]): Promise<updateBannerResponse> => {
+
+  return apiFetch<updateBannerResponse>(getUpdateBannerUrl(bannerId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateBannerRequest)
+  }
+);}
+
+
+
+export type deleteBannerResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteBannerResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteBannerResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteBannerResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteBannerResponseSuccess = (deleteBannerResponse204) & {
+  headers: Headers;
+};
+export type deleteBannerResponseError = (deleteBannerResponse401 | deleteBannerResponse403 | deleteBannerResponse404) & {
+  headers: Headers;
+};
+
+export type deleteBannerResponse = (deleteBannerResponseSuccess | deleteBannerResponseError)
+
+export const getDeleteBannerUrl = (bannerId: string,) => {
+
+
+
+
+  return `/v1/admin/banners/${bannerId}`
+}
+
+/**
+ * Permissão de admin: `banners:write`. Auditado.
+ * @summary Apagar banner (admin)
+ */
+export const deleteBanner = async (bannerId: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteBannerResponse> => {
+
+  return apiFetch<deleteBannerResponse>(getDeleteBannerUrl(bannerId),
   {
     ...options,
     method: 'DELETE'

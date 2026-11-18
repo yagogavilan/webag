@@ -9,7 +9,8 @@ import { MediaService, type MediaAsset } from './media.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const createSchema = z.strictObject({
-  storeId: z.uuid(),
+  /** Obrigatório, exceto para `banner` (admin, sem loja). */
+  storeId: z.uuid().optional(),
   purpose: z.enum(MEDIA_PURPOSES),
   contentType: z.string().max(100),
   sizeBytes: z.number().int().min(1).max(50 * 1024 * 1024),

@@ -8,6 +8,7 @@ import { PasswordService } from '../../src/modules/identity/password.service.js'
 import { sealMfaSecret } from '../../src/platform/crypto/mfa-seal.js';
 import { DEV_MFA_ENC_KEY } from '../../src/platform/config/env.js';
 import {
+  cities,
   stores,
   storeSettings,
   storeMembers,
@@ -306,4 +307,38 @@ export async function ensureCities(ctx: TestContext): Promise<void> {
 /** Marca a reautenticação antiga (para provar o 403 REAUTH_REQUIRED). */
 export async function expireReauth(ctx: TestContext, userId: string): Promise<void> {
   await ctx.db.update(sessions).set({ reauthAt: new Date(Date.now() - 6 * 60_000) }).where(eq(sessions.userId, userId));
+}
+
+// ------------------------------------------------------------------ Onda 3
+
+/** Cidade ativa por nome (cria se faltar). Os testes compartilham o banco: nunca assumem que está vazio. */
+export async function ensureCity(ctx: TestContext, name: string, active = true): Promise<{ id: string; name: string }> {
+  const slug = `${name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-')}-sp`;
+  const [existing] = await ctx.db.select().from(cities).where(eq(cities.slug, slug));
+  if (existing) {
+    if (existing.active !== active) await ctx.db.update(cities).set({ active }).where(eq(cities.id, existing.id));
+    return { id: existing.id, name: existing.name };
+  }
+  const [city] = await ctx.db.insert(cities).values({ name, state: 'SP', slug, active }).returning();
+  if (!city) throw new Error('cidade não criada');
+  return { id: city.id, name: city.name };
+}
+
+/** Cliente cadastrado e com e-mail confirmado. */
+export async function createCustomer(ctx: TestContext): Promise<RegisteredUser> {
+  const user = await registerUser(ctx);
+  await verifyEmailOf(ctx, user);
+  return user;
+}
+
+/** Imagem 2:1 enviada pelo fluxo real de upload do admin (`purpose: banner`, sem loja). */
+export async function uploadBannerImage(ctx: TestContext, admin: { accessToken: string }, size: { width?: number; height?: number } = {}): Promise<string> {
+  const body = await jpegBuffer(size.width ?? 1200, size.height ?? 600);
+  const created = await ctx.http.post('/v1/uploads').set(bearer(admin.accessToken)).send({ purpose: 'banner', contentType: 'image/jpeg', sizeBytes: body.length });
+  if (created.status !== 201) throw new Error(`upload banner ${created.status} ${JSON.stringify(created.body)}`);
+  const id = (created.body as { id: string }).id;
+  memoryStorage(ctx).upload('private', (created.body as { upload: { fields: { key: string } } }).upload.fields.key, body, 'image/jpeg');
+  const done = await ctx.http.post(`/v1/uploads/${id}/complete`).set(bearer(admin.accessToken)).send({});
+  if (done.status !== 200) throw new Error(`complete banner ${done.status} ${JSON.stringify(done.body)}`);
+  return id;
 }

@@ -30,6 +30,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'regions:write': null,
   'categories:read': { method: 'get', path: '/v1/admin/categories' },
   'categories:write': null,
+  'banners:read': { method: 'get', path: '/v1/admin/banners' },
+  'banners:write': null,
   'parameters:read': { method: 'get', path: '/v1/admin/parameters' },
   'parameters:write': null,
   'flags:read': { method: 'get', path: '/v1/admin/feature-flags' },
@@ -80,6 +82,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
       [
         'GET /health',
         'GET /health/ready',
+        'GET /v1/banners',
         'GET /v1/categories',
         'GET /v1/config/flags',
         'GET /v1/legal/:type',

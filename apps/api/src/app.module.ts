@@ -10,6 +10,8 @@ import { MediaModule } from './modules/media/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
 import { StoresModule } from './modules/stores/index.js';
 import { AddressesModule } from './modules/addresses/index.js';
+import { DiscoveryModule } from './modules/discovery/index.js';
+import { CacheModule } from './platform/cache/cache.service.js';
 import { StorageModule } from './platform/storage/storage.module.js';
 import { devModulesFor, PaymentsModule } from './modules/payments/index.js';
 import { UsersModule } from './modules/users/index.js';
@@ -69,6 +71,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     }),
     DatabaseModule,
     RedisModule,
+    CacheModule,
     MailModule,
     RateLimitModule,
     HealthModule,
@@ -81,6 +84,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     StoresModule,
     CatalogModule,
     AddressesModule,
+    DiscoveryModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
   ],

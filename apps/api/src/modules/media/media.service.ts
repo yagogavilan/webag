@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { Principal } from '../../platform/auth/decorators.js';
-import { memberHasStorePermission, type StorePermissionName } from '../../platform/auth/permissions.js';
+import { adminHasPermission, memberHasStorePermission, type StorePermissionName } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../../platform/storage/object-storage.js';
@@ -18,14 +18,14 @@ const IMAGE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp']
 const UPLOAD_WINDOW_SECONDS = 900;
 
 /** Quem pode enviar o quê: a permissão da loja que a finalidade exige (RN-13). */
-const PURPOSE_PERMISSION: Record<MediaPurpose, StorePermissionName> = {
+const PURPOSE_PERMISSION: Record<Exclude<MediaPurpose, 'banner'>, StorePermissionName> = {
   store_logo: 'settings',
   store_cover: 'settings',
   store_document: 'settings',
   product_image: 'catalog',
 };
 
-const PUBLIC_PURPOSES: readonly MediaPurpose[] = ['store_logo', 'store_cover', 'product_image'];
+const PUBLIC_PURPOSES: readonly MediaPurpose[] = ['store_logo', 'store_cover', 'product_image', 'banner'];
 
 export class UploadRejectedError extends AppError {
   constructor(reason: string) {
@@ -51,11 +51,20 @@ export class MediaService {
     return (await this.params.getNumber('upload_max_mb')) * 1024 * 1024;
   }
 
-  async create(principal: Principal, input: { purpose: MediaPurpose; contentType: string; sizeBytes: number; storeId: string }) {
-    const member = await this.principals.storeMembership(principal.userId, input.storeId);
-    // 404 também para quem não é membro (SEC-020): não revela que a loja existe.
-    if (!member) throw errors.notFound();
-    if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose])) throw errors.forbidden();
+  async create(principal: Principal, input: { purpose: MediaPurpose; contentType: string; sizeBytes: number; storeId?: string | undefined }) {
+    let owner: string | null = null;
+    if (input.purpose === 'banner') {
+      // Banner da home (WB-115): sem loja; só admin com a permissão e o segundo fator concluído.
+      if (input.storeId !== undefined) throw errors.validation([{ field: 'storeId', message: 'Banner não pertence a uma loja.' }]);
+      if (!principal.adminProfile || !principal.mfaVerified || !adminHasPermission(principal.adminProfile, 'banners:write')) throw errors.forbidden();
+    } else {
+      if (input.storeId === undefined) throw errors.validation([{ field: 'storeId', message: 'Informe a loja.' }]);
+      owner = input.storeId;
+      const member = await this.principals.storeMembership(principal.userId, owner);
+      // 404 também para quem não é membro (SEC-020): não revela que a loja existe.
+      if (!member) throw errors.notFound();
+      if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose])) throw errors.forbidden();
+    }
 
     const allowed = input.purpose === 'store_document' ? [...IMAGE_TYPES, 'application/pdf'] : IMAGE_TYPES;
     if (!allowed.includes(input.contentType)) throw new UploadRejectedError('Formato não aceito. Envie JPG, PNG ou WebP' + (input.purpose === 'store_document' ? ' ou PDF.' : '.'));
@@ -63,12 +72,12 @@ export class MediaService {
     if (input.sizeBytes < 1 || input.sizeBytes > max) throw new UploadRejectedError(`O arquivo passa do limite de ${max / 1024 / 1024} MB.`);
 
     const id = randomUUID();
-    const objectKey = `uploads/${input.storeId}/${id}`;
+    const objectKey = `uploads/${owner ?? 'banners'}/${id}`;
     const post = await this.storage.presignedPost('private', objectKey, { contentType: input.contentType, maxBytes: max, expiresSeconds: UPLOAD_WINDOW_SECONDS });
     await this.db.insert(mediaAssets).values({
       id,
       ownerUserId: principal.userId,
-      storeId: input.storeId,
+      storeId: owner,
       purpose: input.purpose,
       objectKey,
       declaredContentType: input.contentType,
@@ -110,6 +119,7 @@ export class MediaService {
       const info = await inspectImage(body);
       if (asset.purpose === 'store_logo' && !ratioWithin(info, 1, 0.02)) throw new ImageRejected('A logo precisa ser quadrada (1:1).');
       if (asset.purpose === 'store_cover' && !ratioWithin(info, 16 / 9, 0.03)) throw new ImageRejected('A capa precisa ter proporção 16:9.');
+      if (asset.purpose === 'banner' && !ratioWithin(info, 2, 0.03)) throw new ImageRejected('O banner precisa ter proporção 2:1.');
       let variants: Record<string, string> | null = null;
       if (PUBLIC_PURPOSES.includes(asset.purpose)) {
         variants = {};
@@ -155,6 +165,14 @@ export class MediaService {
     if (asset.status !== 'ready' || !expected.purposes.includes(asset.purpose)) {
       throw errors.unprocessable('MEDIA_NOT_USABLE', 'Arquivo não pode ser usado aqui', { detail: 'Conclua o envio do arquivo certo antes.' });
     }
+    return asset;
+  }
+
+  /** Banner pronto (WB-115): imagem 2:1 enviada por admin, sem loja. */
+  async requireReadyBanner(assetId: string): Promise<MediaAsset> {
+    const [asset] = await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, assetId));
+    if (!asset || asset.purpose !== 'banner') throw errors.notFound('Arquivo não encontrado.');
+    if (asset.status !== 'ready') throw errors.unprocessable('MEDIA_NOT_USABLE', 'Arquivo não pode ser usado aqui', { detail: 'Conclua o envio da imagem antes.' });
     return asset;
   }
 

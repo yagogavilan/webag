@@ -17,6 +17,8 @@ export const ADMIN_PERMISSIONS = {
   'regions:write': [SUPER, OPS],
   'categories:read': [SUPER, OPS, FIN, SUP],
   'categories:write': [SUPER, OPS],
+  'banners:read': [SUPER, OPS, FIN, SUP],
+  'banners:write': [SUPER, OPS],
   'parameters:read': [SUPER, OPS, FIN],
   'parameters:write': [SUPER],
   'flags:read': [SUPER, OPS, FIN, SUP],

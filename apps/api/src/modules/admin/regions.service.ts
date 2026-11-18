@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
+import { CacheService } from '../../platform/cache/cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService } from './audit.service.js';
@@ -16,7 +17,23 @@ export class RegionsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly audit: AuditService,
+    private readonly cache: CacheService,
   ) {}
+
+  /** Lista pública (cidades e bairros ativos), em cache de 60 s; escrita de região invalida o namespace. */
+  async listPublic() {
+    return this.cache.wrap('regions', 'public', 60, async () => {
+      const cities = await this.listCities(true);
+      return cities.map((c) => ({ id: c.id, name: c.name, state: c.state, slug: c.slug, neighborhoods: c.neighborhoods.map((n) => ({ id: n.id, name: n.name })) }));
+    });
+  }
+
+  /** Executa a escrita e invalida o cache público de regiões (também em caso de sucesso parcial não há o que invalidar). */
+  async invalidating<T>(write: () => Promise<T>): Promise<T> {
+    const result = await write();
+    await this.cache.bump('regions');
+    return result;
+  }
 
   async listCities(onlyActive = false): Promise<(City & { neighborhoods: Neighborhood[] })[]> {
     const [cityRows, hoodRows] = await Promise.all([

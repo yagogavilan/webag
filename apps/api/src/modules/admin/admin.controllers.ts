@@ -80,8 +80,7 @@ export class RegionsController {
   @Get('regions')
   @Header('Cache-Control', 'public, max-age=60')
   async publicList() {
-    const cities = await this.regions.listCities(true);
-    return { data: cities.map((c) => ({ id: c.id, name: c.name, state: c.state, slug: c.slug, neighborhoods: c.neighborhoods.map((n) => ({ id: n.id, name: n.name })) })), nextCursor: null };
+    return { data: await this.regions.listPublic(), nextCursor: null };
   }
 
   @AdminOnly('regions:read')
@@ -93,19 +92,19 @@ export class RegionsController {
   @AdminOnly('regions:write')
   @Post('admin/regions/cities')
   create(@Body(new ZodPipe(citySchema)) body: z.infer<typeof citySchema>, @Ctx() ctx: RequestContext) {
-    return this.regions.createCity(body, ctx);
+    return this.regions.invalidating(() => this.regions.createCity(body, ctx));
   }
 
   @AdminOnly('regions:write')
   @Patch('admin/regions/cities/:cityId')
   update(@Param('cityId') cityId: string, @Body(new ZodPipe(cityPatchSchema)) body: z.infer<typeof cityPatchSchema>, @Ctx() ctx: RequestContext) {
-    return this.regions.updateCity(id(cityId), body, ctx);
+    return this.regions.invalidating(() => this.regions.updateCity(id(cityId), body, ctx));
   }
 
   @AdminOnly('regions:write')
   @Post('admin/regions/cities/:cityId/neighborhoods')
   createNeighborhood(@Param('cityId') cityId: string, @Body(new ZodPipe(hoodSchema)) body: z.infer<typeof hoodSchema>, @Ctx() ctx: RequestContext) {
-    return this.regions.createNeighborhood(id(cityId), body, ctx);
+    return this.regions.invalidating(() => this.regions.createNeighborhood(id(cityId), body, ctx));
   }
 
   @AdminOnly('regions:write')
@@ -115,7 +114,7 @@ export class RegionsController {
     @Body(new ZodPipe(cityPatchSchema)) body: z.infer<typeof cityPatchSchema>,
     @Ctx() ctx: RequestContext,
   ) {
-    return this.regions.updateNeighborhood(id(neighborhoodId), body, ctx);
+    return this.regions.invalidating(() => this.regions.updateNeighborhood(id(neighborhoodId), body, ctx));
   }
 }
 

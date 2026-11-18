@@ -11,7 +11,7 @@ import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { StoresService, StoreSettingsService, type Store } from '../stores/index.js';
-import { moderationTerms, productImages, products, productVariants, storeSections, type ModerationStatus, type ProductStatus } from './db/schema.js';
+import { moderationTerms, productImages, productModerationEvents, products, productVariants, storeSections, type ModerationStatus, type ProductStatus } from './db/schema.js';
 import { IMPORT_TEMPLATE, planImport, type ImportedProduct } from './domain/import.js';
 import { matchesSuspectWord, normalizeWord } from './domain/moderation.js';
 import { effectivePrice, endOfMinute, MAX_PRICE_CENTS, MIN_PRICE_CENTS, validatePromotion, type Promotion } from './domain/price.js';
@@ -121,7 +121,6 @@ export class CatalogService {
   }
 
   private async moderationEvent(executor: DbOrTx, product: Pick<Product, 'id' | 'storeId'>, action: 'flag' | 'pause' | 'remove' | 'restore', reason: string | null, actorId: string | null): Promise<void> {
-    const { productModerationEvents } = await import('./db/schema.js');
     await executor.insert(productModerationEvents).values({ productId: product.id, storeId: product.storeId, action, reason, actorId });
   }
 

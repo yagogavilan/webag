@@ -1427,15 +1427,15 @@ export const CompleteResetPasswordResponse = zod.object({
 
 
 /**
- * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404.
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído.
  * @summary Pedir um upload (POST pré-assinado)
  */
 
 
 
 export const CreateUploadBody = zod.object({
-  "storeId": zod.uuid(),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "storeId": zod.uuid().optional().describe('Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`)'),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
   "contentType": zod.string(),
   "sizeBytes": zod.int().min(1)
 })
@@ -1460,7 +1460,7 @@ export const CompleteUploadParams = zod.object({
 
 export const CompleteUploadResponse = zod.object({
   "id": zod.uuid(),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
   "status": zod.enum(['pending', 'ready', 'rejected']),
   "contentType": zod.string().nullish(),
   "sizeBytes": zod.int().nullish(),
@@ -1482,7 +1482,7 @@ export const GetUploadParams = zod.object({
 
 export const GetUploadResponse = zod.object({
   "id": zod.uuid(),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
   "status": zod.enum(['pending', 'ready', 'rejected']),
   "contentType": zod.string().nullish(),
   "sizeBytes": zod.int().nullish(),
@@ -4698,3 +4698,341 @@ export const RemoveModerationTermParams = zod.object({
 })
 
 export const RemoveModerationTermResponse = zod.void()
+
+
+/**
+ * Padrão primeiro, depois do mais antigo ao mais novo. No máximo `enderecos_max` (8) por conta; a lista cabe numa página. Dado pessoal (LGPD): só o dono lê.
+ * @summary Meus endereços salvos
+ */
+export const ListAddressesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
+ * @summary Salvar endereço
+ */
+export const createAddressBodyCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+export const createAddressBodyStreetMax = 120;
+
+export const createAddressBodyNumberMax = 20;
+
+export const createAddressBodyComplementMax = 80;
+
+export const createAddressBodyNeighborhoodMax = 80;
+
+export const createAddressBodyCityMax = 80;
+
+export const createAddressBodyStateDefault = `SP`;
+export const createAddressBodyStateMin = 2;
+export const createAddressBodyStateMax = 2;
+
+export const createAddressBodyLatMin = -90;
+export const createAddressBodyLatMax = 90;
+
+export const createAddressBodyLngMin = -180;
+export const createAddressBodyLngMax = 180;
+
+
+
+export const CreateAddressBody = zod.object({
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "cep": zod.string().regex(createAddressBodyCepRegExp),
+  "street": zod.string().min(1).max(createAddressBodyStreetMax),
+  "number": zod.string().min(1).max(createAddressBodyNumberMax),
+  "complement": zod.string().max(createAddressBodyComplementMax).nullish(),
+  "neighborhood": zod.string().min(1).max(createAddressBodyNeighborhoodMax),
+  "city": zod.string().min(1).max(createAddressBodyCityMax),
+  "state": zod.string().min(createAddressBodyStateMin).max(createAddressBodyStateMax).default(createAddressBodyStateDefault),
+  "lat": zod.number().min(createAddressBodyLatMin).max(createAddressBodyLatMax).optional().describe('Junto com `lng`; vem do GPS do aparelho'),
+  "lng": zod.number().min(createAddressBodyLngMin).max(createAddressBodyLngMax).optional(),
+  "isDefault": zod.boolean().optional()
+})
+
+export const CreateAddressResponse = zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Endereço de outra conta responde 404 (não revela existência, SEC-020).
+ * @summary Um endereço meu
+ */
+export const GetAddressParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetAddressResponse = zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu.
+ * @summary Editar endereço
+ */
+export const UpdateAddressParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const updateAddressBodyCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+export const updateAddressBodyStreetMax = 120;
+
+export const updateAddressBodyNumberMax = 20;
+
+export const updateAddressBodyComplementMax = 80;
+
+export const updateAddressBodyNeighborhoodMax = 80;
+
+export const updateAddressBodyCityMax = 80;
+
+export const updateAddressBodyStateMin = 2;
+export const updateAddressBodyStateMax = 2;
+
+export const updateAddressBodyLatMin = -90;
+export const updateAddressBodyLatMax = 90;
+
+export const updateAddressBodyLngMin = -180;
+export const updateAddressBodyLngMax = 180;
+
+
+
+export const UpdateAddressBody = zod.object({
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "cep": zod.string().regex(updateAddressBodyCepRegExp).optional(),
+  "street": zod.string().min(1).max(updateAddressBodyStreetMax).optional(),
+  "number": zod.string().min(1).max(updateAddressBodyNumberMax).optional(),
+  "complement": zod.string().max(updateAddressBodyComplementMax).nullish(),
+  "neighborhood": zod.string().min(1).max(updateAddressBodyNeighborhoodMax).optional(),
+  "city": zod.string().min(1).max(updateAddressBodyCityMax).optional(),
+  "state": zod.string().min(updateAddressBodyStateMin).max(updateAddressBodyStateMax).optional(),
+  "lat": zod.number().min(updateAddressBodyLatMin).max(updateAddressBodyLatMax).optional(),
+  "lng": zod.number().min(updateAddressBodyLngMin).max(updateAddressBodyLngMax).optional(),
+  "isDefault": zod.literal(true).optional()
+})
+
+export const UpdateAddressResponse = zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Apagar o padrão promove o mais antigo restante. Pedidos já feitos guardam a própria cópia do endereço.
+ * @summary Apagar endereço
+ */
+export const DeleteAddressParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteAddressResponse = zod.void()
+
+
+/**
+ * Até 10, por posição. Com `cityId`: os da cidade e os de todas as cidades; sem: só os de todas. Cache de 60 s (`Cache-Control: public, max-age=60`). Imagem 2:1 em variantes WebP por largura.
+ * @summary Banners vigentes da home (público)
+ */
+export const ListBannersQueryParams = zod.object({
+  "cityId": zod.uuid().optional()
+})
+
+export const ListBannersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL pública WebP')
+}),
+  "destination": zod.object({
+  "type": zod.enum(['store', 'category', 'product', 'coupon', 'none']),
+  "id": zod.uuid().nullable(),
+  "code": zod.string().nullable().describe('Código do cupom')
+}),
+  "position": zod.int()
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Permissão de admin: `banners:read`. Inclui inativos e vencidos; `live` diz se está no ar agora.
+ * @summary Todos os banners (admin)
+ */
+export const ListAdminBannersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL pública WebP')
+}),
+  "destination": zod.object({
+  "type": zod.enum(['store', 'category', 'product', 'coupon', 'none']),
+  "id": zod.uuid().nullable(),
+  "code": zod.string().nullable().describe('Código do cupom')
+}),
+  "position": zod.int()
+}).and(zod.object({
+  "cityId": zod.uuid().nullable().describe('Nulo = todas as cidades'),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "active": zod.boolean(),
+  "live": zod.boolean()
+}))),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Permissão de admin: `banners:write`. A imagem vem de `POST /v1/uploads` com `purpose: banner` (sem `storeId`, 2:1) concluído. Destino `store`, `category` ou `product` exige o ID existente; `coupon` exige o código; `none` não leva destino. Auditado.
+ * @summary Criar banner (admin)
+ */
+export const createBannerBodyTitleMax = 80;
+
+export const createBannerBodyDestinationCodeMax = 20;
+
+export const createBannerBodyPositionMin = 0;
+export const createBannerBodyPositionMax = 999;
+
+
+
+export const CreateBannerBody = zod.object({
+  "title": zod.string().min(1).max(createBannerBodyTitleMax),
+  "imageAssetId": zod.uuid(),
+  "cityId": zod.uuid().nullish(),
+  "destinationType": zod.enum(['store', 'category', 'product', 'coupon', 'none']),
+  "destinationId": zod.uuid().nullish(),
+  "destinationCode": zod.string().min(1).max(createBannerBodyDestinationCodeMax).nullish(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "position": zod.int().min(createBannerBodyPositionMin).max(createBannerBodyPositionMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const CreateBannerResponse = zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL pública WebP')
+}),
+  "destination": zod.object({
+  "type": zod.enum(['store', 'category', 'product', 'coupon', 'none']),
+  "id": zod.uuid().nullable(),
+  "code": zod.string().nullable().describe('Código do cupom')
+}),
+  "position": zod.int()
+})
+
+
+/**
+ * Permissão de admin: `banners:write`. Auditado.
+ * @summary Editar banner (admin)
+ */
+export const UpdateBannerParams = zod.object({
+  "bannerId": zod.uuid()
+})
+
+export const updateBannerBodyTitleMax = 80;
+
+export const updateBannerBodyDestinationCodeMax = 20;
+
+export const updateBannerBodyPositionMin = 0;
+export const updateBannerBodyPositionMax = 999;
+
+
+
+export const UpdateBannerBody = zod.object({
+  "title": zod.string().min(1).max(updateBannerBodyTitleMax).optional(),
+  "imageAssetId": zod.uuid().optional(),
+  "cityId": zod.uuid().nullish(),
+  "destinationType": zod.enum(['store', 'category', 'product', 'coupon', 'none']).optional(),
+  "destinationId": zod.uuid().nullish(),
+  "destinationCode": zod.string().min(1).max(updateBannerBodyDestinationCodeMax).nullish(),
+  "startsAt": zod.iso.datetime({"offset":true}).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "position": zod.int().min(updateBannerBodyPositionMin).max(updateBannerBodyPositionMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateBannerResponse = zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL pública WebP')
+}),
+  "destination": zod.object({
+  "type": zod.enum(['store', 'category', 'product', 'coupon', 'none']),
+  "id": zod.uuid().nullable(),
+  "code": zod.string().nullable().describe('Código do cupom')
+}),
+  "position": zod.int()
+})
+
+
+/**
+ * Permissão de admin: `banners:write`. Auditado.
+ * @summary Apagar banner (admin)
+ */
+export const DeleteBannerParams = zod.object({
+  "bannerId": zod.uuid()
+})
+
+export const DeleteBannerResponse = zod.void()
