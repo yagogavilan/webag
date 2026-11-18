@@ -53,6 +53,7 @@ export function Screen({
           ) : (
             <View style={[styles.flex, styles.content]}>{children}</View>
           )}
+          {tablet && !scroll && footer ? <View style={styles.footer}>{footer}</View> : null}
           {!tablet && footer ? <View style={styles.footer}>{footer}</View> : null}
         </View>
       </KeyboardAvoidingView>

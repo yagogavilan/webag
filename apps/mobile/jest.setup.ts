@@ -31,7 +31,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
-jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000000') }));
+jest.mock('expo-crypto', () => {
+  let n = 0;
+  return { randomUUID: jest.fn(() => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`) };
+});
 
 jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
@@ -39,4 +42,5 @@ jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted', canAskAgain: true })),
   getCurrentPositionAsync: jest.fn(async () => ({ coords: { latitude: -23.28, longitude: -46.74 } })),
   reverseGeocodeAsync: jest.fn(async () => []),
+  geocodeAsync: jest.fn(async () => []),
 }));

@@ -188,6 +188,7 @@ export const ptBR = {
     changeAddress: 'Mudar endereço',
     seeCity: 'Ver lojas de {city}',
     approx: 'Região aproximada',
+    cityLoadError: 'Não conseguimos carregar as cidades agora.',
   },
   address: {
     title: 'Seu endereço',
@@ -228,6 +229,8 @@ export const ptBR = {
     menu: 'Opções do endereço',
     current: 'selecionado',
     visitorNote: 'Crie uma conta para salvar mais endereços.',
+    chooseTitle: 'Escolha onde receber',
+    geocodePending: 'Não conseguimos marcar o ponto no mapa. Você poderá confirmar na hora do pedido.',
     useGps: 'Usar minha localização atual',
     deliveringTo: 'Entregando em {place}.',
   },

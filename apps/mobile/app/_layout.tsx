@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { API_URL } from '../src/api/config';
 import { createQueryClient, wireQueryManagers } from '../src/api/query-client';
 import { sessionStore, useSession } from '../src/api/session';
+import { addressStore, useAddresses } from '../src/features/address/store';
 import { ToastProvider } from '../src/components/Toast';
 import { theme } from '../src/theme';
 
@@ -33,6 +34,7 @@ export default function RootLayout() {
   });
   const [timedOut, setTimedOut] = useState(false);
   const session = useSession();
+  const addresses = useAddresses();
 
   useEffect(() => {
     const timer = setTimeout(() => setTimedOut(true), FONT_TIMEOUT_MS);
@@ -41,10 +43,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     void sessionStore.bootstrap();
+    void addressStore.hydrate();
     return wireQueryManagers();
   }, []);
 
-  const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading';
+  const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading' && addresses.status !== 'loading';
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();

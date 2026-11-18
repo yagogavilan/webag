@@ -1,12 +1,15 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { signOut } from '../../src/api/auth-api';
 import { useSession } from '../../src/api/session';
 import { Button } from '../../src/components/Button';
+import { CaretDown } from '../../src/components/icons';
 import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
 import { EmailVerifyBanner } from '../../src/features/auth/EmailVerifyBanner';
+import { addressStore, useCurrentAddress } from '../../src/features/address/store';
+import { addressArea, addressLine } from '../../src/features/address/types';
 import { t } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
@@ -18,9 +21,31 @@ export default function CustomerHome() {
   const router = useRouter();
   const toast = useToast();
   const session = useSession();
+  const address = useCurrentAddress();
 
   return (
     <Screen scroll>
+      {address ? (
+        <Pressable
+          accessibilityHint={t('home.pickAddress')}
+          accessibilityLabel={`${t('home.deliverTo')} ${addressLine(address)}, ${addressArea(address)}`}
+          accessibilityRole="button"
+          onPress={() => router.push('/addresses')}
+          style={styles.address}
+          testID="home.address"
+        >
+          <View style={styles.addressTexts}>
+            <Text color="secondary" variant="caption">
+              {t('home.deliverTo')}
+            </Text>
+            <Text numberOfLines={1} variant="bodyStrong">
+              {addressLine(address)}
+            </Text>
+          </View>
+          <CaretDown color={theme.color.text.primary} size={theme.size.iconMd} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.brandBox}>
         <Text accessibilityRole="header" style={styles.brand} variant="display">
           {t('common.appName')}
@@ -36,7 +61,10 @@ export default function CustomerHome() {
           <Button
             label={t('home.signOut')}
             onPress={() => {
-              void signOut().then(() => toast.show(t('home.signedOut')));
+              // endereço é dado pessoal: não fica no aparelho depois de sair
+              void signOut()
+                .then(() => addressStore.clearAll())
+                .then(() => toast.show(t('home.signedOut')));
             }}
             testID="home.sign-out"
             variant="secondary"
@@ -54,6 +82,8 @@ export default function CustomerHome() {
 }
 
 const styles = StyleSheet.create({
+  address: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin },
+  addressTexts: { flex: 1 },
   brandBox: { gap: theme.space[2], paddingTop: theme.space[10] },
   brand: { color: theme.color.text.brand },
   account: { gap: theme.space[3] },
