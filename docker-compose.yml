@@ -20,7 +20,9 @@ services:
       # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      # -h 127.0.0.1 (TCP): no 1º boot o servidor temporário de inicialização só escuta no socket local; sem -h o healthcheck
+      # dava "saudável" cedo demais e a migração do `pnpm run setup` podia falhar ("Failed query: CREATE SCHEMA").
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
       timeout: 5s
       retries: 20

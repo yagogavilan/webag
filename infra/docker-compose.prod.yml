@@ -246,6 +246,10 @@ services:
     networks:
       webag:
         ipv4_address: 172.30.0.10
+        # A API usa https://FILES_HOST para assinar e ler arquivos: dentro da rede esse nome aponta direto para o nginx
+        # (não depende de o servidor conseguir acessar o próprio IP público).
+        aliases:
+          - ${FILES_HOST}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1']
       interval: 15s
