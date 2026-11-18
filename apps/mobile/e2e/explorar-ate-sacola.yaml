@@ -1,0 +1,62 @@
+# Fluxo crítico: explorar até a sacola (WB-001, 014, 016, 017, 020). Visitante, sem conta.
+# Precisa da API com o seed (pnpm --filter @webag/api seed) e internet. NÃO executado em CI ainda: Maestro exige emulador
+# (ver docs/arquitetura/pendencias-contrato-mobile.md, "E2E").
+#   maestro test e2e/explorar-ate-sacola.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+# endereço: cidade e bairro (sem GPS nem CEP)
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: location.neighborhood-any
+- assertVisible:
+    id: home.address
+- assertVisible:
+    id: home.list
+# loja perto de mim
+- scrollUntilVisible:
+    element:
+      id: 'home.store-.*'
+- tapOn:
+    id: 'home.store-.*'
+- assertVisible:
+    id: store.screen
+# produto
+- tapOn:
+    id: 'store.product-.*'
+- assertVisible:
+    id: product.screen
+# variação, se o produto tiver (escolhe a primeira disponível; esgotada fica inerte)
+- runFlow:
+    when:
+      visible:
+        id: 'product.group-.*'
+    commands:
+      - tapOn:
+          id: 'product.variant-.*'
+- tapOn:
+    id: product.add
+- assertVisible: Adicionado à sacola.
+- tapOn: Ver sacola
+# sacola: loja, item, total do servidor não existe para visitante: mostra o subtotal e a nota
+- assertVisible:
+    id: cart.screen
+- assertVisible:
+    id: cart.store
+- assertVisible:
+    id: 'cart.item-.*'
+- assertVisible:
+    id: cart.visitor-summary
+- assertVisible:
+    id: cart.total
+# aumentar a quantidade muda o total
+- tapOn: Aumentar quantidade
+- assertVisible:
+    id: cart.total
+# visitante vai criar conta para pagar e a sacola fica guardada
+- tapOn:
+    id: cart.submit
+- assertVisible: Criar conta
