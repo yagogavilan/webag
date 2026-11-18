@@ -5,3 +5,4 @@ export { ParametersService } from './parameters.service.js';
 export { FeatureFlagsService } from './feature-flags.service.js';
 export { LegalService, type LegalDocument } from './legal.service.js';
 export { LEGAL_DOCUMENT_TYPES, type LegalDocumentType } from './db/schema.js';
+export { RegionsService } from './regions.service.js';

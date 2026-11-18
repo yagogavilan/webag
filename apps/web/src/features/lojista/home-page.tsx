@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/panel/page-header';
 import { Banner, Button, ButtonLink, QueryBoundary, SkeletonRows, cx, ui, useToast } from '@/components/ui';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { formatClock, formatDateTime } from '@/lib/format';
-import { CATALOG_READY, NEW_PRODUCT_PATH, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
+import { NEW_PRODUCT_PATH, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import s from './lojista.module.css';
 import { draftErrorMessage } from './onboarding/use-draft';
@@ -130,7 +130,6 @@ function InReview({ store }: { store: MerchantStore }) {
           Enviado em {formatDateTime(store.submittedAt).replace(' de ', ' ')}.
         </p>
       ) : null}
-      {CATALOG_READY ? <ButtonLink href={NEW_PRODUCT_PATH as never}>Cadastrar produtos</ButtonLink> : null}
     </div>
   );
 }
@@ -206,7 +205,7 @@ function Corrections({ store }: { store: MerchantStore }) {
 function Approved({ store }: { store: MerchantStore }) {
   const connected = store.payout.status === 'connected';
   const tasks = [
-    { id: 'product', label: 'Cadastrar o primeiro produto', done: store.hasActiveProduct, href: CATALOG_READY ? NEW_PRODUCT_PATH : null },
+    { id: 'product', label: 'Cadastrar o primeiro produto', done: store.hasActiveProduct, href: NEW_PRODUCT_PATH },
     { id: 'hours', label: 'Definir horário', done: store.hasHours, href: null },
     { id: 'sound', label: 'Testar o som dos pedidos', done: false, href: null },
   ];

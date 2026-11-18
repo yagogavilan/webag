@@ -16,6 +16,10 @@ export interface RequestOptions {
   body?: unknown;
   query?: Record<string, string | number | undefined | null>;
   signal?: AbortSignal;
+  /** Corpo em texto puro: a planilha de produtos (`text/csv`). Exclusivo com `body`. */
+  csv?: string;
+  /** `Idempotency-Key` de uma escrita que o aparelho pode repetir (criar produto). */
+  idempotencyKey?: string;
 }
 
 function queryString(query: RequestOptions['query']): string {
@@ -41,8 +45,10 @@ export async function apiRequest<T>(area: Area, path: string, options: RequestOp
         accept: 'application/json',
         'x-webag-client': 'web',
         ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(options.csv !== undefined ? { 'content-type': 'text/csv; charset=utf-8' } : {}),
+        ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.csv !== undefined ? options.csv : options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: 'same-origin',
       signal: options.signal,
     });

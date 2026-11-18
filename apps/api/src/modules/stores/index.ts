@@ -7,3 +7,4 @@ export { presentStore, uuidParam } from './stores.controllers.js';
 export { isStoreVisible } from './domain/visibility.js';
 export { isOpenNow } from './domain/hours.js';
 export { deliveryFee } from './domain/delivery.js';
+export { GEOCODING_PROVIDER, type GeocodingProvider, type CepResult } from './geocoding.js';

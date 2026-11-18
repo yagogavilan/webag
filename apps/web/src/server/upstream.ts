@@ -34,6 +34,10 @@ export interface UpstreamInit {
   body?: string;
   hints?: ClientHints;
   query?: string;
+  /** Padrão `application/json`. A planilha de produtos segue como `text/csv` (única rota que aceita outro tipo). */
+  contentType?: string;
+  /** Repassado como `Idempotency-Key` (criar produto: repetir o envio não duplica). */
+  idempotencyKey?: string;
 }
 
 export interface UpstreamResult {
@@ -45,7 +49,8 @@ export interface UpstreamResult {
 /** Chamada servidor a servidor para a API. Nunca lança por status HTTP; falha de rede vira 503. */
 export async function callApi(path: string, init: UpstreamInit = {}): Promise<UpstreamResult> {
   const headers = new Headers({ accept: 'application/json' });
-  if (init.body !== undefined) headers.set('content-type', 'application/json');
+  if (init.body !== undefined) headers.set('content-type', init.contentType ?? 'application/json');
+  if (init.idempotencyKey) headers.set('idempotency-key', init.idempotencyKey);
   if (init.accessToken) headers.set('authorization', `Bearer ${init.accessToken}`);
   // Só o BFF, com o segredo, pode declarar o IP do cliente (a API ignora o X-Forwarded-For sem ele).
   const secret = bffSecret();

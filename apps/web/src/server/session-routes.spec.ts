@@ -153,6 +153,16 @@ describe('SEC-115: login do admin em 2 passos', () => {
     expect(cookieHeader(done)).toMatch(/wb_admin_reset=;/);
   });
 
+  it('O-2: reset de conta de admin no host do lojista não devolve o ticket ao JS nem grava cookie', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { tokens: null, mfaRequired: true, resetTicket: 'ticket-secreto', expiresIn: 600 }));
+    const res = await proxyPost(post('/api/proxy/lojista/auth/password/reset', { email: 'a@b.c', code: '123456', newPassword: 'Nova-Senha-123' }), ctx('lojista', ['auth', 'password', 'reset']));
+    const text = await res.text();
+    expect(res.status).toBe(403);
+    expect(text).not.toContain('ticket-secreto');
+    expect(JSON.parse(text)).toMatchObject({ code: 'ADMIN_ACCOUNT_USE_ADMIN_PANEL' });
+    expect(cookieHeader(res)).not.toContain('reset=');
+  });
+
   it('reset/complete sem o cookie do ticket não chega à API; no lojista nem existe', async () => {
     const semTicket = await proxyPost(post('/api/proxy/admin/auth/password/reset/complete', { totpCode: '123456', newPassword: 'x' }), ctx('admin', ['auth', 'password', 'reset', 'complete']));
     expect(semTicket.status).toBe(401);

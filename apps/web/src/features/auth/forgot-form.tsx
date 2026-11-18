@@ -59,6 +59,7 @@ export function ForgotForm({ area = 'admin' }: { area?: 'admin' | 'lojista' }) {
       setStage(result?.mfaRequired ? 'mfa' : 'done');
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 422) setFieldError(caught.fieldMessage('newPassword') ?? caught.detail ?? 'Essa senha é muito comum. Escolha outra.');
+      else if (caught instanceof ApiError && caught.code === 'ADMIN_ACCOUNT_USE_ADMIN_PANEL') setError('Esta conta é de administração. Redefina a senha no painel de administração.');
       else setError('Código incorreto ou vencido.');
     } finally {
       setBusy(false);

@@ -190,11 +190,14 @@ async function loadStore(): Promise<MerchantStore | null> {
   if (!store) return null;
   const owner = store.role !== 'staff';
   const optional = <T>(call: Promise<T>): Promise<T | null> => call.catch(() => null);
-  const [full, documents, onboarding, payment] = await Promise.all([
+  // O catálogo só abre com a loja aprovada (409 `STORE_NOT_APPROVED`): antes disso não há o que perguntar.
+  const catalogOpen = store.status === 'approved';
+  const [full, documents, onboarding, payment, activeProducts] = await Promise.all([
     owner ? optional(apiRequest<ApiStore>('lojista', `stores/${store.id}`)) : Promise.resolve(null),
     owner ? optional(apiRequest<{ data: { id: string; kind: string; uploadedAt: string; current: boolean }[] }>('lojista', `stores/${store.id}/documents`)) : Promise.resolve(null),
     owner ? optional(apiRequest<ApiOnboarding>('lojista', `stores/${store.id}/onboarding`)) : Promise.resolve(null),
     owner ? optional(apiRequest<ApiPaymentView>('lojista', `stores/${store.id}/payment-account`)) : Promise.resolve(null),
+    catalogOpen ? optional(apiRequest<{ data: unknown[] }>('lojista', `stores/${store.id}/products`, { query: { status: 'active', limit: 1 } })) : Promise.resolve(null),
   ]);
   const view = { ...store, ...(full ?? {}) };
   const payout: MerchantStore['payout'] = payment?.connected ? { status: payment.status === 'under_review' ? 'under_review' : 'connected', maskedAccount: payment.holderDocumentMasked ? `Titular ${payment.holderDocumentMasked}` : null, simulated: payment.provider === 'fake' } : { status: 'not_connected', maskedAccount: null, simulated: false };
@@ -219,7 +222,7 @@ async function loadStore(): Promise<MerchantStore | null> {
     submittedAt: view.submittedAt,
     decisionReason: view.decisionReason,
     corrections: view.reviewItems.map((item) => ({ id: item.item, target: item.item === 'store_data' ? { type: 'store_data' as const } : { type: 'document' as const, kind: item.item as DocumentKind }, message: item.reason, fixed: false })),
-    hasActiveProduct: false,
+    hasActiveProduct: (activeProducts?.data.length ?? 0) > 0,
     hasHours: (full?.settings?.hours ?? []).some((day) => day.intervals.length > 0),
     slaBusinessDays: 2,
     missing,

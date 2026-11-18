@@ -13,8 +13,12 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
 const ALLOWED: Record<SessionArea, RegExp> = {
   admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
-    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,5})$/,
+    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
 };
+/** Importação de produtos: o corpo é a planilha (`text/csv`, até 1 MB na API; aqui um pouco mais para a API dar o erro certo). */
+const CSV_IMPORT = /^stores\/[0-9a-f-]{36}\/products\/import$/;
+const CSV_MAX_CHARS = 1_200_000;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,80}$/;
 /** Rotas cuja resposta traz tokens novos (a API revoga a sessão anterior): viram cookie e saem do corpo. */
 const ROTATES_TOKENS = new Set(['me/password', 'auth/password/reset']);
 /** Rotas que encerram a sessão atual. */
@@ -32,6 +36,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
 
   const names = cookieNames(area);
   const hints = clientHints(request.headers);
+  const isCsv = CSV_IMPORT.test(joined) && request.method === 'POST' && (request.headers.get('content-type') ?? '').toLowerCase().startsWith('text/csv');
+  if (isCsv && Number(request.headers.get('content-length') ?? 0) > CSV_MAX_CHARS * 2) return problem(413, 'PAYLOAD_TOO_LARGE', 'Arquivo grande demais', 'A planilha passa do limite de 1 MB.');
+  const sentKey = request.headers.get('idempotency-key');
+  const idempotencyKey = sentKey && IDEMPOTENCY_KEY.test(sentKey) && request.method === 'POST' ? sentKey : undefined;
   let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
   const completesReset = area === 'admin' && joined === 'auth/password/reset/complete';
   if (completesReset) {
@@ -41,13 +49,14 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
     if (!ticket || !sent) return problem(401, 'MFA_INVALID', 'Código incorreto ou vencido', 'Código incorreto ou vencido.');
     body = JSON.stringify({ resetTicket: ticket, totpCode: sent.totpCode, newPassword: sent.newPassword });
   }
+  if (isCsv && (body?.length ?? 0) > CSV_MAX_CHARS) return problem(413, 'PAYLOAD_TOO_LARGE', 'Arquivo grande demais', 'A planilha passa do limite de 1 MB.');
   const query = request.nextUrl.search;
 
   let access = request.cookies.get(names.access)?.value ?? null;
   const refresh = request.cookies.get(names.refresh)?.value ?? null;
   let renewed: TokenPair | null = null;
 
-  const send = () => callApi(`/v1/${joined}`, { method: request.method, accessToken: access, body, hints, query });
+  const send = () => callApi(`/v1/${joined}`, { method: request.method, accessToken: access, body, hints, query, ...(isCsv ? { contentType: 'text/csv; charset=utf-8' } : {}), ...(idempotencyKey ? { idempotencyKey } : {}) });
   const renew = async (): Promise<boolean> => {
     if (!refresh) return false;
     renewed = await refreshSession(refresh, hints);
@@ -67,6 +76,12 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
       writeCookies(pending.cookies, [pendingCookie('reset', ticket.resetTicket, ticket.expiresIn)]);
       return pending;
     }
+  }
+
+  // O-2: conta de admin pedindo redefinição no host do lojista. O ticket do 2º fator nunca chega ao JavaScript deste
+  // host (o `complete` só existe no admin, em outro host e outro cookie): descarta o ticket e orienta o caminho certo.
+  if (area !== 'admin' && joined === 'auth/password/reset' && result.status === 200 && parseJson<{ resetTicket?: unknown }>(result.text)?.resetTicket) {
+    return problem(403, 'ADMIN_ACCOUNT_USE_ADMIN_PANEL', 'Esta conta é de administração', 'Redefina a senha no painel de administração.');
   }
 
   const response = respond(result);

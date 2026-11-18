@@ -31,6 +31,23 @@ export class RegionsService {
       }));
   }
 
+  /**
+   * Região atendida de um endereço (RN-03): a cidade precisa existir e estar ativa; o bairro só conta se estiver
+   * cadastrado (bairro cadastrado e inativo bloqueia; bairro não cadastrado segue a regra da cidade).
+   */
+  async resolveServed(cityName: string, state: string, neighborhoodName: string): Promise<{ cityId: string; neighborhoodId: string | null } | null> {
+    const norm = (text: string): string => slugify(text);
+    const [cityRows, hoodRows] = await Promise.all([
+      this.db.select().from(cities).where(eq(cities.state, state.toUpperCase())),
+      this.db.select().from(neighborhoods),
+    ]);
+    const city = cityRows.find((c) => norm(c.name) === norm(cityName));
+    if (!city?.active) return null;
+    const hood = hoodRows.find((h) => h.cityId === city.id && norm(h.name) === norm(neighborhoodName));
+    if (hood && !hood.active) return null;
+    return { cityId: city.id, neighborhoodId: hood?.id ?? null };
+  }
+
   async createCity(input: { name: string; state: string; active: boolean }, ctx: RequestContext): Promise<City> {
     try {
       return await this.db.transaction(async (tx) => {

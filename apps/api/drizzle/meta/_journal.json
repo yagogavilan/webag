@@ -64,6 +64,13 @@
       "when": 1795021845314,
       "tag": "0008_catalog_idempotency_store_review_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795023197607,
+      "tag": "0009_onda3_addresses_banners",
+      "breakpoints": true
     }
   ]
 }

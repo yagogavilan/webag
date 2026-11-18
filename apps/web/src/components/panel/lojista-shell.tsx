@@ -1,6 +1,6 @@
 'use client';
 
-import { House, Question, SignOut, Storefront, UsersThree } from '@phosphor-icons/react';
+import { House, Package, Question, SignOut, Storefront, UsersThree } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -16,7 +16,7 @@ import { useOnline } from '@/lib/use-online';
 import s from './lojista-shell.module.css';
 
 type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'duotone'; 'aria-hidden'?: boolean | 'true' }>;
-const ICONS: Record<LojistaSection, IconType> = { inicio: House, loja: Storefront, equipe: UsersThree };
+const ICONS: Record<LojistaSection, IconType> = { inicio: House, produtos: Package, loja: Storefront, equipe: UsersThree };
 
 /** Sessão perdida, sair e aviso de volta à rede: comportamento comum ao painel e ao fluxo de cadastro. */
 function useShellBehavior() {

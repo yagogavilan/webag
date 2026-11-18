@@ -279,7 +279,22 @@ fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; 
   background: var(--wb-color-surface-inverse);
   color: var(--wb-color-text-inverse);
   box-shadow: var(--wb-shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-4);
 }
+.toastAction {
+  flex: none;
+  min-height: var(--wb-size-touch-min);
+  min-width: var(--wb-size-touch-min);
+  padding: 0 var(--wb-space-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.toastAction:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
 
 /* ---- Menu, tabs, chips ---- */
 .menuWrap { position: relative; display: inline-block; }

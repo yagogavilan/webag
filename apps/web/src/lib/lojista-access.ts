@@ -11,7 +11,7 @@ export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   suspended: 'Suspensa',
 };
 
-export type LojistaSection = 'inicio' | 'loja' | 'equipe';
+export type LojistaSection = 'inicio' | 'produtos' | 'loja' | 'equipe';
 
 export interface LojistaNavItem {
   section: LojistaSection;
@@ -23,6 +23,7 @@ export interface LojistaNavItem {
 
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
   { section: 'inicio', label: 'Início', href: '/lojista' },
+  { section: 'produtos', label: 'Produtos', href: '/lojista/produtos' },
   { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
   { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', ownerOnly: true },
 ];
@@ -68,8 +69,7 @@ export function supportHref(): string {
   return number ? `https://wa.me/${number}` : 'https://wa.me/';
 }
 
-/** O catálogo (sub-onda 2B) ainda não existe: "Cadastrar produtos" só aparece quando a rota existir. */
-export const CATALOG_READY = false;
+/** O catálogo só abre com a loja aprovada (API: 409 `STORE_NOT_APPROVED`); por isso o atalho só aparece depois da aprovação. */
 export const NEW_PRODUCT_PATH = '/lojista/produtos/novo';
 
 /** Documento do dono mascarado na revisão: só os 4 últimos caracteres (minimização). */

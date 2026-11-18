@@ -10,7 +10,7 @@ import { apiRequest } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { maskPhone } from '@/lib/br/mask';
-import { CATALOG_READY, NEW_PRODUCT_PATH, maskedDocument, onboardingPath } from '@/lib/lojista-access';
+import { maskedDocument, onboardingPath } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import { DOCUMENT_LABEL, REQUIRED_DOCUMENTS } from '../doc-slot';
 import { STORE_KEY } from '../store-context';
@@ -183,12 +183,7 @@ function Submitted({ store }: { store: MerchantStore }) {
         Respondemos em até {store.slaBusinessDays} dias úteis.
       </p>
       <div className={s.formCol} style={{ width: '100%' }}>
-        {CATALOG_READY ? (
-          <ButtonLink href={NEW_PRODUCT_PATH as never} size="lg" data-testid={ltid('revisao', 'success-add-products')}>
-            Cadastrar produtos
-          </ButtonLink>
-        ) : null}
-        <ButtonLink href="/lojista" size="lg" variant={CATALOG_READY ? 'text' : 'primary'} data-testid={ltid('revisao', 'success-status')}>
+        <ButtonLink href="/lojista" size="lg" data-testid={ltid('revisao', 'success-status')}>
           Ver andamento
         </ButtonLink>
       </div>
