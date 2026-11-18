@@ -1,4 +1,3 @@
-import { MODERATION_READY } from './api/admin-moderation';
 import type { AdminProfile } from './session-types';
 
 /**
@@ -77,7 +76,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 export function visibleNav(profile: AdminProfile | null): NavItem[] {
-  return NAV_ITEMS.filter((item) => (item.section !== 'moderacao' || MODERATION_READY) && canView(profile, item.section));
+  return NAV_ITEMS.filter((item) => canView(profile, item.section));
 }
 
 /** Destino pós-login seguro: só caminhos internos do admin (evita open redirect). */

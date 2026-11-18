@@ -23,7 +23,7 @@ export function ModerationRulesPage() {
   const [word, setWord] = useState('');
   const [category, setCategory] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const rules = useQuery({ queryKey: moderationKeys.rules, queryFn: moderationApi.rules, enabled: act });
+  const rules = useQuery({ queryKey: moderationKeys.terms, queryFn: moderationApi.terms, enabled: act });
   const categories = useQuery({ queryKey: keys.categories, queryFn: adminApi.categories, enabled: act });
   if (!act) return <NoAccessState />;
 
@@ -31,7 +31,7 @@ export function ModerationRulesPage() {
     setError(null);
     try {
       await action();
-      await client.invalidateQueries({ queryKey: moderationKeys.rules });
+      await client.invalidateQueries({ queryKey: moderationKeys.terms });
       toast.show(message);
     } catch (caught) {
       setError(saveErrorMessage(caught));
@@ -42,7 +42,8 @@ export function ModerationRulesPage() {
     event.preventDefault();
     const value = word.trim();
     if (value.length < 2) return setError('Escreva a palavra (mínimo 2 letras).');
-    await run(() => moderationApi.addWord(value), 'Palavra adicionada.');
+    if (/\s/.test(value)) return setError('Escreva uma palavra só. Para várias, adicione uma de cada vez.');
+    await run(() => moderationApi.addTerm('suspect_word', value), 'Palavra adicionada.');
     setWord('');
   }
 
@@ -53,7 +54,10 @@ export function ModerationRulesPage() {
       <PageHeader title="Regras de moderação" description="Produtos novos que combinarem entram em Revisar. Nada é bloqueado sozinho." action={<Link href={asRoute('/admin/moderacao')}>Voltar à moderação</Link>} />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <QueryBoundary query={rules} skeleton={<SkeletonRows rows={3} height={56} label="Carregando as regras" />}>
-        {(data) => (
+        {(response) => {
+          const words = response.data.filter((term) => term.kind === 'suspect_word');
+          const forbidden = response.data.filter((term) => term.kind === 'forbidden_category');
+          return (
           <>
             <section className={ui.card} aria-labelledby="palavras">
               <div className={ui.stack}>
@@ -63,11 +67,11 @@ export function ModerationRulesPage() {
                   <Button type="submit" data-testid={T('rule-word-add')}>Adicionar</Button>
                 </form>
                 <ul className={ui.row} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {data.words.map((item) => (
+                  {words.map((item) => (
                     <li key={item.id}>
                       <span className={cx(ui.chip, 'wb-text-body')}>
-                        {item.value}
-                        <button type="button" className={ui.iconButton} aria-label={`Remover a palavra ${item.value}`} onClick={() => void run(() => moderationApi.removeWord(item.id), 'Palavra removida.')} data-testid={T(`rule-word-${item.id}-remove`)}>
+                        {item.label ?? item.value}
+                        <button type="button" className={ui.iconButton} aria-label={`Remover a palavra ${item.label ?? item.value}`} onClick={() => void run(() => moderationApi.removeTerm(item.id), 'Palavra removida.')} data-testid={T(`rule-word-${item.id}-remove`)}>
                           x
                         </button>
                       </span>
@@ -86,14 +90,14 @@ export function ModerationRulesPage() {
                       <option key={node.id} value={node.id}>{node.name}</option>
                     ))}
                   </SelectField>
-                  <Button variant="secondary" disabled={!category} onClick={() => void run(() => moderationApi.addCategory(category), 'Categoria adicionada.')} data-testid={T('rule-category-add')}>Adicionar</Button>
+                  <Button variant="secondary" disabled={!category} onClick={() => void run(() => moderationApi.addTerm('forbidden_category', category), 'Categoria adicionada.')} data-testid={T('rule-category-add')}>Adicionar</Button>
                 </div>
                 <ul className={ui.row} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {data.categories.map((item) => (
+                  {forbidden.map((item) => (
                     <li key={item.id}>
                       <span className={cx(ui.chip, 'wb-text-body')}>
-                        {item.name}
-                        <button type="button" className={ui.iconButton} aria-label={`Remover a categoria ${item.name}`} onClick={() => void run(() => moderationApi.removeCategory(item.id), 'Categoria removida.')}>x</button>
+                        {item.label ?? item.value}
+                        <button type="button" className={ui.iconButton} aria-label={`Remover a categoria ${item.label ?? item.value}`} onClick={() => void run(() => moderationApi.removeTerm(item.id), 'Categoria removida.')}>x</button>
                       </span>
                     </li>
                   ))}
@@ -101,7 +105,8 @@ export function ModerationRulesPage() {
               </div>
             </section>
           </>
-        )}
+          );
+        }}
       </QueryBoundary>
     </div>
   );
