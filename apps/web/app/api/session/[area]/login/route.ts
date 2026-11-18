@@ -23,7 +23,8 @@ const INVALID = () => problem(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incor
 
 /**
  * Login do painel. Os tokens ficam em cookie HttpOnly; o corpo da resposta só diz o que o navegador precisa saber.
- * Quem não tem o papel da área recebe a MESMA mensagem de senha errada e a sessão recém-criada é revogada (WB-100 C4, SEC-106).
+ * Quem não pode abrir a área (admin no painel do lojista, não-admin no admin) recebe a MESMA mensagem de senha errada e a
+ * sessão recém-criada é revogada (WB-100 C4, SEC-106).
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ area: string }> }) {
   const { area } = await context.params;
@@ -50,7 +51,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   if (!body.mfaSetupRequired) {
     const me = await callApi('/v1/me', { accessToken: body.tokens.accessToken, hints });
     const user = parseJson<Me>(me.text);
-    const allowed = user && (area === 'admin' ? user.adminProfile !== null : user.roles.includes('merchant'));
+    // Lojista: cliente sem loja também entra (vê "Você ainda não tem uma loja", onda-1b E7); credencial de admin, não.
+    const allowed = user && (area === 'admin' ? user.adminProfile !== null : user.adminProfile === null);
     if (!allowed) {
       await callApi('/v1/auth/logout', { method: 'POST', accessToken: body.tokens.accessToken, hints });
       return INVALID();

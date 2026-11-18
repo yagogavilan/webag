@@ -11,10 +11,11 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
  */
 const ALLOWED: Record<SessionArea, RegExp> = {
   admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset))|legal\/[a-z_]+)$/,
-  lojista: /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset))|legal\/[a-z_]+)$/,
+  lojista:
+    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|geo\/cep\/\d{8}|uploads(\/[0-9a-f-]{36}\/complete)?|store-invitations\/[A-Za-z0-9_-]{20,200})$/,
 };
 /** Rotas cuja resposta traz tokens novos (a API revoga a sessão anterior): viram cookie e saem do corpo. */
-const ROTATES_TOKENS = new Set(['me/password']);
+const ROTATES_TOKENS = new Set(['me/password', 'auth/password/reset']);
 /** Rotas que encerram a sessão atual. */
 const ENDS_SESSION = new Set(['auth/logout-all']);
 
@@ -52,7 +53,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   if (renewed) writeCookies(response.cookies, sessionCookies(area, renewed));
   if (result.status === 401 && !renewed && refresh) writeCookies(response.cookies, clearedCookies(area));
   if (result.status < 400 && ENDS_SESSION.has(joined)) writeCookies(response.cookies, clearedCookies(area));
-  if (result.status < 400 && ROTATES_TOKENS.has(joined)) {
+  // Redefinir senha só abre sessão para o lojista; o admin sempre passa pelo 2º fator (SEC-095).
+  if (result.status < 400 && ROTATES_TOKENS.has(joined) && (joined !== 'auth/password/reset' || area === 'lojista')) {
     const tokens = parseJson<{ tokens?: TokenPair }>(result.text)?.tokens;
     if (tokens) {
       writeCookies(response.cookies, sessionCookies(area, tokens));

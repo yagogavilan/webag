@@ -1,7 +1,7 @@
 'use client';
 
 import { ClipboardText, FileText, Flag, List, MapPin, SidebarSimple, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
@@ -9,6 +9,7 @@ import { ActionMenu, Banner, ToastProvider, cx, ui, useToast } from '@/component
 import { PROFILE_LABEL, visibleNav, type AdminSection } from '@/lib/admin-access';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import type { Me } from '@/lib/session-types';
+import { createPanelQueryClient } from '@/lib/query-client';
 import { useOnline } from '@/lib/use-online';
 import { IdleGuard } from './idle-guard';
 import { ReauthProvider } from './reauth';
@@ -138,14 +139,7 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
 }
 
 export function AdminShell({ user, children }: { user: Me; children: ReactNode }) {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { staleTime: 30_000, retry: (count, error) => count < 2 && !(error instanceof Error && 'status' in error && typeof error.status === 'number' && error.status >= 400 && error.status < 500), refetchOnWindowFocus: true },
-        },
-      }),
-  );
+  const [client] = useState(createPanelQueryClient);
   return (
     <QueryClientProvider client={client}>
       <ToastProvider>

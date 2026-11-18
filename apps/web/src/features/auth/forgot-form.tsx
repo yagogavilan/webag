@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Banner, Button, NewPasswordPair, OtpInput, TextField, ui } from '@/components/ui';
 import { apiRequest } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
-import { tid } from '@/lib/testid';
+import { ltid, tid } from '@/lib/testid';
 import { AuthCard } from './auth-card';
 import s from './auth.module.css';
 
@@ -13,7 +14,10 @@ import s from './auth.module.css';
  * Esqueci a senha do admin [HIPÓTESE Z-3]: e-mail, código recebido e nova senha. Redefinir NÃO abre sessão para admin;
  * o próximo login continua exigindo o código do autenticador, então o 2º fator nunca é dispensado.
  */
-export function ForgotForm() {
+export function ForgotForm({ area = 'admin' }: { area?: 'admin' | 'lojista' }) {
+  const router = useRouter();
+  const t = area === 'admin' ? tid : ltid;
+  const loginHref = `/${area}/entrar` as const;
   const [stage, setStage] = useState<'email' | 'reset' | 'done'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -30,7 +34,7 @@ export function ForgotForm() {
     setError(null);
     setBusy(true);
     try {
-      await apiRequest('admin', 'auth/password/forgot', { method: 'POST', body: { email: email.trim() } });
+      await apiRequest(area, 'auth/password/forgot', { method: 'POST', body: { email: email.trim() } });
       setStage('reset');
     } catch (caught) {
       setError(caught instanceof ApiError && caught.status === 429 ? 'Muitas tentativas. Espere alguns minutos e tente de novo.' : 'Não foi possível enviar o código. Tente de novo.');
@@ -48,7 +52,8 @@ export function ForgotForm() {
     setFieldError(undefined);
     setBusy(true);
     try {
-      await apiRequest('admin', 'auth/password/reset', { method: 'POST', body: { email: email.trim(), code, newPassword: password } });
+      await apiRequest(area, 'auth/password/reset', { method: 'POST', body: { email: email.trim(), code, newPassword: password } });
+      if (area === 'lojista') return router.replace('/lojista');
       setStage('done');
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 422) setFieldError(caught.fieldMessage('newPassword') ?? caught.detail ?? 'Essa senha é muito comum. Escolha outra.');
@@ -60,34 +65,34 @@ export function ForgotForm() {
 
   if (stage === 'done') {
     return (
-      <AuthCard title="Senha redefinida">
+      <AuthCard area={area} title="Senha redefinida">
         <p className="wb-text-body" style={{ margin: 0 }}>Entre com a nova senha. Ainda vamos pedir o código do seu app autenticador.</p>
-        <Link href="/admin/entrar" className={s.link}>Ir para o login</Link>
+        <Link href={loginHref} className={s.link}>Ir para o login</Link>
       </AuthCard>
     );
   }
 
   if (stage === 'reset') {
     return (
-      <AuthCard title="Crie uma nova senha">
+      <AuthCard area={area} title="Crie uma nova senha">
         <form onSubmit={reset} className={ui.stack} noValidate>
           <p className="wb-text-body" style={{ margin: 0 }}>Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos.</p>
-          <OtpInput value={code} onChange={setCode} invalid={Boolean(error)} testId={tid('forgot', 'code-input')} label="Código recebido por e-mail" />
-          <NewPasswordPair password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} passwordError={fieldError} testIds={{ password: tid('forgot', 'password-input'), confirm: tid('forgot', 'password-confirm-input'), toggle: tid('forgot', 'password-toggle') }} passwordLabel="Nova senha" />
+          <OtpInput value={code} onChange={setCode} invalid={Boolean(error)} testId={t('forgot', 'code-input')} label="Código recebido por e-mail" />
+          <NewPasswordPair password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} passwordError={fieldError} testIds={{ password: t('forgot', 'password-input'), confirm: t('forgot', 'password-confirm-input'), toggle: t('forgot', 'password-toggle') }} passwordLabel="Nova senha" />
           {error ? <Banner tone="danger">{error}</Banner> : null}
-          <Button type="submit" size="lg" loading={busy} loadingLabel="Salvando…" data-testid={tid('forgot', 'submit')}>Redefinir senha</Button>
+          <Button type="submit" size="lg" loading={busy} loadingLabel="Salvando…" data-testid={t('forgot', 'submit')}>Redefinir senha</Button>
         </form>
       </AuthCard>
     );
   }
 
   return (
-    <AuthCard title="Esqueci a senha">
+    <AuthCard area={area} title="Esqueci a senha">
       <form onSubmit={sendEmail} className={ui.stack} noValidate>
-        <TextField label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" error={fieldError} data-testid={tid('forgot', 'email-input')} />
+        <TextField label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" error={fieldError} data-testid={t('forgot', 'email-input')} />
         {error ? <Banner tone="danger">{error}</Banner> : null}
-        <Button type="submit" size="lg" loading={busy} loadingLabel="Enviando…" data-testid={tid('forgot', 'email-submit')}>Enviar código</Button>
-        <Link href="/admin/entrar" className={s.link}>Voltar</Link>
+        <Button type="submit" size="lg" loading={busy} loadingLabel="Enviando…" data-testid={t('forgot', 'email-submit')}>Enviar código</Button>
+        <Link href={loginHref} className={s.link}>Voltar</Link>
       </form>
     </AuthCard>
   );

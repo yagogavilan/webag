@@ -7,10 +7,13 @@ import { callApi, clientHints, parseJson } from '@/server/upstream';
 
 const bodySchema = z.strictObject({ token: z.string().min(20).max(200), password: z.string().min(1).max(1000) });
 
-/** Aceitar convite de admin cria a senha e abre uma sessão sem 2º fator: o painel só libera a configuração do TOTP. */
+/**
+ * Aceitar convite cria a senha e abre a sessão. Admin entra sem 2º fator: o painel só libera a configuração do TOTP.
+ * Funcionário de loja (L10) entra direto, só com o que a permissão libera.
+ */
 export async function POST(request: NextRequest, context: { params: Promise<{ area: string }> }) {
   const { area } = await context.params;
-  if (area !== 'admin' || !isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (!isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
   if (csrfProblem(request)) return problem(403, 'CSRF', 'Requisição recusada');
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
@@ -20,9 +23,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   if (result.status !== 200) {
     return new NextResponse(result.text || null, { status: result.status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
   }
-  const body = parseJson<{ tokens: TokenPair }>(result.text);
+  const body = parseJson<{ tokens: TokenPair; mfaSetupRequired?: boolean }>(result.text);
   if (!body) return problem(502, 'BAD_UPSTREAM', 'Resposta inesperada da API');
-  const response = NextResponse.json({ mfaSetupRequired: true }, { headers: { 'cache-control': 'no-store' } });
+  const response = NextResponse.json({ mfaSetupRequired: area === 'admin' ? true : Boolean(body.mfaSetupRequired) }, { headers: { 'cache-control': 'no-store' } });
   writeCookies(response.cookies, sessionCookies(area, body.tokens));
   return response;
 }

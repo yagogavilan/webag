@@ -3,24 +3,39 @@ import { cookieNames, sessionCookies } from '@/server/cookies';
 import { refreshSession } from '@/server/refresh';
 
 /**
- * Proxy (antigo middleware) do painel admin:
+ * Proxy (antigo middleware) dos painéis admin e lojista (cada área com o seu par de cookies, SEC-106):
  * 1. CSP com nonce e demais cabeçalhos de segurança;
  * 2. renova o access token (cookie de 15 min) usando o refresh antes de renderizar;
  * 3. sem sessão, manda para o login. É só conveniência: a API autoriza de verdade.
  */
-const { access: AT, refresh: RT } = cookieNames('admin');
+type Area = 'admin' | 'lojista';
 
-const PUBLIC_ADMIN_PATHS = ['/admin/entrar', '/admin/convite', '/admin/esqueci-a-senha'];
+const PUBLIC_PATHS: Record<Area, string[]> = {
+  admin: ['/admin/entrar', '/admin/convite', '/admin/esqueci-a-senha'],
+  lojista: ['/lojista/entrar', '/lojista/cadastro', '/lojista/convite', '/lojista/esqueci-a-senha'],
+};
+
+/** Origem do armazenamento de objetos (upload direto com POST pré-assinado e documentos por URL assinada, ADR-005). */
+function storageOrigin(): string {
+  const raw = process.env.STORAGE_ORIGIN?.trim();
+  if (!raw) return '';
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return '';
+  }
+}
 
 function csp(nonce: string): string {
   const dev = process.env.NODE_ENV !== 'production';
+  const storage = storageOrigin();
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${storage ? ` ${storage}` : ''}`,
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src 'self'${storage ? ` ${storage}` : ''}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -30,6 +45,9 @@ function csp(nonce: string): string {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  const area: Area = pathname === '/lojista' || pathname.startsWith('/lojista/') ? 'lojista' : 'admin';
+  const { access: AT, refresh: RT } = cookieNames(area);
+  const home = `/${area}`;
   const nonce = btoa(crypto.randomUUID());
   const policy = csp(nonce);
 
@@ -48,7 +66,7 @@ export async function proxy(request: NextRequest) {
       deviceId: null,
     });
     if (pair) {
-      refreshed = sessionCookies('admin', pair);
+      refreshed = sessionCookies(area, pair);
       hasSession = true;
       const merged = request.cookies
         .getAll()
@@ -59,13 +77,13 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const isPublic = PUBLIC_ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const isPublic = PUBLIC_PATHS[area].some((p) => pathname === p || pathname.startsWith(`${p}/`));
   let response: NextResponse;
   if (!hasSession && !isPublic) {
     const url = request.nextUrl.clone();
-    url.pathname = '/admin/entrar';
+    url.pathname = `${home}/entrar`;
     url.search = '';
-    if (pathname !== '/admin') url.searchParams.set('next', `${pathname}${search}`);
+    if (pathname !== home) url.searchParams.set('next', `${pathname}${search}`);
     response = NextResponse.redirect(url);
     if (refreshToken) {
       // Refresh recusado: limpa para não tentar de novo a cada requisição.
@@ -81,4 +99,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ['/admin/:path*'] };
+export const config = { matcher: ['/admin/:path*', '/lojista/:path*'] };

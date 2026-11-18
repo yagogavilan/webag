@@ -22,6 +22,7 @@ export const getSession = cache(async (area: SessionArea): Promise<SessionState>
   const user = parseJson<Me>(result.text);
   if (!user) return { status: 'anonymous' };
   if (area === 'admin' && !user.adminProfile) return { status: 'anonymous' };
-  if (area === 'lojista' && !user.roles.includes('merchant')) return { status: 'anonymous' };
+  // Lojista: cliente sem loja também tem sessão aqui (a tela diz "Você ainda não tem uma loja"); admin não (SEC-106).
+  if (area === 'lojista' && user.adminProfile) return { status: 'anonymous' };
   return { status: 'ok', user };
 });

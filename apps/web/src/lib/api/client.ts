@@ -62,8 +62,8 @@ export async function apiRequest<T>(area: Area, path: string, options: RequestOp
   return (await response.json()) as T;
 }
 
-/** Chamada às rotas de sessão do BFF (login, logout, convite). Não dispara "sessão perdida". */
-export async function sessionRequest<T>(area: Area, action: 'login' | 'logout' | 'accept-invite', body?: unknown): Promise<T> {
+/** Chamada às rotas de sessão do BFF (login, logout, convite, cadastro do lojista). Não dispara "sessão perdida". */
+export async function sessionRequest<T>(area: Area, action: 'login' | 'logout' | 'accept-invite' | 'register', body?: unknown): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api/session/${area}/${action}`, {
