@@ -61,6 +61,7 @@ jest.mock('expo-router', () => {
     useRouter: () => router,
     useLocalSearchParams: jest.fn(() => ({})),
     useNavigation: () => ({ addListener: () => () => undefined, isFocused: () => true }),
+    usePathname: () => '/store/s1',
     useFocusEffect: (cb: () => void) => cb(),
     Redirect: () => null,
     Stack: Object.assign(() => null, { Screen: () => null }),

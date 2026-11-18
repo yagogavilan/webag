@@ -405,6 +405,7 @@ export const ptBR = {
     emptyText: 'Toque no coração das lojas e produtos de que gostar.',
     emptyAction: 'Explorar lojas',
     removed: 'Removido dos favoritos.',
+    saved: 'Salvo nos favoritos.',
     undo: 'Desfazer',
     removeError: 'Não foi possível remover. Tentar de novo.',
     saveError: 'Não foi possível salvar o favorito. Tente de novo.',

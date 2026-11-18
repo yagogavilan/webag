@@ -65,3 +65,10 @@ export function closedLabel(opensAt: string | null, now?: Date): string {
 export function pluralize(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
+
+/** "18:00" do intervalo de hoje que contém agora (loja aberta); sem intervalo ativo: null. */
+export function closesAtToday(hours: readonly { start: string; end: string }[], now: Date = new Date()): string | null {
+  const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const active = hours.find((h) => h.start <= current && current < h.end);
+  return active ? active.end : null;
+}

@@ -1,7 +1,7 @@
 import type { Category, CategoryNode } from '@webag/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { fetchBanners, fetchCategories, fetchHome } from '../../api/catalog-api';
+import { fetchBanners, fetchCategories, fetchHome, fetchProduct, fetchProductReviews, fetchStore, fetchStoreProducts, fetchStoreReviews } from '../../api/catalog-api';
 import { fetchRegions } from '../../api/auth-api';
 import { createPersistedStore } from '../../lib/persisted-store';
 import { findActiveCity } from '../address/regions';
@@ -73,4 +73,41 @@ export function useCategoryNames(): { names: ReadonlyMap<string, string>; tree: 
     });
     return { names, tree: roots, isLoading: query.isLoading };
   }, [tree, query.isLoading]);
+}
+
+// ---- Loja e produto ----
+
+export function useStoreQuery(storeId: string | undefined, point: DeliveryPoint | null) {
+  return useQuery({
+    queryKey: ['store', storeId, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null],
+    queryFn: () => fetchStore(storeId ?? '', point ? { lat: point.lat, lng: point.lng } : undefined),
+    enabled: Boolean(storeId),
+    staleTime: 60_000,
+  });
+}
+
+export function useStoreProductsQuery(storeId: string | undefined, sectionId: string | null) {
+  return useInfiniteQuery({
+    queryKey: ['store-products', storeId, sectionId],
+    queryFn: ({ pageParam }) => fetchStoreProducts(storeId ?? '', { limit: 20, ...(sectionId ? { sectionId } : {}), ...(pageParam ? { cursor: pageParam } : {}) }),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: Boolean(storeId),
+    staleTime: 60_000,
+  });
+}
+
+export function useProductQuery(productId: string | undefined) {
+  return useQuery({ queryKey: ['product', productId], queryFn: () => fetchProduct(productId ?? ''), enabled: Boolean(productId), staleTime: 30_000 });
+}
+
+export function useReviewsQuery(kind: 'store' | 'product', id: string | undefined) {
+  return useInfiniteQuery({
+    queryKey: ['reviews', kind, id],
+    queryFn: ({ pageParam }) => (kind === 'store' ? fetchStoreReviews(id ?? '', pageParam || undefined) : fetchProductReviews(id ?? '', pageParam || undefined)),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: Boolean(id),
+    staleTime: 60_000,
+  });
 }
