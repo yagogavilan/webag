@@ -128,7 +128,7 @@ O bloqueante B1 está corrigido e tem teste; I1 a I8 estão corrigidos no códig
 | I7 parte 2: links de reativação antigos continuam válidos? | **Não: só o mais novo vale** | `totp.service.ts:343-347`: na mesma transação do reset, todo convite `kind='admin'` do mesmo e-mail, sem uso e sem revogação, recebe `revokedAt`. O aceite (`admin-users.service.ts:141`) recusa convite revogado com 410 | O mesmo teste: o primeiro link devolve 410, o segundo 200, e não sobra convite pendente. Observação: a revogação é por e-mail e inclui convite de admin novo ainda pendente para o mesmo endereço, o que é o comportamento desejado |
 | I8 `TRUST_PROXY` | **Corrigido** | `env.ts:138-139`: em produção a variável é obrigatória (sem padrão); lista de IP/CIDR aceita e CIDR que confia na internet (`0.0.0.0/0`) é recusado (`env.spec.ts:91-93`) | `env.spec.ts:66` ("TRUST_PROXY ausente") |
 | I9 retenção (SEC-075) | **Aberta** | Nenhum job de retenção no código (`grep` por retenção só acha parâmetros). DT-021 segue "Aberta" | Sem teste. **Continua condição do G4** |
-| I10 chave única | **Corrigido** | `env.ts:74`: `MFA_ENC_KEY` própria, separada da `AUTH_HMAC_KEY` (DT-018 fechada) | `production-boot` cobre as chaves de desenvolvimento |
+| I10 chave única | **Corrigido** | `env.ts:74`: `MFA_ENC_KEY` própria, separada da `AUTH_HMAC_KEY` (DT-018 fechada) | `production-boot.e2e-spec.ts` sobe com as quatro chaves separadas; a recusa da chave de desenvolvimento está em `env.ts:120` (`env.spec.ts`) |
 
 ## Pontos novos achados na reverificação (não bloqueiam a aprovação)
 
@@ -142,5 +142,5 @@ O bloqueante B1 está corrigido e tem teste; I1 a I8 estão corrigidos no códig
 ## Decisão sobre a lista original do review
 
 - B1 e I1 a I8: fechados. I10: fechado. I9: aberto (DT-021, G4).
-- S1 a S11: não reverificados aqui (sugestões); S1 (corrida do contador do MFA), S2 (guards globais dentro de `IdentityModule`) e S3 (acesso direto ao `db` em `account.controller.ts`) continuam valendo e entram no backlog da Onda 4A.
+- S1 a S11: não reverificados aqui (eram sugestões). Tratar S1 (corrida do contador do MFA), S2 (guards globais dentro de `IdentityModule`) e S3 (acesso direto ao `db` em `account.controller.ts`) como abertos até conferência e levar ao backlog da Onda 4A.
 - O QA e o Security já podem tratar a Onda 1 como aceita (DEC-026), com I9 como condição de G4 e N1 como condição da Onda 4A.
