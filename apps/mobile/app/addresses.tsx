@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { ApiError } from '../src/api/problem';
+import { deleteRemoteAddress, setRemoteDefault } from '../src/api/addresses-api';
 import { useSession } from '../src/api/session';
 import { Banner } from '../src/components/Banner';
 import { Button } from '../src/components/Button';
@@ -17,6 +19,7 @@ import { addressStore, useAddresses } from '../src/features/address/store';
 import { addressArea, addressLine, MAX_ADDRESSES, type Address } from '../src/features/address/types';
 import { t } from '../src/i18n';
 import { haptic } from '../src/lib/haptics';
+import { useOnline } from '../src/lib/useOnline';
 import { theme } from '../src/theme';
 
 /** D3. Meus endereços e seletor "Entregar em" (WB-003). Tocar numa linha troca o endereço na hora, sem botão de confirmar. */
@@ -24,6 +27,7 @@ export default function AddressesScreen() {
   const router = useRouter();
   const toast = useToast();
   const session = useSession();
+  const online = useOnline();
   const state = useAddresses();
   const [menuFor, setMenuFor] = useState<Address | null>(null);
   const [deleting, setDeleting] = useState<Address | null>(null);
@@ -37,6 +41,8 @@ export default function AddressesScreen() {
 
   const choose = async (address: Address) => {
     await addressStore.setCurrent(address.id);
+    // o endereço padrão da conta acompanha a escolha (melhor esforço: o atual já vale no aparelho)
+    if (address.remote) void setRemoteDefault(address.id).catch(() => undefined);
     toast.show(t('address.deliveringTo', { place: addressLine(address) }));
     router.replace('/');
   };
@@ -54,6 +60,24 @@ export default function AddressesScreen() {
   const confirmDelete = async () => {
     if (!deleting) return;
     const target = deleting;
+    if (target.remote) {
+      if (!online) {
+        setDeleting(null);
+        toast.show(t('address.offlineDelete'));
+        return;
+      }
+      try {
+        await deleteRemoteAddress(target.id);
+      } catch (error) {
+        // 404: já não existe no servidor, então sai do cache também
+        if (!(error instanceof ApiError && error.status === 404)) {
+          setDeleting(null);
+          void haptic('error');
+          toast.show(t('address.deleteError'));
+          return;
+        }
+      }
+    }
     setDeleting(null);
     const { hasCurrent, wasCurrent } = await addressStore.remove(target.id);
     void haptic('success');

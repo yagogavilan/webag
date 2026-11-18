@@ -13,6 +13,7 @@ import { Skeleton } from '../src/components/Skeleton';
 import { ErrorState } from '../src/components/StateViews';
 import { Text } from '../src/components/Text';
 import { useToast } from '../src/components/Toast';
+import { locateCity } from '../src/features/address/city-centers';
 import { findActiveCity } from '../src/features/address/regions';
 import { locateApproximately } from '../src/features/address/location';
 import { addressStore } from '../src/features/address/store';
@@ -22,6 +23,7 @@ import { useOnline } from '../src/lib/useOnline';
 import { theme } from '../src/theme';
 
 type Phase = 'idle' | 'searching' | 'denied' | 'failed' | 'offline' | 'cities';
+type PickedCity = { id: string; name: string; state: string; neighborhoods: { id: string; name: string }[] };
 
 /**
  * D1. Onde você quer receber? (WB-001). A própria tela explica o motivo ANTES do pedido do sistema (design-system.md §5.6).
@@ -33,6 +35,7 @@ export default function LocationScreen() {
   const online = useOnline();
   const queryClient = useQueryClient();
   const [phase, setPhase] = useState<Phase>('idle');
+  const [pickedCity, setPickedCity] = useState<PickedCity | null>(null);
   // "o app lembra a escolha e não pede de novo no mesmo uso"
   const deniedThisSession = useRef(false);
 
@@ -49,6 +52,11 @@ export default function LocationScreen() {
     } catch {
       // fail-open
     }
+    // cidade/bairro escolhidos na lista não trazem ponto: sem ele a busca por raio não funciona
+    const point =
+      place.latitude !== undefined && place.longitude !== undefined
+        ? { latitude: place.latitude, longitude: place.longitude }
+        : await locateCity(place.city, place.district, place.state || 'SP');
     await addressStore.add({
       nickname: null,
       precision: 'approx',
@@ -60,8 +68,8 @@ export default function LocationScreen() {
       district: place.district,
       city: place.city,
       state: place.state || 'SP',
-      latitude: place.latitude ?? null,
-      longitude: place.longitude ?? null,
+      latitude: point?.latitude ?? null,
+      longitude: point?.longitude ?? null,
     });
     void haptic('success');
     toast.show(t('location.deliveringIn', { place: place.district || place.city }));
@@ -92,6 +100,33 @@ export default function LocationScreen() {
     }
   };
 
+  if (phase === 'cities' && pickedCity) {
+    // 2º passo (opcional): bairro. "Qualquer bairro" mostra a cidade inteira
+    return (
+      <Screen header={<Header onBack={() => setPickedCity(null)} title={t('location.neighborhoodTitle')} />}>
+        <View style={styles.list}>
+          <RadioListItem
+            onPress={() => void deliver({ city: pickedCity.name, district: '', state: pickedCity.state })}
+            selected={false}
+            subtitle={t('location.anyNeighborhoodHint')}
+            testID="location.neighborhood-any"
+            title={t('location.anyNeighborhood', { city: pickedCity.name })}
+          />
+          {pickedCity.neighborhoods.map((n) => (
+            <RadioListItem
+              key={n.id}
+              onPress={() => void deliver({ city: pickedCity.name, district: n.name, state: pickedCity.state })}
+              selected={false}
+              subtitle={pickedCity.name}
+              testID={`location.neighborhood-${n.id}`}
+              title={n.name}
+            />
+          ))}
+        </View>
+      </Screen>
+    );
+  }
+
   if (phase === 'cities') {
     return (
       <Screen header={<Header onBack={() => setPhase('idle')} title={t('location.cityTitle')} />}>
@@ -111,7 +146,11 @@ export default function LocationScreen() {
             {regions.data?.data.map((city) => (
               <RadioListItem
                 key={city.id}
-                onPress={() => void deliver({ city: city.name, district: '', state: city.state })}
+                onPress={() =>
+                  city.neighborhoods.length > 0
+                    ? setPickedCity(city)
+                    : void deliver({ city: city.name, district: '', state: city.state })
+                }
                 selected={false}
                 subtitle={city.state}
                 testID={`location.city-${city.id}`}

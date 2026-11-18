@@ -15,6 +15,7 @@ import { API_URL } from '../src/api/config';
 import { createQueryClient, wireQueryManagers } from '../src/api/query-client';
 import { sessionStore, useSession } from '../src/api/session';
 import { addressStore, useAddresses } from '../src/features/address/store';
+import { syncAddresses } from '../src/features/address/sync';
 import { ToastProvider } from '../src/components/Toast';
 import { theme } from '../src/theme';
 
@@ -46,6 +47,16 @@ export default function RootLayout() {
     void addressStore.hydrate();
     return wireQueryManagers();
   }, []);
+
+  // Logado: a lista de endereços vem da API (cache local). Anônimo: o cache de outro usuário não fica (SEC-122).
+  const userId = session.status === 'authenticated' ? session.user.id : null;
+  const anonymous = session.status === 'anonymous';
+  const addressesReady = addresses.status === 'ready';
+  useEffect(() => {
+    if (!addressesReady) return;
+    if (userId) void syncAddresses(userId);
+    else if (anonymous) void addressStore.bindOwner(null);
+  }, [userId, anonymous, addressesReady]);
 
   const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading' && addresses.status !== 'loading';
 

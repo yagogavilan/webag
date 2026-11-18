@@ -9,7 +9,11 @@ jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 const mockRegions = jest.fn();
 jest.mock('../src/api/auth-api', () => ({ fetchRegions: () => mockRegions() }));
 const mockLocate = jest.fn();
-jest.mock('../src/features/address/location', () => ({ locateApproximately: () => mockLocate() }));
+const mockGeocode = jest.fn();
+jest.mock('../src/features/address/location', () => ({
+  locateApproximately: () => mockLocate(),
+  geocodeAddress: (...a: unknown[]) => mockGeocode(...a),
+}));
 
 const city = { id: 'c1', name: 'Francisco Morato', state: 'SP', slug: 'fm', neighborhoods: [] };
 const place = { latitude: -23.28, longitude: -46.74, city: 'Francisco Morato', district: 'Jardim Fortaleza', state: 'SP' };
@@ -17,6 +21,7 @@ const place = { latitude: -23.28, longitude: -46.74, city: 'Francisco Morato', d
 beforeEach(async () => {
   jest.clearAllMocks();
   mockRegions.mockResolvedValue({ data: [city], nextCursor: null });
+  mockGeocode.mockResolvedValue(null);
   await addressStore.clearAll();
   await addressStore.hydrate();
 });
@@ -90,7 +95,24 @@ describe('Onde você quer receber? (D1)', () => {
     await fireEvent.press(await screen.findByTestId('location.city-c1'));
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/'));
     const state = addressStore.getState();
-    expect(state.status === 'ready' && state.addresses[0]).toMatchObject({ precision: 'approx', city: 'Francisco Morato', district: '' });
+    // sem ponto do geocodificador do aparelho, usa o centro da cidade: sem coordenada a busca por raio não funciona
+    expect(state.status === 'ready' && state.addresses[0]).toMatchObject({ precision: 'approx', city: 'Francisco Morato', district: '', latitude: -23.2794 });
+  });
+
+  it('cidade com bairros cadastrados abre a escolha do bairro; o bairro vai no endereço aproximado', async () => {
+    mockRegions.mockResolvedValue({
+      data: [{ ...city, neighborhoods: [{ id: 'n1', name: 'Jardim Fortaleza' }] }],
+      nextCursor: null,
+    });
+    mockGeocode.mockResolvedValue({ latitude: -23.27, longitude: -46.75 });
+    await renderScreen(<LocationScreen />);
+    await fireEvent.press(screen.getByTestId('location.choose-city'));
+    await fireEvent.press(await screen.findByTestId('location.city-c1'));
+    expect(screen.getByText('Qualquer bairro de Francisco Morato')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('location.neighborhood-n1'));
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/'));
+    const state = addressStore.getState();
+    expect(state.status === 'ready' && state.addresses[0]).toMatchObject({ district: 'Jardim Fortaleza', latitude: -23.27, longitude: -46.75 });
   });
 
   it('lista de cidades com erro mostra tentar de novo', async () => {

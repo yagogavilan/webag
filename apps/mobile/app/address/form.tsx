@@ -3,7 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
+import { createRemoteAddress, updateRemoteAddress } from '../../src/api/addresses-api';
 import { fetchRegions } from '../../src/api/auth-api';
+import { ApiError } from '../../src/api/problem';
 import { useSession } from '../../src/api/session';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
@@ -12,6 +14,7 @@ import { Chips } from '../../src/components/Chips';
 import { Header } from '../../src/components/Header';
 import { Screen } from '../../src/components/Screen';
 import { Skeleton } from '../../src/components/Skeleton';
+import { Text } from '../../src/components/Text';
 import { TextField } from '../../src/components/TextField';
 import { useToast } from '../../src/components/Toast';
 import { lookupCep } from '../../src/features/address/cep';
@@ -42,7 +45,7 @@ export default function AddressFormScreen() {
   const [lookup, setLookup] = useState<Lookup>('idle');
   const [banner, setBanner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const stateRef = useRef(editing?.state ?? 'SP');
+  const [uf, setUf] = useState(editing?.state ?? 'SP');
   const lookupSeq = useRef(0);
 
   const { control, handleSubmit, setValue, setFocus, setError, clearErrors } = useForm<AddressForm>({
@@ -83,7 +86,7 @@ export default function AddressFormScreen() {
       setValue('street', result.value.street, { shouldValidate: false });
       setValue('district', result.value.district, { shouldValidate: false });
       setValue('city', result.value.city, { shouldValidate: false });
-      stateRef.current = result.value.state;
+      setUf(result.value.state);
       setLookup('found');
       void haptic('light');
     } else {
@@ -120,7 +123,7 @@ export default function AddressFormScreen() {
         }
         const number = values.noNumber ? '' : values.number.trim();
         const point = await geocodeAddress(
-          `${values.street}, ${number || 's/n'}, ${values.district}, ${values.city} - ${stateRef.current}, Brasil`,
+          `${values.street}, ${number || 's/n'}, ${values.district}, ${values.city} - ${uf}, Brasil`,
         );
         const fields = {
           nickname: loggedIn ? values.nickname : null,
@@ -132,12 +135,17 @@ export default function AddressFormScreen() {
           complement: values.complement.trim(),
           district: values.district.trim(),
           city: values.city.trim(),
-          state: stateRef.current,
+          state: uf,
           latitude: point?.latitude ?? null,
           longitude: point?.longitude ?? null,
         };
         let address;
-        if (editing) {
+        if (loggedIn) {
+          // logado: a API é a fonte. O servidor valida região e limite e repete sem duplicar (rede ruim)
+          const saved = editing?.remote ? await updateRemoteAddress(editing.id, fields) : await createRemoteAddress(fields);
+          await addressStore.upsert(saved, { makeCurrent: true, ...(editing && !editing.remote ? { replaceId: editing.id } : {}) });
+          address = saved;
+        } else if (editing) {
           await addressStore.update(editing.id, fields);
           await addressStore.setCurrent(editing.id);
           address = { ...editing, ...fields };
@@ -152,6 +160,15 @@ export default function AddressFormScreen() {
         toast.show(loggedIn ? t('address.saved') : t('address.deliveringTo', { place: addressLine(address) }));
         if (from === 'addresses' && router.canGoBack()) router.back();
         else router.replace('/');
+      } catch (error) {
+        void haptic('error');
+        if (error instanceof ApiError && error.code === 'REGION_NOT_SERVED') {
+          router.replace({ pathname: '/region-unavailable', params: { place: values.district || values.city, city: values.city } });
+        } else if (error instanceof ApiError && error.code === 'ADDRESS_LIMIT_REACHED') setBanner(t('address.limit'));
+        else if (error instanceof ApiError && error.code === 'ADDRESS_GEOCODING_FAILED') setBanner(t('address.geocodeFailed'));
+        else if (error instanceof ApiError && error.code === 'ADDRESS_DUPLICATE') setBanner(t('address.duplicate'));
+        else if (error instanceof ApiError && error.isConnectivity) setBanner(t('address.offlineSave'));
+        else setBanner(t('address.saveError'));
       } finally {
         setSaving(false);
       }
@@ -343,6 +360,10 @@ export default function AddressFormScreen() {
           )}
         />
       ) : null}
+
+      <Text color="secondary" testID="address.cep-notice" variant="caption">
+        {t('address.cepNotice')}
+      </Text>
 
       {atLimit ? <Banner testID="addresses.limit-message" text={t('address.limit')} tone="warning" /> : null}
       {banner ? <Banner testID="address.error" text={banner} tone="danger" /> : null}

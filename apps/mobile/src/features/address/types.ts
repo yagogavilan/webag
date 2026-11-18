@@ -21,6 +21,8 @@ export interface Address {
   state: string;
   latitude: number | null;
   longitude: number | null;
+  /** true = o `id` é o da API (`/v1/me/addresses`); ausente = só no aparelho (visitante, ou ainda não migrado após o login). */
+  remote?: boolean;
 }
 
 export const MAX_ADDRESSES = 8;

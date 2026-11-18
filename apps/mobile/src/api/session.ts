@@ -12,13 +12,25 @@ export type SessionState =
   | { status: 'anonymous'; notice?: SessionNotice }
   | { status: 'authenticated'; user: StoredUser };
 
+type Cleanup = () => Promise<void> | void;
+
 let current: SessionState = { status: 'loading' };
+const cleanups = new Set<Cleanup>();
 let tokens: StoredSession | null = null;
 const listeners = new Set<() => void>();
 
 function emit(next: SessionState): void {
   current = next;
   listeners.forEach((l) => l());
+}
+
+/**
+ * Registra uma limpeza de dado pessoal que deve rodar em TODO encerramento de sessão (sair, expirar, reuso do refresh): SEC-122.
+ * Quem guarda dado do usuário no aparelho (endereços, histórico, cache de favoritos) se registra aqui; session.ts não importa nenhum deles.
+ */
+export function onSessionCleared(cleanup: Cleanup): () => void {
+  cleanups.add(cleanup);
+  return () => cleanups.delete(cleanup);
 }
 
 export const sessionStore = {
@@ -60,6 +72,7 @@ export const sessionStore = {
   async clear(notice?: SessionNotice): Promise<void> {
     tokens = null;
     await clearSession();
+    await Promise.allSettled([...cleanups].map((run) => Promise.resolve().then(run)));
     emit(notice ? { status: 'anonymous', notice } : { status: 'anonymous' });
   },
 };
