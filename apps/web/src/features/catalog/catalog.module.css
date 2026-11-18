@@ -97,3 +97,7 @@
 .bigNumber { font-size: var(--wb-font-size-xl); font-weight: var(--wb-font-weight-semibold); }
 .columnsList { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
 .columnsList code { padding: 2px var(--wb-space-2); background: var(--wb-color-surface-sunken); border-radius: var(--wb-radius-sm); }
+
+/* Aviso só em tela pequena (K5: planilha é mais fácil no computador). */
+.mobileOnly { display: block; }
+@media (min-width: 1024px) { .mobileOnly { display: none; } }

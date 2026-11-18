@@ -29,15 +29,15 @@ export const FILTERS: { id: ProductFilter; label: string }[] = [
 const PAGE_SIZES = [25, 50, 100] as const;
 const SEARCH_DELAY_MS = 300;
 
-export function ProductsPage() {
-  return <CatalogGate>{(store) => <ProductList storeId={store.id} owner={isCatalogOwner(store)} />}</CatalogGate>;
+export function ProductsPage({ initialFilter = 'all' }: { initialFilter?: ProductFilter }) {
+  return <CatalogGate>{(store) => <ProductList storeId={store.id} owner={isCatalogOwner(store)} initialFilter={initialFilter} />}</CatalogGate>;
 }
 
 /** K1: lista de produtos com busca, filtros, ajuste rápido de estoque, pausa com 1 toque e ação em massa. */
-function ProductList({ storeId, owner }: { storeId: string; owner: boolean }) {
+function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner: boolean; initialFilter: ProductFilter }) {
   const router = useRouter();
   const online = useOnline();
-  const [filter, setFilter] = useState<ProductFilter>('all');
+  const [filter, setFilter] = useState<ProductFilter>(initialFilter);
   const [input, setInput] = useState('');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState<(typeof PAGE_SIZES)[number]>(25);

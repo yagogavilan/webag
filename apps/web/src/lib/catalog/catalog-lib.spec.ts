@@ -110,3 +110,22 @@ describe('helpers do catálogo', () => {
     expect(pickImage(null, 160)).toBeNull();
   });
 });
+
+import { decodeCsv, errorsCsv, validateCsvFile } from './csv';
+
+describe('planilha', () => {
+  it('confere tipo e tamanho com as mensagens da tela', () => {
+    expect(validateCsvFile({ name: 'a.xlsx', size: 10, type: 'application/vnd.ms-excel' })).toBe('Use o modelo do Webag, em CSV.');
+    expect(validateCsvFile({ name: 'a.csv', size: 8 * 1024 * 1024 })).toBe('Esse arquivo tem 8 MB. O máximo é 1 MB.');
+    expect(validateCsvFile({ name: 'a.csv', size: 1000 })).toBeNull();
+  });
+  it('lê Windows-1252 quando o arquivo não é UTF-8', () => {
+    const ansi = new Uint8Array([0x43, 0x61, 0x66, 0xe9]); // "Café" em Windows-1252
+    expect(decodeCsv(ansi.buffer)).toBe('Café');
+    expect(decodeCsv(new TextEncoder().encode('Café').buffer as ArrayBuffer)).toBe('Café');
+  });
+  it('CSV de erros protege contra fórmula e escapa aspas', () => {
+    const text = errorsCsv([{ line: 7, message: '=1+1 "x"' }]);
+    expect(text).toContain('"7";"\'=1+1 ""x"""');
+  });
+});
