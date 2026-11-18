@@ -19,7 +19,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return problem(400, 'VALIDATION_FAILED', 'Dados inválidos');
 
-  const result = await callApi('/v1/auth/invitations/accept', { method: 'POST', body: JSON.stringify(parsed.data), hints: clientHints(request.headers) });
+  // Convite de admin e de funcionário de loja são rotas diferentes na API (cada um com o seu token e papel).
+  const result = await callApi(area === 'admin' ? '/v1/auth/invitations/accept' : '/v1/auth/store-invitations/accept', { method: 'POST', body: JSON.stringify(parsed.data), hints: clientHints(request.headers) });
   if (result.status !== 200) {
     return new NextResponse(result.text || null, { status: result.status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
   }

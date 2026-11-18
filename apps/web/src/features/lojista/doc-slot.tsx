@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api/errors';
 import type { DocumentKind, StoreDocument } from '@/lib/api/lojista';
 import { DOCUMENT_HINT, compressImage, formatBytes, isPdf, validateDocumentFile, type Prepared, type Quarter } from '@/lib/image/prepare';
 import { uploadStoreDocument, type UploadDocumentFn } from '@/lib/image/upload';
+import { formatDateTime } from '@/lib/format';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
 import { ImageCropper } from './image-cropper';
@@ -17,14 +18,13 @@ export const DOCUMENT_LABEL: Record<DocumentKind, string> = {
   id_back: 'Documento com foto, verso',
   address_proof: 'Comprovante de endereço da loja',
   cnpj_card: 'Cartão CNPJ',
-  owner_id_front: 'Documento do responsável, frente',
-  owner_id_back: 'Documento do responsável, verso',
+  responsible_id: 'Documento do responsável',
 };
 
 /** Itens exigidos por tipo de documento (WB-052 C1). */
 export const REQUIRED_DOCUMENTS: Record<'cpf' | 'cnpj', DocumentKind[]> = {
   cpf: ['id_front', 'id_back', 'address_proof'],
-  cnpj: ['cnpj_card', 'owner_id_front', 'owner_id_back'],
+  cnpj: ['cnpj_card', 'responsible_id'],
 };
 
 type Phase =
@@ -36,6 +36,7 @@ type Phase =
   | { name: 'error'; message: string };
 
 interface Props {
+  storeId: string;
   kind: DocumentKind;
   existing?: StoreDocument | undefined;
   /** Motivo do admin quando o item foi marcado com problema (modo correção). */
@@ -52,7 +53,7 @@ interface Props {
  * DocSlot (onda-2 L5): vazio, enviando (com progresso e cancelar), enviado e erro. A falha de um slot não derruba os outros.
  * A foto passa por pré-visualização ("Está legível?"), pode ser girada ou recortada e é comprimida antes de sair do aparelho.
  */
-export function DocSlot({ kind, existing, correction, locked, onUploaded, upload = uploadStoreDocument, missing }: Props) {
+export function DocSlot({ storeId, kind, existing, correction, locked, onUploaded, upload = uploadStoreDocument, missing }: Props) {
   const title = DOCUMENT_LABEL[kind];
   const online = useOnline();
   const [phase, setPhase] = useState<Phase>({ name: 'idle' });
@@ -105,7 +106,7 @@ export function DocSlot({ kind, existing, correction, locked, onUploaded, upload
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const doc = await upload(kind, blob, name, {
+      const doc = await upload(storeId, kind, blob, name, {
         signal: controller.signal,
         onProgress: (percent) => {
           setPhase({ name: 'uploading', percent });
@@ -162,7 +163,7 @@ export function DocSlot({ kind, existing, correction, locked, onUploaded, upload
                 <CheckCircle size={16} weight="fill" aria-hidden="true" /> Enviado
               </span>
               <span className={cx('wb-text-caption', ui.muted)}>
-                {uploaded.fileName} · {formatBytes(uploaded.sizeBytes)}
+                {uploaded.fileName && uploaded.sizeBytes !== undefined ? `${uploaded.fileName} · ${formatBytes(uploaded.sizeBytes)}` : `Enviado em ${formatDateTime(uploaded.uploadedAt).replace(' de ', ' ')}`}
               </span>
             </>
           ) : phase.name === 'error' ? (

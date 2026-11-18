@@ -21,7 +21,7 @@ interface Props {
 /** L3, Etapa 1 de 4: CPF ou CNPJ (com máscara e dígito verificador, inclusive CNPJ alfanumérico). */
 export function Step1({ store, next, backHref }: Props) {
   const router = useRouter();
-  const save = useSaveDraft();
+  const save = useSaveDraft(store);
   const form = useRef<HTMLDivElement>(null);
   const [type, setType] = useState<LegalType>(store?.legalType ?? 'cpf');
   const [document, setDocument] = useState(store?.document ? maskDocument(store.legalType ?? 'cpf', store.document) : '');
@@ -54,9 +54,8 @@ export function Step1({ store, next, backHref }: Props) {
     }
     try {
       await save.mutateAsync({
-        step: Math.max(store?.step ?? 0, 1),
-        legalType: type,
-        document: type === 'cpf' ? onlyDigits(document) : cnpjChars(document),
+        // O CPF/CNPJ não muda depois que a loja nasce (1 documento = 1 loja): com loja criada, só razão social e aceite.
+        ...(store ? {} : { legalType: type, document: type === 'cpf' ? onlyDigits(document) : cnpjChars(document) }),
         ...(type === 'cnpj' ? { legalName: legalName.trim(), fiscalAccepted: true } : {}),
       });
       router.push(next as never);
@@ -67,13 +66,13 @@ export function Step1({ store, next, backHref }: Props) {
   }
 
   return (
-    <StepFrame step={1} screen="etapa1" title="Quem vai vender?" savedAt={store?.updatedAt && store.step >= 1 ? store.updatedAt : null} backHref={backHref} submitLabel="Continuar" busy={save.isPending} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
+    <StepFrame step={1} screen="etapa1" title="Quem vai vender?" savedAt={save.data?.updatedAt ?? null} backHref={backHref} submitLabel="Continuar" busy={save.isPending} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
       <div ref={form} className={ui.stack}>
         <RadioCards<LegalType>
           legend="Tipo de documento"
           name="legal-type"
           value={type}
-          onChange={changeType}
+          onChange={store ? () => undefined : changeType}
           options={[
             { value: 'cpf', label: 'CPF', testId: ltid('etapa1', 'type-cpf') },
             { value: 'cnpj', label: 'CNPJ (MEI incluso)', testId: ltid('etapa1', 'type-cnpj') },
@@ -92,6 +91,8 @@ export function Step1({ store, next, backHref }: Props) {
           spellCheck={false}
           placeholder={type === 'cpf' ? '000.000.000-00' : '00.000.000/0000-00'}
           error={errors.document}
+          readOnly={Boolean(store)}
+          hint={store ? 'Para trocar o CPF ou CNPJ, fale com o suporte.' : undefined}
           data-testid={ltid('etapa1', 'document-input')}
         />
         {errors.duplicate ? (

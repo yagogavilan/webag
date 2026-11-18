@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { json, mockFetch } from '../../../test/render';
-import { fakeStore, renderLojista } from '../../../test/lojista';
+import { fakeStore, renderLojista, storeHandlers } from '../../../test/lojista';
 import type { MerchantStore } from '@/lib/api/lojista';
 import { LojistaHome } from './home-page';
 
@@ -13,10 +13,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }), usePat
 const T = (id: string) => screen.getByTestId(`lojista.inicio.${id}`);
 
 function setup(store: MerchantStore | null, extra: Parameters<typeof mockFetch> = []) {
-  const { impl, calls } = mockFetch(
-    ...extra,
-    (url) => (url.pathname.endsWith('/me/store') ? (store ? json(store) : json({ code: 'STORE_NOT_FOUND', title: 'x', status: 404 }, 404)) : undefined),
-  );
+  const { impl, calls } = mockFetch(...extra, ...storeHandlers(store));
   vi.stubGlobal('fetch', impl);
   renderLojista(<LojistaHome />);
   return calls;
@@ -65,22 +62,21 @@ describe('L8: acompanhar a aprovação', () => {
     );
     expect(await screen.findByText('Precisamos de uma correção.')).toBeInTheDocument();
     expect(T('correction-c1')).toHaveTextContent('A foto do verso está cortada.');
-    expect(T('correction-c2')).toHaveTextContent('Corrigido');
-    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    expect(screen.queryByTestId('lojista.inicio.correction-c2')).toBeNull();
     await userEvent.click(T('resubmit'));
     expect(T('missing')).toHaveTextContent('Falta corrigir: A foto do verso está cortada.');
-    expect(calls.some((c) => c.url.pathname.endsWith('/resubmit'))).toBe(false);
+    expect(calls.some((c) => c.url.pathname.endsWith('/submit'))).toBe(false);
     await userEvent.click(screen.getByRole('button', { name: 'Corrigir' }));
     expect(push).toHaveBeenCalledWith('/lojista/correcao');
   });
 
-  it('correção toda feita: reenvia para análise', async () => {
+  it('correção toda feita (a API não lista mais itens abertos): avisa e reenvia para análise', async () => {
     const calls = setup(
       fakeStore({ status: 'correction_requested', step: 4, corrections: [{ id: 'c1', target: { type: 'document', kind: 'id_back' }, message: 'x', fixed: true }] }),
-      [(url) => (url.pathname.endsWith('/store/resubmit') ? json(fakeStore({ status: 'in_review', step: 4 })) : undefined)],
+      [(url) => (url.pathname.endsWith('/submit') ? json(null, 204) : undefined)],
     );
     await userEvent.click(await screen.findByTestId('lojista.inicio.resubmit'));
-    await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/store/resubmit'))).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/submit'))).toBe(true));
   });
 
   it('recusada: motivo do admin e suporte', async () => {
@@ -115,7 +111,7 @@ describe('L8: acompanhar a aprovação', () => {
   });
 
   it('erro de rede: "Tentar de novo" e sem acesso (403) usa o estado de acesso', async () => {
-    const { impl } = mockFetch((url) => (url.pathname.endsWith('/me/store') ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined));
+    const { impl } = mockFetch((url) => (url.pathname.endsWith('/stores/mine') ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined));
     vi.stubGlobal('fetch', impl);
     renderLojista(<LojistaHome />);
     expect(await screen.findByText('Não conseguimos carregar agora')).toBeInTheDocument();

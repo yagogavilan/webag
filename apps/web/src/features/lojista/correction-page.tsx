@@ -45,7 +45,7 @@ function Corrections({ store }: { store: MerchantStore }) {
     if (pending.length > 0) return setMissing(true);
     setBusy(true);
     try {
-      const sent = await merchantApi.resubmit();
+      const sent = await merchantApi.submit(store.id);
       client.setQueryData<MerchantStore | null>(STORE_KEY, sent);
       toast.show('Cadastro reenviado para análise.');
       router.push('/lojista');
@@ -63,6 +63,7 @@ function Corrections({ store }: { store: MerchantStore }) {
           return (
             <DocSlot
               key={kind}
+              storeId={store.id}
               kind={kind}
               existing={store.documents.find((doc) => doc.kind === kind)}
               locked={!item}

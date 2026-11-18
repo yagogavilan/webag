@@ -9,7 +9,7 @@ import { apiRequest } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
 import { merchantApi, type MerchantStore, type StoreAddress } from '@/lib/api/lojista';
 import { isServedCity } from '@/lib/br/city';
-import { isValidEmail, isValidPhone, maskCep, maskPhone, onlyDigits } from '@/lib/br/mask';
+import { isValidEmail, isValidMobile, maskCep, maskPhone, onlyDigits } from '@/lib/br/mask';
 import { ltid } from '@/lib/testid';
 import { useMerchant } from '../store-context';
 import { SaveError, StepFrame } from './step-frame';
@@ -29,7 +29,7 @@ type Errors = Partial<Record<'name' | 'category' | 'whatsapp' | 'cep' | 'street'
 export function Step2({ store, next, backHref }: Props) {
   const router = useRouter();
   const { user } = useMerchant();
-  const save = useSaveDraft();
+  const save = useSaveDraft(store);
   const root = useRef<HTMLDivElement>(null);
   const [name, setName] = useState(store?.name ?? '');
   const [categoryId, setCategoryId] = useState(store?.categoryId ?? '');
@@ -84,7 +84,7 @@ export function Step2({ store, next, backHref }: Props) {
     const next_: Errors = {};
     if (name.trim().length < 2) next_.name = 'Digite o nome da loja.';
     if (!categoryId) next_.category = 'Escolha a categoria principal.';
-    if (!isValidPhone(whatsapp)) next_.whatsapp = 'Confira o WhatsApp com DDD.';
+    if (!isValidMobile(whatsapp)) next_.whatsapp = 'Confira o WhatsApp com DDD.';
     if (onlyDigits(address.cep).length !== 8) next_.cep = 'Confira o CEP.';
     else if (!address.street.trim() || !address.city.trim()) next_.street = 'Preencha a rua e a cidade.';
     if (!address.noNumber && !address.number.trim()) next_.number = 'Digite o número ou marque "Sem número".';
@@ -95,7 +95,7 @@ export function Step2({ store, next, backHref }: Props) {
       return;
     }
     try {
-      await save.mutateAsync({ step: Math.max(store?.step ?? 0, 2), name: name.trim(), categoryId, whatsapp: onlyDigits(whatsapp), address: { ...address, number: address.noNumber ? '' : address.number.trim() } });
+      await save.mutateAsync({ name: name.trim(), categoryId, whatsapp: onlyDigits(whatsapp), address: { ...address, number: address.noNumber ? '' : address.number.trim() } });
       router.push(next as never);
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'CITY_NOT_SERVED') return setErrors({ city: `Ainda não atendemos ${address.city}.` });
@@ -104,7 +104,7 @@ export function Step2({ store, next, backHref }: Props) {
   }
 
   return (
-    <StepFrame step={2} screen="etapa2" title="Sobre a sua loja" savedAt={store?.updatedAt && store.step >= 2 ? store.updatedAt : null} backHref={backHref} submitLabel="Continuar" busy={save.isPending} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
+    <StepFrame step={2} screen="etapa2" title="Sobre a sua loja" savedAt={save.data?.updatedAt ?? null} backHref={backHref} submitLabel="Continuar" busy={save.isPending} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
       <div ref={root} className={ui.stack}>
         <TextField label="Nome da loja" value={name} maxLength={60} counter={{ value: name.length, max: 60 }} onChange={(e) => setName(e.target.value)} autoComplete="organization" error={errors.name} data-testid={ltid('etapa2', 'name-input')} />
 

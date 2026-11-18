@@ -12,7 +12,7 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
 const ALLOWED: Record<SessionArea, RegExp> = {
   admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset))|legal\/[a-z_]+)$/,
   lojista:
-    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|geo\/cep\/\d{8}|uploads(\/[0-9a-f-]{36}\/complete)?|store-invitations\/[A-Za-z0-9_-]{20,200})$/,
+    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,5})$/,
 };
 /** Rotas cuja resposta traz tokens novos (a API revoga a sessão anterior): viram cookie e saem do corpo. */
 const ROTATES_TOKENS = new Set(['me/password', 'auth/password/reset']);

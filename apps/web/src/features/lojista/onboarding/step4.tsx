@@ -3,6 +3,7 @@
 import { CheckCircle, Lock, Receipt, Wallet } from '@phosphor-icons/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useReauth } from '@/components/panel/reauth';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Banner, Button, SkeletonRows, ui } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
@@ -12,7 +13,6 @@ import { ltid } from '@/lib/testid';
 import { STORE_KEY } from '../store-context';
 import s from '../lojista.module.css';
 import { SaveError, StepFrame } from './step-frame';
-import { draftErrorMessage, useSaveDraft } from './use-draft';
 
 interface Props {
   store: MerchantStore;
@@ -22,7 +22,7 @@ interface Props {
   oauth?: { state?: string | undefined; code?: string | undefined; denied?: boolean | undefined };
 }
 
-type Problem = 'denied' | 'level' | 'expired' | 'in_use' | null;
+type Problem = 'denied' | 'level' | 'expired' | 'in_use' | 'network' | null;
 
 /** Só segue para o Mercado Pago (https) ou volta para o próprio painel; qualquer outro destino é recusado. */
 export function safeAuthorizationUrl(raw: string, origin: string): string | null {
@@ -39,7 +39,7 @@ export function safeAuthorizationUrl(raw: string, origin: string): string | null
 export function Step4({ store, next, backHref, oauth }: Props) {
   const router = useRouter();
   const client = useQueryClient();
-  const save = useSaveDraft();
+  const reauth = useReauth();
   const handled = useRef(false);
   const [connecting, setConnecting] = useState(false);
   const [checking, setChecking] = useState(Boolean(oauth?.state && oauth.code));
@@ -53,30 +53,33 @@ export function Step4({ store, next, backHref, oauth }: Props) {
     if (handled.current || !oauth?.state || !oauth.code) return;
     handled.current = true;
     merchantApi
-      .payoutCallback({ state: oauth.state, code: oauth.code })
+      .payoutCallback(store.id, { state: oauth.state, code: oauth.code })
       .then((payout) => client.setQueryData<MerchantStore | null>(STORE_KEY, (current) => (current ? { ...current, payout } : current)))
       .catch((caught: unknown) => {
-        if (caught instanceof ApiError && caught.code === 'PAYOUT_LEVEL_INSUFFICIENT') setProblem('level');
-        else if (caught instanceof ApiError && caught.code === 'PAYOUT_ACCOUNT_IN_USE') setProblem('in_use');
+        if (caught instanceof ApiError && caught.code === 'PAYMENT_ACCOUNT_LEVEL_INSUFFICIENT') setProblem('level');
+        else if (caught instanceof ApiError && caught.code === 'PAYMENT_ACCOUNT_IN_USE') setProblem('in_use');
+        else if (caught instanceof ApiError && caught.isNetwork) setProblem('network');
         else setProblem('expired');
       })
       .finally(() => {
         setChecking(false);
         router.replace('/lojista/onboarding/4' as never);
       });
-  }, [oauth, client, router]);
+  }, [oauth, client, router, store.id]);
 
   async function connect() {
     setFormError(null);
     setProblem(null);
     setConnecting(true);
     try {
-      const { authorizationUrl } = await merchantApi.connectPayout('/lojista/onboarding/4');
+      // Trocar ou ligar a conta de recebimento exige a senha digitada há menos de 5 min (SEC-109).
+      const { authorizationUrl } = await reauth.guard(() => merchantApi.connectPayout(store.id), 'Digite sua senha para conectar a conta de recebimento.');
       const target = safeAuthorizationUrl(authorizationUrl, window.location.origin);
       if (!target) throw new Error('destino inválido');
       window.location.assign(target);
     } catch (caught) {
       setConnecting(false);
+      if (caught instanceof ApiError && caught.code === 'REAUTH_CANCELLED') return;
       setFormError(caught instanceof ApiError && caught.isNetwork ? 'Conecte-se para conectar sua conta.' : 'Não foi possível abrir o Mercado Pago. Tente de novo.');
     }
   }
@@ -84,23 +87,11 @@ export function Step4({ store, next, backHref, oauth }: Props) {
   async function advance(event?: FormEvent) {
     event?.preventDefault();
     if (!connected) return connect();
-    setFormError(null);
-    try {
-      await save.mutateAsync({ step: Math.max(store.step, 4) });
-      router.push(next as never);
-    } catch (caught) {
-      setFormError(draftErrorMessage(caught));
-    }
+    router.push(next as never);
   }
 
-  async function later() {
-    setFormError(null);
-    try {
-      await save.mutateAsync({ step: Math.max(store.step, 4) });
-      router.push(next as never);
-    } catch (caught) {
-      setFormError(draftErrorMessage(caught));
-    }
+  function later() {
+    router.push(next as never);
   }
 
   return (
@@ -108,16 +99,16 @@ export function Step4({ store, next, backHref, oauth }: Props) {
       step={4}
       screen="etapa4"
       title="Onde você recebe?"
-      savedAt={store.step >= 4 ? store.updatedAt : null}
+      savedAt={null}
       backHref={backHref}
       submitLabel={connected ? 'Continuar' : 'Conectar Mercado Pago'}
       busyLabel={connecting ? 'Abrindo o Mercado Pago…' : 'Salvando…'}
-      busy={connecting || save.isPending}
+      busy={connecting}
       onSubmit={advance}
       error={formError ? <SaveError message={formError} /> : null}
       extraAction={
         !connected ? (
-          <Button variant="text" onClick={() => void later()} disabled={save.isPending || connecting} data-testid={ltid('etapa4', 'connect-later')}>
+          <Button variant="text" onClick={later} disabled={connecting} data-testid={ltid('etapa4', 'connect-later')}>
             Conectar depois
           </Button>
         ) : null
@@ -174,6 +165,7 @@ export function Step4({ store, next, backHref, oauth }: Props) {
           </a>
         </Banner>
       ) : null}
+      {problem === 'network' ? <Banner tone="warning">Sem conexão. Conecte-se para conferir a conta e tente de novo.</Banner> : null}
       {problem === 'expired' ? <Banner tone="warning" testId={ltid('etapa4', 'expired')}>Link expirado. Conecte de novo.</Banner> : null}
       {!connected ? (
         <p className={`wb-text-caption ${ui.muted}`} style={{ margin: 0 }}>

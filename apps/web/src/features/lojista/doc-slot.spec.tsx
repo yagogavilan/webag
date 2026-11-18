@@ -22,7 +22,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('DocSlot (L5)', () => {
   it('vazio: mostra o formato aceito antes do envio e os dois botões', () => {
-    render(<DocSlot kind="id_front" onUploaded={vi.fn()} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} />);
     expect(screen.getByText('JPG, PNG ou PDF, até 5 MB')).toBeInTheDocument();
     expect(T('-camera')).toHaveTextContent('Tirar foto');
     expect(T('-file')).toHaveTextContent('Escolher arquivo');
@@ -31,7 +31,7 @@ describe('DocSlot (L5)', () => {
 
   it('arquivo grande é recusado antes de enviar, com o tamanho real', async () => {
     const upload = vi.fn();
-    render(<DocSlot kind="id_front" onUploaded={vi.fn()} upload={upload} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('grande.pdf', 'application/pdf', 8 * 1024 * 1024));
     expect(await screen.findByText('Esse arquivo tem 8 MB. O máximo é 5 MB.')).toBeInTheDocument();
     expect(T('-file')).toHaveTextContent('Enviar outro');
@@ -39,34 +39,35 @@ describe('DocSlot (L5)', () => {
   });
 
   it('tipo errado: instrução de formato', async () => {
-    render(<DocSlot kind="id_front" onUploaded={vi.fn()} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} />);
     await userEvent.upload(T('-file-input'), file('x.gif', 'image/gif'), { applyAccept: false });
     expect(await screen.findByText('Use uma foto (JPG ou PNG) ou PDF.')).toBeInTheDocument();
   });
 
   it('foto: pré-visualização "Está legível?", comprime e envia só depois de "Usar esta"', async () => {
-    const upload = vi.fn(async (_k, blob: Blob, _n, hooks) => {
+    const upload = vi.fn(async (_s, _k, blob: Blob, _n, hooks) => {
       hooks.onProgress?.(50);
       expect(blob.size).toBe('compressed'.length);
       return doc;
     });
     const onUploaded = vi.fn();
-    render(<DocSlot kind="id_front" onUploaded={onUploaded} upload={upload} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={onUploaded} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('foto.jpg', 'image/jpeg', 4000));
     expect(await screen.findByRole('dialog', { name: 'Está legível?' })).toBeInTheDocument();
     expect(upload).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId('lojista.etapa3.preview-accept'));
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(doc));
-    expect(upload.mock.calls[0]?.[0]).toBe('id_front');
-    expect(upload.mock.calls[0]?.[2]).toBe('foto.jpg');
+    expect(upload.mock.calls[0]?.[0]).toBe('s1');
+    expect(upload.mock.calls[0]?.[1]).toBe('id_front');
+    expect(upload.mock.calls[0]?.[3]).toBe('foto.jpg');
   });
 
   it('PDF vai sem recompressão e sem pré-visualização de imagem', async () => {
-    const upload = vi.fn(async (_k, blob: Blob) => {
+    const upload = vi.fn(async (_s, _k, blob: Blob) => {
       expect(blob.type).toBe('application/pdf');
       return { ...doc, fileName: 'a.pdf', mimeType: 'application/pdf' };
     });
-    render(<DocSlot kind="id_front" onUploaded={vi.fn()} upload={upload} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('a.pdf', 'application/pdf', 2000));
     expect(await screen.findByRole('dialog', { name: 'Usar este arquivo?' })).toBeInTheDocument();
     await userEvent.click(screen.getByTestId('lojista.etapa3.preview-accept'));
@@ -76,7 +77,7 @@ describe('DocSlot (L5)', () => {
   it('falha de um envio não é definitiva: mensagem e "Tentar de novo"', async () => {
     const upload = vi.fn().mockRejectedValueOnce(new ApiError({ status: 500, code: 'X', title: 'x' })).mockResolvedValueOnce(doc);
     const onUploaded = vi.fn();
-    render(<DocSlot kind="id_front" onUploaded={onUploaded} upload={upload} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={onUploaded} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('a.pdf', 'application/pdf'));
     await userEvent.click(await screen.findByTestId('lojista.etapa3.preview-accept'));
     expect(await screen.findByText('Não foi possível enviar. Tentar de novo.')).toBeInTheDocument();
@@ -87,7 +88,7 @@ describe('DocSlot (L5)', () => {
   it('sem conexão: pausa e retoma sozinho quando a rede volta', async () => {
     const upload = vi.fn().mockRejectedValueOnce(networkError()).mockResolvedValueOnce(doc);
     const onUploaded = vi.fn();
-    render(<DocSlot kind="id_front" onUploaded={onUploaded} upload={upload} />);
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={onUploaded} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('a.pdf', 'application/pdf'));
     await userEvent.click(await screen.findByTestId('lojista.etapa3.preview-accept'));
     expect(await screen.findByText('Sem conexão. Retomamos o envio quando você voltar.')).toBeInTheDocument();
@@ -104,8 +105,8 @@ describe('DocSlot (L5)', () => {
   });
 
   it('cancelar o envio volta ao estado vazio', async () => {
-    const upload = vi.fn((_k, _b, _n, hooks: UploadHooks) => new Promise<StoreDocument>((_, reject) => hooks.signal?.addEventListener('abort', () => reject(new DOMException('x', 'AbortError')))));
-    render(<DocSlot kind="id_front" onUploaded={vi.fn()} upload={upload} />);
+    const upload = vi.fn((_s, _k, _b, _n, hooks: UploadHooks) => new Promise<StoreDocument>((_, reject) => hooks.signal?.addEventListener('abort', () => reject(new DOMException('x', 'AbortError')))));
+    render(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} upload={upload} />);
     await userEvent.upload(T('-file-input'), file('a.pdf', 'application/pdf'));
     await userEvent.click(await screen.findByTestId('lojista.etapa3.preview-accept'));
     await userEvent.click(await screen.findByTestId('lojista.etapa3.slot-id_front-cancel'));
@@ -113,18 +114,23 @@ describe('DocSlot (L5)', () => {
   });
 
   it('enviado: nome, tamanho e "Trocar"; "Falta enviar" só quando pedido', () => {
-    const { rerender } = render(<DocSlot kind="id_front" existing={doc} onUploaded={vi.fn()} />);
+    const { rerender } = render(<DocSlot storeId="s1" kind="id_front" existing={doc} onUploaded={vi.fn()} />);
     expect(screen.getByText('Enviado')).toBeInTheDocument();
     expect(screen.getByText('frente.jpg · 244 KB')).toBeInTheDocument();
     expect(T('-replace')).toHaveTextContent('Trocar');
-    rerender(<DocSlot kind="id_front" onUploaded={vi.fn()} missing />);
+    rerender(<DocSlot storeId="s1" kind="id_front" onUploaded={vi.fn()} missing />);
     expect(T('-missing')).toHaveTextContent('Falta enviar documento com foto, frente.');
   });
 
+  it('documento que veio do servidor (sem nome de arquivo) mostra a data do envio', () => {
+    render(<DocSlot storeId="s1" kind="id_front" existing={{ kind: 'id_front', uploadedAt: '2026-11-18T13:15:00Z' }} onUploaded={vi.fn()} />);
+    expect(screen.getByText('Enviado em 18 nov, 10:15')).toBeInTheDocument();
+  });
+
   it('modo correção: motivo do admin no item; item conferido fica fechado', () => {
-    const { rerender } = render(<DocSlot kind="id_front" existing={doc} correction="A foto do verso está cortada. Tire outra foto." onUploaded={vi.fn()} />);
+    const { rerender } = render(<DocSlot storeId="s1" kind="id_front" existing={doc} correction="A foto do verso está cortada. Tire outra foto." onUploaded={vi.fn()} />);
     expect(T('-correction')).toHaveTextContent('A foto do verso está cortada. Tire outra foto.');
-    rerender(<DocSlot kind="id_front" existing={doc} locked onUploaded={vi.fn()} />);
+    rerender(<DocSlot storeId="s1" kind="id_front" existing={doc} locked onUploaded={vi.fn()} />);
     expect(screen.getByText('Conferido')).toBeInTheDocument();
     expect(screen.queryByTestId('lojista.etapa3.slot-id_front-replace')).toBeNull();
   });

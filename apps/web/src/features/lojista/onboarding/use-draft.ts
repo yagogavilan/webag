@@ -6,11 +6,11 @@ import { ApiError } from '@/lib/api/errors';
 import { saveErrorMessage } from '@/lib/api/messages';
 import { STORE_KEY } from '../store-context';
 
-/** Salva o rascunho (PUT /me/store) e põe a resposta no cache: "Salvo às 14:32" vem de `updatedAt` do servidor. */
-export function useSaveDraft() {
+/** Salva o rascunho (cria a loja na etapa 1; depois, PATCH do perfil), relê a loja e põe no cache. */
+export function useSaveDraft(current: MerchantStore | null) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (patch: StoreDraftPatch) => merchantApi.saveDraft(patch),
+    mutationFn: (patch: StoreDraftPatch) => merchantApi.saveDraft(current, patch),
     onSuccess: (store) => client.setQueryData<MerchantStore | null>(STORE_KEY, store),
   });
 }

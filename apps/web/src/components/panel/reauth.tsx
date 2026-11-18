@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiRequest } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
-import { Banner, Button, Dialog, OtpInput } from '@/components/ui';
+import { Banner, Button, Dialog, OtpInput, PasswordField } from '@/components/ui';
 
 interface Pending {
   reason: string;
@@ -18,7 +18,12 @@ interface ReauthApi {
 
 const ReauthContext = createContext<ReauthApi | null>(null);
 
-export function ReauthProvider({ children }: { children: ReactNode }) {
+/**
+ * Reautenticação antes de ação sensível. Admin: código do autenticador. Lojista: senha, válida por 5 min (WB-053 C1, WB-075).
+ */
+export function ReauthProvider({ children, area = 'admin' }: { children: ReactNode; area?: 'admin' | 'lojista' }) {
+  const password = area === 'lojista';
+  const prefix = area;
   const [pending, setPending] = useState<Pending | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -53,13 +58,13 @@ export function ReauthProvider({ children }: { children: ReactNode }) {
     setBusy(true);
     setError(null);
     try {
-      await apiRequest('admin', 'auth/reauth', { method: 'POST', body: { totpCode: value } });
+      await apiRequest(area, 'auth/reauth', { method: 'POST', body: password ? { password: value } : { totpCode: value } });
       const current = pendingRef.current;
       setPending(null);
       current?.resolve();
     } catch (caught) {
       setCode('');
-      setError(caught instanceof ApiError && caught.isNetwork ? 'Conecte-se para continuar.' : 'Código incorreto ou vencido.');
+      setError(caught instanceof ApiError && caught.isNetwork ? 'Conecte-se para continuar.' : password ? 'Senha incorreta.' : 'Código incorreto ou vencido.');
     } finally {
       setBusy(false);
     }
@@ -79,15 +84,15 @@ export function ReauthProvider({ children }: { children: ReactNode }) {
       {pending ? (
         <Dialog
           title="Confirme que é você"
-          testId="admin.reauth.dialog"
+          testId={`${prefix}.reauth.dialog`}
           onClose={cancel}
           locked={busy}
           actions={
             <>
-              <Button onClick={() => void submit(code)} loading={busy} loadingLabel="Confirmando…" data-testid="admin.reauth.submit" disabled={code.length < 6 && !busy}>
+              <Button onClick={() => void submit(code)} loading={busy} loadingLabel="Confirmando…" data-testid={`${prefix}.reauth.submit`} disabled={!code && !busy}>
                 Confirmar
               </Button>
-              <Button variant="text" onClick={cancel} data-testid="admin.reauth.cancel">
+              <Button variant="text" onClick={cancel} data-testid={`${prefix}.reauth.cancel`}>
                 Cancelar
               </Button>
             </>
@@ -96,8 +101,16 @@ export function ReauthProvider({ children }: { children: ReactNode }) {
           <p className="wb-text-body" style={{ margin: 0 }}>
             {pending.reason}
           </p>
-          <OtpInput value={code} onChange={setCode} onComplete={(value) => void submit(value)} invalid={Boolean(error)} testId="admin.reauth.totp-input" autoFocus label="Código do app autenticador" />
-          {error ? <Banner tone="danger">{error}</Banner> : null}
+          {password ? (
+            <form onSubmit={(event) => { event.preventDefault(); void submit(code); }}>
+              <PasswordField label="Sua senha" value={code} onChange={setCode} autoComplete="current-password" error={error ?? undefined} testIds={{ input: `${prefix}.reauth.password-input`, toggle: `${prefix}.reauth.password-toggle` }} />
+            </form>
+          ) : (
+            <>
+              <OtpInput value={code} onChange={setCode} onComplete={(value) => void submit(value)} invalid={Boolean(error)} testId="admin.reauth.totp-input" autoFocus label="Código do app autenticador" />
+              {error ? <Banner tone="danger">{error}</Banner> : null}
+            </>
+          )}
         </Dialog>
       ) : null}
     </ReauthContext.Provider>

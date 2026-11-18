@@ -21,6 +21,12 @@ export function isValidPhone(value: string): boolean {
   return d.length === 10 || d[2] === '9';
 }
 
+/** Celular com DDD e o 9 na frente (WhatsApp da loja: a API recusa fixo). */
+export function isValidMobile(value: string): boolean {
+  const d = onlyDigits(value);
+  return d.length === 11 && Number(d.slice(0, 2)) >= 11 && d[2] === '9';
+}
+
 /** `07900-000`. */
 export function maskCep(value: string): string {
   const d = onlyDigits(value).slice(0, 8);

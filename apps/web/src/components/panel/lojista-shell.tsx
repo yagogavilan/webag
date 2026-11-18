@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
+import { ReauthProvider } from './reauth';
 import { Badge, Banner, Logo, ToastProvider, cx, useToast } from '@/components/ui';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import { STORE_STATUS_LABEL, supportHref, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
@@ -183,7 +184,9 @@ function Providers({ user, children }: { user: Me; children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <StoreProvider user={user}>{children}</StoreProvider>
+        <ReauthProvider area="lojista">
+          <StoreProvider user={user}>{children}</StoreProvider>
+        </ReauthProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

@@ -154,7 +154,7 @@ function Corrections({ store }: { store: MerchantStore }) {
     }
     setBusy(true);
     try {
-      client.setQueryData<MerchantStore | null>(STORE_KEY, await merchantApi.resubmit());
+      client.setQueryData<MerchantStore | null>(STORE_KEY, await merchantApi.submit(store.id));
       toast.show('Cadastro reenviado para análise.');
     } catch (caught) {
       setError(draftErrorMessage(caught));
@@ -167,6 +167,11 @@ function Corrections({ store }: { store: MerchantStore }) {
     <div className={ui.stack} data-testid={T('status-card')}>
       <PageHeader title="Início" />
       <Banner tone="warning">Precisamos de uma correção.</Banner>
+      {store.corrections.length === 0 ? (
+        <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('all-fixed')}>
+          Tudo corrigido. Reenvie para análise.
+        </p>
+      ) : null}
       <ul ref={list} style={{ listStyle: 'none', margin: 0, padding: 0 }} data-testid={T('corrections-list')}>
         {store.corrections.map((item) => (
           <li key={item.id} className={s.correctionItem} data-testid={T(`correction-${item.id}`)}>

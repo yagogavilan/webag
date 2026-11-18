@@ -48,6 +48,7 @@ export function resumeStep(store: Pick<MerchantStore, 'step'> | null): Onboardin
   return done >= 4 ? 'revisao' : (String(done + 1) as OnboardingStep);
 }
 
+
 /** Estados em que o lojista ainda está montando o cadastro (a loja não foi enviada). */
 export function isOnboarding(store: MerchantStore | null): boolean {
   return store === null || store.status === 'draft';

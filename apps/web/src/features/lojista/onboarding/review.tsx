@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { Banner, ButtonLink, SkeletonRows, cx, ui, useToast } from '@/components/ui';
 import { apiRequest } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/errors';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { maskPhone } from '@/lib/br/mask';
 import { CATALOG_READY, NEW_PRODUCT_PATH, maskedDocument, onboardingPath } from '@/lib/lojista-access';
@@ -19,7 +20,7 @@ import { draftErrorMessage } from './use-draft';
 
 interface Missing {
   text: string;
-  step: 1 | 2 | 3;
+  step: 1 | 2 | 3 | 4;
 }
 
 /** O que falta para enviar (onda-2 L7): cada item aponta a etapa onde se resolve. */
@@ -33,7 +34,17 @@ export function missingItems(store: MerchantStore): Missing[] {
   for (const kind of REQUIRED_DOCUMENTS[store.legalType ?? 'cpf']) {
     if (!sent.has(kind)) out.push({ text: DOCUMENT_LABEL[kind].toLowerCase(), step: 3 });
   }
+  // A API só aceita o envio com a conta de recebimento conectada (divergência com o L7, ver pendências do contrato).
+  if (store.payout.status === 'not_connected') out.push({ text: 'conta de recebimento (Mercado Pago)', step: 4 });
   return out;
+}
+
+/** Etapa onde se resolve cada pendência que a API devolve em `ONBOARDING_INCOMPLETE`. */
+function stepOfField(field: string): 1 | 2 | 3 | 4 {
+  if (field === 'legalName' || field === 'fiscalResponsibilityAccepted') return 1;
+  if (field.startsWith('documents.')) return 3;
+  if (field === 'paymentAccount') return 4;
+  return 2;
 }
 
 /** L7: confere os 4 blocos, envia para análise e mostra a tela de sucesso. */
@@ -43,8 +54,9 @@ export function Review({ store, backHref }: { store: MerchantStore; backHref?: s
   const [busy, setBusy] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [serverMissing, setServerMissing] = useState<Missing[]>([]);
   const categories = useQuery({ queryKey: ['lojista', 'categories'], queryFn: () => apiRequest<CategoryTree>('lojista', 'categories'), staleTime: 5 * 60_000 });
-  const missing = missingItems(store);
+  const missing = serverMissing.length > 0 ? serverMissing : missingItems(store);
   const connected = store.payout.status === 'connected';
   const edit = (step: 1 | 2 | 3 | 4) => `${onboardingPath(String(step) as '1')}?de=revisao`;
 
@@ -56,11 +68,15 @@ export function Review({ store, backHref }: { store: MerchantStore; backHref?: s
     if (missing.length > 0) return setShowMissing(true);
     setBusy(true);
     try {
-      const sent = await merchantApi.submit();
+      const sent = await merchantApi.submit(store.id);
       client.setQueryData<MerchantStore | null>(STORE_KEY, sent);
       toast.show('Cadastro enviado para análise.');
     } catch (caught) {
       setBusy(false);
+      if (caught instanceof ApiError && caught.code === 'ONBOARDING_INCOMPLETE') {
+        setServerMissing(caught.fields.map((field) => ({ text: field.message.replace(/\.$/, ''), step: stepOfField(field.field) })));
+        return setShowMissing(true);
+      }
       setFormError(draftErrorMessage(caught));
     }
   }
@@ -74,7 +90,7 @@ export function Review({ store, backHref }: { store: MerchantStore; backHref?: s
       {categories.isPending ? <SkeletonRows rows={1} height={24} label="Carregando o resumo" /> : null}
       {!connected ? (
         <Banner tone="info" testId={ltid('revisao', 'payout-banner')}>
-          Falta conectar o Mercado Pago. Você pode enviar agora; a loja só vai ao ar depois de conectar.
+          Falta conectar o Mercado Pago. Conecte antes de enviar: a loja só vai ao ar depois de conectar.
         </Banner>
       ) : null}
       {showMissing && missing.length > 0 ? (

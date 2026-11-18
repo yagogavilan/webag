@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MerchantStore } from '@/lib/api/lojista';
 import type { Me } from '@/lib/session-types';
 import { json, mockFetch } from '../../../test/render';
+import { fakeStore, storeHandlers } from '../../../test/lojista';
 import { LojistaShell } from './lojista-shell';
 
 const replace = vi.fn();
@@ -11,14 +12,13 @@ let pathname = '/lojista';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }), usePathname: () => pathname }));
 
 const user: Me = { id: 'u1', email: 'marcos@casabela.com.br', emailVerified: true, name: 'Marcos', phone: null, roles: ['customer', 'merchant'], adminProfile: null };
-const baseStore = { id: 's1', status: 'in_review', role: 'owner', name: 'Casa Bela', step: 4, documents: [], corrections: [] } as unknown as MerchantStore;
+const baseStore = fakeStore({ status: 'in_review', name: 'Casa Bela', step: 4, legalType: 'cpf', document: '52998224725' });
 
 function setup(store: Partial<MerchantStore> | 'none' = {}) {
-  const { impl, calls } = mockFetch((url) => {
-    if (url.pathname.endsWith('/me/store')) return store === 'none' ? json({ code: 'STORE_NOT_FOUND', title: 'x', status: 404 }, 404) : json({ ...baseStore, ...store });
-    if (url.pathname.endsWith('/logout')) return new Response(null, { status: 204 });
-    return undefined;
-  });
+  const { impl, calls } = mockFetch(
+    ...storeHandlers(store === 'none' ? null : { ...baseStore, ...store }),
+    (url) => (url.pathname.endsWith('/logout') ? new Response(null, { status: 204 }) : undefined),
+  );
   vi.stubGlobal('fetch', impl);
   render(
     <LojistaShell user={user}>

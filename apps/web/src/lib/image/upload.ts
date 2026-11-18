@@ -43,12 +43,13 @@ export function postToStorage(policy: UploadPolicy, file: Blob, fileName: string
   });
 }
 
-export type UploadDocumentFn = (kind: DocumentKind, blob: Blob, fileName: string, hooks: UploadHooks) => Promise<StoreDocument>;
+export type UploadDocumentFn = (storeId: string, kind: DocumentKind, blob: Blob, fileName: string, hooks: UploadHooks) => Promise<StoreDocument>;
 
 /** Pedir política, enviar ao armazenamento, confirmar (a API confere dono, tamanho e conteúdo) e vincular ao slot. */
-export const uploadStoreDocument: UploadDocumentFn = async (kind, blob, fileName, hooks) => {
-  const policy = await merchantApi.createUpload({ purpose: 'store_document', contentType: blob.type || 'application/octet-stream', sizeBytes: blob.size });
+export const uploadStoreDocument: UploadDocumentFn = async (storeId, kind, blob, fileName, hooks) => {
+  const policy = await merchantApi.createUpload({ storeId, purpose: 'store_document', contentType: blob.type || 'application/octet-stream', sizeBytes: blob.size });
   await postToStorage(policy, blob, fileName, hooks);
   await merchantApi.completeUpload(policy.uploadId);
-  return merchantApi.attachDocument(kind, policy.uploadId);
+  await merchantApi.attachDocument(storeId, kind, policy.uploadId);
+  return { kind, uploadedAt: new Date().toISOString(), fileName, mimeType: blob.type, sizeBytes: blob.size };
 };

@@ -10,8 +10,7 @@ import { ltid } from '@/lib/testid';
 import { DOCUMENT_LABEL, DocSlot, REQUIRED_DOCUMENTS } from '../doc-slot';
 import { STORE_KEY } from '../store-context';
 import s from '../lojista.module.css';
-import { SaveError, StepFrame } from './step-frame';
-import { draftErrorMessage, useSaveDraft } from './use-draft';
+import { StepFrame } from './step-frame';
 
 /** Atualiza o documento do slot no cache do rascunho (o novo substitui o anterior, WB-052 C6). */
 export function useDocumentCache() {
@@ -31,34 +30,27 @@ interface Props {
 export function Step3({ store, next, backHref, upload }: Props) {
   const router = useRouter();
   const toast = useToast();
-  const save = useSaveDraft();
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const putDocument = useDocumentCache();
   const list = useRef<HTMLDivElement>(null);
   const [showMissing, setShowMissing] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const kinds = REQUIRED_DOCUMENTS[store.legalType ?? 'cpf'];
   const sent = new Map(store.documents.map((doc) => [doc.kind, doc]));
   const missing = kinds.filter((kind) => !sent.has(kind));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setFormError(null);
     if (missing.length > 0) {
       setShowMissing(true);
       requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-testid="${ltid('etapa3', `slot-${missing[0] as DocumentKind}`)}"]`)?.scrollIntoView({ block: 'center' }));
       return;
     }
-    try {
-      await save.mutateAsync({ step: Math.max(store.step, 3) });
-      toast.show('Documentos enviados.');
-      router.push(next as never);
-    } catch (caught) {
-      setFormError(draftErrorMessage(caught));
-    }
+    toast.show('Documentos enviados.');
+    router.push(next as never);
   }
 
   return (
-    <StepFrame step={3} screen="etapa3" title="Envie seus documentos" savedAt={store.step >= 3 ? store.updatedAt : null} backHref={backHref} submitLabel="Continuar" busy={save.isPending} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
+    <StepFrame step={3} screen="etapa3" title="Envie seus documentos" savedAt={savedAt} backHref={backHref} submitLabel="Continuar" onSubmit={submit}>
       <p className="wb-text-body" style={{ margin: 0 }}>
         Fotografe com boa luz e sem cortar as bordas. Só a equipe do Webag vê seus documentos.
       </p>
@@ -69,7 +61,7 @@ export function Step3({ store, next, backHref, upload }: Props) {
       ) : null}
       <div ref={list} className={s.slots}>
         {kinds.map((kind) => (
-          <DocSlot key={kind} kind={kind} existing={sent.get(kind)} onUploaded={putDocument} {...(upload ? { upload } : {})} missing={showMissing} />
+          <DocSlot key={kind} storeId={store.id} kind={kind} existing={sent.get(kind)} onUploaded={(doc) => { putDocument(doc); setSavedAt(doc.uploadedAt); }} {...(upload ? { upload } : {})} missing={showMissing} />
         ))}
       </div>
       <span className={ui.srOnly} role="status" aria-live="polite">
