@@ -16,3 +16,8 @@ export function maskPii(text: string): string {
 export function safeErrorMessage(error: unknown): string {
   return maskPii(error instanceof Error ? error.message : String(error));
 }
+
+/** LGPD: a posição do cliente (`lat`/`lng` na query de descoberta) não vai ao log de acesso. */
+export function maskCoordinates(url: string | undefined): string | undefined {
+  return url?.replace(/([?&](?:lat|lng))=[^&]*/g, '$1=[redacted]');
+}

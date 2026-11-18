@@ -2439,6 +2439,136 @@ export interface UpdateBannerRequest {
   active?: boolean;
 }
 
+export interface Rating {
+  /**
+     * Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações
+     * @nullable
+     */
+  average: number | null;
+  count: number;
+  /** Mostrar "Novo" no lugar da nota */
+  isNew: boolean;
+}
+
+export interface StoreDelivery {
+  /** Entrega na posição consultada (dentro do raio e de uma faixa) */
+  available: boolean;
+  /**
+     * Taxa para a posição
+     * @nullable
+     */
+  feeCents: number | null;
+  /** Taxa R$ 0 nessa posição */
+  freeShipping: boolean;
+  /** 0 = sem frete grátis por valor */
+  freeAboveCents: number;
+  minOrderCents: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+}
+
+export type StoreCardLogoUrls = {[key: string]: string};
+
+export type StoreCardLogo = {
+  urls: StoreCardLogoUrls;
+};
+
+export interface StoreCard {
+  id: string;
+  name: string;
+  logo: StoreCardLogo;
+  /** @nullable */
+  mainCategoryId: string | null;
+  open: boolean;
+  /**
+     * Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário
+     * @nullable
+     */
+  opensAt: string | null;
+  /** Linha reta em metros */
+  distanceM: number;
+  rating: Rating;
+  delivery: StoreDelivery;
+  pickupEnabled: boolean;
+  /** Troca voluntária ativa (prazo maior que 0) */
+  acceptsExchange: boolean;
+}
+
+export type ProductCardImageUrls = {[key: string]: string};
+
+export type ProductCardImage = {
+  urls: ProductCardImageUrls;
+};
+
+export type ProductCardStore = {
+  id: string;
+  name: string;
+  open: boolean;
+  /** @nullable */
+  opensAt: string | null;
+  distanceM: number;
+};
+
+export interface ProductCard {
+  id: string;
+  name: string;
+  image: ProductCardImage;
+  price: Money;
+  /** Preço antes da promoção vigente */
+  originalPrice: Money | null;
+  /** @nullable */
+  discountPercent: number | null;
+  /** @nullable */
+  categoryId: string | null;
+  store: ProductCardStore;
+}
+
+export type HomeMode = typeof HomeMode[keyof typeof HomeMode];
+
+
+export const HomeMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export interface Home {
+  mode: HomeMode;
+  /** Nenhuma loja visível na posição */
+  empty: boolean;
+  /** @maxItems 10 */
+  nearbyStores: StoreCard[];
+  /** @maxItems 10 */
+  newStores: StoreCard[];
+  /** @maxItems 10 */
+  offers: ProductCard[];
+  /** @maxItems 10 */
+  bestSellers: ProductCard[];
+  availableCategoryIds: string[];
+}
+
+export interface StoreCardPage {
+  data: StoreCard[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface ProductCardPage {
+  data: ProductCard[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface SuggestionItem {
+  id: string;
+  name: string;
+}
+
+export interface SearchSuggestions {
+  products: SuggestionItem[];
+  stores: SuggestionItem[];
+  categories: SuggestionItem[];
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -2483,6 +2613,16 @@ export type TooManyRequestsResponse = Problem;
  * Cursor opaco devolvido em `nextCursor`
  */
 export type CursorParameter = string;
+
+/**
+ * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+ */
+export type LatParameter = number;
+
+/**
+ * Longitude da posição do cliente
+ */
+export type LngParameter = number;
 
 /**
  * Itens por página (padrão 20, máximo 50)
@@ -2702,6 +2842,190 @@ export const AdminListProductsStatus = {
 
 export type ListBannersParams = {
   cityId?: string;
+};
+
+export type GetHomeParams = {
+  /**
+   * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+   * @minimum -90
+   * @maximum 90
+   */
+  lat: LatParameter;
+  /**
+   * Longitude da posição do cliente
+   * @minimum -180
+   * @maximum 180
+   */
+  lng: LngParameter;
+  mode?: GetHomeMode;
+};
+
+export type GetHomeMode = typeof GetHomeMode[keyof typeof GetHomeMode];
+
+
+export const GetHomeMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type SearchStoresParams = {
+  /**
+   * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+   * @minimum -90
+   * @maximum 90
+   */
+  lat: LatParameter;
+  /**
+   * Longitude da posição do cliente
+   * @minimum -180
+   * @maximum 180
+   */
+  lng: LngParameter;
+  /** @maxLength 80 */
+  q?: string;
+  categoryId?: string;
+  /**
+   * @minimum 0.5
+   * @maximum 50
+   */
+  maxDistanceKm?: number;
+  freeShipping?: SearchStoresFreeShipping;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  minRating?: number;
+  acceptsExchange?: SearchStoresAcceptsExchange;
+  sort?: SearchStoresSort;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type SearchStoresFreeShipping = typeof SearchStoresFreeShipping[keyof typeof SearchStoresFreeShipping];
+
+
+export const SearchStoresFreeShipping = {
+  true: 'true',
+} as const;
+
+export type SearchStoresAcceptsExchange = typeof SearchStoresAcceptsExchange[keyof typeof SearchStoresAcceptsExchange];
+
+
+export const SearchStoresAcceptsExchange = {
+  true: 'true',
+} as const;
+
+export type SearchStoresSort = typeof SearchStoresSort[keyof typeof SearchStoresSort];
+
+
+export const SearchStoresSort = {
+  relevance: 'relevance',
+  distance: 'distance',
+  rating: 'rating',
+  fee: 'fee',
+} as const;
+
+export type SearchProductsParams = {
+  /**
+   * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+   * @minimum -90
+   * @maximum 90
+   */
+  lat: LatParameter;
+  /**
+   * Longitude da posição do cliente
+   * @minimum -180
+   * @maximum 180
+   */
+  lng: LngParameter;
+  /** @maxLength 80 */
+  q?: string;
+  categoryId?: string;
+  /**
+   * @minimum 0
+   * @maximum 9999999
+   */
+  minPriceCents?: number;
+  /**
+   * @minimum 0
+   * @maximum 9999999
+   */
+  maxPriceCents?: number;
+  /**
+   * @minimum 0.5
+   * @maximum 50
+   */
+  maxDistanceKm?: number;
+  freeShipping?: SearchProductsFreeShipping;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  minRating?: number;
+  acceptsExchange?: SearchProductsAcceptsExchange;
+  sort?: SearchProductsSort;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type SearchProductsFreeShipping = typeof SearchProductsFreeShipping[keyof typeof SearchProductsFreeShipping];
+
+
+export const SearchProductsFreeShipping = {
+  true: 'true',
+} as const;
+
+export type SearchProductsAcceptsExchange = typeof SearchProductsAcceptsExchange[keyof typeof SearchProductsAcceptsExchange];
+
+
+export const SearchProductsAcceptsExchange = {
+  true: 'true',
+} as const;
+
+export type SearchProductsSort = typeof SearchProductsSort[keyof typeof SearchProductsSort];
+
+
+export const SearchProductsSort = {
+  relevance: 'relevance',
+  price_asc: 'price_asc',
+  distance: 'distance',
+  rating: 'rating',
+  discount: 'discount',
+} as const;
+
+export type GetSearchSuggestionsParams = {
+  /**
+   * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+   * @minimum -90
+   * @maximum 90
+   */
+  lat: LatParameter;
+  /**
+   * Longitude da posição do cliente
+   * @minimum -180
+   * @maximum 180
+   */
+  lng: LngParameter;
+  /** @maxLength 80 */
+  q: string;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -11026,6 +11350,230 @@ export const deleteBanner = async (bannerId: string, options?: Parameters<typeof
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getHomeResponse200 = {
+  data: Home
+  status: 200
+}
+
+export type getHomeResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getHomeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getHomeResponseSuccess = (getHomeResponse200) & {
+  headers: Headers;
+};
+export type getHomeResponseError = (getHomeResponse400 | getHomeResponse429) & {
+  headers: Headers;
+};
+
+export type getHomeResponse = (getHomeResponseSuccess | getHomeResponseError)
+
+export const getGetHomeUrl = (params: GetHomeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/home?${stringifiedParams}` : `/v1/home`
+}
+
+/**
+ * Lojas que entregam na posição (RN-03/RN-04): aprovada, conta de recebimento ativa, 1+ produto ativo e distância em linha reta (PostGIS) dentro do raio da loja e da faixa de taxa; loja fora do raio não aparece. `nearbyStores`: abertas primeiro, depois distância, depois avaliação. `offers`: promoção vigente, produto com estoque, maior desconto primeiro. `newStores`: aprovadas há até 30 dias. `bestSellers`: vazio até a Onda 4 (precisa de pedidos); seção vazia é ocultada pelo app. `availableCategoryIds`: categorias (com a mãe das filhas) que têm loja visível ali. `empty=true`: nenhuma loja visível (estado 'Ainda não há lojas aqui'). `mode=pickup` (WB-036): lojas com retirada ativa até `retirada_distancia_max_km`, sem exigir entrega. Cache no servidor de 30 s por posição exata; no aparelho `private, max-age=30`. As coordenadas não vão ao log de acesso.
+ * @summary Home do cliente, seções por posição (público)
+ */
+export const getHome = async (params: GetHomeParams, options?: Parameters<typeof apiFetch>[1]): Promise<getHomeResponse> => {
+
+  return apiFetch<getHomeResponse>(getGetHomeUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type searchStoresResponse200 = {
+  data: StoreCardPage
+  status: 200
+}
+
+export type searchStoresResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type searchStoresResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type searchStoresResponseSuccess = (searchStoresResponse200) & {
+  headers: Headers;
+};
+export type searchStoresResponseError = (searchStoresResponse400 | searchStoresResponse429) & {
+  headers: Headers;
+};
+
+export type searchStoresResponse = (searchStoresResponseSuccess | searchStoresResponseError)
+
+export const getSearchStoresUrl = (params: SearchStoresParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/search/stores?${stringifiedParams}` : `/v1/search/stores`
+}
+
+/**
+ * Sem `q`, lista todas as lojas alcançáveis (serve à tela 'ver todas' e à categoria). `q` ignora acento e caixa, tolera 1 erro de digitação a partir de 4 letras, mínimo de 2 letras (400 abaixo disso). Filtros combinam em E. `freeShipping`: taxa R$ 0 nesse endereço. `minRating` só considera lojas com média pública (3+ avaliações). `categoryId` inclui as filhas. Ordenação: `relevance` (abertas primeiro, relevância do nome, distância), `distance`, `rating`, `fee` (menor taxa). Paginação por cursor opaco. Limite de 90 req/min por IP.
+ * @summary Buscar lojas que entregam na posição (público)
+ */
+export const searchStores = async (params: SearchStoresParams, options?: Parameters<typeof apiFetch>[1]): Promise<searchStoresResponse> => {
+
+  return apiFetch<searchStoresResponse>(getSearchStoresUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type searchProductsResponse200 = {
+  data: ProductCardPage
+  status: 200
+}
+
+export type searchProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type searchProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type searchProductsResponseSuccess = (searchProductsResponse200) & {
+  headers: Headers;
+};
+export type searchProductsResponseError = (searchProductsResponse400 | searchProductsResponse429) & {
+  headers: Headers;
+};
+
+export type searchProductsResponse = (searchProductsResponseSuccess | searchProductsResponseError)
+
+export const getSearchProductsUrl = (params: SearchProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/search/products?${stringifiedParams}` : `/v1/search/products`
+}
+
+/**
+ * Só produto ativo, não pausado/removido pela moderação e com disponível (estoque - reservado) maior que zero, de loja visível ali. Produto de loja fechada aparece com `store.open=false` (selo 'Fechada'; o pagamento é bloqueado depois, DEC-022). Preço filtrado e ordenado é o vigente do produto (promoção dentro da janela). `minPriceCents` maior que `maxPriceCents` responde 400. Demais filtros como em `searchStores`. `sort`: `relevance`, `price_asc`, `distance`, `rating`, `discount`.
+ * @summary Buscar produtos de lojas que entregam na posição (público)
+ */
+export const searchProducts = async (params: SearchProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<searchProductsResponse> => {
+
+  return apiFetch<searchProductsResponse>(getSearchProductsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getSearchSuggestionsResponse200 = {
+  data: SearchSuggestions
+  status: 200
+}
+
+export type getSearchSuggestionsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getSearchSuggestionsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getSearchSuggestionsResponseSuccess = (getSearchSuggestionsResponse200) & {
+  headers: Headers;
+};
+export type getSearchSuggestionsResponseError = (getSearchSuggestionsResponse400 | getSearchSuggestionsResponse429) & {
+  headers: Headers;
+};
+
+export type getSearchSuggestionsResponse = (getSearchSuggestionsResponseSuccess | getSearchSuggestionsResponseError)
+
+export const getGetSearchSuggestionsUrl = (params: GetSearchSuggestionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/search/suggestions?${stringifiedParams}` : `/v1/search/suggestions`
+}
+
+/**
+ * Até 5 produtos, 5 lojas e 5 categorias. Com menos de 2 caracteres devolve listas vazias. O app espera 300 ms de pausa antes de chamar (WB-013 C4).
+ * @summary Sugestões enquanto digita (público)
+ */
+export const getSearchSuggestions = async (params: GetSearchSuggestionsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getSearchSuggestionsResponse> => {
+
+  return apiFetch<getSearchSuggestionsResponse>(getGetSearchSuggestionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

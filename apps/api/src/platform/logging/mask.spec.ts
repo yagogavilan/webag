@@ -13,3 +13,13 @@ describe('maskPii (SEC-128)', () => {
     expect(safeErrorMessage('texto')).toBe('texto');
   });
 });
+
+describe('maskCoordinates (LGPD)', () => {
+  it('troca lat e lng da query e preserva o resto', async () => {
+    const { maskCoordinates } = await import('./mask.js');
+    expect(maskCoordinates('/v1/home?lat=-23.28&lng=-46.74&mode=delivery')).toBe('/v1/home?lat=[redacted]&lng=[redacted]&mode=delivery');
+    expect(maskCoordinates('/v1/search/stores?q=pao&lng=-46.7&lat=-23.2')).toBe('/v1/search/stores?q=pao&lng=[redacted]&lat=[redacted]');
+    expect(maskCoordinates('/v1/regions')).toBe('/v1/regions');
+    expect(maskCoordinates(undefined)).toBeUndefined();
+  });
+});

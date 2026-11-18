@@ -5036,3 +5036,323 @@ export const DeleteBannerParams = zod.object({
 })
 
 export const DeleteBannerResponse = zod.void()
+
+
+/**
+ * Lojas que entregam na posição (RN-03/RN-04): aprovada, conta de recebimento ativa, 1+ produto ativo e distância em linha reta (PostGIS) dentro do raio da loja e da faixa de taxa; loja fora do raio não aparece. `nearbyStores`: abertas primeiro, depois distância, depois avaliação. `offers`: promoção vigente, produto com estoque, maior desconto primeiro. `newStores`: aprovadas há até 30 dias. `bestSellers`: vazio até a Onda 4 (precisa de pedidos); seção vazia é ocultada pelo app. `availableCategoryIds`: categorias (com a mãe das filhas) que têm loja visível ali. `empty=true`: nenhuma loja visível (estado 'Ainda não há lojas aqui'). `mode=pickup` (WB-036): lojas com retirada ativa até `retirada_distancia_max_km`, sem exigir entrega. Cache no servidor de 30 s por posição exata; no aparelho `private, max-age=30`. As coordenadas não vão ao log de acesso.
+ * @summary Home do cliente, seções por posição (público)
+ */
+export const getHomeQueryLatMin = -90;
+export const getHomeQueryLatMax = 90;
+
+export const getHomeQueryLngMin = -180;
+export const getHomeQueryLngMax = 180;
+
+export const getHomeQueryModeDefault = `delivery`;
+
+export const GetHomeQueryParams = zod.object({
+  "lat": zod.number().min(getHomeQueryLatMin).max(getHomeQueryLatMax).describe('Latitude da posição do cliente (endereço salvo, CEP ou GPS)'),
+  "lng": zod.number().min(getHomeQueryLngMin).max(getHomeQueryLngMax).describe('Longitude da posição do cliente'),
+  "mode": zod.enum(['delivery', 'pickup']).default(getHomeQueryModeDefault)
+})
+
+export const getHomeResponseNearbyStoresMax = 10;
+
+export const getHomeResponseNewStoresMax = 10;
+
+export const getHomeResponseOffersMax = 10;
+
+export const getHomeResponseBestSellersMax = 10;
+
+
+
+export const GetHomeResponse = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "empty": zod.boolean().describe('Nenhuma loja visível na posição'),
+  "nearbyStores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "mainCategoryId": zod.uuid().nullable(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable().describe('Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário'),
+  "distanceM": zod.int().describe('Linha reta em metros'),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "delivery": zod.object({
+  "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
+  "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
+  "minOrderCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickupEnabled": zod.boolean(),
+  "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
+})).max(getHomeResponseNearbyStoresMax),
+  "newStores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "mainCategoryId": zod.uuid().nullable(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable().describe('Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário'),
+  "distanceM": zod.int().describe('Linha reta em metros'),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "delivery": zod.object({
+  "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
+  "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
+  "minOrderCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickupEnabled": zod.boolean(),
+  "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
+})).max(getHomeResponseNewStoresMax),
+  "offers": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "discountPercent": zod.int().nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "distanceM": zod.int()
+})
+})).max(getHomeResponseOffersMax),
+  "bestSellers": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "discountPercent": zod.int().nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "distanceM": zod.int()
+})
+})).max(getHomeResponseBestSellersMax),
+  "availableCategoryIds": zod.array(zod.uuid())
+})
+
+
+/**
+ * Sem `q`, lista todas as lojas alcançáveis (serve à tela 'ver todas' e à categoria). `q` ignora acento e caixa, tolera 1 erro de digitação a partir de 4 letras, mínimo de 2 letras (400 abaixo disso). Filtros combinam em E. `freeShipping`: taxa R$ 0 nesse endereço. `minRating` só considera lojas com média pública (3+ avaliações). `categoryId` inclui as filhas. Ordenação: `relevance` (abertas primeiro, relevância do nome, distância), `distance`, `rating`, `fee` (menor taxa). Paginação por cursor opaco. Limite de 90 req/min por IP.
+ * @summary Buscar lojas que entregam na posição (público)
+ */
+export const searchStoresQueryLatMin = -90;
+export const searchStoresQueryLatMax = 90;
+
+export const searchStoresQueryLngMin = -180;
+export const searchStoresQueryLngMax = 180;
+
+export const searchStoresQueryQMax = 80;
+
+export const searchStoresQueryMaxDistanceKmMin = 0.5;
+export const searchStoresQueryMaxDistanceKmMax = 50;
+
+export const searchStoresQueryMinRatingMax = 5;
+
+export const searchStoresQuerySortDefault = `relevance`;
+export const searchStoresQueryCursorMax = 200;
+
+export const searchStoresQueryLimitDefault = 20;
+export const searchStoresQueryLimitMax = 50;
+
+
+
+export const SearchStoresQueryParams = zod.object({
+  "lat": zod.number().min(searchStoresQueryLatMin).max(searchStoresQueryLatMax).describe('Latitude da posição do cliente (endereço salvo, CEP ou GPS)'),
+  "lng": zod.number().min(searchStoresQueryLngMin).max(searchStoresQueryLngMax).describe('Longitude da posição do cliente'),
+  "q": zod.string().max(searchStoresQueryQMax).optional(),
+  "categoryId": zod.uuid().optional(),
+  "maxDistanceKm": zod.number().min(searchStoresQueryMaxDistanceKmMin).max(searchStoresQueryMaxDistanceKmMax).optional(),
+  "freeShipping": zod.enum(['true']).optional(),
+  "minRating": zod.number().min(1).max(searchStoresQueryMinRatingMax).optional(),
+  "acceptsExchange": zod.enum(['true']).optional(),
+  "sort": zod.enum(['relevance', 'distance', 'rating', 'fee']).default(searchStoresQuerySortDefault),
+  "cursor": zod.string().max(searchStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(searchStoresQueryLimitMax).default(searchStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const SearchStoresResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "mainCategoryId": zod.uuid().nullable(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable().describe('Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário'),
+  "distanceM": zod.int().describe('Linha reta em metros'),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "delivery": zod.object({
+  "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
+  "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
+  "minOrderCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickupEnabled": zod.boolean(),
+  "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Só produto ativo, não pausado/removido pela moderação e com disponível (estoque - reservado) maior que zero, de loja visível ali. Produto de loja fechada aparece com `store.open=false` (selo 'Fechada'; o pagamento é bloqueado depois, DEC-022). Preço filtrado e ordenado é o vigente do produto (promoção dentro da janela). `minPriceCents` maior que `maxPriceCents` responde 400. Demais filtros como em `searchStores`. `sort`: `relevance`, `price_asc`, `distance`, `rating`, `discount`.
+ * @summary Buscar produtos de lojas que entregam na posição (público)
+ */
+export const searchProductsQueryLatMin = -90;
+export const searchProductsQueryLatMax = 90;
+
+export const searchProductsQueryLngMin = -180;
+export const searchProductsQueryLngMax = 180;
+
+export const searchProductsQueryQMax = 80;
+
+export const searchProductsQueryMinPriceCentsMin = 0;
+export const searchProductsQueryMinPriceCentsMax = 9999999;
+
+export const searchProductsQueryMaxPriceCentsMin = 0;
+export const searchProductsQueryMaxPriceCentsMax = 9999999;
+
+export const searchProductsQueryMaxDistanceKmMin = 0.5;
+export const searchProductsQueryMaxDistanceKmMax = 50;
+
+export const searchProductsQueryMinRatingMax = 5;
+
+export const searchProductsQuerySortDefault = `relevance`;
+export const searchProductsQueryCursorMax = 200;
+
+export const searchProductsQueryLimitDefault = 20;
+export const searchProductsQueryLimitMax = 50;
+
+
+
+export const SearchProductsQueryParams = zod.object({
+  "lat": zod.number().min(searchProductsQueryLatMin).max(searchProductsQueryLatMax).describe('Latitude da posição do cliente (endereço salvo, CEP ou GPS)'),
+  "lng": zod.number().min(searchProductsQueryLngMin).max(searchProductsQueryLngMax).describe('Longitude da posição do cliente'),
+  "q": zod.string().max(searchProductsQueryQMax).optional(),
+  "categoryId": zod.uuid().optional(),
+  "minPriceCents": zod.int().min(searchProductsQueryMinPriceCentsMin).max(searchProductsQueryMinPriceCentsMax).optional(),
+  "maxPriceCents": zod.int().min(searchProductsQueryMaxPriceCentsMin).max(searchProductsQueryMaxPriceCentsMax).optional(),
+  "maxDistanceKm": zod.number().min(searchProductsQueryMaxDistanceKmMin).max(searchProductsQueryMaxDistanceKmMax).optional(),
+  "freeShipping": zod.enum(['true']).optional(),
+  "minRating": zod.number().min(1).max(searchProductsQueryMinRatingMax).optional(),
+  "acceptsExchange": zod.enum(['true']).optional(),
+  "sort": zod.enum(['relevance', 'price_asc', 'distance', 'rating', 'discount']).default(searchProductsQuerySortDefault),
+  "cursor": zod.string().max(searchProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(searchProductsQueryLimitMax).default(searchProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const SearchProductsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "discountPercent": zod.int().nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "distanceM": zod.int()
+})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Até 5 produtos, 5 lojas e 5 categorias. Com menos de 2 caracteres devolve listas vazias. O app espera 300 ms de pausa antes de chamar (WB-013 C4).
+ * @summary Sugestões enquanto digita (público)
+ */
+export const getSearchSuggestionsQueryLatMin = -90;
+export const getSearchSuggestionsQueryLatMax = 90;
+
+export const getSearchSuggestionsQueryLngMin = -180;
+export const getSearchSuggestionsQueryLngMax = 180;
+
+export const getSearchSuggestionsQueryQMax = 80;
+
+
+
+export const GetSearchSuggestionsQueryParams = zod.object({
+  "lat": zod.number().min(getSearchSuggestionsQueryLatMin).max(getSearchSuggestionsQueryLatMax).describe('Latitude da posição do cliente (endereço salvo, CEP ou GPS)'),
+  "lng": zod.number().min(getSearchSuggestionsQueryLngMin).max(getSearchSuggestionsQueryLngMax).describe('Longitude da posição do cliente'),
+  "q": zod.string().max(getSearchSuggestionsQueryQMax)
+})
+
+export const GetSearchSuggestionsResponse = zod.object({
+  "products": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+})),
+  "stores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+})),
+  "categories": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string()
+}))
+})

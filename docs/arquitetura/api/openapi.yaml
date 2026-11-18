@@ -50,6 +50,8 @@ tags:
     description: Endereços salvos do cliente (`/v1/me/addresses`, até 8, um padrão)
   - name: home
     description: Banners e seções da home do app do cliente (descoberta)
+  - name: search
+    description: Busca pública de produtos e lojas por posição, com filtros e ordenação
 security:
   - bearerAuth: []
 paths:
@@ -3821,6 +3823,108 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/home:
+    get:
+      tags: [home]
+      operationId: getHome
+      summary: Home do cliente, seções por posição (público)
+      description: "Lojas que entregam na posição (RN-03/RN-04): aprovada, conta de recebimento ativa, 1+ produto ativo e distância em linha reta (PostGIS) dentro do raio da loja e da faixa de taxa; loja fora do raio não aparece. `nearbyStores`: abertas primeiro, depois distância, depois avaliação. `offers`: promoção vigente, produto com estoque, maior desconto primeiro. `newStores`: aprovadas há até 30 dias. `bestSellers`: vazio até a Onda 4 (precisa de pedidos); seção vazia é ocultada pelo app. `availableCategoryIds`: categorias (com a mãe das filhas) que têm loja visível ali. `empty=true`: nenhuma loja visível (estado 'Ainda não há lojas aqui'). `mode=pickup` (WB-036): lojas com retirada ativa até `retirada_distancia_max_km`, sem exigir entrega. Cache no servidor de 30 s por posição exata; no aparelho `private, max-age=30`. As coordenadas não vão ao log de acesso."
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: mode, in: query, schema: { type: string, enum: [delivery, pickup], default: delivery } }
+      responses:
+        '200':
+          description: Seções da home
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Home' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/search/stores:
+    get:
+      tags: [search]
+      operationId: searchStores
+      summary: Buscar lojas que entregam na posição (público)
+      description: "Sem `q`, lista todas as lojas alcançáveis (serve à tela 'ver todas' e à categoria). `q` ignora acento e caixa, tolera 1 erro de digitação a partir de 4 letras, mínimo de 2 letras (400 abaixo disso). Filtros combinam em E. `freeShipping`: taxa R$ 0 nesse endereço. `minRating` só considera lojas com média pública (3+ avaliações). `categoryId` inclui as filhas. Ordenação: `relevance` (abertas primeiro, relevância do nome, distância), `distance`, `rating`, `fee` (menor taxa). Paginação por cursor opaco. Limite de 90 req/min por IP."
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: maxDistanceKm, in: query, schema: { type: number, minimum: 0.5, maximum: 50 } }
+        - { name: freeShipping, in: query, schema: { type: string, enum: ['true'] } }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { name: acceptsExchange, in: query, schema: { type: string, enum: ['true'] } }
+        - { name: sort, in: query, schema: { type: string, enum: [relevance, distance, rating, fee], default: relevance } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Lojas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreCardPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/search/products:
+    get:
+      tags: [search]
+      operationId: searchProducts
+      summary: Buscar produtos de lojas que entregam na posição (público)
+      description: "Só produto ativo, não pausado/removido pela moderação e com disponível (estoque - reservado) maior que zero, de loja visível ali. Produto de loja fechada aparece com `store.open=false` (selo 'Fechada'; o pagamento é bloqueado depois, DEC-022). Preço filtrado e ordenado é o vigente do produto (promoção dentro da janela). `minPriceCents` maior que `maxPriceCents` responde 400. Demais filtros como em `searchStores`. `sort`: `relevance`, `price_asc`, `distance`, `rating`, `discount`."
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: minPriceCents, in: query, schema: { type: integer, minimum: 0, maximum: 9999999 } }
+        - { name: maxPriceCents, in: query, schema: { type: integer, minimum: 0, maximum: 9999999 } }
+        - { name: maxDistanceKm, in: query, schema: { type: number, minimum: 0.5, maximum: 50 } }
+        - { name: freeShipping, in: query, schema: { type: string, enum: ['true'] } }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { name: acceptsExchange, in: query, schema: { type: string, enum: ['true'] } }
+        - { name: sort, in: query, schema: { type: string, enum: [relevance, price_asc, distance, rating, discount], default: relevance } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Produtos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductCardPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/search/suggestions:
+    get:
+      tags: [search]
+      operationId: getSearchSuggestions
+      summary: Sugestões enquanto digita (público)
+      description: "Até 5 produtos, 5 lojas e 5 categorias. Com menos de 2 caracteres devolve listas vazias. O app espera 300 ms de pausa antes de chamar (WB-013 C4)."
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 80 } }
+      responses:
+        '200':
+          description: Sugestões
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchSuggestions' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -3833,6 +3937,18 @@ components:
       in: query
       description: Cursor opaco devolvido em `nextCursor`
       schema: { type: string, maxLength: 200 }
+    Lat:
+      name: lat
+      in: query
+      required: true
+      description: Latitude da posição do cliente (endereço salvo, CEP ou GPS)
+      schema: { type: number, minimum: -90, maximum: 90 }
+    Lng:
+      name: lng
+      in: query
+      required: true
+      description: Longitude da posição do cliente
+      schema: { type: number, minimum: -180, maximum: 180 }
     Limit:
       name: limit
       in: query
@@ -6260,3 +6376,100 @@ components:
         endsAt: { type: string, format: date-time }
         position: { type: integer, minimum: 0, maximum: 999 }
         active: { type: boolean }
+    Rating:
+      type: object
+      required: [average, count, isNew]
+      properties:
+        average: { type: [number, 'null'], description: 'Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações' }
+        count: { type: integer }
+        isNew: { type: boolean, description: 'Mostrar "Novo" no lugar da nota' }
+    StoreDelivery:
+      type: object
+      required: [available, feeCents, freeShipping, freeAboveCents, minOrderCents, etaMinMinutes, etaMaxMinutes]
+      properties:
+        available: { type: boolean, description: 'Entrega na posição consultada (dentro do raio e de uma faixa)' }
+        feeCents: { type: [integer, 'null'], description: Taxa para a posição, antes de "grátis acima de X" }
+        freeShipping: { type: boolean, description: Taxa R$ 0 nessa posição }
+        freeAboveCents: { type: integer, description: '0 = sem frete grátis por valor' }
+        minOrderCents: { type: integer }
+        etaMinMinutes: { type: integer }
+        etaMaxMinutes: { type: integer }
+    StoreCard:
+      type: object
+      required: [id, name, logo, mainCategoryId, open, opensAt, distanceM, rating, delivery, pickupEnabled, acceptsExchange]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        logo:
+          type: object
+          required: [urls]
+          properties:
+            urls: { type: object, additionalProperties: { type: string, format: uri } }
+        mainCategoryId: { type: [string, 'null'], format: uuid }
+        open: { type: boolean }
+        opensAt: { type: [string, 'null'], format: date-time, description: 'Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário' }
+        distanceM: { type: integer, description: Linha reta em metros }
+        rating: { $ref: '#/components/schemas/Rating' }
+        delivery: { $ref: '#/components/schemas/StoreDelivery' }
+        pickupEnabled: { type: boolean }
+        acceptsExchange: { type: boolean, description: Troca voluntária ativa (prazo maior que 0) }
+    ProductCard:
+      type: object
+      required: [id, name, image, price, originalPrice, discountPercent, categoryId, store]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        image:
+          type: object
+          required: [urls]
+          properties:
+            urls: { type: object, additionalProperties: { type: string, format: uri } }
+        price: { $ref: '#/components/schemas/Money' }
+        originalPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: Preço antes da promoção vigente }
+        discountPercent: { type: [integer, 'null'] }
+        categoryId: { type: [string, 'null'], format: uuid }
+        store:
+          type: object
+          required: [id, name, open, opensAt, distanceM]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            open: { type: boolean }
+            opensAt: { type: [string, 'null'], format: date-time }
+            distanceM: { type: integer }
+    Home:
+      type: object
+      required: [mode, empty, nearbyStores, newStores, offers, bestSellers, availableCategoryIds]
+      properties:
+        mode: { type: string, enum: [delivery, pickup] }
+        empty: { type: boolean, description: Nenhuma loja visível na posição }
+        nearbyStores: { type: array, items: { $ref: '#/components/schemas/StoreCard' }, maxItems: 10 }
+        newStores: { type: array, items: { $ref: '#/components/schemas/StoreCard' }, maxItems: 10 }
+        offers: { type: array, items: { $ref: '#/components/schemas/ProductCard' }, maxItems: 10 }
+        bestSellers: { type: array, items: { $ref: '#/components/schemas/ProductCard' }, maxItems: 10 }
+        availableCategoryIds: { type: array, items: { type: string, format: uuid } }
+    StoreCardPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StoreCard' } }
+        nextCursor: { type: [string, 'null'] }
+    ProductCardPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ProductCard' } }
+        nextCursor: { type: [string, 'null'] }
+    SuggestionItem:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    SearchSuggestions:
+      type: object
+      required: [products, stores, categories]
+      properties:
+        products: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }
+        stores: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }
+        categories: { type: array, items: { $ref: '#/components/schemas/SuggestionItem' } }

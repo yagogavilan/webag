@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { stdSerializers } from 'pino';
 import { LoggerModule } from 'nestjs-pino';
+import { maskCoordinates } from './platform/logging/mask.js';
 import { HealthModule } from './health/health.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AdminModule } from './modules/admin/index.js';
@@ -47,6 +49,13 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
                 : randomUUID();
             res.setHeader('x-request-id', id);
             return id;
+          },
+          // LGPD: a posição do cliente (lat/lng na URL de descoberta) não entra no log de acesso.
+          serializers: {
+            req: (req: Parameters<typeof stdSerializers.req>[0]) => {
+              const out = stdSerializers.req(req);
+              return { ...out, url: maskCoordinates(out.url) };
+            },
           },
           // Nunca logar credenciais (skill padroes-backend).
           redact: {
