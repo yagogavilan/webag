@@ -94,6 +94,31 @@ Todo componente interativo tem **alvo ≥ 48**, rótulo de acessibilidade, anel 
 
 **Regra do som (lojista):** navegadores bloqueiam áudio automático até haver um toque do usuário [M, política de autoplay]. O painel pede **uma vez por turno**: banner "Ligar alertas sonoros" (1 toque) e depois mostra o ícone "Som ligado". Sem isso, o lojista perde pedidos. Além do som: título da aba, notificação do navegador (com permissão) e, no celular, manter a tela acesa na página de Pedidos (Wake Lock, **[HIPÓTESE]** conforme suporte do navegador). Teste de alerta no onboarding ("Tocar som de teste").
 
+### 3.3 Componentes adicionados nas ondas 2 a 4 (v0.2.0)
+
+Cada um é composto de tokens e componentes já existentes; nenhum cria cor, raio ou sombra nova. Estados: seguem a §3.2 (padrão, pressionado, desabilitado, carregando, erro, foco) mais os listados.
+
+| Componente | Onde | Regras |
+|---|---|---|
+| **StatusBadge** (pedido) | Pedidos, acompanhar, painel do lojista | Selo (altura 24, raio 4, ícone 16 + texto `micro`). Mapa fechado: Aguardando pagamento (alerta, `Clock`), Aguardando a loja (info, `Hourglass`), Pedido aceito (info, `CheckCircle`), Em separação (info, `Package`), Saiu para entrega (info, `Truck`), Pronto para retirar (sucesso, `Storefront`), Entregue (sucesso, `CheckCircle` Fill), Cancelado e Recusado pela loja (erro, `XCircle`), Pagamento vencido (neutro, `Clock`). Painel do lojista usa os mesmos rótulos, com "Aguardando você" no lugar de "Aguardando a loja" nos novos |
+| **CartBar** | Loja, Produto | Barra flutuante `sm`, 56, acima da barra inferior: "Ver sacola · 2 itens · R$ 89,90"; botão de largura total; só aparece com itens da loja aberta; anunciada ao leitor ("Sacola, 2 itens, 89 reais e 90 centavos") |
+| **VariantSelector** | Produto | Grupo com título e valor escolhido ("Cor: Azul-marinho"). Tamanho = chips; Cor = amostra 48 com nome escrito e check. Indisponível: riscado (ou traço diagonal na amostra), `opacity.disabled`, anunciado "42, esgotado". Rádio acessível. A cor da amostra é dado do produto, não token |
+| **MapPinPicker** | Endereço do cliente (só se a geocodificação falhar), endereço da loja | Mapa com pino fixo ao centro; arrastar o mapa move o ponto; botões + e − de zoom; botões de mover 10 m para quem usa teclado; texto com o endereço do ponto; botão "Confirmar ponto". Nunca pede a localização do aparelho aqui |
+| **ImageCropper** | Logo, capa, foto de produto | Modal com moldura fixa (1:1 ou 16:9), arrastar para mover, zoom por barra + botões + e −, "Girar", prévia, "Usar recorte". Entrada até 5 MB; saída ≤ 300 KB comprimida no navegador; teclado: setas e `+` `-` |
+| **DocSlot** | Onboarding do lojista | Variante de FileUpload para 1 documento: miniatura 96, título, estado (vazio, enviando com %, enviado, erro), "Tirar foto", "Escolher arquivo", "Trocar". Mostra tipo e tamanho aceitos antes do envio. Prévia com "Está legível?" |
+| **TimeField** | Horários da loja | Máscara `00:00`, teclado numérico, passo de 15 min, validação "Confira o horário (ex.: 09:00)." |
+| **WeekSchedule** | Horários da loja | 7 linhas: Switch com texto "Aberto/Fechado" + até 2 intervalos (TimeField) + "Adicionar 2º horário"; atalhos de preenchimento ("Seg a sex, 9h às 18h") e "Copiar para outros dias". Cada linha é um grupo para o leitor de tela |
+| **BandEditor** | Taxa por distância | Até 5 linhas "De (automático) · Até (km) · Valor"; "De" copia o "Até" da linha anterior e a última linha termina no raio: impossível criar lacuna ou sobreposição. "Adicionar faixa" e "Remover" (última) |
+| **VariationGrid** | Variações e estoque | Atributos como etiquetas (até 3) e grade gerada das combinações: celular = cartão de linha com rótulo + stepper de estoque; desktop = tabela (Opção, Estoque, Preço, Código, Remover). "Mesmo estoque para todas" + "Aplicar"; selo "Esgotado" quando 0 |
+| **BulkActionBar** | Lista de produtos, DataTable | Barra de ações com contagem ("3 selecionados"), ações e "Cancelar seleção"; rodapé no celular, topo da tabela no desktop. A confirmação repete a contagem no botão ("Pausar 12 produtos") |
+| **ReorderList** | Seções da vitrine, fotos | Alça de arrastar **e** botões "Subir" e "Descer" (ou "Mover para o início"); nunca só gesto (2.5.7) |
+| **OrderCard** (lojista) | Painel de pedidos | Número, hora, tempo desde a chegada ("há 2 min", em alerta a partir de 5 min e em erro a partir de 8, sempre com ícone), tipo (selo), itens (2 linhas + "+N"), total, selo "Pago" e a ação do estado (Aceitar e Recusar nos novos; StatusAction nos demais). Desktop ≥ 1280: número em `display`, total em `title1`, 3 colunas |
+| **PanelStatusBar** | Painel de pedidos | Som ("Som ligado" / "Som desligado" + "Tocar som de teste") e conexão ("Sincronizado há 3 s"). Estados de erro viram faixa vermelha persistente (som bloqueado, sem conexão), sempre com ícone e texto |
+| **SecureCardForm** | Checkout (cartão) | Campos do provedor dentro de um cartão com fio: número, validade, código, nome, parcelas (folha com rádio mostrando o **total com juros**). Rótulos visíveis, teclado numérico. Aparência configurada com os tokens até onde o provedor permitir. Nenhum dado de cartão em log nem em estado do app |
+| **OrderTimer / PixCountdown** | PIX, alerta de pedido | Contagem em `numeral`; mudança para alerta (ícone + texto) abaixo de 2 min; nunca lida a cada segundo (anuncia em 5:00, 1:00, 0:30 e ao vencer) |
+
+**Regra de formulário atualizada (§6):** botão de envio **ativo** com erro mostrado ao tocar (rola e foca o 1º erro) é o padrão; botão inerte só com o motivo escrito no próprio rótulo (ex.: "Loja fechada · abre 9h").
+
 ### 3.2 Matriz de estados (cada componente interativo)
 
 | Componente | Padrão | Pressionado | Desabilitado | Carregando | Erro | Foco |
