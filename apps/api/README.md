@@ -23,8 +23,30 @@ Com `PAYMENT_PROVIDER=fake` (padrão) existem rotas autenticadas que não fazem 
 - Cartão de teste: `cardToken` terminado em `0000` aprova, `0001` recusa por saldo, `0002` pede 3DS, `0003` dá timeout; outro valor recusa.
 - A aprovação passa pelo mesmo caminho do webhook real (`POST /v1/webhooks/fake`, assinado com `FAKE_PAYMENT_WEBHOOK_SECRET`).
 
+## Mercado Pago: de simulado para real só com o `.env` (WB-160)
+O mesmo código roda nos dois modos (`PaymentProvider`). Trocar não exige deploy de código, só variáveis. Com `PAYMENT_PROVIDER=mercadopago` e qualquer chave faltando a API **não sobe** e a mensagem lista os nomes (nunca os valores).
+
+| Variável | Onde pegar (painel do Mercado Pago) |
+|---|---|
+| `MP_CLIENT_ID`, `MP_CLIENT_SECRET` | mercadopago.com.br/developers > **Suas integrações** > aplicação da Webag > **Credenciais** (produção ou de teste). Aplicação do tipo marketplace, com OAuth habilitado |
+| `MP_ACCESS_TOKEN` | mesma tela, "Access Token" (`APP_USR-...` em produção; `TEST-...` só fora de produção). A API recusa `TEST-` em produção |
+| `MP_WEBHOOK_SECRET` | **Suas integrações** > aplicação > **Webhooks** > configurar notificações > "Revelar" a assinatura secreta. Um segredo por ambiente |
+| `MP_OAUTH_REDIRECT_URI` | a página (HTTPS) que recebe `code` e `state` do retorno do OAuth e os envia a `POST /v1/stores/{storeId}/payment-account/callback`. Cadastrar a **mesma** URL em "URLs de redirecionamento" da aplicação |
+| `MP_PAYER_DOCUMENT_REQUIRED` | `true` se o sandbox exigir CPF no PIX `[confirmar no sandbox]` |
+| `PAYMENT_TOKEN_ENC_KEY` | chave AES-256 em base64 que a Webag gera (`openssl rand -base64 32`); cifra os tokens dos lojistas. Guardar fora do servidor |
+
+**URL do webhook** (cadastrar em Webhooks, evento "Pagamentos"): `https://<API_PUBLIC_URL>/v1/webhooks/mercadopago`. A API valida `x-signature` (HMAC-SHA256 do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`), responde 200 rápido e processa em fila durável; o estado vem sempre de uma re-consulta `GET /v1/payments/{id}` com o token do lojista. A conciliação (a cada 5 min, mais varredura de 48 h) cobre notificação perdida; o PIX vencido é expirado a cada ~20 s.
+
+**Split:** cada lojista conecta a conta por OAuth; a cobrança sai com o token DELE e leva `application_fee` (comissão + taxa de serviço − desconto da plataforma). O token é cifrado, renovado sozinho quando faltam menos de 30 dias e nunca vai a log. Loja sem conta ativa não cobra.
+
+**Não validado em produção.** O adaptador foi escrito contra o SDK oficial (`mercadopago@3.6.2`) e a documentação, com testes de HTTP simulado. Pontos marcados `[confirmar no sandbox]` no código: onde o MP devolve a `application_fee` (fee_details), `capture:false` com split (captura no aceite, HIP-010), devolução da comissão no estorno parcial, CPF no PIX, comportamento de saldo insuficiente do lojista no estorno, campo `identification` do titular.
+
+### Provedor simulado (`fake`) em desenvolvimento
+- Cartão: `card.token` = `fake_tok_approved` (aprova), `fake_tok_insufficient` (recusa por saldo), `fake_tok_3ds` (fica pendente com URL de desafio), `fake_tok_timeout` (timeout do provedor). Também vale o sufixo `0000`/`0001`/`0002`/`0003`.
+- PIX: o pedido nasce `awaiting_payment`; `POST /v1/dev/payments/{attemptId}/approve|decline|expire` (id em `GET /v1/orders/{id}/payment` não aparece: consulte `payment_attempts.external_reference = <orderId>`) dispara o MESMO caminho do webhook real. Tarifa simulada: PIX 0,99% e cartão 4,98%.
+
 ## Módulos (ADR-007)
-`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, esqueleto Mercado Pago, webhook, conciliação). Um módulo só importa o `index.ts` do outro.
+`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, Mercado Pago, webhook, conciliação) · `finance` (comissão, ledger) · `orders` (pedido, estados, estoque). Um módulo só importa o `index.ts` do outro.
 
 ## Proxy e IP do cliente (SEC-114)
 

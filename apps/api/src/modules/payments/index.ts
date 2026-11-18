@@ -9,3 +9,4 @@ export {
   type ProviderPayment,
   type CreateProviderPaymentInput,
 } from './payment-provider.js';
+export { SellerCredentialsRegistry, type SellerCredentials } from './seller-credentials.js';

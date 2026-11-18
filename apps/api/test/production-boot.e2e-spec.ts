@@ -30,6 +30,9 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     PAYMENT_PROVIDER: 'mercadopago',
     MP_ACCESS_TOKEN: 'APP_USR-123',
     MP_WEBHOOK_SECRET: 'segredo-do-webhook-123456',
+      MP_CLIENT_ID: '1234567890',
+      MP_CLIENT_SECRET: 'client-secret-prod',
+      MP_OAUTH_REDIRECT_URI: 'https://app.webag.com.br/conectar-mercado-pago',
     PAYMENT_TOKEN_ENC_KEY: Buffer.alloc(32, 7).toString('base64'),
     LOG_LEVEL: 'silent',
   };
@@ -85,12 +88,12 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     await expect(boot({ ...productionEnv, MP_ACCESS_TOKEN: 'TEST-abc' })).rejects.toThrow(/MP_ACCESS_TOKEN/);
   });
 
-  it('o adaptador do Mercado Pago ainda não cria pagamento (501 explícito), mas já valida assinatura', async () => {
+  it('com Mercado Pago ativo, loja sem conta conectada NÃO cobra (nunca usa o token da plataforma) e nenhuma chamada sai', async () => {
     const app = await boot(productionEnv);
     try {
       const { PaymentsService } = await import('../src/modules/payments/payments.service.js');
-      await expect(app.get(PaymentsService).createPayment({ externalReference: 'x', method: 'pix', amountCents: 1000, storeId: null })).rejects.toMatchObject({
-        code: 'MERCADOPAGO_NOT_IMPLEMENTED',
+      await expect(app.get(PaymentsService).createPayment({ externalReference: 'x', method: 'pix', amountCents: 1000, storeId: randomUUID() })).rejects.toMatchObject({
+        code: 'STORE_PAYMENT_ACCOUNT_UNAVAILABLE',
       });
     } finally {
       await app.close();

@@ -32,6 +32,7 @@
     "argon2": "0.45.2",
     "drizzle-orm": "0.45.4",
     "ioredis": "5.11.1",
+    "mercadopago": "3.6.2",
     "nestjs-pino": "5.3.2",
     "nodemailer": "10.6.0",
     "pg": "8.23.1",

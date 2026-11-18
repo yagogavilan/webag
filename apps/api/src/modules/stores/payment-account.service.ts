@@ -1,6 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, isNull, ne, gt } from 'drizzle-orm';
+import { and, eq, isNull, ne, gt, sql } from 'drizzle-orm';
+import { MercadoPagoConfig, OAuth, User } from 'mercadopago';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import type { Env } from '../../platform/config/env.js';
 import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
@@ -11,7 +12,7 @@ import { paymentAccountChangedEmail, paymentAccountUnderReviewEmail } from '../.
 import { AuditService } from '../admin/index.js';
 import { isUniqueViolation } from '../admin/util.js';
 import { adminProfiles, users } from '../identity/db/schema.js';
-import { PaymentsService } from '../payments/index.js';
+import { PaymentsService, SellerCredentialsRegistry } from '../payments/index.js';
 import { paymentAccounts, paymentOauthStates, stores } from './db/schema.js';
 import { maskDocument, normalizeDocument } from './domain/document.js';
 
@@ -34,6 +35,8 @@ export interface PaymentOAuthProvider {
   /** URL de autorização. `redirect_uri` vem de configuração, nunca da requisição (SEC-045). */
   authorizationUrl(state: string): string;
   exchange(code: string, context: { storeId: string; storeDocument: string }): Promise<ConnectedAccount>;
+  /** Renova os tokens antes do vencimento (DT-034). O `refresh_token` antigo deixa de valer: gravar o novo na MESMA transação. */
+  refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }>;
 }
 export const PAYMENT_OAUTH_PROVIDER = Symbol('PAYMENT_OAUTH_PROVIDER');
 
@@ -65,23 +68,69 @@ export class FakePaymentOAuthProvider implements PaymentOAuthProvider {
       expiresAt: new Date(Date.now() + 180 * 86_400_000),
     });
   }
+
+  refresh(): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+    return Promise.resolve({ accessToken: `fake-access-${randomToken(12)}`, refreshToken: `fake-refresh-${randomToken(12)}`, expiresAt: new Date(Date.now() + 180 * 86_400_000) });
+  }
 }
 
-/** Adaptador do Mercado Pago: sem credencial do fundador não conecta (501 explícito, como o provedor de pagamentos). */
+/**
+ * OAuth do Mercado Pago (split, ADR-002 §1) com o SDK oficial. `redirect_uri` vem do ambiente, nunca da requisição
+ * (SEC-045). O titular da conta vem de `GET /users/me` com o token do lojista [confirmar no sandbox: campo `identification`].
+ */
 @Injectable()
 export class MercadoPagoOAuthProvider implements PaymentOAuthProvider {
   readonly name = 'mercadopago' as const;
-  authorizationUrl(): string {
-    throw new AppError(501, 'NOT_IMPLEMENTED', 'Conexão com o Mercado Pago ainda não implementada', { detail: 'Depende das credenciais do aplicativo (fundador).' });
+  constructor(private readonly config: ConfigService<Env, true>) {}
+
+  private creds() {
+    const clientId = this.config.get('MP_CLIENT_ID', { infer: true });
+    const clientSecret = this.config.get('MP_CLIENT_SECRET', { infer: true });
+    const redirectUri = this.config.get('MP_OAUTH_REDIRECT_URI', { infer: true });
+    const platformToken = this.config.get('MP_ACCESS_TOKEN', { infer: true });
+    if (!clientId || !clientSecret || !redirectUri || !platformToken) throw new AppError(503, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Conexão com o Mercado Pago não configurada');
+    return { clientId, clientSecret, redirectUri, platformToken };
   }
-  exchange(): Promise<ConnectedAccount> {
-    return Promise.reject(new AppError(501, 'NOT_IMPLEMENTED', 'Conexão com o Mercado Pago ainda não implementada'));
+
+  authorizationUrl(state: string): string {
+    const { clientId, redirectUri, platformToken } = this.creds();
+    return new OAuth(new MercadoPagoConfig({ accessToken: platformToken })).getAuthorizationURL({ options: { client_id: clientId, redirect_uri: redirectUri, state } });
+  }
+
+  async exchange(code: string): Promise<ConnectedAccount> {
+    const { clientId, clientSecret, redirectUri, platformToken } = this.creds();
+    try {
+      const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).create({ body: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri } });
+      if (!tokens.access_token || !tokens.refresh_token || tokens.user_id === undefined) throw new Error('resposta de OAuth incompleta');
+      const me = await new User(new MercadoPagoConfig({ accessToken: tokens.access_token, options: { timeout: 8_000, maxRetries: 1 } })).get();
+      const holder = (me as { identification?: { number?: string } }).identification?.number ?? '';
+      return {
+        providerAccountId: String(tokens.user_id),
+        holderDocument: holder,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: new Date(Date.now() + (tokens.expires_in ?? 15_552_000) * 1000),
+      };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      const status = (error as { status?: number }).status;
+      if (status !== undefined && status >= 400 && status < 500) throw new AppError(400, 'OAUTH_CODE_INVALID', 'Código de autorização inválido', { detail: 'O código expirou ou já foi usado. Conecte de novo.' });
+      throw new AppError(503, 'PAYMENT_PROVIDER_UNAVAILABLE', 'Mercado Pago indisponível', { detail: 'Tente conectar de novo em instantes.', retryAfterSeconds: 10 });
+    }
+  }
+
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+    const { clientId, clientSecret, platformToken } = this.creds();
+    const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).refresh({ body: { client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken } });
+    if (!tokens.access_token || !tokens.refresh_token) throw new Error('resposta de renovação incompleta');
+    return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt: new Date(Date.now() + (tokens.expires_in ?? 15_552_000) * 1000) };
   }
 }
 
 /** Conta de recebimento (WB-053, SEC-045..048). */
 @Injectable()
-export class PaymentAccountService {
+export class PaymentAccountService implements OnModuleInit {
+  private readonly logger = new Logger(PaymentAccountService.name);
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     @Inject(PAYMENT_OAUTH_PROVIDER) private readonly provider: PaymentOAuthProvider,
@@ -89,7 +138,41 @@ export class PaymentAccountService {
     private readonly audit: AuditService,
     private readonly mail: MailService,
     private readonly payments: PaymentsService,
+    private readonly sellers: SellerCredentialsRegistry,
   ) {}
+
+  onModuleInit(): void {
+    this.sellers.register((storeId) => this.credentialsFor(storeId));
+  }
+
+  /**
+   * Token do lojista para cobrar/estornar/consultar (só `active`). Renova sozinho quando faltam menos de 30 dias (DT-034):
+   * lock por loja e gravação do par novo na mesma transação, porque o `refresh_token` antigo morre ao renovar.
+   */
+  async credentialsFor(storeId: string): Promise<{ accessToken: string; providerAccountId: string } | null> {
+    const [row] = await this.db.select().from(paymentAccounts).where(and(eq(paymentAccounts.storeId, storeId), eq(paymentAccounts.status, 'active'), eq(paymentAccounts.provider, this.provider.name)));
+    if (!row) return null;
+    let tokens = this.openTokens(storeId, row.tokensEnc);
+    if (row.tokensExpireAt && row.tokensExpireAt.getTime() - Date.now() < 30 * 86_400_000) {
+      try {
+        tokens = await this.db.transaction(async (tx) => {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-token-refresh:${storeId}`}))`);
+          const [fresh] = await tx.select().from(paymentAccounts).where(eq(paymentAccounts.id, row.id));
+          if (!fresh) return tokens;
+          if (fresh.tokensExpireAt && fresh.tokensExpireAt.getTime() - Date.now() >= 30 * 86_400_000) return this.openTokens(storeId, fresh.tokensEnc); // outra instância já renovou
+          const renewed = await this.provider.refresh(this.openTokens(storeId, fresh.tokensEnc).refreshToken);
+          await tx.update(paymentAccounts).set({ tokensEnc: this.sealTokens(storeId, renewed), tokensExpireAt: renewed.expiresAt }).where(eq(paymentAccounts.id, row.id));
+          return renewed;
+        });
+      } catch (error) {
+        // Ainda dentro da validade: segue com o token atual e alerta. Vencido: a cobrança falha e a loja precisa reconectar.
+        this.logger.error(`renovação do token da loja ${storeId} falhou: ${(error as Error).message}`);
+        await this.payments.raiseAlert(null, 'payment_token_refresh_failed', { storeId }).catch(() => undefined);
+        if (row.tokensExpireAt && row.tokensExpireAt.getTime() <= Date.now()) return null;
+      }
+    }
+    return { accessToken: tokens.accessToken, providerAccountId: row.providerAccountId };
+  }
 
   private get encKey(): string {
     return this.config.get('PAYMENT_TOKEN_ENC_KEY', { infer: true });

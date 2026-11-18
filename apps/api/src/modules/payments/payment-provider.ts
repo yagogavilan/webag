@@ -71,7 +71,7 @@ export interface PaymentProvider {
   /** O provedor exige o CPF do pagador neste método? (`PAYER_DOCUMENT_REQUIRED`). Ausente = não exige. */
   requiresPayerDocument?(method: PaymentMethod): boolean;
   /** Conta de recebimento esperada para a loja (conferida na re-consulta, SEC-034). */
-  expectedReceiverId(storeId: string | null): string | null;
+  expectedReceiverId(storeId: string | null): Promise<string | null> | string | null;
   /** Valida a assinatura e extrai o evento. Lança `AppError` 401 se inválida. */
   verifyWebhook(input: {
     headers: Record<string, string | string[] | undefined>;

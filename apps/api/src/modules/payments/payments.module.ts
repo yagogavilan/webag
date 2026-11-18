@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../platform/config/env.js';
 import { AdminModule } from '../admin/index.js';
 import { PaymentsAdminController, WebhooksController } from './payments.controllers.js';
+import { SellerCredentialsRegistry } from './seller-credentials.js';
 import { PaymentsService } from './payments.service.js';
 import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider.js';
 import { FakePaymentProvider } from './providers/fake.provider.js';
@@ -12,6 +13,7 @@ import { MercadoPagoPaymentProvider } from './providers/mercadopago.provider.js'
   imports: [AdminModule],
   controllers: [WebhooksController, PaymentsAdminController],
   providers: [
+    SellerCredentialsRegistry,
     FakePaymentProvider,
     MercadoPagoPaymentProvider,
     {
@@ -23,6 +25,6 @@ import { MercadoPagoPaymentProvider } from './providers/mercadopago.provider.js'
     },
     PaymentsService,
   ],
-  exports: [PaymentsService, FakePaymentProvider, PAYMENT_PROVIDER],
+  exports: [PaymentsService, FakePaymentProvider, PAYMENT_PROVIDER, SellerCredentialsRegistry],
 })
 export class PaymentsModule {}

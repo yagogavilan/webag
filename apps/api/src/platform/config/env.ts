@@ -93,6 +93,13 @@ export const envSchema = z
     FAKE_PAYMENT_WEBHOOK_SECRET: z.string().min(16).default(DEV_FAKE_WEBHOOK_SECRET),
     MP_ACCESS_TOKEN: z.string().optional(),
     MP_WEBHOOK_SECRET: z.string().optional(),
+    /** App do Mercado Pago (painel de desenvolvedores): `client_id` e `client_secret` do OAuth do split (WB-155). */
+    MP_CLIENT_ID: z.string().optional(),
+    MP_CLIENT_SECRET: z.string().optional(),
+    /** URL cadastrada no app do MP para o retorno do OAuth; a página que a recebe repassa `code` e `state` à API. */
+    MP_OAUTH_REDIRECT_URI: z.url().optional(),
+    /** `true` se o provedor exigir o CPF do pagador no PIX [confirmar no sandbox]. */
+    MP_PAYER_DOCUMENT_REQUIRED: optionalBool,
     PAYMENT_TOKEN_ENC_KEY: z.string().default(DEV_PAYMENT_TOKEN_ENC_KEY),
 
     // --- Armazenamento S3 (ADR-005): RustFS no dev, R2/S3 em produção. `memory` só para testes. ---
@@ -110,6 +117,17 @@ export const envSchema = z
     GEOCODING_PROVIDER: z.enum(['fake', 'http']).default('fake'),
   })
   .superRefine((env, ctx) => {
+    // WB-160 C3: Mercado Pago ativo sem as chaves derruba o boot em QUALQUER ambiente (não no meio do pedido).
+    if (env.PAYMENT_PROVIDER === 'mercadopago') {
+      const required: [string, unknown][] = [
+        ['MP_ACCESS_TOKEN', env.MP_ACCESS_TOKEN],
+        ['MP_WEBHOOK_SECRET', env.MP_WEBHOOK_SECRET],
+        ['MP_CLIENT_ID', env.MP_CLIENT_ID],
+        ['MP_CLIENT_SECRET', env.MP_CLIENT_SECRET],
+        ['MP_OAUTH_REDIRECT_URI', env.MP_OAUTH_REDIRECT_URI],
+      ];
+      for (const [name, value] of required) if (!value) ctx.addIssue({ code: 'custom', path: [name], message: 'obrigatório com PAYMENT_PROVIDER=mercadopago (ver apps/api/README.md, seção Mercado Pago)' });
+    }
     if (env.NODE_ENV !== 'production') return;
     // SEC-080 / SEC-036: configuração insegura em produção derruba o boot. Nunca imprime valores.
     const fail = (path: string, message: string): void => {

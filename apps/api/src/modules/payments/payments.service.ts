@@ -382,7 +382,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
   /** Aplica o estado do provedor à tentativa, com a máquina de estados e as conferências de SEC-034/SEC-040. */
   private async sync(attempt: PaymentAttempt, remote: ProviderPayment): Promise<void> {
     if (remote.status === 'approved') {
-      const mismatches = this.mismatches(attempt, remote);
+      const mismatches = await this.mismatches(attempt, remote);
       if (mismatches.length > 0) {
         if (attempt.status === 'pending' || attempt.status === 'pending_3ds') {
           await this.db.update(paymentAttempts).set({ status: 'divergent', updatedAt: new Date() }).where(eq(paymentAttempts.id, attempt.id));
@@ -412,13 +412,13 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     if (changed) await this.notifyAfter(changed, attempt.status, remote);
   }
 
-  private mismatches(attempt: PaymentAttempt, remote: ProviderPayment): string[] {
+  private async mismatches(attempt: PaymentAttempt, remote: ProviderPayment): Promise<string[]> {
     const found: string[] = [];
     if (remote.amountCents !== attempt.amountCents) found.push('amount');
     if (remote.currency !== attempt.currency) found.push('currency');
     if (remote.externalReference !== attempt.externalReference) found.push('external_reference');
     if (remote.applicationFeeCents !== attempt.applicationFeeCents) found.push('application_fee');
-    if (attempt.storeId && remote.receiverId !== this.provider.expectedReceiverId(attempt.storeId)) found.push('receiver');
+    if (attempt.storeId && remote.receiverId !== (await this.provider.expectedReceiverId(attempt.storeId))) found.push('receiver');
     return found;
   }
 
@@ -635,7 +635,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
           continue;
         }
         const before = attempt.status;
-        const mismatches = remote.status === 'approved' || attempt.status === 'approved' ? this.mismatches(attempt, remote) : [];
+        const mismatches = remote.status === 'approved' || attempt.status === 'approved' ? await this.mismatches(attempt, remote) : [];
         if (mismatches.length > 0) {
           await this.sync(attempt, { ...remote, status: 'approved' });
           alerts++;

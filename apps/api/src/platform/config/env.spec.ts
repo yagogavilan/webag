@@ -30,6 +30,28 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...base, API_PORT: '70000' })).toThrow(/API_PORT/);
   });
 
+  describe('Mercado Pago ativo (WB-160 C3)', () => {
+    it('em QUALQUER ambiente, sem as chaves a aplicação não sobe e a mensagem diz quais faltam (sem valores)', () => {
+      let message = '';
+      try {
+        validateEnv({ ...base, PAYMENT_PROVIDER: 'mercadopago', MP_ACCESS_TOKEN: 'TEST-123' });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      for (const name of ['MP_WEBHOOK_SECRET', 'MP_CLIENT_ID', 'MP_CLIENT_SECRET', 'MP_OAUTH_REDIRECT_URI']) expect(message).toContain(name);
+      expect(message).not.toContain('MP_ACCESS_TOKEN');
+      expect(message).not.toContain('TEST-123');
+    });
+
+    it('com todas as chaves sobe em desenvolvimento (token de teste vale fora de produção)', () => {
+      expect(() => validateEnv({ ...base, PAYMENT_PROVIDER: 'mercadopago', MP_ACCESS_TOKEN: 'TEST-123', MP_WEBHOOK_SECRET: 'segredo-do-webhook-123456', MP_CLIENT_ID: '1', MP_CLIENT_SECRET: 'x', MP_OAUTH_REDIRECT_URI: 'https://app.webag.test/mp' })).not.toThrow();
+    });
+
+    it('fake continua sendo o padrão e não exige nada', () => {
+      expect(() => validateEnv({ ...base })).not.toThrow();
+    });
+  });
+
   describe('produção (SEC-080, SEC-036)', () => {
     const prod = {
       ...base,
@@ -45,6 +67,9 @@ describe('validateEnv', () => {
       PAYMENT_PROVIDER: 'mercadopago',
       MP_ACCESS_TOKEN: 'APP_USR-123',
       MP_WEBHOOK_SECRET: 'segredo-do-webhook-123456',
+      MP_CLIENT_ID: '1234567890',
+      MP_CLIENT_SECRET: 'client-secret-prod',
+      MP_OAUTH_REDIRECT_URI: 'https://app.webag.com.br/conectar-mercado-pago',
       PAYMENT_TOKEN_ENC_KEY: Buffer.alloc(32, 7).toString('base64'),
       S3_ACCESS_KEY: 'prod-access',
       S3_SECRET_KEY: 'prod-secret-long',
