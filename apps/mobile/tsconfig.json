@@ -5,7 +5,10 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["jest"]
+    "types": ["jest"],
+    "paths": {
+      "phosphor-react-native": ["./node_modules/phosphor-react-native/lib/typescript/index.d.ts"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   "exclude": ["node_modules", "dist"]

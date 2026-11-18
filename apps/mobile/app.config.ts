@@ -19,7 +19,21 @@ const config: ExpoConfig = {
     // Edge-to-edge é obrigatório no SDK atual: telas usam safe areas.
     package: 'br.com.webag.app',
   },
-  plugins: ['expo-router', 'expo-font', 'expo-splash-screen'],
+  plugins: [
+    'expo-router',
+    'expo-font',
+    'expo-splash-screen',
+    'expo-secure-store',
+    [
+      'expo-location',
+      {
+        // Texto do diálogo do sistema. O app explica o motivo ANTES, em tela própria (design-system.md §5.6).
+        locationWhenInUsePermission: 'O Webag usa sua localização só enquanto o app está aberto, para mostrar as lojas que entregam perto de você.',
+        isAndroidBackgroundLocationEnabled: false,
+        isIosBackgroundLocationEnabled: false,
+      },
+    ],
+  ],
   experiments: { typedRoutes: true },
 };
 
