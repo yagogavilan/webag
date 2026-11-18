@@ -50,4 +50,13 @@ export async function loginLojista(page: Page, email: string, password: string):
   await page.getByTestId('lojista.login.email-input').fill(email);
   await page.getByTestId('lojista.login.password-input').fill(password);
   await page.getByTestId('lojista.login.submit').click();
+  // Espera o painel abrir: navegar antes disso derrubaria o cookie de sessão que ainda está sendo gravado.
+  await page.waitForURL((url) => !url.pathname.includes('/entrar'));
+}
+
+/** Semeia um lojista com loja APROVADA (o catálogo só abre depois da aprovação) e entra no painel. */
+export async function seedMerchant(name = 'Casa Bela'): Promise<{ email: string; password: string; storeId: string }> {
+  const response = await fetch(`${FAKE_API}/__test/seed-merchant`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+  if (!response.ok) throw new Error(`seed falhou: ${response.status}`);
+  return (await response.json()) as { email: string; password: string; storeId: string };
 }

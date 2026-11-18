@@ -105,6 +105,8 @@ const readBody = (req) =>
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
       try {
+        // A importação de produtos manda a planilha em texto (`text/csv`), não JSON.
+        if ((req.headers['content-type'] ?? '').startsWith('text/csv')) return resolve({ __csv: raw });
         resolve(raw ? JSON.parse(raw) : {});
       } catch {
         resolve(null);
@@ -698,7 +700,8 @@ route('POST', '/v1/uploads/:id/complete', {}, (req, res, ctx) => {
   const upload = uploads.get(ctx.params[0]);
   if (!upload) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
   upload.status = 'ready';
-  json(res, 200, { id: upload.id, status: 'ready', urls: null, rejectionReason: null });
+  const urls = upload.purpose === 'product_image' ? { 160: `http://localhost:${PORT}/__storage/img-${upload.id}.png`, 400: `http://localhost:${PORT}/__storage/img-${upload.id}.png` } : null;
+  json(res, 200, { id: upload.id, status: 'ready', urls, rejectionReason: null });
 });
 
 // admin: fila, caso e decisões
@@ -755,6 +758,223 @@ route('POST', '/v1/admin/stores/:id/request-correction', { perm: 'stores:decide'
 route('POST', '/v1/admin/stores/:id/reject', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'in_review', 'rejected', (s) => (s.decisionReason = ctx.body.reason)));
 route('POST', '/v1/admin/stores/:id/suspend', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'approved', 'suspended', (s) => (s.decisionReason = ctx.body.reason)));
 route('POST', '/v1/admin/stores/:id/reactivate', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'suspended', 'approved', (s) => (s.decisionReason = null)));
+
+// ---------------------------------------------------------------- catálogo do lojista (Onda 2B): o comportamento observável que o painel usa
+const products = new Map(); // id -> produto
+const sections = new Map(); // id -> seção
+const idempotent = new Map(); // chave -> id do produto
+const storeProducts = (storeId) => [...products.values()].filter((p) => p.storeId === storeId && p.status !== 'archived');
+const imageUrls = (assetId) => ({ 160: `http://localhost:${PORT}/__storage/img-${assetId}.png`, 400: `http://localhost:${PORT}/__storage/img-${assetId}.png` });
+const presentVariant = (v) => ({ id: v.id, attributes: v.attributes, sku: v.sku, priceCents: v.priceCents, effectivePriceCents: v.priceCents, originalPriceCents: null, discountPercent: null, stock: v.stock, reserved: 0, available: v.stock, soldOut: v.stock <= 0, low: v.stock > 0 && v.stock <= 3 });
+const presentProduct = (p) => ({
+  id: p.id, name: p.name, description: p.description, categoryId: p.categoryId, sectionId: p.sectionId, status: p.status, moderationStatus: p.moderationStatus, moderationReason: null,
+  basePriceCents: p.basePriceCents, promotion: { priceCents: p.promoPriceCents, startsAt: p.promoStartsAt, endsAt: p.promoEndsAt, active: false },
+  variantAttributes: p.variantAttributes, variants: p.variants.map(presentVariant), images: p.images.map((assetId, position) => ({ id: assetId, position, urls: imageUrls(assetId) })),
+  soldOut: p.variants.length > 0 && p.variants.every((v) => v.stock <= 0), publishedAt: p.publishedAt, createdAt: p.createdAt, updatedAt: p.updatedAt,
+});
+const summary = (p) => {
+  const total = p.variants.reduce((sum, v) => sum + v.stock, 0);
+  const prices = p.variants.map((v) => v.priceCents ?? p.basePriceCents).filter((x) => x != null);
+  return { id: p.id, name: p.name, status: p.status, moderationStatus: p.moderationStatus, sectionId: p.sectionId, basePriceCents: p.basePriceCents, fromPriceCents: prices.length ? Math.min(...prices) : p.basePriceCents, cover: p.images[0] ? imageUrls(p.images[0]) : null, availableTotal: total, low: total > 0 && total <= 3, soldOut: p.variants.length > 0 && total <= 0, variantCount: p.variants.length, updatedAt: p.updatedAt };
+};
+const mustCatalog = (res, ctx) => {
+  const s = stores.get(ctx.params[0]);
+  if (!s || s.ownerId !== ctx.user.id) return void problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (s.status !== 'approved') return void problem(res, 409, 'STORE_NOT_APPROVED', 'Loja ainda não aprovada', 'O catálogo é liberado depois da aprovação da loja.');
+  return s;
+};
+const mustProduct = (res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return null;
+  const p = products.get(ctx.params[1]);
+  if (!p || p.storeId !== s.id) return void problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  return p;
+};
+const touch = (p) => (p.updatedAt = now());
+
+route('GET', '/v1/stores/:id/products', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  let rows = storeProducts(s.id);
+  const status = ctx.query.get('status');
+  const q = (ctx.query.get('q') ?? '').toLowerCase();
+  if (status) rows = rows.filter((p) => p.status === status);
+  if (ctx.query.get('lowStock')) rows = rows.filter((p) => summary(p).low);
+  if (q) rows = rows.filter((p) => p.name.toLowerCase().includes(q));
+  if (ctx.query.get('sectionId')) rows = rows.filter((p) => p.sectionId === ctx.query.get('sectionId'));
+  rows = rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.seq - a.seq);
+  const limit = Number(ctx.query.get('limit') ?? 25);
+  const offset = Number(ctx.query.get('cursor') ?? 0);
+  const page = rows.slice(offset, offset + limit);
+  json(res, 200, { data: page.map(summary), nextCursor: offset + limit < rows.length ? String(offset + limit) : null });
+});
+route('POST', '/v1/stores/:id/products', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const key = req.headers['idempotency-key'];
+  if (key && idempotent.has(key)) return json(res, 201, presentProduct(products.get(idempotent.get(key))));
+  const b = ctx.body;
+  if (typeof b.name !== 'string' || b.name.trim().length < 2) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos', undefined, { errors: [{ field: 'name', message: 'Informe o nome.' }] });
+  const p = { id: randomUUID(), seq: products.size, storeId: s.id, name: b.name.trim(), description: b.description ?? null, categoryId: b.categoryId ?? null, sectionId: b.sectionId ?? null, status: 'draft', moderationStatus: 'ok', basePriceCents: b.basePriceCents ?? null, promoPriceCents: null, promoStartsAt: null, promoEndsAt: null, variantAttributes: [], variants: [], images: [], publishedAt: null, createdAt: now(), updatedAt: now() };
+  products.set(p.id, p);
+  if (key) idempotent.set(key, p.id);
+  json(res, 201, presentProduct(p));
+});
+route('GET', '/v1/stores/:id/products/import/template', {}, (req, res, ctx) => {
+  if (!mustCatalog(res, ctx)) return;
+  res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8' }).end('nome;categoria;descricao;preco;promocional;promo_inicio;promo_fim;variacao1;variacao2;estoque;codigo\r\n');
+});
+const HEADERS = ['nome', 'categoria', 'descricao', 'preco', 'promocional', 'promo_inicio', 'promo_fim', 'variacao1', 'variacao2', 'estoque', 'codigo'];
+route('POST', '/v1/stores/:id/products/import', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const text = ctx.body.__csv ?? '';
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
+  const header = (lines[0] ?? '').split(';');
+  if (HEADERS.some((h) => !header.includes(h))) return problem(res, 422, 'IMPORT_FILE_INVALID', 'Planilha inválida', 'Cabeçalho inválido. Use o modelo.', { errors: [{ field: 'file', message: 'Cabeçalho inválido. Use o modelo.' }] });
+  const errors = [];
+  const groups = new Map();
+  lines.slice(1).forEach((line, i) => {
+    const cells = Object.fromEntries(line.split(';').map((value, index) => [header[index], value.trim()]));
+    const row = i + 2;
+    if (!cells.nome) return errors.push({ line: row, message: 'nome vazio' });
+    if (!/^\d+(,\d{1,2})?$/.test(cells.preco ?? '')) return errors.push({ line: row, message: 'preço vazio ou inválido' });
+    const group = groups.get(cells.nome) ?? { nome: cells.nome, preco: Math.round(Number(cells.preco.replace(',', '.')) * 100), codigo: cells.codigo || null, estoque: 0 };
+    group.estoque += Number(cells.estoque || 0);
+    groups.set(cells.nome, group);
+  });
+  const existing = new Set(storeProducts(s.id).flatMap((p) => p.variants.map((v) => v.sku)).filter(Boolean));
+  const dup = [...groups.values()].filter((g) => g.codigo && existing.has(g.codigo));
+  const fresh = [...groups.values()].filter((g) => !dup.includes(g));
+  const mode = ctx.query.get('mode') ?? 'preview';
+  const base = { totalLines: lines.length - 1, valid: lines.length - 1 - errors.length, invalid: errors.length, errors, productsToCreate: fresh.length, alreadyExist: dup.length };
+  if (mode !== 'commit') return json(res, 200, { ...base, committed: false, created: 0, updated: 0, skipped: 0 });
+  for (const g of fresh) {
+    const p = { id: randomUUID(), seq: products.size, storeId: s.id, name: g.nome, description: null, categoryId: null, sectionId: null, status: 'draft', moderationStatus: 'ok', basePriceCents: g.preco, promoPriceCents: null, promoStartsAt: null, promoEndsAt: null, variantAttributes: [], variants: [{ id: randomUUID(), attributes: {}, stock: g.estoque, priceCents: null, sku: g.codigo }], images: [], publishedAt: null, createdAt: now(), updatedAt: now() };
+    products.set(p.id, p);
+  }
+  json(res, 200, { ...base, committed: true, created: fresh.length, updated: 0, skipped: dup.length });
+});
+route('POST', '/v1/stores/:id/products/bulk', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const { productIds, action } = ctx.body;
+  let changed = 0;
+  for (const id of productIds) {
+    const p = products.get(id);
+    if (!p || p.storeId !== s.id) continue;
+    if (action.type === 'pause' && p.status === 'active') p.status = 'paused';
+    if (action.type === 'resume' && p.status === 'paused') p.status = 'active';
+    if (action.type === 'move_section') p.sectionId = action.sectionId;
+    changed++;
+    touch(p);
+  }
+  json(res, 200, { dryRun: false, willChange: changed, changed, blocked: [] });
+});
+route('GET', '/v1/stores/:id/products/:pid', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (p) json(res, 200, presentProduct(p));
+});
+route('PATCH', '/v1/stores/:id/products/:pid', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  const b = ctx.body;
+  for (const [from, to] of [['name', 'name'], ['description', 'description'], ['categoryId', 'categoryId'], ['sectionId', 'sectionId'], ['basePriceCents', 'basePriceCents'], ['promoPriceCents', 'promoPriceCents'], ['promoStartsAt', 'promoStartsAt'], ['promoEndsAt', 'promoEndsAt']]) if (b[from] !== undefined) p[to] = b[from];
+  if (p.promoPriceCents != null && p.basePriceCents != null && p.promoPriceCents >= p.basePriceCents) return problem(res, 422, 'PROMOTION_INVALID', 'Promoção inválida', 'O preço promocional precisa ser menor que o normal.');
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('DELETE', '/v1/stores/:id/products/:pid', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  p.status = 'archived';
+  empty(res);
+});
+route('PUT', '/v1/stores/:id/products/:pid/variants', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  const { attributes, variants } = ctx.body;
+  if (!Array.isArray(variants) || variants.length < 1) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  p.variantAttributes = attributes;
+  p.variants = variants.map((v) => ({ id: v.id ?? randomUUID(), attributes: v.attributes, stock: v.stock ?? 0, priceCents: v.priceCents ?? null, sku: v.sku ?? null }));
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('POST', '/v1/stores/:id/products/:pid/variants/:vid/stock', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  const v = p.variants.find((x) => x.id === ctx.params[2]);
+  if (!v) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  v.stock = ctx.body.set !== undefined ? ctx.body.set : v.stock + ctx.body.delta;
+  touch(p);
+  json(res, 200, presentVariant(v));
+});
+route('PUT', '/v1/stores/:id/products/:pid/images', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  if (ctx.body.imageIds.length > 8) return problem(res, 422, 'TOO_MANY_IMAGES', 'Muitas fotos');
+  p.images = ctx.body.imageIds;
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('POST', '/v1/stores/:id/products/:pid/publish', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  const errors = [];
+  if (!p.categoryId) errors.push({ field: 'categoryId', message: 'Escolha a categoria.' });
+  if (p.basePriceCents == null) errors.push({ field: 'basePriceCents', message: 'Informe o preço.' });
+  if (p.images.length < 1) errors.push({ field: 'imageIds', message: 'Envie ao menos 1 foto.' });
+  if (p.variants.length < 1) errors.push({ field: 'variants', message: 'Cadastre ao menos 1 variação.' });
+  if (errors.length > 0) return problem(res, 422, 'PRODUCT_INCOMPLETE', 'Produto incompleto', 'Faltam informações para publicar.', { errors });
+  p.status = 'active';
+  p.publishedAt = now();
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('POST', '/v1/stores/:id/products/:pid/pause', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  p.status = 'paused';
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('POST', '/v1/stores/:id/products/:pid/resume', {}, (req, res, ctx) => {
+  const p = mustProduct(res, ctx);
+  if (!p) return;
+  p.status = 'active';
+  touch(p);
+  json(res, 200, presentProduct(p));
+});
+route('GET', '/v1/stores/:id/sections', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const rows = [...sections.values()].filter((x) => x.storeId === s.id).sort((a, b) => a.position - b.position);
+  json(res, 200, { data: rows.map((x) => ({ id: x.id, name: x.name, position: x.position, productCount: storeProducts(s.id).filter((p) => p.sectionId === x.id).length })), nextCursor: null });
+});
+route('POST', '/v1/stores/:id/sections', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const x = { id: randomUUID(), storeId: s.id, name: String(ctx.body.name).trim(), position: [...sections.values()].filter((y) => y.storeId === s.id).length };
+  sections.set(x.id, x);
+  json(res, 201, { id: x.id, name: x.name, position: x.position, productCount: 0 });
+});
+route('DELETE', '/v1/stores/:id/sections/:sid', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  sections.delete(ctx.params[1]);
+  for (const p of products.values()) if (p.sectionId === ctx.params[1]) p.sectionId = null;
+  empty(res);
+});
+
+// semeia lojista com loja APROVADA e conta de senha conhecida (o catálogo só abre com a loja aprovada)
+route('POST', '/__test/seed-merchant', { public: true }, (req, res, ctx) => {
+  const owner = { id: randomUUID(), email: `lojista-${randomUUID().slice(0, 8)}@loja.test`, name: 'Marcos Silva', password: 'Webag-Lojista-2026!', profile: null, active: true, roles: ['customer', 'merchant'], emailVerified: true };
+  users.set(owner.id, owner);
+  const document = String(Math.floor(10_000_000_000 + Math.random() * 89_999_999_999));
+  const s = { id: randomUUID(), ownerId: owner.id, status: 'approved', documentType: 'cpf', document, legalName: null, name: ctx.body.name ?? 'Casa Bela', description: null, whatsapp: '11987654321', mainCategoryId: categories[2].id, address: { cep: '07900-000', street: 'Rua das Flores', number: '10', complement: null, neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: -23.28, lng: -46.74 }, documents: CPF_KINDS.map((kind) => ({ id: randomUUID(), kind, createdAt: now(), superseded: false })), reviewItems: [], history: [], payment: { status: 'active' }, submittedAt: now(), decidedBy: null, decisionReason: null, createdAt: now() };
+  stores.set(s.id, s);
+  json(res, 201, { email: owner.email, password: owner.password, storeId: s.id });
+});
 
 // semeia uma loja já enviada para análise (o teste de aprovação não depende do teste de cadastro)
 route('POST', '/__test/seed-store', { public: true }, (req, res, ctx) => {
