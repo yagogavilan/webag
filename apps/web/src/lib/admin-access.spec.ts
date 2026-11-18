@@ -1,0 +1,36 @@
+import { describe, expect, it } from 'vitest';
+import { canEdit, canView, safeNext, visibleNav } from './admin-access';
+
+describe('matriz de menu do admin (onda-1b §AD0)', () => {
+  it('super admin vê tudo e edita o que é editável', () => {
+    expect(visibleNav('super_admin').map((i) => i.section)).toEqual(['regioes', 'categorias', 'parametros', 'flags', 'termos', 'auditoria', 'admins']);
+    expect(canEdit('super_admin', 'parametros')).toBe(true);
+    expect(canEdit('super_admin', 'auditoria')).toBe(false);
+  });
+
+  it('operação edita regiões e categorias, só lê termos e não vê parâmetros, flags nem admins', () => {
+    expect(visibleNav('operations').map((i) => i.section)).toEqual(['regioes', 'categorias', 'termos']);
+    expect(canEdit('operations', 'regioes')).toBe(true);
+    expect(canView('operations', 'termos')).toBe(true);
+    expect(canEdit('operations', 'termos')).toBe(false);
+  });
+
+  it.each(['finance', 'support'] as const)('%s não vê nenhuma área de configuração', (profile) => {
+    expect(visibleNav(profile)).toEqual([]);
+  });
+
+  it('sem perfil não vê nada', () => {
+    expect(visibleNav(null)).toEqual([]);
+  });
+});
+
+describe('safeNext', () => {
+  it.each([
+    ['/admin/regioes', '/admin/regioes'],
+    ['/admin/parametros?x=1', '/admin/parametros?x=1'],
+  ])('aceita %s', (input, expected) => expect(safeNext(input)).toBe(expected));
+
+  it.each([null, undefined, '', 'https://evil.com', '//evil.com', '/lojista', '/admin//x\\y', '/admin/entrar', '/admin/convite?token=1'])('rejeita %s', (input) => {
+    expect(safeNext(input)).toBeNull();
+  });
+});
