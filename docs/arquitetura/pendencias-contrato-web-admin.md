@@ -1,16 +1,16 @@
 # Pendências de contrato: web do admin (Onda 1A) para o backend
 
-> Origem: retorno do mobile-dev, 2026-11-18. O backend-dev cobre isto na Onda 2 (marco 0/1) ou registra em divida-tecnica.md. Sem estes itens as telas ficam incompletas.
+> **Estado em 2026-11-18: itens 1 a 11 entregues pela API** (commits `de81b06`, `9a58f5d`, `ce9cc44`; contrato e cliente gerado atualizados). Origem: retorno do mobile-dev, 2026-11-18. O backend-dev cobre isto na Onda 2 (marco 0/1) ou registra em divida-tecnica.md. Sem estes itens as telas ficam incompletas.
 
 | # | Pendência | Referência |
 |---|---|---|
 | 1 | ~~Login de admin em 2 passos~~ **Feito no web (2026-11-18)**: `POST /api/session/admin/mfa`, `mfaToken` e `resetTicket` em cookie HttpOnly, `reset/complete` na allowlist. Falta no backend: **remover `totpCode` do `/auth/login` e do `/auth/password/reset`** (o web não envia mais) | SEC-090, SEC-115, DEC-027 B1 |
-| 2 | `PUT /admin/feature-flags` e PATCH de admins aceitarem `reason` | auditoria |
-| 3 | `PUT /admin/parameters` receber versão (`expectedUpdatedAt`) e responder 409 | RN-02 |
-| 4 | Rota `POST admin/totp/recovery-codes` (regenerar códigos) | SEC-092 |
-| 5 | Termos: campos "o que mudou" e "publicada por"; contagem de aceites | WB-100/101 |
-| 6 | `/admin/admins`: convites pendentes e último acesso | WB-228 |
-| 7 | Auditoria: nome do ator e aparelho; exportação CSV; "só as próprias ações" para perfis não-super | WB-123 |
+| 2 | ~~`PUT /admin/feature-flags` e PATCH de admins aceitarem `reason`~~ **Feito** (opcional, mínimo 5; vai à auditoria) | auditoria |
+| 3 | ~~`PUT /admin/parameters` receber versão (`expectedUpdatedAt`) e responder 409~~ **Feito** (`PARAMETER_CONFLICT`; também no reset; omitido = sem controle) | RN-02 |
+| 4 | ~~Rota `POST admin/totp/recovery-codes`~~ **Feito** (exige reautenticação; também `GET admin/totp/status` com `recoveryCodesLow`) | SEC-092 |
+| 5 | ~~Termos: campos "o que mudou" e "publicada por"; contagem de aceites~~ **Feito** (`changeSummary` na publicação; `publishedByName` e `acceptances` nas rotas de admin) | WB-100/101 |
+| 6 | ~~`/admin/admins`: convites pendentes e último acesso~~ **Feito** (`pendingInvitations[]` e `lastLoginAt`) | WB-228 |
+| 7 | ~~Auditoria: nome do ator e aparelho; exportação CSV; "só as próprias ações"~~ **Feito** (`actorName`, `device`, `GET admin/audit-log/export`; permissão `audit:own`, filtro de ator forçado para não-super) | WB-123 |
 
 Também: o security-engineer deve revisar o BFF de sessão do web, a reautenticação e o rascunho dos termos em localStorage (não guardar dado sensível).
 
@@ -18,9 +18,9 @@ Também: o security-engineer deve revisar o BFF de sessão do web, a reautentica
 
 | # | Pendência da API (backend-dev) | Referência |
 |---|---|---|
-| 8 | **Só aceitar o IP declarado pelo BFF com o segredo dele.** O web envia `X-Webag-Bff-Secret: $BFF_SHARED_SECRET` (se definido) e `X-Forwarded-For: <ip do cliente já resolvido>` (um único valor; ausente quando o web não conhece um IP confiável). A API deve usar esse IP **só** se o segredo bater (comparação em tempo constante); sem o segredo, usar o IP da conexão e ignorar `X-Forwarded-For`. `BFF_SHARED_SECRET` obrigatório em produção na API e no web. Substitui o `TRUST_PROXY` por número de saltos; `TRUST_PROXY` por CIDR continua valendo para o nginx | SEC-114 (2) |
+| 8 | **FEITO.** (`BFF_SHARED_SECRET` opcional na API; com o segredo certo vale o primeiro IP de `X-Forwarded-For`; sem ele a API segue o `TRUST_PROXY`, agora também por lista de IP/CIDR; `0.0.0.0/0` é recusado no boot.) **Só aceitar o IP declarado pelo BFF com o segredo dele.** O web envia `X-Webag-Bff-Secret: $BFF_SHARED_SECRET` (se definido) e `X-Forwarded-For: <ip do cliente já resolvido>` (um único valor; ausente quando o web não conhece um IP confiável). A API deve usar esse IP **só** se o segredo bater (comparação em tempo constante); sem o segredo, usar o IP da conexão e ignorar `X-Forwarded-For`. `BFF_SHARED_SECRET` obrigatório em produção na API e no web. Substitui o `TRUST_PROXY` por número de saltos; `TRUST_PROXY` por CIDR continua valendo para o nginx | SEC-114 (2) |
 | 9 | Porta da API fora da rede interna (só o web e o nginx chegam) | SEC-114 (3), tech-lead |
-| 10 | Remover `totpCode` de `LoginRequest` e `ResetPasswordRequest` (legado de 1 passo) | SEC-115 |
+| 10 | ~~Remover `totpCode` de `LoginRequest` e `ResetPasswordRequest`~~ **Feito** (enviar o campo é 400) | SEC-115 |
 | 11 | Contrato de `mfa/verify`: 401 `MFA_INVALID` e 429 `MFA_RATE_LIMITED` (o web trata os dois); 403 limpa o cookie do desafio | SEC-090 |
 
 Variáveis do web (servidor; nenhuma é pública). Incluir em `infra/env.example` e no guia de deploy (tech-lead):

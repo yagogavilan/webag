@@ -9,9 +9,9 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 |---|---|---|
 | `users` | e-mail (minúsculo, único, `CHECK lower`), senha Argon2id, nome, celular (dígitos), status (`active/blocked/deleted`), `email_verified_at`, `adult_declared_at` | Sem CPF nem data de nascimento (minimização). Nunca exposto: `password_hash` |
 | `user_roles` | `customer`, `merchant` | Papel de lojista só com e-mail confirmado (SEC-008b) |
-| `admin_profiles` | perfil (`super_admin/operations/finance/support`), `active`, segredo TOTP cifrado (AES-256-GCM, AAD = user), `totp_last_step` (anti-replay) | TOTP obrigatório (SEC-015) |
+| `admin_profiles` | perfil (`super_admin/operations/finance/support`), `active`, segredo TOTP cifrado (AES-256-GCM, AAD = user), `totp_last_step` (anti-replay), `totp_reenroll_required_at` (usou código de recuperação: o acesso continua exigindo 2º fator, SEC-113), `totp_setup_deadline_at` (48 h para o 1º enrolamento) | TOTP obrigatório (SEC-015) |
 | `admin_recovery_codes` | 10 códigos por admin como HMAC-SHA256, `used_at` | Uso único atômico |
-| `sessions` | uma por família de refresh: IP, user agent, device, `absolute_expires_at` (90 d), `revoked_at`, `mfa_verified_at`, `reauth_at` | Access token só vale com sessão ativa no banco (SEC-010) |
+| `sessions` | uma por família de refresh: IP, user agent, device, `absolute_expires_at` (90 d), `revoked_at`, `mfa_verified_at`, `mfa_factor` (`totp`/`recovery`; só a sessão `recovery` reconfigura um TOTP perdido, SEC-113), `reauth_at` | Access token só vale com sessão ativa no banco (SEC-010) |
 | `refresh_tokens` | SHA-256 do token opaco, `used_at`, `expires_at` (30 d deslizante) | Rotação a cada uso; reuso fora de 30 s revoga a sessão (SEC-011) |
 | `auth_codes` | HMAC do código de 6 dígitos por (usuário, finalidade), validade, tentativas, `consumed_at`, `invalidated_at` | SEC-002 |
 | `invitations` | hash do token (256 bits), tipo (`admin`, `store_staff`), e-mail, payload, 48 h (admin), `used_at`, `revoked_at` | SEC-017; reativação de admin usa o mesmo mecanismo (SEC-093) |
@@ -28,8 +28,8 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 | `categories` | 2 níveis, nome único por nível, ícone de biblioteca fixa |
 | `parameters` / `parameter_history` | Valor corrente; definição, faixa e padrão ficam em `parameters.definitions.ts` (RN-02). Histórico append-only com motivo |
 | `feature_flags` | Flags de HIP-042; definição em `feature-flags.definitions.ts` |
-| `legal_documents` | Termos do cliente, do lojista e privacidade; versões imutáveis, `relevant_change` |
-| `audit_log` | Quem, o quê, antes/depois (sem segredos), IP, `request_id`, motivo. **Append-only por trigger** (SEC-074, WB-123 C3) |
+| `legal_documents` | Termos do cliente, do lojista e privacidade; versões imutáveis, `relevant_change`, `change_summary` ("o que mudou") |
+| `audit_log` | Quem, o quê, antes/depois (sem segredos), IP, `user_agent`, `request_id`, motivo. **Append-only por trigger** (SEC-074, WB-123 C3) |
 
 ## payments (base, ADR-002)
 | Tabela | Conteúdo |

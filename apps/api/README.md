@@ -25,3 +25,14 @@ Com `PAYMENT_PROVIDER=fake` (padrão) existem rotas autenticadas que não fazem 
 
 ## Módulos (ADR-007)
 `identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, esqueleto Mercado Pago, webhook, conciliação). Um módulo só importa o `index.ts` do outro.
+
+## Proxy e IP do cliente (SEC-114)
+
+- `TRUST_PROXY` (obrigatório em produção): número de saltos (0 a 5) **ou** lista de IP/CIDR dos proxies (`127.0.0.1,10.0.0.0/8`). Prefira a lista: só quem está nela declara o IP via `X-Forwarded-For`. `0.0.0.0/0` e `/0` derrubam o boot. A porta da API não fica exposta fora da rede interna.
+- `BFF_SHARED_SECRET` (opcional, mínimo 32 caracteres): o BFF do painel web manda o segredo em `X-Webag-Bff-Secret` e o IP do navegador (já resolvido por ele) em `X-Forwarded-For`; só com o segredo certo a API usa esse IP. Sem o segredo, o BFF é um cliente comum. O mesmo valor vai no `.env` do web.
+
+## Seed da Onda 2 (lojas fictícias)
+
+`pnpm --filter @webag/api db:seed` (depois do seed da Onda 1) cria 7 lojas fictícias em bairros reais de Francisco Morato e Franco da Rocha, com 6 produtos cada (variações, estoque, promoções, seções) e fotos geradas. Login dos donos: `lojista.<slug>@seed.webag.local`, senha `webag-seed-lojista-2026` (só desenvolvimento; use `SEED_MERCHANT_PASSWORD` para trocar). Em produção só roda com `SEED_ONDA2=true` e `SEED_MERCHANT_PASSWORD`. Fotos precisam do armazenamento local no ar (RustFS, `docker compose up`); sem ele as lojas nascem sem foto.
+
+Fonte dos dados (detalhe no cabeçalho de `seed/onda2.ts`): nomes, donos, produtos, preços e endereços inventados; bairros reais com coordenadas aproximadas do bairro; CPFs fictícios com dígitos válidos; fotos geradas por código com `sharp` (gradiente e formas, sem terceiros, sem direito autoral); conta de recebimento do provedor `fake`.
