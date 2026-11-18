@@ -55,7 +55,7 @@ export interface SeedOnda2Options {
 
 export const DEV_SEED_MERCHANT_PASSWORD = 'webag-seed-lojista-2026';
 
-interface SeedProduct {
+export interface SeedProduct {
   name: string;
   description: string;
   category: string;
@@ -67,13 +67,13 @@ interface SeedProduct {
   hue: number;
 }
 
-interface SeedStore {
+export interface SeedStore {
   slug: string;
   name: string;
   owner: string;
   description: string;
   category: string;
-  city: 'francisco-morato-sp' | 'franco-da-rocha-sp';
+  city: 'francisco-morato-sp' | 'franco-da-rocha-sp' | 'caieiras-sp';
   neighborhood: string;
   street: string;
   number: string;
@@ -88,6 +88,12 @@ interface SeedStore {
   pickup: boolean;
   hours: { weekdays: number[]; start: string; end: string }[];
   products: SeedProduct[];
+  /** Há quantos dias a loja foi aprovada ("Lojas novas" = até 30). Padrão 0. */
+  approvedDaysAgo?: number;
+  /** Dias de troca voluntária (0 = não aceita). */
+  voluntaryExchangeDays?: number;
+  /** Loja pausada sem prazo (aparece "Fechada"). */
+  paused?: boolean;
 }
 
 const WEEK = [1, 2, 3, 4, 5, 6];
@@ -227,6 +233,13 @@ export async function generateProductImage(hue: number, variant: number): Promis
 const IMAGE_WIDTHS = [160, 400, 800] as const;
 
 export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise<void> {
+  await seedStores(db, SEED_STORES, options);
+  const log = options.log ?? (() => undefined);
+  log(`seed da Onda 2 concluído. Login dos lojistas de teste: lojista.<loja>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD})`);
+}
+
+/** Cria as lojas da lista que ainda não existem (idempotente pelo e-mail do dono). Usado pelas Ondas 2 e 3. */
+export async function seedStores(db: Db, seeds: SeedStore[], options: SeedOnda2Options = {}): Promise<void> {
   const log = options.log ?? (() => undefined);
   if (options.production && !options.merchantPassword) throw new Error('Em produção o seed da Onda 2 exige SEED_MERCHANT_PASSWORD');
   const password = options.merchantPassword ?? DEV_SEED_MERCHANT_PASSWORD;
@@ -244,7 +257,7 @@ export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise
   const docs = await db.select().from(legalDocuments);
   let storageDown = false;
 
-  for (const seed of SEED_STORES) {
+  for (const seed of seeds) {
     const email = `lojista.${seed.slug}@seed.webag.local`;
     const [existingUser] = await db.select().from(users).where(eq(users.email, email));
     if (existingUser) {
@@ -283,14 +296,14 @@ export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise
         addressState: 'SP',
         lat: seed.lat,
         lng: seed.lng,
-        approvedAt: new Date(),
+        approvedAt: new Date(Date.now() - (seed.approvedDaysAgo ?? 0) * 86_400_000),
       })
       .returning();
     if (!store) continue;
     await db.insert(storeMembers).values({ storeId: store.id, userId: owner.id, role: 'owner', permissions: [] });
     await db
       .insert(storeSettings)
-      .values({ storeId: store.id, acceptsDelivery: true, radiusM: seed.radiusM, feeMode: 'by_distance', minOrderCents: seed.minOrderCents, freeAboveCents: seed.freeAboveCents, pickupEnabled: seed.pickup, etaMinMinutes: 30, etaMaxMinutes: 50 });
+      .values({ storeId: store.id, acceptsDelivery: true, radiusM: seed.radiusM, feeMode: 'by_distance', minOrderCents: seed.minOrderCents, freeAboveCents: seed.freeAboveCents, pickupEnabled: seed.pickup, voluntaryExchangeDays: seed.voluntaryExchangeDays ?? 0, pausedIndefinitely: seed.paused ?? false, etaMinMinutes: 30, etaMaxMinutes: 50 });
     await db.insert(storeDeliveryTiers).values(seed.tiers.map((t, position) => ({ storeId: store.id, position, ...t })));
     for (const block of seed.hours) {
       await db.insert(storeHours).values(block.weekdays.map((weekday) => ({ storeId: store.id, weekday, startMin: toMin(block.start), endMin: toMin(block.end) })));
@@ -346,7 +359,6 @@ export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise
     }
     log(`loja ${seed.name} (${city.name} / ${seed.neighborhood}): ${seed.products.length} produtos`);
   }
-  log(`seed da Onda 2 concluído. Login dos lojistas de teste: lojista.<loja>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD})`);
 }
 
 async function attachGeneratedImage(db: Db, storage: ObjectStorage, ownerId: string, storeId: string, productId: string, hue: number, index: number): Promise<void> {

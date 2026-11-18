@@ -4,6 +4,7 @@ import * as schema from '../src/platform/database/schema.js';
 import { S3ObjectStorage } from '../src/platform/storage/s3.storage.js';
 import { seedOnda1 } from './onda1.js';
 import { seedOnda2 } from './onda2.js';
+import { seedOnda3 } from './onda3.js';
 
 /**
  * Seed de desenvolvimento: `pnpm --filter @webag/api db:seed`. Idempotente. Cada onda soma um arquivo aqui.
@@ -34,6 +35,10 @@ async function main(): Promise<void> {
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       });
       await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
+      // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners (em produção: SEED_ONDA3=true).
+      if (!production || process.env.SEED_ONDA3 === 'true') {
+        await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
+      }
     }
     console.log('[seed] concluído');
   } finally {

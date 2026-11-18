@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { isStoreVisible } from '../src/modules/stores/index.js';
 import { OBJECT_STORAGE } from '../src/platform/storage/object-storage.js';
 import { MemoryObjectStorage } from '../src/platform/storage/memory.storage.js';
-import { productImages, products, productVariants, stores, users, paymentAccounts, storeSettings } from '../src/platform/database/schema.js';
+import { mediaAssets, productImages, products, productVariants, stores, users, paymentAccounts, storeSettings } from '../src/platform/database/schema.js';
 import { seedOnda1 } from '../seed/onda1.js';
 import { fakeCpf, SEED_STORES, seedOnda2 } from '../seed/onda2.js';
 import { isValidCpf } from '../src/modules/stores/domain/document.js';
@@ -45,8 +45,11 @@ describe('Seed da Onda 2: lojas fictícias em Francisco Morato e Franco da Rocha
     const variants = await ctx.db.select().from(productVariants).where(sql`${productVariants.storeId} in (${sql.join(seeded.map((s) => sql`${s.id}`), sql`, `)})`);
     expect(new Set(variants.map((v) => `${v.storeId}:${v.sku}`)).size).toBe(variants.length);
     expect(variants.some((v) => v.stock === 0)).toBe(true); // há esgotado para testar a vitrine
-    // as fotos foram para o bucket público já redimensionadas em WebP
-    expect(storage.keys('public').filter((k) => k.endsWith('/400.webp')).length).toBeGreaterThanOrEqual(42);
+    // as fotos foram geradas já redimensionadas em WebP (conferido no banco: o seed da Onda 3 pode ter criado as lojas antes,
+    // com outro armazenamento em memória, então contar objetos do bucket deste teste dependeria da ordem dos arquivos)
+    const images = await ctx.db.select({ variants: mediaAssets.variants }).from(mediaAssets).where(sql`${mediaAssets.storeId} in (${sql.join(seeded.map((s) => sql`${s.id}`), sql`, `)}) and ${mediaAssets.purpose} = 'product_image'`);
+    expect(images.filter((i) => i.variants && '400' in i.variants).length).toBeGreaterThanOrEqual(42);
+    expect(storage).toBeDefined();
   });
 
   it('o lojista de teste entra pela API com a senha do seed e enxerga a própria loja (e só ela)', async () => {
