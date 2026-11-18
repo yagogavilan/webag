@@ -134,6 +134,7 @@ Prioridade e tipo: legenda em `estrategia.md` §7. `R-nn` = pendência de defini
 | O1-SEG-13 | SEC-085 | CI tem `pnpm audit --audit-level high`, lockfile versionado e varredura de segredos; PR de teste com dependência Alta conhecida falha | MAN/CI | P1 |
 | O1-SEG-14 | SEC-025 | Schemas expõem IDs como UUID; nenhuma rota aceita ID sequencial | API | P2 |
 | O1-SEG-15 | ADR-006 | Gate de CI: OpenAPI gerado do código = `openapi.yaml` versionado; divergência reprova o PR | CI | P1 |
+| O1-SEG-16 | ADR-006, plano de execução §1 | Migrações: banco vazio aplica todas; rodar duas vezes é idempotente; seed da onda 1 (admin inicial, parâmetros, flags, regiões, categorias, termos) idempotente | INT | P0 |
 
 ### 2.7 Admin: login, perfis, TOTP, convite, endereço próprio (WB-100, 101, 222, 223; SEC-015, 016, 017, 082, 083)
 | ID | Origem | Caso | Tipo | P |

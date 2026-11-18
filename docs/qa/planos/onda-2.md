@@ -147,7 +147,7 @@ Legenda de prioridade/tipo: `estrategia.md` §7. `R-nn` = pendência em `revisao
 | O2-TRC-03 | WB-059 C3 | A política é versionada para o snapshot no pedido: alterar a política não muda a versão referenciada por pedido já existente (diferido, onda 4) | INT | P1 |
 | O2-TRC-04 | WB-059, R-26 | Religar a troca voluntária volta ao prazo padrão (7) ou ao último, conforme decisão | API | P2 |
 
-### 2.7 Catálogo: produto, variações, estoque e preço (WB-060, 061, 062, 063, 064)
+### 2.8 Catálogo: produto, variações, estoque e preço (WB-060, 061, 062, 063, 064)
 | ID | Origem | Caso | Tipo | P |
 |---|---|---|---|---|
 | O2-PRD-01 | WB-060 C1 | Criar com nome (80 ok/81 → 422), descrição (1.000 ok/1.001 → 422), categoria ativa, preço, foto principal e ≥ 1 variação ou "sem variação" com estoque; categoria inativa → 422 | API | P0 |
@@ -174,13 +174,13 @@ Legenda de prioridade/tipo: `estrategia.md` §7. `R-nn` = pendência em `revisao
 | O2-PRC-04 | WB-062, RN-05 | Subir o preço normal acima da promoção vigente ok; baixar o normal abaixo ou igual à promoção vigente → 422 | API | P1 |
 | O2-PRC-05 | WB-062 C1 | Percentual exibido "de/por": 33,33% → 33%, 0,4% → "0%" não é exibido (regra de arredondamento definida no PO) | UNIT | P3 |
 | O2-PRC-06 | WB-062 C4 | Alterar preço com carrinho aberto avisa no checkout. Diferido (onda 4, WB-023 C5) | E2E-M | P1 |
-| O2-SEC-01 | WB-063 C1-C4 | Seções (Should): nome ≤ 40, ordem das seções e dos produtos; produto sem seção em "Outros"; seção sem produto ativo não aparece; excluir seção manda os produtos para "Outros" | API | P2 |
+| O2-SCT-01 | WB-063 C1-C4 | Seções (Should): nome ≤ 40, ordem das seções e dos produtos; produto sem seção em "Outros"; seção sem produto ativo não aparece; excluir seção manda os produtos para "Outros" | API | P2 |
 | O2-EST-01 | WB-064 C1 | Pausar/reativar com 1 toque e o status refletido na lista; produto pausado fora da API pública | E2E-W | P1 |
 | O2-EST-02 | WB-064 C2, HIP-033, R-14 | Selo "Baixo" quando `disponível ≤ estoque_baixo_un` (3 → baixo, 4 → não); notificação 1× por variação: 3 (envia), 2 (não), sobe para 10 (rearma), volta a 3 (envia de novo); limite por loja de 0 a 100 | UNIT | P1 |
 | O2-EST-03 | WB-064 C3 | Ajuste rápido (+/-): dois toques "+1" simultâneos resultam em +2 (usa delta/versão, sem perda de atualização) ou 409 claro; nunca +1 silencioso | CONC | P0 |
 | O2-EST-04 | WB-064 C3 | Ajuste que deixaria estoque abaixo do reservado mostra o motivo; falha de rede reverte o valor exibido | E2E-W | P1 |
 
-### 2.8 Moderação de produtos (WB-107)
+### 2.9 Moderação de produtos (WB-107)
 | ID | Origem | Caso | Tipo | P |
 |---|---|---|---|---|
 | O2-MOD-01 | WB-107 C1 | Lista com filtros por loja, categoria, data; "Remover" e "Pausar" exigem motivo (sem motivo → 422); filtro "denunciados" diferido (onda 6) | API/E2E-W | P1 |
@@ -189,7 +189,7 @@ Legenda de prioridade/tipo: `estrategia.md` §7. `R-nn` = pendência em `revisao
 | O2-MOD-04 | WB-107 C4 | 3 remoções em 30 dias → loja sinalizada para análise de suspensão; 2 remoções ou 3 em 31 dias → não (FakeClock) | INT | P1 |
 | O2-MOD-05 | WB-107, SEC-021 | Só super e operação moderam; financeiro, suporte e lojista → 403; remoção auditada | API | P0 |
 
-### 2.9 Loja nova e limite de exposição (WB-225, SEC-062)
+### 2.10 Loja nova e limite de exposição (WB-225, SEC-062)
 | ID | Origem | Caso | Tipo | P |
 |---|---|---|---|---|
 | O2-NOV-01 | WB-225 C1, C5, R-10 | `isNewStore`: aprovada há 29 dias com 25 pedidos ENTREGUE, há 31 com 10 e há 31 com 25 pedidos; a regra "o que durar mais" é testada nas 3 combinações; limite cai para `pedido_max_cents` global só quando as duas condições acabam | UNIT | P0 |
@@ -198,7 +198,7 @@ Legenda de prioridade/tipo: `estrategia.md` §7. `R-nn` = pendência em `revisao
 | O2-NOV-04 | WB-225 C1, SEC-062, R-10 | Checkout de R$ 500,00 aceito e R$ 500,01 → 422 com mensagem ao cliente e carrinho mantido; base do limite (subtotal ou total com frete) conforme R-10. Diferido (onda 4) | API | P0 |
 | O2-NOV-05 | WB-225 C3, C6 | Alerta "Loja em risco" (não recebi > 5% ou cancelamento > 15%, mínimo 10 pedidos) e contagem de pedidos barrados. Diferido (ondas 4 e 6) | INT | P1 |
 
-### 2.10 Ponta a ponta, seed, migração e transversais da onda
+### 2.11 Ponta a ponta, seed, migração e transversais da onda
 | ID | Origem | Caso | Tipo | P |
 |---|---|---|---|---|
 | O2-E2E-01 | critério de saída, WB-050, 051, 052, 053, 103, 054 | **Cadastrar e aprovar loja (caminho feliz):** lojista cria conta, confirma o código (lido no Mailpit), faz as 4 etapas, envia documentos, conecta a conta `fake`, envia; admin entra com TOTP, abre a fila, vê documentos, aprova; lojista vê "Aprovada" e o e-mail chega | E2E-W | P0 |
