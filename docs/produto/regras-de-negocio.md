@@ -29,6 +29,10 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `troca_voluntaria_dias_padrao` | 7 | 0-30 | HIP-017 |
 | `taxa_coleta_max_cents` | 3000 | 0-10000 | HIP-018 |
 | `troca_resposta_h` | 48 | 12-120 | HIP-019 |
+| `troca_taxa_pagamento_h` | 48 `[HIPÓTESE]` | 12-120 | HIP-D09, WB-175 C6 |
+| `disputa_comprovante_h` | 48 `[HIPÓTESE]` | 12-120 | WB-110 C4 |
+| `estorno_cobertura_teto_cents` | 30000 `[HIPÓTESE]` | 0-100000 | DEC-020a, WB-109 C9 |
+| `push_mkt_min_segmento` | 20 `[HIPÓTESE]` | 10-1000 | WB-197 C2 |
 | `coleta_agendamento_dias_uteis` / `coleta_entrega_item_dias` | 3 / 7 | 1-10 | HIP-019 |
 | `reembolso_dias_uteis` | 3 | 1-10 | HIP-019 |
 | `mediacao_dias_uteis` / `contestacao_dias` | 5 / 7 | 1-15 | HIP-020 |
@@ -62,8 +66,8 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 ## RN-04 Entrega, frete, pedido mínimo
 - Taxa **fixa** (R$ 0 a R$ 50) ou **por distância**: até 5 faixas `[de_km, ate_km, valor]` contíguas, sem lacuna; última faixa termina no raio da loja. Intervalo `[de, ate)`: o limite superior pertence à faixa seguinte (2,00 km cai em 2-5, não em 0-2); a última faixa inclui o raio (R-17).
 - Distância = linha reta entre loja e endereço (HIP-013). Fora do raio: loja some da lista; se o cliente chegar por link, mostra "Não entrega no seu endereço".
-- **Pedido mínimo** compara com o subtotal de produtos (preço vigente, antes de cupom e frete). Abaixo: checkout bloqueado e texto "Faltam R$ X".
-- **Entrega grátis acima de X:** compara com o mesmo subtotal; frete = R$ 0 se subtotal >= X.
+- **Pedido mínimo** compara com o subtotal de produtos (preço vigente, antes de cupom e frete). Abaixo: o checkout não avança e o texto diz "Faltam R$ X" (o botão principal vira "Adicionar mais itens", sem botão desabilitado; RN-17).
+- **Entrega grátis acima de X:** compara com o mesmo subtotal; frete = R$ 0 se subtotal >= X; X precisa ser estritamente maior que o pedido mínimo e X = 0 desliga a opção (R-17c).
 - **Tempo estimado:** faixa em minutos definida pela loja (ex.: 30-60); exibido como informado, sem recálculo.
 - Retirada: sem frete; loja informa endereço de retirada (padrão: o da loja), instruções e tempo de preparo (faixa em minutos).
 - Pagamento só online (PIX ou cartão). Dinheiro/maquininha na entrega **fora da 1.0** (brief §4).
@@ -154,22 +158,23 @@ Exemplo: subtotal R$ 100,00, cupom da loja R$ 10,00, frete R$ 8,00, sem taxa de 
 |---|---|---|---|---|
 | Arrependimento | 7 dias corridos (piso legal) | Não | Nenhum (frete e coleta por conta da loja) | Reembolso |
 | Defeito | 30 dias (piso; duráveis 90, validar jurídico) | Só com prova (inspeção), vai à mediação | Nenhum | Troca por igual, ou reembolso |
-| Tamanho errado / cor diferente | Definido pela loja (padrão 7; 0 = não aceita) | Sim, se fora do prazo ou política "não aceita"; motivo obrigatório | Taxa de coleta da loja (<= `taxa_coleta_max_cents`), paga ao solicitar | Troca por outra variação disponível, ou reembolso se não houver |
+| Tamanho errado / cor diferente | Definido pela loja (padrão 7; 0 = não aceita) | Sim, se fora do prazo ou política "não aceita"; motivo obrigatório | Taxa de coleta da loja (<= `taxa_coleta_max_cents`), **paga após a aprovação da loja**, só se o cliente escolher coleta em casa (HIP-D09; WB-175) | Troca por outra variação disponível, ou reembolso se não houver |
 
 Fotos: 1 a 5 (JPG/PNG, até 5 MB cada); obrigatórias para defeito, opcionais nos demais.
 
 **Estados da troca:**
 SOLICITADA → APROVADA | RECUSADA | CANCELADA (cliente, antes da coleta)
 APROVADA → COLETA_AGENDADA (loja informa data/janela; ou "cliente leva à loja") 
+Subestado de APROVADA "taxa pendente" (sem novo status): coleta em casa com taxa ainda não paga; a coleta só é agendada após o pagamento; sem pagamento em `troca_taxa_pagamento_h`, a troca é CANCELADA (sem cobrança).
 COLETA_AGENDADA → ITEM_RECEBIDO | COLETA_FALHOU (até 2 reagendamentos; depois EXPIRADA)
 ITEM_RECEBIDO → inspeção OK → REEMBOLSO_PROCESSANDO ou REPOSICAO_ENVIADA → CONCLUIDA; inspeção reprovada → EM_MEDIACAO
 RECUSADA → EM_MEDIACAO (cliente contesta em até `contestacao_dias`) → APROVADA ou RECUSADA_FINAL
 APROVADA/COLETA_AGENDADA sem item entregue em `coleta_entrega_item_dias` → EXPIRADA.
 
 **Prazos:** loja responde em `troca_resposta_h` (sem resposta: arrependimento é aprovado; demais vão à mediação); loja agenda coleta em até `coleta_agendamento_dias_uteis`; reembolso em até `reembolso_dias_uteis` após ITEM_RECEBIDO; mediação decide em `mediacao_dias_uteis`.
-**Financeiro:** reembolso devolve valor dos itens (e frete original em arrependimento, a validar com jurídico) pelo provedor; comissão devolvida proporcional (RN-10). Taxa de coleta não é reembolsada, exceto se a loja recusar ou a troca for cancelada antes da coleta. Reposição não gera nova cobrança nem nova comissão; consome estoque (reserva ao aprovar a troca).
+**Financeiro:** reembolso devolve valor dos itens (e frete original em arrependimento, a validar com jurídico) pelo provedor; comissão devolvida proporcional (RN-10). Taxa de coleta só é cobrada após a aprovação; não é reembolsada, exceto se a troca for cancelada depois de paga e antes da coleta (recusa não gera cobrança). Reposição não gera nova cobrança nem nova comissão; consome estoque (reserva ao aprovar a troca).
 Troca de item trocado: não permitida (nova solicitação só por defeito).
-**Regra de produto:** o switch "aceita troca" da loja controla só a troca voluntária (tamanho/cor). A UI nunca oferece desligar arrependimento ou defeito.
+**Regra de produto:** o switch "aceita troca" da loja controla só a troca voluntária (tamanho/cor). A UI nunca oferece desligar arrependimento ou defeito. Motivo que a loja não aceita ou fora do prazo aparece inerte, com o motivo escrito (DEC-024b).
 
 ## RN-12 Avaliações
 - Só cliente com pedido ENTREGUE; 1 avaliação de loja por pedido e 1 por produto do pedido; janela `avaliacao_janela_dias`; nota 1-5 (obrigatória), comentário opcional até 500 caracteres; não editável após enviada (pode apagar e reenviar dentro da janela).
@@ -179,7 +184,7 @@ Troca de item trocado: não permitida (nova solicitação só por defeito).
 
 ## RN-13 Papéis e permissões
 **Admin:** super admin (tudo); operação (lojas, catálogo, pedidos, trocas, regiões, marketing, conteúdo; sem financeiro nem admins); financeiro (comissões, repasses, estornos, conciliação, relatórios financeiros; leitura de pedidos); suporte (leitura de clientes, lojas e pedidos, redefinir senha de cliente, abrir mediação; sem estorno e sem edição de loja).
-**Lojista:** dono (tudo, incluindo financeiro, conta de recebimento, equipe, configurações) e funcionários com permissões marcáveis: pedidos, catálogo/estoque, trocas, cupons, avaliações. Financeiro, dados bancários e equipe são só do dono. Escopo sempre limitado à própria loja.
+**Lojista:** dono (tudo, incluindo financeiro, conta de recebimento, equipe, configurações) e funcionários com permissões marcáveis: pedidos, catálogo/estoque, trocas, cupons, avaliações e **valores de venda** (`vendas_valores`, **desligada por padrão**; só o dono liga; libera vendas em R$, ticket médio e gráfico do painel inicial, nunca o financeiro; DEC-024c, WB-075 C7). Financeiro, dados bancários e equipe são só do dono. Escopo sempre limitado à própria loja.
 **Cliente:** só os próprios dados.
 Todo acesso é validado no servidor por papel e por loja (nunca só pela interface).
 
@@ -210,3 +215,8 @@ Qualquer outra transição (inclusive RECUSADA ou SUSPENSA direto para APROVADA,
 - **Cancelamento**: pedidos CANCELADO + RECUSADO / pedidos que chegaram a RECEBIDO, por ator e motivo.
 - **Tempo de aceite**: RECEBIDO até ACEITO (mediana e p90).
 - **Loja ativa**: aprovada, com 1+ pedido ENTREGUE nos últimos 30 dias.
+
+## RN-17 Formulários: botão de envio sempre ativo (DEC-024d, WB-006 C2/C4, WB-020 C5)
+- O botão principal de um formulário (cadastro, login, contestação, avaliação, configuração etc.) **nunca fica desabilitado** por campo inválido ou faltando: ele fica ativo e, ao tocar, **não envia**, mostra o erro junto ao campo (texto + ícone, nunca só cor) e leva o foco ao primeiro campo com erro (acessibilidade: leitor de tela e quem não percebe o que falta).
+- Exceções: estado "Enviando…" (evita envio duplicado) e ação indisponível por permissão ou regra de negócio, que **não aparece** (ou aparece inerte com o motivo escrito, como em RN-11), em vez de um botão desabilitado sem explicação.
+- Vale para app e painéis web; casos de teste verificam "toca sem preencher: não envia, mostra erro, foco no campo".
