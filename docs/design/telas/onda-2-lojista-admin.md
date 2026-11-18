@@ -64,7 +64,7 @@ Estrutura: **Conta** (L1, L2) e depois 4 etapas do FormWizard ("Etapa 1 de 4"): 
 ### L2. Confirmar e-mail com código (WB-050 C4)
 
 **Objetivo:** provar que o e-mail é dele. **Ação principal:** digitar ou colar o código (verifica sozinho no 6º dígito; sem botão).
-- **Layout:** título "Confirme seu e-mail"; texto "Enviamos um código de 6 dígitos para marcos@casabela.com.br." OTPInput; abaixo "Reenviar código em 0:30" (vira link "Reenviar código"); link "Trocar e-mail".
+- **Layout:** título "Confirme seu e-mail"; texto "Enviamos um código de 6 dígitos para marcos@casabela.com.br." OTPInput; abaixo "Reenviar código em 1:00" (vira link "Reenviar código"; valor de `otp_reenvio_s`; tela completa em `onda-1b-contas.md` E4); link "Trocar e-mail".
 - **Validade:** 10 min. Texto discreto: "O código vale por 10 minutos."
 
 | Estado | Comportamento |
@@ -263,7 +263,7 @@ stateDiagram-v2
 - **Selo de prazo** (ícone + texto): "No prazo" (neutro), "Vence hoje" (`warning`), "Atrasada 1 dia" (`danger`), conforme `aprovacao_loja_sla_dias_uteis`. Em "Aguardando lojista", o prazo está pausado: "Prazo pausado".
 - **Selo de risco:** "CNPJ repetido" (alerta) quando a checagem de duplicidade encontra outra loja.
 - **Filtros (chips):** Todas · Novas · Reenviadas · Atrasadas. Busca por nome, cidade ou CPF/CNPJ. Atualizada "às 10:42" + botão "Atualizar".
-- **Perfis:** operação e super admin veem "Analisar a mais antiga" e "Abrir"; suporte e financeiro veem "Ver" (leitura).
+- **Perfis (matriz de `prd/admin.md`):** operação e super admin veem "Analisar a mais antiga" e "Abrir". Suporte vê a fila e os dados em leitura ("Ver"), **sem documentos**. Financeiro não vê a fila (menu Lojas só pelo Financeiro > Repasses).
 
 | Estado | Comportamento |
 |---|---|
@@ -306,7 +306,7 @@ stateDiagram-v2
 | Conflito (C4) | Dialog: "Esta loja já foi decidida por Ana às 10:42." + "Ver decisão" e "Voltar à fila" |
 | Offline | Marcações da checklist ficam no aparelho. Decisões: "Conecte-se para decidir. Suas marcações estão salvas." |
 | Sucesso | Toast "Casa Bela aprovada. Próxima loja da fila." e abre o próximo caso (ou volta à fila vazia). Sem "desfazer" (o e-mail já saiu) |
-| Permissão | Suporte e financeiro: documento e dados visíveis, sem ações; faixa "Você pode ver este caso, mas não decidir." |
+| Permissão | Só super admin e operação abrem os documentos (WB-218 C1). Suporte vê os dados sem ações e **sem a aba Documentos**; faixa "Você pode ver este caso, mas não decidir." Financeiro não acessa |
 
 **Atalhos:** `a` aprova (só com checklist completa, abre o diálogo), `j` e `k` trocam de documento, `?` lista os atalhos; todos têm botão equivalente. **A11y:** checklist com grupo de rádio por item; ao completar, anuncia "Checklist completa. Aprovar liberado."; o visualizador tem controles por teclado (`+`, `-`, `r` girar). **testID:** `doc-viewer`, `doc-thumb-<id>`, `check-<id>-ok`, `check-<id>-problem`, `check-<id>-note`, `approve`, `request-correction`, `reject`, `reveal-<campo>`, `confirm-approve`, `reject-reason`. **Analytics:** `admin_store_approved`, `admin_correction_requested`, `admin_store_rejected` (com segundos até a decisão). Toda decisão vai à auditoria (WB-123).
 
@@ -331,7 +331,7 @@ stateDiagram-v2
 | Vazio | Aba Histórico sem eventos: "Nenhum evento ainda." |
 | Erro / Offline | EP; ações bloqueadas offline com "Conecte-se para alterar a loja." |
 | Sucesso | Toast "Casa Bela suspensa." / "Casa Bela reativada." / "Alteração salva." |
-| Permissão | Só super admin e operação alteram; suporte e financeiro leem (botões ocultos) |
+| Permissão | Só super admin e operação alteram. Suporte lê (botões ocultos, sem aba Documentos). Financeiro vê só o resumo e o saldo, pelo menu Financeiro |
 
 **testID:** `status-badge`, `edit`, `more-menu`, `suspend`, `suspend-reason`, `suspend-confirm`, `reactivate`, `reactivate-confirm`, `diff-list`, `edit-reason`, `edit-confirm`, `pending-orders-link`.
 

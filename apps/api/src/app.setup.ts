@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import type { NextFunction, Request, Response } from 'express';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import type { Env } from './platform/config/env.js';
@@ -10,6 +11,17 @@ export function configureApp(app: NestExpressApplication): void {
 
   app.useLogger(app.get(Logger));
   app.disable('x-powered-by');
+  // IP real atrás do proxy (rate limit, auditoria). 0 = usa o IP do socket.
+  app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }));
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    if (config.get('NODE_ENV', { infer: true }) === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
   // Graceful shutdown: SIGTERM fecha HTTP, pool do Postgres e Redis (OnApplicationShutdown).
   app.enableShutdownHooks();
 

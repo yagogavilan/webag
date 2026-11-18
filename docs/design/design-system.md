@@ -1,6 +1,6 @@
 # Design System Webag
 
-> Autor: product-designer. Data: 2026-11-18. Versão 0.2.0 (0.2.0: PasswordField com confirmação por DEC-012; §3.1b componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
+> Autor: product-designer. Data: 2026-11-18. Versão 0.3.0 (0.3.0: §3.1c componentes das ondas 1B, 5 e 6; OTPInput com reenvio em 1:00; 0.2.0: PasswordField com confirmação por DEC-012; §3.1b componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
 > Alvos: app Expo (cliente) e web Next.js (lojista e admin). Mesma linguagem, componentes implementados nos dois, comportamento nativo de cada plataforma quando divergir (§8).
 
 ## 1. Princípios
@@ -62,7 +62,7 @@ Todo componente interativo tem **alvo ≥ 48**, rótulo de acessibilidade, anel 
 | Componente | Regras |
 |---|---|
 | **Radio / Checkbox / Switch** | Visual 24 (switch 52×32), alvo 48 incluindo o rótulo. Marcado: preenchimento `brand.600` + ícone (check ou ponto). Switch mostra "Ligado/Desligado" em texto em telas de configuração |
-| **OTPInput** (código de 6 dígitos) | 6 caixas 48×56, foco automático, avança sozinha, aceita colar o código inteiro e preenchimento automático (`oneTimeCode`), Backspace volta. Abaixo: "Reenviar código em 0:30" |
+| **OTPInput** (código de 6 dígitos) | 6 caixas 48×56, foco automático, avança sozinha, aceita colar o código inteiro e preenchimento automático (`oneTimeCode`), Backspace volta. Abaixo: "Reenviar código em 1:00" (valor de `otp_reenvio_s`, 60 s) |
 | **PasswordField** | Botão olho 48 (mostrar/ocultar). Medidor: 4 segmentos + palavra "Fraca", "Média" ou "Forte" (nunca só cor). Aceita colar e gerenciador de senhas. **Variante com confirmação (DEC-012):** em todo lugar que define senha nova (cadastro do cliente e do lojista, convite de funcionário, redefinir senha, alterar senha) vêm dois campos, "Senha" e "Confirmar senha"; **um único olho** controla os dois; a confirmação valida ao sair do campo ou ao igualar o tamanho ("As senhas são iguais." com check / "As senhas não são iguais."); `autocomplete="new-password"` nos dois, para o gerenciador preencher juntos |
 | **AddressField (CEP)** | CEP com máscara; ao completar 8 dígitos preenche rua, bairro e cidade (skeleton nesses campos); usuário só digita número e complemento; "Sem número" como caixa de seleção |
 | **PixPayment** | QR 240 (mín. 200) com margem 16 branca; código copia e cola em 2 linhas truncado; **botão "Copiar código" `lg` 56 largura total**; contagem regressiva em `numeral`; "Como pagar" em 3 linhas com ícone. Estados: gerando, aguardando, copiado, vence em < 2 min, vencido, pago, falha ao gerar (§5.5) |
@@ -118,6 +118,23 @@ Cada um é composto de tokens e componentes já existentes; nenhum cria cor, rai
 | **OrderTimer / PixCountdown** | PIX, alerta de pedido | Contagem em `numeral`; mudança para alerta (ícone + texto) abaixo de 2 min; nunca lida a cada segundo (anuncia em 5:00, 1:00, 0:30 e ao vencer) |
 
 **Regra de formulário atualizada (§6):** botão de envio **ativo** com erro mostrado ao tocar (rola e foca o 1º erro) é o padrão; botão inerte só com o motivo escrito no próprio rótulo (ex.: "Loja fechada · abre 9h").
+
+### 3.1c Componentes adicionados nas ondas 1B, 5 e 6 (v0.3.0)
+
+Compostos de tokens e componentes existentes; nenhum cria cor, raio ou sombra. Estados: §3.2.
+
+| Componente | Onde | Regras |
+|---|---|---|
+| **TotpSetup** | Admin (obrigatório), lojista (opcional) | 3 passos com barra. Passo 2: QR 200 com margem branca 16, botão "Abrir no app autenticador" (celular), segredo em blocos de 4 com "Copiar" (alternativa ao QR, obrigatória), OTPInput. Passo 3 = RecoveryCodes |
+| **RecoveryCodes** | TotpSetup, Meu perfil | 10 códigos `XXXXX-XXXXX` em 2 colunas, fonte tabular, em texto (nunca imagem). "Copiar tudo", "Baixar arquivo", "Imprimir". Aviso "aparecem só agora". Caixa "Guardei..." libera "Concluir" |
+| **EmailConfirmSheet** | App e web | BottomSheet (app) ou Dialog (web) com OTPInput, contador, "Abrir meu e-mail" e "Corrigir e-mail". Texto de contexto por ação; a ação pendente continua sozinha após o código |
+| **ReasonDialog** | Admin | Dialog com título que repete o alvo, resumo antes e depois (DiffView), campo Motivo obrigatório (10 a 200, contador, chips de motivos comuns) e botão "[Verbo] [alvo]". Destrutivo quando desliga ou apaga. Falha fechada: sem auditoria, sem ação |
+| **IconPicker** | Categorias, banners | Grade de ícones de biblioteca fixa, cada um com **nome escrito** e check no escolhido; busca por nome; alvo 48 |
+| **RichTextLite** | Termos | Títulos 2 e 3, negrito, lista, link; barra com botões de texto rotulados; colar vira texto limpo; nenhum HTML cru |
+| **VersionList** | Termos | Versão, vigência, "relevante" (ícone + texto), autor, status (Vigente, Agendada, Anterior). Versão publicada é somente leitura |
+| **DiffView** | Auditoria, ReasonDialog | Antes e depois em colunas (empilha no celular); saiu "−" com `danger.subtle`, entrou "+" com `success.subtle` (sinal + cor); leitor: "Campo: antes X, depois Y" |
+| **FlagRow** | Feature flags | Nome, efeito ao desligar (1 frase), Switch com texto "Ligada/Desligada", autor e data da última mudança; Switch com spinner ao salvar e volta ao valor antigo se falhar |
+| **ParamRow** | Parâmetros | ListItem 72: nome legível, valor com unidade, "Padrão X · de A a B", chave técnica em `caption`, selo "Alterado" ou "Lei" (piso legal) |
 
 ### 3.2 Matriz de estados (cada componente interativo)
 

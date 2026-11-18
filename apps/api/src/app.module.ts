@@ -3,6 +3,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { HealthModule } from './health/health.module.js';
+import { APP_FILTER } from '@nestjs/core';
+import { AdminModule } from './modules/admin/index.js';
+import { IdentityModule } from './modules/identity/index.js';
+import { UsersModule } from './modules/users/index.js';
+import { ProblemFilter } from './platform/http/problem.filter.js';
+import { MailModule } from './platform/mail/mail.module.js';
+import { RateLimitService } from './platform/ratelimit/rate-limit.service.js';
 import { validateEnv, type Env } from './platform/config/env.js';
 import { DatabaseModule } from './platform/database/database.module.js';
 import { RedisModule } from './platform/redis/redis.module.js';
@@ -35,7 +42,12 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
           },
           // Nunca logar credenciais (skill padroes-backend).
           redact: {
-            paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+            paths: [
+              'req.headers.authorization',
+              'req.headers.cookie',
+              'res.headers["set-cookie"]',
+              'req.body',
+            ],
             censor: '[redacted]',
           },
           autoLogging: {
@@ -50,7 +62,13 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     }),
     DatabaseModule,
     RedisModule,
+    MailModule,
     HealthModule,
+    AdminModule,
+    UsersModule,
+    IdentityModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: ProblemFilter }, RateLimitService],
+  exports: [RateLimitService],
 })
 export class AppModule {}

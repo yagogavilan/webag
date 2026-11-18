@@ -81,7 +81,7 @@
 
 **Vista 1: Criar conta (padrão).** Header "Criar conta" com voltar; link "Já tenho conta" no topo. Texto: "Falta pouco para pagar. Sua sacola fica guardada." Campos, nesta ordem: **Nome completo** · **E-mail** · **Celular** (máscara) · **Senha** (medidor) · **Confirmar senha** · caixa "Tenho 18 anos ou mais e aceito os Termos de uso e a Política de Privacidade" (links em tela própria, voltam sem perder o formulário). Um olho controla as duas senhas. Confirmação valida ao sair do campo ou ao igualar o tamanho: "As senhas são iguais." / "As senhas não são iguais." Rodapé: botão `lg` "Criar conta". Se `login_social` estiver ligada (WB-010): acima do formulário, "Continuar com Google" e (iOS, sempre junto) "Continuar com Apple", e o divisor "ou". Desligada: nada aparece.
 **Vista 2: Entrar.** Campos E-mail e Senha (olho); link "Esqueci a senha" (o fluxo de recuperação pede código e nova senha com confirmação); botão "Entrar"; link "Criar conta".
-**Vista 3: Confirmar e-mail (código).** Mesmo molde de L2 (`onda-2-lojista-admin.md`): 6 caixas, "Reenviar código em 0:30". No desenho padrão é opcional e abre pelo banner "Confirme seu e-mail"; na variante B abre logo após "Criar conta".
+**Vista 3: Confirmar e-mail (código).** Mesmo molde de L2 (`onda-2-lojista-admin.md`): 6 caixas, "Reenviar código em 1:00" (telas completas de conta e acesso: `onda-1b-contas.md` E1 a E5). No desenho padrão é opcional e abre pelo banner "Confirme seu e-mail"; na variante B abre logo após "Criar conta".
 
 **Mensagens:** "Digite seu nome." · "Confira o e-mail." · "Confira o celular com DDD." · "Senha fraca. Use 8 caracteres ou mais, com letras e números." · "As senhas não são iguais." · "Marque a caixa para continuar." · e-mail já existe: "Esse e-mail já tem conta." + botão "Entrar" (mesma mensagem, sem dizer se a conta foi confirmada) · login errado: "E-mail ou senha incorretos." · bloqueio: "Muitas tentativas. Tente em 15 minutos ou redefina a senha." · conta bloqueada: "Conta indisponível. Fale com o suporte." + link.
 
@@ -236,7 +236,7 @@
 |---|---|---|
 | Cancelar pedido (C1) | "Cancelar o pedido?" / "A loja ainda não começou a separar. Você recebe R$ 166,80 de volta no PIX." (cartão: "...em até 2 faturas") | "Cancelar pedido" (destrutivo) · "Manter pedido" |
 | Pedir cancelamento (C2) | "Pedir cancelamento?" / "A loja responde em até 10 minutos." | "Pedir cancelamento" · "Manter pedido". Depois: "Aguardando a resposta da loja" na linha do tempo |
-| Não recebi (WB-037) | "Não recebeu o pedido?" / "Vamos avisar a loja e o Webag. O repasse à loja fica retido até resolver." | "Abrir disputa" · "Voltar". Depois: Banner "Disputa aberta · protocolo WB-48213. Respondemos em até 2 dias úteis." **[HIPÓTESE de prazo]** |
+| Não recebi (WB-037) | "Não recebeu o pedido?" / "Vamos avisar a loja e o Webag. Você recebe a resposta em até 2 dias úteis." (corrigido na onda 5: no modo split o Webag não retém o repasse, DEC-016) | "Abrir disputa" · "Voltar". Depois: Banner "Disputa aberta · protocolo WB-48213. Respondemos em até 2 dias úteis." **[HIPÓTESE de prazo]** |
 
 - **Comprovante (folha):** número, data e hora, forma de pagamento, valores e ID da transação; botão "Compartilhar".
 - **Atraso:** se passar do tempo estimado, Banner de alerta "Seu pedido está demorando mais que o normal." + "Falar com a loja".
