@@ -14,6 +14,9 @@ Toda decisão relevante entra aqui (produto, prioridade, risco aceito, veto derr
 | DEC-008 | 2026-11-18 | Receita: comissão por pedido (padrão, por categoria e por loja) + taxa de serviço opcional, ambas configuráveis no admin | Brief §3.3 Financeiro | Fundador | Mensalidade | Aprovada |
 | DEC-009 | 2026-11-18 | Cidades do lançamento: Francisco Morato, Franco da Rocha, Caieiras, Campo Limpo Paulista (cadastráveis no admin) | Brief §2 | Fundador | — | Aprovada |
 | DEC-010 | 2026-11-18 | Paralelismo máx. 3 agentes; Sonnet para execução, Opus para arquitetura/segurança/decisões difíceis | Brief §1 (economia) | Fundador | — | Aprovada |
+| DEC-011 | 2026-11-18 | Troca: o piso legal (CDC: arrependimento 7 dias em compra à distância e vício do produto) é fixo e não editável; a loja define aceitar, prazo e taxa de coleta apenas para troca por tamanho/cor (HIP-017). Preserva o diferencial "Retira Troca" sem violar a lei | CEO (valida PO) | Loja decide tudo | Aceita; fundador deve conferir no relatório final |
+| DEC-012 | 2026-11-18 | Campo "confirmar senha" MANTIDO no cadastro, porque o brief §3.1 pede confirmação de senha explicitamente (rejeita HIP-D06). Mostrar/ocultar senha também existe. A confirmação de e-mail por código segue sujeita ao parecer do Security (HIP-D07) | CEO | Remover o campo | Aceita |
+| DEC-013 | 2026-11-18 | Escopo da 1.0 permanece completo (134 histórias), sem corte para um M1; a ordem de construção em ondas do `backlog.md` define o que fica pronto primeiro. Se faltar tempo/uso, as histórias Should/Could caem primeiro | CEO | Corte para M1 de 5 lojas | Aceita |
 
 ## Decisões em aberto
 - [x] Modelo de entrega → DEC-007
@@ -26,3 +29,56 @@ Toda decisão relevante entra aqui (produto, prioridade, risco aceito, veto derr
 
 | ID | Hipótese | Por quê | Configurável no admin? |
 |---|---|---|---|
+| HIP-001 | Comissão padrão de **10%** sobre o subtotal de produtos (após cupom da loja, sem frete), sem taxa fixa por item. Precedência: loja > categoria > padrão | Mercado: iFood 12% + 3,2% de pagamento; ML ~10-19% + fixa; Shopee 14-20% + fixa (`pesquisa-mercado.md` §4). Webag não opera logística, então fica abaixo do iFood. Validar no piloto | Sim (padrão, categoria, loja) |
+| HIP-002 | Nenhuma promoção de lançamento ativa por padrão; admin pode dar comissão reduzida a uma loja com data de término | Atrair as primeiras lojas sem fixar subsídio em código | Sim (comissão por loja com vigência) |
+| HIP-003 | Taxa de serviço ao cliente **desligada** (R$ 0,00) no lançamento; quando ligada, valor fixo ou %, com teto | Cliente é sensível a taxa e desconfiado de app novo; DEC-008 pede "opcional" | Sim |
+| HIP-004 | Taxa do provedor de pagamento (PIX ~0,99%, cartão ~3,98-4,98% no MP) é arcada pelo lojista e exibida separada da comissão | Mecânica do split do MP (taxa do MP sai primeiro; comissão do marketplace sobre o restante) | Não (mecânica do provedor); exibição fixa |
+| HIP-005 | Frete é 100% do lojista (entrega própria, DEC-007); Webag não cobra comissão sobre frete | Simplicidade e coerência com entrega pelo lojista | Não |
+| HIP-006 | PIX expira em **15 min**, com contagem regressiva | Padrão de checkout de apps; reserva de estoque curta | Sim (5-60) |
+| HIP-007 | Estoque é reservado ao criar o pedido e liberado se expirar, cancelar ou recusar; carrinho não reserva | Evita venda duplicada sem travar estoque por carrinho abandonado | Não (regra); prazo segue HIP-006 |
+| HIP-008 | Loja tem **10 min** para aceitar (lembrete aos 5); sem resposta, cancelamento automático com estorno total | Cliente pagou à vista e espera rápido; padrão de apps de delivery | Sim (3-30) |
+| HIP-009 | Cliente cancela sem custo até a loja iniciar a separação (RECEBIDO/ACEITO); depois só por solicitação à loja; após sair/ficar pronto, só via troca/arrependimento | Equilibra direito do cliente e custo de separação do lojista | Não (regra) |
+| HIP-010 | Cartão: autorizar na criação e capturar quando a loja aceita, se o MP permitir com split; senão captura imediata + estorno | Reduz estornos; viabilidade técnica a confirmar no ADR de pagamentos | Não (ADR) |
+| HIP-011 | Cartão em até **3x**, juros do provedor pagos pelo cliente e exibidos antes de pagar, parcela mínima R$ 30,00 | Parcelado é comum, mas sem subsídio da loja na 1.0 | Sim |
+| HIP-012 | Valor máximo por pedido de **R$ 2.000,00** na 1.0 | Limite antifraude inicial para app novo | Sim |
+| HIP-013 | Raio de entrega máx. **15 km** por loja (padrão ao criar: 5 km); distância em linha reta (PostGIS) | Região compacta; rota real exigiria API paga | Sim (máx.) |
+| HIP-014 | Loja informa o tempo estimado (faixa em minutos); só se compra com loja aberta (sem agendamento na 1.0) | Agendamento amplia escopo sem evidência | Faixa por loja; agendamento fora |
+| HIP-015 | Repasse semanal (segunda), só de pedidos ENTREGUE há 7+ dias sem troca/disputa aberta (modo recebimento centralizado). Em split, vale a liberação do MP (a confirmar) | 7 dias = janela de arrependimento (CDC art. 49) | Sim (periodicidade, carência) |
+| HIP-016 | Em estorno, a comissão é devolvida proporcionalmente; taxa do provedor não é devolvida | Venda desfeita não gera comissão; provedor não devolve taxa | Não |
+| HIP-017 | Prazos de troca: arrependimento 7 dias corridos do recebimento (piso legal, fixo); defeito 30 dias (piso; duráveis 90 dias, validar com jurídico); tamanho/cor definidos pela loja (padrão 7 dias; 0 = não aceita). A política da loja **não** desliga arrependimento nem defeito | O brief diz "a loja define se aceita", mas o CDC impõe piso. Conflito sinalizado ao fundador | Piso legal editável só por super admin; prazo voluntário por loja |
+| HIP-018 | Taxa de coleta só em troca voluntária (tamanho/cor), cobrada ao solicitar, teto R$ 30,00; defeito e arrependimento sem custo ao cliente | Prática de mercado e entendimento corrente do CDC (validar com jurídico) | Sim (teto); valor por loja |
+| HIP-019 | SLA de troca: loja responde em 48h (sem resposta: arrependimento é aprovado; demais vão à mediação); coleta agendada em até 3 dias úteis; cliente tem 7 dias para entregar o item; reembolso em até 3 dias úteis após recebimento | Evita troca parada e protege o cliente | Sim |
+| HIP-020 | Mediação do admin decide em até 5 dias úteis; cliente contesta recusa em até 7 dias | Meta operacional de uma equipe pequena | Sim |
+| HIP-021 | Avaliação: até 30 dias após ENTREGUE, nota 1-5, comentário até 500 caracteres, média pública só a partir de 3 avaliações, moderação pós-publicação | Evita nota enganosa com 1 avaliação | Sim (janela, mínimo) |
+| HIP-022 | Código de verificação por **e-mail** (6 dígitos, 10 min, 5 tentativas, reenvio após 60 s); SMS/WhatsApp fora da 1.0 | SMS/WhatsApp custam por envio e dinheiro exige autorização (DEC-003) | Sim (validade, tentativas) |
+| HIP-023 | Senha mínima de 8 caracteres e medidor de força; bloqueio após 5 falhas por 15 min | Padrão OWASP ASVS; sem fricção excessiva | Sim |
+| HIP-024 | Exclusão de conta: efeito imediato; anonimização em até 15 dias; dados fiscais/financeiros retidos 5 anos com acesso restrito; bloqueada se houver pedido ou troca em aberto | Apple 5.1.1(v), Google Play, LGPD art. 16 (obrigação legal) | Sim (prazos) |
+| HIP-025 | Exportação de dados automática: link por e-mail em até 24h, válido 7 dias (limite legal LGPD: 15 dias) | LGPD art. 19 | Sim |
+| HIP-026 | Cliente declara ter 18+ anos no cadastro; data de nascimento não é coletada | Minimização (LGPD); evita regime de menores (art. 14) | Não |
+| HIP-027 | Push de marketing só com opt-in explícito, máx. 2 por semana, entre 9h e 20h | LGPD (consentimento) e fadiga de notificação | Sim |
+| HIP-028 | Alerta de novo pedido ao lojista: som no painel + Web Push + e-mail; sem SMS/WhatsApp na 1.0 | Custo zero; painel é web, não app | Sim (canais) |
+| HIP-029 | Moderação de produto pós-publicação (denúncia + varredura do admin) com lista de categorias proibidas | Pré-moderação não escala com equipe de 1 | Sim (lista de proibidos) |
+| HIP-030 | Aprovação de loja com SLA interno de 2 dias úteis; loja só é visível com aprovação + conta de recebimento ativa + 1 produto ativo | Evita vitrine vazia e loja sem como receber | Sim (SLA) |
+| HIP-031 | 1 CPF/CNPJ = 1 loja na 1.0; vendedor CPF permitido (brief), com responsabilidade fiscal do lojista; Webag não emite nota do produto | Brief §3.2; habitualidade de PF é risco fiscal sinalizado | Exigir CNPJ acima de R$ X: fora da 1.0 |
+| HIP-032 | Home: lojas abertas primeiro, depois distância e avaliação; seção vazia é ocultada; "mais vendidos" exige 5 pedidos em 30 dias | Cold start: seção vazia passa imagem de app morto | Sim (mínimos) |
+| HIP-033 | Estoque numérico obrigatório por variação; alerta de estoque baixo em 3 unidades | Brief: estoque por variação | Sim (limite por loja) |
+| HIP-034 | Limites: 8 fotos/produto, upload até 5 MB (comprimido no cliente), 100 variações/produto, importação até 500 linhas | Celular fraco e 3G | Sim |
+| HIP-035 | Retenção: auditoria 5 anos; logs de acesso 6 meses (Marco Civil art. 15); documentos de loja reprovada apagados em 90 dias | Obrigação legal e minimização (validar com security) | Sim |
+| HIP-036 | Lojista vê nome, telefone e endereço do cliente só em pedido ativo e por 30 dias após conclusão; depois mascarados | Minimização (LGPD) | Sim (dias) |
+| HIP-037 | Cupom: 1 por pedido, não cumulativo, incide só sobre produtos; cupom da plataforma é custo da Webag; total cobrado mínimo R$ 1,00 | Evita pedido de R$ 0 e disputa de custo | Sim (mínimo) |
+| HIP-038 | Pedido SAIU_PARA_ENTREGA vira ENTREGUE após 24h sem reclamação "não recebi"; retirada não feita em 48h cancela com estorno total | Sem rastreio do entregador na 1.0 | Sim |
+| HIP-039 | Estorno manual acima de R$ 500,00 exige super admin | Controle interno de dinheiro | Sim |
+| HIP-040 | Retirada usa código de 4 dígitos informado pelo cliente à loja | Evita retirada indevida sem QR scanner | Sim (dígitos) |
+| HIP-041 | Carrinho persiste 7 dias; máx. 50 unidades por item; 8 endereços salvos | Limites razoáveis | Sim |
+| HIP-042 | Cadastro de lojista aberto (com aprovação manual); cartão de crédito, PIX, retirada, login social e taxa de serviço atrás de feature flag | Permite desligar sem deploy | Sim (feature flags) |
+| HIP-043 | Meta do piloto (primeiros 90 dias): 20 lojas ativas, 1.000 pedidos/mês, aceite mediano < 3 min, cancelamento < 8%, repetição em 30 dias > 25% | Sem série histórica; metas de referência para decidir continuidade | Não (meta) |
+| HIP-D01 | Cor de destaque única: verde-azulado profundo "petróleo" `#00696F` (`packages/tokens`); neutros quentes; sem tema escuro na 1.0 | Vermelho, amarelo, laranja, coral e azul estão ocupados no varejo BR; roxo proibido; contraste 6,4:1 com branco; não colide com cores de feedback (`docs/design/identidade.md` §3) | Não (marca); tokens editáveis em `tokens.json` |
+| HIP-D02 | Fonte Figtree (OFL), 3 pesos; plano B Inter | Identidade própria sem custo de licença; precisa de teste de acentos e números tabulares (`pesquisa-referencias.md` §6) | Não |
+| HIP-D03 | Ícones Phosphor (MIT), pesos regular/fill/duotone; plano B Lucide | Vocabulário de varejo e peso Fill para estado ativo; porta React Native é da comunidade | Não |
+| HIP-D04 | Símbolo: sacola com "w"; logotipo "webag" em minúsculas Figtree Bold. Arquivos em `docs/design/assets/` | Duas ideias (web + bag) legíveis a 16 px; marca refinável antes do G5 | Não |
+| HIP-D05 | A interface diz "Sacola" (não "Carrinho") | Reforça o nome Webag; padrão iFood [M] | Sim (só texto) |
+| HIP-D06 | Cadastro sem campo "confirmar senha"; mostrar/ocultar senha no lugar (se "confirmação" no brief §3.1 significava isso) | Menos um campo no checkout; meta de compra < 2 min (`fluxos.md` §2) | Não |
+| HIP-D07 | Confirmação de e-mail por código **não bloqueia** a compra; obrigatória para trocar senha/e-mail, exportar dados e excluir conta. **Precisa de parecer do Security** | Com bloqueio a 1ª compra leva ≈ 156 s e estoura os 2 min; sem bloqueio ≈ 111 s | Sim (flag) |
+| HIP-D08 | Orçamento de tempo da compra e metas de toques/telas/palavras (`fluxos.md` §2) | Modelo de toques e segundos, a validar com teste cronometrado (brief §7) | Não |
+| HIP-D09 | Taxa de coleta da troca cobrada **após a aprovação da loja**, não ao solicitar (diverge de HIP-018) | Pedido de troca sem passo de pagamento; recusa não exige estorno da taxa | Sim |
+| HIP-D10 | CPF só pedido no checkout e só se o Mercado Pago exigir; sem mapa na escolha de endereço na 1.0 (CEP + localização) | Minimização (LGPD) e custo de mapas | Sim (flag) |
