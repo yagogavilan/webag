@@ -166,6 +166,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
   const [checks, setChecks] = useChecks(storeId);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [conflict, setConflict] = useState<string | null>(null);
+  const [confirmedEmpty, setConfirmedEmpty] = useState(false);
   const [mobileTab, setMobileTab] = useState<'documents' | 'data' | 'decision'>(canDocuments ? 'documents' : 'data');
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const current = useMemo(() => detail.documents.filter((doc) => doc.current), [detail.documents]);
@@ -305,7 +306,11 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
             <>
               <ConfirmButton
                 label="Pedir correção"
-                precheck={() => (problemsWithoutNote(checks).length > 0 ? 'Escreva o que está errado em cada item com problema.' : null)}
+                precheck={() => {
+                  const empty = problemsWithoutNote(checks).length > 0;
+                  setConfirmedEmpty(empty);
+                  return empty ? 'Escreva o que está errado em cada item com problema.' : null;
+                }}
                 onConfirm={() => run(() => adminStoresApi.requestCorrection(storeId, correctionItems), 'Correção pedida.')}
                 onClose={() => setDialog(null)}
                 testId={T('confirm-correction')}
@@ -314,12 +319,19 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
             </>
           }
         >
-          <p className="wb-text-body" style={{ margin: 0 }}>O lojista recebe estes itens por e-mail:</p>
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
-            {problems(checks).map((item) => (
-              <li key={item.id} className="wb-text-body"><strong>{item.label}:</strong> {checks[item.id].note || 'sem texto'}</li>
-            ))}
-          </ul>
+          <p className="wb-text-body" style={{ margin: 0 }}>O lojista recebe estes itens por e-mail. Edite o texto se precisar:</p>
+          {problems(checks).map((item) => (
+            <TextField
+              key={item.id}
+              label={item.label}
+              value={checks[item.id].note}
+              onChange={(event) => setChecks({ ...checks, [item.id]: { ...checks[item.id], note: event.target.value.slice(0, 300) } })}
+              hint="O lojista vai ler."
+              error={confirmedEmpty && checks[item.id].note.trim().length < 3 ? 'Escreva o que está errado.' : undefined}
+              autoComplete="off"
+              data-testid={T(`correction-note-${item.id}`)}
+            />
+          ))}
         </Dialog>
       ) : null}
       {dialog === 'reject' ? (

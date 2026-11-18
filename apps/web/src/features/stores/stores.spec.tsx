@@ -170,7 +170,7 @@ describe('Caso de aprovação (A2)', () => {
     await userEvent.click(screen.getByTestId('admin.caso.request-correction'));
     await userEvent.click(screen.getByTestId('admin.caso.confirm-correction'));
     expect(await screen.findByText('Escreva o que está errado em cada item com problema.')).toBeInTheDocument();
-    await userEvent.type(screen.getByTestId('admin.caso.check-legible-note'), 'O verso está cortado.');
+    await userEvent.type(screen.getByTestId('admin.caso.correction-note-legible'), 'O verso está cortado.');
     await userEvent.click(screen.getByTestId('admin.caso.confirm-correction'));
     await waitFor(() => expect(push).toHaveBeenCalled());
     const call = calls.find((c) => path(c.url).endsWith('request-correction'))!;

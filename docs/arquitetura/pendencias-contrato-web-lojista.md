@@ -15,4 +15,8 @@
 | 9 | Conexão do Mercado Pago depois da aprovação: confirmar que o `redirect_uri` configurado leva a `/lojista/onboarding/4` | O web aceita o retorno do OAuth nessa rota para loja em qualquer estado, menos recusada e suspensa |
 | 10 | Edição de loja pelo admin com as telas do lojista (A3, "modo admin"): os endpoints `PUT /admin/stores/:id/settings/:section` e `PATCH /admin/stores/:id` existem, mas o web ainda não tem o diálogo "antes e depois" | A3 só suspende, reativa e consulta |
 
-**Não feito nesta rodada (registrado para a próxima):** L9 Equipe e L10 Aceitar convite (o contrato de `members` existe; o link "Equipe" do menu ainda não abre uma tela).
+| 11 | Convite de funcionário: `name` é obrigatório na API (mín. 2) e opcional na spec (L9); falta "Reenviar convite" (rota) | O web exige o nome; o item "Reenviar convite" do menu não existe |
+
+**Não feito nesta rodada (registrado para a próxima):** L10 Aceitar convite (o BFF tem `accept-invite`, falta a tela em `/lojista/convite` com "Confirmar senha"), chip de pausa no cabeçalho (#8) e a edição de loja pelo admin (#10). L9 Equipe está pronta (`/lojista/equipe`).
+
+**Achados corrigidos no E2E (não são do contrato):** o cadastro caía em "This page couldn't load" ao pedir o código por e-mail (faltava o `ToastProvider` nas rotas de acesso) e a etapa 3 voltava para si mesma depois dos documentos (o `step` ficava velho no cache).

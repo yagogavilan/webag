@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 import { Banner, ui, useToast } from '@/components/ui';
-import type { DocumentKind, MerchantStore, StoreDocument } from '@/lib/api/lojista';
+import { merchantApi, type DocumentKind, type MerchantStore, type StoreDocument } from '@/lib/api/lojista';
 import type { UploadDocumentFn } from '@/lib/image/upload';
 import { ltid } from '@/lib/testid';
 import { DOCUMENT_LABEL, DocSlot, REQUIRED_DOCUMENTS } from '../doc-slot';
@@ -31,6 +31,7 @@ export function Step3({ store, next, backHref, upload }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const client = useQueryClient();
   const putDocument = useDocumentCache();
   const list = useRef<HTMLDivElement>(null);
   const [showMissing, setShowMissing] = useState(false);
@@ -44,6 +45,12 @@ export function Step3({ store, next, backHref, upload }: Props) {
       setShowMissing(true);
       requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-testid="${ltid('etapa3', `slot-${missing[0] as DocumentKind}`)}"]`)?.scrollIntoView({ block: 'center' }));
       return;
+    }
+    // `step` vem do que a API diz faltar: relê a loja para a etapa 4 abrir (sem isso a guarda de ordem volta à etapa 3).
+    try {
+      await client.fetchQuery({ queryKey: STORE_KEY, queryFn: merchantApi.store, staleTime: 0 });
+    } catch {
+      client.setQueryData<MerchantStore | null>(STORE_KEY, (current) => (current ? { ...current, step: Math.max(current.step, 3) } : current));
     }
     toast.show('Documentos enviados.');
     router.push(next as never);

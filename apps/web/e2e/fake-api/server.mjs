@@ -3,6 +3,7 @@
 // Uso: node e2e/fake-api/server.mjs  (PORT, FAKE_ACCESS_TTL_S)
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import { deflateSync } from 'node:zlib';
 
 const PORT = Number(process.env.PORT ?? 3999);
 const ACCESS_TTL = Number(process.env.FAKE_ACCESS_TTL_S ?? 900);
@@ -42,6 +43,7 @@ function addAdmin({ email, name, password, profile, secret }) {
 addAdmin({ email: 'admin@webag.local', name: 'Ana Souza', password: 'Webag-Admin-Dev-2026', profile: 'super_admin', secret: SUPER_SECRET });
 addAdmin({ email: 'operacao@webag.local', name: 'Caio Lima', password: 'Webag-Admin-Dev-2026', profile: 'operations', secret: SUPER_SECRET });
 addAdmin({ email: 'novo@webag.local', name: 'Nina Alves', password: 'Webag-Admin-Dev-2026', profile: 'support', secret: null });
+users.set('lojista', { id: randomUUID(), email: 'lojista@webag.local', name: 'Marcos Silva', password: 'Lojista-Dev-2026', profile: null, active: true, roles: ['customer', 'merchant'], emailVerified: true });
 users.set('customer', { id: randomUUID(), email: 'cliente@webag.local', name: 'Cliente', password: 'Cliente-Dev-2026', profile: null, active: true });
 
 const cities = [
@@ -81,6 +83,7 @@ const flags = [
 ].map(([key, enabled, description]) => ({ key, enabled, description, updatedAt: null }));
 const legal = { customer_terms: [], merchant_terms: [], privacy: [] };
 legal.customer_terms.push({ id: randomUUID(), type: 'customer_terms', version: 1, title: 'Termos de uso', content: '## Termos\nTexto inicial dos termos de uso do cliente, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
+legal.merchant_terms.push({ id: randomUUID(), type: 'merchant_terms', version: 1, title: 'Termos do lojista', content: '## Termos do lojista\nTexto inicial, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
 legal.privacy.push({ id: randomUUID(), type: 'privacy', version: 1, title: 'Política de privacidade', content: '## Privacidade\nTexto inicial da política de privacidade, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
 
 // ---------------------------------------------------------------- utilitários
@@ -145,11 +148,15 @@ const PERMS = {
   'legal:write': ['super_admin'],
   'audit:read': ['super_admin'],
   'admins:manage': ['super_admin'],
+  'stores:read': ['super_admin', 'operations', 'support'],
+  'stores:write': ['super_admin', 'operations'],
+  'stores:decide': ['super_admin', 'operations'],
+  'stores:documents': ['super_admin', 'operations'],
 };
 function me(user) {
-  return { id: user.id, email: user.email, emailVerified: true, name: user.name, phone: null, roles: user.profile ? ['customer'] : ['customer'], adminProfile: user.profile && user.active ? user.profile : null, pendingTerms: [] };
+  return { id: user.id, email: user.email, emailVerified: user.emailVerified ?? true, name: user.name, phone: null, roles: user.roles ?? ['customer'], adminProfile: user.profile && user.active ? user.profile : null, pendingTerms: [] };
 }
-const publicUser = (u) => ({ id: u.id, email: u.email, emailVerified: true, name: u.name });
+const publicUser = (u) => ({ id: u.id, email: u.email, emailVerified: u.emailVerified ?? true, name: u.name });
 
 // ---------------------------------------------------------------- rotas
 const routes = [];
@@ -485,11 +492,296 @@ route('POST', '/v1/admin/admins/:id/totp/reset', { perm: 'admins:manage', reauth
   empty(res);
 });
 // utilitário de teste (não existe na API real): lê o segredo do admin semeado
+
+// ---------------------------------------------------------------- lojista e lojas (Onda 2A)
+const stores = new Map();
+const uploads = new Map();
+// PNG mínimo (cinza 16x12) para o visualizador de documentos.
+const PNG = (() => {
+  const crc = (buf) => {
+    let c;
+    const table = Array.from({ length: 256 }, (_, n) => {
+      c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    let x = 0xffffffff;
+    for (const b of buf) x = table[(x ^ b) & 0xff] ^ (x >>> 8);
+    return (x ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const sum = Buffer.alloc(4);
+    sum.writeUInt32BE(crc(body));
+    return Buffer.concat([len, body, sum]);
+  };
+  const [w, h] = [16, 12];
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 0;
+  const raw = Buffer.concat(Array.from({ length: h }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(w, 180)])));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+})();
+
+const CPF_KINDS = ['id_front', 'id_back', 'address_proof'];
+const CNPJ_KINDS = ['cnpj_card', 'responsible_id'];
+const ownerStore = (user) => [...stores.values()].find((s) => s.ownerId === user.id);
+const apiStore = (s, viewer = 'owner') => ({
+  id: s.id,
+  status: s.status,
+  documentType: s.documentType,
+  document: s.document,
+  legalName: s.legalName,
+  name: s.name,
+  description: s.description,
+  phone: null,
+  whatsapp: s.whatsapp,
+  mainCategoryId: s.mainCategoryId,
+  extraCategoryIds: [],
+  address: s.address,
+  logo: null,
+  cover: null,
+  pendingReview: false,
+  reviewItems: s.reviewItems.filter((i) => !i.resolved).map((i) => ({ item: i.item, reason: i.reason })),
+  submittedAt: s.submittedAt,
+  decisionReason: s.status === 'rejected' || s.status === 'suspended' ? s.decisionReason : null,
+  createdAt: s.createdAt,
+  ...(viewer === 'owner' ? { role: 'owner' } : {}),
+});
+const currentDocs = (s) => s.documents.filter((d) => !d.superseded);
+function missingFor(s) {
+  const out = [];
+  if (!s.name) out.push({ field: 'name', message: 'Informe o nome da loja.' });
+  if (!s.mainCategoryId) out.push({ field: 'mainCategoryId', message: 'Escolha a categoria principal.' });
+  if (!s.whatsapp) out.push({ field: 'whatsapp', message: 'Informe o WhatsApp ou o telefone.' });
+  if (!s.address?.cep || s.address.lat == null) out.push({ field: 'address', message: 'Informe o endereço da loja.' });
+  if (s.documentType === 'cnpj' && !s.legalName) out.push({ field: 'legalName', message: 'Informe a razão social.' });
+  const have = new Set(currentDocs(s).map((d) => d.kind));
+  for (const kind of s.documentType === 'cpf' ? CPF_KINDS : CNPJ_KINDS) if (!have.has(kind)) out.push({ field: `documents.${kind}`, message: `Falta o documento: ${kind}.` });
+  if (!s.payment) out.push({ field: 'paymentAccount', message: 'Conecte a conta de recebimento.' });
+  for (const item of s.reviewItems) if (!item.resolved) out.push({ field: `review.${item.item}`, message: 'Corrija o item reprovado.' });
+  return out;
+}
+const mustOwn = (res, ctx) => {
+  const s = stores.get(ctx.params[0]);
+  if (!s || s.ownerId !== ctx.user.id) {
+    problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+    return null;
+  }
+  return s;
+};
+const addHistory = (s, from, to, actor, reason) => s.history.push({ from, to, at: now(), reason: reason ?? null, actor });
+
+route('GET', '/v1/categories', {}, (req, res) => json(res, 200, { data: tree().map((c) => ({ ...c, createdAt: now(), updatedAt: now() })), nextCursor: null }));
+route('GET', '/v1/regions', {}, (req, res) => json(res, 200, { data: cities.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name, state: c.state, slug: c.slug, neighborhoods: c.neighborhoods.filter((n) => n.active).map((n) => ({ id: n.id, name: n.name })) })), nextCursor: null }));
+route('GET', '/v1/cep/:cep', {}, (req, res, ctx) => {
+  if (ctx.params[0].replace('-', '') === '07900000') return json(res, 200, { street: 'Rua das Flores', neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: -23.28, lng: -46.74 });
+  problem(res, 404, 'NOT_FOUND', 'Não encontrado', 'CEP não encontrado.');
+});
+
+// conta de lojista: cadastro com código por e-mail (código fixo 123456) e papel de lojista
+route('POST', '/v1/auth/register', { public: true }, (req, res, ctx) => {
+  const b = ctx.body;
+  const email = String(b.email ?? '').toLowerCase();
+  if ([...users.values()].some((u) => u.email === email)) return problem(res, 409, 'EMAIL_ALREADY_REGISTERED', 'E-mail já cadastrado');
+  if (String(b.password ?? '').length < 8) return problem(res, 422, 'WEAK_PASSWORD', 'Senha fraca', undefined, { errors: [{ field: 'password', message: 'Senha fraca.' }] });
+  const user = { id: randomUUID(), email, name: b.name, password: b.password, profile: null, active: true, roles: ['customer'], emailVerified: false };
+  users.set(user.id, user);
+  const { tokens } = newSession(user, { mfaVerified: false });
+  json(res, 201, { user: publicUser(user), tokens });
+});
+route('POST', '/v1/auth/email/verify', {}, (req, res, ctx) => {
+  if (ctx.body.code !== '123456') return problem(res, 401, 'CODE_INVALID', 'Código inválido', 'Código incorreto ou vencido.');
+  ctx.user.emailVerified = true;
+  empty(res);
+});
+route('POST', '/v1/auth/email/resend', {}, (req, res) => empty(res));
+route('POST', '/v1/me/merchant-role', {}, (req, res, ctx) => {
+  if (!ctx.user.emailVerified) return problem(res, 403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirme seu e-mail');
+  if (!ctx.user.roles.includes('merchant')) ctx.user.roles.push('merchant');
+  empty(res);
+});
+
+// lojas do lojista
+route('GET', '/v1/stores/mine', {}, (req, res, ctx) => {
+  const s = ownerStore(ctx.user);
+  json(res, 200, { data: s ? [apiStore(s)] : [], nextCursor: null });
+});
+route('POST', '/v1/stores', {}, (req, res, ctx) => {
+  if (!ctx.user.emailVerified) return problem(res, 403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirme seu e-mail');
+  const b = ctx.body;
+  const document = String(b.documentNumber ?? '').replace(/\D/g, '');
+  if (!/^\d{11}$|^\d{14}$/.test(document)) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos', undefined, { errors: [{ field: 'documentNumber', message: 'CPF inválido.' }] });
+  if ([...stores.values()].some((s) => s.document === document)) return problem(res, 409, 'DOCUMENT_IN_USE', 'Documento já cadastrado', 'Esse CPF ou CNPJ já tem uma loja.');
+  const s = { id: randomUUID(), ownerId: ctx.user.id, status: 'draft', documentType: b.documentType, document, legalName: b.legalName ?? null, name: null, description: null, whatsapp: null, mainCategoryId: null, address: null, documents: [], reviewItems: [], history: [], payment: null, submittedAt: null, decidedBy: null, decisionReason: null, createdAt: now() };
+  stores.set(s.id, s);
+  json(res, 201, apiStore(s));
+});
+route('GET', '/v1/stores/:id', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (s) json(res, 200, { ...apiStore(s), settings: { hours: [] } });
+});
+route('PATCH', '/v1/stores/:id/profile', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  const b = ctx.body;
+  if (b.name !== undefined) s.name = b.name;
+  if (b.legalName !== undefined) s.legalName = b.legalName;
+  if (b.mainCategoryId !== undefined) s.mainCategoryId = b.mainCategoryId;
+  if (b.whatsapp !== undefined) s.whatsapp = b.whatsapp;
+  if (b.description !== undefined) s.description = b.description;
+  if (b.address) s.address = { cep: b.address.cep, street: b.address.street ?? null, number: b.address.number, complement: b.address.complement ?? null, neighborhood: b.address.neighborhood ?? null, city: b.address.city ?? null, state: b.address.state ?? null, lat: b.address.lat ?? null, lng: b.address.lng ?? null };
+  json(res, 200, { ...apiStore(s), pendingReview: false });
+});
+route('GET', '/v1/stores/:id/onboarding', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (s) json(res, 200, { status: s.status, complete: missingFor(s).length === 0, missing: missingFor(s), paymentAccount: s.payment, history: s.history });
+});
+route('GET', '/v1/stores/:id/documents', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (s) json(res, 200, { data: s.documents.map((d) => ({ id: d.id, kind: d.kind, uploadedAt: d.createdAt, current: !d.superseded })), nextCursor: null });
+});
+route('POST', '/v1/stores/:id/documents', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  const upload = uploads.get(ctx.body.uploadId);
+  if (!upload || upload.status !== 'ready') return problem(res, 422, 'UPLOAD_NOT_READY', 'Arquivo não confirmado');
+  for (const d of s.documents) if (d.kind === ctx.body.kind) d.superseded = true;
+  s.documents.push({ id: randomUUID(), kind: ctx.body.kind, createdAt: now(), superseded: false });
+  // Reenvio de documento em correção: o item aberto daquele documento fica resolvido.
+  for (const item of s.reviewItems) if (item.item === ctx.body.kind) item.resolved = true;
+  empty(res);
+});
+route('POST', '/v1/stores/:id/submit', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  const missing = missingFor(s);
+  if (missing.length > 0) return problem(res, 422, 'ONBOARDING_INCOMPLETE', 'Faltam itens para enviar a loja', 'Complete o que falta e envie de novo.', { errors: missing });
+  const from = s.status;
+  s.status = 'in_review';
+  s.submittedAt = s.submittedAt ?? now();
+  addHistory(s, from, 'in_review', ctx.user.id);
+  json(res, 200, apiStore(s));
+});
+
+// conta de recebimento (Mercado Pago simulado): autoriza e volta ao painel com state e code
+route('GET', '/v1/stores/:id/payment-account', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (s) json(res, 200, s.payment ? { connected: true, provider: 'fake', status: 'active', holderDocumentMasked: '***.982.247-**' } : { connected: false });
+});
+route('POST', '/v1/stores/:id/payment-account/connect', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  s.oauthState = randomBytes(24).toString('base64url');
+  json(res, 200, { authorizationUrl: `/lojista/onboarding/4?state=${s.oauthState}&code=fake-code`, state: s.oauthState, expiresInSeconds: 600 });
+});
+route('POST', '/v1/stores/:id/payment-account/callback', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  if (!s.oauthState || ctx.body.state !== s.oauthState) return problem(res, 422, 'OAUTH_STATE_INVALID', 'Link expirado');
+  s.oauthState = null;
+  s.payment = { status: 'active' };
+  json(res, 200, { connected: true, provider: 'fake', status: 'active', holderDocumentMasked: '***.982.247-**' });
+});
+
+// uploads: política (POST ao armazenamento falso), confirmação
+route('POST', '/v1/uploads', {}, (req, res, ctx) => {
+  const id = randomUUID();
+  uploads.set(id, { id, storeId: ctx.body.storeId, purpose: ctx.body.purpose, status: 'pending' });
+  json(res, 200, { id, upload: { url: `http://localhost:${PORT}/__storage/${id}`, fields: { key: id }, expiresAt: now() } });
+});
+route('POST', '/v1/uploads/:id/complete', {}, (req, res, ctx) => {
+  const upload = uploads.get(ctx.params[0]);
+  if (!upload) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  upload.status = 'ready';
+  json(res, 200, { id: upload.id, status: 'ready', urls: null, rejectionReason: null });
+});
+
+// admin: fila, caso e decisões
+const queueRow = (s) => ({ id: s.id, name: s.name, status: s.status, documentMasked: `•••${s.document.slice(-4)}`, city: s.address?.city ?? null, submittedAt: s.submittedAt, overdue: false, holderMismatch: false });
+route('GET', '/v1/admin/stores', { perm: 'stores:read' }, (req, res, ctx) => {
+  const status = ctx.query.get('status') ?? 'in_review';
+  const rows = [...stores.values()].filter((s) => s.status === status).sort((a, b) => String(a.submittedAt ?? a.createdAt).localeCompare(String(b.submittedAt ?? b.createdAt)));
+  json(res, 200, { data: rows.map(queueRow), nextCursor: null });
+});
+route('GET', '/v1/admin/stores/:id', { perm: 'stores:read' }, (req, res, ctx) => {
+  const s = stores.get(ctx.params[0]);
+  if (!s) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  const owner = users.get(s.ownerId);
+  json(res, 200, {
+    store: apiStore(s, 'admin'),
+    owner: { email: owner?.email ?? '', name: owner?.name ?? '' },
+    documents: s.documents.map((d) => ({ id: d.id, kind: d.kind, uploadedAt: d.createdAt, current: !d.superseded })),
+    reviewItems: s.reviewItems.filter((i) => !i.resolved).map((i) => ({ item: i.item, reason: i.reason })),
+    history: s.history.map((h) => ({ from: h.from, to: h.to, at: h.at, reason: h.reason })),
+    paymentAccount: s.payment ? { status: 'active', holderDocumentMasked: '***.982.247-**', holderMatchesStore: true } : null,
+    sameDocument: [],
+    settings: {},
+  });
+});
+route('POST', '/v1/admin/stores/:id/documents/:doc/access', { perm: 'stores:documents' }, (req, res, ctx) => {
+  const s = stores.get(ctx.params[0]);
+  const doc = s?.documents.find((d) => d.id === ctx.params[1]);
+  if (!doc) return problem(res, 404, 'NOT_FOUND', 'Documento não encontrado.');
+  record(req, ctx, { action: 'store.document_view', targetType: 'store_document', targetId: doc.id, reason: ctx.body.reason });
+  json(res, 200, { url: `http://localhost:${PORT}/__storage/doc-${doc.id}.png?sig=1`, expiresInSeconds: 300, contentType: 'image/png' });
+});
+function decide(req, res, ctx, from, to, apply) {
+  const s = stores.get(ctx.params[0]);
+  if (!s) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (s.status !== from) {
+    const who = s.decidedBy ? users.get(s.decidedBy)?.name : null;
+    return problem(res, 409, from === 'in_review' && ['approved', 'rejected', 'correction_requested'].includes(s.status) ? 'STORE_ALREADY_DECIDED' : 'INVALID_STORE_TRANSITION', 'Loja já decidida', who ? `Já decidida por ${who}.` : 'Já decidida.');
+  }
+  const previous = s.status;
+  s.status = to;
+  s.decidedBy = ctx.user.id;
+  apply(s);
+  addHistory(s, previous, to, ctx.user.id, s.decisionReason);
+  record(req, ctx, { action: `store.${to}`, targetType: 'store', targetId: s.id, reason: s.decisionReason });
+  json(res, 200, apiStore(s, 'admin'));
+}
+route('POST', '/v1/admin/stores/:id/approve', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'in_review', 'approved', () => {}));
+route('POST', '/v1/admin/stores/:id/request-correction', { perm: 'stores:decide' }, (req, res, ctx) =>
+  decide(req, res, ctx, 'in_review', 'correction_requested', (s) => {
+    for (const item of ctx.body.items ?? []) s.reviewItems.push({ item: item.item, reason: item.reason, resolved: false });
+    s.decisionReason = (ctx.body.items ?? []).map((i) => `${i.item}: ${i.reason}`).join('; ');
+  }),
+);
+route('POST', '/v1/admin/stores/:id/reject', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'in_review', 'rejected', (s) => (s.decisionReason = ctx.body.reason)));
+route('POST', '/v1/admin/stores/:id/suspend', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'approved', 'suspended', (s) => (s.decisionReason = ctx.body.reason)));
+route('POST', '/v1/admin/stores/:id/reactivate', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'suspended', 'approved', (s) => (s.decisionReason = null)));
+
+// semeia uma loja já enviada para análise (o teste de aprovação não depende do teste de cadastro)
+route('POST', '/__test/seed-store', { public: true }, (req, res, ctx) => {
+  const name = ctx.body.name ?? 'Casa Bela';
+  const owner = { id: randomUUID(), email: `dono-${randomUUID().slice(0, 8)}@loja.test`, name: 'Marcos Silva', password: 'x', profile: null, active: true, roles: ['customer', 'merchant'], emailVerified: true };
+  users.set(owner.id, owner);
+  const document = String(Math.floor(10_000_000_000 + Math.random() * 89_999_999_999));
+  const s = { id: randomUUID(), ownerId: owner.id, status: 'in_review', documentType: 'cpf', document, legalName: null, name, description: null, whatsapp: '11987654321', mainCategoryId: categories[2].id, address: { cep: '07900-000', street: 'Rua das Flores', number: '10', complement: null, neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: -23.28, lng: -46.74 }, documents: CPF_KINDS.map((kind) => ({ id: randomUUID(), kind, createdAt: now(), superseded: false })), reviewItems: [], history: [], payment: { status: 'active' }, submittedAt: ctx.body.submittedAt ?? now(), decidedBy: null, decisionReason: null, createdAt: now() };
+  stores.set(s.id, s);
+  json(res, 201, { id: s.id, name, documents: s.documents.map((d) => d.id) });
+});
 route('GET', '/__test/state', { public: true }, (req, res) => json(res, 200, { superSecret: SUPER_SECRET, audit: audit.length }));
 
 // ---------------------------------------------------------------- servidor
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
+  // Armazenamento de objetos falso (ADR-005): recebe o POST pré-assinado e serve o documento por URL assinada.
+  if (url.pathname.startsWith('/__storage/')) {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': '*' };
+    if (req.method === 'OPTIONS') return void res.writeHead(204, cors).end();
+    if (req.method === 'POST') {
+      req.resume();
+      return void req.on('end', () => res.writeHead(204, cors).end());
+    }
+    res.writeHead(200, { ...cors, 'content-type': 'image/png', 'cache-control': 'no-store' });
+    return void res.end(PNG);
+  }
   const match = routes.find((r) => r.method === req.method && r.regex.test(url.pathname));
   if (!match) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
   const ctx = { params: url.pathname.match(match.regex).slice(1), query: url.searchParams, body: {}, user: null, session: null };
