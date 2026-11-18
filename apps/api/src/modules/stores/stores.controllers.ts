@@ -30,7 +30,7 @@ import {
 import { StoresService, type Store } from './stores.service.js';
 import { TeamService } from './team.service.js';
 import { Inject } from '@nestjs/common';
-import { Db, DRIZZLE } from '../../platform/database/database.module.js';
+import { type Db, DRIZZLE } from '../../platform/database/database.module.js';
 import { eq } from 'drizzle-orm';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

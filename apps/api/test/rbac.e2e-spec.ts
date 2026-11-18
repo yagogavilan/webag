@@ -6,7 +6,7 @@ import { ADMIN_PERMISSIONS, adminHasPermission, type AdminPermission } from '../
 import { auditLog, storeMembers, userRoles } from '../src/platform/database/schema.js';
 import { ADMIN_PROFILES } from '../src/modules/identity/db/schema.js';
 import { bearer, createTestApp, listRoutes, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureLegalDocs, registerUser, type TestAdmin } from './helpers/fixtures.js';
+import { createAdmin, ensureLegalDocs, insertStoreRow, registerUser, type TestAdmin } from './helpers/fixtures.js';
 
 /** Rotas só para o teste de RBAC por loja (a tabela `stores` nasce na Onda 2). */
 @Controller('v1/test-stores/:storeId')
@@ -38,6 +38,14 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'legal:write': null,
   'audit:read': { method: 'get', path: '/v1/admin/audit-log' },
   'admins:manage': { method: 'get', path: '/v1/admin/admins' },
+  'stores:read': { method: 'get', path: '/v1/admin/stores' },
+  'stores:write': null,
+  'stores:decide': null,
+  'stores:documents': null,
+  'products:read': null,
+  'products:moderate': null,
+  'moderation:read': null,
+  'moderation:write': null,
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
 };
@@ -80,6 +88,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'POST /v1/auth/invitations/accept',
         'POST /v1/auth/login',
         'POST /v1/auth/mfa/verify',
+        'POST /v1/auth/store-invitations/accept',
         'POST /v1/auth/password/forgot',
         'POST /v1/auth/password/reset',
         'POST /v1/auth/password/reset/complete',
@@ -119,7 +128,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
   });
 
   describe('RBAC por loja', () => {
-    const storeId = randomUUID();
+    let storeId: string = randomUUID();
     let owner: Awaited<ReturnType<typeof registerUser>>;
     let staff: typeof owner;
     let staffNoPerm: typeof owner;
@@ -127,6 +136,8 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
 
     beforeAll(async () => {
       [owner, staff, staffNoPerm, outsider] = [await registerUser(ctx), await registerUser(ctx), await registerUser(ctx), await registerUser(ctx)];
+      storeId = (await insertStoreRow(ctx, owner.userId)).id; // a FK de store_members exige loja real (DT-019 paga)
+      await ctx.db.delete(storeMembers).where(eq(storeMembers.storeId, storeId));
       await ctx.db.insert(storeMembers).values([
         { storeId, userId: owner.userId, role: 'owner', permissions: [] },
         { storeId, userId: staff.userId, role: 'staff', permissions: ['orders'] },

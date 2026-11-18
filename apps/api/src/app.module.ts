@@ -6,6 +6,9 @@ import { HealthModule } from './health/health.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AdminModule } from './modules/admin/index.js';
 import { IdentityModule } from './modules/identity/index.js';
+import { MediaModule } from './modules/media/index.js';
+import { StoresModule } from './modules/stores/index.js';
+import { StorageModule } from './platform/storage/storage.module.js';
 import { devModulesFor, PaymentsModule } from './modules/payments/index.js';
 import { UsersModule } from './modules/users/index.js';
 import { ProblemFilter } from './platform/http/problem.filter.js';
@@ -70,6 +73,9 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     UsersModule,
     IdentityModule,
     PaymentsModule,
+    StorageModule,
+    MediaModule,
+    StoresModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
   ],

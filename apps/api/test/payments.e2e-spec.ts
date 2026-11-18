@@ -342,7 +342,7 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
     });
 
     it('SEC-035: nenhuma rota fora de /v1/dev confirma, aprova ou recusa pagamento', () => {
-      const risky = listRoutes(ctx.app).filter((r) => /confirm|approve|decline|capture/i.test(r.path) && !r.path.startsWith('/v1/dev/') && !r.path.startsWith('/v1/admin/totp'));
+      const risky = listRoutes(ctx.app).filter((r) => /confirm|approve|decline|capture/i.test(r.path) && !r.path.startsWith('/v1/dev/') && !r.path.startsWith('/v1/admin/totp') && !r.path.startsWith('/v1/admin/stores/') && !r.path.startsWith('/v1/admin/products/'));
       expect(risky).toEqual([]);
     });
 

@@ -39,10 +39,10 @@ export class AdminStoresService {
       .where(
         and(
           eq(stores.status, status),
-          cursor ? sql`(coalesce(${stores.submittedAt}, ${stores.createdAt}), ${stores.id}) > (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : undefined,
+          cursor ? sql`(date_trunc('milliseconds', coalesce(${stores.submittedAt}, ${stores.createdAt})), ${stores.id}) > (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : undefined,
         ),
       )
-      .orderBy(sql`coalesce(${stores.submittedAt}, ${stores.createdAt}) asc`, asc(stores.id))
+      .orderBy(sql`date_trunc('milliseconds', coalesce(${stores.submittedAt}, ${stores.createdAt})) asc`, asc(stores.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
     const sla = await this.storesService.slaDays();
@@ -109,7 +109,7 @@ export class AdminStoresService {
     const result = await this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('update');
       if (!before) throw errors.notFound('Loja não encontrada.');
-      if (before.status !== from || !canTransitionStore(before.status as StoreStatus, to, 'admin')) return { kind: 'invalid' as const, current: before };
+      if (before.status !== from || !canTransitionStore(before.status, to, 'admin')) return { kind: 'invalid' as const, current: before };
       const extra = await work(tx, before);
       const [after] = await tx
         .update(stores)
@@ -126,7 +126,7 @@ export class AdminStoresService {
       // Transição inválida: recusada com erro e AUDITADA (R-29).
       await this.audit.recordStandalone(ctx, { action: 'store.invalid_transition', targetType: 'store', targetId: storeId, before: { status: current.status }, after: { attempted: to } }).catch(() => undefined);
       const decisions: StoreStatus[] = ['approved', 'rejected', 'correction_requested'];
-      if (from === 'in_review' && decisions.includes(current.status as StoreStatus) && current.decidedBy) {
+      if (from === 'in_review' && decisions.includes(current.status) && current.decidedBy) {
         const who = await this.nameOf(current.decidedBy);
         throw errors.conflict('STORE_ALREADY_DECIDED', 'Loja já decidida', who ? `Já decidida por ${who}.` : 'Já decidida.');
       }

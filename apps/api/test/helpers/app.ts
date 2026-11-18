@@ -70,13 +70,29 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   await redis.connect().catch(() => undefined);
   return {
     app,
-    http: request(app.getHttpServer()),
+    http: withRandomIp(request(app.getHttpServer())),
     mail: mail.current!,
     db: drizzle(pool, { schema, casing: 'snake_case' }),
     pool,
     redis,
     close: () => app.close(),
   };
+}
+
+/**
+ * Cada requisição sai de um IP próprio (X-Forwarded-For, TRUST_PROXY=1) para os limites por IP não vazarem entre testes.
+ * Teste que precisa de IP fixo (limite, bloqueio) define o header explicitamente, e o dele vale.
+ */
+function withRandomIp(agent: ReturnType<typeof request>): ReturnType<typeof request> {
+  return new Proxy(agent, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof prop === 'string' && ['get', 'post', 'put', 'patch', 'delete'].includes(prop) && typeof value === 'function') {
+        return (url: string) => (value as (u: string) => { set: (k: string, v: string) => unknown }).call(target, url).set('X-Forwarded-For', randomIp());
+      }
+      return value;
+    },
+  });
 }
 
 export const uniqueEmail = (prefix = 'user'): string => `${prefix}-${randomUUID().slice(0, 8)}@teste.webag.local`;

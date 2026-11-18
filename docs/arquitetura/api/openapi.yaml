@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Webag API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contrato da API do Webag (fonte da verdade, ver skill `contrato-api` e ADR-007).
     Recursos de negócio ficam sob `/v1`. Endpoints operacionais (`/health`) ficam fora do versionamento.
@@ -36,6 +36,12 @@ tags:
     description: Trilha de auditoria append-only
   - name: payments
     description: Webhook do provedor de pagamento e alertas de conciliação
+  - name: admin-stores
+    description: Fila de aprovação, decisões, documentos e edição de lojas (admin)
+  - name: stores
+    description: "Loja do lojista (onboarding, perfil, configuração, documentos, conta de recebimento e equipe)"
+  - name: uploads
+    description: Upload de arquivos em 2 passos (POST pré-assinado + complete), validado por magic bytes
 security:
   - bearerAuth: []
 paths:
@@ -1383,6 +1389,1493 @@ paths:
           $ref: '#/components/responses/Unprocessable'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/uploads:
+    post:
+      tags:
+      - uploads
+      operationId: createUpload
+      summary: Pedir um upload (POST pré-assinado)
+      description: "A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCreateRequest"
+      responses:
+        '201':
+          description: Upload criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadCreated"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/uploads/{id}/complete:
+    post:
+      tags:
+      - uploads
+      operationId: completeUpload
+      summary: Concluir o upload (valida e processa)
+      description: "Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado)."
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/uploads/{id}:
+    get:
+      tags:
+      - uploads
+      operationId: getUpload
+      summary: Consultar o estado de um upload
+      description: Só o dono do upload; outro usuário recebe 404.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores:
+    post:
+      tags:
+      - stores
+      operationId: createStore
+      summary: Criar a loja (etapa 1 do onboarding)
+      description: Papel de lojista e e-mail confirmado. CPF ou CNPJ (numérico ou alfanumérico) com dígito verificador; 1 documento = 1 loja e 1 conta = 1 loja (409 `DOCUMENT_IN_USE` / `STORE_ALREADY_EXISTS`). CNPJ pede `legalName` e `fiscalResponsibilityAccepted` (422 `FISCAL_ACCEPTANCE_REQUIRED`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStoreRequest"
+      responses:
+        '201':
+          description: Loja criada em rascunho
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/mine:
+    get:
+      tags:
+      - stores
+      operationId: listMyStores
+      summary: Lojas das quais sou membro
+      description: Uma por conta na 1.0.
+      responses:
+        '200':
+          description: Lojas
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - nextCursor
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Store"
+                  nextCursor:
+                    type:
+                    - string
+                    - 'null'
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+  /v1/stores/{storeId}:
+    get:
+      tags:
+      - stores
+      operationId: getStore
+      summary: Ver a loja
+      description: Qualquer membro. O CPF/CNPJ vem inteiro só para o dono; funcionário vê mascarado. `settings` só para o dono.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/profile:
+    patch:
+      tags:
+      - stores
+      operationId: updateStoreProfile
+      summary: Editar o perfil da loja (dono)
+      description: "Permissão `settings`. Em rascunho, correção pedida ou aprovada. Alterar o nome depois de aprovada fica pendente de análise (`pendingReview`), e a loja segue com o nome antigo. O endereço é resolvido pelo CEP (coordenada gravada em PostGIS); cidade fora das regiões ativas: 422 `CITY_NOT_SERVED`."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStoreProfileRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/onboarding:
+    get:
+      tags:
+      - stores
+      operationId: getStoreOnboarding
+      summary: O que falta para enviar à análise
+      description: Permissão `settings`.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingStatus"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/documents:
+    get:
+      tags:
+      - stores
+      operationId: listStoreDocuments
+      summary: Documentos enviados (sem download)
+      description: Permissão `settings`. O dono vê tipo, data e se é o vigente, nunca o arquivo nem a chave (R-28b).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - nextCursor
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StoreDocument"
+                  nextCursor:
+                    type:
+                    - string
+                    - 'null'
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags:
+      - stores
+      operationId: attachStoreDocument
+      summary: Anexar documento (upload concluído)
+      description: O reenvio substitui o anterior e mantém o histórico. CPF exige `id_front`, `id_back` e `address_proof`; CNPJ exige `cnpj_card` e `responsible_id`.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachDocumentRequest"
+      responses:
+        '204':
+          description: Anexado
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/submit:
+    post:
+      tags:
+      - stores
+      operationId: submitStore
+      summary: Enviar a loja à análise
+      description: 422 `ONBOARDING_INCOMPLETE` lista o que falta (campo e mensagem). Vale também para o reenvio depois de "correção pedida" (só os itens reprovados precisam ser corrigidos).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/settings:
+    get:
+      tags:
+      - stores
+      operationId: getStoreSettings
+      summary: Configuração da loja (dono)
+      description: Permissão `settings`.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreSettings"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/hours:
+    put:
+      tags:
+      - stores
+      operationId: setStoreHours
+      summary: Horários de funcionamento
+      description: "Por dia: fechado (lista vazia) ou até 2 intervalos; fim posterior ao início e exclusivo; último fim 23:59. Fuso America/Sao_Paulo."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HoursRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/holidays:
+    put:
+      tags:
+      - stores
+      operationId: setStoreHolidays
+      summary: Feriados e folgas (manual)
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HolidaysRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/pause:
+    post:
+      tags:
+      - stores
+      operationId: pauseStore
+      summary: Pausar a loja
+      description: A loja vira "Fechada" na hora e reabre sozinha ao fim do prazo (cálculo na leitura).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PauseRequest"
+      responses:
+        '204':
+          description: Pausada
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+      - stores
+      operationId: resumeStore
+      summary: Reabrir a loja
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Reaberta
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/delivery:
+    put:
+      tags:
+      - stores
+      operationId: setStoreDelivery
+      summary: "Entrega: raio, taxa, mínimo, grátis e tempo"
+      description: Raio de 1 a `raio_max_km`; taxa fixa R$ 0 a 50 ou até 5 faixas contíguas `[de, até)` até o raio; frete grátis acima de X estritamente maior que o mínimo (0 desliga); tempo mínimo < máximo ≤ 1.440. Sempre sobra entrega ou retirada.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/delivery/preview:
+    post:
+      tags:
+      - stores
+      operationId: previewStoreDelivery
+      summary: Prévia da taxa para um endereço
+      description: Usa a MESMA função do checkout (distância no PostGIS, faixa `[de, até)`).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryPreviewRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryPreview"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/{storeId}/pickup:
+    put:
+      tags:
+      - stores
+      operationId: setStorePickup
+      summary: Retirada na loja
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PickupRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/exchange-policy:
+    put:
+      tags:
+      - stores
+      operationId: setStoreExchangePolicy
+      summary: Política de trocas (voluntária)
+      description: Só a troca voluntária é configurável (0 = não aceita; 1 a 30 dias; taxa de coleta de R$ 0 até `taxa_coleta_max_cents`). Arrependimento (7 dias) e defeito são piso legal fixo e NÃO são campos (enviar qualquer outro campo é 400). Cada mudança sobe a versão da política (snapshot no pedido).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangePolicyRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/stores/{storeId}/low-stock:
+    put:
+      tags:
+      - stores
+      operationId: setStoreLowStock
+      summary: Limite de estoque baixo da loja (0 a 100)
+      description: Nulo usa o parâmetro global.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LowStockRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/cep/{cep}:
+    get:
+      tags:
+      - stores
+      operationId: lookupCep
+      summary: Consultar CEP (rua, bairro, cidade e coordenada)
+      description: Papel de lojista. Limite de 60 por 10 min.
+      parameters:
+      - name: cep
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^\d{5}-?\d{3}$
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CepResult"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/{storeId}/payment-account:
+    get:
+      tags:
+      - stores
+      operationId: getPaymentAccount
+      summary: Conta de recebimento (mascarada)
+      description: Só o dono (`payment_account`).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAccountView"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+      - stores
+      operationId: disconnectPaymentAccount
+      summary: Desconectar a conta de recebimento
+      description: Dono com senha recente; avisa o dono por e-mail, audita e alerta o admin (SEC-048).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Desconectada
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/payment-account/connect:
+    post:
+      tags:
+      - stores
+      operationId: startPaymentAccountConnect
+      summary: Iniciar a conexão OAuth
+      description: Só o dono, com senha digitada há até 5 min (403 `REAUTH_REQUIRED`). `state` de 256 bits guardado no servidor (só o hash), ligado à sessão e à loja, uso único, 10 min; um `state` novo invalida o anterior. `redirect_uri` vem da configuração.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAccountConnectStart"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/{storeId}/payment-account/callback:
+    post:
+      tags:
+      - stores
+      operationId: completePaymentAccountConnect
+      summary: Concluir a conexão OAuth
+      description: "O painel repassa `code` e `state` do retorno do provedor. `state` de outra sessão, de outra loja, reutilizado ou vencido: 400 `OAUTH_STATE_INVALID` e nada é vinculado. Titular com CPF/CNPJ diferente da loja: `under_review` e a loja não fica apta até o admin liberar. Conta já usada por outra loja: 409 `PAYMENT_ACCOUNT_IN_USE`. Provedor `fake`: `code` = `fake-ok`."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentAccountCallbackRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAccountView"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/{storeId}/members:
+    get:
+      tags:
+      - stores
+      operationId: listStoreMembers
+      summary: Equipe e convites pendentes
+      description: Só o dono (`team`).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamView"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/members/invitations:
+    post:
+      tags:
+      - stores
+      operationId: inviteStoreMember
+      summary: Convidar funcionário
+      description: "Dono com senha recente. Link de 7 dias, token de 256 bits (hash no banco), ligado ao e-mail. E-mail que não pode ser convidado: 422 `CANNOT_INVITE` com mensagem única (não revela se tem conta). Permissões: orders, catalog, exchanges, coupons, reviews, sales_values."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffInviteRequest"
+      responses:
+        '201':
+          description: Convite enviado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffInviteResponse"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/stores/{storeId}/members/invitations/{invitationId}:
+    delete:
+      tags:
+      - stores
+      operationId: revokeStoreInvitation
+      summary: Revogar convite
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: invitationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Revogado
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/members/{userId}:
+    patch:
+      tags:
+      - stores
+      operationId: setStoreMemberPermissions
+      summary: Alterar permissões do funcionário
+      description: Vale na próxima requisição e entra no log da loja.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberPermissionsRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+    delete:
+      tags:
+      - stores
+      operationId: removeStoreMember
+      summary: Remover funcionário
+      description: As sessões e renovações dele terminam na hora. O dono não se remove (409 `CANNOT_REMOVE_OWNER`).
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/stores/{storeId}/activity:
+    get:
+      tags:
+      - stores
+      operationId: listStoreActivity
+      summary: Quem fez o quê na loja
+      description: Só o dono. Sem dado do cliente.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - nextCursor
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StoreActivity"
+                  nextCursor:
+                    type:
+                    - string
+                    - 'null'
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+  /v1/auth/store-invitations/accept:
+    post:
+      tags:
+      - stores
+      operationId: acceptStoreInvitation
+      summary: Aceitar convite de funcionário
+      description: Conta nova nasce com o e-mail confirmado. Conta existente confirma a senha atual. 410 `INVITATION_INVALID` para convite usado, revogado ou vencido.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptStoreInvitationRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptStoreInvitationResponse"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '410':
+          $ref: "#/components/responses/Gone"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/stores:
+    get:
+      tags:
+      - admin-stores
+      operationId: listAdminStores
+      summary: Fila de lojas
+      description: "Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em \"correção pedida\"."
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - draft
+          - in_review
+          - correction_requested
+          - approved
+          - rejected
+          - suspended
+        description: "Padrão: in_review"
+      - $ref: "#/components/parameters/Cursor"
+      - $ref: "#/components/parameters/Limit"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - nextCursor
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminStoreListItem"
+                  nextCursor:
+                    type:
+                    - string
+                    - 'null'
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+  /v1/admin/stores/{storeId}:
+    get:
+      tags:
+      - admin-stores
+      operationId: getAdminStore
+      summary: Detalhe da loja para análise
+      description: "Permissão `stores:read`. Lista os documentos (sem arquivo), itens reprovados, histórico, conta de recebimento e outras lojas com o mesmo documento."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStoreDetail"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags:
+      - admin-stores
+      operationId: editAdminStore
+      summary: Editar dados da loja
+      description: "Permissão `stores:write` (super e operação). Grava antes/depois na auditoria."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminStorePatchRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/admin/stores/{storeId}/documents/{documentId}/access:
+    post:
+      tags:
+      - admin-stores
+      operationId: accessStoreDocument
+      summary: Abrir documento (URL de 5 min, auditada)
+      description: "Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentAccessRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentAccessResponse"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/stores/{storeId}/approve:
+    post:
+      tags:
+      - admin-stores
+      operationId: approveStore
+      summary: Aprovar a loja
+      description: "Permissão `stores:decide`. De \"em análise\" para \"aprovada\". 409 `STORE_ALREADY_DECIDED` (\"Já decidida por [nome]\") se outro admin decidiu antes."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/reactivate:
+    post:
+      tags:
+      - admin-stores
+      operationId: reactivateStore
+      summary: Reativar loja suspensa
+      description: "Permissão `stores:decide`. Só de \"suspensa\". A loja volta visível se continuar atendendo a RN-03."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/request-correction:
+    post:
+      tags:
+      - admin-stores
+      operationId: requestStoreCorrection
+      summary: Pedir correção (motivo por item)
+      description: "Permissão `stores:decide`. Um motivo por item reprovado (documento ou `store_data`). O prazo do SLA fica pausado até o reenvio."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrectionRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/reject:
+    post:
+      tags:
+      - admin-stores
+      operationId: rejectStore
+      summary: Recusar a loja (final)
+      description: "Permissão `stores:decide`. Motivo obrigatório; novo cadastro só com o suporte."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionReasonRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/suspend:
+    post:
+      tags:
+      - admin-stores
+      operationId: suspendStore
+      summary: Suspender a loja
+      description: "Permissão `stores:decide`. Só de \"aprovada\"; motivo obrigatório; a loja some da API pública na hora."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionReasonRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/settings/{section}:
+    put:
+      tags:
+      - admin-stores
+      operationId: editAdminStoreSettings
+      summary: Editar configuração da loja (admin)
+      description: "Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: section
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - hours
+          - holidays
+          - delivery
+          - pickup
+          - exchange-policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '422':
+          $ref: "#/components/responses/Unprocessable"
+  /v1/admin/stores/{storeId}/payment-account/release:
+    post:
+      tags:
+      - admin-stores
+      operationId: releaseStorePaymentAccount
+      summary: Liberar conta com titular divergente
+      description: "Permissão `stores:decide` com TOTP recente. Motivo (mín. 10 caracteres) e auditoria."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseAccountRequest"
+      responses:
+        '204':
+          description: Liberada
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
+  /v1/admin/stores/{storeId}/data-review/{decision}:
+    post:
+      tags:
+      - admin-stores
+      operationId: decideStoreDataReview
+      summary: Decidir alteração de nome pendente
+      description: "Permissão `stores:decide`. `decision`: approve ou reject."
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: decision
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - approve
+          - reject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionReasonRequest"
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
+        '409':
+          $ref: "#/components/responses/Conflict"
 components:
   securitySchemes:
     bearerAuth:
@@ -2145,3 +3638,1255 @@ components:
           type: array
           items: { $ref: '#/components/schemas/PaymentAlert' }
         nextCursor: { type: [string, 'null'] }
+    UploadCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - storeId
+      - purpose
+      - contentType
+      - sizeBytes
+      properties:
+        storeId:
+          type: string
+          format: uuid
+        purpose:
+          type: string
+          enum:
+          - store_logo
+          - store_cover
+          - product_image
+          - store_document
+        contentType:
+          type: string
+          example: image/jpeg
+        sizeBytes:
+          type: integer
+          minimum: 1
+    UploadCreated:
+      type: object
+      required:
+      - id
+      - upload
+      properties:
+        id:
+          type: string
+          format: uuid
+        upload:
+          type: object
+          required:
+          - url
+          - fields
+          - expiresAt
+          properties:
+            url:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+            expiresAt:
+              type: string
+              format: date-time
+    MediaAsset:
+      type: object
+      required:
+      - id
+      - purpose
+      - status
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        purpose:
+          type: string
+          enum:
+          - store_logo
+          - store_cover
+          - product_image
+          - store_document
+        status:
+          type: string
+          enum:
+          - pending
+          - ready
+          - rejected
+        contentType:
+          type:
+          - string
+          - 'null'
+        sizeBytes:
+          type:
+          - integer
+          - 'null'
+        width:
+          type:
+          - integer
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+        urls:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            type: string
+          description: Largura (px) para URL pública da variante WebP
+        rejectionReason:
+          type:
+          - string
+          - 'null'
+        createdAt:
+          type: string
+          format: date-time
+    CreateStoreRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - documentType
+      - documentNumber
+      properties:
+        documentType:
+          type: string
+          enum:
+          - cpf
+          - cnpj
+        documentNumber:
+          type: string
+          minLength: 11
+          maxLength: 20
+        legalName:
+          type: string
+          minLength: 3
+          maxLength: 160
+        fiscalResponsibilityAccepted:
+          type: boolean
+    StoreAddressInput:
+      type: object
+      additionalProperties: false
+      required:
+      - cep
+      - number
+      properties:
+        cep:
+          type: string
+          pattern: ^\d{5}-?\d{3}$
+        number:
+          type: string
+          maxLength: 20
+        complement:
+          type: string
+          maxLength: 80
+        street:
+          type: string
+        neighborhood:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+          minLength: 2
+          maxLength: 2
+        lat:
+          type: number
+        lng:
+          type: number
+    UpdateStoreProfileRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        legalName:
+          type: string
+        fiscalResponsibilityAccepted:
+          type: boolean
+        mainCategoryId:
+          type: string
+          format: uuid
+        extraCategoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 2
+        description:
+          type: string
+          maxLength: 300
+          description: Até 300 caracteres Unicode
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        address:
+          $ref: "#/components/schemas/StoreAddressInput"
+        logoAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        coverAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    StoreAddress:
+      type: object
+      required:
+      - cep
+      - number
+      properties:
+        cep:
+          type: string
+        street:
+          type:
+          - string
+          - 'null'
+        number:
+          type:
+          - string
+          - 'null'
+        complement:
+          type:
+          - string
+          - 'null'
+        neighborhood:
+          type:
+          - string
+          - 'null'
+        city:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+        lat:
+          type:
+          - number
+          - 'null'
+        lng:
+          type:
+          - number
+          - 'null'
+    Store:
+      type: object
+      required:
+      - id
+      - status
+      - documentType
+      - document
+      - pendingReview
+      - reviewItems
+      - extraCategoryIds
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - draft
+          - in_review
+          - correction_requested
+          - approved
+          - rejected
+          - suspended
+        documentType:
+          type: string
+          enum:
+          - cpf
+          - cnpj
+        document:
+          type: string
+          description: Inteiro para dono e admin; mascarado para funcionário
+        legalName:
+          type:
+          - string
+          - 'null'
+        name:
+          type:
+          - string
+          - 'null'
+        description:
+          type:
+          - string
+          - 'null'
+        phone:
+          type:
+          - string
+          - 'null'
+        whatsapp:
+          type:
+          - string
+          - 'null'
+        mainCategoryId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        extraCategoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        address:
+          oneOf:
+          - $ref: "#/components/schemas/StoreAddress"
+          - type: 'null'
+        logo:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            type: string
+        cover:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            type: string
+        pendingReview:
+          type: boolean
+        reviewItems:
+          type: array
+          items:
+            type: object
+            required:
+            - item
+            - reason
+            properties:
+              item:
+                type: string
+              reason:
+                type: string
+        submittedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionReason:
+          type:
+          - string
+          - 'null'
+        createdAt:
+          type: string
+          format: date-time
+        role:
+          type: string
+          description: Só em /stores/mine
+        settings:
+          $ref: "#/components/schemas/StoreSettings"
+    OnboardingStatus:
+      type: object
+      required:
+      - status
+      - complete
+      - missing
+      - paymentAccount
+      - history
+      properties:
+        status:
+          type: string
+        complete:
+          type: boolean
+        missing:
+          type: array
+          items:
+            type: object
+            required:
+            - field
+            - message
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+        paymentAccount:
+          type:
+          - string
+          - 'null'
+          enum:
+          - active
+          - under_review
+          - null
+        history:
+          type: array
+          items:
+            type: object
+            required:
+            - to
+            - at
+            properties:
+              from:
+                type:
+                - string
+                - 'null'
+              to:
+                type: string
+              at:
+                type: string
+                format: date-time
+    StoreDocument:
+      type: object
+      required:
+      - id
+      - kind
+      - uploadedAt
+      - current
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - id_front
+          - id_back
+          - address_proof
+          - cnpj_card
+          - responsible_id
+        uploadedAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+    AttachDocumentRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      - uploadId
+      properties:
+        kind:
+          type: string
+          enum:
+          - id_front
+          - id_back
+          - address_proof
+          - cnpj_card
+          - responsible_id
+        uploadId:
+          type: string
+          format: uuid
+    Interval:
+      type: object
+      additionalProperties: false
+      required:
+      - start
+      - end
+      properties:
+        start:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        end:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+    HoursRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - days
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - weekday
+            - intervals
+            properties:
+              weekday:
+                type: integer
+                minimum: 0
+                maximum: 6
+                description: 0 = domingo
+              intervals:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Interval"
+                maxItems: 3
+          maxItems: 7
+    HolidaysRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - holidays
+      properties:
+        holidays:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - date
+            properties:
+              date:
+                type: string
+                format: date
+              label:
+                type: string
+                maxLength: 60
+          maxItems: 366
+    PauseRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          enum:
+          - 30m
+          - 1h
+          - 2h
+          - end_of_day
+          - until_resume
+    DeliveryRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - acceptsDelivery
+      - radiusKm
+      - feeMode
+      - minOrderCents
+      - etaMinMinutes
+      - etaMaxMinutes
+      properties:
+        acceptsDelivery:
+          type: boolean
+        radiusKm:
+          type: number
+          minimum: 1
+          description: km, até 2 casas
+        feeMode:
+          type: string
+          enum:
+          - fixed
+          - by_distance
+        feeFixedCents:
+          type: integer
+          minimum: 0
+          maximum: 5000
+        tiers:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - fromKm
+            - toKm
+            - feeCents
+            properties:
+              fromKm:
+                type: number
+                minimum: 0
+              toKm:
+                type: number
+                minimum: 0
+              feeCents:
+                type: integer
+                minimum: 0
+                maximum: 5000
+          maxItems: 5
+        minOrderCents:
+          type: integer
+          minimum: 0
+        freeAboveCents:
+          type: integer
+          minimum: 0
+          description: 0 desliga
+        etaMinMinutes:
+          type: integer
+          minimum: 1
+        etaMaxMinutes:
+          type: integer
+          maximum: 1440
+    DeliveryPreviewRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        cep:
+          type: string
+          pattern: ^\d{5}-?\d{3}$
+        lat:
+          type: number
+        lng:
+          type: number
+        subtotalCents:
+          type: integer
+          minimum: 0
+    DeliveryPreview:
+      type: object
+      required:
+      - available
+      - distanceM
+      - feeCents
+      - freeShipping
+      - belowMinimum
+      properties:
+        available:
+          type: boolean
+        distanceM:
+          type:
+          - number
+          - 'null'
+        feeCents:
+          type:
+          - integer
+          - 'null'
+        freeShipping:
+          type: boolean
+        belowMinimum:
+          type: boolean
+    PickupRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      - prepMinMinutes
+      - prepMaxMinutes
+      properties:
+        enabled:
+          type: boolean
+        useStoreAddress:
+          type: boolean
+        address:
+          type: string
+          maxLength: 200
+        instructions:
+          type: string
+          maxLength: 200
+        prepMinMinutes:
+          type: integer
+          minimum: 1
+        prepMaxMinutes:
+          type: integer
+          maximum: 1440
+    ExchangePolicyRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - voluntaryDays
+      properties:
+        voluntaryDays:
+          type: integer
+          minimum: 0
+          maximum: 30
+          description: 0 = não aceita troca voluntária
+        collectionFeeCents:
+          type: integer
+          minimum: 0
+        confirmDefault:
+          type: boolean
+    LowStockRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - threshold
+      properties:
+        threshold:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 100
+    StoreSettings:
+      type: object
+      required:
+      - isOpenNow
+      - hours
+      - holidays
+      - pause
+      - delivery
+      - pickup
+      - exchangePolicy
+      - lowStockThreshold
+      properties:
+        isOpenNow:
+          type: boolean
+        hours:
+          type: array
+          items:
+            type: object
+            required:
+            - weekday
+            - intervals
+            properties:
+              weekday:
+                type: integer
+              intervals:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Interval"
+        holidays:
+          type: array
+          items:
+            type: object
+            required:
+            - date
+            properties:
+              date:
+                type: string
+              label:
+                type:
+                - string
+                - 'null'
+        pause:
+          type: object
+          required:
+          - active
+          - until
+          - indefinitely
+          properties:
+            active:
+              type: boolean
+            until:
+              type:
+              - string
+              - 'null'
+              format: date-time
+            indefinitely:
+              type: boolean
+        delivery:
+          type: object
+          required:
+          - acceptsDelivery
+          - radiusKm
+          - feeMode
+          - feeFixedCents
+          - tiers
+          - minOrderCents
+          - freeAboveCents
+          - etaMinMinutes
+          - etaMaxMinutes
+          properties:
+            acceptsDelivery:
+              type: boolean
+            radiusKm:
+              type: number
+            feeMode:
+              type: string
+            feeFixedCents:
+              type: integer
+            tiers:
+              type: array
+              items:
+                type: object
+                required:
+                - fromKm
+                - toKm
+                - feeCents
+                properties:
+                  fromKm:
+                    type: number
+                  toKm:
+                    type: number
+                  feeCents:
+                    type: integer
+            minOrderCents:
+              type: integer
+            freeAboveCents:
+              type: integer
+            etaMinMinutes:
+              type: integer
+            etaMaxMinutes:
+              type: integer
+        pickup:
+          type: object
+          required:
+          - enabled
+          - useStoreAddress
+          - prepMinMinutes
+          - prepMaxMinutes
+          properties:
+            enabled:
+              type: boolean
+            useStoreAddress:
+              type: boolean
+            address:
+              type:
+              - string
+              - 'null'
+            instructions:
+              type:
+              - string
+              - 'null'
+            prepMinMinutes:
+              type: integer
+            prepMaxMinutes:
+              type: integer
+        exchangePolicy:
+          type: object
+          required:
+          - voluntaryDays
+          - collectionFeeCents
+          - version
+          - legalFloor
+          properties:
+            voluntaryDays:
+              type: integer
+            collectionFeeCents:
+              type: integer
+            version:
+              type: integer
+            legalFloor:
+              type: object
+              required:
+              - withdrawalDays
+              - defectDays
+              properties:
+                withdrawalDays:
+                  type: integer
+                defectDays:
+                  type: integer
+        lowStockThreshold:
+          type: integer
+    CepResult:
+      type: object
+      required:
+      - cep
+      - street
+      - neighborhood
+      - city
+      - state
+      - lat
+      - lng
+      properties:
+        cep:
+          type: string
+        street:
+          type: string
+        neighborhood:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+    PaymentAccountView:
+      oneOf:
+      - type: object
+        required:
+        - connected
+        properties:
+          connected:
+            type: boolean
+            enum:
+            - false
+      - type: object
+        required:
+        - connected
+        - provider
+        - status
+        - holderDocumentMasked
+        - holderMatchesStore
+        - connectedAt
+        properties:
+          connected:
+            type: boolean
+            enum:
+            - true
+          provider:
+            type: string
+          status:
+            type: string
+            enum:
+            - active
+            - under_review
+          holderDocumentMasked:
+            type: string
+          holderMatchesStore:
+            type: boolean
+          connectedAt:
+            type: string
+            format: date-time
+    PaymentAccountConnectStart:
+      type: object
+      required:
+      - authorizationUrl
+      - state
+      - expiresInSeconds
+      properties:
+        authorizationUrl:
+          type: string
+        state:
+          type: string
+        expiresInSeconds:
+          type: integer
+          example: 600
+    PaymentAccountCallbackRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - state
+      properties:
+        code:
+          type: string
+          maxLength: 200
+        state:
+          type: string
+          minLength: 20
+          maxLength: 200
+    StaffInviteRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - email
+      - name
+      - permissions
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        permissions:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+    StaffInviteResponse:
+      type: object
+      required:
+      - invitationId
+      - expiresAt
+      properties:
+        invitationId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+    MemberPermissionsRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - permissions
+      properties:
+        permissions:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+    TeamView:
+      type: object
+      required:
+      - members
+      - invitations
+      properties:
+        members:
+          type: array
+          items:
+            type: object
+            required:
+            - userId
+            - name
+            - email
+            - role
+            - permissions
+            - since
+            properties:
+              userId:
+                type: string
+                format: uuid
+              name:
+                type: string
+              email:
+                type: string
+              role:
+                type: string
+                enum:
+                - owner
+                - staff
+              permissions:
+                type: array
+                items:
+                  type: string
+              since:
+                type: string
+                format: date-time
+        invitations:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - email
+            - name
+            - permissions
+            - expiresAt
+            properties:
+              id:
+                type: string
+                format: uuid
+              email:
+                type: string
+              name:
+                type: string
+              permissions:
+                type: array
+                items:
+                  type: string
+              expiresAt:
+                type: string
+                format: date-time
+    StoreActivity:
+      type: object
+      required:
+      - action
+      - at
+      properties:
+        action:
+          type: string
+        at:
+          type: string
+          format: date-time
+        actor:
+          type:
+          - string
+          - 'null'
+    AcceptStoreInvitationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - token
+      - password
+      properties:
+        token:
+          type: string
+          minLength: 20
+          maxLength: 200
+        password:
+          type: string
+    AcceptStoreInvitationResponse:
+      type: object
+      required:
+      - tokens
+      - storeId
+      properties:
+        tokens:
+          $ref: "#/components/schemas/TokenPair"
+        storeId:
+          type: string
+          format: uuid
+    AdminStoreListItem:
+      type: object
+      required:
+      - id
+      - status
+      - documentMasked
+      - overdue
+      - holderMismatch
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        documentMasked:
+          type: string
+        city:
+          type:
+          - string
+          - 'null'
+        submittedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        overdue:
+          type: boolean
+        holderMismatch:
+          type: boolean
+    AdminStoreDetail:
+      type: object
+      required:
+      - store
+      - owner
+      - documents
+      - reviewItems
+      - history
+      - paymentAccount
+      - sameDocument
+      - settings
+      properties:
+        store:
+          $ref: "#/components/schemas/Store"
+        owner:
+          type: object
+          required:
+          - email
+          - name
+          properties:
+            email:
+              type: string
+            name:
+              type: string
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreDocument"
+        reviewItems:
+          type: array
+          items:
+            type: object
+            required:
+            - item
+            - reason
+            properties:
+              item:
+                type: string
+              reason:
+                type: string
+        history:
+          type: array
+          items:
+            type: object
+            required:
+            - to
+            - at
+            properties:
+              from:
+                type:
+                - string
+                - 'null'
+              to:
+                type: string
+              at:
+                type: string
+                format: date-time
+              reason:
+                type:
+                - string
+                - 'null'
+        paymentAccount:
+          oneOf:
+          - type: object
+            required:
+            - status
+            - holderDocumentMasked
+            - holderMatchesStore
+            properties:
+              status:
+                type: string
+              holderDocumentMasked:
+                type: string
+              holderMatchesStore:
+                type: boolean
+          - type: 'null'
+        sameDocument:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - status
+            properties:
+              id:
+                type: string
+                format: uuid
+              status:
+                type: string
+        settings:
+          $ref: "#/components/schemas/StoreSettings"
+    DocumentAccessRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          enum:
+          - initial_review
+          - doubt
+          - report
+    DocumentAccessResponse:
+      type: object
+      required:
+      - url
+      - expiresInSeconds
+      - contentType
+      properties:
+        url:
+          type: string
+        expiresInSeconds:
+          type: integer
+          example: 300
+        contentType:
+          type: string
+    DecisionReasonRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+    CorrectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - item
+            - reason
+            properties:
+              item:
+                type: string
+                description: Tipo do documento ou store_data
+              reason:
+                type: string
+                minLength: 3
+                maxLength: 500
+          minItems: 1
+          maxItems: 10
+    AdminStorePatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+        profile:
+          $ref: "#/components/schemas/UpdateStoreProfileRequest"
+    ReleaseAccountRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500

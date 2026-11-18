@@ -12,7 +12,7 @@
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
  *
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 import * as zod from 'zod';
 
@@ -1340,4 +1340,2293 @@ export const CompleteResetPasswordResponse = zod.object({
   "mfaRequired": zod.literal(true).optional().describe('Admin com TOTP: falta o 2º fator (use `resetTicket`)'),
   "resetTicket": zod.string().optional().describe('Ticket opaco de 256 bits, 10 min, uso único'),
   "expiresIn": zod.int().optional()
+})
+
+
+/**
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404.
+ * @summary Pedir um upload (POST pré-assinado)
+ */
+
+
+
+export const CreateUploadBody = zod.object({
+  "storeId": zod.uuid(),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "contentType": zod.string(),
+  "sizeBytes": zod.int().min(1)
+})
+
+export const CreateUploadResponse = zod.object({
+  "id": zod.uuid(),
+  "upload": zod.object({
+  "url": zod.string(),
+  "fields": zod.record(zod.string(), zod.string()),
+  "expiresAt": zod.iso.datetime({"offset":true})
+})
+})
+
+
+/**
+ * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
+ * @summary Concluir o upload (valida e processa)
+ */
+export const CompleteUploadParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const CompleteUploadResponse = zod.object({
+  "id": zod.uuid(),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "status": zod.enum(['pending', 'ready', 'rejected']),
+  "contentType": zod.string().nullish(),
+  "sizeBytes": zod.int().nullish(),
+  "width": zod.int().nullish(),
+  "height": zod.int().nullish(),
+  "urls": zod.record(zod.string(), zod.string()).nullish().describe('Largura (px) para URL pública da variante WebP'),
+  "rejectionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Só o dono do upload; outro usuário recebe 404.
+ * @summary Consultar o estado de um upload
+ */
+export const GetUploadParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetUploadResponse = zod.object({
+  "id": zod.uuid(),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document']),
+  "status": zod.enum(['pending', 'ready', 'rejected']),
+  "contentType": zod.string().nullish(),
+  "sizeBytes": zod.int().nullish(),
+  "width": zod.int().nullish(),
+  "height": zod.int().nullish(),
+  "urls": zod.record(zod.string(), zod.string()).nullish().describe('Largura (px) para URL pública da variante WebP'),
+  "rejectionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Papel de lojista e e-mail confirmado. CPF ou CNPJ (numérico ou alfanumérico) com dígito verificador; 1 documento = 1 loja e 1 conta = 1 loja (409 `DOCUMENT_IN_USE` / `STORE_ALREADY_EXISTS`). CNPJ pede `legalName` e `fiscalResponsibilityAccepted` (422 `FISCAL_ACCEPTANCE_REQUIRED`).
+ * @summary Criar a loja (etapa 1 do onboarding)
+ */
+export const createStoreBodyDocumentNumberMin = 11;
+export const createStoreBodyDocumentNumberMax = 20;
+
+export const createStoreBodyLegalNameMin = 3;
+export const createStoreBodyLegalNameMax = 160;
+
+
+
+export const CreateStoreBody = zod.object({
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "documentNumber": zod.string().min(createStoreBodyDocumentNumberMin).max(createStoreBodyDocumentNumberMax),
+  "legalName": zod.string().min(createStoreBodyLegalNameMin).max(createStoreBodyLegalNameMax).optional(),
+  "fiscalResponsibilityAccepted": zod.boolean().optional()
+})
+
+export const createStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const createStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const CreateStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(createStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(createStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Uma por conta na 1.0.
+ * @summary Lojas das quais sou membro
+ */
+export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const ListMyStoresResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(listMyStoresResponseDataItemSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Qualquer membro. O CPF/CNPJ vem inteiro só para o dono; funcionário vê mascarado. `settings` só para o dono.
+ * @summary Ver a loja
+ */
+export const GetStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const GetStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(getStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(getStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `settings`. Em rascunho, correção pedida ou aprovada. Alterar o nome depois de aprovada fica pendente de análise (`pendingReview`), e a loja segue com o nome antigo. O endereço é resolvido pelo CEP (coordenada gravada em PostGIS); cidade fora das regiões ativas: 422 `CITY_NOT_SERVED`.
+ * @summary Editar o perfil da loja (dono)
+ */
+export const UpdateStoreProfileParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const updateStoreProfileBodyNameMin = 2;
+export const updateStoreProfileBodyNameMax = 80;
+
+export const updateStoreProfileBodyExtraCategoryIdsMax = 2;
+
+export const updateStoreProfileBodyDescriptionMax = 300;
+
+export const updateStoreProfileBodyAddressCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+export const updateStoreProfileBodyAddressNumberMax = 20;
+
+export const updateStoreProfileBodyAddressComplementMax = 80;
+
+export const updateStoreProfileBodyAddressStateMin = 2;
+export const updateStoreProfileBodyAddressStateMax = 2;
+
+
+
+export const UpdateStoreProfileBody = zod.object({
+  "name": zod.string().min(updateStoreProfileBodyNameMin).max(updateStoreProfileBodyNameMax).optional(),
+  "legalName": zod.string().optional(),
+  "fiscalResponsibilityAccepted": zod.boolean().optional(),
+  "mainCategoryId": zod.uuid().optional(),
+  "extraCategoryIds": zod.array(zod.uuid()).max(updateStoreProfileBodyExtraCategoryIdsMax).optional(),
+  "description": zod.string().max(updateStoreProfileBodyDescriptionMax).optional().describe('Até 300 caracteres Unicode'),
+  "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
+  "address": zod.object({
+  "cep": zod.string().regex(updateStoreProfileBodyAddressCepRegExp),
+  "number": zod.string().max(updateStoreProfileBodyAddressNumberMax),
+  "complement": zod.string().max(updateStoreProfileBodyAddressComplementMax).optional(),
+  "street": zod.string().optional(),
+  "neighborhood": zod.string().optional(),
+  "city": zod.string().optional(),
+  "state": zod.string().min(updateStoreProfileBodyAddressStateMin).max(updateStoreProfileBodyAddressStateMax).optional(),
+  "lat": zod.number().optional(),
+  "lng": zod.number().optional()
+}).optional(),
+  "logoAssetId": zod.uuid().nullish(),
+  "coverAssetId": zod.uuid().nullish()
+})
+
+export const updateStoreProfileResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const updateStoreProfileResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const UpdateStoreProfileResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(updateStoreProfileResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(updateStoreProfileResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `settings`.
+ * @summary O que falta para enviar à análise
+ */
+export const GetStoreOnboardingParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreOnboardingResponse = zod.object({
+  "status": zod.string(),
+  "complete": zod.boolean(),
+  "missing": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})),
+  "paymentAccount": zod.union([zod.literal('active'),zod.literal('under_review'),zod.literal(null)]).nullable(),
+  "history": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string(),
+  "at": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Permissão `settings`. O dono vê tipo, data e se é o vigente, nunca o arquivo nem a chave (R-28b).
+ * @summary Documentos enviados (sem download)
+ */
+export const ListStoreDocumentsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const ListStoreDocumentsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['id_front', 'id_back', 'address_proof', 'cnpj_card', 'responsible_id']),
+  "uploadedAt": zod.iso.datetime({"offset":true}),
+  "current": zod.boolean()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * O reenvio substitui o anterior e mantém o histórico. CPF exige `id_front`, `id_back` e `address_proof`; CNPJ exige `cnpj_card` e `responsible_id`.
+ * @summary Anexar documento (upload concluído)
+ */
+export const AttachStoreDocumentParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const AttachStoreDocumentBody = zod.object({
+  "kind": zod.enum(['id_front', 'id_back', 'address_proof', 'cnpj_card', 'responsible_id']),
+  "uploadId": zod.uuid()
+})
+
+export const AttachStoreDocumentResponse = zod.void()
+
+
+/**
+ * 422 `ONBOARDING_INCOMPLETE` lista o que falta (campo e mensagem). Vale também para o reenvio depois de "correção pedida" (só os itens reprovados precisam ser corrigidos).
+ * @summary Enviar a loja à análise
+ */
+export const SubmitStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const submitStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const submitStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const SubmitStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(submitStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(submitStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `settings`.
+ * @summary Configuração da loja (dono)
+ */
+export const GetStoreSettingsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getStoreSettingsResponseHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getStoreSettingsResponseHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const GetStoreSettingsResponse = zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(getStoreSettingsResponseHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(getStoreSettingsResponseHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+})
+
+
+/**
+ * Por dia: fechado (lista vazia) ou até 2 intervalos; fim posterior ao início e exclusivo; último fim 23:59. Fuso America/Sao_Paulo.
+ * @summary Horários de funcionamento
+ */
+export const SetStoreHoursParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStoreHoursBodyDaysItemWeekdayMin = 0;
+export const setStoreHoursBodyDaysItemWeekdayMax = 6;
+
+export const setStoreHoursBodyDaysItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const setStoreHoursBodyDaysItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const setStoreHoursBodyDaysItemIntervalsMax = 3;
+
+export const setStoreHoursBodyDaysMax = 7;
+
+
+
+export const SetStoreHoursBody = zod.object({
+  "days": zod.array(zod.object({
+  "weekday": zod.int().min(setStoreHoursBodyDaysItemWeekdayMin).max(setStoreHoursBodyDaysItemWeekdayMax).describe('0 = domingo'),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(setStoreHoursBodyDaysItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(setStoreHoursBodyDaysItemIntervalsItemEndRegExp)
+})).max(setStoreHoursBodyDaysItemIntervalsMax)
+})).max(setStoreHoursBodyDaysMax)
+})
+
+export const SetStoreHoursResponse = zod.void()
+
+
+/**
+ * @summary Feriados e folgas (manual)
+ */
+export const SetStoreHolidaysParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStoreHolidaysBodyHolidaysItemLabelMax = 60;
+
+export const setStoreHolidaysBodyHolidaysMax = 366;
+
+
+
+export const SetStoreHolidaysBody = zod.object({
+  "holidays": zod.array(zod.object({
+  "date": zod.iso.date(),
+  "label": zod.string().max(setStoreHolidaysBodyHolidaysItemLabelMax).optional()
+})).max(setStoreHolidaysBodyHolidaysMax)
+})
+
+export const SetStoreHolidaysResponse = zod.void()
+
+
+/**
+ * A loja vira "Fechada" na hora e reabre sozinha ao fim do prazo (cálculo na leitura).
+ * @summary Pausar a loja
+ */
+export const PauseStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const PauseStoreBody = zod.object({
+  "kind": zod.enum(['30m', '1h', '2h', 'end_of_day', 'until_resume'])
+})
+
+export const PauseStoreResponse = zod.void()
+
+
+/**
+ * @summary Reabrir a loja
+ */
+export const ResumeStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const ResumeStoreResponse = zod.void()
+
+
+/**
+ * Raio de 1 a `raio_max_km`; taxa fixa R$ 0 a 50 ou até 5 faixas contíguas `[de, até)` até o raio; frete grátis acima de X estritamente maior que o mínimo (0 desliga); tempo mínimo < máximo ≤ 1.440. Sempre sobra entrega ou retirada.
+ * @summary Entrega: raio, taxa, mínimo, grátis e tempo
+ */
+export const SetStoreDeliveryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+
+export const setStoreDeliveryBodyFeeFixedCentsMin = 0;
+export const setStoreDeliveryBodyFeeFixedCentsMax = 5000;
+
+export const setStoreDeliveryBodyTiersItemFromKmMin = 0;
+
+export const setStoreDeliveryBodyTiersItemToKmMin = 0;
+
+export const setStoreDeliveryBodyTiersItemFeeCentsMin = 0;
+export const setStoreDeliveryBodyTiersItemFeeCentsMax = 5000;
+
+export const setStoreDeliveryBodyTiersMax = 5;
+
+export const setStoreDeliveryBodyMinOrderCentsMin = 0;
+
+export const setStoreDeliveryBodyFreeAboveCentsMin = 0;
+
+
+export const setStoreDeliveryBodyEtaMaxMinutesMax = 1440;
+
+
+
+export const SetStoreDeliveryBody = zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number().min(1).describe('km, até 2 casas'),
+  "feeMode": zod.enum(['fixed', 'by_distance']),
+  "feeFixedCents": zod.int().min(setStoreDeliveryBodyFeeFixedCentsMin).max(setStoreDeliveryBodyFeeFixedCentsMax).optional(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number().min(setStoreDeliveryBodyTiersItemFromKmMin),
+  "toKm": zod.number().min(setStoreDeliveryBodyTiersItemToKmMin),
+  "feeCents": zod.int().min(setStoreDeliveryBodyTiersItemFeeCentsMin).max(setStoreDeliveryBodyTiersItemFeeCentsMax)
+})).max(setStoreDeliveryBodyTiersMax).optional(),
+  "minOrderCents": zod.int().min(setStoreDeliveryBodyMinOrderCentsMin),
+  "freeAboveCents": zod.int().min(setStoreDeliveryBodyFreeAboveCentsMin).optional().describe('0 desliga'),
+  "etaMinMinutes": zod.int().min(1),
+  "etaMaxMinutes": zod.int().max(setStoreDeliveryBodyEtaMaxMinutesMax)
+})
+
+export const SetStoreDeliveryResponse = zod.void()
+
+
+/**
+ * Usa a MESMA função do checkout (distância no PostGIS, faixa `[de, até)`).
+ * @summary Prévia da taxa para um endereço
+ */
+export const PreviewStoreDeliveryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const previewStoreDeliveryBodyCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+export const previewStoreDeliveryBodySubtotalCentsMin = 0;
+
+
+
+export const PreviewStoreDeliveryBody = zod.object({
+  "cep": zod.string().regex(previewStoreDeliveryBodyCepRegExp).optional(),
+  "lat": zod.number().optional(),
+  "lng": zod.number().optional(),
+  "subtotalCents": zod.int().min(previewStoreDeliveryBodySubtotalCentsMin).optional()
+})
+
+export const PreviewStoreDeliveryResponse = zod.object({
+  "available": zod.boolean(),
+  "distanceM": zod.number().nullable(),
+  "feeCents": zod.int().nullable(),
+  "freeShipping": zod.boolean(),
+  "belowMinimum": zod.boolean()
+})
+
+
+/**
+ * @summary Retirada na loja
+ */
+export const SetStorePickupParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStorePickupBodyAddressMax = 200;
+
+export const setStorePickupBodyInstructionsMax = 200;
+
+
+export const setStorePickupBodyPrepMaxMinutesMax = 1440;
+
+
+
+export const SetStorePickupBody = zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean().optional(),
+  "address": zod.string().max(setStorePickupBodyAddressMax).optional(),
+  "instructions": zod.string().max(setStorePickupBodyInstructionsMax).optional(),
+  "prepMinMinutes": zod.int().min(1),
+  "prepMaxMinutes": zod.int().max(setStorePickupBodyPrepMaxMinutesMax)
+})
+
+export const SetStorePickupResponse = zod.void()
+
+
+/**
+ * Só a troca voluntária é configurável (0 = não aceita; 1 a 30 dias; taxa de coleta de R$ 0 até `taxa_coleta_max_cents`). Arrependimento (7 dias) e defeito são piso legal fixo e NÃO são campos (enviar qualquer outro campo é 400). Cada mudança sobe a versão da política (snapshot no pedido).
+ * @summary Política de trocas (voluntária)
+ */
+export const SetStoreExchangePolicyParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStoreExchangePolicyBodyVoluntaryDaysMin = 0;
+export const setStoreExchangePolicyBodyVoluntaryDaysMax = 30;
+
+export const setStoreExchangePolicyBodyCollectionFeeCentsMin = 0;
+
+
+
+export const SetStoreExchangePolicyBody = zod.object({
+  "voluntaryDays": zod.int().min(setStoreExchangePolicyBodyVoluntaryDaysMin).max(setStoreExchangePolicyBodyVoluntaryDaysMax).describe('0 = não aceita troca voluntária'),
+  "collectionFeeCents": zod.int().min(setStoreExchangePolicyBodyCollectionFeeCentsMin).optional(),
+  "confirmDefault": zod.boolean().optional()
+})
+
+export const SetStoreExchangePolicyResponse = zod.void()
+
+
+/**
+ * Nulo usa o parâmetro global.
+ * @summary Limite de estoque baixo da loja (0 a 100)
+ */
+export const SetStoreLowStockParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setStoreLowStockBodyThresholdMin = 0;
+export const setStoreLowStockBodyThresholdMax = 100;
+
+
+
+export const SetStoreLowStockBody = zod.object({
+  "threshold": zod.int().min(setStoreLowStockBodyThresholdMin).max(setStoreLowStockBodyThresholdMax).nullable()
+})
+
+export const SetStoreLowStockResponse = zod.void()
+
+
+/**
+ * Papel de lojista. Limite de 60 por 10 min.
+ * @summary Consultar CEP (rua, bairro, cidade e coordenada)
+ */
+export const lookupCepPathCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+
+
+export const LookupCepParams = zod.object({
+  "cep": zod.string().regex(lookupCepPathCepRegExp)
+})
+
+export const LookupCepResponse = zod.object({
+  "cep": zod.string(),
+  "street": zod.string(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "lat": zod.number(),
+  "lng": zod.number()
+})
+
+
+/**
+ * Só o dono (`payment_account`).
+ * @summary Conta de recebimento (mascarada)
+ */
+export const GetPaymentAccountParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetPaymentAccountResponse = zod.union([zod.object({
+  "connected": zod.literal(false)
+}),zod.object({
+  "connected": zod.literal(true),
+  "provider": zod.string(),
+  "status": zod.enum(['active', 'under_review']),
+  "holderDocumentMasked": zod.string(),
+  "holderMatchesStore": zod.boolean(),
+  "connectedAt": zod.iso.datetime({"offset":true})
+})])
+
+
+/**
+ * Dono com senha recente; avisa o dono por e-mail, audita e alerta o admin (SEC-048).
+ * @summary Desconectar a conta de recebimento
+ */
+export const DisconnectPaymentAccountParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const DisconnectPaymentAccountResponse = zod.void()
+
+
+/**
+ * Só o dono, com senha digitada há até 5 min (403 `REAUTH_REQUIRED`). `state` de 256 bits guardado no servidor (só o hash), ligado à sessão e à loja, uso único, 10 min; um `state` novo invalida o anterior. `redirect_uri` vem da configuração.
+ * @summary Iniciar a conexão OAuth
+ */
+export const StartPaymentAccountConnectParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const StartPaymentAccountConnectResponse = zod.object({
+  "authorizationUrl": zod.string(),
+  "state": zod.string(),
+  "expiresInSeconds": zod.int()
+})
+
+
+/**
+ * O painel repassa `code` e `state` do retorno do provedor. `state` de outra sessão, de outra loja, reutilizado ou vencido: 400 `OAUTH_STATE_INVALID` e nada é vinculado. Titular com CPF/CNPJ diferente da loja: `under_review` e a loja não fica apta até o admin liberar. Conta já usada por outra loja: 409 `PAYMENT_ACCOUNT_IN_USE`. Provedor `fake`: `code` = `fake-ok`.
+ * @summary Concluir a conexão OAuth
+ */
+export const CompletePaymentAccountConnectParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const completePaymentAccountConnectBodyCodeMax = 200;
+
+export const completePaymentAccountConnectBodyStateMin = 20;
+export const completePaymentAccountConnectBodyStateMax = 200;
+
+
+
+export const CompletePaymentAccountConnectBody = zod.object({
+  "code": zod.string().max(completePaymentAccountConnectBodyCodeMax),
+  "state": zod.string().min(completePaymentAccountConnectBodyStateMin).max(completePaymentAccountConnectBodyStateMax)
+})
+
+export const CompletePaymentAccountConnectResponse = zod.union([zod.object({
+  "connected": zod.literal(false)
+}),zod.object({
+  "connected": zod.literal(true),
+  "provider": zod.string(),
+  "status": zod.enum(['active', 'under_review']),
+  "holderDocumentMasked": zod.string(),
+  "holderMatchesStore": zod.boolean(),
+  "connectedAt": zod.iso.datetime({"offset":true})
+})])
+
+
+/**
+ * Só o dono (`team`).
+ * @summary Equipe e convites pendentes
+ */
+export const ListStoreMembersParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const ListStoreMembersResponse = zod.object({
+  "members": zod.array(zod.object({
+  "userId": zod.uuid(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['owner', 'staff']),
+  "permissions": zod.array(zod.string()),
+  "since": zod.iso.datetime({"offset":true})
+})),
+  "invitations": zod.array(zod.object({
+  "id": zod.uuid(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "permissions": zod.array(zod.string()),
+  "expiresAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Dono com senha recente. Link de 7 dias, token de 256 bits (hash no banco), ligado ao e-mail. E-mail que não pode ser convidado: 422 `CANNOT_INVITE` com mensagem única (não revela se tem conta). Permissões: orders, catalog, exchanges, coupons, reviews, sales_values.
+ * @summary Convidar funcionário
+ */
+export const InviteStoreMemberParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const inviteStoreMemberBodyNameMin = 2;
+export const inviteStoreMemberBodyNameMax = 120;
+
+export const inviteStoreMemberBodyPermissionsMax = 10;
+
+
+
+export const InviteStoreMemberBody = zod.object({
+  "email": zod.email(),
+  "name": zod.string().min(inviteStoreMemberBodyNameMin).max(inviteStoreMemberBodyNameMax),
+  "permissions": zod.array(zod.string()).max(inviteStoreMemberBodyPermissionsMax)
+})
+
+export const InviteStoreMemberResponse = zod.object({
+  "invitationId": zod.uuid(),
+  "expiresAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * @summary Revogar convite
+ */
+export const RevokeStoreInvitationParams = zod.object({
+  "storeId": zod.uuid(),
+  "invitationId": zod.uuid()
+})
+
+export const RevokeStoreInvitationResponse = zod.void()
+
+
+/**
+ * Vale na próxima requisição e entra no log da loja.
+ * @summary Alterar permissões do funcionário
+ */
+export const SetStoreMemberPermissionsParams = zod.object({
+  "storeId": zod.uuid(),
+  "userId": zod.uuid()
+})
+
+export const setStoreMemberPermissionsBodyPermissionsMax = 10;
+
+
+
+export const SetStoreMemberPermissionsBody = zod.object({
+  "permissions": zod.array(zod.string()).max(setStoreMemberPermissionsBodyPermissionsMax)
+})
+
+export const SetStoreMemberPermissionsResponse = zod.void()
+
+
+/**
+ * As sessões e renovações dele terminam na hora. O dono não se remove (409 `CANNOT_REMOVE_OWNER`).
+ * @summary Remover funcionário
+ */
+export const RemoveStoreMemberParams = zod.object({
+  "storeId": zod.uuid(),
+  "userId": zod.uuid()
+})
+
+export const RemoveStoreMemberResponse = zod.void()
+
+
+/**
+ * Só o dono. Sem dado do cliente.
+ * @summary Quem fez o quê na loja
+ */
+export const ListStoreActivityParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const ListStoreActivityResponse = zod.object({
+  "data": zod.array(zod.object({
+  "action": zod.string(),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.string().nullish()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Conta nova nasce com o e-mail confirmado. Conta existente confirma a senha atual. 410 `INVITATION_INVALID` para convite usado, revogado ou vencido.
+ * @summary Aceitar convite de funcionário
+ */
+export const acceptStoreInvitationBodyTokenMin = 20;
+export const acceptStoreInvitationBodyTokenMax = 200;
+
+
+
+export const AcceptStoreInvitationBody = zod.object({
+  "token": zod.string().min(acceptStoreInvitationBodyTokenMin).max(acceptStoreInvitationBodyTokenMax),
+  "password": zod.string()
+})
+
+export const AcceptStoreInvitationResponse = zod.object({
+  "tokens": zod.object({
+  "accessToken": zod.string().describe('JWT HS256 de 15 min'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "expiresIn": zod.int().describe('Segundos de validade do access token'),
+  "tokenType": zod.enum(['Bearer'])
+}),
+  "storeId": zod.uuid()
+})
+
+
+/**
+ * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida".
+ * @summary Fila de lojas
+ */
+export const listAdminStoresQueryCursorMax = 200;
+
+export const listAdminStoresQueryLimitDefault = 20;
+export const listAdminStoresQueryLimitMax = 50;
+
+
+
+export const ListAdminStoresQueryParams = zod.object({
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']).optional().describe('Padrão: in_review'),
+  "cursor": zod.string().max(listAdminStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listAdminStoresQueryLimitMax).default(listAdminStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListAdminStoresResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().nullish(),
+  "status": zod.string(),
+  "documentMasked": zod.string(),
+  "city": zod.string().nullish(),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "overdue": zod.boolean(),
+  "holderMismatch": zod.boolean()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão `stores:read`. Lista os documentos (sem arquivo), itens reprovados, histórico, conta de recebimento e outras lojas com o mesmo documento.
+ * @summary Detalhe da loja para análise
+ */
+export const GetAdminStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getAdminStoreResponseStoreSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getAdminStoreResponseStoreSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const GetAdminStoreResponse = zod.object({
+  "store": zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(getAdminStoreResponseStoreSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(getAdminStoreResponseStoreSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+}),
+  "owner": zod.object({
+  "email": zod.string(),
+  "name": zod.string()
+}),
+  "documents": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['id_front', 'id_back', 'address_proof', 'cnpj_card', 'responsible_id']),
+  "uploadedAt": zod.iso.datetime({"offset":true}),
+  "current": zod.boolean()
+})),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "history": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string(),
+  "at": zod.iso.datetime({"offset":true}),
+  "reason": zod.string().nullish()
+})),
+  "paymentAccount": zod.union([zod.object({
+  "status": zod.string(),
+  "holderDocumentMasked": zod.string(),
+  "holderMatchesStore": zod.boolean()
+}),zod.null()]),
+  "sameDocument": zod.array(zod.object({
+  "id": zod.uuid(),
+  "status": zod.string()
+})),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(getAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(getAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+})
+})
+
+
+/**
+ * Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
+ * @summary Editar dados da loja
+ */
+export const EditAdminStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const editAdminStoreBodyReasonMin = 5;
+export const editAdminStoreBodyReasonMax = 500;
+
+export const editAdminStoreBodyProfileNameMin = 2;
+export const editAdminStoreBodyProfileNameMax = 80;
+
+export const editAdminStoreBodyProfileExtraCategoryIdsMax = 2;
+
+export const editAdminStoreBodyProfileDescriptionMax = 300;
+
+export const editAdminStoreBodyProfileAddressCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
+export const editAdminStoreBodyProfileAddressNumberMax = 20;
+
+export const editAdminStoreBodyProfileAddressComplementMax = 80;
+
+export const editAdminStoreBodyProfileAddressStateMin = 2;
+export const editAdminStoreBodyProfileAddressStateMax = 2;
+
+
+
+export const EditAdminStoreBody = zod.object({
+  "reason": zod.string().min(editAdminStoreBodyReasonMin).max(editAdminStoreBodyReasonMax),
+  "profile": zod.object({
+  "name": zod.string().min(editAdminStoreBodyProfileNameMin).max(editAdminStoreBodyProfileNameMax).optional(),
+  "legalName": zod.string().optional(),
+  "fiscalResponsibilityAccepted": zod.boolean().optional(),
+  "mainCategoryId": zod.uuid().optional(),
+  "extraCategoryIds": zod.array(zod.uuid()).max(editAdminStoreBodyProfileExtraCategoryIdsMax).optional(),
+  "description": zod.string().max(editAdminStoreBodyProfileDescriptionMax).optional().describe('Até 300 caracteres Unicode'),
+  "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
+  "address": zod.object({
+  "cep": zod.string().regex(editAdminStoreBodyProfileAddressCepRegExp),
+  "number": zod.string().max(editAdminStoreBodyProfileAddressNumberMax),
+  "complement": zod.string().max(editAdminStoreBodyProfileAddressComplementMax).optional(),
+  "street": zod.string().optional(),
+  "neighborhood": zod.string().optional(),
+  "city": zod.string().optional(),
+  "state": zod.string().min(editAdminStoreBodyProfileAddressStateMin).max(editAdminStoreBodyProfileAddressStateMax).optional(),
+  "lat": zod.number().optional(),
+  "lng": zod.number().optional()
+}).optional(),
+  "logoAssetId": zod.uuid().nullish(),
+  "coverAssetId": zod.uuid().nullish()
+}).optional()
+})
+
+export const editAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const EditAdminStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(editAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco.
+ * @summary Abrir documento (URL de 5 min, auditada)
+ */
+export const AccessStoreDocumentParams = zod.object({
+  "storeId": zod.uuid(),
+  "documentId": zod.uuid()
+})
+
+export const AccessStoreDocumentBody = zod.object({
+  "reason": zod.enum(['initial_review', 'doubt', 'report'])
+})
+
+export const AccessStoreDocumentResponse = zod.object({
+  "url": zod.string(),
+  "expiresInSeconds": zod.int(),
+  "contentType": zod.string()
+})
+
+
+/**
+ * Permissão `stores:decide`. De "em análise" para "aprovada". 409 `STORE_ALREADY_DECIDED` ("Já decidida por [nome]") se outro admin decidiu antes.
+ * @summary Aprovar a loja
+ */
+export const ApproveStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const approveStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const approveStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const ApproveStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(approveStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(approveStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:decide`. Só de "suspensa". A loja volta visível se continuar atendendo a RN-03.
+ * @summary Reativar loja suspensa
+ */
+export const ReactivateStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const reactivateStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const reactivateStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const ReactivateStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(reactivateStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(reactivateStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:decide`. Um motivo por item reprovado (documento ou `store_data`). O prazo do SLA fica pausado até o reenvio.
+ * @summary Pedir correção (motivo por item)
+ */
+export const RequestStoreCorrectionParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const requestStoreCorrectionBodyItemsItemReasonMin = 3;
+export const requestStoreCorrectionBodyItemsItemReasonMax = 500;
+
+export const requestStoreCorrectionBodyItemsMax = 10;
+
+
+
+export const RequestStoreCorrectionBody = zod.object({
+  "items": zod.array(zod.object({
+  "item": zod.string().describe('Tipo do documento ou store_data'),
+  "reason": zod.string().min(requestStoreCorrectionBodyItemsItemReasonMin).max(requestStoreCorrectionBodyItemsItemReasonMax)
+})).min(1).max(requestStoreCorrectionBodyItemsMax)
+})
+
+export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const RequestStoreCorrectionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(requestStoreCorrectionResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(requestStoreCorrectionResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:decide`. Motivo obrigatório; novo cadastro só com o suporte.
+ * @summary Recusar a loja (final)
+ */
+export const RejectStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const rejectStoreBodyReasonMin = 5;
+export const rejectStoreBodyReasonMax = 500;
+
+
+
+export const RejectStoreBody = zod.object({
+  "reason": zod.string().min(rejectStoreBodyReasonMin).max(rejectStoreBodyReasonMax)
+})
+
+export const rejectStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const rejectStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const RejectStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(rejectStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(rejectStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:decide`. Só de "aprovada"; motivo obrigatório; a loja some da API pública na hora.
+ * @summary Suspender a loja
+ */
+export const SuspendStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const suspendStoreBodyReasonMin = 5;
+export const suspendStoreBodyReasonMax = 500;
+
+
+
+export const SuspendStoreBody = zod.object({
+  "reason": zod.string().min(suspendStoreBodyReasonMin).max(suspendStoreBodyReasonMax)
+})
+
+export const suspendStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const suspendStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const SuspendStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(suspendStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(suspendStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
+})
+
+
+/**
+ * Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
+ * @summary Editar configuração da loja (admin)
+ */
+export const EditAdminStoreSettingsParams = zod.object({
+  "storeId": zod.uuid(),
+  "section": zod.enum(['hours', 'holidays', 'delivery', 'pickup', 'exchange-policy'])
+})
+
+export const EditAdminStoreSettingsBody = zod.looseObject({
+
+}).describe('Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)')
+
+export const EditAdminStoreSettingsResponse = zod.void()
+
+
+/**
+ * Permissão `stores:decide` com TOTP recente. Motivo (mín. 10 caracteres) e auditoria.
+ * @summary Liberar conta com titular divergente
+ */
+export const ReleaseStorePaymentAccountParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const releaseStorePaymentAccountBodyReasonMin = 10;
+export const releaseStorePaymentAccountBodyReasonMax = 500;
+
+
+
+export const ReleaseStorePaymentAccountBody = zod.object({
+  "reason": zod.string().min(releaseStorePaymentAccountBodyReasonMin).max(releaseStorePaymentAccountBodyReasonMax)
+})
+
+export const ReleaseStorePaymentAccountResponse = zod.void()
+
+
+/**
+ * Permissão `stores:decide`. `decision`: approve ou reject.
+ * @summary Decidir alteração de nome pendente
+ */
+export const DecideStoreDataReviewParams = zod.object({
+  "storeId": zod.uuid(),
+  "decision": zod.enum(['approve', 'reject'])
+})
+
+export const decideStoreDataReviewBodyReasonMin = 5;
+export const decideStoreDataReviewBodyReasonMax = 500;
+
+
+
+export const DecideStoreDataReviewBody = zod.object({
+  "reason": zod.string().min(decideStoreDataReviewBodyReasonMin).max(decideStoreDataReviewBodyReasonMax)
+})
+
+export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const DecideStoreDataReviewResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "documentType": zod.enum(['cpf', 'cnpj']),
+  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
+  "legalName": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "whatsapp": zod.string().nullish(),
+  "mainCategoryId": zod.uuid().nullish(),
+  "extraCategoryIds": zod.array(zod.uuid()),
+  "address": zod.union([zod.object({
+  "cep": zod.string(),
+  "street": zod.string().nullish(),
+  "number": zod.string().nullable(),
+  "complement": zod.string().nullish(),
+  "neighborhood": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "lat": zod.number().nullish(),
+  "lng": zod.number().nullish()
+}),zod.null()]).optional(),
+  "logo": zod.record(zod.string(), zod.string()).nullish(),
+  "cover": zod.record(zod.string(), zod.string()).nullish(),
+  "pendingReview": zod.boolean(),
+  "reviewItems": zod.array(zod.object({
+  "item": zod.string(),
+  "reason": zod.string()
+})),
+  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "role": zod.string().optional().describe('Só em /stores/mine'),
+  "settings": zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(decideStoreDataReviewResponseSettingsHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(decideStoreDataReviewResponseSettingsHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int()
+})
+}),
+  "lowStockThreshold": zod.int()
+}).optional()
 })

@@ -20,7 +20,7 @@ import {
   type StoreDocumentKind,
 } from './db/schema.js';
 import { isValidDocument, maskDocument, normalizeDocument } from './domain/document.js';
-import { canTransitionStore, isEditableByMerchant, type StoreActor, type StoreStatus } from './domain/state.js';
+import { canTransitionStore, isEditableByMerchant, type StoreActor } from './domain/state.js';
 import { GEOCODING_PROVIDER, type GeocodingProvider } from './geocoding.js';
 import type { ProfileInput } from './stores.schemas.js';
 
@@ -150,7 +150,7 @@ export class StoresService {
 
   /** O lojista edita dados enquanto rascunho, em correção ou aprovada; em análise, recusada ou suspensa não. */
   assertProfileEditable(store: Store): void {
-    if (isEditableByMerchant(store.status as StoreStatus) || store.status === 'approved') return;
+    if (isEditableByMerchant(store.status) || store.status === 'approved') return;
     throw errors.conflict('STORE_NOT_EDITABLE', 'A loja não pode ser editada agora', store.status === 'in_review' ? 'Ela está em análise.' : store.status === 'suspended' ? 'Loja suspensa. Fale com o suporte.' : 'Loja recusada. Fale com o suporte.');
   }
 
@@ -280,7 +280,7 @@ export class StoresService {
   async attachDocument(store: Store, kind: StoreDocumentKind, uploadId: string, principal: Principal): Promise<void> {
     this.assertProfileEditable(store);
     if (store.status === 'approved') throw errors.conflict('STORE_NOT_EDITABLE', 'Documentos só mudam durante o cadastro ou a correção');
-    if (!REQUIRED_DOCUMENTS[store.documentType as 'cpf' | 'cnpj'].includes(kind)) {
+    if (!REQUIRED_DOCUMENTS[store.documentType].includes(kind)) {
       throw errors.unprocessable('DOCUMENT_KIND_NOT_REQUIRED', 'Documento não exigido para este cadastro', { errors: [{ field: 'kind', message: 'Esse documento não é exigido para o seu tipo de cadastro.' }] });
     }
     const asset = await this.media.requireReady(uploadId, { storeId: store.id, purposes: ['store_document'] });
@@ -318,7 +318,7 @@ export class StoresService {
       .from(storeDocuments)
       .where(and(eq(storeDocuments.storeId, store.id), isNull(storeDocuments.supersededAt)));
     const have = new Set(docs.map((d) => d.kind));
-    for (const kind of REQUIRED_DOCUMENTS[store.documentType as 'cpf' | 'cnpj']) {
+    for (const kind of REQUIRED_DOCUMENTS[store.documentType]) {
       if (!have.has(kind)) missing.push({ field: `documents.${kind}`, message: `Falta o documento: ${DOCUMENT_LABELS[kind]}.` });
     }
     if (!(await this.paymentAccountStatus(store.id))) missing.push({ field: 'paymentAccount', message: 'Conecte a conta de recebimento.' });
@@ -333,7 +333,7 @@ export class StoresService {
     return this.db.transaction(async (tx) => {
       const [locked] = await tx.select().from(stores).where(eq(stores.id, store.id)).for('update');
       if (!locked) throw errors.notFound('Loja não encontrada.');
-      if (!canTransitionStore(locked.status as StoreStatus, 'in_review', 'merchant')) {
+      if (!canTransitionStore(locked.status, 'in_review', 'merchant')) {
         throw errors.conflict('INVALID_STORE_TRANSITION', 'A loja não pode ser enviada agora', `Status atual: ${locked.status}.`);
       }
       const now = new Date();

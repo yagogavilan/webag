@@ -12,7 +12,7 @@
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
  *
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 import { apiFetch } from '../http/api-fetch.js';
 export type HealthIndicatorStatus = typeof HealthIndicatorStatus[keyof typeof HealthIndicatorStatus];
@@ -834,6 +834,754 @@ export interface PaymentAlertPage {
   nextCursor: string | null;
 }
 
+export type UploadCreateRequestPurpose = typeof UploadCreateRequestPurpose[keyof typeof UploadCreateRequestPurpose];
+
+
+export const UploadCreateRequestPurpose = {
+  store_logo: 'store_logo',
+  store_cover: 'store_cover',
+  product_image: 'product_image',
+  store_document: 'store_document',
+} as const;
+
+export interface UploadCreateRequest {
+  storeId: string;
+  purpose: UploadCreateRequestPurpose;
+  contentType: string;
+  /** @minimum 1 */
+  sizeBytes: number;
+}
+
+export type UploadCreatedUploadFields = {[key: string]: string};
+
+export type UploadCreatedUpload = {
+  url: string;
+  fields: UploadCreatedUploadFields;
+  expiresAt: string;
+};
+
+export interface UploadCreated {
+  id: string;
+  upload: UploadCreatedUpload;
+}
+
+export type MediaAssetPurpose = typeof MediaAssetPurpose[keyof typeof MediaAssetPurpose];
+
+
+export const MediaAssetPurpose = {
+  store_logo: 'store_logo',
+  store_cover: 'store_cover',
+  product_image: 'product_image',
+  store_document: 'store_document',
+} as const;
+
+export type MediaAssetStatus = typeof MediaAssetStatus[keyof typeof MediaAssetStatus];
+
+
+export const MediaAssetStatus = {
+  pending: 'pending',
+  ready: 'ready',
+  rejected: 'rejected',
+} as const;
+
+/**
+ * Largura (px) para URL pública da variante WebP
+ * @nullable
+ */
+export type MediaAssetUrls = {[key: string]: string} | null;
+
+export interface MediaAsset {
+  id: string;
+  purpose: MediaAssetPurpose;
+  status: MediaAssetStatus;
+  /** @nullable */
+  contentType?: string | null;
+  /** @nullable */
+  sizeBytes?: number | null;
+  /** @nullable */
+  width?: number | null;
+  /** @nullable */
+  height?: number | null;
+  /**
+     * Largura (px) para URL pública da variante WebP
+     * @nullable
+     */
+  urls?: MediaAssetUrls;
+  /** @nullable */
+  rejectionReason?: string | null;
+  createdAt: string;
+}
+
+export type CreateStoreRequestDocumentType = typeof CreateStoreRequestDocumentType[keyof typeof CreateStoreRequestDocumentType];
+
+
+export const CreateStoreRequestDocumentType = {
+  cpf: 'cpf',
+  cnpj: 'cnpj',
+} as const;
+
+export interface CreateStoreRequest {
+  documentType: CreateStoreRequestDocumentType;
+  /**
+     * @minLength 11
+     * @maxLength 20
+     */
+  documentNumber: string;
+  /**
+     * @minLength 3
+     * @maxLength 160
+     */
+  legalName?: string;
+  fiscalResponsibilityAccepted?: boolean;
+}
+
+export interface StoreAddressInput {
+  /** @pattern ^\d{5}-?\d{3}$ */
+  cep: string;
+  /** @maxLength 20 */
+  number: string;
+  /** @maxLength 80 */
+  complement?: string;
+  street?: string;
+  neighborhood?: string;
+  city?: string;
+  /**
+     * @minLength 2
+     * @maxLength 2
+     */
+  state?: string;
+  lat?: number;
+  lng?: number;
+}
+
+export interface UpdateStoreProfileRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name?: string;
+  legalName?: string;
+  fiscalResponsibilityAccepted?: boolean;
+  mainCategoryId?: string;
+  /** @maxItems 2 */
+  extraCategoryIds?: string[];
+  /**
+     * Até 300 caracteres Unicode
+     * @maxLength 300
+     */
+  description?: string;
+  phone?: string;
+  whatsapp?: string;
+  address?: StoreAddressInput;
+  /** @nullable */
+  logoAssetId?: string | null;
+  /** @nullable */
+  coverAssetId?: string | null;
+}
+
+export interface StoreAddress {
+  cep: string;
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  number: string | null;
+  /** @nullable */
+  complement?: string | null;
+  /** @nullable */
+  neighborhood?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  lat?: number | null;
+  /** @nullable */
+  lng?: number | null;
+}
+
+export type StoreStatus = typeof StoreStatus[keyof typeof StoreStatus];
+
+
+export const StoreStatus = {
+  draft: 'draft',
+  in_review: 'in_review',
+  correction_requested: 'correction_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  suspended: 'suspended',
+} as const;
+
+export type StoreDocumentType = typeof StoreDocumentType[keyof typeof StoreDocumentType];
+
+
+export const StoreDocumentType = {
+  cpf: 'cpf',
+  cnpj: 'cnpj',
+} as const;
+
+/**
+ * @nullable
+ */
+export type StoreLogo = {[key: string]: string} | null;
+
+/**
+ * @nullable
+ */
+export type StoreCover = {[key: string]: string} | null;
+
+export type StoreReviewItemsItem = {
+  item: string;
+  reason: string;
+};
+
+export interface Interval {
+  /** @pattern ^([01]\d|2[0-3]):[0-5]\d$ */
+  start: string;
+  /** @pattern ^([01]\d|2[0-3]):[0-5]\d$ */
+  end: string;
+}
+
+export type StoreSettingsHoursItem = {
+  weekday: number;
+  intervals: Interval[];
+};
+
+export type StoreSettingsHolidaysItem = {
+  date: string;
+  /** @nullable */
+  label?: string | null;
+};
+
+export type StoreSettingsPause = {
+  active: boolean;
+  /** @nullable */
+  until: string | null;
+  indefinitely: boolean;
+};
+
+export type StoreSettingsDeliveryTiersItem = {
+  fromKm: number;
+  toKm: number;
+  feeCents: number;
+};
+
+export type StoreSettingsDelivery = {
+  acceptsDelivery: boolean;
+  radiusKm: number;
+  feeMode: string;
+  feeFixedCents: number;
+  tiers: StoreSettingsDeliveryTiersItem[];
+  minOrderCents: number;
+  freeAboveCents: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+};
+
+export type StoreSettingsPickup = {
+  enabled: boolean;
+  useStoreAddress: boolean;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  instructions?: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+};
+
+export type StoreSettingsExchangePolicyLegalFloor = {
+  withdrawalDays: number;
+  defectDays: number;
+};
+
+export type StoreSettingsExchangePolicy = {
+  voluntaryDays: number;
+  collectionFeeCents: number;
+  version: number;
+  legalFloor: StoreSettingsExchangePolicyLegalFloor;
+};
+
+export interface StoreSettings {
+  isOpenNow: boolean;
+  hours: StoreSettingsHoursItem[];
+  holidays: StoreSettingsHolidaysItem[];
+  pause: StoreSettingsPause;
+  delivery: StoreSettingsDelivery;
+  pickup: StoreSettingsPickup;
+  exchangePolicy: StoreSettingsExchangePolicy;
+  lowStockThreshold: number;
+}
+
+export interface Store {
+  id: string;
+  status: StoreStatus;
+  documentType: StoreDocumentType;
+  /** Inteiro para dono e admin; mascarado para funcionário */
+  document: string;
+  /** @nullable */
+  legalName?: string | null;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
+  mainCategoryId?: string | null;
+  extraCategoryIds: string[];
+  address?: StoreAddress | null;
+  /** @nullable */
+  logo?: StoreLogo;
+  /** @nullable */
+  cover?: StoreCover;
+  pendingReview: boolean;
+  reviewItems: StoreReviewItemsItem[];
+  /** @nullable */
+  submittedAt?: string | null;
+  /** @nullable */
+  decisionReason?: string | null;
+  createdAt: string;
+  /** Só em /stores/mine */
+  role?: string;
+  settings?: StoreSettings;
+}
+
+export type OnboardingStatusMissingItem = {
+  field: string;
+  message: string;
+};
+
+/**
+ * @nullable
+ */
+export type OnboardingStatusPaymentAccount = typeof OnboardingStatusPaymentAccount[keyof typeof OnboardingStatusPaymentAccount] | null;
+
+
+export const OnboardingStatusPaymentAccount = {
+  active: 'active',
+  under_review: 'under_review',
+} as const;
+
+export type OnboardingStatusHistoryItem = {
+  /** @nullable */
+  from?: string | null;
+  to: string;
+  at: string;
+};
+
+export interface OnboardingStatus {
+  status: string;
+  complete: boolean;
+  missing: OnboardingStatusMissingItem[];
+  /** @nullable */
+  paymentAccount: OnboardingStatusPaymentAccount;
+  history: OnboardingStatusHistoryItem[];
+}
+
+export type StoreDocumentKind = typeof StoreDocumentKind[keyof typeof StoreDocumentKind];
+
+
+export const StoreDocumentKind = {
+  id_front: 'id_front',
+  id_back: 'id_back',
+  address_proof: 'address_proof',
+  cnpj_card: 'cnpj_card',
+  responsible_id: 'responsible_id',
+} as const;
+
+export interface StoreDocument {
+  id: string;
+  kind: StoreDocumentKind;
+  uploadedAt: string;
+  current: boolean;
+}
+
+export type AttachDocumentRequestKind = typeof AttachDocumentRequestKind[keyof typeof AttachDocumentRequestKind];
+
+
+export const AttachDocumentRequestKind = {
+  id_front: 'id_front',
+  id_back: 'id_back',
+  address_proof: 'address_proof',
+  cnpj_card: 'cnpj_card',
+  responsible_id: 'responsible_id',
+} as const;
+
+export interface AttachDocumentRequest {
+  kind: AttachDocumentRequestKind;
+  uploadId: string;
+}
+
+export type HoursRequestDaysItem = {
+  /**
+     * 0 = domingo
+     * @minimum 0
+     * @maximum 6
+     */
+  weekday: number;
+  /** @maxItems 3 */
+  intervals: Interval[];
+};
+
+export interface HoursRequest {
+  /** @maxItems 7 */
+  days: HoursRequestDaysItem[];
+}
+
+export type HolidaysRequestHolidaysItem = {
+  date: string;
+  /** @maxLength 60 */
+  label?: string;
+};
+
+export interface HolidaysRequest {
+  /** @maxItems 366 */
+  holidays: HolidaysRequestHolidaysItem[];
+}
+
+export type PauseRequestKind = typeof PauseRequestKind[keyof typeof PauseRequestKind];
+
+
+export const PauseRequestKind = {
+  '30m': '30m',
+  '1h': '1h',
+  '2h': '2h',
+  end_of_day: 'end_of_day',
+  until_resume: 'until_resume',
+} as const;
+
+export interface PauseRequest {
+  kind: PauseRequestKind;
+}
+
+export type DeliveryRequestFeeMode = typeof DeliveryRequestFeeMode[keyof typeof DeliveryRequestFeeMode];
+
+
+export const DeliveryRequestFeeMode = {
+  fixed: 'fixed',
+  by_distance: 'by_distance',
+} as const;
+
+export type DeliveryRequestTiersItem = {
+  /** @minimum 0 */
+  fromKm: number;
+  /** @minimum 0 */
+  toKm: number;
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  feeCents: number;
+};
+
+export interface DeliveryRequest {
+  acceptsDelivery: boolean;
+  /**
+     * km, até 2 casas
+     * @minimum 1
+     */
+  radiusKm: number;
+  feeMode: DeliveryRequestFeeMode;
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  feeFixedCents?: number;
+  /** @maxItems 5 */
+  tiers?: DeliveryRequestTiersItem[];
+  /** @minimum 0 */
+  minOrderCents: number;
+  /**
+     * 0 desliga
+     * @minimum 0
+     */
+  freeAboveCents?: number;
+  /** @minimum 1 */
+  etaMinMinutes: number;
+  /** @maximum 1440 */
+  etaMaxMinutes: number;
+}
+
+export interface DeliveryPreviewRequest {
+  /** @pattern ^\d{5}-?\d{3}$ */
+  cep?: string;
+  lat?: number;
+  lng?: number;
+  /** @minimum 0 */
+  subtotalCents?: number;
+}
+
+export interface DeliveryPreview {
+  available: boolean;
+  /** @nullable */
+  distanceM: number | null;
+  /** @nullable */
+  feeCents: number | null;
+  freeShipping: boolean;
+  belowMinimum: boolean;
+}
+
+export interface PickupRequest {
+  enabled: boolean;
+  useStoreAddress?: boolean;
+  /** @maxLength 200 */
+  address?: string;
+  /** @maxLength 200 */
+  instructions?: string;
+  /** @minimum 1 */
+  prepMinMinutes: number;
+  /** @maximum 1440 */
+  prepMaxMinutes: number;
+}
+
+export interface ExchangePolicyRequest {
+  /**
+     * 0 = não aceita troca voluntária
+     * @minimum 0
+     * @maximum 30
+     */
+  voluntaryDays: number;
+  /** @minimum 0 */
+  collectionFeeCents?: number;
+  confirmDefault?: boolean;
+}
+
+export interface LowStockRequest {
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  threshold: number | null;
+}
+
+export interface CepResult {
+  cep: string;
+  street: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+}
+
+export type PaymentAccountView = {
+  connected: false;
+} | {
+  connected: true;
+  provider: string;
+  status: 'active' | 'under_review';
+  holderDocumentMasked: string;
+  holderMatchesStore: boolean;
+  connectedAt: string;
+};
+
+export interface PaymentAccountConnectStart {
+  authorizationUrl: string;
+  state: string;
+  expiresInSeconds: number;
+}
+
+export interface PaymentAccountCallbackRequest {
+  /** @maxLength 200 */
+  code: string;
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  state: string;
+}
+
+export interface StaffInviteRequest {
+  email: string;
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  name: string;
+  /** @maxItems 10 */
+  permissions: string[];
+}
+
+export interface StaffInviteResponse {
+  invitationId: string;
+  expiresAt: string;
+}
+
+export interface MemberPermissionsRequest {
+  /** @maxItems 10 */
+  permissions: string[];
+}
+
+export type TeamViewMembersItemRole = typeof TeamViewMembersItemRole[keyof typeof TeamViewMembersItemRole];
+
+
+export const TeamViewMembersItemRole = {
+  owner: 'owner',
+  staff: 'staff',
+} as const;
+
+export type TeamViewMembersItem = {
+  userId: string;
+  name: string;
+  email: string;
+  role: TeamViewMembersItemRole;
+  permissions: string[];
+  since: string;
+};
+
+export type TeamViewInvitationsItem = {
+  id: string;
+  email: string;
+  name: string;
+  permissions: string[];
+  expiresAt: string;
+};
+
+export interface TeamView {
+  members: TeamViewMembersItem[];
+  invitations: TeamViewInvitationsItem[];
+}
+
+export interface StoreActivity {
+  action: string;
+  at: string;
+  /** @nullable */
+  actor?: string | null;
+}
+
+export interface AcceptStoreInvitationRequest {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  token: string;
+  password: string;
+}
+
+export interface AcceptStoreInvitationResponse {
+  tokens: TokenPair;
+  storeId: string;
+}
+
+export interface AdminStoreListItem {
+  id: string;
+  /** @nullable */
+  name?: string | null;
+  status: string;
+  documentMasked: string;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  submittedAt?: string | null;
+  overdue: boolean;
+  holderMismatch: boolean;
+}
+
+export type AdminStoreDetailOwner = {
+  email: string;
+  name: string;
+};
+
+export type AdminStoreDetailReviewItemsItem = {
+  item: string;
+  reason: string;
+};
+
+export type AdminStoreDetailHistoryItem = {
+  /** @nullable */
+  from?: string | null;
+  to: string;
+  at: string;
+  /** @nullable */
+  reason?: string | null;
+};
+
+export type AdminStoreDetailPaymentAccount = {
+  status: string;
+  holderDocumentMasked: string;
+  holderMatchesStore: boolean;
+} | null;
+
+export type AdminStoreDetailSameDocumentItem = {
+  id: string;
+  status: string;
+};
+
+export interface AdminStoreDetail {
+  store: Store;
+  owner: AdminStoreDetailOwner;
+  documents: StoreDocument[];
+  reviewItems: AdminStoreDetailReviewItemsItem[];
+  history: AdminStoreDetailHistoryItem[];
+  paymentAccount: AdminStoreDetailPaymentAccount;
+  sameDocument: AdminStoreDetailSameDocumentItem[];
+  settings: StoreSettings;
+}
+
+export type DocumentAccessRequestReason = typeof DocumentAccessRequestReason[keyof typeof DocumentAccessRequestReason];
+
+
+export const DocumentAccessRequestReason = {
+  initial_review: 'initial_review',
+  doubt: 'doubt',
+  report: 'report',
+} as const;
+
+export interface DocumentAccessRequest {
+  reason: DocumentAccessRequestReason;
+}
+
+export interface DocumentAccessResponse {
+  url: string;
+  expiresInSeconds: number;
+  contentType: string;
+}
+
+export interface DecisionReasonRequest {
+  /**
+     * @minLength 5
+     * @maxLength 500
+     */
+  reason: string;
+}
+
+export type CorrectionRequestItemsItem = {
+  /** Tipo do documento ou store_data */
+  item: string;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason: string;
+};
+
+export interface CorrectionRequest {
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  items: CorrectionRequestItemsItem[];
+}
+
+export interface AdminStorePatchRequest {
+  /**
+     * @minLength 5
+     * @maxLength 500
+     */
+  reason: string;
+  profile?: UpdateStoreProfileRequest;
+}
+
+export interface ReleaseAccountRequest {
+  /**
+     * @minLength 10
+     * @maxLength 500
+     */
+  reason: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -926,6 +1674,63 @@ export type ListPaymentAlertsParams = {
    */
   limit?: LimitParameter;
 };
+
+export type ListMyStores200 = {
+  data: Store[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListStoreDocuments200 = {
+  data: StoreDocument[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListStoreActivity200 = {
+  data: StoreActivity[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListAdminStoresParams = {
+  /** Padrão: in_review */
+  status?: ListAdminStoresStatus;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListAdminStoresStatus = typeof ListAdminStoresStatus[keyof typeof ListAdminStoresStatus];
+
+
+export const ListAdminStoresStatus = {
+  draft: 'draft',
+  in_review: 'in_review',
+  correction_requested: 'correction_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  suspended: 'suspended',
+} as const;
+
+export type ListAdminStores200 = {
+  data: AdminStoreListItem[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+/**
+ * Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
+ */
+export type EditAdminStoreSettingsBody = { [key: string]: unknown };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -4161,5 +4966,2781 @@ export const completeResetPassword = async (completeResetPasswordRequest: Comple
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(completeResetPasswordRequest)
+  }
+);}
+
+
+
+export type createUploadResponse201 = {
+  data: UploadCreated
+  status: 201
+}
+
+export type createUploadResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createUploadResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createUploadResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createUploadResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createUploadResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createUploadResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createUploadResponseSuccess = (createUploadResponse201) & {
+  headers: Headers;
+};
+export type createUploadResponseError = (createUploadResponse400 | createUploadResponse401 | createUploadResponse403 | createUploadResponse404 | createUploadResponse422 | createUploadResponse429) & {
+  headers: Headers;
+};
+
+export type createUploadResponse = (createUploadResponseSuccess | createUploadResponseError)
+
+export const getCreateUploadUrl = () => {
+
+
+
+
+  return `/v1/uploads`
+}
+
+/**
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404.
+ * @summary Pedir um upload (POST pré-assinado)
+ */
+export const createUpload = async (uploadCreateRequest: UploadCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createUploadResponse> => {
+
+  return apiFetch<createUploadResponse>(getCreateUploadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(uploadCreateRequest)
+  }
+);}
+
+
+
+export type completeUploadResponse200 = {
+  data: MediaAsset
+  status: 200
+}
+
+export type completeUploadResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type completeUploadResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type completeUploadResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type completeUploadResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type completeUploadResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type completeUploadResponseSuccess = (completeUploadResponse200) & {
+  headers: Headers;
+};
+export type completeUploadResponseError = (completeUploadResponse401 | completeUploadResponse404 | completeUploadResponse409 | completeUploadResponse422 | completeUploadResponse429) & {
+  headers: Headers;
+};
+
+export type completeUploadResponse = (completeUploadResponseSuccess | completeUploadResponseError)
+
+export const getCompleteUploadUrl = (id: string,) => {
+
+
+
+
+  return `/v1/uploads/${id}/complete`
+}
+
+/**
+ * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
+ * @summary Concluir o upload (valida e processa)
+ */
+export const completeUpload = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<completeUploadResponse> => {
+
+  return apiFetch<completeUploadResponse>(getCompleteUploadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getUploadResponse200 = {
+  data: MediaAsset
+  status: 200
+}
+
+export type getUploadResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getUploadResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getUploadResponseSuccess = (getUploadResponse200) & {
+  headers: Headers;
+};
+export type getUploadResponseError = (getUploadResponse401 | getUploadResponse404) & {
+  headers: Headers;
+};
+
+export type getUploadResponse = (getUploadResponseSuccess | getUploadResponseError)
+
+export const getGetUploadUrl = (id: string,) => {
+
+
+
+
+  return `/v1/uploads/${id}`
+}
+
+/**
+ * Só o dono do upload; outro usuário recebe 404.
+ * @summary Consultar o estado de um upload
+ */
+export const getUpload = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getUploadResponse> => {
+
+  return apiFetch<getUploadResponse>(getGetUploadUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createStoreResponse201 = {
+  data: Store
+  status: 201
+}
+
+export type createStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createStoreResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createStoreResponseSuccess = (createStoreResponse201) & {
+  headers: Headers;
+};
+export type createStoreResponseError = (createStoreResponse400 | createStoreResponse401 | createStoreResponse403 | createStoreResponse409 | createStoreResponse422 | createStoreResponse429) & {
+  headers: Headers;
+};
+
+export type createStoreResponse = (createStoreResponseSuccess | createStoreResponseError)
+
+export const getCreateStoreUrl = () => {
+
+
+
+
+  return `/v1/stores`
+}
+
+/**
+ * Papel de lojista e e-mail confirmado. CPF ou CNPJ (numérico ou alfanumérico) com dígito verificador; 1 documento = 1 loja e 1 conta = 1 loja (409 `DOCUMENT_IN_USE` / `STORE_ALREADY_EXISTS`). CNPJ pede `legalName` e `fiscalResponsibilityAccepted` (422 `FISCAL_ACCEPTANCE_REQUIRED`).
+ * @summary Criar a loja (etapa 1 do onboarding)
+ */
+export const createStore = async (createStoreRequest: CreateStoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createStoreResponse> => {
+
+  return apiFetch<createStoreResponse>(getCreateStoreUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createStoreRequest)
+  }
+);}
+
+
+
+export type listMyStoresResponse200 = {
+  data: ListMyStores200
+  status: 200
+}
+
+export type listMyStoresResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listMyStoresResponseSuccess = (listMyStoresResponse200) & {
+  headers: Headers;
+};
+export type listMyStoresResponseError = (listMyStoresResponse401) & {
+  headers: Headers;
+};
+
+export type listMyStoresResponse = (listMyStoresResponseSuccess | listMyStoresResponseError)
+
+export const getListMyStoresUrl = () => {
+
+
+
+
+  return `/v1/stores/mine`
+}
+
+/**
+ * Uma por conta na 1.0.
+ * @summary Lojas das quais sou membro
+ */
+export const listMyStores = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listMyStoresResponse> => {
+
+  return apiFetch<listMyStoresResponse>(getListMyStoresUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type getStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreResponseSuccess = (getStoreResponse200) & {
+  headers: Headers;
+};
+export type getStoreResponseError = (getStoreResponse401 | getStoreResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreResponse = (getStoreResponseSuccess | getStoreResponseError)
+
+export const getGetStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}`
+}
+
+/**
+ * Qualquer membro. O CPF/CNPJ vem inteiro só para o dono; funcionário vê mascarado. `settings` só para o dono.
+ * @summary Ver a loja
+ */
+export const getStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreResponse> => {
+
+  return apiFetch<getStoreResponse>(getGetStoreUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateStoreProfileResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type updateStoreProfileResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateStoreProfileResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateStoreProfileResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateStoreProfileResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateStoreProfileResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateStoreProfileResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateStoreProfileResponseSuccess = (updateStoreProfileResponse200) & {
+  headers: Headers;
+};
+export type updateStoreProfileResponseError = (updateStoreProfileResponse400 | updateStoreProfileResponse401 | updateStoreProfileResponse403 | updateStoreProfileResponse404 | updateStoreProfileResponse409 | updateStoreProfileResponse422) & {
+  headers: Headers;
+};
+
+export type updateStoreProfileResponse = (updateStoreProfileResponseSuccess | updateStoreProfileResponseError)
+
+export const getUpdateStoreProfileUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/profile`
+}
+
+/**
+ * Permissão `settings`. Em rascunho, correção pedida ou aprovada. Alterar o nome depois de aprovada fica pendente de análise (`pendingReview`), e a loja segue com o nome antigo. O endereço é resolvido pelo CEP (coordenada gravada em PostGIS); cidade fora das regiões ativas: 422 `CITY_NOT_SERVED`.
+ * @summary Editar o perfil da loja (dono)
+ */
+export const updateStoreProfile = async (storeId: string,
+    updateStoreProfileRequest: UpdateStoreProfileRequest, options?: Parameters<typeof apiFetch>[1]): Promise<updateStoreProfileResponse> => {
+
+  return apiFetch<updateStoreProfileResponse>(getUpdateStoreProfileUrl(storeId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateStoreProfileRequest)
+  }
+);}
+
+
+
+export type getStoreOnboardingResponse200 = {
+  data: OnboardingStatus
+  status: 200
+}
+
+export type getStoreOnboardingResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreOnboardingResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreOnboardingResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreOnboardingResponseSuccess = (getStoreOnboardingResponse200) & {
+  headers: Headers;
+};
+export type getStoreOnboardingResponseError = (getStoreOnboardingResponse401 | getStoreOnboardingResponse403 | getStoreOnboardingResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreOnboardingResponse = (getStoreOnboardingResponseSuccess | getStoreOnboardingResponseError)
+
+export const getGetStoreOnboardingUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/onboarding`
+}
+
+/**
+ * Permissão `settings`.
+ * @summary O que falta para enviar à análise
+ */
+export const getStoreOnboarding = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreOnboardingResponse> => {
+
+  return apiFetch<getStoreOnboardingResponse>(getGetStoreOnboardingUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listStoreDocumentsResponse200 = {
+  data: ListStoreDocuments200
+  status: 200
+}
+
+export type listStoreDocumentsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreDocumentsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreDocumentsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreDocumentsResponseSuccess = (listStoreDocumentsResponse200) & {
+  headers: Headers;
+};
+export type listStoreDocumentsResponseError = (listStoreDocumentsResponse401 | listStoreDocumentsResponse403 | listStoreDocumentsResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreDocumentsResponse = (listStoreDocumentsResponseSuccess | listStoreDocumentsResponseError)
+
+export const getListStoreDocumentsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/documents`
+}
+
+/**
+ * Permissão `settings`. O dono vê tipo, data e se é o vigente, nunca o arquivo nem a chave (R-28b).
+ * @summary Documentos enviados (sem download)
+ */
+export const listStoreDocuments = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreDocumentsResponse> => {
+
+  return apiFetch<listStoreDocumentsResponse>(getListStoreDocumentsUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type attachStoreDocumentResponse204 = {
+  data: void
+  status: 204
+}
+
+export type attachStoreDocumentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type attachStoreDocumentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type attachStoreDocumentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type attachStoreDocumentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type attachStoreDocumentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type attachStoreDocumentResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type attachStoreDocumentResponseSuccess = (attachStoreDocumentResponse204) & {
+  headers: Headers;
+};
+export type attachStoreDocumentResponseError = (attachStoreDocumentResponse400 | attachStoreDocumentResponse401 | attachStoreDocumentResponse403 | attachStoreDocumentResponse404 | attachStoreDocumentResponse409 | attachStoreDocumentResponse422) & {
+  headers: Headers;
+};
+
+export type attachStoreDocumentResponse = (attachStoreDocumentResponseSuccess | attachStoreDocumentResponseError)
+
+export const getAttachStoreDocumentUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/documents`
+}
+
+/**
+ * O reenvio substitui o anterior e mantém o histórico. CPF exige `id_front`, `id_back` e `address_proof`; CNPJ exige `cnpj_card` e `responsible_id`.
+ * @summary Anexar documento (upload concluído)
+ */
+export const attachStoreDocument = async (storeId: string,
+    attachDocumentRequest: AttachDocumentRequest, options?: Parameters<typeof apiFetch>[1]): Promise<attachStoreDocumentResponse> => {
+
+  return apiFetch<attachStoreDocumentResponse>(getAttachStoreDocumentUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(attachDocumentRequest)
+  }
+);}
+
+
+
+export type submitStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type submitStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type submitStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type submitStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type submitStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type submitStoreResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type submitStoreResponseSuccess = (submitStoreResponse200) & {
+  headers: Headers;
+};
+export type submitStoreResponseError = (submitStoreResponse401 | submitStoreResponse403 | submitStoreResponse404 | submitStoreResponse409 | submitStoreResponse422) & {
+  headers: Headers;
+};
+
+export type submitStoreResponse = (submitStoreResponseSuccess | submitStoreResponseError)
+
+export const getSubmitStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/submit`
+}
+
+/**
+ * 422 `ONBOARDING_INCOMPLETE` lista o que falta (campo e mensagem). Vale também para o reenvio depois de "correção pedida" (só os itens reprovados precisam ser corrigidos).
+ * @summary Enviar a loja à análise
+ */
+export const submitStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<submitStoreResponse> => {
+
+  return apiFetch<submitStoreResponse>(getSubmitStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getStoreSettingsResponse200 = {
+  data: StoreSettings
+  status: 200
+}
+
+export type getStoreSettingsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreSettingsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreSettingsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreSettingsResponseSuccess = (getStoreSettingsResponse200) & {
+  headers: Headers;
+};
+export type getStoreSettingsResponseError = (getStoreSettingsResponse401 | getStoreSettingsResponse403 | getStoreSettingsResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreSettingsResponse = (getStoreSettingsResponseSuccess | getStoreSettingsResponseError)
+
+export const getGetStoreSettingsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/settings`
+}
+
+/**
+ * Permissão `settings`.
+ * @summary Configuração da loja (dono)
+ */
+export const getStoreSettings = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreSettingsResponse> => {
+
+  return apiFetch<getStoreSettingsResponse>(getGetStoreSettingsUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setStoreHoursResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreHoursResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreHoursResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreHoursResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreHoursResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreHoursResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStoreHoursResponseSuccess = (setStoreHoursResponse204) & {
+  headers: Headers;
+};
+export type setStoreHoursResponseError = (setStoreHoursResponse400 | setStoreHoursResponse401 | setStoreHoursResponse403 | setStoreHoursResponse404 | setStoreHoursResponse422) & {
+  headers: Headers;
+};
+
+export type setStoreHoursResponse = (setStoreHoursResponseSuccess | setStoreHoursResponseError)
+
+export const getSetStoreHoursUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/hours`
+}
+
+/**
+ * Por dia: fechado (lista vazia) ou até 2 intervalos; fim posterior ao início e exclusivo; último fim 23:59. Fuso America/Sao_Paulo.
+ * @summary Horários de funcionamento
+ */
+export const setStoreHours = async (storeId: string,
+    hoursRequest: HoursRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreHoursResponse> => {
+
+  return apiFetch<setStoreHoursResponse>(getSetStoreHoursUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(hoursRequest)
+  }
+);}
+
+
+
+export type setStoreHolidaysResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreHolidaysResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreHolidaysResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreHolidaysResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreHolidaysResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreHolidaysResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStoreHolidaysResponseSuccess = (setStoreHolidaysResponse204) & {
+  headers: Headers;
+};
+export type setStoreHolidaysResponseError = (setStoreHolidaysResponse400 | setStoreHolidaysResponse401 | setStoreHolidaysResponse403 | setStoreHolidaysResponse404 | setStoreHolidaysResponse422) & {
+  headers: Headers;
+};
+
+export type setStoreHolidaysResponse = (setStoreHolidaysResponseSuccess | setStoreHolidaysResponseError)
+
+export const getSetStoreHolidaysUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/holidays`
+}
+
+/**
+ * @summary Feriados e folgas (manual)
+ */
+export const setStoreHolidays = async (storeId: string,
+    holidaysRequest: HolidaysRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreHolidaysResponse> => {
+
+  return apiFetch<setStoreHolidaysResponse>(getSetStoreHolidaysUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(holidaysRequest)
+  }
+);}
+
+
+
+export type pauseStoreResponse204 = {
+  data: void
+  status: 204
+}
+
+export type pauseStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type pauseStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type pauseStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type pauseStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type pauseStoreResponseSuccess = (pauseStoreResponse204) & {
+  headers: Headers;
+};
+export type pauseStoreResponseError = (pauseStoreResponse400 | pauseStoreResponse401 | pauseStoreResponse403 | pauseStoreResponse404) & {
+  headers: Headers;
+};
+
+export type pauseStoreResponse = (pauseStoreResponseSuccess | pauseStoreResponseError)
+
+export const getPauseStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/pause`
+}
+
+/**
+ * A loja vira "Fechada" na hora e reabre sozinha ao fim do prazo (cálculo na leitura).
+ * @summary Pausar a loja
+ */
+export const pauseStore = async (storeId: string,
+    pauseRequest: PauseRequest, options?: Parameters<typeof apiFetch>[1]): Promise<pauseStoreResponse> => {
+
+  return apiFetch<pauseStoreResponse>(getPauseStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(pauseRequest)
+  }
+);}
+
+
+
+export type resumeStoreResponse204 = {
+  data: void
+  status: 204
+}
+
+export type resumeStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type resumeStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resumeStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resumeStoreResponseSuccess = (resumeStoreResponse204) & {
+  headers: Headers;
+};
+export type resumeStoreResponseError = (resumeStoreResponse401 | resumeStoreResponse403 | resumeStoreResponse404) & {
+  headers: Headers;
+};
+
+export type resumeStoreResponse = (resumeStoreResponseSuccess | resumeStoreResponseError)
+
+export const getResumeStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/pause`
+}
+
+/**
+ * @summary Reabrir a loja
+ */
+export const resumeStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<resumeStoreResponse> => {
+
+  return apiFetch<resumeStoreResponse>(getResumeStoreUrl(storeId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type setStoreDeliveryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreDeliveryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreDeliveryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreDeliveryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreDeliveryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreDeliveryResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStoreDeliveryResponseSuccess = (setStoreDeliveryResponse204) & {
+  headers: Headers;
+};
+export type setStoreDeliveryResponseError = (setStoreDeliveryResponse400 | setStoreDeliveryResponse401 | setStoreDeliveryResponse403 | setStoreDeliveryResponse404 | setStoreDeliveryResponse422) & {
+  headers: Headers;
+};
+
+export type setStoreDeliveryResponse = (setStoreDeliveryResponseSuccess | setStoreDeliveryResponseError)
+
+export const getSetStoreDeliveryUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/delivery`
+}
+
+/**
+ * Raio de 1 a `raio_max_km`; taxa fixa R$ 0 a 50 ou até 5 faixas contíguas `[de, até)` até o raio; frete grátis acima de X estritamente maior que o mínimo (0 desliga); tempo mínimo < máximo ≤ 1.440. Sempre sobra entrega ou retirada.
+ * @summary Entrega: raio, taxa, mínimo, grátis e tempo
+ */
+export const setStoreDelivery = async (storeId: string,
+    deliveryRequest: DeliveryRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreDeliveryResponse> => {
+
+  return apiFetch<setStoreDeliveryResponse>(getSetStoreDeliveryUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(deliveryRequest)
+  }
+);}
+
+
+
+export type previewStoreDeliveryResponse200 = {
+  data: DeliveryPreview
+  status: 200
+}
+
+export type previewStoreDeliveryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type previewStoreDeliveryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type previewStoreDeliveryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type previewStoreDeliveryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type previewStoreDeliveryResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type previewStoreDeliveryResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type previewStoreDeliveryResponseSuccess = (previewStoreDeliveryResponse200) & {
+  headers: Headers;
+};
+export type previewStoreDeliveryResponseError = (previewStoreDeliveryResponse400 | previewStoreDeliveryResponse401 | previewStoreDeliveryResponse403 | previewStoreDeliveryResponse404 | previewStoreDeliveryResponse422 | previewStoreDeliveryResponse429) & {
+  headers: Headers;
+};
+
+export type previewStoreDeliveryResponse = (previewStoreDeliveryResponseSuccess | previewStoreDeliveryResponseError)
+
+export const getPreviewStoreDeliveryUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/delivery/preview`
+}
+
+/**
+ * Usa a MESMA função do checkout (distância no PostGIS, faixa `[de, até)`).
+ * @summary Prévia da taxa para um endereço
+ */
+export const previewStoreDelivery = async (storeId: string,
+    deliveryPreviewRequest: DeliveryPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<previewStoreDeliveryResponse> => {
+
+  return apiFetch<previewStoreDeliveryResponse>(getPreviewStoreDeliveryUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(deliveryPreviewRequest)
+  }
+);}
+
+
+
+export type setStorePickupResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStorePickupResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStorePickupResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStorePickupResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStorePickupResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStorePickupResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStorePickupResponseSuccess = (setStorePickupResponse204) & {
+  headers: Headers;
+};
+export type setStorePickupResponseError = (setStorePickupResponse400 | setStorePickupResponse401 | setStorePickupResponse403 | setStorePickupResponse404 | setStorePickupResponse422) & {
+  headers: Headers;
+};
+
+export type setStorePickupResponse = (setStorePickupResponseSuccess | setStorePickupResponseError)
+
+export const getSetStorePickupUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/pickup`
+}
+
+/**
+ * @summary Retirada na loja
+ */
+export const setStorePickup = async (storeId: string,
+    pickupRequest: PickupRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStorePickupResponse> => {
+
+  return apiFetch<setStorePickupResponse>(getSetStorePickupUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(pickupRequest)
+  }
+);}
+
+
+
+export type setStoreExchangePolicyResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreExchangePolicyResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreExchangePolicyResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreExchangePolicyResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreExchangePolicyResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreExchangePolicyResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStoreExchangePolicyResponseSuccess = (setStoreExchangePolicyResponse204) & {
+  headers: Headers;
+};
+export type setStoreExchangePolicyResponseError = (setStoreExchangePolicyResponse400 | setStoreExchangePolicyResponse401 | setStoreExchangePolicyResponse403 | setStoreExchangePolicyResponse404 | setStoreExchangePolicyResponse422) & {
+  headers: Headers;
+};
+
+export type setStoreExchangePolicyResponse = (setStoreExchangePolicyResponseSuccess | setStoreExchangePolicyResponseError)
+
+export const getSetStoreExchangePolicyUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exchange-policy`
+}
+
+/**
+ * Só a troca voluntária é configurável (0 = não aceita; 1 a 30 dias; taxa de coleta de R$ 0 até `taxa_coleta_max_cents`). Arrependimento (7 dias) e defeito são piso legal fixo e NÃO são campos (enviar qualquer outro campo é 400). Cada mudança sobe a versão da política (snapshot no pedido).
+ * @summary Política de trocas (voluntária)
+ */
+export const setStoreExchangePolicy = async (storeId: string,
+    exchangePolicyRequest: ExchangePolicyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreExchangePolicyResponse> => {
+
+  return apiFetch<setStoreExchangePolicyResponse>(getSetStoreExchangePolicyUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(exchangePolicyRequest)
+  }
+);}
+
+
+
+export type setStoreLowStockResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreLowStockResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreLowStockResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreLowStockResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreLowStockResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreLowStockResponseSuccess = (setStoreLowStockResponse204) & {
+  headers: Headers;
+};
+export type setStoreLowStockResponseError = (setStoreLowStockResponse400 | setStoreLowStockResponse401 | setStoreLowStockResponse403 | setStoreLowStockResponse404) & {
+  headers: Headers;
+};
+
+export type setStoreLowStockResponse = (setStoreLowStockResponseSuccess | setStoreLowStockResponseError)
+
+export const getSetStoreLowStockUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/low-stock`
+}
+
+/**
+ * Nulo usa o parâmetro global.
+ * @summary Limite de estoque baixo da loja (0 a 100)
+ */
+export const setStoreLowStock = async (storeId: string,
+    lowStockRequest: LowStockRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreLowStockResponse> => {
+
+  return apiFetch<setStoreLowStockResponse>(getSetStoreLowStockUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(lowStockRequest)
+  }
+);}
+
+
+
+export type lookupCepResponse200 = {
+  data: CepResult
+  status: 200
+}
+
+export type lookupCepResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type lookupCepResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type lookupCepResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type lookupCepResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type lookupCepResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type lookupCepResponseSuccess = (lookupCepResponse200) & {
+  headers: Headers;
+};
+export type lookupCepResponseError = (lookupCepResponse401 | lookupCepResponse403 | lookupCepResponse404 | lookupCepResponse422 | lookupCepResponse429) & {
+  headers: Headers;
+};
+
+export type lookupCepResponse = (lookupCepResponseSuccess | lookupCepResponseError)
+
+export const getLookupCepUrl = (cep: string,) => {
+
+
+
+
+  return `/v1/cep/${cep}`
+}
+
+/**
+ * Papel de lojista. Limite de 60 por 10 min.
+ * @summary Consultar CEP (rua, bairro, cidade e coordenada)
+ */
+export const lookupCep = async (cep: string, options?: Parameters<typeof apiFetch>[1]): Promise<lookupCepResponse> => {
+
+  return apiFetch<lookupCepResponse>(getLookupCepUrl(cep),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getPaymentAccountResponse200 = {
+  data: PaymentAccountView
+  status: 200
+}
+
+export type getPaymentAccountResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getPaymentAccountResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getPaymentAccountResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getPaymentAccountResponseSuccess = (getPaymentAccountResponse200) & {
+  headers: Headers;
+};
+export type getPaymentAccountResponseError = (getPaymentAccountResponse401 | getPaymentAccountResponse403 | getPaymentAccountResponse404) & {
+  headers: Headers;
+};
+
+export type getPaymentAccountResponse = (getPaymentAccountResponseSuccess | getPaymentAccountResponseError)
+
+export const getGetPaymentAccountUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/payment-account`
+}
+
+/**
+ * Só o dono (`payment_account`).
+ * @summary Conta de recebimento (mascarada)
+ */
+export const getPaymentAccount = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getPaymentAccountResponse> => {
+
+  return apiFetch<getPaymentAccountResponse>(getGetPaymentAccountUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type disconnectPaymentAccountResponse204 = {
+  data: void
+  status: 204
+}
+
+export type disconnectPaymentAccountResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type disconnectPaymentAccountResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type disconnectPaymentAccountResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type disconnectPaymentAccountResponseSuccess = (disconnectPaymentAccountResponse204) & {
+  headers: Headers;
+};
+export type disconnectPaymentAccountResponseError = (disconnectPaymentAccountResponse401 | disconnectPaymentAccountResponse403 | disconnectPaymentAccountResponse404) & {
+  headers: Headers;
+};
+
+export type disconnectPaymentAccountResponse = (disconnectPaymentAccountResponseSuccess | disconnectPaymentAccountResponseError)
+
+export const getDisconnectPaymentAccountUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/payment-account`
+}
+
+/**
+ * Dono com senha recente; avisa o dono por e-mail, audita e alerta o admin (SEC-048).
+ * @summary Desconectar a conta de recebimento
+ */
+export const disconnectPaymentAccount = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<disconnectPaymentAccountResponse> => {
+
+  return apiFetch<disconnectPaymentAccountResponse>(getDisconnectPaymentAccountUrl(storeId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type startPaymentAccountConnectResponse200 = {
+  data: PaymentAccountConnectStart
+  status: 200
+}
+
+export type startPaymentAccountConnectResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type startPaymentAccountConnectResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type startPaymentAccountConnectResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type startPaymentAccountConnectResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type startPaymentAccountConnectResponseSuccess = (startPaymentAccountConnectResponse200) & {
+  headers: Headers;
+};
+export type startPaymentAccountConnectResponseError = (startPaymentAccountConnectResponse401 | startPaymentAccountConnectResponse403 | startPaymentAccountConnectResponse404 | startPaymentAccountConnectResponse429) & {
+  headers: Headers;
+};
+
+export type startPaymentAccountConnectResponse = (startPaymentAccountConnectResponseSuccess | startPaymentAccountConnectResponseError)
+
+export const getStartPaymentAccountConnectUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/payment-account/connect`
+}
+
+/**
+ * Só o dono, com senha digitada há até 5 min (403 `REAUTH_REQUIRED`). `state` de 256 bits guardado no servidor (só o hash), ligado à sessão e à loja, uso único, 10 min; um `state` novo invalida o anterior. `redirect_uri` vem da configuração.
+ * @summary Iniciar a conexão OAuth
+ */
+export const startPaymentAccountConnect = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<startPaymentAccountConnectResponse> => {
+
+  return apiFetch<startPaymentAccountConnectResponse>(getStartPaymentAccountConnectUrl(storeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type completePaymentAccountConnectResponse200 = {
+  data: PaymentAccountView
+  status: 200
+}
+
+export type completePaymentAccountConnectResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type completePaymentAccountConnectResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type completePaymentAccountConnectResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type completePaymentAccountConnectResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type completePaymentAccountConnectResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type completePaymentAccountConnectResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type completePaymentAccountConnectResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type completePaymentAccountConnectResponseSuccess = (completePaymentAccountConnectResponse200) & {
+  headers: Headers;
+};
+export type completePaymentAccountConnectResponseError = (completePaymentAccountConnectResponse400 | completePaymentAccountConnectResponse401 | completePaymentAccountConnectResponse403 | completePaymentAccountConnectResponse404 | completePaymentAccountConnectResponse409 | completePaymentAccountConnectResponse422 | completePaymentAccountConnectResponse429) & {
+  headers: Headers;
+};
+
+export type completePaymentAccountConnectResponse = (completePaymentAccountConnectResponseSuccess | completePaymentAccountConnectResponseError)
+
+export const getCompletePaymentAccountConnectUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/payment-account/callback`
+}
+
+/**
+ * O painel repassa `code` e `state` do retorno do provedor. `state` de outra sessão, de outra loja, reutilizado ou vencido: 400 `OAUTH_STATE_INVALID` e nada é vinculado. Titular com CPF/CNPJ diferente da loja: `under_review` e a loja não fica apta até o admin liberar. Conta já usada por outra loja: 409 `PAYMENT_ACCOUNT_IN_USE`. Provedor `fake`: `code` = `fake-ok`.
+ * @summary Concluir a conexão OAuth
+ */
+export const completePaymentAccountConnect = async (storeId: string,
+    paymentAccountCallbackRequest: PaymentAccountCallbackRequest, options?: Parameters<typeof apiFetch>[1]): Promise<completePaymentAccountConnectResponse> => {
+
+  return apiFetch<completePaymentAccountConnectResponse>(getCompletePaymentAccountConnectUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(paymentAccountCallbackRequest)
+  }
+);}
+
+
+
+export type listStoreMembersResponse200 = {
+  data: TeamView
+  status: 200
+}
+
+export type listStoreMembersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreMembersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreMembersResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreMembersResponseSuccess = (listStoreMembersResponse200) & {
+  headers: Headers;
+};
+export type listStoreMembersResponseError = (listStoreMembersResponse401 | listStoreMembersResponse403 | listStoreMembersResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreMembersResponse = (listStoreMembersResponseSuccess | listStoreMembersResponseError)
+
+export const getListStoreMembersUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/members`
+}
+
+/**
+ * Só o dono (`team`).
+ * @summary Equipe e convites pendentes
+ */
+export const listStoreMembers = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreMembersResponse> => {
+
+  return apiFetch<listStoreMembersResponse>(getListStoreMembersUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type inviteStoreMemberResponse201 = {
+  data: StaffInviteResponse
+  status: 201
+}
+
+export type inviteStoreMemberResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type inviteStoreMemberResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type inviteStoreMemberResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type inviteStoreMemberResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type inviteStoreMemberResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type inviteStoreMemberResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type inviteStoreMemberResponseSuccess = (inviteStoreMemberResponse201) & {
+  headers: Headers;
+};
+export type inviteStoreMemberResponseError = (inviteStoreMemberResponse400 | inviteStoreMemberResponse401 | inviteStoreMemberResponse403 | inviteStoreMemberResponse404 | inviteStoreMemberResponse422 | inviteStoreMemberResponse429) & {
+  headers: Headers;
+};
+
+export type inviteStoreMemberResponse = (inviteStoreMemberResponseSuccess | inviteStoreMemberResponseError)
+
+export const getInviteStoreMemberUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/members/invitations`
+}
+
+/**
+ * Dono com senha recente. Link de 7 dias, token de 256 bits (hash no banco), ligado ao e-mail. E-mail que não pode ser convidado: 422 `CANNOT_INVITE` com mensagem única (não revela se tem conta). Permissões: orders, catalog, exchanges, coupons, reviews, sales_values.
+ * @summary Convidar funcionário
+ */
+export const inviteStoreMember = async (storeId: string,
+    staffInviteRequest: StaffInviteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<inviteStoreMemberResponse> => {
+
+  return apiFetch<inviteStoreMemberResponse>(getInviteStoreMemberUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(staffInviteRequest)
+  }
+);}
+
+
+
+export type revokeStoreInvitationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokeStoreInvitationResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type revokeStoreInvitationResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type revokeStoreInvitationResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type revokeStoreInvitationResponseSuccess = (revokeStoreInvitationResponse204) & {
+  headers: Headers;
+};
+export type revokeStoreInvitationResponseError = (revokeStoreInvitationResponse401 | revokeStoreInvitationResponse403 | revokeStoreInvitationResponse404) & {
+  headers: Headers;
+};
+
+export type revokeStoreInvitationResponse = (revokeStoreInvitationResponseSuccess | revokeStoreInvitationResponseError)
+
+export const getRevokeStoreInvitationUrl = (storeId: string,
+    invitationId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/members/invitations/${invitationId}`
+}
+
+/**
+ * @summary Revogar convite
+ */
+export const revokeStoreInvitation = async (storeId: string,
+    invitationId: string, options?: Parameters<typeof apiFetch>[1]): Promise<revokeStoreInvitationResponse> => {
+
+  return apiFetch<revokeStoreInvitationResponse>(getRevokeStoreInvitationUrl(storeId,invitationId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type setStoreMemberPermissionsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreMemberPermissionsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreMemberPermissionsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreMemberPermissionsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreMemberPermissionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreMemberPermissionsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type setStoreMemberPermissionsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setStoreMemberPermissionsResponseSuccess = (setStoreMemberPermissionsResponse204) & {
+  headers: Headers;
+};
+export type setStoreMemberPermissionsResponseError = (setStoreMemberPermissionsResponse400 | setStoreMemberPermissionsResponse401 | setStoreMemberPermissionsResponse403 | setStoreMemberPermissionsResponse404 | setStoreMemberPermissionsResponse409 | setStoreMemberPermissionsResponse422) & {
+  headers: Headers;
+};
+
+export type setStoreMemberPermissionsResponse = (setStoreMemberPermissionsResponseSuccess | setStoreMemberPermissionsResponseError)
+
+export const getSetStoreMemberPermissionsUrl = (storeId: string,
+    userId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/members/${userId}`
+}
+
+/**
+ * Vale na próxima requisição e entra no log da loja.
+ * @summary Alterar permissões do funcionário
+ */
+export const setStoreMemberPermissions = async (storeId: string,
+    userId: string,
+    memberPermissionsRequest: MemberPermissionsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreMemberPermissionsResponse> => {
+
+  return apiFetch<setStoreMemberPermissionsResponse>(getSetStoreMemberPermissionsUrl(storeId,userId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(memberPermissionsRequest)
+  }
+);}
+
+
+
+export type removeStoreMemberResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeStoreMemberResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeStoreMemberResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type removeStoreMemberResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeStoreMemberResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type removeStoreMemberResponseSuccess = (removeStoreMemberResponse204) & {
+  headers: Headers;
+};
+export type removeStoreMemberResponseError = (removeStoreMemberResponse401 | removeStoreMemberResponse403 | removeStoreMemberResponse404 | removeStoreMemberResponse409) & {
+  headers: Headers;
+};
+
+export type removeStoreMemberResponse = (removeStoreMemberResponseSuccess | removeStoreMemberResponseError)
+
+export const getRemoveStoreMemberUrl = (storeId: string,
+    userId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/members/${userId}`
+}
+
+/**
+ * As sessões e renovações dele terminam na hora. O dono não se remove (409 `CANNOT_REMOVE_OWNER`).
+ * @summary Remover funcionário
+ */
+export const removeStoreMember = async (storeId: string,
+    userId: string, options?: Parameters<typeof apiFetch>[1]): Promise<removeStoreMemberResponse> => {
+
+  return apiFetch<removeStoreMemberResponse>(getRemoveStoreMemberUrl(storeId,userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listStoreActivityResponse200 = {
+  data: ListStoreActivity200
+  status: 200
+}
+
+export type listStoreActivityResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreActivityResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreActivityResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreActivityResponseSuccess = (listStoreActivityResponse200) & {
+  headers: Headers;
+};
+export type listStoreActivityResponseError = (listStoreActivityResponse401 | listStoreActivityResponse403 | listStoreActivityResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreActivityResponse = (listStoreActivityResponseSuccess | listStoreActivityResponseError)
+
+export const getListStoreActivityUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/activity`
+}
+
+/**
+ * Só o dono. Sem dado do cliente.
+ * @summary Quem fez o quê na loja
+ */
+export const listStoreActivity = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreActivityResponse> => {
+
+  return apiFetch<listStoreActivityResponse>(getListStoreActivityUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type acceptStoreInvitationResponse200 = {
+  data: AcceptStoreInvitationResponse
+  status: 200
+}
+
+export type acceptStoreInvitationResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type acceptStoreInvitationResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acceptStoreInvitationResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type acceptStoreInvitationResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type acceptStoreInvitationResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type acceptStoreInvitationResponseSuccess = (acceptStoreInvitationResponse200) & {
+  headers: Headers;
+};
+export type acceptStoreInvitationResponseError = (acceptStoreInvitationResponse400 | acceptStoreInvitationResponse401 | acceptStoreInvitationResponse410 | acceptStoreInvitationResponse422 | acceptStoreInvitationResponse429) & {
+  headers: Headers;
+};
+
+export type acceptStoreInvitationResponse = (acceptStoreInvitationResponseSuccess | acceptStoreInvitationResponseError)
+
+export const getAcceptStoreInvitationUrl = () => {
+
+
+
+
+  return `/v1/auth/store-invitations/accept`
+}
+
+/**
+ * Conta nova nasce com o e-mail confirmado. Conta existente confirma a senha atual. 410 `INVITATION_INVALID` para convite usado, revogado ou vencido.
+ * @summary Aceitar convite de funcionário
+ */
+export const acceptStoreInvitation = async (acceptStoreInvitationRequest: AcceptStoreInvitationRequest, options?: Parameters<typeof apiFetch>[1]): Promise<acceptStoreInvitationResponse> => {
+
+  return apiFetch<acceptStoreInvitationResponse>(getAcceptStoreInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(acceptStoreInvitationRequest)
+  }
+);}
+
+
+
+export type listAdminStoresResponse200 = {
+  data: ListAdminStores200
+  status: 200
+}
+
+export type listAdminStoresResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminStoresResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminStoresResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminStoresResponseSuccess = (listAdminStoresResponse200) & {
+  headers: Headers;
+};
+export type listAdminStoresResponseError = (listAdminStoresResponse400 | listAdminStoresResponse401 | listAdminStoresResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminStoresResponse = (listAdminStoresResponseSuccess | listAdminStoresResponseError)
+
+export const getListAdminStoresUrl = (params?: ListAdminStoresParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/stores?${stringifiedParams}` : `/v1/admin/stores`
+}
+
+/**
+ * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida".
+ * @summary Fila de lojas
+ */
+export const listAdminStores = async (params?: ListAdminStoresParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminStoresResponse> => {
+
+  return apiFetch<listAdminStoresResponse>(getListAdminStoresUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminStoreResponse200 = {
+  data: AdminStoreDetail
+  status: 200
+}
+
+export type getAdminStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreResponseSuccess = (getAdminStoreResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreResponseError = (getAdminStoreResponse401 | getAdminStoreResponse403 | getAdminStoreResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreResponse = (getAdminStoreResponseSuccess | getAdminStoreResponseError)
+
+export const getGetAdminStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}`
+}
+
+/**
+ * Permissão `stores:read`. Lista os documentos (sem arquivo), itens reprovados, histórico, conta de recebimento e outras lojas com o mesmo documento.
+ * @summary Detalhe da loja para análise
+ */
+export const getAdminStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreResponse> => {
+
+  return apiFetch<getAdminStoreResponse>(getGetAdminStoreUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type editAdminStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type editAdminStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type editAdminStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type editAdminStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type editAdminStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type editAdminStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type editAdminStoreResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type editAdminStoreResponseSuccess = (editAdminStoreResponse200) & {
+  headers: Headers;
+};
+export type editAdminStoreResponseError = (editAdminStoreResponse400 | editAdminStoreResponse401 | editAdminStoreResponse403 | editAdminStoreResponse404 | editAdminStoreResponse409 | editAdminStoreResponse422) & {
+  headers: Headers;
+};
+
+export type editAdminStoreResponse = (editAdminStoreResponseSuccess | editAdminStoreResponseError)
+
+export const getEditAdminStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}`
+}
+
+/**
+ * Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
+ * @summary Editar dados da loja
+ */
+export const editAdminStore = async (storeId: string,
+    adminStorePatchRequest: AdminStorePatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreResponse> => {
+
+  return apiFetch<editAdminStoreResponse>(getEditAdminStoreUrl(storeId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminStorePatchRequest)
+  }
+);}
+
+
+
+export type accessStoreDocumentResponse200 = {
+  data: DocumentAccessResponse
+  status: 200
+}
+
+export type accessStoreDocumentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type accessStoreDocumentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type accessStoreDocumentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type accessStoreDocumentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type accessStoreDocumentResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type accessStoreDocumentResponseSuccess = (accessStoreDocumentResponse200) & {
+  headers: Headers;
+};
+export type accessStoreDocumentResponseError = (accessStoreDocumentResponse400 | accessStoreDocumentResponse401 | accessStoreDocumentResponse403 | accessStoreDocumentResponse404 | accessStoreDocumentResponse429) & {
+  headers: Headers;
+};
+
+export type accessStoreDocumentResponse = (accessStoreDocumentResponseSuccess | accessStoreDocumentResponseError)
+
+export const getAccessStoreDocumentUrl = (storeId: string,
+    documentId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/documents/${documentId}/access`
+}
+
+/**
+ * Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco.
+ * @summary Abrir documento (URL de 5 min, auditada)
+ */
+export const accessStoreDocument = async (storeId: string,
+    documentId: string,
+    documentAccessRequest: DocumentAccessRequest, options?: Parameters<typeof apiFetch>[1]): Promise<accessStoreDocumentResponse> => {
+
+  return apiFetch<accessStoreDocumentResponse>(getAccessStoreDocumentUrl(storeId,documentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(documentAccessRequest)
+  }
+);}
+
+
+
+export type approveStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type approveStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type approveStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type approveStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type approveStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type approveStoreResponseSuccess = (approveStoreResponse200) & {
+  headers: Headers;
+};
+export type approveStoreResponseError = (approveStoreResponse401 | approveStoreResponse403 | approveStoreResponse404 | approveStoreResponse409) & {
+  headers: Headers;
+};
+
+export type approveStoreResponse = (approveStoreResponseSuccess | approveStoreResponseError)
+
+export const getApproveStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/approve`
+}
+
+/**
+ * Permissão `stores:decide`. De "em análise" para "aprovada". 409 `STORE_ALREADY_DECIDED` ("Já decidida por [nome]") se outro admin decidiu antes.
+ * @summary Aprovar a loja
+ */
+export const approveStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<approveStoreResponse> => {
+
+  return apiFetch<approveStoreResponse>(getApproveStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type reactivateStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type reactivateStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type reactivateStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type reactivateStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type reactivateStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type reactivateStoreResponseSuccess = (reactivateStoreResponse200) & {
+  headers: Headers;
+};
+export type reactivateStoreResponseError = (reactivateStoreResponse401 | reactivateStoreResponse403 | reactivateStoreResponse404 | reactivateStoreResponse409) & {
+  headers: Headers;
+};
+
+export type reactivateStoreResponse = (reactivateStoreResponseSuccess | reactivateStoreResponseError)
+
+export const getReactivateStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/reactivate`
+}
+
+/**
+ * Permissão `stores:decide`. Só de "suspensa". A loja volta visível se continuar atendendo a RN-03.
+ * @summary Reativar loja suspensa
+ */
+export const reactivateStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<reactivateStoreResponse> => {
+
+  return apiFetch<reactivateStoreResponse>(getReactivateStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type requestStoreCorrectionResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type requestStoreCorrectionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type requestStoreCorrectionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type requestStoreCorrectionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type requestStoreCorrectionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type requestStoreCorrectionResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type requestStoreCorrectionResponseSuccess = (requestStoreCorrectionResponse200) & {
+  headers: Headers;
+};
+export type requestStoreCorrectionResponseError = (requestStoreCorrectionResponse400 | requestStoreCorrectionResponse401 | requestStoreCorrectionResponse403 | requestStoreCorrectionResponse404 | requestStoreCorrectionResponse409) & {
+  headers: Headers;
+};
+
+export type requestStoreCorrectionResponse = (requestStoreCorrectionResponseSuccess | requestStoreCorrectionResponseError)
+
+export const getRequestStoreCorrectionUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/request-correction`
+}
+
+/**
+ * Permissão `stores:decide`. Um motivo por item reprovado (documento ou `store_data`). O prazo do SLA fica pausado até o reenvio.
+ * @summary Pedir correção (motivo por item)
+ */
+export const requestStoreCorrection = async (storeId: string,
+    correctionRequest: CorrectionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<requestStoreCorrectionResponse> => {
+
+  return apiFetch<requestStoreCorrectionResponse>(getRequestStoreCorrectionUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(correctionRequest)
+  }
+);}
+
+
+
+export type rejectStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type rejectStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type rejectStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type rejectStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type rejectStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type rejectStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type rejectStoreResponseSuccess = (rejectStoreResponse200) & {
+  headers: Headers;
+};
+export type rejectStoreResponseError = (rejectStoreResponse400 | rejectStoreResponse401 | rejectStoreResponse403 | rejectStoreResponse404 | rejectStoreResponse409) & {
+  headers: Headers;
+};
+
+export type rejectStoreResponse = (rejectStoreResponseSuccess | rejectStoreResponseError)
+
+export const getRejectStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/reject`
+}
+
+/**
+ * Permissão `stores:decide`. Motivo obrigatório; novo cadastro só com o suporte.
+ * @summary Recusar a loja (final)
+ */
+export const rejectStore = async (storeId: string,
+    decisionReasonRequest: DecisionReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<rejectStoreResponse> => {
+
+  return apiFetch<rejectStoreResponse>(getRejectStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(decisionReasonRequest)
+  }
+);}
+
+
+
+export type suspendStoreResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type suspendStoreResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type suspendStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type suspendStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type suspendStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type suspendStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type suspendStoreResponseSuccess = (suspendStoreResponse200) & {
+  headers: Headers;
+};
+export type suspendStoreResponseError = (suspendStoreResponse400 | suspendStoreResponse401 | suspendStoreResponse403 | suspendStoreResponse404 | suspendStoreResponse409) & {
+  headers: Headers;
+};
+
+export type suspendStoreResponse = (suspendStoreResponseSuccess | suspendStoreResponseError)
+
+export const getSuspendStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/suspend`
+}
+
+/**
+ * Permissão `stores:decide`. Só de "aprovada"; motivo obrigatório; a loja some da API pública na hora.
+ * @summary Suspender a loja
+ */
+export const suspendStore = async (storeId: string,
+    decisionReasonRequest: DecisionReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<suspendStoreResponse> => {
+
+  return apiFetch<suspendStoreResponse>(getSuspendStoreUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(decisionReasonRequest)
+  }
+);}
+
+
+
+export type editAdminStoreSettingsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type editAdminStoreSettingsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type editAdminStoreSettingsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type editAdminStoreSettingsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type editAdminStoreSettingsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type editAdminStoreSettingsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type editAdminStoreSettingsResponseSuccess = (editAdminStoreSettingsResponse204) & {
+  headers: Headers;
+};
+export type editAdminStoreSettingsResponseError = (editAdminStoreSettingsResponse400 | editAdminStoreSettingsResponse401 | editAdminStoreSettingsResponse403 | editAdminStoreSettingsResponse404 | editAdminStoreSettingsResponse422) & {
+  headers: Headers;
+};
+
+export type editAdminStoreSettingsResponse = (editAdminStoreSettingsResponseSuccess | editAdminStoreSettingsResponseError)
+
+export const getEditAdminStoreSettingsUrl = (storeId: string,
+    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/settings/${section}`
+}
+
+/**
+ * Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
+ * @summary Editar configuração da loja (admin)
+ */
+export const editAdminStoreSettings = async (storeId: string,
+    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',
+    editAdminStoreSettingsBody: EditAdminStoreSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreSettingsResponse> => {
+
+  return apiFetch<editAdminStoreSettingsResponse>(getEditAdminStoreSettingsUrl(storeId,section),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(editAdminStoreSettingsBody)
+  }
+);}
+
+
+
+export type releaseStorePaymentAccountResponse204 = {
+  data: void
+  status: 204
+}
+
+export type releaseStorePaymentAccountResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type releaseStorePaymentAccountResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type releaseStorePaymentAccountResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type releaseStorePaymentAccountResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type releaseStorePaymentAccountResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type releaseStorePaymentAccountResponseSuccess = (releaseStorePaymentAccountResponse204) & {
+  headers: Headers;
+};
+export type releaseStorePaymentAccountResponseError = (releaseStorePaymentAccountResponse400 | releaseStorePaymentAccountResponse401 | releaseStorePaymentAccountResponse403 | releaseStorePaymentAccountResponse404 | releaseStorePaymentAccountResponse409) & {
+  headers: Headers;
+};
+
+export type releaseStorePaymentAccountResponse = (releaseStorePaymentAccountResponseSuccess | releaseStorePaymentAccountResponseError)
+
+export const getReleaseStorePaymentAccountUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/payment-account/release`
+}
+
+/**
+ * Permissão `stores:decide` com TOTP recente. Motivo (mín. 10 caracteres) e auditoria.
+ * @summary Liberar conta com titular divergente
+ */
+export const releaseStorePaymentAccount = async (storeId: string,
+    releaseAccountRequest: ReleaseAccountRequest, options?: Parameters<typeof apiFetch>[1]): Promise<releaseStorePaymentAccountResponse> => {
+
+  return apiFetch<releaseStorePaymentAccountResponse>(getReleaseStorePaymentAccountUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(releaseAccountRequest)
+  }
+);}
+
+
+
+export type decideStoreDataReviewResponse200 = {
+  data: Store
+  status: 200
+}
+
+export type decideStoreDataReviewResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type decideStoreDataReviewResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type decideStoreDataReviewResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type decideStoreDataReviewResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type decideStoreDataReviewResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type decideStoreDataReviewResponseSuccess = (decideStoreDataReviewResponse200) & {
+  headers: Headers;
+};
+export type decideStoreDataReviewResponseError = (decideStoreDataReviewResponse400 | decideStoreDataReviewResponse401 | decideStoreDataReviewResponse403 | decideStoreDataReviewResponse404 | decideStoreDataReviewResponse409) & {
+  headers: Headers;
+};
+
+export type decideStoreDataReviewResponse = (decideStoreDataReviewResponseSuccess | decideStoreDataReviewResponseError)
+
+export const getDecideStoreDataReviewUrl = (storeId: string,
+    decision: 'approve' | 'reject',) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/data-review/${decision}`
+}
+
+/**
+ * Permissão `stores:decide`. `decision`: approve ou reject.
+ * @summary Decidir alteração de nome pendente
+ */
+export const decideStoreDataReview = async (storeId: string,
+    decision: 'approve' | 'reject',
+    decisionReasonRequest: DecisionReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<decideStoreDataReviewResponse> => {
+
+  return apiFetch<decideStoreDataReviewResponse>(getDecideStoreDataReviewUrl(storeId,decision),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(decisionReasonRequest)
   }
 );}

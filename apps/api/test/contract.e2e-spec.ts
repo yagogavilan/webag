@@ -60,7 +60,8 @@ describe('contrato OpenAPI x rotas reais', () => {
   });
 
   it('SEC-035: nenhum caminho documentado confirma/aprova pagamento', () => {
-    expect(operations.filter((o) => /confirm|approve|capture/i.test(o.key) && !o.key.includes('/admin/totp'))).toEqual([]);
+    // Aprovar LOJA ou produto é moderação de cadastro, não pagamento: só os caminhos de pagamento contam.
+    expect(operations.filter((o) => /confirm|approve|capture/i.test(o.key) && !o.key.includes('/admin/totp') && !o.key.includes('/admin/stores/') && !o.key.includes('/admin/products/'))).toEqual([]);
   });
 
   it('operações autenticadas documentam 401 e as públicas de escrita documentam 429', () => {
