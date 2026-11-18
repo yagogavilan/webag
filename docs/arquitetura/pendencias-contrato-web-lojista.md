@@ -20,3 +20,14 @@
 **Não feito nesta rodada (registrado para a próxima):** L10 Aceitar convite (o BFF tem `accept-invite`, falta a tela em `/lojista/convite` com "Confirmar senha"), chip de pausa no cabeçalho (#8) e a edição de loja pelo admin (#10). L9 Equipe está pronta (`/lojista/equipe`).
 
 **Achados corrigidos no E2E (não são do contrato):** o cadastro caía em "This page couldn't load" ao pedir o código por e-mail (faltava o `ToastProvider` nas rotas de acesso) e a etapa 3 voltava para si mesma depois dos documentos (o `step` ficava velho no cache).
+
+## Lacunas apontadas pelo web do catálogo (2026-11-18, mobile-dev)
+> Para o backend-dev. O web ficou assim por falta de contrato; não foi contornado.
+
+| # | Lacuna | Efeito hoje |
+|---|---|---|
+| C1 | Contrato sem denúncias de produto, foto e contagem de remoções por loja na moderação | Aba "Denunciados" virou "Pausados e Removidos" |
+| C2 | Importação só CSV (1 MB), sem XLSX nem coluna de foto (DT-028) | Importador limitado |
+| C3 | Sem rota para ordenar produtos dentro de uma seção | Ordem fixa |
+| C4 | `GET /stores/mine` sem a lista de permissões do funcionário | Tela mostra "sem acesso" só após o 403 |
+| C5 | Moderação do admin (`/admin/products`, `/moderation`, `/moderation/terms`) não testada contra a API real | QA valida na Onda 2 |
