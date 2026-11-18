@@ -5,7 +5,7 @@ import { sha256Hex } from '../../platform/crypto/crypto.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { MailService } from '../../platform/mail/mail.service.js';
-import { loginAttemptsEmail, passwordChangedEmail } from '../../platform/mail/templates.js';
+import { loginAttemptsEmail, panelPasswordChangedEmail, passwordChangedEmail } from '../../platform/mail/templates.js';
 import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
 import { UsersService, type DocumentRef } from '../users/index.js';
@@ -38,6 +38,8 @@ export interface MfaChallenge {
 
 export const MFA_TOKEN_TTL_SECONDS = 300;
 export const MFA_TOKEN_MAX_ATTEMPTS = 5;
+/** SEC-095: `reset_ticket` de 10 min, uso único. */
+export const RESET_TICKET_TTL_SECONDS = 600;
 
 /** Mensagem única para token inválido/vencido/usado e para código errado (SEC-090). */
 const MFA_INVALID = () => new AppError(401, 'MFA_INVALID', 'Código incorreto ou vencido', { detail: 'Código incorreto ou vencido.' });
@@ -293,10 +295,15 @@ export class AuthService {
   }
 
   /**
-   * SEC-006: nova senha pela política, código de reset, confirma o e-mail, revoga TODAS as sessões e avisa por e-mail.
-   * Admin não ganha sessão aqui (o TOTP continua exigido no login).
+   * SEC-006 / SEC-095: nova senha pela política, código de reset, confirma o e-mail, revoga TODAS as sessões e avisa
+   * por e-mail. Admin com TOTP: o código do e-mail é conferido PRIMEIRO (sem ele o 2º fator nem é avaliado nem
+   * contado, review B1) e devolve um `resetTicket`; a senha só é gravada em `completeReset`, com o TOTP validado NESSE
+   * ticket. Admin não ganha sessão (o TOTP continua exigido no login).
    */
-  async resetPassword(input: { email: string; code: string; newPassword: string; totpCode?: string }, ctx: RequestContext): Promise<{ tokens: TokenPair | null }> {
+  async resetPassword(
+    input: { email: string; code: string; newPassword: string; totpCode?: string },
+    ctx: RequestContext,
+  ): Promise<{ tokens: TokenPair | null; mfaRequired?: true; resetTicket?: string; expiresIn?: number }> {
     const [user] = await this.db.select().from(users).where(eq(users.email, input.email));
     await this.limiter.enforce(`rl:reset-confirm:${sha256Hex(input.email)}`, 10, 900);
     if (!user) {
@@ -305,14 +312,38 @@ export class AuthService {
     }
     this.passwords.assertPolicy(input.newPassword, await this.params.getNumber('senha_min'));
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
-    // SEC-095: admin com TOTP nunca troca a senha só com o código do e-mail: o 2º fator vale na MESMA chamada.
-    if (admin?.active && admin.totpConfirmedAt) {
-      if (!input.totpCode) throw new AppError(401, 'TOTP_REQUIRED', 'Informe o código do autenticador', { detail: 'Informe o código do app autenticador.' });
-      if (!(await this.totp.verifyWithLimits(user.id, input.totpCode, ctx))) throw INVALID_CREDENTIALS();
-    }
+    // 1º passo, sempre: o código do e-mail. Errado, vencido ou usado: 400 sem tocar no limite do 2º fator (B1).
     await this.codes.verify(user.id, 'reset_password', input.code);
 
-    const passwordHash = await this.passwords.hash(input.newPassword);
+    if (admin?.active && admin.totpConfirmedAt) {
+      const resetTicket = await this.tickets.issue('password_reset', user.id, RESET_TICKET_TTL_SECONDS, { emailVerified: true });
+      if (!input.totpCode) return { tokens: null, mfaRequired: true, resetTicket, expiresIn: RESET_TICKET_TTL_SECONDS };
+      // Compatibilidade: cliente antigo manda o TOTP na mesma chamada. Passa pelo mesmo ticket.
+      return this.completeReset({ resetTicket, totpCode: input.totpCode, newPassword: input.newPassword }, ctx);
+    }
+    return { tokens: await this.applyNewPassword(user, input.newPassword, null, ctx) };
+  }
+
+  /**
+   * SEC-095, passos 2 e 3: `resetTicket` (e-mail já validado) + TOTP ou código de recuperação + senha nova. O servidor só
+   * grava a senha se os DOIS fatores foram validados neste ticket. Erro de código soma no limite POR CONTA (SEC-091).
+   */
+  async completeReset(input: { resetTicket: string; totpCode: string; newPassword: string }, ctx: RequestContext): Promise<{ tokens: null }> {
+    const ticket = await this.tickets.attempt('password_reset', input.resetTicket, MFA_TOKEN_MAX_ATTEMPTS);
+    if (!ticket?.emailVerifiedAt) throw MFA_INVALID();
+    this.passwords.assertPolicy(input.newPassword, await this.params.getNumber('senha_min'));
+    const factor = await this.totp.verifyWithLimits(ticket.userId, input.totpCode, ctx);
+    if (!factor) throw MFA_INVALID();
+    await this.tickets.markMfa(ticket.id, factor.kind);
+    if (!(await this.tickets.consume(ticket.id))) throw MFA_INVALID();
+    const user = await this.getUser(ticket.userId);
+    await this.applyNewPassword(user, input.newPassword, factor, ctx);
+    return { tokens: null };
+  }
+
+  private async applyNewPassword(user: UserRow, newPassword: string, factor: VerifiedFactor | null, ctx: RequestContext): Promise<TokenPair | null> {
+    const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
+    const passwordHash = await this.passwords.hash(newPassword);
     const tokens = await this.db.transaction(async (tx) => {
       await tx
         .update(users)
@@ -320,13 +351,29 @@ export class AuthService {
         .where(eq(users.id, user.id));
       await this.sessions.revokeSessions(tx, user.id, 'password_reset');
       await tx.insert(accessLog).values({ userId: user.id, event: 'password_reset', ip: ctx.ip, userAgent: ctx.userAgent });
+      if (admin?.active) {
+        await this.audit.record(tx, ctx, {
+          action: 'admin.password_reset',
+          actorId: user.id,
+          actorRole: admin.profile,
+          targetType: 'user',
+          targetId: user.id,
+          after: { secondFactor: factor?.kind ?? null },
+        });
+      }
       if (user.status !== 'active' || admin?.active) return null;
       return (await this.sessions.createSession(tx, user.id, ctx, { mfaVerified: false, reauth: true })).tokens;
     });
     // O dono pode ter errado várias vezes antes de redefinir: zera a espera deste IP.
-    await this.limiter.reset(`lf:${sha256Hex(input.email)}:${ctx.ip ?? 'unknown'}`);
-    this.mail.enqueue({ to: user.email, ...passwordChangedEmail() });
-    return { tokens };
+    await this.limiter.reset(`lf:${sha256Hex(user.email)}:${ctx.ip ?? 'unknown'}`);
+    if (admin?.active) {
+      // SEC-095: e-mail ao titular e alerta aos OUTROS super admins.
+      this.mail.enqueue({ to: user.email, ...panelPasswordChangedEmail(user.email, true) });
+      for (const other of await this.totp.superAdminEmails(user.id)) this.mail.enqueue({ to: other, ...panelPasswordChangedEmail(user.email, false) });
+    } else {
+      this.mail.enqueue({ to: user.email, ...passwordChangedEmail() });
+    }
+    return tokens;
   }
 
   /** SEC-007: troca logado pede a senha atual; revoga todas as sessões e abre uma nova. */

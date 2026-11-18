@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { adminProfiles, auditLog, invitations, sessions, users } from '../src/platform/database/schema.js';
+import { adminProfiles, auditLog, authTickets, invitations, sessions, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, totpAt, uniqueEmail, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureLegalDocs, loginAdmin, type TestAdmin } from './helpers/fixtures.js';
 
@@ -8,7 +8,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
   let superAdmin: TestAdmin;
 
   const tokenFromInviteMail = (email: string): string => {
-    const text = ctx.mail.to(email).at(-1)?.text ?? '';
+    const text = ctx.mail.to(email).findLast((m) => /token=/.test(m.text))?.text ?? '';
     const match = /token=([A-Za-z0-9_-]+)/.exec(text);
     if (!match?.[1]) throw new Error('Convite não encontrado no e-mail');
     return match[1];
@@ -56,8 +56,9 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
 
       // login seguinte: senha certa sem código → TOTP_REQUIRED; código errado → mensagem única
       const ip = randomIp();
-      const noCode = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD }).expect(401);
-      expect(noCode.body.code).toBe('TOTP_REQUIRED');
+      const noCode = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD }).expect(200);
+      expect(noCode.body).toMatchObject({ mfaRequired: true });
+      expect(noCode.body.tokens).toBeUndefined();
       const wrong = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD, totpCode: '000000' }).expect(401);
       expect(wrong.body.code).toBe('INVALID_CREDENTIALS');
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.profile, 'operations'));
@@ -248,21 +249,32 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       expect(log).toBeDefined();
     });
 
-    it('SEC-095: "esqueci a senha" de admin com TOTP exige o 2º fator na mesma chamada; senha só muda com os dois', async () => {
+    it('SEC-095: "esqueci a senha" de admin com TOTP: o código do e-mail vem primeiro e devolve um ticket; a senha só muda com os dois fatores', async () => {
       const admin = await createAdmin(ctx, 'support');
       await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email: admin.email }).expect(202);
       const code = ctx.mail.lastCode(admin.email);
       const newPassword = 'senha-nova-do-admin-88';
-      const reset = (extra: Record<string, unknown>) =>
-        ctx.http.post('/v1/auth/password/reset').set('X-Forwarded-For', randomIp()).send({ email: admin.email, code, newPassword, ...extra });
-      const missing = await reset({}).expect(401);
-      expect(missing.body.code).toBe('TOTP_REQUIRED');
-      await reset({ totpCode: '000000' }).expect(401);
+      const step1 = await ctx.http.post('/v1/auth/password/reset').set('X-Forwarded-For', randomIp()).send({ email: admin.email, code, newPassword }).expect(200);
+      expect(step1.body).toMatchObject({ tokens: null, mfaRequired: true, expiresIn: 600 });
+      const ticket = step1.body.resetTicket as string;
+      const [stored] = await ctx.db.select().from(authTickets).where(eq(authTickets.userId, admin.userId));
+      expect(stored?.tokenHash).not.toBe(ticket); // só o hash fica no banco
+      // a senha ainda é a antiga
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      const ok = await reset({ totpCode: totpAt(admin.totpSecret!) }).expect(200);
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: newPassword, totpCode: totpAt(admin.totpSecret!) }).expect(401);
+
+      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
+      const complete = (extra: Record<string, unknown>) =>
+        ctx.http.post('/v1/auth/password/reset/complete').set('X-Forwarded-For', randomIp()).send({ resetTicket: ticket, newPassword, ...extra });
+      await complete({ totpCode: '000000' }).expect(401);
+      const ok = await complete({ totpCode: totpAt(admin.totpSecret!) }).expect(200);
       expect(ok.body.tokens).toBeNull(); // admin nunca ganha sessão pelo reset: precisa do login com TOTP
+      await complete({ totpCode: totpAt(admin.totpSecret!, 1) }).expect(401); // ticket de uso único
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
       await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: newPassword, totpCode: totpAt(admin.totpSecret!) }).expect(200);
+      // SEC-095: aviso ao titular e aos outros super admins
+      expect(ctx.mail.to(admin.email).some((m) => m.subject.includes('senha do painel'))).toBe(true);
+      expect(ctx.mail.to(superAdmin.email).some((m) => m.subject.includes('senha do painel'))).toBe(true);
     });
 
     it('a lista de admins não vaza hash de senha nem segredo de TOTP', async () => {

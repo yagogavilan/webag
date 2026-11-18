@@ -208,7 +208,8 @@ export interface ResetPasswordRequest {
   code: string;
   newPassword: string;
   /**
-     * Obrigatório para admin com TOTP: o segundo fator vale na mesma chamada (SEC-095)
+     * Obsoleto. Admin com TOTP usa `/auth/password/reset/complete`. Se vier, só é avaliado depois do código do e-mail, passando pelo mesmo ticket.
+     * @deprecated
      * @minLength 6
      * @maxLength 32
      */
@@ -217,6 +218,47 @@ export interface ResetPasswordRequest {
 
 export interface ResetPasswordResponse {
   tokens: TokenPair | null;
+  /** Admin com TOTP: falta o 2º fator (use `resetTicket`) */
+  mfaRequired?: true;
+  /** Ticket opaco de 256 bits, 10 min, uso único */
+  resetTicket?: string;
+  expiresIn?: number;
+}
+
+export interface MfaChallenge {
+  mfaRequired: true;
+  /** Token opaco de 256 bits, 5 min, uso único, 5 tentativas */
+  mfaToken: string;
+  expiresIn: number;
+}
+
+export interface MfaVerifyRequest {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  mfaToken: string;
+  /**
+     * TOTP de 6 dígitos ou código de recuperação
+     * @minLength 6
+     * @maxLength 32
+     */
+  code: string;
+}
+
+export interface CompleteResetPasswordRequest {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  resetTicket: string;
+  /**
+     * TOTP de 6 dígitos ou código de recuperação
+     * @minLength 6
+     * @maxLength 32
+     */
+  totpCode: string;
+  newPassword: string;
 }
 
 export interface ReauthRequest {
@@ -1094,7 +1136,7 @@ export const emailExists = async (emailExistsRequest: EmailExistsRequest, option
 
 
 export type loginResponse200 = {
-  data: AuthResult
+  data: AuthResult | MfaChallenge
   status: 200
 }
 
@@ -1136,7 +1178,7 @@ export const getLoginUrl = () => {
 }
 
 /**
- * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin: 401 `TOTP_REQUIRED` pede o `totpCode`; código de recuperação também vale uma vez e força reconfigurar o TOTP.
+ * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. Código de recuperação também vale uma vez e força reconfigurar o TOTP.
  * @summary Entrar com e-mail e senha
  */
 export const login = async (loginRequest: LoginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<loginResponse> => {
@@ -1546,7 +1588,7 @@ export const getResetPasswordUrl = () => {
 }
 
 /**
- * Confirma o e-mail, revoga TODAS as sessões e envia aviso "Sua senha foi alterada". Admin não recebe sessão (`tokens: null`).
+ * Confirma o e-mail, revoga TODAS as sessões e envia aviso "Sua senha foi alterada". O código do e-mail é conferido primeiro. Admin com TOTP não troca a senha aqui: a resposta é `{ tokens: null, mfaRequired: true, resetTicket }` e a troca termina em `/auth/password/reset/complete` (SEC-095). Admin não recebe sessão (`tokens: null`).
  * @summary Redefinir a senha com o código
  */
 export const resetPassword = async (resetPasswordRequest: ResetPasswordRequest, options?: Parameters<typeof apiFetch>[1]): Promise<resetPasswordResponse> => {
@@ -4001,5 +4043,123 @@ export const reprocessWebhookEvent = async (eventId: number, options?: Parameter
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type verifyMfaResponse200 = {
+  data: AuthResult
+  status: 200
+}
+
+export type verifyMfaResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type verifyMfaResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type verifyMfaResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type verifyMfaResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type verifyMfaResponseSuccess = (verifyMfaResponse200) & {
+  headers: Headers;
+};
+export type verifyMfaResponseError = (verifyMfaResponse400 | verifyMfaResponse401 | verifyMfaResponse403 | verifyMfaResponse429) & {
+  headers: Headers;
+};
+
+export type verifyMfaResponse = (verifyMfaResponseSuccess | verifyMfaResponseError)
+
+export const getVerifyMfaUrl = () => {
+
+
+
+
+  return `/v1/auth/mfa/verify`
+}
+
+/**
+ * Recebe o `mfaToken` do login (256 bits, 5 min, uso único, 5 tentativas) e o TOTP ou um código de recuperação. Token inexistente, vencido, usado ou código errado têm a MESMA resposta (401 `MFA_INVALID`). Erros somam no limite do 2º fator POR CONTA (429 `MFA_RATE_LIMITED`, SEC-091).
+ * @summary 2º passo do login do admin (SEC-090)
+ */
+export const verifyMfa = async (mfaVerifyRequest: MfaVerifyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<verifyMfaResponse> => {
+
+  return apiFetch<verifyMfaResponse>(getVerifyMfaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(mfaVerifyRequest)
+  }
+);}
+
+
+
+export type completeResetPasswordResponse200 = {
+  data: ResetPasswordResponse
+  status: 200
+}
+
+export type completeResetPasswordResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type completeResetPasswordResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type completeResetPasswordResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type completeResetPasswordResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type completeResetPasswordResponseSuccess = (completeResetPasswordResponse200) & {
+  headers: Headers;
+};
+export type completeResetPasswordResponseError = (completeResetPasswordResponse400 | completeResetPasswordResponse401 | completeResetPasswordResponse422 | completeResetPasswordResponse429) & {
+  headers: Headers;
+};
+
+export type completeResetPasswordResponse = (completeResetPasswordResponseSuccess | completeResetPasswordResponseError)
+
+export const getCompleteResetPasswordUrl = () => {
+
+
+
+
+  return `/v1/auth/password/reset/complete`
+}
+
+/**
+ * Recebe o `resetTicket` devolvido por `/auth/password/reset` (código do e-mail já validado, 10 min, uso único, 5 tentativas), o TOTP ou código de recuperação e a senha nova. O servidor só grava a senha se os dois fatores foram validados neste ticket. Revoga todas as sessões, avisa o titular e os outros super admins e audita.
+ * @summary Concluir a redefinição de senha do admin (SEC-095, passos 2 e 3)
+ */
+export const completeResetPassword = async (completeResetPasswordRequest: CompleteResetPasswordRequest, options?: Parameters<typeof apiFetch>[1]): Promise<completeResetPasswordResponse> => {
+
+  return apiFetch<completeResetPasswordResponse>(getCompleteResetPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(completeResetPasswordRequest)
   }
 );}

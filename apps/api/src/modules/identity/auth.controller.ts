@@ -13,10 +13,12 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AdminUsersService } from './admin-users.service.js';
 import {
   acceptInvitationSchema,
+  completeResetSchema,
   correctEmailSchema,
   emailExistsSchema,
   forgotPasswordSchema,
   loginSchema,
+  mfaVerifySchema,
   reauthSchema,
   refreshSchema,
   registerSchema,
@@ -55,6 +57,14 @@ export class AuthController {
   @Post('login')
   login(@Body(new ZodPipe(loginSchema)) body: In<typeof loginSchema>, @Ctx() ctx: RequestContext) {
     return this.auth.login(body, ctx);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @RateLimit({ name: 'mfa-verify', limit: 30, windowSeconds: 60 })
+  @Post('mfa/verify')
+  verifyMfa(@Body(new ZodPipe(mfaVerifySchema)) body: In<typeof mfaVerifySchema>, @Ctx() ctx: RequestContext) {
+    return this.auth.verifyMfa(body, ctx);
   }
 
   @Public()
@@ -116,6 +126,14 @@ export class AuthController {
   @Post('password/reset')
   reset(@Body(new ZodPipe(resetPasswordSchema)) body: In<typeof resetPasswordSchema>, @Ctx() ctx: RequestContext) {
     return this.auth.resetPassword(body, ctx);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @RateLimit({ name: 'password-reset-complete', limit: 30, windowSeconds: 900 })
+  @Post('password/reset/complete')
+  completeReset(@Body(new ZodPipe(completeResetSchema)) body: In<typeof completeResetSchema>, @Ctx() ctx: RequestContext) {
+    return this.auth.completeReset(body, ctx);
   }
 
   @HttpCode(204)

@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { generateTotpSecret } from '../../src/modules/identity/totp.js';
 import { PasswordService } from '../../src/modules/identity/password.service.js';
-import { encryptSecret } from '../../src/platform/crypto/crypto.js';
-import { DEV_AUTH_HMAC_KEY } from '../../src/platform/config/env.js';
+import { sealMfaSecret } from '../../src/platform/crypto/mfa-seal.js';
+import { DEV_MFA_ENC_KEY } from '../../src/platform/config/env.js';
 import {
   adminProfiles,
   legalDocuments,
@@ -111,7 +111,7 @@ export async function createAdmin(ctx: TestContext, profile: AdminProfile, optio
     userId: user.id,
     profile,
     ...(totpSecret
-      ? { totpSecretEnc: encryptSecret(totpSecret, DEV_AUTH_HMAC_KEY, 'totp', `user:${user.id}`), totpConfirmedAt: new Date() }
+      ? { totpSecretEnc: sealMfaSecret(totpSecret, user.id, DEV_MFA_ENC_KEY), totpConfirmedAt: new Date() }
       : {}),
   });
   const login = await loginAdmin(ctx, { email, password, totpSecret });

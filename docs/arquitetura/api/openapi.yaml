@@ -152,7 +152,7 @@ paths:
       tags: [auth]
       operationId: login
       summary: Entrar com e-mail e senha
-      description: "Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin: 401 `TOTP_REQUIRED` pede o `totpCode`; código de recuperação também vale uma vez e força reconfigurar o TOTP."
+      description: "Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. Código de recuperação também vale uma vez e força reconfigurar o TOTP."
       security: []
       requestBody:
         required: true
@@ -162,11 +162,13 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Sessão aberta
+          description: "Sessão aberta, ou desafio de 2º fator (mfaRequired true) para admin com TOTP"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResult'
+                oneOf:
+                  - $ref: '#/components/schemas/AuthResult'
+                  - $ref: '#/components/schemas/MfaChallenge'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -309,7 +311,7 @@ paths:
       tags: [auth]
       operationId: resetPassword
       summary: Redefinir a senha com o código
-      description: "Confirma o e-mail, revoga TODAS as sessões e envia aviso \"Sua senha foi alterada\". Admin não recebe sessão (`tokens: null`)."
+      description: "Confirma o e-mail, revoga TODAS as sessões e envia aviso \"Sua senha foi alterada\". O código do e-mail é conferido primeiro. Admin com TOTP não troca a senha aqui: a resposta é `{ tokens: null, mfaRequired: true, resetTicket }` e a troca termina em `/auth/password/reset/complete` (SEC-095). Admin não recebe sessão (`tokens: null`)."
       security: []
       requestBody:
         required: true
@@ -1325,6 +1327,62 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/auth/mfa/verify:
+    post:
+      tags: [auth]
+      operationId: verifyMfa
+      summary: 2º passo do login do admin (SEC-090)
+      description: "Recebe o `mfaToken` do login (256 bits, 5 min, uso único, 5 tentativas) e o TOTP ou um código de recuperação. Token inexistente, vencido, usado ou código errado têm a MESMA resposta (401 `MFA_INVALID`). Erros somam no limite do 2º fator POR CONTA (429 `MFA_RATE_LIMITED`, SEC-091)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaVerifyRequest'
+      responses:
+        '200':
+          description: Sessão aberta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/password/reset/complete:
+    post:
+      tags: [auth]
+      operationId: completeResetPassword
+      summary: Concluir a redefinição de senha do admin (SEC-095, passos 2 e 3)
+      description: "Recebe o `resetTicket` devolvido por `/auth/password/reset` (código do e-mail já validado, 10 min, uso único, 5 tentativas), o TOTP ou código de recuperação e a senha nova. O servidor só grava a senha se os dois fatores foram validados neste ticket. Revoga todas as sessões, avisa o titular e os outros super admins e audita."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteResetPasswordRequest'
+      responses:
+        '200':
+          description: Senha redefinida (admin não recebe sessão)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -1560,7 +1618,7 @@ components:
         email: { type: string, format: email }
         code: { type: string, pattern: '^[0-9]{6}$' }
         newPassword: { type: string }
-        totpCode: { type: string, minLength: 6, maxLength: 32, description: 'Obrigatório para admin com TOTP: o segundo fator vale na mesma chamada (SEC-095)' }
+        totpCode: { type: string, minLength: 6, maxLength: 32, deprecated: true, description: 'Obsoleto. Admin com TOTP usa `/auth/password/reset/complete`. Se vier, só é avaliado depois do código do e-mail, passando pelo mesmo ticket.' }
     ResetPasswordResponse:
       type: object
       required: [tokens]
@@ -1569,6 +1627,31 @@ components:
           oneOf:
             - { $ref: '#/components/schemas/TokenPair' }
             - { type: 'null' }
+        mfaRequired: { type: boolean, enum: [true], description: 'Admin com TOTP: falta o 2º fator (use `resetTicket`)' }
+        resetTicket: { type: string, description: 'Ticket opaco de 256 bits, 10 min, uso único' }
+        expiresIn: { type: integer, example: 600 }
+    MfaChallenge:
+      type: object
+      required: [mfaRequired, mfaToken, expiresIn]
+      properties:
+        mfaRequired: { type: boolean, enum: [true] }
+        mfaToken: { type: string, description: 'Token opaco de 256 bits, 5 min, uso único, 5 tentativas' }
+        expiresIn: { type: integer, example: 300 }
+    MfaVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [mfaToken, code]
+      properties:
+        mfaToken: { type: string, minLength: 20, maxLength: 200 }
+        code: { type: string, minLength: 6, maxLength: 32, description: TOTP de 6 dígitos ou código de recuperação }
+    CompleteResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [resetTicket, totpCode, newPassword]
+      properties:
+        resetTicket: { type: string, minLength: 20, maxLength: 200 }
+        totpCode: { type: string, minLength: 6, maxLength: 32, description: TOTP de 6 dígitos ou código de recuperação }
+        newPassword: { type: string }
     ReauthRequest:
       type: object
       additionalProperties: false

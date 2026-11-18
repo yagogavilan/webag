@@ -114,7 +114,7 @@ export const EmailExistsResponse = zod.object({
 
 
 /**
- * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin: 401 `TOTP_REQUIRED` pede o `totpCode`; código de recuperação também vale uma vez e força reconfigurar o TOTP.
+ * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. Código de recuperação também vale uma vez e força reconfigurar o TOTP.
  * @summary Entrar com e-mail e senha
  */
 export const loginBodyTotpCodeMin = 6;
@@ -130,7 +130,7 @@ export const LoginBody = zod.object({
   "code": zod.string().regex(loginBodyCodeRegExp).optional().describe('Step-up por e-mail')
 })
 
-export const LoginResponse = zod.object({
+export const LoginResponse = zod.union([zod.object({
   "user": zod.object({
   "id": zod.uuid(),
   "email": zod.email(),
@@ -144,7 +144,11 @@ export const LoginResponse = zod.object({
   "tokenType": zod.enum(['Bearer'])
 }),
   "mfaSetupRequired": zod.boolean().describe('Admin sem TOTP configurado (ou que usou código de recuperação). Só a configuração do TOTP fica liberada.')
-})
+}),zod.object({
+  "mfaRequired": zod.literal(true),
+  "mfaToken": zod.string().describe('Token opaco de 256 bits, 5 min, uso único, 5 tentativas'),
+  "expiresIn": zod.int()
+})])
 
 
 /**
@@ -227,7 +231,7 @@ export const ForgotPasswordResponse = zod.object({
 
 
 /**
- * Confirma o e-mail, revoga TODAS as sessões e envia aviso "Sua senha foi alterada". Admin não recebe sessão (`tokens: null`).
+ * Confirma o e-mail, revoga TODAS as sessões e envia aviso "Sua senha foi alterada". O código do e-mail é conferido primeiro. Admin com TOTP não troca a senha aqui: a resposta é `{ tokens: null, mfaRequired: true, resetTicket }` e a troca termina em `/auth/password/reset/complete` (SEC-095). Admin não recebe sessão (`tokens: null`).
  * @summary Redefinir a senha com o código
  */
 export const resetPasswordBodyCodeRegExp = new RegExp('^[0-9]{6}$');
@@ -240,7 +244,7 @@ export const ResetPasswordBody = zod.object({
   "email": zod.email(),
   "code": zod.string().regex(resetPasswordBodyCodeRegExp),
   "newPassword": zod.string(),
-  "totpCode": zod.string().min(resetPasswordBodyTotpCodeMin).max(resetPasswordBodyTotpCodeMax).optional().describe('Obrigatório para admin com TOTP: o segundo fator vale na mesma chamada (SEC-095)')
+  "totpCode": zod.string().min(resetPasswordBodyTotpCodeMin).max(resetPasswordBodyTotpCodeMax).optional().describe('Obsoleto. Admin com TOTP usa `/auth/password/reset/complete`. Se vier, só é avaliado depois do código do e-mail, passando pelo mesmo ticket.')
 })
 
 export const ResetPasswordResponse = zod.object({
@@ -249,7 +253,10 @@ export const ResetPasswordResponse = zod.object({
   "refreshToken": zod.string().describe('Token opaco de 256 bits'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
-}),zod.null()])
+}),zod.null()]),
+  "mfaRequired": zod.literal(true).optional().describe('Admin com TOTP: falta o 2º fator (use `resetTicket`)'),
+  "resetTicket": zod.string().optional().describe('Ticket opaco de 256 bits, 10 min, uso único'),
+  "expiresIn": zod.int().optional()
 })
 
 
@@ -1269,3 +1276,68 @@ export const ReprocessWebhookEventParams = zod.object({
 })
 
 export const ReprocessWebhookEventResponse = zod.void()
+
+
+/**
+ * Recebe o `mfaToken` do login (256 bits, 5 min, uso único, 5 tentativas) e o TOTP ou um código de recuperação. Token inexistente, vencido, usado ou código errado têm a MESMA resposta (401 `MFA_INVALID`). Erros somam no limite do 2º fator POR CONTA (429 `MFA_RATE_LIMITED`, SEC-091).
+ * @summary 2º passo do login do admin (SEC-090)
+ */
+export const verifyMfaBodyMfaTokenMin = 20;
+export const verifyMfaBodyMfaTokenMax = 200;
+
+export const verifyMfaBodyCodeMin = 6;
+export const verifyMfaBodyCodeMax = 32;
+
+
+
+export const VerifyMfaBody = zod.object({
+  "mfaToken": zod.string().min(verifyMfaBodyMfaTokenMin).max(verifyMfaBodyMfaTokenMax),
+  "code": zod.string().min(verifyMfaBodyCodeMin).max(verifyMfaBodyCodeMax).describe('TOTP de 6 dígitos ou código de recuperação')
+})
+
+export const VerifyMfaResponse = zod.object({
+  "user": zod.object({
+  "id": zod.uuid(),
+  "email": zod.email(),
+  "emailVerified": zod.boolean(),
+  "name": zod.string()
+}),
+  "tokens": zod.object({
+  "accessToken": zod.string().describe('JWT HS256 de 15 min'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "expiresIn": zod.int().describe('Segundos de validade do access token'),
+  "tokenType": zod.enum(['Bearer'])
+}),
+  "mfaSetupRequired": zod.boolean().describe('Admin sem TOTP configurado (ou que usou código de recuperação). Só a configuração do TOTP fica liberada.')
+})
+
+
+/**
+ * Recebe o `resetTicket` devolvido por `/auth/password/reset` (código do e-mail já validado, 10 min, uso único, 5 tentativas), o TOTP ou código de recuperação e a senha nova. O servidor só grava a senha se os dois fatores foram validados neste ticket. Revoga todas as sessões, avisa o titular e os outros super admins e audita.
+ * @summary Concluir a redefinição de senha do admin (SEC-095, passos 2 e 3)
+ */
+export const completeResetPasswordBodyResetTicketMin = 20;
+export const completeResetPasswordBodyResetTicketMax = 200;
+
+export const completeResetPasswordBodyTotpCodeMin = 6;
+export const completeResetPasswordBodyTotpCodeMax = 32;
+
+
+
+export const CompleteResetPasswordBody = zod.object({
+  "resetTicket": zod.string().min(completeResetPasswordBodyResetTicketMin).max(completeResetPasswordBodyResetTicketMax),
+  "totpCode": zod.string().min(completeResetPasswordBodyTotpCodeMin).max(completeResetPasswordBodyTotpCodeMax).describe('TOTP de 6 dígitos ou código de recuperação'),
+  "newPassword": zod.string()
+})
+
+export const CompleteResetPasswordResponse = zod.object({
+  "tokens": zod.union([zod.object({
+  "accessToken": zod.string().describe('JWT HS256 de 15 min'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "expiresIn": zod.int().describe('Segundos de validade do access token'),
+  "tokenType": zod.enum(['Bearer'])
+}),zod.null()]),
+  "mfaRequired": zod.literal(true).optional().describe('Admin com TOTP: falta o 2º fator (use `resetTicket`)'),
+  "resetTicket": zod.string().optional().describe('Ticket opaco de 256 bits, 10 min, uso único'),
+  "expiresIn": zod.int().optional()
+})

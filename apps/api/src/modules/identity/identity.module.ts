@@ -14,6 +14,7 @@ import { CodeService } from './code.service.js';
 import { PasswordService } from './password.service.js';
 import { PrincipalService } from './principal.service.js';
 import { SessionService } from './session.service.js';
+import { TicketService } from './ticket.service.js';
 import { TotpService } from './totp.service.js';
 
 @Module({
@@ -26,6 +27,7 @@ import { TotpService } from './totp.service.js';
     PasswordService,
     PrincipalService,
     SessionService,
+    TicketService,
     TotpService,
     // Ordem: primeiro o rate limit (barato, protege o banco), depois a autenticação.
     { provide: APP_GUARD, useClass: RateLimitGuard },
