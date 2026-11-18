@@ -3,3 +3,4 @@ export { CatalogModule } from './catalog.module.js';
 export { CatalogService, ProductOrdersPort } from './catalog.service.js';
 export { isProductVisible, isOfferable } from './domain/stock.js';
 export { effectivePrice } from './domain/price.js';
+export { InventoryService, type StockLine } from './inventory.service.js';

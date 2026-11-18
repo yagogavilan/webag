@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplica
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import type { RequestContext } from '../../platform/auth/decorators.js';
-import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
+import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
@@ -20,6 +20,15 @@ import {
 import { PAYMENT_PROVIDER, type PaymentProvider, type ProviderPayment } from './payment-provider.js';
 
 export type PaymentAttempt = typeof paymentAttempts.$inferSelect;
+
+/**
+ * Quem reage ao pagamento (o pedido, Onda 4) se registra aqui, sem o módulo de pagamentos importar o de pedidos (sem
+ * ciclo). Os ganchos rodam na MESMA transação da mudança: falha no gancho desfaz a transição e o webhook é retentado.
+ */
+export interface PaymentListener {
+  onAttemptTransition?(tx: Tx, attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void>;
+  onRefundConfirmed?(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string; reason: string; refundedTotalCents: number }): Promise<void>;
+}
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 
 export interface CreatePaymentInput {
@@ -56,6 +65,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
   private readonly logger = new Logger(PaymentsService.name);
   private timers: NodeJS.Timeout[] = [];
   private readonly inflight = new Set<Promise<unknown>>();
+  private readonly listeners: PaymentListener[] = [];
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
@@ -65,6 +75,14 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     private readonly flags: FeatureFlagsService,
     private readonly audit: AuditService,
   ) {}
+
+  registerListener(listener: PaymentListener): void {
+    this.listeners.push(listener);
+  }
+
+  private async notifyTransition(tx: Tx, attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void> {
+    for (const listener of this.listeners) await listener.onAttemptTransition?.(tx, attempt, from, remote);
+  }
 
   /** Fila durável no Postgres: processa eventos vencidos e concilia pendentes (SEC-042). Desligado em teste. */
   onApplicationBootstrap(): void {
@@ -157,17 +175,21 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   /** Preenche a tentativa `creating` com a resposta do provedor (também usada pela conciliação). */
   private async completeCreation(attemptId: string, remote: ProviderPayment): Promise<PaymentAttempt> {
-    const [attempt] = await this.db
-      .update(paymentAttempts)
-      .set({
-        providerPaymentId: remote.providerPaymentId,
-        status: remote.status,
-        pixCopyPaste: remote.pixCopyPaste ?? null,
-        declineReason: remote.declineReason ?? null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')))
-      .returning();
+    const attempt = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(paymentAttempts)
+        .set({
+          providerPaymentId: remote.providerPaymentId,
+          status: remote.status,
+          pixCopyPaste: remote.pixCopyPaste ?? null,
+          declineReason: remote.declineReason ?? null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')))
+        .returning();
+      if (updated && remote.status !== 'pending') await this.notifyTransition(tx, updated, 'creating', remote);
+      return updated;
+    });
     if (attempt) return attempt;
     return this.getAttempt(attemptId);
   }
@@ -315,10 +337,15 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     }
     if (!canTransition(attempt.status, remote.status)) return; // repetido ou regressivo: sem efeito
 
-    await this.db
-      .update(paymentAttempts)
-      .set({ status: remote.status, declineReason: remote.declineReason ?? attempt.declineReason, updatedAt: new Date() })
-      .where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, attempt.status)));
+    await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(paymentAttempts)
+        .set({ status: remote.status, declineReason: remote.declineReason ?? attempt.declineReason, updatedAt: new Date() })
+        .where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, attempt.status)))
+        .returning();
+      // Só quem de fato mudou o estado dispara o gancho (evento repetido ou concorrente não repete o efeito no pedido).
+      if (updated) await this.notifyTransition(tx, updated, attempt.status, remote);
+    });
   }
 
   private mismatches(attempt: PaymentAttempt, remote: ProviderPayment): string[] {
@@ -430,6 +457,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       if (locked && done === locked.amountCents) {
         await tx.update(paymentAttempts).set({ status: 'refunded', updatedAt: new Date() }).where(eq(paymentAttempts.id, attemptId));
       }
+      if (locked) for (const listener of this.listeners) await listener.onRefundConfirmed?.(tx, locked, { amountCents, idempotencyKey, reason, refundedTotalCents: done });
       // N1: a auditoria vale para TODO estorno confirmado, inclusive o concluído pela conciliação (usa o ator gravado na
       // intenção, não o de quem rodou a recuperação). Na mesma transação: falha de auditoria desfaz o estorno gravado.
       const [intent] = await tx

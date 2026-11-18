@@ -29,6 +29,8 @@ export interface ProviderPayment {
   /** Quem recebeu o dinheiro (conta da loja no provedor). */
   receiverId: string | null;
   refundedCents: number;
+  /** Tarifa cobrada pelo provedor (`fee_details`), quando já conhecida; alimenta o ledger. */
+  providerFeeCents?: number;
   pixCopyPaste?: string;
   threeDsUrl?: string;
   declineReason?: string;
