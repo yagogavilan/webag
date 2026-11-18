@@ -104,6 +104,17 @@ export interface AdminUser {
   totpConfigured: boolean;
 }
 
+export type VerifiedChannel = 'video_call' | 'in_person' | 'registered_phone';
+
+export interface SessionRow {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  lastUsedAt: string;
+  userAgent: string | null;
+  ip: string | null;
+}
+
 const A = 'admin' as const;
 
 export const adminApi = {
@@ -134,7 +145,12 @@ export const adminApi = {
   admins: () => apiRequest<Page<AdminUser>>(A, 'admin/admins'),
   inviteAdmin: (body: { name: string; email: string; profile: AdminProfile }) => apiRequest<{ invitationId: string; expiresAt: string }>(A, 'admin/admins', { method: 'POST', body }),
   updateAdmin: (userId: string, body: { profile?: AdminProfile; active?: boolean }) => apiRequest<void>(A, `admin/admins/${userId}`, { method: 'PATCH', body }),
-  resetTotp: (userId: string) => apiRequest<void>(A, `admin/admins/${userId}/totp/reset`, { method: 'POST' }),
+  revokeInvitation: (invitationId: string) => apiRequest<void>(A, `admin/admins/invitations/${invitationId}`, { method: 'DELETE' }),
+  resetTotp: (userId: string, body: { reason: string; verifiedChannel: VerifiedChannel }) => apiRequest<void>(A, `admin/admins/${userId}/totp/reset`, { method: 'POST', body }),
+
+  /** PENDENTE no backend (DT-018): o service existe (`regenerateRecoveryCodes`), a rota ainda não. Caminho assumido. */
+  regenerateRecoveryCodes: () => apiRequest<{ recoveryCodes: string[] }>(A, 'admin/totp/recovery-codes', { method: 'POST' }),
+  sessions: () => apiRequest<Page<SessionRow>>(A, 'me/sessions'),
 
   changePassword: (body: { currentPassword: string; newPassword: string }) => apiRequest<{ ok: true }>(A, 'me/password', { method: 'POST', body }),
   logoutAll: () => apiRequest<void>(A, 'auth/logout-all', { method: 'POST' }),
@@ -148,4 +164,5 @@ export const keys = {
   legal: (type: LegalType) => ['admin', 'legal', type] as const,
   audit: (filters: AuditFilters) => ['admin', 'audit', filters] as const,
   admins: ['admin', 'admins'] as const,
+  sessions: ['admin', 'sessions'] as const,
 };
