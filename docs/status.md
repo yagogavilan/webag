@@ -12,10 +12,11 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| Pesquisa de referências + design system em tokens | product-designer | Concluído (34 pares de contraste AA verificados pelo CEO) |
-| PRD e histórias da 1.0 + backlog fase 2 | product-owner | Em andamento |
-| ADR de stack + esqueleto do monorepo | tech-lead | Em andamento |
+| Concluir esqueleto do monorepo e fechar ADRs (Onda 0) | tech-lead | Em andamento |
 | Threat model de autenticação e pagamento | security-engineer | Em andamento |
+| Specs de tela das ondas 2 a 4 | product-designer | Em andamento |
+
+Concluídos: design system e tokens, PRDs e backlog (134 histórias), plano de 16 sub-ondas com board e RAID (`docs/gestao/plano-execucao.md`). Um reinício do container derrubou 3 agentes; o que estava commitado sobreviveu e o trabalho foi redisparado.
 
 ## Falta (plano de fases)
 1. Fundação (acima)
