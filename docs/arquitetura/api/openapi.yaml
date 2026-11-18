@@ -40,6 +40,10 @@ tags:
     description: Fila de aprovação, decisões, documentos e edição de lojas (admin)
   - name: stores
     description: "Loja do lojista (onboarding, perfil, configuração, documentos, conta de recebimento e equipe)"
+  - name: catalog
+    description: Catálogo da loja (produtos, variações, estoque, promoção, seções, planilha e ação em massa)
+  - name: moderation
+    description: Moderação de produtos e listas de categorias proibidas e palavras suspeitas (admin)
   - name: uploads
     description: Upload de arquivos em 2 passos (POST pré-assinado + complete), validado por magic bytes
 security:
@@ -2943,6 +2947,671 @@ paths:
           $ref: "#/components/responses/NotFound"
         '409':
           $ref: "#/components/responses/Conflict"
+  /v1/stores/{storeId}/products:
+    get:
+      tags: [catalog]
+      operationId: listProducts
+      summary: Listar produtos da loja
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Filtros por status, busca, seção e estoque baixo; paginação por cursor."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, active, paused, archived] } }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: sectionId, in: query, schema: { type: string, format: uuid } }
+        - { name: lowStock, in: query, schema: { type: string, enum: ['true'] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Produtos (mais recentes primeiro)
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ProductPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [catalog]
+      operationId: createProduct
+      summary: Criar produto (rascunho)
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, schema: { type: string, minLength: 8, maxLength: 80 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/CreateProductRequest' }
+      responses:
+        '201':
+          description: Produto criado
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/products/import/template:
+    get:
+      tags: [catalog]
+      operationId: getProductImportTemplate
+      summary: Modelo de planilha (CSV)
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Arquivo CSV com o cabeçalho e 2 linhas de exemplo
+          content:
+            text/csv:
+              schema:
+                { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/products/import:
+    post:
+      tags: [catalog]
+      operationId: importProducts
+      summary: Importar produtos por planilha (CSV)
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mode, in: query, schema: { type: string, enum: [preview, commit], default: preview } }
+        - { name: onExisting, in: query, schema: { type: string, enum: [skip, update], default: skip } }
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              { type: string }
+      responses:
+        '200':
+          description: Resumo da importação
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/products/bulk:
+    post:
+      tags: [catalog]
+      operationId: bulkProducts
+      summary: Ação em massa
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/BulkRequest' }
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/BulkResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}:
+    get:
+      tags: [catalog]
+      operationId: getProduct
+      summary: Detalhe do produto
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [catalog]
+      operationId: updateProduct
+      summary: Editar produto e promoção
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/UpdateProductRequest' }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags: [catalog]
+      operationId: archiveProduct
+      summary: Arquivar produto
+      description: "\"Excluir\" arquiva: o histórico de pedidos mantém nome e preço. 409 `OPEN_ORDERS` com pedidos em andamento. Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Arquivado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/stores/{storeId}/products/{productId}/variants:
+    put:
+      tags: [catalog]
+      operationId: setProductVariants
+      summary: Definir variações e estoque
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` (\"X unidades estão reservadas em pedidos\"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/SetVariantsRequest' }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}/variants/{variantId}/stock:
+    post:
+      tags: [catalog]
+      operationId: adjustVariantStock
+      summary: Ajuste rápido de estoque
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/StockAdjustBody' }
+      responses:
+        '200':
+          description: Variação atualizada
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ProductVariant' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}/images:
+    put:
+      tags: [catalog]
+      operationId: setProductImages
+      summary: Definir fotos (ordem = posição; a 1ª é a capa)
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/SetImagesRequest' }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}/publish:
+    post:
+      tags: [catalog]
+      operationId: publishProduct
+      summary: Publicar produto
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}/pause:
+    post:
+      tags: [catalog]
+      operationId: pauseProduct
+      summary: Pausar produto
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Tira da vitrine sem apagar."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/products/{productId}/resume:
+    post:
+      tags: [catalog]
+      operationId: resumeProduct
+      summary: Reativar produto
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). 403 `PRODUCT_MODERATED`: o lojista não reativa o que a moderação pausou ou removeu (R-12d)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Product' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/sections:
+    get:
+      tags: [catalog]
+      operationId: listSections
+      summary: Seções da vitrine
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Seções em ordem
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/SectionList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [catalog]
+      operationId: createSection
+      summary: Criar seção
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Nome até 40 caracteres; até 30 seções."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/SectionRequest' }
+      responses:
+        '201':
+          description: Seção criada
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Section' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/stores/{storeId}/sections/order:
+    put:
+      tags: [catalog]
+      operationId: orderSections
+      summary: Ordenar seções
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Envie todos os ids da loja."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/SectionOrderRequest' }
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/stores/{storeId}/sections/{sectionId}:
+    patch:
+      tags: [catalog]
+      operationId: renameSection
+      summary: Renomear seção
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: sectionId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/SectionRequest' }
+      responses:
+        '200':
+          description: Seção
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/Section' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [catalog]
+      operationId: deleteSection
+      summary: Excluir seção
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Os produtos vão para \"Outros\"."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: sectionId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Excluída
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/products:
+    get:
+      tags: [moderation]
+      operationId: adminListProducts
+      summary: Produtos (moderação)
+      description: "Filtros por loja, categoria, status, moderação, período e busca. Permissão de admin: `products:read`."
+      parameters:
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: moderationStatus, in: query, schema: { type: string, enum: [ok, review, paused, removed] } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, active, paused, archived] } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Produtos
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/AdminProductPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/products/{productId}/moderation:
+    post:
+      tags: [moderation]
+      operationId: moderateProduct
+      summary: Pausar, remover ou restaurar produto
+      description: "Pausar e remover exigem motivo (422 `REASON_REQUIRED`), avisam o lojista por e-mail com o motivo e entram na auditoria. O status de moderação é separado do status do lojista; só o admin o reverte. 3 remoções da loja em 30 dias a sinalizam para análise de suspensão (`storeFlagged`). Permissão de admin: `products:moderate`."
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/ModerateRequest' }
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ModerationResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/moderation/terms:
+    get:
+      tags: [moderation]
+      operationId: listModerationTerms
+      summary: Listas de moderação
+      description: "Categorias proibidas (BLOQUEIAM o cadastro) e palavras suspeitas (só SINALIZAM). Permissão de admin: `moderation:read`."
+      responses:
+        '200':
+          description: Itens
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ModerationTermList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [moderation]
+      operationId: addModerationTerm
+      summary: Adicionar item às listas
+      description: "Palavra suspeita: uma palavra só, casa como palavra inteira sem caixa nem acento. Categoria proibida: id de categoria existente (a subcategoria herda). Permissão de admin: `moderation:write`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/ModerationTermRequest' }
+      responses:
+        '201':
+          description: Item criado
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ModerationTerm' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/moderation/terms/{termId}:
+    delete:
+      tags: [moderation]
+      operationId: removeModerationTerm
+      summary: Remover item das listas
+      description: "Não altera produtos já cadastrados. Permissão de admin: `moderation:write`."
+      parameters:
+        - { name: termId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -4989,3 +5658,264 @@ components:
           type: string
           minLength: 10
           maxLength: 500
+    ProductVariant:
+      type: object
+      required: [id, attributes, sku, priceCents, effectivePriceCents, originalPriceCents, discountPercent, stock, reserved, available, soldOut, low]
+      properties:
+        id: { type: string, format: uuid }
+        attributes: { type: object, additionalProperties: { type: string }, example: { Tamanho: P, Cor: Azul } }
+        sku: { type: [string, 'null'] }
+        priceCents: { type: [integer, 'null'], description: Preço próprio da variação; vazio usa o do produto }
+        effectivePriceCents: { type: [integer, 'null'], description: Preço vigente hoje (com a promoção, se ativa) }
+        originalPriceCents: { type: [integer, 'null'], description: Preço "de" quando há promoção ativa }
+        discountPercent: { type: [integer, 'null'], description: Percentual exibido, arredondado para baixo; abaixo de 1% não aparece }
+        stock: { type: integer, minimum: 0, maximum: 99999 }
+        reserved: { type: integer }
+        available: { type: integer, description: estoque menos reservado }
+        soldOut: { type: boolean }
+        low: { type: boolean, description: Disponível maior que zero e menor ou igual ao limite da loja }
+    Product:
+      type: object
+      required: [id, name, description, categoryId, sectionId, status, moderationStatus, moderationReason, basePriceCents, promotion, variantAttributes, variants, images, soldOut, publishedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 80 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        categoryId: { type: [string, 'null'], format: uuid }
+        sectionId: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [draft, active, paused, archived] }
+        moderationStatus: { type: string, enum: [ok, review, paused, removed], description: Separado do status do lojista; só o admin altera }
+        moderationReason: { type: [string, 'null'], description: Motivo, só quando pausado ou removido pela moderação }
+        basePriceCents: { type: [integer, 'null'], minimum: 1, maximum: 9999999 }
+        promotion:
+          type: object
+          required: [priceCents, startsAt, endsAt, active]
+          properties:
+            priceCents: { type: [integer, 'null'] }
+            startsAt: { type: [string, 'null'], format: date-time }
+            endsAt: { type: [string, 'null'], format: date-time }
+            active: { type: boolean, description: Calculado na leitura; o fim da promoção não depende de job }
+        variantAttributes: { type: array, items: { type: string } }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariant' } }
+        images:
+          type: array
+          items:
+            type: object
+            required: [id, position, urls]
+            properties:
+              id: { type: string, format: uuid, description: Id do upload (`/uploads`) }
+              position: { type: integer }
+              urls: { type: [object, 'null'], additionalProperties: { type: string }, description: 'Largura em px para URL pública WebP' }
+        soldOut: { type: boolean, description: Todas as variações sem disponível }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProductSummary:
+      type: object
+      required: [id, name, status, moderationStatus, sectionId, basePriceCents, fromPriceCents, cover, availableTotal, low, soldOut, variantCount, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [draft, active, paused, archived] }
+        moderationStatus: { type: string, enum: [ok, review, paused, removed] }
+        sectionId: { type: [string, 'null'], format: uuid }
+        basePriceCents: { type: [integer, 'null'] }
+        fromPriceCents: { type: [integer, 'null'] }
+        cover: { type: [object, 'null'], additionalProperties: { type: string } }
+        availableTotal: { type: integer }
+        low: { type: boolean }
+        soldOut: { type: boolean }
+        variantCount: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    ProductPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ProductSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    CreateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        categoryId: { type: [string, 'null'], format: uuid }
+        sectionId: { type: [string, 'null'], format: uuid }
+        basePriceCents: { type: [integer, 'null'], description: 'Centavos, de 1 a 9999999 (422 fora da faixa)' }
+    UpdateProductRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        categoryId: { type: [string, 'null'], format: uuid }
+        sectionId: { type: [string, 'null'], format: uuid }
+        basePriceCents: { type: [integer, 'null'] }
+        promoPriceCents: { type: [integer, 'null'] }
+        promoStartsAt: { type: [string, 'null'], format: date-time }
+        promoEndsAt: { type: [string, 'null'], format: date-time }
+    SetVariantsRequest:
+      type: object
+      additionalProperties: false
+      required: [attributes, variants]
+      properties:
+        attributes: { type: array, maxItems: 5, items: { type: string, maxLength: 30 }, description: 'Nomes dos atributos (até 3 válidos). Vazio = sem variação' }
+        variants:
+          type: array
+          minItems: 1
+          maxItems: 300
+          items:
+            type: object
+            additionalProperties: false
+            required: [attributes]
+            properties:
+              id: { type: string, format: uuid }
+              attributes: { type: object, additionalProperties: { type: string, maxLength: 40 } }
+              stock: { type: integer }
+              priceCents: { type: [integer, 'null'] }
+              sku: { type: [string, 'null'], maxLength: 40 }
+    StockAdjustBody:
+      oneOf:
+        - { type: object, additionalProperties: false, required: [delta], properties: { delta: { type: integer } } }
+        - { type: object, additionalProperties: false, required: [set], properties: { set: { type: integer } } }
+    SetImagesRequest:
+      type: object
+      additionalProperties: false
+      required: [imageIds]
+      properties:
+        imageIds: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+    Section:
+      type: object
+      required: [id, name, position, productCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 40 }
+        position: { type: integer }
+        productCount: { type: integer }
+    SectionList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Section' } }
+        nextCursor: { type: 'null' }
+    SectionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 40 }
+    SectionOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids: { type: array, minItems: 1, maxItems: 100, items: { type: string, format: uuid } }
+    BulkRequest:
+      type: object
+      additionalProperties: false
+      required: [productIds, action]
+      properties:
+        productIds: { type: array, minItems: 1, maxItems: 200, items: { type: string, format: uuid } }
+        dryRun: { type: boolean, default: false }
+        action:
+          oneOf:
+            - { type: object, additionalProperties: false, required: [type], properties: { type: { const: pause } } }
+            - { type: object, additionalProperties: false, required: [type], properties: { type: { const: resume } } }
+            - { type: object, additionalProperties: false, required: [type, sectionId], properties: { type: { const: move_section }, sectionId: { type: [string, 'null'], format: uuid } } }
+            - { type: object, additionalProperties: false, required: [type, mode, value], properties: { type: { const: price_adjust }, mode: { type: string, enum: [percent, amount] }, value: { type: number, description: 'percent: ex. -10 ou 5.5; amount: centavos inteiros (positivo ou negativo)' } } }
+    BulkResult:
+      type: object
+      required: [dryRun, willChange, changed, blocked]
+      properties:
+        dryRun: { type: boolean }
+        willChange: { type: integer }
+        changed: { type: integer }
+        blocked:
+          type: array
+          items:
+            type: object
+            required: [productId, name, reason]
+            properties:
+              productId: { type: string, format: uuid }
+              name: { type: string }
+              reason: { type: string }
+    ImportResult:
+      type: object
+      required: [totalLines, valid, invalid, errors, productsToCreate, alreadyExist, committed, created, updated, skipped]
+      properties:
+        totalLines: { type: integer }
+        valid: { type: integer }
+        invalid: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [line, message]
+            properties:
+              line: { type: integer, description: Linha da planilha (o cabeçalho é a 1) }
+              message: { type: string }
+        productsToCreate: { type: integer }
+        alreadyExist: { type: integer, description: Produtos cujo código (SKU) já existe na loja }
+        committed: { type: boolean }
+        created: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+    AdminProduct:
+      type: object
+      required: [id, name, description, storeId, storeName, categoryId, status, moderationStatus, moderationReason, moderatedAt, basePriceCents, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        storeId: { type: string, format: uuid }
+        storeName: { type: [string, 'null'] }
+        categoryId: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [draft, active, paused, archived] }
+        moderationStatus: { type: string, enum: [ok, review, paused, removed] }
+        moderationReason: { type: [string, 'null'] }
+        moderatedAt: { type: [string, 'null'], format: date-time }
+        basePriceCents: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+    AdminProductPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminProduct' } }
+        nextCursor: { type: [string, 'null'] }
+    ModerateRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [pause, remove, restore] }
+        reason: { type: string, minLength: 5, maxLength: 500, description: Obrigatório para pausar e remover }
+    ModerationResult:
+      type: object
+      required: [id, moderationStatus, storeFlagged]
+      properties:
+        id: { type: string, format: uuid }
+        moderationStatus: { type: string, enum: [ok, review, paused, removed] }
+        storeFlagged: { type: boolean, description: A remoção completou 3 em 30 dias e a loja foi sinalizada para análise de suspensão }
+    ModerationTerm:
+      type: object
+      required: [id, kind, value, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [forbidden_category, suspect_word] }
+        value: { type: string, description: 'Palavra normalizada, ou id da categoria' }
+        label: { type: [string, 'null'], description: Nome da categoria, ou a própria palavra }
+        createdAt: { type: string, format: date-time }
+    ModerationTermList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ModerationTerm' } }
+        nextCursor: { type: 'null' }
+    ModerationTermRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, value]
+      properties:
+        kind: { type: string, enum: [forbidden_category, suspect_word] }
+        value: { type: string, minLength: 1, maxLength: 80 }

@@ -11,6 +11,7 @@ import { MediaService } from '../media/index.js';
 import {
   paymentAccounts,
   storeDocuments,
+  storeActivity,
   storeExtraCategories,
   storeReviewItems,
   storeSettings,
@@ -361,6 +362,21 @@ export class StoresService {
   async ownerEmail(store: Store): Promise<{ email: string; name: string }> {
     const [row] = await this.db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, store.ownerUserId));
     return row ?? { email: '', name: '' };
+  }
+
+  /** Registro de atividade da loja (quem fez o quê), usado pelo catálogo. Sem dado do cliente. */
+  async logActivity(executor: DbOrTx, storeId: string, actorId: string | null, action: string, details: Record<string, unknown>): Promise<void> {
+    await executor.insert(storeActivity).values({ storeId, actorId, action, details });
+  }
+
+  /** WB-107 C4: sinaliza a loja para análise de suspensão (idempotente; a decisão é do admin). */
+  async flagSuspensionReview(storeId: string): Promise<boolean> {
+    const rows = await this.db
+      .update(stores)
+      .set({ suspensionReviewFlaggedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(stores.id, storeId), isNull(stores.suspensionReviewFlaggedAt)))
+      .returning({ id: stores.id });
+    return rows.length > 0;
   }
 
   /** Dias úteis do SLA de aprovação (parâmetro). */

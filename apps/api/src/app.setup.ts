@@ -25,6 +25,8 @@ export function configureApp(app: NestExpressApplication): void {
     }
     next();
   });
+  // Importação de produtos por planilha: corpo text/csv de até 1 MB. O parser só age nesse Content-Type (o JSON segue no limite padrão).
+  app.useBodyParser('text', { type: 'text/csv', limit: '1mb' });
   // Graceful shutdown: SIGTERM fecha HTTP, pool do Postgres e Redis (OnApplicationShutdown).
   app.enableShutdownHooks();
 

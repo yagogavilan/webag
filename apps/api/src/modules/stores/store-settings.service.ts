@@ -267,6 +267,12 @@ export class StoreSettingsService {
     });
   }
 
+  /** Limite de estoque baixo da loja (WB-064): o dela, ou o padrão `estoque_baixo_un`. */
+  async lowStockThresholdFor(storeId: string): Promise<number> {
+    const settings = await this.stores.getSettings(storeId);
+    return settings.lowStockThreshold ?? (await this.params.getNumber('estoque_baixo_un'));
+  }
+
   async setLowStockThreshold(store: Store, threshold: number | null, actor: Actor, ctx: RequestContext): Promise<void> {
     this.assertEditable(store, actor);
     await this.db.transaction(async (tx) => {

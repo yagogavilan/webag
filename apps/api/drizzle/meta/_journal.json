@@ -57,6 +57,13 @@
       "when": 1795021464492,
       "tag": "0007_admin_contract_audit_device_terms_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795021845314,
+      "tag": "0008_catalog_idempotency_store_review_flag",
+      "breakpoints": true
     }
   ]
 }

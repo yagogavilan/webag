@@ -3713,3 +3713,988 @@ export const DecideStoreDataReviewResponse = zod.object({
   "lowStockThreshold": zod.int()
 }).optional()
 })
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Filtros por status, busca, seção e estoque baixo; paginação por cursor.
+ * @summary Listar produtos da loja
+ */
+export const ListProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listProductsQueryQMax = 80;
+
+export const listProductsQueryCursorMax = 200;
+
+export const listProductsQueryLimitDefault = 20;
+export const listProductsQueryLimitMax = 50;
+
+
+
+export const ListProductsQueryParams = zod.object({
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']).optional(),
+  "q": zod.string().max(listProductsQueryQMax).optional(),
+  "sectionId": zod.uuid().optional(),
+  "lowStock": zod.enum(['true']).optional(),
+  "cursor": zod.string().max(listProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listProductsQueryLimitMax).default(listProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListProductsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']),
+  "sectionId": zod.uuid().nullable(),
+  "basePriceCents": zod.int().nullable(),
+  "fromPriceCents": zod.int().nullable(),
+  "cover": zod.record(zod.string(), zod.string()).nullable(),
+  "availableTotal": zod.int(),
+  "low": zod.boolean(),
+  "soldOut": zod.boolean(),
+  "variantCount": zod.int(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`.
+ * @summary Criar produto (rascunho)
+ */
+export const CreateProductParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createProductHeaderIdempotencyKeyMin = 8;
+export const createProductHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateProductHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createProductHeaderIdempotencyKeyMin).max(createProductHeaderIdempotencyKeyMax).optional()
+})
+
+export const createProductBodyNameMin = 2;
+export const createProductBodyNameMax = 80;
+
+export const createProductBodyDescriptionMax = 1000;
+
+
+
+export const CreateProductBody = zod.object({
+  "name": zod.string().min(createProductBodyNameMin).max(createProductBodyNameMax),
+  "description": zod.string().max(createProductBodyDescriptionMax).nullish(),
+  "categoryId": zod.uuid().nullish(),
+  "sectionId": zod.uuid().nullish(),
+  "basePriceCents": zod.int().nullish().describe('Centavos, de 1 a 9999999 (422 fora da faixa)')
+})
+
+export const createProductResponseNameMax = 80;
+
+export const createProductResponseDescriptionMax = 1000;
+
+export const createProductResponseBasePriceCentsMax = 9999999;
+
+export const createProductResponseVariantsItemStockMin = 0;
+export const createProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const CreateProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(createProductResponseNameMax),
+  "description": zod.string().max(createProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(createProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(createProductResponseVariantsItemStockMin).max(createProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Modelo de planilha (CSV)
+ */
+export const GetProductImportTemplateParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetProductImportTemplateResponse = zod.unknown()
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
+ * @summary Importar produtos por planilha (CSV)
+ */
+export const ImportProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const importProductsQueryModeDefault = `preview`;
+export const importProductsQueryOnExistingDefault = `skip`;
+
+export const ImportProductsQueryParams = zod.object({
+  "mode": zod.enum(['preview', 'commit']).default(importProductsQueryModeDefault),
+  "onExisting": zod.enum(['skip', 'update']).default(importProductsQueryOnExistingDefault)
+})
+
+export const ImportProductsResponse = zod.object({
+  "totalLines": zod.int(),
+  "valid": zod.int(),
+  "invalid": zod.int(),
+  "errors": zod.array(zod.object({
+  "line": zod.int().describe('Linha da planilha (o cabeçalho é a 1)'),
+  "message": zod.string()
+})),
+  "productsToCreate": zod.int(),
+  "alreadyExist": zod.int().describe('Produtos cujo código (SKU) já existe na loja'),
+  "committed": zod.boolean(),
+  "created": zod.int(),
+  "updated": zod.int(),
+  "skipped": zod.int()
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo.
+ * @summary Ação em massa
+ */
+export const BulkProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const bulkProductsBodyProductIdsMax = 200;
+
+export const bulkProductsBodyDryRunDefault = false;
+
+export const BulkProductsBody = zod.object({
+  "productIds": zod.array(zod.uuid()).min(1).max(bulkProductsBodyProductIdsMax),
+  "dryRun": zod.boolean().default(bulkProductsBodyDryRunDefault),
+  "action": zod.union([zod.object({
+  "type": zod.literal("pause")
+}),zod.object({
+  "type": zod.literal("resume")
+}),zod.object({
+  "type": zod.literal("move_section"),
+  "sectionId": zod.uuid().nullable()
+}),zod.object({
+  "type": zod.literal("price_adjust"),
+  "mode": zod.enum(['percent', 'amount']),
+  "value": zod.number().describe('percent: ex. -10 ou 5.5; amount: centavos inteiros (positivo ou negativo)')
+})])
+})
+
+export const BulkProductsResponse = zod.object({
+  "dryRun": zod.boolean(),
+  "willChange": zod.int(),
+  "changed": zod.int(),
+  "blocked": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "reason": zod.string()
+}))
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Detalhe do produto
+ */
+export const GetProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const getProductResponseNameMax = 80;
+
+export const getProductResponseDescriptionMax = 1000;
+
+export const getProductResponseBasePriceCentsMax = 9999999;
+
+export const getProductResponseVariantsItemStockMin = 0;
+export const getProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const GetProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(getProductResponseNameMax),
+  "description": zod.string().max(getProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(getProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(getProductResponseVariantsItemStockMin).max(getProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422.
+ * @summary Editar produto e promoção
+ */
+export const UpdateProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const updateProductBodyNameMin = 2;
+export const updateProductBodyNameMax = 80;
+
+export const updateProductBodyDescriptionMax = 1000;
+
+
+
+export const UpdateProductBody = zod.object({
+  "name": zod.string().min(updateProductBodyNameMin).max(updateProductBodyNameMax).optional(),
+  "description": zod.string().max(updateProductBodyDescriptionMax).nullish(),
+  "categoryId": zod.uuid().nullish(),
+  "sectionId": zod.uuid().nullish(),
+  "basePriceCents": zod.int().nullish(),
+  "promoPriceCents": zod.int().nullish(),
+  "promoStartsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "promoEndsAt": zod.iso.datetime({"offset":true}).nullish()
+})
+
+export const updateProductResponseNameMax = 80;
+
+export const updateProductResponseDescriptionMax = 1000;
+
+export const updateProductResponseBasePriceCentsMax = 9999999;
+
+export const updateProductResponseVariantsItemStockMin = 0;
+export const updateProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const UpdateProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(updateProductResponseNameMax),
+  "description": zod.string().max(updateProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(updateProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(updateProductResponseVariantsItemStockMin).max(updateProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * "Excluir" arquiva: o histórico de pedidos mantém nome e preço. 409 `OPEN_ORDERS` com pedidos em andamento. Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Arquivar produto
+ */
+export const ArchiveProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const ArchiveProductResponse = zod.void()
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`.
+ * @summary Definir variações e estoque
+ */
+export const SetProductVariantsParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const setProductVariantsBodyAttributesItemMax = 30;
+
+export const setProductVariantsBodyAttributesMax = 5;
+
+export const setProductVariantsBodyVariantsItemAttributesMaxOne = 40;
+
+export const setProductVariantsBodyVariantsItemSkuMax = 40;
+
+export const setProductVariantsBodyVariantsMax = 300;
+
+
+
+export const SetProductVariantsBody = zod.object({
+  "attributes": zod.array(zod.string().max(setProductVariantsBodyAttributesItemMax)).max(setProductVariantsBodyAttributesMax).describe('Nomes dos atributos (até 3 válidos). Vazio = sem variação'),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string().max(setProductVariantsBodyVariantsItemAttributesMaxOne)),
+  "stock": zod.int().optional(),
+  "priceCents": zod.int().nullish(),
+  "sku": zod.string().max(setProductVariantsBodyVariantsItemSkuMax).nullish()
+})).min(1).max(setProductVariantsBodyVariantsMax)
+})
+
+export const setProductVariantsResponseNameMax = 80;
+
+export const setProductVariantsResponseDescriptionMax = 1000;
+
+export const setProductVariantsResponseBasePriceCentsMax = 9999999;
+
+export const setProductVariantsResponseVariantsItemStockMin = 0;
+export const setProductVariantsResponseVariantsItemStockMax = 99999;
+
+
+
+export const SetProductVariantsResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(setProductVariantsResponseNameMax),
+  "description": zod.string().max(setProductVariantsResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(setProductVariantsResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(setProductVariantsResponseVariantsItemStockMin).max(setProductVariantsResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite.
+ * @summary Ajuste rápido de estoque
+ */
+export const AdjustVariantStockParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid(),
+  "variantId": zod.uuid()
+})
+
+export const AdjustVariantStockBody = zod.union([zod.object({
+  "delta": zod.int()
+}),zod.object({
+  "set": zod.int()
+})])
+
+export const adjustVariantStockResponseStockMin = 0;
+export const adjustVariantStockResponseStockMax = 99999;
+
+
+
+export const AdjustVariantStockResponse = zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(adjustVariantStockResponseStockMin).max(adjustVariantStockResponseStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`.
+ * @summary Definir fotos (ordem = posição; a 1ª é a capa)
+ */
+export const SetProductImagesParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const setProductImagesBodyImageIdsMax = 20;
+
+
+
+export const SetProductImagesBody = zod.object({
+  "imageIds": zod.array(zod.uuid()).max(setProductImagesBodyImageIdsMax)
+})
+
+export const setProductImagesResponseNameMax = 80;
+
+export const setProductImagesResponseDescriptionMax = 1000;
+
+export const setProductImagesResponseBasePriceCentsMax = 9999999;
+
+export const setProductImagesResponseVariantsItemStockMin = 0;
+export const setProductImagesResponseVariantsItemStockMax = 99999;
+
+
+
+export const SetProductImagesResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(setProductImagesResponseNameMax),
+  "description": zod.string().max(setProductImagesResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(setProductImagesResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(setProductImagesResponseVariantsItemStockMin).max(setProductImagesResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu.
+ * @summary Publicar produto
+ */
+export const PublishProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const publishProductResponseNameMax = 80;
+
+export const publishProductResponseDescriptionMax = 1000;
+
+export const publishProductResponseBasePriceCentsMax = 9999999;
+
+export const publishProductResponseVariantsItemStockMin = 0;
+export const publishProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const PublishProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(publishProductResponseNameMax),
+  "description": zod.string().max(publishProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(publishProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(publishProductResponseVariantsItemStockMin).max(publishProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Tira da vitrine sem apagar.
+ * @summary Pausar produto
+ */
+export const PauseProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const pauseProductResponseNameMax = 80;
+
+export const pauseProductResponseDescriptionMax = 1000;
+
+export const pauseProductResponseBasePriceCentsMax = 9999999;
+
+export const pauseProductResponseVariantsItemStockMin = 0;
+export const pauseProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const PauseProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(pauseProductResponseNameMax),
+  "description": zod.string().max(pauseProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(pauseProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(pauseProductResponseVariantsItemStockMin).max(pauseProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). 403 `PRODUCT_MODERATED`: o lojista não reativa o que a moderação pausou ou removeu (R-12d).
+ * @summary Reativar produto
+ */
+export const ResumeProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const resumeProductResponseNameMax = 80;
+
+export const resumeProductResponseDescriptionMax = 1000;
+
+export const resumeProductResponseBasePriceCentsMax = 9999999;
+
+export const resumeProductResponseVariantsItemStockMin = 0;
+export const resumeProductResponseVariantsItemStockMax = 99999;
+
+
+
+export const ResumeProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(resumeProductResponseNameMax),
+  "description": zod.string().max(resumeProductResponseDescriptionMax).nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(resumeProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(resumeProductResponseVariantsItemStockMin).max(resumeProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Seções da vitrine
+ */
+export const ListSectionsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listSectionsResponseDataItemNameMax = 40;
+
+
+
+export const ListSectionsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(listSectionsResponseDataItemNameMax),
+  "position": zod.int(),
+  "productCount": zod.int()
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Nome até 40 caracteres; até 30 seções.
+ * @summary Criar seção
+ */
+export const CreateSectionParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createSectionBodyNameMax = 40;
+
+
+
+export const CreateSectionBody = zod.object({
+  "name": zod.string().min(1).max(createSectionBodyNameMax)
+})
+
+export const createSectionResponseNameMax = 40;
+
+
+
+export const CreateSectionResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(createSectionResponseNameMax),
+  "position": zod.int(),
+  "productCount": zod.int()
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Envie todos os ids da loja.
+ * @summary Ordenar seções
+ */
+export const OrderSectionsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const orderSectionsBodyIdsMax = 100;
+
+
+
+export const OrderSectionsBody = zod.object({
+  "ids": zod.array(zod.uuid()).min(1).max(orderSectionsBodyIdsMax)
+})
+
+export const OrderSectionsResponse = zod.void()
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Renomear seção
+ */
+export const RenameSectionParams = zod.object({
+  "storeId": zod.uuid(),
+  "sectionId": zod.uuid()
+})
+
+export const renameSectionBodyNameMax = 40;
+
+
+
+export const RenameSectionBody = zod.object({
+  "name": zod.string().min(1).max(renameSectionBodyNameMax)
+})
+
+export const renameSectionResponseNameMax = 40;
+
+
+
+export const RenameSectionResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(renameSectionResponseNameMax),
+  "position": zod.int(),
+  "productCount": zod.int()
+})
+
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Os produtos vão para "Outros".
+ * @summary Excluir seção
+ */
+export const DeleteSectionParams = zod.object({
+  "storeId": zod.uuid(),
+  "sectionId": zod.uuid()
+})
+
+export const DeleteSectionResponse = zod.void()
+
+
+/**
+ * Filtros por loja, categoria, status, moderação, período e busca. Permissão de admin: `products:read`.
+ * @summary Produtos (moderação)
+ */
+export const adminListProductsQueryQMax = 80;
+
+export const adminListProductsQueryCursorMax = 200;
+
+export const adminListProductsQueryLimitDefault = 20;
+export const adminListProductsQueryLimitMax = 50;
+
+
+
+export const AdminListProductsQueryParams = zod.object({
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional(),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).optional(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']).optional(),
+  "from": zod.iso.datetime({"offset":true}).optional(),
+  "to": zod.iso.datetime({"offset":true}).optional(),
+  "q": zod.string().max(adminListProductsQueryQMax).optional(),
+  "cursor": zod.string().max(adminListProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(adminListProductsQueryLimitMax).default(adminListProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const AdminListProductsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']),
+  "moderationReason": zod.string().nullable(),
+  "moderatedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "basePriceCents": zod.int().nullable(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Pausar e remover exigem motivo (422 `REASON_REQUIRED`), avisam o lojista por e-mail com o motivo e entram na auditoria. O status de moderação é separado do status do lojista; só o admin o reverte. 3 remoções da loja em 30 dias a sinalizam para análise de suspensão (`storeFlagged`). Permissão de admin: `products:moderate`.
+ * @summary Pausar, remover ou restaurar produto
+ */
+export const ModerateProductParams = zod.object({
+  "productId": zod.uuid()
+})
+
+export const moderateProductBodyReasonMin = 5;
+export const moderateProductBodyReasonMax = 500;
+
+
+
+export const ModerateProductBody = zod.object({
+  "action": zod.enum(['pause', 'remove', 'restore']),
+  "reason": zod.string().min(moderateProductBodyReasonMin).max(moderateProductBodyReasonMax).optional().describe('Obrigatório para pausar e remover')
+})
+
+export const ModerateProductResponse = zod.object({
+  "id": zod.uuid(),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']),
+  "storeFlagged": zod.boolean().describe('A remoção completou 3 em 30 dias e a loja foi sinalizada para análise de suspensão')
+})
+
+
+/**
+ * Categorias proibidas (BLOQUEIAM o cadastro) e palavras suspeitas (só SINALIZAM). Permissão de admin: `moderation:read`.
+ * @summary Listas de moderação
+ */
+export const ListModerationTermsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['forbidden_category', 'suspect_word']),
+  "value": zod.string().describe('Palavra normalizada, ou id da categoria'),
+  "label": zod.string().nullish().describe('Nome da categoria'),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Palavra suspeita: uma palavra só, casa como palavra inteira sem caixa nem acento. Categoria proibida: id de categoria existente (a subcategoria herda). Permissão de admin: `moderation:write`.
+ * @summary Adicionar item às listas
+ */
+export const addModerationTermBodyValueMax = 80;
+
+
+
+export const AddModerationTermBody = zod.object({
+  "kind": zod.enum(['forbidden_category', 'suspect_word']),
+  "value": zod.string().min(1).max(addModerationTermBodyValueMax)
+})
+
+export const AddModerationTermResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['forbidden_category', 'suspect_word']),
+  "value": zod.string().describe('Palavra normalizada, ou id da categoria'),
+  "label": zod.string().nullish().describe('Nome da categoria'),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Não altera produtos já cadastrados. Permissão de admin: `moderation:write`.
+ * @summary Remover item das listas
+ */
+export const RemoveModerationTermParams = zod.object({
+  "termId": zod.uuid()
+})
+
+export const RemoveModerationTermResponse = zod.void()

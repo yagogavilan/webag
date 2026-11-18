@@ -1646,6 +1646,489 @@ export interface ReleaseAccountRequest {
   reason: string;
 }
 
+export type ProductVariantAttributes = {[key: string]: string};
+
+export interface ProductVariant {
+  id: string;
+  attributes: ProductVariantAttributes;
+  /** @nullable */
+  sku: string | null;
+  /**
+     * Preço próprio da variação; vazio usa o do produto
+     * @nullable
+     */
+  priceCents: number | null;
+  /**
+     * Preço vigente hoje (com a promoção
+     * @nullable
+     */
+  effectivePriceCents: number | null;
+  /**
+     * Preço "de" quando há promoção ativa
+     * @nullable
+     */
+  originalPriceCents: number | null;
+  /**
+     * Percentual exibido
+     * @nullable
+     */
+  discountPercent: number | null;
+  /**
+     * @minimum 0
+     * @maximum 99999
+     */
+  stock: number;
+  reserved: number;
+  /** estoque menos reservado */
+  available: number;
+  soldOut: boolean;
+  /** Disponível maior que zero e menor ou igual ao limite da loja */
+  low: boolean;
+}
+
+export type ProductStatus = typeof ProductStatus[keyof typeof ProductStatus];
+
+
+export const ProductStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+/**
+ * Separado do status do lojista; só o admin altera
+ */
+export type ProductModerationStatus = typeof ProductModerationStatus[keyof typeof ProductModerationStatus];
+
+
+export const ProductModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+export type ProductPromotion = {
+  /** @nullable */
+  priceCents: number | null;
+  /** @nullable */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  /** Calculado na leitura; o fim da promoção não depende de job */
+  active: boolean;
+};
+
+/**
+ * Largura em px para URL pública WebP
+ * @nullable
+ */
+export type ProductImagesItemUrls = {[key: string]: string} | null;
+
+export type ProductImagesItem = {
+  /** Id do upload (`/uploads`) */
+  id: string;
+  position: number;
+  /**
+     * Largura em px para URL pública WebP
+     * @nullable
+     */
+  urls: ProductImagesItemUrls;
+};
+
+export interface Product {
+  id: string;
+  /** @maxLength 80 */
+  name: string;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  description: string | null;
+  /** @nullable */
+  categoryId: string | null;
+  /** @nullable */
+  sectionId: string | null;
+  status: ProductStatus;
+  /** Separado do status do lojista; só o admin altera */
+  moderationStatus: ProductModerationStatus;
+  /**
+     * Motivo
+     * @nullable
+     */
+  moderationReason: string | null;
+  /**
+     * @minimum 1
+     * @maximum 9999999
+     * @nullable
+     */
+  basePriceCents: number | null;
+  promotion: ProductPromotion;
+  variantAttributes: string[];
+  variants: ProductVariant[];
+  images: ProductImagesItem[];
+  /** Todas as variações sem disponível */
+  soldOut: boolean;
+  /** @nullable */
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductSummaryStatus = typeof ProductSummaryStatus[keyof typeof ProductSummaryStatus];
+
+
+export const ProductSummaryStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type ProductSummaryModerationStatus = typeof ProductSummaryModerationStatus[keyof typeof ProductSummaryModerationStatus];
+
+
+export const ProductSummaryModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProductSummaryCover = {[key: string]: string} | null;
+
+export interface ProductSummary {
+  id: string;
+  name: string;
+  status: ProductSummaryStatus;
+  moderationStatus: ProductSummaryModerationStatus;
+  /** @nullable */
+  sectionId: string | null;
+  /** @nullable */
+  basePriceCents: number | null;
+  /** @nullable */
+  fromPriceCents: number | null;
+  /** @nullable */
+  cover: ProductSummaryCover;
+  availableTotal: number;
+  low: boolean;
+  soldOut: boolean;
+  variantCount: number;
+  updatedAt: string;
+}
+
+export interface ProductPage {
+  data: ProductSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface CreateProductRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  description?: string | null;
+  /** @nullable */
+  categoryId?: string | null;
+  /** @nullable */
+  sectionId?: string | null;
+  /**
+     * Centavos, de 1 a 9999999 (422 fora da faixa)
+     * @nullable
+     */
+  basePriceCents?: number | null;
+}
+
+export interface UpdateProductRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name?: string;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  description?: string | null;
+  /** @nullable */
+  categoryId?: string | null;
+  /** @nullable */
+  sectionId?: string | null;
+  /** @nullable */
+  basePriceCents?: number | null;
+  /** @nullable */
+  promoPriceCents?: number | null;
+  /** @nullable */
+  promoStartsAt?: string | null;
+  /** @nullable */
+  promoEndsAt?: string | null;
+}
+
+export type SetVariantsRequestVariantsItemAttributes = {[key: string]: string};
+
+export type SetVariantsRequestVariantsItem = {
+  id?: string;
+  attributes: SetVariantsRequestVariantsItemAttributes;
+  stock?: number;
+  /** @nullable */
+  priceCents?: number | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  sku?: string | null;
+};
+
+export interface SetVariantsRequest {
+  /**
+     * Nomes dos atributos (até 3 válidos). Vazio = sem variação
+     * @maxItems 5
+     * @items.maxLength 30
+     */
+  attributes: string[];
+  /**
+     * @minItems 1
+     * @maxItems 300
+     */
+  variants: SetVariantsRequestVariantsItem[];
+}
+
+export type StockAdjustBody = {
+  delta: number;
+} | {
+  set: number;
+};
+
+export interface SetImagesRequest {
+  /** @maxItems 20 */
+  imageIds: string[];
+}
+
+export interface Section {
+  id: string;
+  /** @maxLength 40 */
+  name: string;
+  position: number;
+  productCount: number;
+}
+
+export interface SectionList {
+  data: Section[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export interface SectionRequest {
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  name: string;
+}
+
+export interface SectionOrderRequest {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  ids: string[];
+}
+
+export type BulkRequestAction = {
+  type: 'pause';
+} | {
+  type: 'resume';
+} | {
+  type: 'move_section';
+  /** @nullable */
+  sectionId: string | null;
+} | {
+  type: 'price_adjust';
+  mode: 'percent' | 'amount';
+  /** percent: ex. -10 ou 5.5; amount: centavos inteiros (positivo ou negativo) */
+  value: number;
+};
+
+export interface BulkRequest {
+  /**
+     * @minItems 1
+     * @maxItems 200
+     */
+  productIds: string[];
+  dryRun?: boolean;
+  action: BulkRequestAction;
+}
+
+export type BulkResultBlockedItem = {
+  productId: string;
+  name: string;
+  reason: string;
+};
+
+export interface BulkResult {
+  dryRun: boolean;
+  willChange: number;
+  changed: number;
+  blocked: BulkResultBlockedItem[];
+}
+
+export type ImportResultErrorsItem = {
+  /** Linha da planilha (o cabeçalho é a 1) */
+  line: number;
+  message: string;
+};
+
+export interface ImportResult {
+  totalLines: number;
+  valid: number;
+  invalid: number;
+  errors: ImportResultErrorsItem[];
+  productsToCreate: number;
+  /** Produtos cujo código (SKU) já existe na loja */
+  alreadyExist: number;
+  committed: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+export type AdminProductStatus = typeof AdminProductStatus[keyof typeof AdminProductStatus];
+
+
+export const AdminProductStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type AdminProductModerationStatus = typeof AdminProductModerationStatus[keyof typeof AdminProductModerationStatus];
+
+
+export const AdminProductModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+export interface AdminProduct {
+  id: string;
+  name: string;
+  /** @nullable */
+  description: string | null;
+  storeId: string;
+  /** @nullable */
+  storeName: string | null;
+  /** @nullable */
+  categoryId: string | null;
+  status: AdminProductStatus;
+  moderationStatus: AdminProductModerationStatus;
+  /** @nullable */
+  moderationReason: string | null;
+  /** @nullable */
+  moderatedAt: string | null;
+  /** @nullable */
+  basePriceCents: number | null;
+  createdAt: string;
+}
+
+export interface AdminProductPage {
+  data: AdminProduct[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type ModerateRequestAction = typeof ModerateRequestAction[keyof typeof ModerateRequestAction];
+
+
+export const ModerateRequestAction = {
+  pause: 'pause',
+  remove: 'remove',
+  restore: 'restore',
+} as const;
+
+export interface ModerateRequest {
+  action: ModerateRequestAction;
+  /**
+     * Obrigatório para pausar e remover
+     * @minLength 5
+     * @maxLength 500
+     */
+  reason?: string;
+}
+
+export type ModerationResultModerationStatus = typeof ModerationResultModerationStatus[keyof typeof ModerationResultModerationStatus];
+
+
+export const ModerationResultModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+export interface ModerationResult {
+  id: string;
+  moderationStatus: ModerationResultModerationStatus;
+  /** A remoção completou 3 em 30 dias e a loja foi sinalizada para análise de suspensão */
+  storeFlagged: boolean;
+}
+
+export type ModerationTermKind = typeof ModerationTermKind[keyof typeof ModerationTermKind];
+
+
+export const ModerationTermKind = {
+  forbidden_category: 'forbidden_category',
+  suspect_word: 'suspect_word',
+} as const;
+
+export interface ModerationTerm {
+  id: string;
+  kind: ModerationTermKind;
+  /** Palavra normalizada, ou id da categoria */
+  value: string;
+  /**
+     * Nome da categoria
+     * @nullable
+     */
+  label?: string | null;
+  createdAt: string;
+}
+
+export interface ModerationTermList {
+  data: ModerationTerm[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export type ModerationTermRequestKind = typeof ModerationTermRequestKind[keyof typeof ModerationTermRequestKind];
+
+
+export const ModerationTermRequestKind = {
+  forbidden_category: 'forbidden_category',
+  suspect_word: 'suspect_word',
+} as const;
+
+export interface ModerationTermRequest {
+  kind: ModerationTermRequestKind;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  value: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -1807,6 +2290,105 @@ export type ListAdminStores200 = {
  * Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
  */
 export type EditAdminStoreSettingsBody = { [key: string]: unknown };
+
+export type ListProductsParams = {
+  status?: ListProductsStatus;
+  /** @maxLength 80 */
+  q?: string;
+  sectionId?: string;
+  lowStock?: ListProductsLowStock;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListProductsStatus = typeof ListProductsStatus[keyof typeof ListProductsStatus];
+
+
+export const ListProductsStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type ListProductsLowStock = typeof ListProductsLowStock[keyof typeof ListProductsLowStock];
+
+
+export const ListProductsLowStock = {
+  true: 'true',
+} as const;
+
+export type ImportProductsParams = {
+  mode?: ImportProductsMode;
+  onExisting?: ImportProductsOnExisting;
+};
+
+export type ImportProductsMode = typeof ImportProductsMode[keyof typeof ImportProductsMode];
+
+
+export const ImportProductsMode = {
+  preview: 'preview',
+  commit: 'commit',
+} as const;
+
+export type ImportProductsOnExisting = typeof ImportProductsOnExisting[keyof typeof ImportProductsOnExisting];
+
+
+export const ImportProductsOnExisting = {
+  skip: 'skip',
+  update: 'update',
+} as const;
+
+export type AdminListProductsParams = {
+  storeId?: string;
+  categoryId?: string;
+  moderationStatus?: AdminListProductsModerationStatus;
+  status?: AdminListProductsStatus;
+  from?: string;
+  to?: string;
+  /** @maxLength 80 */
+  q?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type AdminListProductsModerationStatus = typeof AdminListProductsModerationStatus[keyof typeof AdminListProductsModerationStatus];
+
+
+export const AdminListProductsModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+export type AdminListProductsStatus = typeof AdminListProductsStatus[keyof typeof AdminListProductsStatus];
+
+
+export const AdminListProductsStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -7997,5 +8579,1576 @@ export const decideStoreDataReview = async (storeId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(decisionReasonRequest)
+  }
+);}
+
+
+
+export type listProductsResponse200 = {
+  data: ProductPage
+  status: 200
+}
+
+export type listProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listProductsResponseSuccess = (listProductsResponse200) & {
+  headers: Headers;
+};
+export type listProductsResponseError = (listProductsResponse400 | listProductsResponse401 | listProductsResponse403 | listProductsResponse404) & {
+  headers: Headers;
+};
+
+export type listProductsResponse = (listProductsResponseSuccess | listProductsResponseError)
+
+export const getListProductsUrl = (storeId: string,
+    params?: ListProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/products?${stringifiedParams}` : `/v1/stores/${storeId}/products`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Filtros por status, busca, seção e estoque baixo; paginação por cursor.
+ * @summary Listar produtos da loja
+ */
+export const listProducts = async (storeId: string,
+    params?: ListProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listProductsResponse> => {
+
+  return apiFetch<listProductsResponse>(getListProductsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createProductResponse201 = {
+  data: Product
+  status: 201
+}
+
+export type createProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createProductResponseSuccess = (createProductResponse201) & {
+  headers: Headers;
+};
+export type createProductResponseError = (createProductResponse400 | createProductResponse401 | createProductResponse403 | createProductResponse404 | createProductResponse409 | createProductResponse422 | createProductResponse429) & {
+  headers: Headers;
+};
+
+export type createProductResponse = (createProductResponseSuccess | createProductResponseError)
+
+export const getCreateProductUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`.
+ * @summary Criar produto (rascunho)
+ */
+export const createProduct = async (storeId: string,
+    createProductRequest: CreateProductRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createProductResponse> => {
+
+  return apiFetch<createProductResponse>(getCreateProductUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createProductRequest)
+  }
+);}
+
+
+
+export type getProductImportTemplateResponse200 = {
+  data: string
+  status: 200
+}
+
+export type getProductImportTemplateResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getProductImportTemplateResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getProductImportTemplateResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getProductImportTemplateResponseSuccess = (getProductImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getProductImportTemplateResponseError = (getProductImportTemplateResponse401 | getProductImportTemplateResponse403 | getProductImportTemplateResponse404) & {
+  headers: Headers;
+};
+
+export type getProductImportTemplateResponse = (getProductImportTemplateResponseSuccess | getProductImportTemplateResponseError)
+
+export const getGetProductImportTemplateUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/import/template`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Modelo de planilha (CSV)
+ */
+export const getProductImportTemplate = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getProductImportTemplateResponse> => {
+
+  return apiFetch<getProductImportTemplateResponse>(getGetProductImportTemplateUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type importProductsResponse200 = {
+  data: ImportResult
+  status: 200
+}
+
+export type importProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type importProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type importProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type importProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type importProductsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type importProductsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type importProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type importProductsResponseSuccess = (importProductsResponse200) & {
+  headers: Headers;
+};
+export type importProductsResponseError = (importProductsResponse400 | importProductsResponse401 | importProductsResponse403 | importProductsResponse404 | importProductsResponse409 | importProductsResponse422 | importProductsResponse429) & {
+  headers: Headers;
+};
+
+export type importProductsResponse = (importProductsResponseSuccess | importProductsResponseError)
+
+export const getImportProductsUrl = (storeId: string,
+    params?: ImportProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/products/import?${stringifiedParams}` : `/v1/stores/${storeId}/products/import`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
+ * @summary Importar produtos por planilha (CSV)
+ */
+export const importProducts = async (storeId: string,
+    importProductsBody: string,
+    params?: ImportProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<importProductsResponse> => {
+
+  return apiFetch<importProductsResponse>(getImportProductsUrl(storeId,params),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'text/csv' }, options?.headers),
+    body: JSON.stringify(importProductsBody)
+  }
+);}
+
+
+
+export type bulkProductsResponse200 = {
+  data: BulkResult
+  status: 200
+}
+
+export type bulkProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type bulkProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type bulkProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type bulkProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type bulkProductsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type bulkProductsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type bulkProductsResponseSuccess = (bulkProductsResponse200) & {
+  headers: Headers;
+};
+export type bulkProductsResponseError = (bulkProductsResponse400 | bulkProductsResponse401 | bulkProductsResponse403 | bulkProductsResponse404 | bulkProductsResponse409 | bulkProductsResponse422) & {
+  headers: Headers;
+};
+
+export type bulkProductsResponse = (bulkProductsResponseSuccess | bulkProductsResponseError)
+
+export const getBulkProductsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/bulk`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo.
+ * @summary Ação em massa
+ */
+export const bulkProducts = async (storeId: string,
+    bulkRequest: BulkRequest, options?: Parameters<typeof apiFetch>[1]): Promise<bulkProductsResponse> => {
+
+  return apiFetch<bulkProductsResponse>(getBulkProductsUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(bulkRequest)
+  }
+);}
+
+
+
+export type getProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type getProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getProductResponseSuccess = (getProductResponse200) & {
+  headers: Headers;
+};
+export type getProductResponseError = (getProductResponse401 | getProductResponse403 | getProductResponse404) & {
+  headers: Headers;
+};
+
+export type getProductResponse = (getProductResponseSuccess | getProductResponseError)
+
+export const getGetProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Detalhe do produto
+ */
+export const getProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getProductResponse> => {
+
+  return apiFetch<getProductResponse>(getGetProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type updateProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateProductResponseSuccess = (updateProductResponse200) & {
+  headers: Headers;
+};
+export type updateProductResponseError = (updateProductResponse400 | updateProductResponse401 | updateProductResponse403 | updateProductResponse404 | updateProductResponse409 | updateProductResponse422) & {
+  headers: Headers;
+};
+
+export type updateProductResponse = (updateProductResponseSuccess | updateProductResponseError)
+
+export const getUpdateProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422.
+ * @summary Editar produto e promoção
+ */
+export const updateProduct = async (storeId: string,
+    productId: string,
+    updateProductRequest: UpdateProductRequest, options?: Parameters<typeof apiFetch>[1]): Promise<updateProductResponse> => {
+
+  return apiFetch<updateProductResponse>(getUpdateProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateProductRequest)
+  }
+);}
+
+
+
+export type archiveProductResponse204 = {
+  data: void
+  status: 204
+}
+
+export type archiveProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type archiveProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type archiveProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type archiveProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type archiveProductResponseSuccess = (archiveProductResponse204) & {
+  headers: Headers;
+};
+export type archiveProductResponseError = (archiveProductResponse401 | archiveProductResponse403 | archiveProductResponse404 | archiveProductResponse409) & {
+  headers: Headers;
+};
+
+export type archiveProductResponse = (archiveProductResponseSuccess | archiveProductResponseError)
+
+export const getArchiveProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}`
+}
+
+/**
+ * "Excluir" arquiva: o histórico de pedidos mantém nome e preço. 409 `OPEN_ORDERS` com pedidos em andamento. Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Arquivar produto
+ */
+export const archiveProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<archiveProductResponse> => {
+
+  return apiFetch<archiveProductResponse>(getArchiveProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type setProductVariantsResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type setProductVariantsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setProductVariantsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setProductVariantsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setProductVariantsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setProductVariantsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type setProductVariantsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setProductVariantsResponseSuccess = (setProductVariantsResponse200) & {
+  headers: Headers;
+};
+export type setProductVariantsResponseError = (setProductVariantsResponse400 | setProductVariantsResponse401 | setProductVariantsResponse403 | setProductVariantsResponse404 | setProductVariantsResponse409 | setProductVariantsResponse422) & {
+  headers: Headers;
+};
+
+export type setProductVariantsResponse = (setProductVariantsResponseSuccess | setProductVariantsResponseError)
+
+export const getSetProductVariantsUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/variants`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`.
+ * @summary Definir variações e estoque
+ */
+export const setProductVariants = async (storeId: string,
+    productId: string,
+    setVariantsRequest: SetVariantsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setProductVariantsResponse> => {
+
+  return apiFetch<setProductVariantsResponse>(getSetProductVariantsUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setVariantsRequest)
+  }
+);}
+
+
+
+export type adjustVariantStockResponse200 = {
+  data: ProductVariant
+  status: 200
+}
+
+export type adjustVariantStockResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adjustVariantStockResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adjustVariantStockResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adjustVariantStockResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adjustVariantStockResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type adjustVariantStockResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type adjustVariantStockResponseSuccess = (adjustVariantStockResponse200) & {
+  headers: Headers;
+};
+export type adjustVariantStockResponseError = (adjustVariantStockResponse400 | adjustVariantStockResponse401 | adjustVariantStockResponse403 | adjustVariantStockResponse404 | adjustVariantStockResponse409 | adjustVariantStockResponse422) & {
+  headers: Headers;
+};
+
+export type adjustVariantStockResponse = (adjustVariantStockResponseSuccess | adjustVariantStockResponseError)
+
+export const getAdjustVariantStockUrl = (storeId: string,
+    productId: string,
+    variantId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/variants/${variantId}/stock`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite.
+ * @summary Ajuste rápido de estoque
+ */
+export const adjustVariantStock = async (storeId: string,
+    productId: string,
+    variantId: string,
+    stockAdjustBody: StockAdjustBody, options?: Parameters<typeof apiFetch>[1]): Promise<adjustVariantStockResponse> => {
+
+  return apiFetch<adjustVariantStockResponse>(getAdjustVariantStockUrl(storeId,productId,variantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(stockAdjustBody)
+  }
+);}
+
+
+
+export type setProductImagesResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type setProductImagesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setProductImagesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setProductImagesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setProductImagesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setProductImagesResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type setProductImagesResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setProductImagesResponseSuccess = (setProductImagesResponse200) & {
+  headers: Headers;
+};
+export type setProductImagesResponseError = (setProductImagesResponse400 | setProductImagesResponse401 | setProductImagesResponse403 | setProductImagesResponse404 | setProductImagesResponse409 | setProductImagesResponse422) & {
+  headers: Headers;
+};
+
+export type setProductImagesResponse = (setProductImagesResponseSuccess | setProductImagesResponseError)
+
+export const getSetProductImagesUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/images`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`.
+ * @summary Definir fotos (ordem = posição; a 1ª é a capa)
+ */
+export const setProductImages = async (storeId: string,
+    productId: string,
+    setImagesRequest: SetImagesRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setProductImagesResponse> => {
+
+  return apiFetch<setProductImagesResponse>(getSetProductImagesUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setImagesRequest)
+  }
+);}
+
+
+
+export type publishProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type publishProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type publishProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type publishProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type publishProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type publishProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type publishProductResponseSuccess = (publishProductResponse200) & {
+  headers: Headers;
+};
+export type publishProductResponseError = (publishProductResponse401 | publishProductResponse403 | publishProductResponse404 | publishProductResponse409 | publishProductResponse422) & {
+  headers: Headers;
+};
+
+export type publishProductResponse = (publishProductResponseSuccess | publishProductResponseError)
+
+export const getPublishProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/publish`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu.
+ * @summary Publicar produto
+ */
+export const publishProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<publishProductResponse> => {
+
+  return apiFetch<publishProductResponse>(getPublishProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type pauseProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type pauseProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type pauseProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type pauseProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type pauseProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type pauseProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type pauseProductResponseSuccess = (pauseProductResponse200) & {
+  headers: Headers;
+};
+export type pauseProductResponseError = (pauseProductResponse401 | pauseProductResponse403 | pauseProductResponse404 | pauseProductResponse409 | pauseProductResponse422) & {
+  headers: Headers;
+};
+
+export type pauseProductResponse = (pauseProductResponseSuccess | pauseProductResponseError)
+
+export const getPauseProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/pause`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Tira da vitrine sem apagar.
+ * @summary Pausar produto
+ */
+export const pauseProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<pauseProductResponse> => {
+
+  return apiFetch<pauseProductResponse>(getPauseProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type resumeProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type resumeProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type resumeProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resumeProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resumeProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type resumeProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type resumeProductResponseSuccess = (resumeProductResponse200) & {
+  headers: Headers;
+};
+export type resumeProductResponseError = (resumeProductResponse401 | resumeProductResponse403 | resumeProductResponse404 | resumeProductResponse409 | resumeProductResponse422) & {
+  headers: Headers;
+};
+
+export type resumeProductResponse = (resumeProductResponseSuccess | resumeProductResponseError)
+
+export const getResumeProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/resume`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). 403 `PRODUCT_MODERATED`: o lojista não reativa o que a moderação pausou ou removeu (R-12d).
+ * @summary Reativar produto
+ */
+export const resumeProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<resumeProductResponse> => {
+
+  return apiFetch<resumeProductResponse>(getResumeProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listSectionsResponse200 = {
+  data: SectionList
+  status: 200
+}
+
+export type listSectionsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listSectionsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listSectionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listSectionsResponseSuccess = (listSectionsResponse200) & {
+  headers: Headers;
+};
+export type listSectionsResponseError = (listSectionsResponse401 | listSectionsResponse403 | listSectionsResponse404) & {
+  headers: Headers;
+};
+
+export type listSectionsResponse = (listSectionsResponseSuccess | listSectionsResponseError)
+
+export const getListSectionsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/sections`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Seções da vitrine
+ */
+export const listSections = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<listSectionsResponse> => {
+
+  return apiFetch<listSectionsResponse>(getListSectionsUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createSectionResponse201 = {
+  data: Section
+  status: 201
+}
+
+export type createSectionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createSectionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createSectionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createSectionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createSectionResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createSectionResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createSectionResponseSuccess = (createSectionResponse201) & {
+  headers: Headers;
+};
+export type createSectionResponseError = (createSectionResponse400 | createSectionResponse401 | createSectionResponse403 | createSectionResponse404 | createSectionResponse409 | createSectionResponse422) & {
+  headers: Headers;
+};
+
+export type createSectionResponse = (createSectionResponseSuccess | createSectionResponseError)
+
+export const getCreateSectionUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/sections`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Nome até 40 caracteres; até 30 seções.
+ * @summary Criar seção
+ */
+export const createSection = async (storeId: string,
+    sectionRequest: SectionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createSectionResponse> => {
+
+  return apiFetch<createSectionResponse>(getCreateSectionUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(sectionRequest)
+  }
+);}
+
+
+
+export type orderSectionsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type orderSectionsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type orderSectionsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type orderSectionsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type orderSectionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type orderSectionsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type orderSectionsResponseSuccess = (orderSectionsResponse204) & {
+  headers: Headers;
+};
+export type orderSectionsResponseError = (orderSectionsResponse400 | orderSectionsResponse401 | orderSectionsResponse403 | orderSectionsResponse404 | orderSectionsResponse409) & {
+  headers: Headers;
+};
+
+export type orderSectionsResponse = (orderSectionsResponseSuccess | orderSectionsResponseError)
+
+export const getOrderSectionsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/sections/order`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Envie todos os ids da loja.
+ * @summary Ordenar seções
+ */
+export const orderSections = async (storeId: string,
+    sectionOrderRequest: SectionOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<orderSectionsResponse> => {
+
+  return apiFetch<orderSectionsResponse>(getOrderSectionsUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(sectionOrderRequest)
+  }
+);}
+
+
+
+export type renameSectionResponse200 = {
+  data: Section
+  status: 200
+}
+
+export type renameSectionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type renameSectionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type renameSectionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type renameSectionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type renameSectionResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type renameSectionResponseSuccess = (renameSectionResponse200) & {
+  headers: Headers;
+};
+export type renameSectionResponseError = (renameSectionResponse400 | renameSectionResponse401 | renameSectionResponse403 | renameSectionResponse404 | renameSectionResponse409) & {
+  headers: Headers;
+};
+
+export type renameSectionResponse = (renameSectionResponseSuccess | renameSectionResponseError)
+
+export const getRenameSectionUrl = (storeId: string,
+    sectionId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/sections/${sectionId}`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`).
+ * @summary Renomear seção
+ */
+export const renameSection = async (storeId: string,
+    sectionId: string,
+    sectionRequest: SectionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<renameSectionResponse> => {
+
+  return apiFetch<renameSectionResponse>(getRenameSectionUrl(storeId,sectionId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(sectionRequest)
+  }
+);}
+
+
+
+export type deleteSectionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteSectionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteSectionResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteSectionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteSectionResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteSectionResponseSuccess = (deleteSectionResponse204) & {
+  headers: Headers;
+};
+export type deleteSectionResponseError = (deleteSectionResponse401 | deleteSectionResponse403 | deleteSectionResponse404 | deleteSectionResponse409) & {
+  headers: Headers;
+};
+
+export type deleteSectionResponse = (deleteSectionResponseSuccess | deleteSectionResponseError)
+
+export const getDeleteSectionUrl = (storeId: string,
+    sectionId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/sections/${sectionId}`
+}
+
+/**
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Os produtos vão para "Outros".
+ * @summary Excluir seção
+ */
+export const deleteSection = async (storeId: string,
+    sectionId: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteSectionResponse> => {
+
+  return apiFetch<deleteSectionResponse>(getDeleteSectionUrl(storeId,sectionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type adminListProductsResponse200 = {
+  data: AdminProductPage
+  status: 200
+}
+
+export type adminListProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adminListProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adminListProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adminListProductsResponseSuccess = (adminListProductsResponse200) & {
+  headers: Headers;
+};
+export type adminListProductsResponseError = (adminListProductsResponse400 | adminListProductsResponse401 | adminListProductsResponse403) & {
+  headers: Headers;
+};
+
+export type adminListProductsResponse = (adminListProductsResponseSuccess | adminListProductsResponseError)
+
+export const getAdminListProductsUrl = (params?: AdminListProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/products?${stringifiedParams}` : `/v1/admin/products`
+}
+
+/**
+ * Filtros por loja, categoria, status, moderação, período e busca. Permissão de admin: `products:read`.
+ * @summary Produtos (moderação)
+ */
+export const adminListProducts = async (params?: AdminListProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<adminListProductsResponse> => {
+
+  return apiFetch<adminListProductsResponse>(getAdminListProductsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type moderateProductResponse200 = {
+  data: ModerationResult
+  status: 200
+}
+
+export type moderateProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type moderateProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type moderateProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type moderateProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type moderateProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type moderateProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type moderateProductResponseSuccess = (moderateProductResponse200) & {
+  headers: Headers;
+};
+export type moderateProductResponseError = (moderateProductResponse400 | moderateProductResponse401 | moderateProductResponse403 | moderateProductResponse404 | moderateProductResponse409 | moderateProductResponse422) & {
+  headers: Headers;
+};
+
+export type moderateProductResponse = (moderateProductResponseSuccess | moderateProductResponseError)
+
+export const getModerateProductUrl = (productId: string,) => {
+
+
+
+
+  return `/v1/admin/products/${productId}/moderation`
+}
+
+/**
+ * Pausar e remover exigem motivo (422 `REASON_REQUIRED`), avisam o lojista por e-mail com o motivo e entram na auditoria. O status de moderação é separado do status do lojista; só o admin o reverte. 3 remoções da loja em 30 dias a sinalizam para análise de suspensão (`storeFlagged`). Permissão de admin: `products:moderate`.
+ * @summary Pausar, remover ou restaurar produto
+ */
+export const moderateProduct = async (productId: string,
+    moderateRequest: ModerateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<moderateProductResponse> => {
+
+  return apiFetch<moderateProductResponse>(getModerateProductUrl(productId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(moderateRequest)
+  }
+);}
+
+
+
+export type listModerationTermsResponse200 = {
+  data: ModerationTermList
+  status: 200
+}
+
+export type listModerationTermsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listModerationTermsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listModerationTermsResponseSuccess = (listModerationTermsResponse200) & {
+  headers: Headers;
+};
+export type listModerationTermsResponseError = (listModerationTermsResponse401 | listModerationTermsResponse403) & {
+  headers: Headers;
+};
+
+export type listModerationTermsResponse = (listModerationTermsResponseSuccess | listModerationTermsResponseError)
+
+export const getListModerationTermsUrl = () => {
+
+
+
+
+  return `/v1/admin/moderation/terms`
+}
+
+/**
+ * Categorias proibidas (BLOQUEIAM o cadastro) e palavras suspeitas (só SINALIZAM). Permissão de admin: `moderation:read`.
+ * @summary Listas de moderação
+ */
+export const listModerationTerms = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listModerationTermsResponse> => {
+
+  return apiFetch<listModerationTermsResponse>(getListModerationTermsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type addModerationTermResponse201 = {
+  data: ModerationTerm
+  status: 201
+}
+
+export type addModerationTermResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type addModerationTermResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type addModerationTermResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type addModerationTermResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type addModerationTermResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type addModerationTermResponseSuccess = (addModerationTermResponse201) & {
+  headers: Headers;
+};
+export type addModerationTermResponseError = (addModerationTermResponse400 | addModerationTermResponse401 | addModerationTermResponse403 | addModerationTermResponse409 | addModerationTermResponse422) & {
+  headers: Headers;
+};
+
+export type addModerationTermResponse = (addModerationTermResponseSuccess | addModerationTermResponseError)
+
+export const getAddModerationTermUrl = () => {
+
+
+
+
+  return `/v1/admin/moderation/terms`
+}
+
+/**
+ * Palavra suspeita: uma palavra só, casa como palavra inteira sem caixa nem acento. Categoria proibida: id de categoria existente (a subcategoria herda). Permissão de admin: `moderation:write`.
+ * @summary Adicionar item às listas
+ */
+export const addModerationTerm = async (moderationTermRequest: ModerationTermRequest, options?: Parameters<typeof apiFetch>[1]): Promise<addModerationTermResponse> => {
+
+  return apiFetch<addModerationTermResponse>(getAddModerationTermUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(moderationTermRequest)
+  }
+);}
+
+
+
+export type removeModerationTermResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeModerationTermResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeModerationTermResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type removeModerationTermResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeModerationTermResponseSuccess = (removeModerationTermResponse204) & {
+  headers: Headers;
+};
+export type removeModerationTermResponseError = (removeModerationTermResponse401 | removeModerationTermResponse403 | removeModerationTermResponse404) & {
+  headers: Headers;
+};
+
+export type removeModerationTermResponse = (removeModerationTermResponseSuccess | removeModerationTermResponseError)
+
+export const getRemoveModerationTermUrl = (termId: string,) => {
+
+
+
+
+  return `/v1/admin/moderation/terms/${termId}`
+}
+
+/**
+ * Não altera produtos já cadastrados. Permissão de admin: `moderation:write`.
+ * @summary Remover item das listas
+ */
+export const removeModerationTerm = async (termId: string, options?: Parameters<typeof apiFetch>[1]): Promise<removeModerationTermResponse> => {
+
+  return apiFetch<removeModerationTermResponse>(getRemoveModerationTermUrl(termId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}

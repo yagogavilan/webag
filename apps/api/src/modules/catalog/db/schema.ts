@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { categories } from '../../admin/db/schema.js';
 import { users } from '../../identity/db/schema.js';
 import { mediaAssets } from '../../media/db/schema.js';
@@ -48,12 +48,20 @@ export const products = pgTable(
     promoEndsAt: timestamp({ withTimezone: true }),
     /** Nomes dos atributos de variação (até 3). Vazio = "sem variação" (uma variação implícita). */
     variantAttributes: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** `Idempotency-Key` do cliente: duplo clique em "criar" gera 1 produto (O2-PRD-10). */
+    idempotencyKey: varchar({ length: 80 }),
     publishedAt: timestamp({ withTimezone: true }),
     archivedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('products_store_idx').on(t.storeId, t.status), index('products_moderation_idx').on(t.moderationStatus, t.createdAt)],
+  (t) => [
+    index('products_store_idx').on(t.storeId, t.status),
+    index('products_moderation_idx').on(t.moderationStatus, t.createdAt),
+    uniqueIndex('products_idempotency_uq').on(t.storeId, t.idempotencyKey).where(sql`${t.idempotencyKey} is not null`),
+    // Preço e estoque nunca fora da faixa, nem por bug de aplicação (RN-05).
+    check('products_price_range', sql`${t.basePriceCents} is null or (${t.basePriceCents} between 1 and 9999999)`),
+  ],
 );
 
 export const productImages = pgTable(
