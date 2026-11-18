@@ -1,0 +1,197 @@
+# Sites do Webag. Este arquivo é um MODELO: o contêiner do nginx troca ${API_HOST}, ${ADMIN_HOST}, ${LOJISTA_HOST} e
+# ${FILES_HOST} pelos valores do .env na hora de subir (NGINX_ENVSUBST_FILTER=^(API|ADMIN|LOJISTA|FILES)_HOST$).
+# Não edite o resultado dentro do contêiner: edite este arquivo e reinicie (docker compose ... up -d nginx).
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Porta 80: só serve o desafio do Let's Encrypt e redireciona o resto para HTTPS.
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Usado pelo healthcheck do contêiner.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# HTTPS com host desconhecido (alguém acessando pelo IP ou por um domínio que não é nosso): recusa o handshake.
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# API (app mobile, webhook do Mercado Pago, tempo real). Os painéis falam com a API por dentro da rede (BFF), não por aqui.
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${API_HOST};
+
+    include /etc/nginx/snippets/ssl.conf;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'" always;
+
+    # A API só recebe JSON (e planilha CSV de até 1 MB). Fotos vão direto ao armazenamento (FILES_HOST).
+    client_max_body_size 2m;
+    limit_req zone=webag_api burst=60 nodelay;
+    limit_conn webag_conn 50;
+
+    # Liveness para monitores externos (UptimeRobot etc.). Readiness (/health/ready) fica só na rede interna.
+    location = /health {
+        access_log off;
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass http://api:3000;
+    }
+    location /health/ {
+        return 404;
+    }
+
+    # WebSocket (Socket.IO, namespace /rt, ADR-004): conexão longa, sem buffer.
+    location /socket.io/ {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_pass http://api:3000;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass http://api:3000;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Painel do ADMINISTRADOR (host próprio, SEC-116). O web também recusa (404) a área errada por host; aqui é a 2ª trava.
+# Recomendado: restringir por IP (veja docs/deploy/guia-deploy.md, "Proteger o painel admin").
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${ADMIN_HOST};
+
+    include /etc/nginx/snippets/ssl.conf;
+    include /etc/nginx/snippets/security-headers.conf;
+
+    client_max_body_size 2m;
+    limit_req zone=webag_panel burst=40 nodelay;
+    limit_conn webag_conn 50;
+
+    location = / {
+        return 302 /admin;
+    }
+    # Nada de lojista neste host.
+    location ^~ /lojista {
+        return 404;
+    }
+    location ~ ^/api/(session|proxy)/lojista {
+        return 404;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass http://web:3001;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Painel do LOJISTA (host próprio, SEC-116).
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${LOJISTA_HOST};
+
+    include /etc/nginx/snippets/ssl.conf;
+    include /etc/nginx/snippets/security-headers.conf;
+
+    client_max_body_size 2m;
+    limit_req zone=webag_panel burst=40 nodelay;
+    limit_conn webag_conn 50;
+
+    location = / {
+        return 302 /lojista;
+    }
+    location ^~ /admin {
+        return 404;
+    }
+    location ~ ^/api/(session|proxy)/admin {
+        return 404;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass http://web:3001;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Arquivos (armazenamento S3 do próprio servidor, RustFS): fotos públicas por URL direta e envio/leitura por links
+# pré-assinados gerados pela API (ADR-005). Só métodos de leitura e POST; nada de PUT/DELETE vindo da internet.
+# Se usar Cloudflare R2/AWS S3 em vez do RustFS, este bloco não é usado (veja o guia de deploy).
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${FILES_HOST};
+
+    include /etc/nginx/snippets/ssl.conf;
+
+    # upload_max_mb vai até 20 (parâmetro do admin); sobra para o cabeçalho do formulário.
+    client_max_body_size 25m;
+    limit_req zone=webag_files burst=100 nodelay;
+    limit_conn webag_conn 50;
+
+    # Resolve o nome "storage" na hora da requisição: o nginx sobe mesmo sem o armazenamento local (perfil storage-local).
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    location / {
+        limit_except GET HEAD POST OPTIONS {
+            deny all;
+        }
+
+        include /etc/nginx/snippets/security-headers.conf;
+        # O que o armazenamento enviar de CORS é descartado; valem só as origens dos nossos painéis (mapa em 00-global).
+        proxy_hide_header Access-Control-Allow-Origin;
+        add_header Access-Control-Allow-Origin  $webag_files_cors_origin always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization, x-amz-*, Origin, Accept" always;
+        add_header Access-Control-Max-Age       3600 always;
+        add_header Vary                         Origin always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+
+        # Não usa proxy-common.conf: SigV4 assina o Host, então repassa exatamente o que o cliente enviou ($http_host).
+        proxy_http_version 1.1;
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_hide_header Strict-Transport-Security;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Permissions-Policy;
+        proxy_request_buffering off;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        set $webag_storage http://storage:9000;
+        proxy_pass $webag_storage;
+    }
+}

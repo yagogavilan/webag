@@ -1,6 +1,10 @@
 # Imagem de produção da API. Contexto de build = raiz do monorepo:
 #   docker build -f apps/api/Dockerfile -t webag-api .
 # Nenhum segredo entra na imagem: tudo vem do ambiente em tempo de execução.
+# Alvos (docker build --target <nome>):
+#   runtime (padrão)  imagem enxuta que roda a API e as migrações (node dist/platform/database/migrate.js)
+#   tools             imagem com o código-fonte e as ferramentas de desenvolvimento, SÓ para tarefas pontuais
+#                     (seed inicial de produção: admin, categorias, regiões, parâmetros, termos). Não fica rodando.
 
 FROM node:24-alpine AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=true TURBO_TELEMETRY_DISABLED=1
@@ -13,6 +17,13 @@ RUN pnpm install --frozen-lockfile --filter "@webag/api..."
 RUN pnpm --filter "@webag/api..." run build
 # Só dependências de produção da API, sem o resto do monorepo.
 RUN pnpm --filter @webag/api deploy --prod --legacy /out
+
+# Tarefas pontuais (seed). Roda como usuário comum; não é a imagem da API.
+FROM build AS tools
+ENV NODE_ENV=production
+USER node
+WORKDIR /repo
+CMD ["pnpm", "--filter", "@webag/api", "db:seed"]
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production \

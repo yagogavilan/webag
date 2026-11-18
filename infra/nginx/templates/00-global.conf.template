@@ -1,0 +1,41 @@
+# Configurações globais do nginx do Webag (contexto http). Carregado antes dos sites (templates/default.conf.template).
+
+# Esconde a versão do nginx nas respostas.
+server_tokens off;
+
+# Upgrade para WebSocket (Socket.IO do status do pedido em tempo real, ADR-004).
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# Limite grosso por IP, só para segurar abuso/varredura. O limite fino (login, OTP, busca) é da própria API (Redis).
+# Valores generosos de propósito: muitos usuários de celular saem pelo mesmo IP (CGNAT das operadoras).
+limit_req_zone $binary_remote_addr zone=webag_api:10m   rate=30r/s;
+limit_req_zone $binary_remote_addr zone=webag_panel:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=webag_files:10m rate=30r/s;
+limit_req_status 429;
+limit_conn_zone $binary_remote_addr zone=webag_conn:10m;
+limit_conn_status 429;
+
+# Origens autorizadas a enviar arquivos direto ao armazenamento (POST pré-assinado feito pelo navegador do painel).
+map $http_origin $webag_files_cors_origin {
+    default "";
+    "https://${ADMIN_HOST}"   $http_origin;
+    "https://${LOJISTA_HOST}" $http_origin;
+}
+
+# Log sem query string (links assinados e códigos nunca vão para o log) e com o IP real.
+log_format webag '$remote_addr - [$time_iso8601] "$request_method $uri $server_protocol" '
+                 '$status $body_bytes_sent "$http_user_agent" rt=$request_time host=$host';
+access_log /var/log/nginx/access.log webag;
+
+# Compressão de texto/JSON.
+gzip on;
+gzip_types application/json text/css application/javascript text/plain image/svg+xml;
+gzip_min_length 1024;
+
+# Tempos padrão do repasse (os locations de WebSocket e de arquivos sobrescrevem).
+proxy_connect_timeout 5s;
+proxy_send_timeout    60s;
+proxy_read_timeout    60s;
