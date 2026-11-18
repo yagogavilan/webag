@@ -58,12 +58,13 @@ RN-11 (completa): matriz motivo x prazo x custo x resolução; estados da troca;
 ### WB-170 Pedir troca no app — Must — dep: WB-027, WB-059
 Como cliente, quero pedir troca de um item entregue, para resolver sem sair de casa.
 - **C1** Dado pedido ENTREGUE dentro de algum prazo (RN-11), então vejo "Pedir troca ou devolução" em cada item elegível; fora de todos os prazos, vejo "Prazo encerrado" com a data.
-- **C2** Dado escolher o motivo (tamanho errado, defeito, cor diferente, arrependimento), então o app mostra só as opções válidas pelo prazo de cada motivo e explica o custo (ex.: "Taxa de coleta R$ 5,00").
+- **C2** Dado escolher o motivo (tamanho errado, defeito, cor diferente, arrependimento), então o app mostra os 4 motivos, cada um com prazo e custo escritos (ex.: "se a loja aprovar, a coleta em casa custa R$ 5,00"); motivo fora do prazo ou não aceito aparece **inerte, com o motivo escrito** ("Prazo encerrado em 12 nov"); tocar nele só explica, sem erro.
 - **C3** Dado motivo "defeito", então exijo 1 a 5 fotos; nos demais, fotos são opcionais.
 - **C4** Dado "tamanho errado" ou "cor diferente", então escolho a variação desejada entre as com estoque; sem estoque, vejo "Sem estoque. Pedir reembolso?".
-- **C5** Dado a loja sem troca voluntária (prazo 0), então tamanho/cor não aparecem como opção; arrependimento e defeito sim.
+- **C5** Dado a loja sem troca voluntária (prazo 0) ou o prazo voluntário vencido, então "tamanho errado" e "cor diferente" **aparecem inertes com o motivo** ("Essa loja não faz troca por tamanho ou cor" / "Prazo encerrado em [data]"), nunca escondidos (DEC-024b); arrependimento e defeito seguem ativos dentro do piso legal.
 - **C6** Dado item com solicitação aberta, então "Pedir troca" não aparece e vejo o status.
 - **C7** Dado enviar, então crio a troca SOLICITADA, notifico a loja (WB-193) e vejo o protocolo e o prazo de resposta (48 h).
+- **C9** Dado o passo "Como devolver" `[HIPÓTESE, tela X1]`, então escolho "Levar até a loja" ou "Coleta em casa" (só se a loja entrega no meu endereço); a taxa de coleta só se aplica a "Coleta em casa" em troca por tamanho/cor e é mostrada como "cobrada só se a loja aprovar" (WB-175 C1).
 - **C8** Dado sem conexão, então salvo como rascunho com aviso e envio depois (prazo conta da data de envio aceita pelo servidor; se venceu nesse intervalo, vale a data em que o cliente iniciou `[HIPÓTESE]`).
 
 ### WB-171 Acompanhar a troca — Must — dep: WB-170
@@ -72,7 +73,7 @@ Como cliente, quero ver o status da troca, para saber o próximo passo.
 - **C2** Dado mudança de status, então recebo push (WB-193) e a tela atualiza.
 - **C3** Dado recusa, então vejo o motivo da loja e o botão "Contestar" (WB-176) até `contestacao_dias`.
 - **C4** Dado reembolso, então vejo valor, forma e previsão (até 3 dias úteis após o item recebido).
-- **C5** Dado "Cancelar troca" antes da coleta, então vira CANCELADA e a taxa de coleta é estornada.
+- **C5** Dado "Cancelar troca" antes da coleta, então vira CANCELADA e a taxa de coleta, se já paga, é estornada.
 
 ### WB-172 Loja: fila de trocas e decisão — Must — dep: WB-170, WB-075
 Como lojista, quero ver e decidir as trocas, para atender dentro do prazo.
@@ -85,7 +86,7 @@ Como lojista, quero ver e decidir as trocas, para atender dentro do prazo.
 
 ### WB-173 Coleta e recebimento do item — Must — dep: WB-172
 Como lojista, quero combinar a coleta e confirmar o recebimento, para fechar a troca.
-- **C1** Dado APROVADA, então informo "Vou coletar" com data e janela (em até `coleta_agendamento_dias_uteis`) ou "O cliente leva à loja"; o cliente é notificado.
+- **C1** Dado APROVADA com devolução "Coleta em casa" (escolhida pelo cliente em WB-170), então informo "Vou coletar" com data e janela (em até `coleta_agendamento_dias_uteis`, contados **a partir do pagamento da taxa** quando há taxa, WB-175); enquanto a taxa estiver pendente, o botão de agendar fica inerte com "Aguardando o pagamento da taxa". Dado devolução "Levar à loja", então o cliente é só notificado e a taxa é R$ 0. Em ambos o cliente é notificado.
 - **C2** Dado coleta feita, então marco "Item recebido" e escolho a inspeção: OK ou "Reprovar" (motivo + foto).
 - **C3** Dado cliente ausente, então marco "Coleta não realizada" (até 2 reagendamentos); na 3ª, a troca EXPIRA e o cliente é avisado.
 - **C4** Dado inspeção reprovada, então a troca vai à mediação (WB-110); a loja não pode recusar unilateralmente após recebimento.
@@ -102,12 +103,14 @@ Como cliente e lojista, quero concluir a troca com o novo item ou o dinheiro de 
 
 ### WB-175 Taxa de coleta — Must — dep: WB-170, WB-154
 Como lojista, quero cobrar a coleta na troca voluntária, para não ter prejuízo.
-- **C1** Dado troca por tamanho/cor com taxa de coleta > 0, então o cliente vê o valor antes de enviar e o paga por PIX ou cartão ao solicitar (mesmo provedor, cobrança separada do pedido).
-- **C2** Dado recusa da loja ou cancelamento antes da coleta, então a taxa é estornada integralmente.
-- **C3** Dado defeito ou arrependimento, então a taxa é R$ 0 (a loja arca).
+- **C1** Dado troca por tamanho/cor com devolução "Coleta em casa" e taxa de coleta > 0, então o cliente vê o valor **antes de enviar** ("cobrada só se a loja aprovar"), mas **não paga ao solicitar**: a troca é criada sem passo de pagamento (HIP-D09, DEC-024e). Só depois que a loja aprova, a troca fica "Aprovada, taxa pendente" e o cliente paga por PIX ou cartão (mesmo provedor, cobrança separada do pedido); a taxa é cobrada **uma vez**, com valor congelado no momento da aprovação.
+- **C2** Dado recusa da loja, então **não há cobrança nem estorno** (nada foi pago). Dado cancelamento pelo cliente após pagar a taxa e antes da coleta, então a taxa é estornada integralmente.
+- **C3** Dado defeito ou arrependimento, ou devolução "Levar à loja", então a taxa é R$ 0 (a loja arca) e a troca nunca entra em "taxa pendente".
 - **C4** Dado a taxa, então ela entra no extrato da loja como receita da loja sem comissão `[HIPÓTESE]` e o provedor cobra a própria taxa dela.
 - **C5** Dado taxa > `taxa_coleta_max_cents`, então a configuração da loja não deixa salvar (WB-059).
-- **C6** Dado falha no pagamento da taxa, então a solicitação não é criada e o cliente vê o motivo.
+- **C6** Dado troca "Aprovada, taxa pendente" sem pagamento em `troca_taxa_pagamento_h` (48 h `[HIPÓTESE]`; lembrete em 24 h), então vira CANCELADA com o motivo "Taxa de coleta não paga" e o cliente é avisado; ele pode pedir de novo dentro do prazo do motivo, ou escolher "Levar à loja" sem taxa.
+- **C7** Dado falha no pagamento da taxa, então a troca segue "Aprovada, taxa pendente", o cliente vê o motivo e pode tentar de novo até o prazo de C6; pagamento confirmado por webhook libera a loja a agendar a coleta (WB-173 C1) e notifica a loja.
+- **C8** Dado troca por reposição aprovada, então o estoque da variação nova é reservado na aprovação (RN-11) mesmo com taxa pendente; se C6 cancelar, a reserva é liberada.
 
 ### WB-176 Contestar recusa e mediação — Must — dep: WB-171, WB-110
 Como cliente, quero contestar uma recusa, para ter uma segunda análise.

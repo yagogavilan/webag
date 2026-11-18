@@ -132,12 +132,14 @@ Como cliente, quero que a loja veja só o necessário, para proteger meus dados.
 - **C4** Dado funcionário sem permissão de pedidos, então não vê nenhum dado do cliente.
 - **C5** Dado exportação de pedidos pelo lojista, então respeita as mesmas máscaras.
 
-### WB-217 Canal do titular e encarregado — Must — dep: WB-117
+### WB-217 Canal do titular e encarregado — Must — dep: WB-117, WB-034
 Como titular, quero saber a quem pedir, para exercer meus direitos.
 - **C1** Dado a política e o app (Ajuda > Privacidade), então mostram o nome do encarregado (inicialmente o fundador `[validar]`) e um e-mail dedicado.
 - **C2** Dado solicitação recebida, então o admin registra no painel (tipo, data, prazo de 15 dias, resposta) e recebe alerta aos 10 dias.
 - **C3** Dado a lista de solicitações, então só super admin acessa; o histórico guarda o que foi respondido.
 - **C4** Dado resposta, então o titular recebe e-mail com o resultado.
+- **C5** Dado a tela "Privacidade e dados" (CC7, app e web pública, sem login), então o titular envia o pedido por formulário (tipo, e-mail, mensagem até 1000); o sistema cria o registro com **protocolo**, prazo de 15 dias e canal "formulário", responde "Recebemos seu pedido. Protocolo [x]" e envia e-mail de confirmação; a rota pública tem rate limit e resposta idêntica exista ou não conta (anti-enumeração). Dado pedido por e-mail, então o super admin o registra manualmente (C2, tela OP3). O e-mail do encarregado e dos canais vêm da configuração de conteúdo do admin (WB-034 C1).
+- **C6** Dado o nome e o e-mail do encarregado exibidos, então o texto de "O que acontece" ao excluir/exportar e os prazos de retenção seguem a minuta do PO e **passam por revisão do fundador/jurídico antes do G5** (`[validar]`).
 
 ### WB-218 Proteção e registro de acesso a documentos — Must — dep: WB-052
 Como lojista, quero que meus documentos só sejam vistos por quem precisa, para ficar seguro.

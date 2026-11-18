@@ -138,11 +138,12 @@ Como cliente, quero escolher se recebo ofertas, para controlar o que chega.
 - **C3** Dado o link de descadastro de e-mail, então desliga o canal e-mail na hora.
 - **C4** Dado excluir conta, então os consentimentos são apagados ou anonimizados conforme WB-215, com registro de que existiu consentimento (prova legal por prazo mínimo).
 - **C5** Dado flag de marketing desligada (WB-120), então nada é enviado independentemente de preferência.
+- **C6** Dado que o marketing **não é pedido no cadastro** (WB-006 C7, DEC-024f), então a oferta de "Ofertas e novidades" aparece só em 2 lugares: (a) uma vez, após o 1º pedido pago, como cartão dispensável na tela de sucesso/pedido (junto da explicação de push de WB-190 C1), com "Agora não" que não pergunta de novo por 30 dias `[HIPÓTESE]`; (b) sempre em Conta > Notificações. A caixa nasce desmarcada e a ação de ligar é explícita (WB-211).
 
 ### WB-197 Push segmentado pelo admin — Should — dep: WB-196, WB-118
 Como operação, quero enviar push para um segmento, para ativar clientes e lojas.
 - **C1** Dado nova campanha, então escolho segmento (cidade, bairro, "sem compra há N dias", "comprou categoria X", "novos clientes", "lista de espera de [bairro]"), título (<= 60), corpo (<= 120) e destino (tela do app).
-- **C2** Dado o segmento, então vejo a **estimativa** de destinatários **só entre os que têm opt-in**; menos de 20 destinatários bloqueia (proteção contra reidentificação) `[HIPÓTESE]`.
+- **C2** Dado o segmento, então vejo a **estimativa** de destinatários **só entre os que têm opt-in**; menos de `push_mkt_min_segmento` (20 `[HIPÓTESE]`, parâmetro no admin, RN-02) destinatários bloqueia (proteção contra reidentificação).
 - **C3** Dado enviar, então respeita janela 9h-20h (envio agendado para a próxima janela) e `push_mkt_max_semana` por usuário (quem já atingiu é excluído).
 - **C4** Dado campanha enviada, então vejo enviados, entregues, abertos e descadastros.
 - **C5** Dado confirmação, então a tela exige "Enviar para N pessoas?" antes; não há desfazer após o envio.

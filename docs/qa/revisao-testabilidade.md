@@ -123,3 +123,26 @@ Regra aplicada: DEC-023 (a) a (d). Onde nada é dito, foi adotada a recomendaç�
 | R-40 | Resolvido | `lojista.md` WB-054 C6 | Produto criado antes da aprovação fica invisível |
 
 **Totais:** 37 resolvidas (R-18 com `[HIPÓTESE]`), 1 registrada sem ação (R-31), 2 com o Security (R-06, R-07). Dos 11 que bloqueavam P0, 10 estão resolvidas; R-06 segue com o Security.
+
+### Ajustes pedidos ao QA depois de DEC-024 (PO, 2026-11-18)
+
+Origem: respostas ao Designer (DEC-024) e às tabelas Z das ondas 1b, 5 e 6; resumo em `docs/produto/backlog.md` ("Respostas ao Designer"); hipóteses em `decisoes.md` HIP-D11 a HIP-D24. Planos que precisam de ajuste (nome do arquivo em `docs/qa/planos/`; se o plano ainda não existir, já nasce com o critério novo):
+
+| Plano / área | Ajuste | Critério de origem |
+|---|---|---|
+| Cadastro e formulários em geral (onda 1: WB-006, 008, 009; onda 5: contestação, avaliação) | Trocar "botão inativo" por "botão ativo; ao tocar com erro não envia, mostra o erro junto ao campo e leva o foco ao campo". Caso P0 novo: tocar sem preencher nada. Verificar também com leitor de tela | RN-17; WB-006 C2 e C4 |
+| Carrinho (WB-020 C5, pedido mínimo) | Não existe botão de finalizar desabilitado; o botão principal vira "Adicionar mais itens" com "Faltam R$ X" | RN-04, RN-17 |
+| Cadastro (WB-006 C7) | Caso negativo: nenhuma caixa de marketing no cadastro | DEC-024f |
+| Notificações (WB-196 C6) | Oferta única após o 1º pedido pago, "Agora não" sem nova pergunta por 30 dias, e sempre disponível em Conta > Notificações (caixa desmarcada) | HIP-D23 |
+| Banners (WB-115 C1) | Proporção 2:1; o recorte impede outra proporção; o teste de imagem 16:9 passa a ser o caso negativo | DEC-024a |
+| Trocas: pedir (WB-170 C2, C5, C9) | Tamanho/cor **inertes com o motivo** (loja sem troca voluntária e prazo vencido), nunca escondidos; tocar no inerte não dá erro; novo passo "Como devolver" (levar à loja x coleta em casa) | DEC-024b; HIP-D21 |
+| Trocas: taxa de coleta (WB-175 C1 a C8; WB-171 C5; WB-173 C1; WB-177) | **Reescrever o plano:** a troca é criada sem pagamento; a taxa só aparece após a aprovação ("Aprovada, taxa pendente"); loja sem poder agendar enquanto pendente; 48 h sem pagar cancela com motivo e libera a reserva; recusa não gera cobrança nem estorno; cancelar após pagar estorna; taxa R$ 0 em "Levar à loja", defeito e arrependimento. Idempotência do webhook da taxa | DEC-024e; HIP-D09, D21 |
+| Equipe e painel inicial (WB-075 C7, C8; WB-078 C5; WB-072; RN-13) | Nova permissão `vendas_valores`, padrão desligada: sem ela, a API **não devolve** vendas em R$, ticket médio e gráfico (testar a resposta, não só a tela); com ela, vê esses números e continua sem financeiro (403 em WB-076); valores dentro do pedido seguem visíveis com "pedidos". Atividade da equipe (C8) | DEC-024c; HIP-D22 |
+| Admin: parâmetros e flags (WB-119 C1, WB-120 C5, C6) | Quatro chaves novas em RN-02 (`troca_taxa_pagamento_h`, `disputa_comprovante_h`, `estorno_cobertura_teto_cents`, `push_mkt_min_segmento`); desligar PIX e cartão juntos é bloqueado (UI e API 409); selo "Pagamentos: simulado/real" (nunca "simulado" em produção) | HIP-D11, D12 |
+| Admin: intervir no pedido (WB-109 C9, WB-110 C4) | "Cobrir com saldo do Webag" só super admin, até o teto, com TOTP e motivo, vira dívida do lojista; prazo do comprovante de 48 h | HIP-D13, D14 |
+| Ajuda (WB-034 C1) e novo WB-227 | Contatos e horário vêm da configuração do admin (alterar e ver no app e no painel sem deploy); WB-227 é **história nova**: diagnóstico de alertas, "Testar alertas agora" sem criar pedido, Wake Lock sem suporte mostra só a dica; funcionário vê a tela | HIP-D15, D17 |
+| Privacidade (WB-217 C5, C6) | Formulário público do titular: protocolo, prazo de 15 dias, rate limit, resposta idêntica exista ou não conta | HIP-D18 |
+| Lista de espera (WB-004 C2) | 1 inscrição por e-mail e bairro; repetir não duplica nem dá erro | HIP-D19 |
+| Admin: meu perfil (WB-228) | **História nova**: alterar senha com TOTP vigente derruba as outras sessões; "Sair de todos os aparelhos"; minha atividade filtrada. TOTP e códigos de recuperação seguem com o Security | AC6 |
+
+Sem mudança pedida (continuam como estão): R-06/R-07 (TOTP, Security), WB-214 C6 e login do admin em 2 passos. Observação: `prd/lgpd.md` WB-214 mantém duas linhas "C6" (a segunda, antiga, pede confirmar com o Security); vale a primeira (DEC-020d, R-30), e a limpeza do texto fica com o Security por tocar exclusão web.

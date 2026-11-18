@@ -40,18 +40,32 @@ Origem: `docs/qa/revisao-testabilidade.md` (R-01 a R-40; status por item no fim 
 | Abuso e contas | WB-050 C2 (login antes de ganhar papel), WB-075 (convite nasce confirmado, mensagem genérica, dono não se remove), WB-053 C8-C9 (1 conta MP = 1 loja; 1 `state`), WB-101 C1 (admin só com e-mail exclusivo), WB-224 C10 (limite atômico na criação do pedido), WB-225 C1 e C5 (loja nova = 30 dias **e** 20 pedidos; total cobrado) | `prd/lojista.md`, `prd/admin.md`, `prd/seguranca-acesso.md` |
 | Critérios numéricos e de borda | Cadastro (WB-006 C2: zxcvbn), sessão 30/90 dias (WB-008 C1), reset (WB-009 C5-C6), promoção em data e hora (WB-062 C1), faixas de frete `[de, até)` (WB-057), horários (WB-056), estoque e SKU (WB-061), rearme do estoque baixo (WB-064 C2), flags e parâmetros (WB-119 C6, WB-120 C1), webhooks (WB-153 C3), `fake` (WB-150 C3), termos (WB-210 C3, WB-117 C2), documentos (WB-052 C3/C6/C7, WB-218) | vários PRDs |
 
+## Alterações 2026-11-18 (respostas ao Designer, DEC-024)
+Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md` e `onda-6-conformidade.md`. Hipóteses novas: `decisoes.md` (HIP-D11 a HIP-D24). TOTP, "esqueci a senha" do admin e exclusão web ficam com o Security (não alterados).
+
+| Item | O que mudou | Onde |
+|---|---|---|
+| Banner 2:1 (DEC-024a) | WB-115 C1: proporção 2:1 (era 16:9) | `prd/admin.md` |
+| Troca inerte (024b) | WB-170 C2, C5: tamanho/cor aparecem inertes com o motivo; novo C9 (devolução: levar à loja ou coleta em casa) | `prd/trocas.md`, RN-11 |
+| Valores de venda (024c) | Nova permissão `vendas_valores`, padrão desligada: WB-075 C7, WB-078 C5, RN-13; WB-075 C8 (atividade da equipe) | `prd/lojista.md`, RN-13 |
+| Botão ativo (024d) | Nova **RN-17**; WB-006 C2 e C4; carrinho C5 (mínimo) | `prd/cliente.md`, RN-04, RN-17 |
+| Taxa de coleta (024e) | WB-175 C1 a C8 reescritos: paga **após a aprovação**; novo prazo `troca_taxa_pagamento_h`; subestado "taxa pendente" | `prd/trocas.md`, RN-11, RN-02 |
+| Marketing (024f) | WB-006 C7 (não pedido no cadastro); WB-196 C6 (pós-1º pedido e em Notificações) | `prd/cliente.md`, `prd/notificacoes.md` |
+| Perguntas Z restantes | Selo de pagamentos e bloqueio de PIX+cartão desligados juntos (WB-120 C5, C6); cobertura de estorno (WB-109 C9); prazo do comprovante; configuração de contatos (WB-034 C1); formulário do titular (WB-217 C5, C6); lista de espera (WB-004 C2); parâmetros novos em RN-02 | vários |
+| **Histórias novas** | **WB-227** (Ajuda do lojista e diagnóstico dos alertas, Should) e **WB-228** (Admin: meu perfil e segurança, Must): telas AJ2 e AC6 não tinham história. Total da 1.0: 142 para **144** | `prd/lojista.md`, `prd/seguranca-acesso.md` |
+
 **Onde estão as histórias.** Cada história (WB-###) com "Como..., quero..., para..." e critérios Dado/Quando/Então está no PRD do épico (fonte única, sem duplicar aqui). Este arquivo é o índice: prioridade, ordem de construção, dependências e fase 2.
 
 | Épico | PRD | IDs |
 |---|---|---|
 | Cliente | `prd/cliente.md` | WB-001 a 038 |
-| Lojista | `prd/lojista.md` | WB-050 a 079 |
+| Lojista | `prd/lojista.md` | WB-050 a 079, 227 |
 | Admin | `prd/admin.md` | WB-100 a 125 |
 | Pagamentos | `prd/pagamentos.md` | WB-150 a 161 |
 | Trocas ("Retira Troca") | `prd/trocas.md` | WB-170 a 178 |
 | Notificações | `prd/notificacoes.md` | WB-190 a 199 |
 | LGPD | `prd/lgpd.md` | WB-210 a 218 |
-| Segurança de acesso e risco de loja | `prd/seguranca-acesso.md` | WB-219 a 226 |
+| Segurança de acesso e risco de loja | `prd/seguranca-acesso.md` | WB-219 a 226, 228 |
 | Fase 2 (sem Gherkin até entrar no roadmap) | este arquivo §6 | WB-300 a 334 |
 
 ## 1. Como priorizei
@@ -63,11 +77,11 @@ Origem: `docs/qa/revisao-testabilidade.md` (R-01 a R-40; status por item no fim 
 
 | MoSCoW | Qtde |
 |---|---|
-| Must | 116 (109 + WB-219 a 225) |
-| Should | 23 (21 + WB-079, que desceu de Could, + WB-226) |
+| Must | 117 (109 + WB-219 a 225 + WB-228) |
+| Should | 24 (21 + WB-079, que desceu de Could, + WB-226 + WB-227) |
 | Could | 2 (WB-010, 199) |
 | Won't (1.0) | 1 (WB-161) |
-| **Total 1.0** | **142** |
+| **Total 1.0** | **144** (142 + WB-227 e WB-228, DEC-024; só histórias de telas que o Designer desenhou sem história) |
 
 Crítica ao escopo: 116 Must é muito para uma "1.0 de piloto". Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
 
@@ -239,6 +253,8 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 131 | WB-199 | Carrinho esquecido | Could | 196 | |
 | 132 | WB-010 | Login Google e Apple (preparado, flag desligada) | Could | 008, 120 | S |
 | 133 | WB-079 | Segurança de acesso do lojista (2FA opcional) | Should (era Could; SEC-015) | 050 | S |
+| 133a | WB-227 | Ajuda do lojista e diagnóstico dos alertas (tela AJ2) | Should | 067, 192, 034 | |
+| 133b | WB-228 | Admin: meu perfil e segurança (tela AC6) | Must | 100, 222, 219 | S |
 | 134 | WB-161 | Segundo adaptador de pagamento | Won't (1.0) | 150 | |
 
 Observações de dependência: WB-219 a 224 não bloqueiam o início de outras histórias, mas WB-219/220/221/222/223 precisam estar prontas antes de G4 (requisitos G4 do Security: SEC-004, 010, 011, 015, 082). WB-225 depende de WB-198 apenas para o alerta (o limite funciona sem ele). WB-038 e WB-124 são um par (cliente denuncia, admin trata) e devem ir na mesma sprint, antes de G5 (exigência de lojas de apps para conteúdo de usuário). WB-213 e WB-214 também bloqueiam G5. WB-155 (ADR) precisa estar decidido **antes** de WB-053, WB-151 e WB-152. WB-018 mostra avaliações vazias até WB-031 existir.

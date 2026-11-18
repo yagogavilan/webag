@@ -1,6 +1,6 @@
 # PRD: Segurança de acesso e risco de loja (histórias transversais)
 
-Status: pronto para G3 (aguarda estimativa, specs e threat model já feito em `docs/seguranca/threat-model-auth-pagamento.md`) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-219 a WB-226
+Status: pronto para G3 (aguarda estimativa, specs e threat model já feito em `docs/seguranca/threat-model-auth-pagamento.md`) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-219 a WB-226 e WB-228
 Origem: parecer `docs/seguranca/revisao-adrs.md` (SEC-101, 102, 103, 106, 105) e requisitos `docs/seguranca/requisitos-seguranca.md` (SEC-004, 008, 015, 016, 017, 060, 062, 067, 082); decisões DEC-014 a DEC-018 em `docs/decisoes.md`. Os critérios abaixo dizem **o que** o usuário vê; o **como** (Argon2, HMAC, Redis, cookies) é do `backend-dev` e do `tech-lead`.
 
 ## Problema
@@ -105,6 +105,14 @@ Como cliente, quero informar um código ao receber o pedido, para que a loja nã
 - **C4** Dado pedido de retirada, então vale o código de retirada existente (WB-026).
 - **Nota:** reduz o abuso "entregue falso" e dá prova nas disputas (WB-037); custo de UX para o cliente e para o lojista, por isso Should e com flag `[HIPÓTESE]`; validar no piloto.
 
+### WB-228 Admin: meu perfil e segurança — Must — dep: WB-100, WB-222, WB-219
+Como admin, quero cuidar do meu próprio acesso, para manter minha conta segura (tela AC6, `onda-1b-contas.md`; nova, sem história até DEC-024). O **como** do TOTP, dos códigos de recuperação e da recuperação do super admin é do Security (R-06/R-07, WB-222) e não é definido aqui.
+- **C1** Dado o menu do usuário > "Meu perfil", então vejo nome, e-mail, perfil (selo) e data/hora do último acesso; não edito perfil nem e-mail (só super admin altera admins, WB-101).
+- **C2** Dado "Alterar senha", então informo a atual, a nova e a confirmação (regras de WB-006 C2 e RN-17); a ação exige TOTP vigente (`reauth_min`, WB-222 C6); ao concluir, as outras sessões e renovações caem (WB-219 C1) e vejo "Senha alterada.".
+- **C3** Dado "Sair de todos os aparelhos", então confirmo em diálogo e toda sessão antiga recebe 401 na próxima requisição (WB-219 C1).
+- **C4** Dado "Minha atividade", então abre a Auditoria (WB-123) já filtrada nas minhas próprias ações (perfil "leitura própria"); nenhum admin vê a atividade de outro sem a permissão de auditoria.
+- **C5** Dado "Gerar novos códigos de recuperação" (comportamento definido em WB-222 C5/C6), então a tela só expõe a ação; regras e limites vêm do Security.
+
 ## Dependências e riscos
 | Item | Tipo | Mitigação |
 |---|---|---|
@@ -118,6 +126,6 @@ Como cliente, quero informar um código ao receber o pedido, para que a loja nã
 | Pergunta | Quem responde |
 |---|---|
 | Valores de loja nova (30 dias, 20 pedidos, R$ 500) são adequados ao ticket das lojas do piloto? | fundador (V1/V4) |
-| A Webag cobre o estorno com recurso próprio quando o lojista não tem saldo? Teto? | fundador |
+| ~~A Webag cobre o estorno com recurso próprio quando o lojista não tem saldo? Teto?~~ Respondida: sim, só super admin, teto R$ 300 `[HIPÓTESE]` (DEC-020a, WB-109 C9); fundador revisa o teto e o backend confirma a viabilidade no MP | fundador |
 | Captcha de terceiro entra na 1.0? | fundador + security-engineer |
 | Exclusão pela web com e-mail não confirmado: senha ou código (SEC-002 `delete_web`)? | security-engineer |
