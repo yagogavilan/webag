@@ -1,10 +1,22 @@
 import type { Category, CategoryNode } from '@webag/shared';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { fetchBanners, fetchCategories, fetchHome, fetchProduct, fetchProductReviews, fetchStore, fetchStoreProducts, fetchStoreReviews } from '../../api/catalog-api';
+import {
+  fetchBanners,
+  fetchCategories,
+  fetchHome,
+  fetchProduct,
+  fetchProductReviews,
+  fetchSearchProducts,
+  fetchSearchStores,
+  fetchStore,
+  fetchStoreProducts,
+  fetchStoreReviews,
+} from '../../api/catalog-api';
 import { fetchRegions } from '../../api/auth-api';
 import { createPersistedStore } from '../../lib/persisted-store';
 import { findActiveCity } from '../address/regions';
+import { toProductParams, toStoreParams, type Filters, type ProductSort, type StoreSort } from '../search/filters';
 import { useCurrentAddress } from '../address/store';
 
 /** Onde o cliente está para a busca por raio: o ponto do endereço atual. Sem ponto (cidade sem coordenada) a descoberta pede o CEP. */
@@ -108,6 +120,30 @@ export function useReviewsQuery(kind: 'store' | 'product', id: string | undefine
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: Boolean(id),
+    staleTime: 60_000,
+  });
+}
+
+// ---- Resultados de busca ----
+
+export function useProductResults(point: DeliveryPoint | null, q: string | undefined, filters: Filters, sort: ProductSort, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: ['search-products', q ?? null, filters, sort, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null],
+    queryFn: ({ pageParam, signal }) => fetchSearchProducts(toProductParams({ lat: point?.lat ?? 0, lng: point?.lng ?? 0 }, filters, q, sort, pageParam || undefined), signal),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: enabled && point !== null,
+    staleTime: 60_000,
+  });
+}
+
+export function useStoreResults(point: DeliveryPoint | null, q: string | undefined, filters: Filters, sort: StoreSort, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: ['search-stores', q ?? null, filters, sort, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null],
+    queryFn: ({ pageParam, signal }) => fetchSearchStores(toStoreParams({ lat: point?.lat ?? 0, lng: point?.lng ?? 0 }, filters, q, sort, pageParam || undefined), signal),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: enabled && point !== null,
     staleTime: 60_000,
   });
 }

@@ -63,27 +63,19 @@ export function registerFavoritesCleanup(client: QueryClient): () => void {
 interface ToggleArgs {
   kind: FavoriteKind;
   id: string;
-  name: string;
   on: boolean;
-  /** Mensagem de sucesso (a loja mostra "Loja salva nos favoritos."). */
+  /** Sem toast de sucesso (a tela de favoritos mostra o seu, com "Desfazer"). */
   silent?: boolean;
 }
 
 /**
  * Favoritar com atualização otimista: o coração muda na hora; se a API recusar, volta e avisa. Sem rede a ação espera na fila do
  * TanStack Query e sai quando a conexão voltar (ação segura; só vale enquanto o app está aberto).
- * Visitante: abre a tela de entrar e, no retorno, a tela chama `useApplyPendingFavorite` para executar.
  */
-export function useFavorite(kind: FavoriteKind, id: string | undefined, name: string) {
+export function useSetFavorite() {
   const client = useQueryClient();
-  const router = useRouter();
-  const pathname = usePathname();
   const toast = useToast();
-  const session = useSession();
-  const ids = useFavoriteIds();
-  const isFavorite = id !== undefined && ids[kind].has(id);
-
-  const mutation = useMutation({
+  return useMutation({
     networkMode: 'online',
     mutationFn: async (args: ToggleArgs) => (args.kind === 'store' ? setFavoriteStore(args.id, args.on) : setFavoriteProduct(args.id, args.on)),
     onMutate: async (args) => {
@@ -100,11 +92,26 @@ export function useFavorite(kind: FavoriteKind, id: string | undefined, name: st
       void haptic('error');
       toast.show(error instanceof ApiError && error.code === 'FAVORITES_LIMIT_REACHED' ? t('favorites.limit') : args.on ? t('favorites.saveError') : t('favorites.removeError'));
     },
+    // a verdade volta do servidor: o conjunto otimista pode estar incompleto se a 1ª carga ainda não tinha terminado
+    onSettled: () => void client.invalidateQueries({ queryKey: FAVORITE_IDS_KEY }),
     onSuccess: (_data, args) => {
       void client.invalidateQueries({ queryKey: ['favorites', 'list'] });
       if (!args.silent) toast.show(args.on ? (args.kind === 'store' ? t('store.favoriteAdded') : t('favorites.saved')) : t('favorites.removed'));
     },
   });
+}
+
+/**
+ * Coração de uma loja ou produto. Visitante: abre a tela de entrar e, no retorno, a tela chama `applyPending` (via
+ * `useApplyPendingFavorite`) para executar o que ele tinha pedido.
+ */
+export function useFavorite(kind: FavoriteKind, id: string | undefined, _name: string) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const session = useSession();
+  const ids = useFavoriteIds();
+  const mutation = useSetFavorite();
+  const isFavorite = id !== undefined && ids[kind].has(id);
 
   const toggle = () => {
     if (!id) return;
@@ -114,15 +121,15 @@ export function useFavorite(kind: FavoriteKind, id: string | undefined, name: st
       router.push({ pathname: '/login', params: { returnTo: pathname } });
       return;
     }
-    mutation.mutate({ kind, id, name, on: !isFavorite });
+    mutation.mutate({ kind, id, on: !isFavorite });
   };
 
   /** Chamado ao voltar do login: executa o favoritar que o visitante tinha pedido. */
   const applyPending = () => {
-    if (id && session.status === 'authenticated' && takePendingFavorite(kind, id) && !isFavorite) mutation.mutate({ kind, id, name, on: true });
+    if (id && session.status === 'authenticated' && takePendingFavorite(kind, id) && !isFavorite) mutation.mutate({ kind, id, on: true });
   };
 
-  return { isFavorite, toggle, applyPending, loading: mutation.isPending, ready: session.status !== 'loading' };
+  return { isFavorite, toggle, applyPending, loading: mutation.isPending };
 }
 
 /** Executa o favoritar pendente quando a tela volta do login (mesma tela, mesma posição). */
