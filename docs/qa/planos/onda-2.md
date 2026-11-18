@@ -75,7 +75,7 @@ Legenda de prioridade/tipo: `estrategia.md` §7. `R-nn` = pendência em `revisao
 ### 2.4 Aprovação de lojas: fila, decisão e acompanhamento (WB-103, 104, 054)
 | ID | Origem | Caso | Tipo | P |
 |---|---|---|---|---|
-| O2-APR-01 | R-29 | Máquina de estados da loja (rascunho, em análise, aprovada, reprovada, suspensa): toda transição válida passa e **toda inválida falha** (ex.: aprovar rascunho, reaprovar aprovada, suspender reprovada); tabela completa | UNIT | P0 |
+| O2-APR-01 | R-29 | Máquina de estados da loja (rascunho, em análise, correção pedida, aprovada, recusada, suspensa): toda transição válida passa e **toda inválida falha** (ex.: aprovar rascunho, reaprovar aprovada, suspender reprovada); tabela completa | UNIT | P0 |
 | O2-APR-02 | WB-103 C1, HIP-030, R-15 | Fila só com "Em análise", ordenada pela data de envio; destaque vermelho após 2 dias úteis: enviada sexta 17:00 passa a atrasada na terça 17:00, não no domingo (FakeClock, `America/Sao_Paulo`) | UNIT/E2E-W | P1 |
 | O2-APR-03 | WB-103 C2 | Abrir a loja mostra dados, documentos (URL curta, acesso auditado) e a checagem de duplicidade de CPF/CNPJ | E2E-W | P1 |
 | O2-APR-04 | WB-103 C3, WB-054 C2 | Aprovar: loja vira APROVADA, lojista recebe e-mail (Mailpit) e notificação; só aparece ao cliente com conta de recebimento ativa + 1 produto ativo (RN-03) | INT/E2E-W | P0 |
