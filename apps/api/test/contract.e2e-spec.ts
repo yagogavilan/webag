@@ -5,6 +5,8 @@ import { createTestApp, listRoutes, type TestContext } from './helpers/app.js';
 
 interface Operation {
   operationId: string;
+  /** Contrato publicado antes do código (ex.: pedido na Onda 3, implementado na Onda 4). Sai da comparação com as rotas reais. */
+  'x-planned'?: string;
   security?: unknown[];
   responses: Record<string, unknown>;
 }
@@ -15,9 +17,11 @@ interface Contract {
 
 const contract = parse(readFileSync(resolve(import.meta.dirname, '../../../docs/arquitetura/api/openapi.yaml'), 'utf8')) as Contract;
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
-const operations = Object.entries(contract.paths).flatMap(([path, item]) =>
+const allOperations = Object.entries(contract.paths).flatMap(([path, item]) =>
   METHODS.filter((m) => item[m]).map((m) => ({ key: `${m.toUpperCase()} ${path}`, op: item[m]! })),
 );
+const operations = allOperations.filter((o) => o.op['x-planned'] === undefined);
+const planned = allOperations.filter((o) => o.op['x-planned'] !== undefined);
 
 /** O contrato (openapi.yaml) e o código não podem divergir (ADR-007: o YAML é a fonte da verdade). */
 describe('contrato OpenAPI x rotas reais', () => {
@@ -40,6 +44,12 @@ describe('contrato OpenAPI x rotas reais', () => {
     expect(real).toEqual(documented);
   });
 
+  it('operações planejadas (`x-planned`) ainda não existem como rota; ao implementar, remover a marca (e o contrato passa a valer)', () => {
+    const real = new Set(routes().map((r) => r.key));
+    expect(planned.filter((o) => real.has(o.key)).map((o) => o.key)).toEqual([]);
+    expect(planned.every((o) => /^Onda \d/.test(o.op['x-planned'] ?? ''))).toBe(true);
+  });
+
   it('segurança: `security: []` exatamente nas rotas @Public (SEC-021)', () => {
     const publicReal = new Set(routes().filter((r) => r.isPublic).map((r) => r.key));
     const publicDocumented = new Set(operations.filter((o) => Array.isArray(o.op.security) && o.op.security.length === 0).map((o) => o.key));
@@ -47,7 +57,7 @@ describe('contrato OpenAPI x rotas reais', () => {
   });
 
   it('operationIds são únicos', () => {
-    const ids = operations.map((o) => o.op.operationId);
+    const ids = allOperations.map((o) => o.op.operationId);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -65,7 +75,7 @@ describe('contrato OpenAPI x rotas reais', () => {
   });
 
   it('operações autenticadas documentam 401 e as públicas de escrita documentam 429', () => {
-    for (const { key, op } of operations) {
+    for (const { key, op } of allOperations) {
       const isPublic = Array.isArray(op.security) && op.security.length === 0;
       if (!isPublic) expect(Object.keys(op.responses), key).toContain('401');
       if (isPublic && key.startsWith('POST') && !key.includes('/webhooks/')) expect(Object.keys(op.responses), key).toContain('429');

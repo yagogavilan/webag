@@ -10,6 +10,8 @@ export interface AppErrorOptions {
   errors?: FieldError[];
   /** Segundos até poder tentar de novo (vira o header Retry-After em 429/503). */
   retryAfterSeconds?: number;
+  /** Membros de extensão do RFC 9457 (ex.: loja atual na sacola). Nunca dado pessoal ou interno. */
+  extensions?: Record<string, unknown>;
 }
 
 /**
@@ -36,8 +38,8 @@ export const errors = {
     new AppError(403, code, 'Sem permissão', { detail }),
   notFound: (detail = 'Recurso não encontrado.') =>
     new AppError(404, 'NOT_FOUND', 'Não encontrado', { detail }),
-  conflict: (code: string, title: string, detail?: string) =>
-    new AppError(409, code, title, { detail }),
+  conflict: (code: string, title: string, detail?: string, extensions?: Record<string, unknown>) =>
+    new AppError(409, code, title, { detail, ...(extensions ? { extensions } : {}) }),
   gone: (code: string, title: string, detail?: string) => new AppError(410, code, title, { detail }),
   unprocessable: (code: string, title: string, options?: AppErrorOptions) =>
     new AppError(422, code, title, options),

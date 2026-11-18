@@ -37,6 +37,7 @@ export class ProblemFilter implements ExceptionFilter {
     let detail: string | undefined;
     let fieldErrors: AppError['problem']['errors'];
     let retryAfter: number | undefined;
+    let extensions: Record<string, unknown> | undefined;
 
     if (exception instanceof AppError) {
       status = exception.getStatus();
@@ -45,6 +46,7 @@ export class ProblemFilter implements ExceptionFilter {
       detail = exception.problem.detail;
       fieldErrors = exception.problem.errors;
       retryAfter = exception.problem.retryAfterSeconds;
+      extensions = exception.problem.extensions;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const fallback = STATUS_DEFAULTS[status] ?? { code: `HTTP_${status}`, title: 'Erro' };
@@ -69,6 +71,8 @@ export class ProblemFilter implements ExceptionFilter {
         ...(detail ? { detail } : {}),
         code,
         ...(fieldErrors ? { errors: fieldErrors } : {}),
+        // Extensões não sobrescrevem os campos padrão do RFC 9457.
+        ...(extensions ? Object.fromEntries(Object.entries(extensions).filter(([key]) => !['type', 'title', 'status', 'detail', 'code', 'errors'].includes(key))) : {}),
       });
   }
 }

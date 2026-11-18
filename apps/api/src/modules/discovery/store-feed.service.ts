@@ -7,7 +7,7 @@ import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { storeDeliveryTiers, storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
 import { deliveryFee, type Tier, type WeeklyHours } from '../stores/index.js';
-import { hoursToday, isOpen, nextOpening, type OpeningInput } from './domain/opening.js';
+import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
 import { type GeoPoint, pointKey, pointSql } from './geo.js';
 
 export type DiscoveryMode = 'delivery' | 'pickup';

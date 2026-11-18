@@ -12,7 +12,7 @@ import { users } from '../identity/db/schema.js';
 import { stores, storeSettings } from '../stores/db/schema.js';
 import { maskDocument } from '../stores/domain/document.js';
 import { StoreSettingsService } from '../stores/index.js';
-import { hoursToday, isOpen, nextOpening, type OpeningInput } from './domain/opening.js';
+import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
 import { reviews } from './db/schema.js';
 import type { GeoPoint } from './geo.js';
 

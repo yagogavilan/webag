@@ -42,5 +42,18 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 ## Triggers e constraints que valem como teste
 `webag_forbid_mutation()` bloqueia UPDATE/DELETE (e TRUNCATE no audit) em `audit_log`, `parameter_history`, `terms_acceptances`, `consents`, `payment_refunds`, `legal_documents` para qualquer role (testado em `test/admin-config.e2e-spec.ts`).
 
+## Onda 3 (descoberta, endereços, sacola)
+| Tabela | Conteúdo |
+|---|---|
+| `user_addresses` | Endereços salvos (até `enderecos_max`); `lat`/`lng` + coluna GERADA `location geography(Point,4326)` com GiST; um padrão por usuário (índice único parcial); sem duplicar CEP+número+complemento |
+| `banners` | Banner da home 2:1; cidade nula = todas; destino loja, categoria, produto, cupom ou nenhum; período e posição |
+| `reviews` | Avaliação de loja (`product_id` nulo) ou produto; só leitura na Onda 3; `order_id` sem FK até a Onda 4; remoção é `status = removed` |
+| `favorites` | Loja OU produto por usuário (CHECK de um alvo só; únicos parciais) |
+| `search_history` | Últimos 10 termos distintos por usuário (`term_key` sem acento/caixa) |
+| `coupons`, `coupon_redemptions` | Cupom (percentual, fixo, frete grátis; escopo loja/plataforma) e uso por pedido (devolvido com `released_at`) |
+| `carts`, `cart_items` | Sacola por conta (`carts.user_id` único), uma loja; `revision` sobe a cada mudança; `seen_price_cents` guarda o preço que o cliente viu |
+
+Funções e índices: `f_norm(text)` (unaccent + lower, IMUTÁVEL) com índices GIN `pg_trgm` em `products.name` e `stores.name`; índice GiST de `stores.location` (migração 0005) alimenta `ST_DWithin` da descoberta. Migrações 0009 a 0011.
+
 ## Próximas ondas
 Onda 2 adiciona `stores` (+ FK de `store_members`), documentos e catálogo; Onda 3 adiciona geografia (`geography(Point,4326)` + GiST); Onda 4 adiciona pedidos, `idempotency_keys`, `ledger_entries` (append-only, SEC-041) e liga `payment_attempts.external_reference` ao pedido.

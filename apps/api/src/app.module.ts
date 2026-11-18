@@ -12,6 +12,7 @@ import { MediaModule } from './modules/media/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
 import { StoresModule } from './modules/stores/index.js';
 import { AddressesModule } from './modules/addresses/index.js';
+import { CartModule } from './modules/cart/index.js';
 import { DiscoveryModule } from './modules/discovery/index.js';
 import { CacheModule } from './platform/cache/cache.service.js';
 import { StorageModule } from './platform/storage/storage.module.js';
@@ -94,6 +95,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     CatalogModule,
     AddressesModule,
     DiscoveryModule,
+    CartModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
   ],

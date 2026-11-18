@@ -2851,6 +2851,637 @@ export interface RecordSearchTermRequest {
   term: string;
 }
 
+export type CartWarningCode = typeof CartWarningCode[keyof typeof CartWarningCode];
+
+
+export const CartWarningCode = {
+  PRICE_CHANGED: 'PRICE_CHANGED',
+  QUANTITY_EXCEEDS_STOCK: 'QUANTITY_EXCEEDS_STOCK',
+  OUT_OF_STOCK: 'OUT_OF_STOCK',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export interface CartWarning {
+  code: CartWarningCode;
+  /** Texto pt-BR sugerido */
+  message: string;
+  /** Só em `PRICE_CHANGED` */
+  fromCents?: number;
+  /** Só em `PRICE_CHANGED` */
+  toCents?: number;
+  /** Só em `QUANTITY_EXCEEDS_STOCK` */
+  requestedQuantity?: number;
+  /** Só em `QUANTITY_EXCEEDS_STOCK` */
+  maxQuantity?: number;
+}
+
+export type CartItemAttributes = {[key: string]: string};
+
+export interface CartItem {
+  id: string;
+  variantId: string;
+  productId: string;
+  name: string;
+  attributes: CartItemAttributes;
+  image: ImageUrls;
+  /** Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar */
+  quantity: number;
+  unitPrice: Money;
+  /** Preço antes da promoção vigente */
+  originalUnitPrice: Money | null;
+  lineTotal: Money;
+  available: boolean;
+  maxQuantity: number;
+  warnings: CartWarning[];
+}
+
+export type CartNoticeCode = typeof CartNoticeCode[keyof typeof CartNoticeCode];
+
+
+export const CartNoticeCode = {
+  CART_EXPIRED: 'CART_EXPIRED',
+  QUANTITY_ADJUSTED: 'QUANTITY_ADJUSTED',
+  STORE_REPLACED: 'STORE_REPLACED',
+  MERGE_KEPT_ACCOUNT_CART: 'MERGE_KEPT_ACCOUNT_CART',
+  MERGE_ITEM_SKIPPED: 'MERGE_ITEM_SKIPPED',
+} as const;
+
+export interface CartNotice {
+  code: CartNoticeCode;
+  message: string;
+  requestedQuantity?: number;
+  appliedQuantity?: number;
+  maxQuantity?: number;
+  variantId?: string;
+}
+
+export type CartCouponKind = typeof CartCouponKind[keyof typeof CartCouponKind];
+
+
+export const CartCouponKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+  free_shipping: 'free_shipping',
+} as const;
+
+export type CartCouponScope = typeof CartCouponScope[keyof typeof CartCouponScope];
+
+
+export const CartCouponScope = {
+  store: 'store',
+  platform: 'platform',
+} as const;
+
+export interface CartCoupon {
+  code: string;
+  kind: CartCouponKind;
+  scope: CartCouponScope;
+  applied: boolean;
+  /**
+     * Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)
+     * @nullable
+     */
+  rejection: string | null;
+}
+
+/**
+ * Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.
+ */
+export interface CartSummary {
+  subtotal: Money;
+  delivery: Money;
+  /** 'a partir de': sem endereço escolhido */
+  deliveryEstimated: boolean;
+  freeShipping: boolean;
+  serviceFee: Money;
+  discount: Money;
+  total: Money;
+  /** Cupom que zeraria o total: mostrar 'Valor mínimo cobrado' */
+  minimumTotalApplied: boolean;
+  /** Desconto da plataforma cortado no teto da comissão */
+  platformDiscountCapped: boolean;
+  /** 'Faltam R$ X para o pedido mínimo' */
+  missingForMinimum: Money | null;
+}
+
+export type CartCheckoutBlockersItem = typeof CartCheckoutBlockersItem[keyof typeof CartCheckoutBlockersItem];
+
+
+export const CartCheckoutBlockersItem = {
+  EMPTY: 'EMPTY',
+  ITEM_UNAVAILABLE: 'ITEM_UNAVAILABLE',
+  STORE_UNAVAILABLE: 'STORE_UNAVAILABLE',
+  STORE_CLOSED: 'STORE_CLOSED',
+  BELOW_MINIMUM: 'BELOW_MINIMUM',
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  NEEDS_ADDRESS: 'NEEDS_ADDRESS',
+  PICKUP_UNAVAILABLE: 'PICKUP_UNAVAILABLE',
+  ABOVE_MAX_ORDER: 'ABOVE_MAX_ORDER',
+} as const;
+
+export interface CartCheckout {
+  canCheckout: boolean;
+  blockers: CartCheckoutBlockersItem[];
+  /** @nullable */
+  opensAt: string | null;
+}
+
+export type CartStore = {
+  id: string;
+  name: string;
+  logo: ImageUrls;
+  open: boolean;
+  /** @nullable */
+  opensAt: string | null;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  minOrder: Money;
+} | null;
+
+export type CartDeliveryMode = typeof CartDeliveryMode[keyof typeof CartDeliveryMode];
+
+
+export const CartDeliveryMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type CartDelivery = {
+  mode: CartDeliveryMode;
+  /** @nullable */
+  addressId: string | null;
+  /**
+     * Entrega no endereço; nulo sem endereço ou na retirada
+     * @nullable
+     */
+  available: boolean | null;
+  /** @nullable */
+  distanceM: number | null;
+  /**
+     * Menor frete da loja ('a partir de')
+     * @nullable
+     */
+  feeFromCents: number | null;
+  estimated: boolean;
+};
+
+export interface Cart {
+  /** @nullable */
+  id: string | null;
+  /** Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu */
+  revision: number;
+  store: CartStore;
+  items: CartItem[];
+  coupon: null | CartCoupon;
+  delivery: CartDelivery;
+  summary: CartSummary;
+  checkout: CartCheckout;
+  /** Avisos desta resposta (não persistem) */
+  notices: CartNotice[];
+}
+
+export interface SetCartItemRequest {
+  /**
+     * @minimum 1
+     * @maximum 999
+     */
+  quantity: number;
+  /** Confirma 'Esvaziar e continuar' ao trocar de loja (WB-021) */
+  replaceStore?: boolean;
+}
+
+export interface ApplyCouponRequest {
+  /**
+     * @minLength 1
+     * @maxLength 30
+     */
+  code: string;
+}
+
+export type MergeCartRequestItemsItem = {
+  variantId: string;
+  /**
+     * @minimum 1
+     * @maximum 999
+     */
+  quantity: number;
+};
+
+export interface MergeCartRequest {
+  /** @maxItems 50 */
+  items: MergeCartRequestItemsItem[];
+}
+
+export type CartStoreConflictProblemStatus = typeof CartStoreConflictProblemStatus[keyof typeof CartStoreConflictProblemStatus];
+
+
+export const CartStoreConflictProblemStatus = {
+  NUMBER_409: 409,
+} as const;
+
+export type CartStoreConflictProblemCode = typeof CartStoreConflictProblemCode[keyof typeof CartStoreConflictProblemCode];
+
+
+export const CartStoreConflictProblemCode = {
+  CART_STORE_CONFLICT: 'CART_STORE_CONFLICT',
+} as const;
+
+export type CartStoreConflictProblemCurrentStore = {
+  id: string;
+  name: string;
+};
+
+export type CartStoreConflictProblemNewStore = {
+  id: string;
+  name: string;
+};
+
+export interface CartStoreConflictProblem {
+  type: string;
+  title: string;
+  status: CartStoreConflictProblemStatus;
+  detail?: string;
+  code: CartStoreConflictProblemCode;
+  currentStore: CartStoreConflictProblemCurrentStore;
+  newStore: CartStoreConflictProblemNewStore;
+  itemCount: number;
+}
+
+/**
+ * Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.
+ */
+export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
+
+
+export const OrderStatus = {
+  awaiting_payment: 'awaiting_payment',
+  received: 'received',
+  accepted: 'accepted',
+  in_preparation: 'in_preparation',
+  out_for_delivery: 'out_for_delivery',
+  ready_for_pickup: 'ready_for_pickup',
+  delivered: 'delivered',
+  cancelled: 'cancelled',
+  refused: 'refused',
+  expired: 'expired',
+} as const;
+
+export type CreateOrderRequestMode = typeof CreateOrderRequestMode[keyof typeof CreateOrderRequestMode];
+
+
+export const CreateOrderRequestMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type CreateOrderRequestPaymentMethod = typeof CreateOrderRequestPaymentMethod[keyof typeof CreateOrderRequestPaymentMethod];
+
+
+export const CreateOrderRequestPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+/**
+ * Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão.
+ */
+export type CreateOrderRequestCard = {
+  /**
+     * @minLength 8
+     * @maxLength 200
+     */
+  token: string;
+  /**
+     * @minimum 1
+     * @maximum 3
+     */
+  installments: number;
+  /** @maxLength 40 */
+  paymentMethodId?: string;
+  /** @maxLength 40 */
+  issuerId?: string;
+};
+
+export interface CreateOrderRequest {
+  mode: CreateOrderRequestMode;
+  /** Obrigatório na entrega; deve ser do cliente (404 se de outra conta) */
+  addressId?: string;
+  /** `revision` da sacola que o cliente viu */
+  cartRevision: number;
+  paymentMethod: CreateOrderRequestPaymentMethod;
+  /** Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão. */
+  card?: CreateOrderRequestCard;
+  /**
+     * CPF (11 dígitos) quando o provedor exigir (`PAYER_DOCUMENT_REQUIRED`). Vai só ao provedor; não é guardado pelo Webag além do necessário para a conciliação.
+     * @pattern ^\d{11}$
+     */
+  payerDocument?: string;
+}
+
+export type CheckoutChangeKind = typeof CheckoutChangeKind[keyof typeof CheckoutChangeKind];
+
+
+export const CheckoutChangeKind = {
+  PRICE_CHANGED: 'PRICE_CHANGED',
+  QUANTITY_REDUCED: 'QUANTITY_REDUCED',
+  OUT_OF_STOCK: 'OUT_OF_STOCK',
+  UNAVAILABLE: 'UNAVAILABLE',
+  DELIVERY_FEE_CHANGED: 'DELIVERY_FEE_CHANGED',
+  DISCOUNT_CHANGED: 'DISCOUNT_CHANGED',
+} as const;
+
+export interface CheckoutChange {
+  kind: CheckoutChangeKind;
+  variantId: string;
+  name?: string;
+  fromCents?: number;
+  toCents?: number;
+  fromQuantity?: number;
+  toQuantity?: number;
+}
+
+export type CheckoutConflictProblemStatus = typeof CheckoutConflictProblemStatus[keyof typeof CheckoutConflictProblemStatus];
+
+
+export const CheckoutConflictProblemStatus = {
+  NUMBER_409: 409,
+} as const;
+
+export type CheckoutConflictProblemCode = typeof CheckoutConflictProblemCode[keyof typeof CheckoutConflictProblemCode];
+
+
+export const CheckoutConflictProblemCode = {
+  CART_CHANGED: 'CART_CHANGED',
+  STORE_CLOSED: 'STORE_CLOSED',
+  STOCK_CONFLICT: 'STOCK_CONFLICT',
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+} as const;
+
+export interface CheckoutConflictProblem {
+  type: string;
+  title: string;
+  status: CheckoutConflictProblemStatus;
+  detail?: string;
+  code: CheckoutConflictProblemCode;
+  /** Em `CART_CHANGED`: o que mudou e o novo total em `cart` */
+  changes?: CheckoutChange[];
+  cart?: Cart;
+  /**
+     * Em `STORE_CLOSED`
+     * @nullable
+     */
+  opensAt?: string | null;
+}
+
+export type OrderItemAttributes = {[key: string]: string};
+
+/**
+ * Snapshot do item no momento do pedido (não muda se o produto mudar depois).
+ */
+export interface OrderItem {
+  productId: string;
+  variantId: string;
+  name: string;
+  attributes: OrderItemAttributes;
+  image: ImageUrls;
+  quantity: number;
+  unitPrice: Money;
+  lineTotal: Money;
+}
+
+export interface PixPayment {
+  /** PIX copia e cola */
+  copyPaste: string;
+  /**
+     * Imagem PNG em base64; nulo se o provedor não devolveu
+     * @nullable
+     */
+  qrCodeBase64: string | null;
+  expiresAt: string;
+}
+
+export type OrderPaymentMethod = typeof OrderPaymentMethod[keyof typeof OrderPaymentMethod];
+
+
+export const OrderPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+/**
+ * Estados do provedor expostos ao cliente; os internos (`creating`, `divergent`) aparecem como `pending`
+ */
+export type OrderPaymentStatus = typeof OrderPaymentStatus[keyof typeof OrderPaymentStatus];
+
+
+export const OrderPaymentStatus = {
+  pending: 'pending',
+  pending_3ds: 'pending_3ds',
+  approved: 'approved',
+  declined: 'declined',
+  expired: 'expired',
+  cancelled: 'cancelled',
+  refunded: 'refunded',
+} as const;
+
+export interface OrderPayment {
+  method: OrderPaymentMethod;
+  /** Estados do provedor expostos ao cliente; os internos (`creating`, `divergent`) aparecem como `pending` */
+  status: OrderPaymentStatus;
+  amount: Money;
+  pix: PixPayment | null;
+  installments: number;
+  /** @nullable */
+  threeDsUrl?: string | null;
+  /**
+     * Texto pt-BR seguro para mostrar
+     * @nullable
+     */
+  declineReason: string | null;
+  updatedAt: string;
+}
+
+export type OrderTimelineEntryActor = typeof OrderTimelineEntryActor[keyof typeof OrderTimelineEntryActor];
+
+
+export const OrderTimelineEntryActor = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export interface OrderTimelineEntry {
+  status: OrderStatus;
+  at: string;
+  actor: OrderTimelineEntryActor;
+  /** @nullable */
+  reason: string | null;
+}
+
+export type OrderMode = typeof OrderMode[keyof typeof OrderMode];
+
+
+export const OrderMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type OrderStore = {
+  id: string;
+  name: string;
+  logo: ImageUrls;
+  /**
+     * Para "Falar com a loja" (WB-029)
+     * @nullable
+     */
+  whatsapp: string | null;
+};
+
+export type OrderDelivery = {
+  address: Address;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+} | null;
+
+export type OrderPickup = {
+  address: string;
+  /** @nullable */
+  instructions: string | null;
+  /**
+     * Código de 4 dígitos; só depois de pago
+     * @nullable
+     */
+  code: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+} | null;
+
+export type OrderPaymentPropertyMethod = typeof OrderPaymentPropertyMethod[keyof typeof OrderPaymentPropertyMethod];
+
+
+export const OrderPaymentPropertyMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type OrderPaymentPropertyStatus = typeof OrderPaymentPropertyStatus[keyof typeof OrderPaymentPropertyStatus];
+
+
+export const OrderPaymentPropertyStatus = {
+  pending: 'pending',
+  pending_3ds: 'pending_3ds',
+  approved: 'approved',
+  declined: 'declined',
+  expired: 'expired',
+  cancelled: 'cancelled',
+  refunded: 'refunded',
+} as const;
+
+export type OrderPaymentProperty = {
+  method: OrderPaymentPropertyMethod;
+  status: OrderPaymentPropertyStatus;
+};
+
+/**
+ * Política vigente no pedido (snapshot, WB-059 C3)
+ */
+export type OrderExchangePolicy = {
+  voluntaryDays: number;
+  collectionFeeCents: number;
+  version: number;
+};
+
+export type OrderAllowedActionsItem = typeof OrderAllowedActionsItem[keyof typeof OrderAllowedActionsItem];
+
+
+export const OrderAllowedActionsItem = {
+  cancel: 'cancel',
+  request_cancel: 'request_cancel',
+  contact_store: 'contact_store',
+  rate: 'rate',
+  report_not_received: 'report_not_received',
+  request_exchange: 'request_exchange',
+} as const;
+
+export type OrderCancellationBy = typeof OrderCancellationBy[keyof typeof OrderCancellationBy];
+
+
+export const OrderCancellationBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type OrderCancellation = {
+  by: OrderCancellationBy;
+  /** @nullable */
+  reason: string | null;
+  at: string;
+} | null;
+
+export interface Order {
+  id: string;
+  /** Código curto legível para falar com a loja e o suporte */
+  number: string;
+  status: OrderStatus;
+  mode: OrderMode;
+  createdAt: string;
+  updatedAt: string;
+  store: OrderStore;
+  items: OrderItem[];
+  summary: CartSummary;
+  /** @nullable */
+  couponCode: string | null;
+  delivery: OrderDelivery;
+  pickup: OrderPickup;
+  payment: OrderPaymentProperty;
+  /** Política vigente no pedido (snapshot, WB-059 C3) */
+  exchangePolicy: OrderExchangePolicy;
+  timeline: OrderTimelineEntry[];
+  allowedActions: OrderAllowedActionsItem[];
+  cancellation: OrderCancellation;
+}
+
+export type OrderSummaryMode = typeof OrderSummaryMode[keyof typeof OrderSummaryMode];
+
+
+export const OrderSummaryMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type OrderSummaryStore = {
+  id: string;
+  name: string;
+  logo: ImageUrls;
+};
+
+export interface OrderSummary {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: OrderSummaryMode;
+  store: OrderSummaryStore;
+  itemCount: number;
+  firstItemName: string;
+  firstItemImage: ImageUrls;
+  total: Money;
+  createdAt: string;
+}
+
+export interface OrderPage {
+  data: OrderSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface CancelOrderRequest {
+  /** @maxLength 200 */
+  reason?: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -2895,6 +3526,19 @@ export type TooManyRequestsResponse = Problem;
  * Cursor opaco devolvido em `nextCursor`
  */
 export type CursorParameter = string;
+
+export type CartModeParameter = typeof CartModeParameter[keyof typeof CartModeParameter];
+
+
+export const CartModeParameter = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+/**
+ * Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404
+ */
+export type CartAddressIdParameter = string;
 
 /**
  * Latitude da posição do cliente (endereço salvo, CEP ou GPS)
@@ -3385,6 +4029,85 @@ export type ListFavoritesKind = typeof ListFavoritesKind[keyof typeof ListFavori
 export const ListFavoritesKind = {
   store: 'store',
   product: 'product',
+} as const;
+
+export type GetCartParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type ClearCartParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type SetCartItemParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type RemoveCartItemParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type ApplyCartCouponParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type RemoveCartCouponParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type AcknowledgeCartParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type MergeCartParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
+
+export type ListOrdersParams = {
+  scope?: ListOrdersScope;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListOrdersScope = typeof ListOrdersScope[keyof typeof ListOrdersScope];
+
+
+export const ListOrdersScope = {
+  active: 'active',
+  past: 'past',
 } as const;
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -12647,6 +13370,836 @@ export const clearSearchHistory = async ( options?: Parameters<typeof apiFetch>[
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getCartResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type getCartResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getCartResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCartResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getCartResponseSuccess = (getCartResponse200) & {
+  headers: Headers;
+};
+export type getCartResponseError = (getCartResponse400 | getCartResponse401 | getCartResponse404) & {
+  headers: Headers;
+};
+
+export type getCartResponse = (getCartResponseSuccess | getCartResponseError)
+
+export const getGetCartUrl = (params?: GetCartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart?${stringifiedParams}` : `/v1/cart`
+}
+
+/**
+ * Uma sacola por conta, de uma loja só (DEC-006). Sempre recalculada na leitura (RN-05): preço, estoque, horário e frete. O que mudou vem como `warnings` por item (`PRICE_CHANGED`, `QUANTITY_EXCEEDS_STOCK`, `OUT_OF_STOCK`, `UNAVAILABLE`) e a leitura NÃO altera o que o cliente colocou; `POST /v1/cart/acknowledge` aceita as mudanças. `summary` já usa os valores vigentes (item esgotado fica de fora do subtotal). `delivery`: com `mode=delivery`, o endereço é `addressId` (do dono, senão 404) ou o padrão da conta; sem endereço, `estimated=true` e o frete é 'a partir de'. `checkout.blockers` lista o que impede o pagamento: loja fechada e frete/mínimo NÃO impedem montar a sacola (DEC-022). Sacola parada além de `carrinho_validade_dias` (7) é esvaziada com o aviso `CART_EXPIRED`. Cupom é reavaliado a cada leitura: `coupon.applied=false` com `rejection` quando deixou de valer (o código fica guardado).
+ * @summary Minha sacola, com valores vigentes (WB-020)
+ */
+export const getCart = async (params?: GetCartParams, options?: Parameters<typeof apiFetch>[1]): Promise<getCartResponse> => {
+
+  return apiFetch<getCartResponse>(getGetCartUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type clearCartResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type clearCartResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type clearCartResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type clearCartResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type clearCartResponseSuccess = (clearCartResponse200) & {
+  headers: Headers;
+};
+export type clearCartResponseError = (clearCartResponse401 | clearCartResponse404 | clearCartResponse429) & {
+  headers: Headers;
+};
+
+export type clearCartResponse = (clearCartResponseSuccess | clearCartResponseError)
+
+export const getClearCartUrl = (params?: ClearCartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart?${stringifiedParams}` : `/v1/cart`
+}
+
+/**
+ * Remove todos os itens e o cupom. Devolve a sacola vazia.
+ * @summary Esvaziar a sacola
+ */
+export const clearCart = async (params?: ClearCartParams, options?: Parameters<typeof apiFetch>[1]): Promise<clearCartResponse> => {
+
+  return apiFetch<clearCartResponse>(getClearCartUrl(params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type setCartItemResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type setCartItemResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setCartItemResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setCartItemResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setCartItemResponse409 = {
+  data: CartStoreConflictProblem
+  status: 409
+}
+
+export type setCartItemResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setCartItemResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type setCartItemResponseSuccess = (setCartItemResponse200) & {
+  headers: Headers;
+};
+export type setCartItemResponseError = (setCartItemResponse400 | setCartItemResponse401 | setCartItemResponse404 | setCartItemResponse409 | setCartItemResponse422 | setCartItemResponse429) & {
+  headers: Headers;
+};
+
+export type setCartItemResponse = (setCartItemResponseSuccess | setCartItemResponseError)
+
+export const getSetCartItemUrl = (variantId: string,
+    params?: SetCartItemParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/items/${variantId}?${stringifiedParams}` : `/v1/cart/items/${variantId}`
+}
+
+/**
+ * IDEMPOTENTE: define a quantidade absoluta, então repetir em rede ruim é seguro (não precisa de `Idempotency-Key`). Acima do disponível ou de `item_qtd_max` (50) ajusta ao máximo e devolve o aviso `QUANTITY_ADJUSTED` em `notices` (WB-020 C2). Para remover, use DELETE. Loja fechada não impede adicionar (DEC-022). Item de OUTRA loja: 409 `CART_STORE_CONFLICT` com `currentStore`, `newStore` e `itemCount` (o app mostra 'Esvaziar a sacola?'); repetir com `replaceStore: true` esvazia e adiciona (WB-021). 404: variação inexistente ou de loja não visível; 422 `OUT_OF_STOCK` ou `ITEM_UNAVAILABLE`.
+ * @summary Definir a quantidade de uma variação (adicionar ou alterar)
+ */
+export const setCartItem = async (variantId: string,
+    setCartItemRequest: SetCartItemRequest,
+    params?: SetCartItemParams, options?: Parameters<typeof apiFetch>[1]): Promise<setCartItemResponse> => {
+
+  return apiFetch<setCartItemResponse>(getSetCartItemUrl(variantId,params),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setCartItemRequest)
+  }
+);}
+
+
+
+export type removeCartItemResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type removeCartItemResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeCartItemResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeCartItemResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type removeCartItemResponseSuccess = (removeCartItemResponse200) & {
+  headers: Headers;
+};
+export type removeCartItemResponseError = (removeCartItemResponse401 | removeCartItemResponse404 | removeCartItemResponse429) & {
+  headers: Headers;
+};
+
+export type removeCartItemResponse = (removeCartItemResponseSuccess | removeCartItemResponseError)
+
+export const getRemoveCartItemUrl = (variantId: string,
+    params?: RemoveCartItemParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/items/${variantId}?${stringifiedParams}` : `/v1/cart/items/${variantId}`
+}
+
+/**
+ * Idempotente: remover o que não está na sacola também responde 200. Ao remover o último item a sacola fica sem loja e sem cupom.
+ * @summary Remover uma variação da sacola
+ */
+export const removeCartItem = async (variantId: string,
+    params?: RemoveCartItemParams, options?: Parameters<typeof apiFetch>[1]): Promise<removeCartItemResponse> => {
+
+  return apiFetch<removeCartItemResponse>(getRemoveCartItemUrl(variantId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type applyCartCouponResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type applyCartCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type applyCartCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type applyCartCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type applyCartCouponResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type applyCartCouponResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type applyCartCouponResponseSuccess = (applyCartCouponResponse200) & {
+  headers: Headers;
+};
+export type applyCartCouponResponseError = (applyCartCouponResponse400 | applyCartCouponResponse401 | applyCartCouponResponse404 | applyCartCouponResponse422 | applyCartCouponResponse429) & {
+  headers: Headers;
+};
+
+export type applyCartCouponResponse = (applyCartCouponResponseSuccess | applyCartCouponResponseError)
+
+export const getApplyCartCouponUrl = (params?: ApplyCartCouponParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/coupon?${stringifiedParams}` : `/v1/cart/coupon`
+}
+
+/**
+ * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP.
+ * @summary Aplicar ou trocar o cupom (WB-022)
+ */
+export const applyCartCoupon = async (applyCouponRequest: ApplyCouponRequest,
+    params?: ApplyCartCouponParams, options?: Parameters<typeof apiFetch>[1]): Promise<applyCartCouponResponse> => {
+
+  return apiFetch<applyCartCouponResponse>(getApplyCartCouponUrl(params),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(applyCouponRequest)
+  }
+);}
+
+
+
+export type removeCartCouponResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type removeCartCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeCartCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeCartCouponResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type removeCartCouponResponseSuccess = (removeCartCouponResponse200) & {
+  headers: Headers;
+};
+export type removeCartCouponResponseError = (removeCartCouponResponse401 | removeCartCouponResponse404 | removeCartCouponResponse429) & {
+  headers: Headers;
+};
+
+export type removeCartCouponResponse = (removeCartCouponResponseSuccess | removeCartCouponResponseError)
+
+export const getRemoveCartCouponUrl = (params?: RemoveCartCouponParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/coupon?${stringifiedParams}` : `/v1/cart/coupon`
+}
+
+/**
+ * @summary Remover o cupom
+ */
+export const removeCartCoupon = async (params?: RemoveCartCouponParams, options?: Parameters<typeof apiFetch>[1]): Promise<removeCartCouponResponse> => {
+
+  return apiFetch<removeCartCouponResponse>(getRemoveCartCouponUrl(params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type acknowledgeCartResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type acknowledgeCartResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acknowledgeCartResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acknowledgeCartResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type acknowledgeCartResponseSuccess = (acknowledgeCartResponse200) & {
+  headers: Headers;
+};
+export type acknowledgeCartResponseError = (acknowledgeCartResponse401 | acknowledgeCartResponse404 | acknowledgeCartResponse429) & {
+  headers: Headers;
+};
+
+export type acknowledgeCartResponse = (acknowledgeCartResponseSuccess | acknowledgeCartResponseError)
+
+export const getAcknowledgeCartUrl = (params?: AcknowledgeCartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/acknowledge?${stringifiedParams}` : `/v1/cart/acknowledge`
+}
+
+/**
+ * Grava o que a leitura já mostrou: ajusta quantidades ao disponível e atualiza os preços vistos; some o aviso `PRICE_CHANGED`. Item esgotado ou fora do ar NÃO é removido sozinho (o cliente remove). É o passo entre `409 CART_CHANGED` do checkout e a nova tentativa.
+ * @summary Aceitar o que mudou ("Aceitar e continuar")
+ */
+export const acknowledgeCart = async (params?: AcknowledgeCartParams, options?: Parameters<typeof apiFetch>[1]): Promise<acknowledgeCartResponse> => {
+
+  return apiFetch<acknowledgeCartResponse>(getAcknowledgeCartUrl(params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type mergeCartResponse200 = {
+  data: Cart
+  status: 200
+}
+
+export type mergeCartResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type mergeCartResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type mergeCartResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type mergeCartResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type mergeCartResponseSuccess = (mergeCartResponse200) & {
+  headers: Headers;
+};
+export type mergeCartResponseError = (mergeCartResponse400 | mergeCartResponse401 | mergeCartResponse404 | mergeCartResponse429) & {
+  headers: Headers;
+};
+
+export type mergeCartResponse = (mergeCartResponseSuccess | mergeCartResponseError)
+
+export const getMergeCartUrl = (params?: MergeCartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/merge?${stringifiedParams}` : `/v1/cart/merge`
+}
+
+/**
+ * O visitante monta a sacola no aparelho; ao entrar, o app envia os itens (até 50). Conta com sacola vazia adota os itens; mesma loja soma as quantidades até o estoque; loja diferente MANTÉM a da conta e avisa (`MERGE_KEPT_ACCOUNT_CART`). Item inválido é ignorado com `MERGE_ITEM_SKIPPED`. Cupom não faz parte (o visitante não aplica cupom offline).
+ * @summary Juntar a sacola do visitante ao entrar na conta (RN-05)
+ */
+export const mergeCart = async (mergeCartRequest: MergeCartRequest,
+    params?: MergeCartParams, options?: Parameters<typeof apiFetch>[1]): Promise<mergeCartResponse> => {
+
+  return apiFetch<mergeCartResponse>(getMergeCartUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(mergeCartRequest)
+  }
+);}
+
+
+
+export type createOrderResponse200 = {
+  data: Order
+  status: 200
+}
+
+export type createOrderResponse201 = {
+  data: Order
+  status: 201
+}
+
+export type createOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createOrderResponse409 = {
+  data: CheckoutConflictProblem
+  status: 409
+}
+
+export type createOrderResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createOrderResponse503 = {
+  data: Problem
+  status: 503
+}
+
+export type createOrderResponseSuccess = (createOrderResponse200 | createOrderResponse201) & {
+  headers: Headers;
+};
+export type createOrderResponseError = (createOrderResponse400 | createOrderResponse401 | createOrderResponse404 | createOrderResponse409 | createOrderResponse422 | createOrderResponse429 | createOrderResponse503) & {
+  headers: Headers;
+};
+
+export type createOrderResponse = (createOrderResponseSuccess | createOrderResponseError)
+
+export const getCreateOrderUrl = () => {
+
+
+
+
+  return `/v1/orders`
+}
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO (Onda 4). Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
+ *
+ * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+ *
+ * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. Se a sacola mudou ou se preço, estoque, horário ou frete mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+ *
+ * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
+ *
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
+ */
+export const createOrder = async (createOrderRequest: CreateOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createOrderResponse> => {
+
+  return apiFetch<createOrderResponse>(getCreateOrderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createOrderRequest)
+  }
+);}
+
+
+
+export type listOrdersResponse200 = {
+  data: OrderPage
+  status: 200
+}
+
+export type listOrdersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listOrdersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listOrdersResponseSuccess = (listOrdersResponse200) & {
+  headers: Headers;
+};
+export type listOrdersResponseError = (listOrdersResponse400 | listOrdersResponse401) & {
+  headers: Headers;
+};
+
+export type listOrdersResponse = (listOrdersResponseSuccess | listOrdersResponseError)
+
+export const getListOrdersUrl = (params?: ListOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/orders?${stringifiedParams}` : `/v1/orders`
+}
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
+ * @summary Meus pedidos (WB-030)
+ */
+export const listOrders = async (params?: ListOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listOrdersResponse> => {
+
+  return apiFetch<listOrdersResponse>(getListOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getOrderResponse200 = {
+  data: Order
+  status: 200
+}
+
+export type getOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getOrderResponseSuccess = (getOrderResponse200) & {
+  headers: Headers;
+};
+export type getOrderResponseError = (getOrderResponse401 | getOrderResponse404) & {
+  headers: Headers;
+};
+
+export type getOrderResponse = (getOrderResponseSuccess | getOrderResponseError)
+
+export const getGetOrderUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}`
+}
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Fonte da verdade do estado: o app também ouve o canal em tempo real do pedido (Socket.IO, ADR-004), mas SEMPRE pode recuperar tudo por esta rota ao reabrir ou perder eventos. Pedido de outra conta responde 404 (SEC-020). `allowedActions` diz o que o cliente pode fazer agora. `pickup.code` (4 dígitos) só aparece depois de pago.
+ * @summary Detalhe e acompanhamento do pedido (WB-027)
+ */
+export const getOrder = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getOrderResponse> => {
+
+  return apiFetch<getOrderResponse>(getGetOrderUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelOrderResponse200 = {
+  data: Order
+  status: 200
+}
+
+export type cancelOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type cancelOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type cancelOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type cancelOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type cancelOrderResponseSuccess = (cancelOrderResponse200) & {
+  headers: Headers;
+};
+export type cancelOrderResponseError = (cancelOrderResponse400 | cancelOrderResponse401 | cancelOrderResponse404 | cancelOrderResponse409 | cancelOrderResponse429) & {
+  headers: Headers;
+};
+
+export type cancelOrderResponse = (cancelOrderResponseSuccess | cancelOrderResponseError)
+
+export const getCancelOrderUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/cancel`
+}
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404.
+ * @summary Cancelar o pedido (WB-028, RN-08)
+ */
+export const cancelOrder = async (orderId: string,
+    cancelOrderRequest?: CancelOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelOrderResponse> => {
+
+  return apiFetch<cancelOrderResponse>(getCancelOrderUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cancelOrderRequest)
+  }
+);}
+
+
+
+export type getOrderPaymentResponse200 = {
+  data: OrderPayment
+  status: 200
+}
+
+export type getOrderPaymentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getOrderPaymentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getOrderPaymentResponseSuccess = (getOrderPaymentResponse200) & {
+  headers: Headers;
+};
+export type getOrderPaymentResponseError = (getOrderPaymentResponse401 | getOrderPaymentResponse404) & {
+  headers: Headers;
+};
+
+export type getOrderPaymentResponse = (getOrderPaymentResponseSuccess | getOrderPaymentResponseError)
+
+export const getGetOrderPaymentUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/payment`
+}
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Para o app reabrir a tela do PIX (copia e cola, QR, validade) e acompanhar a aprovação quando o evento em tempo real não chegar (polling a cada poucos segundos, com recuo). Somente leitura: o status vem do provedor por webhook assinado e da conciliação, nunca de uma chamada do cliente (SEC-035). Pedido de outra conta responde 404.
+ * @summary Estado do pagamento do pedido (WB-024, WB-158)
+ */
+export const getOrderPayment = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getOrderPaymentResponse> => {
+
+  return apiFetch<getOrderPaymentResponse>(getGetOrderPaymentUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

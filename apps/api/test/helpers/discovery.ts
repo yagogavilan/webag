@@ -162,3 +162,10 @@ export const clearFeedCache = async (ctx: TestContext): Promise<void> => {
   await ctx.redis.flushdb();
 };
 
+
+/** Variação única da loja de teste (a que `makeStore` cria junto do produto). */
+export async function variantOf(ctx: TestContext, productId: string): Promise<string> {
+  const [variant] = await ctx.db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, productId));
+  if (!variant) throw new Error('produto sem variação');
+  return variant.id;
+}

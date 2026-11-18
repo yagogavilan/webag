@@ -5768,3 +5768,1515 @@ export const RecordSearchTermResponse = zod.void()
  * @summary Limpar histórico
  */
 export const ClearSearchHistoryResponse = zod.void()
+
+
+/**
+ * Uma sacola por conta, de uma loja só (DEC-006). Sempre recalculada na leitura (RN-05): preço, estoque, horário e frete. O que mudou vem como `warnings` por item (`PRICE_CHANGED`, `QUANTITY_EXCEEDS_STOCK`, `OUT_OF_STOCK`, `UNAVAILABLE`) e a leitura NÃO altera o que o cliente colocou; `POST /v1/cart/acknowledge` aceita as mudanças. `summary` já usa os valores vigentes (item esgotado fica de fora do subtotal). `delivery`: com `mode=delivery`, o endereço é `addressId` (do dono, senão 404) ou o padrão da conta; sem endereço, `estimated=true` e o frete é 'a partir de'. `checkout.blockers` lista o que impede o pagamento: loja fechada e frete/mínimo NÃO impedem montar a sacola (DEC-022). Sacola parada além de `carrinho_validade_dias` (7) é esvaziada com o aviso `CART_EXPIRED`. Cupom é reavaliado a cada leitura: `coupon.applied=false` com `rejection` quando deixou de valer (o código fica guardado).
+ * @summary Minha sacola, com valores vigentes (WB-020)
+ */
+export const getCartQueryModeDefault = `delivery`;
+
+export const GetCartQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(getCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const GetCartResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * Remove todos os itens e o cupom. Devolve a sacola vazia.
+ * @summary Esvaziar a sacola
+ */
+export const clearCartQueryModeDefault = `delivery`;
+
+export const ClearCartQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(clearCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const ClearCartResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * IDEMPOTENTE: define a quantidade absoluta, então repetir em rede ruim é seguro (não precisa de `Idempotency-Key`). Acima do disponível ou de `item_qtd_max` (50) ajusta ao máximo e devolve o aviso `QUANTITY_ADJUSTED` em `notices` (WB-020 C2). Para remover, use DELETE. Loja fechada não impede adicionar (DEC-022). Item de OUTRA loja: 409 `CART_STORE_CONFLICT` com `currentStore`, `newStore` e `itemCount` (o app mostra 'Esvaziar a sacola?'); repetir com `replaceStore: true` esvazia e adiciona (WB-021). 404: variação inexistente ou de loja não visível; 422 `OUT_OF_STOCK` ou `ITEM_UNAVAILABLE`.
+ * @summary Definir a quantidade de uma variação (adicionar ou alterar)
+ */
+export const SetCartItemParams = zod.object({
+  "variantId": zod.uuid().describe('ID da variação (vem de GET /v1/browse/products)')
+})
+
+export const setCartItemQueryModeDefault = `delivery`;
+
+export const SetCartItemQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(setCartItemQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const setCartItemBodyQuantityMax = 999;
+
+
+
+export const SetCartItemBody = zod.object({
+  "quantity": zod.int().min(1).max(setCartItemBodyQuantityMax),
+  "replaceStore": zod.boolean().optional().describe('Confirma \'Esvaziar e continuar\' ao trocar de loja (WB-021)')
+})
+
+export const SetCartItemResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * Idempotente: remover o que não está na sacola também responde 200. Ao remover o último item a sacola fica sem loja e sem cupom.
+ * @summary Remover uma variação da sacola
+ */
+export const RemoveCartItemParams = zod.object({
+  "variantId": zod.uuid().describe('ID da variação (vem de GET /v1/browse/products)')
+})
+
+export const removeCartItemQueryModeDefault = `delivery`;
+
+export const RemoveCartItemQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(removeCartItemQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const RemoveCartItemResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP.
+ * @summary Aplicar ou trocar o cupom (WB-022)
+ */
+export const applyCartCouponQueryModeDefault = `delivery`;
+
+export const ApplyCartCouponQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(applyCartCouponQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const applyCartCouponBodyCodeMax = 30;
+
+
+
+export const ApplyCartCouponBody = zod.object({
+  "code": zod.string().min(1).max(applyCartCouponBodyCodeMax)
+})
+
+export const ApplyCartCouponResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * @summary Remover o cupom
+ */
+export const removeCartCouponQueryModeDefault = `delivery`;
+
+export const RemoveCartCouponQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(removeCartCouponQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const RemoveCartCouponResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * Grava o que a leitura já mostrou: ajusta quantidades ao disponível e atualiza os preços vistos; some o aviso `PRICE_CHANGED`. Item esgotado ou fora do ar NÃO é removido sozinho (o cliente remove). É o passo entre `409 CART_CHANGED` do checkout e a nova tentativa.
+ * @summary Aceitar o que mudou ("Aceitar e continuar")
+ */
+export const acknowledgeCartQueryModeDefault = `delivery`;
+
+export const AcknowledgeCartQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(acknowledgeCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const AcknowledgeCartResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * O visitante monta a sacola no aparelho; ao entrar, o app envia os itens (até 50). Conta com sacola vazia adota os itens; mesma loja soma as quantidades até o estoque; loja diferente MANTÉM a da conta e avisa (`MERGE_KEPT_ACCOUNT_CART`). Item inválido é ignorado com `MERGE_ITEM_SKIPPED`. Cupom não faz parte (o visitante não aplica cupom offline).
+ * @summary Juntar a sacola do visitante ao entrar na conta (RN-05)
+ */
+export const mergeCartQueryModeDefault = `delivery`;
+
+export const MergeCartQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(mergeCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+export const mergeCartBodyItemsItemQuantityMax = 999;
+
+export const mergeCartBodyItemsMax = 50;
+
+
+
+export const MergeCartBody = zod.object({
+  "items": zod.array(zod.object({
+  "variantId": zod.uuid(),
+  "quantity": zod.int().min(1).max(mergeCartBodyItemsItemQuantityMax)
+})).max(mergeCartBodyItemsMax)
+})
+
+export const MergeCartResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})]),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "variantId": zod.uuid(),
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int().describe('Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar'),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalUnitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "available": zod.boolean(),
+  "maxQuantity": zod.int(),
+  "warnings": zod.array(zod.object({
+  "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
+  "message": zod.string().describe('Texto pt-BR sugerido'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
+  "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
+}))
+})),
+  "coupon": zod.union([zod.null(),zod.object({
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "scope": zod.enum(['store', 'platform']),
+  "applied": zod.boolean(),
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+})]),
+  "delivery": zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().nullable(),
+  "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
+  "distanceM": zod.int().nullable(),
+  "feeFromCents": zod.int().nullable().describe('Menor frete da loja (\'a partir de\')'),
+  "estimated": zod.boolean()
+}),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "checkout": zod.object({
+  "canCheckout": zod.boolean(),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+}),
+  "notices": zod.array(zod.object({
+  "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
+  "message": zod.string(),
+  "requestedQuantity": zod.int().optional(),
+  "appliedQuantity": zod.int().optional(),
+  "maxQuantity": zod.int().optional(),
+  "variantId": zod.uuid().optional()
+})).describe('Avisos desta resposta (não persistem)')
+})
+
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO (Onda 4). Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
+ *
+ * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+ *
+ * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. Se a sacola mudou ou se preço, estoque, horário ou frete mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+ *
+ * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
+ *
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
+ */
+export const createOrderHeaderIdempotencyKeyMin = 8;
+export const createOrderHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateOrderHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createOrderHeaderIdempotencyKeyMin).max(createOrderHeaderIdempotencyKeyMax)
+})
+
+export const createOrderBodyCardTokenMin = 8;
+export const createOrderBodyCardTokenMax = 200;
+
+export const createOrderBodyCardInstallmentsMax = 3;
+
+export const createOrderBodyCardPaymentMethodIdMax = 40;
+
+export const createOrderBodyCardIssuerIdMax = 40;
+
+export const createOrderBodyPayerDocumentRegExp = new RegExp('^\\d{11}$');
+
+
+export const CreateOrderBody = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().optional().describe('Obrigatório na entrega; deve ser do cliente (404 se de outra conta)'),
+  "cartRevision": zod.int().describe('`revision` da sacola que o cliente viu'),
+  "paymentMethod": zod.enum(['pix', 'card']),
+  "card": zod.object({
+  "token": zod.string().min(createOrderBodyCardTokenMin).max(createOrderBodyCardTokenMax),
+  "installments": zod.int().min(1).max(createOrderBodyCardInstallmentsMax),
+  "paymentMethodId": zod.string().max(createOrderBodyCardPaymentMethodIdMax).optional(),
+  "issuerId": zod.string().max(createOrderBodyCardIssuerIdMax).optional()
+}).optional().describe('Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão.'),
+  "payerDocument": zod.string().regex(createOrderBodyPayerDocumentRegExp).optional().describe('CPF (11 dígitos) quando o provedor exigir (`PAYER_DOCUMENT_REQUIRED`). Vai só ao provedor; não é guardado pelo Webag além do necessário para a conciliação.')
+})
+
+export const CreateOrderResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "whatsapp": zod.string().nullable().describe('Para "Falar com a loja" (WB-029)')
+}),
+  "items": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "variantId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Snapshot do item no momento do pedido (não muda se o produto mudar depois).')),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "couponCode": zod.string().nullable(),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "code": zod.string().nullable().describe('Código de 4 dígitos; só depois de pago'),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded'])
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int()
+}).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "allowedActions": zod.array(zod.enum(['cancel', 'request_cancel', 'contact_store', 'rate', 'report_not_received', 'request_exchange'])),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})])
+})
+
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
+ * @summary Meus pedidos (WB-030)
+ */
+export const listOrdersQueryCursorMax = 200;
+
+export const listOrdersQueryLimitDefault = 20;
+export const listOrdersQueryLimitMax = 50;
+
+
+
+export const ListOrdersQueryParams = zod.object({
+  "scope": zod.enum(['active', 'past']).optional(),
+  "cursor": zod.string().max(listOrdersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listOrdersQueryLimitMax).default(listOrdersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListOrdersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+})
+}),
+  "itemCount": zod.int(),
+  "firstItemName": zod.string(),
+  "firstItemImage": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Fonte da verdade do estado: o app também ouve o canal em tempo real do pedido (Socket.IO, ADR-004), mas SEMPRE pode recuperar tudo por esta rota ao reabrir ou perder eventos. Pedido de outra conta responde 404 (SEC-020). `allowedActions` diz o que o cliente pode fazer agora. `pickup.code` (4 dígitos) só aparece depois de pago.
+ * @summary Detalhe e acompanhamento do pedido (WB-027)
+ */
+export const GetOrderParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const GetOrderResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "whatsapp": zod.string().nullable().describe('Para "Falar com a loja" (WB-029)')
+}),
+  "items": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "variantId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Snapshot do item no momento do pedido (não muda se o produto mudar depois).')),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "couponCode": zod.string().nullable(),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "code": zod.string().nullable().describe('Código de 4 dígitos; só depois de pago'),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded'])
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int()
+}).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "allowedActions": zod.array(zod.enum(['cancel', 'request_cancel', 'contact_store', 'rate', 'report_not_received', 'request_exchange'])),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})])
+})
+
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404.
+ * @summary Cancelar o pedido (WB-028, RN-08)
+ */
+export const CancelOrderParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const cancelOrderBodyReasonMax = 200;
+
+
+
+export const CancelOrderBody = zod.object({
+  "reason": zod.string().max(cancelOrderBodyReasonMax).optional()
+})
+
+export const CancelOrderResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "whatsapp": zod.string().nullable().describe('Para "Falar com a loja" (WB-029)')
+}),
+  "items": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "variantId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Snapshot do item no momento do pedido (não muda se o produto mudar depois).')),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "couponCode": zod.string().nullable(),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "code": zod.string().nullable().describe('Código de 4 dígitos; só depois de pago'),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded'])
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int()
+}).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "allowedActions": zod.array(zod.enum(['cancel', 'request_cancel', 'contact_store', 'rate', 'report_not_received', 'request_exchange'])),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})])
+})
+
+
+/**
+ * CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Para o app reabrir a tela do PIX (copia e cola, QR, validade) e acompanhar a aprovação quando o evento em tempo real não chegar (polling a cada poucos segundos, com recuo). Somente leitura: o status vem do provedor por webhook assinado e da conciliação, nunca de uma chamada do cliente (SEC-035). Pedido de outra conta responde 404.
+ * @summary Estado do pagamento do pedido (WB-024, WB-158)
+ */
+export const GetOrderPaymentParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const GetOrderPaymentResponse = zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded']).describe('Estados do provedor expostos ao cliente; os internos (`creating`, `divergent`) aparecem como `pending`'),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "pix": zod.union([zod.object({
+  "copyPaste": zod.string().describe('PIX copia e cola'),
+  "qrCodeBase64": zod.string().nullable().describe('Imagem PNG em base64; nulo se o provedor não devolveu'),
+  "expiresAt": zod.iso.datetime({"offset":true})
+}),zod.null()]),
+  "installments": zod.int(),
+  "threeDsUrl": zod.url().nullish(),
+  "declineReason": zod.string().nullable().describe('Texto pt-BR seguro para mostrar'),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})

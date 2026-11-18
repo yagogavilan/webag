@@ -56,6 +56,10 @@ tags:
     description: Loja e produto públicos para o cliente (vitrine, variações, avaliações lidas)
   - name: favorites
     description: Favoritos de lojas e produtos da conta
+  - name: cart
+    description: Sacola da conta no servidor (uma loja por pedido, cupom, resumo de valores)
+  - name: orders
+    description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento). Contrato publicado na Onda 3; implementação na Onda 4 (operações com `x-planned`)"
 security:
   - bearerAuth: []
 paths:
@@ -4165,6 +4169,344 @@ paths:
           description: Apagado
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /v1/cart:
+    get:
+      tags: [cart]
+      operationId: getCart
+      summary: Minha sacola, com valores vigentes (WB-020)
+      description: "Uma sacola por conta, de uma loja só (DEC-006). Sempre recalculada na leitura (RN-05): preço, estoque, horário e frete. O que mudou vem como `warnings` por item (`PRICE_CHANGED`, `QUANTITY_EXCEEDS_STOCK`, `OUT_OF_STOCK`, `UNAVAILABLE`) e a leitura NÃO altera o que o cliente colocou; `POST /v1/cart/acknowledge` aceita as mudanças. `summary` já usa os valores vigentes (item esgotado fica de fora do subtotal). `delivery`: com `mode=delivery`, o endereço é `addressId` (do dono, senão 404) ou o padrão da conta; sem endereço, `estimated=true` e o frete é 'a partir de'. `checkout.blockers` lista o que impede o pagamento: loja fechada e frete/mínimo NÃO impedem montar a sacola (DEC-022). Sacola parada além de `carrinho_validade_dias` (7) é esvaziada com o aviso `CART_EXPIRED`. Cupom é reavaliado a cada leitura: `coupon.applied=false` com `rejection` quando deixou de valer (o código fica guardado)."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Sacola
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [cart]
+      operationId: clearCart
+      summary: Esvaziar a sacola
+      description: "Remove todos os itens e o cupom. Devolve a sacola vazia."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Sacola vazia
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/cart/items/{variantId}:
+    parameters:
+      - { name: variantId, in: path, required: true, description: 'ID da variação (vem de GET /v1/browse/products)', schema: { type: string, format: uuid } }
+    put:
+      tags: [cart]
+      operationId: setCartItem
+      summary: Definir a quantidade de uma variação (adicionar ou alterar)
+      description: "IDEMPOTENTE: define a quantidade absoluta, então repetir em rede ruim é seguro (não precisa de `Idempotency-Key`). Acima do disponível ou de `item_qtd_max` (50) ajusta ao máximo e devolve o aviso `QUANTITY_ADJUSTED` em `notices` (WB-020 C2). Para remover, use DELETE. Loja fechada não impede adicionar (DEC-022). Item de OUTRA loja: 409 `CART_STORE_CONFLICT` com `currentStore`, `newStore` e `itemCount` (o app mostra 'Esvaziar a sacola?'); repetir com `replaceStore: true` esvazia e adiciona (WB-021). 404: variação inexistente ou de loja não visível; 422 `OUT_OF_STOCK` ou `ITEM_UNAVAILABLE`."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetCartItemRequest' }
+      responses:
+        '200':
+          description: Sacola atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: "`CART_STORE_CONFLICT`: a sacola tem itens de outra loja"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CartStoreConflictProblem' }
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [cart]
+      operationId: removeCartItem
+      summary: Remover uma variação da sacola
+      description: "Idempotente: remover o que não está na sacola também responde 200. Ao remover o último item a sacola fica sem loja e sem cupom."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Sacola atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/cart/coupon:
+    put:
+      tags: [cart]
+      operationId: applyCartCoupon
+      summary: Aplicar ou trocar o cupom (WB-022)
+      description: "Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApplyCouponRequest' }
+      responses:
+        '200':
+          description: Cupom aplicado; sacola com o desconto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [cart]
+      operationId: removeCartCoupon
+      summary: Remover o cupom
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Sacola sem cupom
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/cart/acknowledge:
+    post:
+      tags: [cart]
+      operationId: acknowledgeCart
+      summary: Aceitar o que mudou ("Aceitar e continuar")
+      description: "Grava o que a leitura já mostrou: ajusta quantidades ao disponível e atualiza os preços vistos; some o aviso `PRICE_CHANGED`. Item esgotado ou fora do ar NÃO é removido sozinho (o cliente remove). É o passo entre `409 CART_CHANGED` do checkout e a nova tentativa."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Sacola atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/cart/merge:
+    post:
+      tags: [cart]
+      operationId: mergeCart
+      summary: Juntar a sacola do visitante ao entrar na conta (RN-05)
+      description: "O visitante monta a sacola no aparelho; ao entrar, o app envia os itens (até 50). Conta com sacola vazia adota os itens; mesma loja soma as quantidades até o estoque; loja diferente MANTÉM a da conta e avisa (`MERGE_KEPT_ACCOUNT_CART`). Item inválido é ignorado com `MERGE_ITEM_SKIPPED`. Cupom não faz parte (o visitante não aplica cupom offline)."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MergeCartRequest' }
+      responses:
+        '200':
+          description: Sacola unificada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/orders:
+    post:
+      tags: [orders]
+      operationId: createOrder
+      summary: Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
+      x-planned: Onda 4 (contrato publicado antes da implementação, ação A-02)
+      description: |
+        CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO (Onda 4). Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
+
+        **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+
+        **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. Se a sacola mudou ou se preço, estoque, horário ou frete mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+
+        **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
+
+        **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '200':
+          description: 'Repetição da mesma requisição (mesma chave e mesmo corpo): o pedido original'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '201':
+          description: Pedido criado, aguardando pagamento
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: "`CART_CHANGED` (com `changes`), `STORE_CLOSED`, `STOCK_CONFLICT`, `IDEMPOTENCY_KEY_REUSED`"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CheckoutConflictProblem' }
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: "`PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado; tentar de novo com a mesma `Idempotency-Key`"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    get:
+      tags: [orders]
+      operationId: listOrders
+      summary: Meus pedidos (WB-030)
+      x-planned: Onda 4 (contrato publicado antes da implementação, ação A-02)
+      description: "CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor."
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [active, past] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Pedidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/orders/{orderId}:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [orders]
+      operationId: getOrder
+      summary: Detalhe e acompanhamento do pedido (WB-027)
+      x-planned: Onda 4 (contrato publicado antes da implementação, ação A-02)
+      description: "CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Fonte da verdade do estado: o app também ouve o canal em tempo real do pedido (Socket.IO, ADR-004), mas SEMPRE pode recuperar tudo por esta rota ao reabrir ou perder eventos. Pedido de outra conta responde 404 (SEC-020). `allowedActions` diz o que o cliente pode fazer agora. `pickup.code` (4 dígitos) só aparece depois de pago."
+      responses:
+        '200':
+          description: Pedido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/orders/{orderId}/cancel:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [orders]
+      operationId: cancelOrder
+      summary: Cancelar o pedido (WB-028, RN-08)
+      x-planned: Onda 4 (contrato publicado antes da implementação, ação A-02)
+      description: "CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelOrderRequest' }
+      responses:
+        '200':
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/orders/{orderId}/payment:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [orders]
+      operationId: getOrderPayment
+      summary: Estado do pagamento do pedido (WB-024, WB-158)
+      x-planned: Onda 4 (contrato publicado antes da implementação, ação A-02)
+      description: "CONTRATO PUBLICADO, AINDA NÃO IMPLEMENTADO. Para o app reabrir a tela do PIX (copia e cola, QR, validade) e acompanhar a aprovação quando o evento em tempo real não chegar (polling a cada poucos segundos, com recuo). Somente leitura: o status vem do provedor por webhook assinado e da conciliação, nunca de uma chamada do cliente (SEC-035). Pedido de outra conta responde 404."
+      responses:
+        '200':
+          description: Pagamento
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPayment' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -4177,6 +4519,16 @@ components:
       in: query
       description: Cursor opaco devolvido em `nextCursor`
       schema: { type: string, maxLength: 200 }
+    CartMode:
+      name: mode
+      in: query
+      description: Como o cliente quer receber; define frete e bloqueios do resumo
+      schema: { type: string, enum: [delivery, pickup], default: delivery }
+    CartAddressId:
+      name: addressId
+      in: query
+      description: "Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404"
+      schema: { type: string, format: uuid }
     Lat:
       name: lat
       in: query
@@ -6936,3 +7288,337 @@ components:
       required: [term]
       properties:
         term: { type: string, minLength: 2, maxLength: 80 }
+    CartWarning:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [PRICE_CHANGED, QUANTITY_EXCEEDS_STOCK, OUT_OF_STOCK, UNAVAILABLE] }
+        message: { type: string, description: Texto pt-BR sugerido }
+        fromCents: { type: integer, description: Só em `PRICE_CHANGED`, preço que o cliente viu }
+        toCents: { type: integer, description: Só em `PRICE_CHANGED`, preço vigente }
+        requestedQuantity: { type: integer, description: Só em `QUANTITY_EXCEEDS_STOCK` }
+        maxQuantity: { type: integer, description: Só em `QUANTITY_EXCEEDS_STOCK` }
+    CartItem:
+      type: object
+      required: [id, variantId, productId, name, attributes, image, quantity, unitPrice, originalUnitPrice, lineTotal, available, maxQuantity, warnings]
+      properties:
+        id: { type: string, format: uuid }
+        variantId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        attributes: { type: object, additionalProperties: { type: string }, example: { Tamanho: '42', Cor: Preto } }
+        image: { $ref: '#/components/schemas/ImageUrls' }
+        quantity: { type: integer, description: 'Quantidade que valerá no pedido (já limitada ao disponível); 0 se esgotado ou fora do ar' }
+        unitPrice: { $ref: '#/components/schemas/Money' }
+        originalUnitPrice: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: Preço antes da promoção vigente }
+        lineTotal: { $ref: '#/components/schemas/Money' }
+        available: { type: boolean }
+        maxQuantity: { type: integer }
+        warnings: { type: array, items: { $ref: '#/components/schemas/CartWarning' } }
+    CartNotice:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [CART_EXPIRED, QUANTITY_ADJUSTED, STORE_REPLACED, MERGE_KEPT_ACCOUNT_CART, MERGE_ITEM_SKIPPED] }
+        message: { type: string }
+        requestedQuantity: { type: integer }
+        appliedQuantity: { type: integer }
+        maxQuantity: { type: integer }
+        variantId: { type: string, format: uuid }
+    CartCoupon:
+      type: object
+      required: [code, kind, scope, applied, rejection]
+      properties:
+        code: { type: string }
+        kind: { type: string, enum: [percent, fixed, free_shipping] }
+        scope: { type: string, enum: [store, platform] }
+        applied: { type: boolean }
+        rejection: { type: [string, 'null'], description: 'Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)' }
+    CartSummary:
+      type: object
+      required: [subtotal, delivery, deliveryEstimated, freeShipping, serviceFee, discount, total, minimumTotalApplied, platformDiscountCapped, missingForMinimum]
+      description: "Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa."
+      properties:
+        subtotal: { $ref: '#/components/schemas/Money' }
+        delivery: { $ref: '#/components/schemas/Money' }
+        deliveryEstimated: { type: boolean, description: "'a partir de': sem endereço escolhido" }
+        freeShipping: { type: boolean }
+        serviceFee: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        minimumTotalApplied: { type: boolean, description: "Cupom que zeraria o total: mostrar 'Valor mínimo cobrado'" }
+        platformDiscountCapped: { type: boolean, description: Desconto da plataforma cortado no teto da comissão }
+        missingForMinimum: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: "'Faltam R$ X para o pedido mínimo'" }
+    CartCheckout:
+      type: object
+      required: [canCheckout, blockers, opensAt]
+      properties:
+        canCheckout: { type: boolean }
+        blockers:
+          type: array
+          items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER] }
+        opensAt: { type: [string, 'null'], format: date-time }
+    Cart:
+      type: object
+      required: [id, revision, store, items, coupon, delivery, summary, checkout, notices]
+      properties:
+        id: { type: [string, 'null'], format: uuid }
+        revision: { type: integer, description: Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu }
+        store:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, name, logo, open, opensAt, etaMinMinutes, etaMaxMinutes, minOrder]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                logo: { $ref: '#/components/schemas/ImageUrls' }
+                open: { type: boolean }
+                opensAt: { type: [string, 'null'], format: date-time }
+                etaMinMinutes: { type: integer }
+                etaMaxMinutes: { type: integer }
+                minOrder: { $ref: '#/components/schemas/Money' }
+        items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
+        coupon: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/CartCoupon' }] }
+        delivery:
+          type: object
+          required: [mode, addressId, available, distanceM, feeFromCents, estimated]
+          properties:
+            mode: { type: string, enum: [delivery, pickup] }
+            addressId: { type: [string, 'null'], format: uuid }
+            available: { type: [boolean, 'null'], description: Entrega no endereço; nulo sem endereço ou na retirada }
+            distanceM: { type: [integer, 'null'] }
+            feeFromCents: { type: [integer, 'null'], description: "Menor frete da loja ('a partir de')" }
+            estimated: { type: boolean }
+        summary: { $ref: '#/components/schemas/CartSummary' }
+        checkout: { $ref: '#/components/schemas/CartCheckout' }
+        notices: { type: array, items: { $ref: '#/components/schemas/CartNotice' }, description: Avisos desta resposta (não persistem) }
+    SetCartItemRequest:
+      type: object
+      additionalProperties: false
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 1, maximum: 999 }
+        replaceStore: { type: boolean, description: "Confirma 'Esvaziar e continuar' ao trocar de loja (WB-021)" }
+    ApplyCouponRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 30 }
+    MergeCartRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [variantId, quantity]
+            properties:
+              variantId: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1, maximum: 999 }
+    CartStoreConflictProblem:
+      type: object
+      required: [type, title, status, code, currentStore, newStore, itemCount]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer, enum: [409] }
+        detail: { type: string }
+        code: { type: string, enum: [CART_STORE_CONFLICT] }
+        currentStore: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        newStore: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        itemCount: { type: integer }
+    OrderStatus:
+      type: string
+      description: "Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma."
+      enum: [awaiting_payment, received, accepted, in_preparation, out_for_delivery, ready_for_pickup, delivered, cancelled, refused, expired]
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, cartRevision, paymentMethod]
+      properties:
+        mode: { type: string, enum: [delivery, pickup] }
+        addressId: { type: string, format: uuid, description: 'Obrigatório na entrega; deve ser do cliente (404 se de outra conta)' }
+        cartRevision: { type: integer, description: '`revision` da sacola que o cliente viu' }
+        paymentMethod: { type: string, enum: [pix, card] }
+        card:
+          type: object
+          additionalProperties: false
+          description: Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão.
+          required: [token, installments]
+          properties:
+            token: { type: string, minLength: 8, maxLength: 200 }
+            installments: { type: integer, minimum: 1, maximum: 3 }
+            paymentMethodId: { type: string, maxLength: 40 }
+            issuerId: { type: string, maxLength: 40 }
+        payerDocument:
+          type: string
+          description: "CPF (11 dígitos) quando o provedor exigir (`PAYER_DOCUMENT_REQUIRED`). Vai só ao provedor; não é guardado pelo Webag além do necessário para a conciliação."
+          pattern: '^\d{11}$'
+    CheckoutChange:
+      type: object
+      required: [kind, variantId]
+      properties:
+        kind: { type: string, enum: [PRICE_CHANGED, QUANTITY_REDUCED, OUT_OF_STOCK, UNAVAILABLE, DELIVERY_FEE_CHANGED, DISCOUNT_CHANGED] }
+        variantId: { type: string, format: uuid }
+        name: { type: string }
+        fromCents: { type: integer }
+        toCents: { type: integer }
+        fromQuantity: { type: integer }
+        toQuantity: { type: integer }
+    CheckoutConflictProblem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer, enum: [409] }
+        detail: { type: string }
+        code: { type: string, enum: [CART_CHANGED, STORE_CLOSED, STOCK_CONFLICT, IDEMPOTENCY_KEY_REUSED] }
+        changes: { type: array, items: { $ref: '#/components/schemas/CheckoutChange' }, description: 'Em `CART_CHANGED`: o que mudou e o novo total em `cart`' }
+        cart: { $ref: '#/components/schemas/Cart' }
+        opensAt: { type: [string, 'null'], format: date-time, description: 'Em `STORE_CLOSED`' }
+    OrderItem:
+      type: object
+      description: Snapshot do item no momento do pedido (não muda se o produto mudar depois).
+      required: [productId, variantId, name, attributes, image, quantity, unitPrice, lineTotal]
+      properties:
+        productId: { type: string, format: uuid }
+        variantId: { type: string, format: uuid }
+        name: { type: string }
+        attributes: { type: object, additionalProperties: { type: string } }
+        image: { $ref: '#/components/schemas/ImageUrls' }
+        quantity: { type: integer }
+        unitPrice: { $ref: '#/components/schemas/Money' }
+        lineTotal: { $ref: '#/components/schemas/Money' }
+    PixPayment:
+      type: object
+      required: [copyPaste, qrCodeBase64, expiresAt]
+      properties:
+        copyPaste: { type: string, description: PIX copia e cola }
+        qrCodeBase64: { type: [string, 'null'], description: 'Imagem PNG em base64; nulo se o provedor não devolveu' }
+        expiresAt: { type: string, format: date-time }
+    OrderPayment:
+      type: object
+      required: [method, status, amount, pix, installments, declineReason, updatedAt]
+      properties:
+        method: { type: string, enum: [pix, card] }
+        status: { type: string, enum: [pending, pending_3ds, approved, declined, expired, cancelled, refunded], description: 'Estados do provedor expostos ao cliente; os internos (`creating`, `divergent`) aparecem como `pending`' }
+        amount: { $ref: '#/components/schemas/Money' }
+        pix: { oneOf: [{ $ref: '#/components/schemas/PixPayment' }, { type: 'null' }] }
+        installments: { type: integer }
+        threeDsUrl: { type: [string, 'null'], format: uri }
+        declineReason: { type: [string, 'null'], description: Texto pt-BR seguro para mostrar }
+        updatedAt: { type: string, format: date-time }
+    OrderTimelineEntry:
+      type: object
+      required: [status, at, actor, reason]
+      properties:
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        at: { type: string, format: date-time }
+        actor: { type: string, enum: [customer, store, system, admin] }
+        reason: { type: [string, 'null'] }
+    Order:
+      type: object
+      required: [id, number, status, mode, createdAt, updatedAt, store, items, summary, couponCode, delivery, pickup, payment, exchangePolicy, timeline, allowedActions, cancellation]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, description: 'Código curto legível para falar com a loja e o suporte', example: 'WB-4F7K2' }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        mode: { type: string, enum: [delivery, pickup] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        store:
+          type: object
+          required: [id, name, logo, whatsapp]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            logo: { $ref: '#/components/schemas/ImageUrls' }
+            whatsapp: { type: [string, 'null'], description: 'Para "Falar com a loja" (WB-029)' }
+        items: { type: array, items: { $ref: '#/components/schemas/OrderItem' } }
+        summary: { $ref: '#/components/schemas/CartSummary' }
+        couponCode: { type: [string, 'null'] }
+        delivery:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [address, etaMinMinutes, etaMaxMinutes]
+              properties:
+                address: { $ref: '#/components/schemas/Address' }
+                etaMinMinutes: { type: integer }
+                etaMaxMinutes: { type: integer }
+        pickup:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [address, instructions, code, prepMinMinutes, prepMaxMinutes]
+              properties:
+                address: { type: string }
+                instructions: { type: [string, 'null'] }
+                code: { type: [string, 'null'], description: 'Código de 4 dígitos; só depois de pago' }
+                prepMinMinutes: { type: integer }
+                prepMaxMinutes: { type: integer }
+        payment:
+          type: object
+          required: [method, status]
+          properties:
+            method: { type: string, enum: [pix, card] }
+            status: { type: string, enum: [pending, pending_3ds, approved, declined, expired, cancelled, refunded] }
+        exchangePolicy:
+          type: object
+          required: [voluntaryDays, collectionFeeCents, version]
+          description: Política vigente no pedido (snapshot, WB-059 C3)
+          properties:
+            voluntaryDays: { type: integer }
+            collectionFeeCents: { type: integer }
+            version: { type: integer }
+        timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' } }
+        allowedActions:
+          type: array
+          items: { type: string, enum: [cancel, request_cancel, contact_store, rate, report_not_received, request_exchange] }
+        cancellation:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [by, reason, at]
+              properties:
+                by: { type: string, enum: [customer, store, system, admin] }
+                reason: { type: [string, 'null'] }
+                at: { type: string, format: date-time }
+    OrderSummary:
+      type: object
+      required: [id, number, status, mode, store, itemCount, firstItemName, firstItemImage, total, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        mode: { type: string, enum: [delivery, pickup] }
+        store:
+          type: object
+          required: [id, name, logo]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            logo: { $ref: '#/components/schemas/ImageUrls' }
+        itemCount: { type: integer }
+        firstItemName: { type: string }
+        firstItemImage: { $ref: '#/components/schemas/ImageUrls' }
+        total: { $ref: '#/components/schemas/Money' }
+        createdAt: { type: string, format: date-time }
+    OrderPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/OrderSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    CancelOrderRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 200 }
