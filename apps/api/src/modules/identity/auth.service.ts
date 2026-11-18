@@ -14,7 +14,8 @@ import { CodeService } from './code.service.js';
 import { accessLog, adminProfiles, userRoles, users } from './db/schema.js';
 import { PasswordService } from './password.service.js';
 import { SessionService, type TokenPair } from './session.service.js';
-import { TotpService } from './totp.service.js';
+import { TicketService } from './ticket.service.js';
+import { TotpService, type VerifiedFactor } from './totp.service.js';
 import type { registerSchema } from './auth.schemas.js';
 import { isUniqueViolation } from '../admin/util.js';
 
@@ -26,6 +27,20 @@ export interface AuthResult {
   /** Admin sem TOTP configurado: o painel só libera a tela de configuração (SEC-015). */
   mfaSetupRequired: boolean;
 }
+
+/** SEC-090: senha certa de admin com TOTP devolve só este desafio, sem access nem refresh. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  mfaToken: string;
+  /** Segundos de validade do `mfaToken` (5 min, uso único, 5 tentativas). */
+  expiresIn: number;
+}
+
+export const MFA_TOKEN_TTL_SECONDS = 300;
+export const MFA_TOKEN_MAX_ATTEMPTS = 5;
+
+/** Mensagem única para token inválido/vencido/usado e para código errado (SEC-090). */
+const MFA_INVALID = () => new AppError(401, 'MFA_INVALID', 'Código incorreto ou vencido', { detail: 'Código incorreto ou vencido.' });
 
 const INVALID_CREDENTIALS = () =>
   new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', { detail: 'E-mail ou senha incorretos.' });
@@ -40,6 +55,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly codes: CodeService,
     private readonly totp: TotpService,
+    private readonly tickets: TicketService,
     private readonly params: ParametersService,
     private readonly flags: FeatureFlagsService,
     private readonly limiter: RateLimitService,
@@ -139,7 +155,7 @@ export class AuthService {
   async login(
     input: { email: string; password: string; totpCode?: string; code?: string },
     ctx: RequestContext,
-  ): Promise<AuthResult> {
+  ): Promise<AuthResult | MfaChallenge> {
     const maxFails = await this.params.getNumber('login_falhas');
     const waitSeconds = (await this.params.getNumber('login_espera_min')) * 60;
     const ip = ctx.ip ?? 'unknown';
@@ -176,35 +192,55 @@ export class AuthService {
 
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
     const activeAdmin = admin?.active ? admin : null;
-    let mfaVerified = false;
-    let mfaSetupRequired = false;
-    if (activeAdmin) {
-      if (activeAdmin.totpConfirmedAt) {
-        if (!input.totpCode) throw new AppError(401, 'TOTP_REQUIRED', 'Informe o código do autenticador', { detail: 'Informe o código do app autenticador.' });
-        const kind = await this.totp.verifyWithLimits(user.id, input.totpCode, ctx);
-        if (!kind) {
-          // WB-222 C4: não diz qual passo falhou; conta no mesmo limite de falhas.
-          await this.registerFailure(failKey, user, maxFails, waitSeconds, ctx);
-          throw INVALID_CREDENTIALS();
-        }
-        // Código de recuperação entra uma vez e força reconfigurar o TOTP (WB-222 C5): sessão sem MFA concluído.
-        mfaVerified = kind === 'totp';
-        mfaSetupRequired = kind === 'recovery';
-      } else {
-        mfaSetupRequired = true;
+    let factor: VerifiedFactor | null = null;
+    if (activeAdmin?.totpConfirmedAt) {
+      if (!input.totpCode) {
+        // SEC-090: 2 passos. A senha certa devolve só um token opaco; sessão só depois do código.
+        const mfaToken = await this.tickets.issue('mfa_login', user.id, MFA_TOKEN_TTL_SECONDS);
+        return { mfaRequired: true, mfaToken, expiresIn: MFA_TOKEN_TTL_SECONDS };
+      }
+      // Caminho de 1 passo (obsoleto, mantido enquanto o painel migra para o `mfaToken`): mesmos limites por conta.
+      factor = await this.totp.verifyWithLimits(user.id, input.totpCode, ctx);
+      if (!factor) {
+        // WB-222 C4: não diz qual passo falhou; conta no mesmo limite de falhas.
+        await this.registerFailure(failKey, user, maxFails, waitSeconds, ctx);
+        throw INVALID_CREDENTIALS();
       }
     }
-
     await this.limiter.reset(failKey);
     if (needsStepUp) await this.limiter.reset(`lfa:${user.id}`);
+    return this.openSession(user, activeAdmin?.profile ?? null, activeAdmin?.totpConfirmedAt != null ? factor : null, ctx);
+  }
 
+  /**
+   * SEC-090, 2º passo: `mfaToken` (256 bits, 5 min, uso único, 5 tentativas) + TOTP ou código de recuperação.
+   * Os erros de código somam no limite POR CONTA (SEC-091), de qualquer IP.
+   */
+  async verifyMfa(input: { mfaToken: string; code: string }, ctx: RequestContext): Promise<AuthResult> {
+    const ticket = await this.tickets.attempt('mfa_login', input.mfaToken, MFA_TOKEN_MAX_ATTEMPTS);
+    if (!ticket) throw MFA_INVALID();
+    const factor = await this.totp.verifyWithLimits(ticket.userId, input.code, ctx);
+    if (!factor) throw MFA_INVALID();
+    if (!(await this.tickets.consume(ticket.id))) throw MFA_INVALID();
+    const user = await this.getUser(ticket.userId);
+    if (user.status !== 'active') throw new AppError(403, 'ACCOUNT_BLOCKED', 'Conta indisponível', { detail: 'Conta indisponível. Fale com o suporte.' });
+    const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
+    await this.limiter.reset(`lf:${sha256Hex(user.email)}:${ctx.ip ?? 'unknown'}`);
+    await this.limiter.reset(`lfa:${user.id}`);
+    return this.openSession(user, admin?.active ? admin.profile : null, factor, ctx);
+  }
+
+  private async openSession(user: UserRow, adminProfile: string | null, factor: VerifiedFactor | null, ctx: RequestContext): Promise<AuthResult> {
+    // Código de recuperação entra uma vez e força reconfigurar o TOTP (WB-222 C5): sessão sem MFA concluído.
+    const mfaVerified = factor?.kind === 'totp';
+    const mfaSetupRequired = adminProfile !== null && !mfaVerified;
     const { tokens } = await this.db.transaction(async (tx) => {
       await tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
       await tx.insert(accessLog).values({ userId: user.id, event: 'login', ip: ctx.ip, userAgent: ctx.userAgent });
       return this.sessions.createSession(tx, user.id, ctx, { mfaVerified, reauth: true });
     });
-    if (activeAdmin) {
-      await this.audit.recordStandalone(ctx, { action: 'admin.login', actorId: user.id, actorRole: activeAdmin.profile, targetType: 'user', targetId: user.id, after: { mfaVerified } });
+    if (adminProfile) {
+      await this.audit.recordStandalone(ctx, { action: 'admin.login', actorId: user.id, actorRole: adminProfile, targetType: 'user', targetId: user.id, after: { mfaVerified } });
     }
     return { user: this.summary(user), tokens, mfaSetupRequired };
   }

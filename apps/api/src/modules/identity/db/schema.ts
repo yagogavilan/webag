@@ -76,11 +76,14 @@ export const adminProfiles = pgTable('admin_profiles', {
     .references(() => users.id, { onDelete: 'cascade' }),
   profile: text({ enum: ADMIN_PROFILES }).notNull(),
   active: boolean().notNull().default(true),
-  /** AES-256-GCM (chave derivada de AUTH_HMAC_KEY). Nulo = TOTP ainda não configurado. */
+  /** AES-256-GCM com a MFA_ENC_KEY (SEC-090). Nulo = TOTP ainda não configurado. */
   totpSecretEnc: text(),
   totpConfirmedAt: timestamp({ withTimezone: true }),
   /** Último passo de 30 s aceito: impede reuso do mesmo código (anti-replay). */
   totpLastStep: integer(),
+  /** Segredo pendente vale 10 min e aceita no máximo 10 erros (SEC-090). */
+  totpSetupStartedAt: timestamp({ withTimezone: true }),
+  totpSetupAttempts: integer().notNull().default(0),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -161,6 +164,35 @@ export const authCodes = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('auth_codes_user_purpose_idx').on(t.userId, t.purpose, t.createdAt)],
+);
+
+/**
+ * Tickets de uso único de 256 bits (guardados como hash): `mfa_login` (SEC-090, 2º passo do login do admin),
+ * `password_reset` (SEC-095: código do e-mail + 2º fator + nova senha) e `account_delete` (SEC-096).
+ */
+export const TICKET_KINDS = ['mfa_login', 'password_reset', 'account_delete'] as const;
+export type TicketKind = (typeof TICKET_KINDS)[number];
+
+export const authTickets = pgTable(
+  'auth_tickets',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    kind: text({ enum: TICKET_KINDS }).notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text().notNull(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    attempts: integer().notNull().default(0),
+    /** password_reset: passo 1 concluído (código do e-mail aceito). */
+    emailVerifiedAt: timestamp({ withTimezone: true }),
+    /** password_reset: passo 2 concluído (TOTP ou código de recuperação). */
+    mfaVerifiedAt: timestamp({ withTimezone: true }),
+    mfaKind: text({ enum: ['totp', 'recovery'] }),
+    usedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('auth_tickets_token_uq').on(t.tokenHash), index('auth_tickets_user_idx').on(t.userId, t.kind)],
 );
 
 export const INVITATION_KINDS = ['admin', 'store_staff'] as const;

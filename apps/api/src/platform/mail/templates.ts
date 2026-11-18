@@ -96,3 +96,42 @@ export function accessResetEmail(link: string, hours: number): Body {
     html: html('Reative seu acesso', [`Crie uma senha nova e configure a verificação em duas etapas: <a href="${link}">reativar acesso</a>.`, `O link vale por ${hours} horas e só pode ser usado uma vez.`]),
   };
 }
+
+/** SEC-092: aviso ao titular quando um código de recuperação é usado. Nunca inclui o código. */
+export function recoveryCodeUsedEmail(remaining: number): Body {
+  return {
+    subject: 'Um código de recuperação da sua conta Webag foi usado',
+    text: `Um código de recuperação foi usado para entrar no painel. Restam ${remaining}. Você precisará configurar o app autenticador de novo. Se não foi você, avise um super admin agora.\n\n${footer}`,
+    html: html('Código de recuperação usado', [`Um código de recuperação foi usado para entrar no painel. Restam ${remaining}.`, 'Você precisará configurar o app autenticador de novo. Se não foi você, avise um super admin agora.']),
+  };
+}
+
+export function recoveryCodesRegeneratedEmail(): Body {
+  return {
+    subject: 'Novos códigos de recuperação gerados na sua conta Webag',
+    text: `Você gerou novos códigos de recuperação. Os anteriores deixaram de valer. Se não foi você, avise um super admin agora.\n\n${footer}`,
+    html: html('Novos códigos de recuperação', ['Você gerou novos códigos de recuperação. Os anteriores deixaram de valer.', 'Se não foi você, avise um super admin agora.']),
+  };
+}
+
+/** SEC-095: aviso de senha do painel alterada (ao titular e, em versão resumida, aos outros super admins). */
+export function panelPasswordChangedEmail(email: string, toOwner: boolean): Body {
+  const line = toOwner
+    ? 'A senha do seu acesso ao painel foi alterada com código do e-mail e verificação em duas etapas. Se não foi você, avise um super admin agora.'
+    : `A senha do painel da conta ${email} foi redefinida por "Esqueci a senha". Se isso não era esperado, investigue.`;
+  return { subject: 'Sua senha do painel Webag foi alterada', text: `${line}\n\n${footer}`, html: html('Senha do painel alterada', [line]) };
+}
+
+/** SEC-093 / SEC-094: aviso de redefinição de acesso (ao alvo e aos super admins). */
+export function accessResetNoticeEmail(targetEmail: string, origin: 'super_admin' | 'cli' | 'cli_override', toTarget: boolean): Body {
+  const how =
+    origin === 'super_admin'
+      ? 'por um super admin'
+      : origin === 'cli'
+        ? 'pelo procedimento de emergência no servidor'
+        : 'pelo procedimento de emergência no servidor, ignorando a existência de outro super admin';
+  const line = toTarget
+    ? `O seu acesso ao painel foi redefinido ${how}. Você receberá um link separado para criar uma senha nova. Se não esperava, avise um super admin.`
+    : `O acesso da conta ${targetEmail} ao painel foi redefinido ${how}. Se isso não era esperado, investigue.`;
+  return { subject: 'Acesso ao painel Webag redefinido', text: `${line}\n\n${footer}`, html: html('Acesso redefinido', [line]) };
+}

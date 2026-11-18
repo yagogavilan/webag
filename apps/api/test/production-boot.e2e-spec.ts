@@ -17,6 +17,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     REDIS_URL: TEST_ENV.redisUrl,
     JWT_ACCESS_SECRET: 'a-very-long-random-production-secret-0123456789',
     AUTH_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210',
+    MFA_ENC_KEY: 'yet-another-very-long-random-production-mfa-key-1234567890',
     CORS_ORIGINS: 'https://app.webag.com.br',
     PAYMENT_PROVIDER: 'mercadopago',
     MP_ACCESS_TOKEN: 'APP_USR-123',

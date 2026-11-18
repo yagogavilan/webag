@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const DEV_JWT_ACCESS_SECRET = 'dev-only-insecure-change-me-0123456789abcdef';
 export const DEV_AUTH_HMAC_KEY = 'dev-only-insecure-hmac-key-0123456789abcdef-change-me';
 export const DEV_FAKE_WEBHOOK_SECRET = 'dev-only-fake-webhook-secret';
+export const DEV_MFA_ENC_KEY = 'dev-only-insecure-mfa-key-0123456789abcdef-change-me';
 
 const csv = z
   .string()
@@ -44,8 +45,10 @@ export const envSchema = z
     // --- Autenticação (ADR-003, SEC-010/011) ---
     JWT_ACCESS_SECRET: z.string().min(32).default(DEV_JWT_ACCESS_SECRET),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
-    /** Chave do servidor para HMAC de códigos, derivação de refresh e cifra do segredo TOTP. */
+    /** Chave do servidor para HMAC de códigos e derivação de refresh. */
     AUTH_HMAC_KEY: z.string().min(32).default(DEV_AUTH_HMAC_KEY),
+    /** Chave própria da cifra do segredo TOTP (AES-256-GCM, SEC-090). Separada da AUTH_HMAC_KEY e guardada fora do banco e dos backups dele. */
+    MFA_ENC_KEY: z.string().min(32).default(DEV_MFA_ENC_KEY),
     REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     REFRESH_ABSOLUTE_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(90),
     /** Janela em que o reuso do refresh devolve o mesmo par (retry em 3G, SEC-011). */
@@ -77,6 +80,10 @@ export const envSchema = z
       fail('JWT_ACCESS_SECRET', 'valor de desenvolvimento não é aceito em produção');
     if (env.AUTH_HMAC_KEY === DEV_AUTH_HMAC_KEY)
       fail('AUTH_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.MFA_ENC_KEY === DEV_MFA_ENC_KEY)
+      fail('MFA_ENC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.MFA_ENC_KEY === env.AUTH_HMAC_KEY)
+      fail('MFA_ENC_KEY', 'precisa ser diferente da AUTH_HMAC_KEY (SEC-090)');
     if (env.CORS_ORIGINS.length === 0 || env.CORS_ORIGINS.includes('*'))
       fail('CORS_ORIGINS', 'em produção precisa listar origens exatas (sem vazio nem "*")');
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');
