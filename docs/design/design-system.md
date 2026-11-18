@@ -134,6 +134,9 @@ Compostos de tokens e componentes existentes; nenhum cria cor, raio ou sombra. E
 | **VersionList** | Termos | Versão, vigência, "relevante" (ícone + texto), autor, status (Vigente, Agendada, Anterior). Versão publicada é somente leitura |
 | **DiffView** | Auditoria, ReasonDialog | Antes e depois em colunas (empilha no celular); saiu "−" com `danger.subtle`, entrou "+" com `success.subtle` (sinal + cor); leitor: "Campo: antes X, depois Y" |
 | **FlagRow** | Feature flags | Nome, efeito ao desligar (1 frase), Switch com texto "Ligada/Desligada", autor e data da última mudança; Switch com spinner ao salvar e volta ao valor antigo se falhar |
+| **NextStepCard** | Troca (cliente e lojista), pedidos | Cartão no topo do detalhe: título `title2` = próximo passo em 1 frase, texto de apoio, 1 ação primária. Substitui o menu de status; a StatusTimeline vem abaixo |
+| **DiagnosticRow** | Ajuda do lojista | Ícone + rótulo + estado **em texto** ("Ligado", "Desligado") + ação de correção quando falha; nunca só cor |
+| **EstimateCard** | Push segmentado | Número grande (`numeral`) + legenda + linha de exclusões; abaixo do mínimo o número vira "Poucas pessoas (12)" e o botão de envio fica inerte com o motivo no rótulo |
 | **ParamRow** | Parâmetros | ListItem 72: nome legível, valor com unidade, "Padrão X · de A a B", chave técnica em `caption`, selo "Alterado" ou "Lei" (piso legal) |
 
 ### 3.2 Matriz de estados (cada componente interativo)
