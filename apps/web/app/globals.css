@@ -1,0 +1,21 @@
+/* Base global. Cores, espaços e tipografia vêm só de @webag/tokens (variáveis --wb-*). */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--wb-font-family-web);
+  color: var(--wb-color-text-primary);
+  background: var(--wb-color-surface-background);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--wb-color-text-link);
+}
