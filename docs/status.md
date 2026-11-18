@@ -12,11 +12,11 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| SEC-113 (veto), contrato 2 passos, endurecimento Onda 1, Onda 2B (loja, catálogo, seed) | backend-dev | Retomado após limite de uso |
-| SEC-114/115 no web (BFF e login em 2 passos) | mobile-dev | Retomado |
-| Área do lojista: onboarding, fila de aprovação, configuração da loja | mobile-dev | Retomado |
+| Onda 3 back-end: endereços, descoberta PostGIS, home, loja/produto, busca, favoritos, sacola e contrato de pedido | backend-dev | Em andamento |
+| Web do catálogo do lojista + moderação no admin (2B) | mobile-dev | Em andamento |
+| Revisão independente da Onda 2 e adendo da Onda 1 | tech-lead | Em andamento |
 
-Concluídos: design system e tokens; 84 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 123; planos de teste (337 casos); Onda 1: back-end (117 testes de integração), web do admin 1A, base do app do cliente (cadastro, login, endereço); Onda 2A: API de lojas e aprovação, onboarding do lojista no web. **Onda 1 com veto do Security (DEC-029): fecha quando SEC-113 e SEC-114 forem corrigidos e reverificados.** Decisões DEC-001 a DEC-029.
+Concluídos: design system e tokens; 84 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 129; planos de teste (337 casos). **Onda 1 fechada** (Security: aprovado com ressalvas, veto DEC-029 retirado). **Onda 2**: API de lojas, aprovação e documentos privados; API de catálogo (variações, estoque, promoção, importação CSV, moderação) e configuração da loja; seed com 7 lojas e 42 produtos de Francisco Morato e Franco da Rocha; web do lojista (onboarding, configuração, equipe) e fila de aprovação do admin. Base do app do cliente (cadastro, login, endereço). Decisões DEC-001 a DEC-029.
 Incidentes: 1 reinício do container e 3 limites de uso de 5 h (06:50, 11:50 e 16:50 UTC). O que estava commitado sobreviveu em todos.
 
 ## Falta (plano de fases)
