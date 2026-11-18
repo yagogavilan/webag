@@ -58,15 +58,16 @@ RN-03, RN-04, RN-05, RN-06, RN-07, RN-08, RN-09, RN-10, RN-11, RN-12, RN-13; HIP
 ### WB-050 Criar conta de lojista — Must — dep: WB-100 (base de auth)
 Como lojista, quero criar minha conta, para começar o cadastro da loja.
 - **C1** Dado a tela inicial, então peço nome, e-mail, celular, senha (regras WB-006) e aceite de termos do lojista.
-- **C2** Dado e-mail já cadastrado como cliente, então posso usar a mesma credencial e adicionar o papel de lojista, sem recriar a conta.
+- **C2** Dado e-mail já cadastrado (cliente ou lojista), então o formulário não confirma nem nega a existência: mostra "Entre para continuar" e leva ao login; só depois de autenticar (senha, e confirmação de e-mail, C4) a conta existente recebe o papel de lojista. Nunca se cria segunda conta nem se concede papel sem login (R-08, SEC-008, SEC-005).
 - **C3** Dado cadastro de lojista desligado (feature flag), então vejo "Cadastro de lojas indisponível" com opção de lista de espera por e-mail.
 - **C4** Dado e-mail não confirmado (inclusive conta de cliente que quer virar lojista), então confirmo por código (mesmas regras de WB-007) antes de seguir; o papel de lojista não é concedido a e-mail não confirmado (WB-224 C2).
 
 ### WB-051 Onboarding: dados da loja e CPF/CNPJ — Must — dep: WB-050, WB-118
 Como lojista, quero informar os dados da loja em etapas curtas, para enviá-la à aprovação.
-- **C1** Dado a etapa 1, então escolho "CPF" ou "CNPJ (MEI incluso)", e informo o número com máscara e dígito verificador válido; inválido: erro no campo.
+- **C1** Dado a etapa 1, então escolho "CPF" ou "CNPJ (MEI incluso)", e informo o número com máscara e dígito verificador válido; inválido: erro no campo. O validador de CNPJ aceita o formato numérico e o alfanumérico (letras em parte dos caracteres; coluna em texto, máscara aceita letras) `[HIPÓTESE: confirmar data e algoritmo na fonte da Receita antes da sprint; R-18]`.
 - **C2** Dado documento já usado por outra loja, então vejo "Esse CPF/CNPJ já tem loja. Fale com o suporte" (1 documento = 1 loja, HIP-031).
-- **C3** Dado a etapa 2, então informo nome da loja, categoria principal, telefone/WhatsApp e endereço da loja por CEP (autocompletar, geocodificado); cidade fora das regiões ativas: "Ainda não atendemos [cidade]" e fica na lista de espera.
+- **C3** Dado a etapa 2, então informo nome da loja, categoria principal, telefone/WhatsApp e endereço da loja por CEP (autocompletar, geocodificado); cidade fora das regiões ativas: "Ainda não atendemos [cidade]"; entra na lista de espera **só se marcar o checkbox próprio, desmarcado por padrão** (finalidade com consentimento, WB-211 C1); sem marcar, só vê a mensagem (R-39).
+- **C6** Dado documento (CPF/CNPJ) de loja reprovada e sem pedidos, então o documento fica livre para novo cadastro; documento de loja suspensa continua ocupado (R-15).
 - **C4** Dado abandono no meio, então o rascunho é salvo e retomo da etapa em que parei, com barra de progresso "Etapa X de 4".
 - **C5** Dado CNPJ, então peço razão social e confirmo que a loja é responsável fiscal pelas vendas (aceite registrado, HIP-031).
 
@@ -74,8 +75,10 @@ Como lojista, quero informar os dados da loja em etapas curtas, para enviá-la �
 Como lojista, quero enviar meus documentos pelo celular, para provar quem sou.
 - **C1** Dado CPF: documento com foto (RG ou CNH, frente e verso) e foto de comprovante de endereço da loja; CNPJ: cartão CNPJ e documento do responsável; formatos JPG, PNG ou PDF, até 5 MB cada.
 - **C2** Dado arquivo inválido (tipo ou tamanho), então vejo o motivo e posso reenviar.
-- **C3** Dado envio, então os arquivos ficam em área privada, visíveis só ao admin (acesso registrado, WB-218).
+- **C3** Dado envio, então os arquivos ficam em área privada, visíveis só ao admin (acesso registrado com **motivo obrigatório** escolhido de lista curta: análise inicial, dúvida, denúncia; WB-218).
 - **C4** Dado foto escura ou cortada, então posso refazer antes de enviar (pré-visualização).
+- **C6** Dado reenvio de documento, então o novo substitui o anterior e o histórico dos envios (data, quem enviou, resultado da análise) é mantido (R-28d).
+- **C7** Dado o dono em "Documentos", então vê a lista enviada e a data de cada envio, mas **não baixa** os próprios arquivos (R-28b).
 - **C5** Dado PDF enviado, então o admin o abre por link de 5 min servido pela origem do storage (não do painel), sem varredura de antivírus na 1.0 (risco aceito, DEC-017; ClamAV na fase 2) e com imagens limitadas a 40 megapixels (SEC-108).
 
 ### WB-053 Onboarding: conta de recebimento — Must — dep: WB-051, WB-155
@@ -86,13 +89,17 @@ Como lojista, quero informar onde recebo, para ser pago pelas vendas.
 - **C4** Dado qualquer modo, então os dados de recebimento ficam visíveis só ao dono, mascarados, e **trocar ou desconectar a conta de recebimento** exige senha de <= 5 min, envia e-mail de aviso ao dono, grava auditoria e alerta o admin (SEC-048; antes era WB-079 C3, agora Must).
 - **C5** Dado provedor `fake` (dev), então a etapa conclui com "Conta de teste conectada".
 - **C6** Dado retorno do OAuth, então só vale se o `state` for o gerado para esta sessão e esta loja, de uso único e com no máximo 10 min; caso contrário vejo "Link expirado. Conecte de novo" e nada é vinculado (SEC-109).
-- **C7** Dado o titular da conta Mercado Pago com CPF/CNPJ diferente do da loja, então a conexão fica "Em análise" e o admin é alertado antes de a loja poder vender (SEC-047) `[regra de bloqueio vs. alerta: confirmar com o security-engineer]`.
+- **C7** Dado o titular da conta Mercado Pago com CPF/CNPJ diferente do da loja, então a conexão fica "Em análise" e a **ativação da venda é BLOQUEADA** até o admin liberar (DEC-020e, DEC-023a, SEC-047). O lojista vê "Titular da conta diferente do cadastro. Aguarde a análise ou conecte outra conta"; o admin é alertado e libera em WB-103 C7 (tela, motivo obrigatório, auditoria). Sem liberação a loja não aparece no app (RN-03).
+- **C8** Dado uma conta Mercado Pago já vinculada a outra loja, então a conexão é recusada ("Essa conta já está em uso por outra loja. Fale com o suporte"): 1 conta MP = 1 loja (R-37a).
+- **C9** Dado duplo toque em "Conectar", então só 1 `state` fica ativo por loja; o anterior é invalidado ao gerar o novo (R-37b).
 
 ### WB-054 Acompanhar aprovação — Must — dep: WB-052, WB-103
 Como lojista, quero saber em que pé está minha loja, para não ficar no escuro.
 - **C1** Dado envio, então o status vira "Em análise" com a mensagem "Respondemos em até 2 dias úteis" (HIP-030).
 - **C2** Dado aprovação, então recebo e-mail e notificação, a loja pode ser configurada para ficar visível ao cliente quando tiver 1 produto ativo e conta de recebimento ativa.
-- **C3** Dado reprovação, então vejo o motivo por item (documento ilegível, dados divergentes etc.) e posso corrigir e reenviar sem refazer tudo.
+- **C3** Dado "Correção pedida", então vejo o motivo por item, com **um item por documento exigido mais "dados da loja"**, e posso corrigir e reenviar sem refazer tudo; o prazo de 2 dias úteis fica pausado até o reenvio (RN-16; R-28c, R-29).
+- **C5** Dado "Recusada" (final), então vejo o motivo e a orientação de falar com o suporte; novo cadastro só com o suporte (RN-16).
+- **C6** Dado loja ainda em análise, então posso criar e salvar produtos (ficam ATIVOS mas invisíveis, RN-03); a loja só aparece no app após aprovação, conta de recebimento ativa e 1 produto ativo (R-40).
 - **C4** Dado loja aprovada mas sem produto ativo, então o painel mostra "Cadastre 1 produto para aparecer no app".
 
 ### WB-055 Perfil da loja — Must — dep: WB-054
@@ -100,25 +107,25 @@ Como lojista, quero personalizar logo, capa, descrição, categorias e WhatsApp,
 - **C1** Dado upload de logo (quadrado) e capa (16:9), então o painel recorta e comprime no navegador (até 5 MB de origem, resultado <= 300 KB) e mostra a prévia.
 - **C2** Dado descrição, então até 300 caracteres; categorias, escolho 1 principal e até 2 extras entre as ativas do admin.
 - **C3** Dado WhatsApp, então máscara e validação; o número é usado no botão do cliente (WB-029).
-- **C4** Dado alterar nome ou CPF/CNPJ após aprovação, então exige nova análise do admin (os demais campos publicam na hora).
+- **C4** Dado alterar nome ou CPF/CNPJ após aprovação, então exige nova análise do admin (os demais campos publicam na hora); durante a análise a loja continua visível e vendendo com os dados antigos, e a mudança só vale após a aprovação (R-23).
 - **C5** Dado erro de upload, então vejo "Não foi possível enviar. Tentar de novo" e a imagem anterior permanece.
 
 ### WB-056 Horários, feriados e pausa — Must — dep: WB-055
 Como lojista, quero definir quando abro e pausar quando preciso, para não receber pedido que não posso atender.
-- **C1** Dado cada dia da semana, então defino fechado ou até 2 intervalos (ex.: 09:00-12:00 e 14:00-18:00); fim posterior ao início.
-- **C2** Dado data de feriado/folga, então marco fechada e a loja aparece "Fechada hoje".
+- **C1** Dado cada dia da semana, então defino fechado ou até 2 intervalos (ex.: 09:00-12:00 e 14:00-18:00); fim posterior ao início. O fim é **exclusivo** (às 12:00 a loja já está fechada). Intervalo não passa da meia-noite: o último fim é 23:59, e quem fecha depois divide em dois dias (R-16a, R-16b).
+- **C2** Dado data de feriado/folga, então marco fechada e a loja aparece "Fechada hoje". Feriado é só manual, sem calendário na 1.0 (R-16d).
 - **C3** Dado "Pausar", então escolho 30 min, 1 h, 2 h, até o fim do dia ou até eu reabrir; a loja vira "Fechada" na hora, pedidos em andamento continuam.
 - **C4** Dado pausa com prazo, então a loja reabre sozinha ao fim, e vejo aviso "Loja pausada" em destaque no painel.
 - **C5** Dado fechamento do horário, então pedidos já aceitos seguem; novos não entram.
-- **C6** Dado "Esqueci aberta": loja aberta sem nenhuma interação no painel por 3 h e sem pedido aceito: o sistema avisa por e-mail "Sua loja está aberta e ninguém respondeu" e sugere pausar `[HIPÓTESE]`.
+- **C6** Dado "Esqueci aberta": loja aberta sem nenhuma interação no painel (conta como interação: login, aceitar, recusar ou avançar pedido, pausar ou reabrir; R-16c) por 3 h e sem pedido aceito: o sistema avisa por e-mail "Sua loja está aberta e ninguém respondeu" e sugere pausar `[HIPÓTESE]`.
 
 ### WB-057 Entrega: raio, taxa, mínimo, grátis e tempo — Must — dep: WB-055
 Como lojista, quero configurar entrega do meu jeito, para não ter prejuízo com frete.
 - **C1** Dado raio, então valor em km de 1 até `raio_max_km` (15; padrão 5); acima: erro com o limite.
-- **C2** Dado taxa **fixa** (R$ 0 a R$ 50) ou **por distância** com até 5 faixas contíguas até o raio; faixa com lacuna ou sobreposição: erro "As faixas precisam ser seguidas".
-- **C3** Dado pedido mínimo e "entrega grátis acima de R$ X", então X deve ser maior que o mínimo; valores aplicados conforme RN-04.
+- **C2** Dado taxa **fixa** (R$ 0 a R$ 50) ou **por distância** com até 5 faixas contíguas até o raio; faixa com lacuna ou sobreposição: erro "As faixas precisam ser seguidas". Faixa é `[de, até)`: o limite superior pertence à próxima faixa (2,00 km é da faixa 2-5, não da 0-2); a última faixa inclui o raio (R-17a). Reduzir o raio com faixas já cadastradas além dele: recusa e pede o ajuste das faixas (R-17b).
+- **C3** Dado pedido mínimo e "entrega grátis acima de R$ X", então X deve ser **estritamente maior** que o mínimo (inclusive quando o mínimo é 0); X = 0 desliga a opção; valores aplicados conforme RN-04 (R-17c).
 - **C4** Dado tempo estimado, então informo mínimo e máximo em minutos (min < máx; máx até 1.440).
-- **C5** Dado "Prévia", então escolho um endereço de teste e vejo a taxa que o cliente veria.
+- **C5** Dado "Prévia", então escolho um endereço de teste e vejo a taxa que o cliente veria. O provedor de geocodificação do CEP é o definido no ADR-008 (tech-lead); o critério de aceite é a taxa igual à do checkout para o mesmo endereço (R-17d).
 - **C6** Dado desativar entrega (só retirada), então é permitido se a retirada estiver ativa; nenhuma opção ativa: erro.
 
 ### WB-058 Retirada na loja — Must — dep: WB-055
@@ -130,33 +137,35 @@ Como lojista, quero oferecer retirada, para vender sem entregar.
 ### WB-059 Política de trocas — Must — dep: WB-055
 Como lojista, quero definir minhas regras de troca, para evitar conflito.
 - **C1** Dado "Aceito troca por tamanho ou cor", então defino prazo em dias (1 a 30; padrão 7) e taxa de coleta de R$ 0 a `taxa_coleta_max_cents` (R$ 30).
-- **C2** Dado desligar a troca voluntária, então vejo aviso "Arrependimento (7 dias) e defeito continuam valendo por lei" e o prazo voluntário vira 0.
+- **C2** Dado desligar a troca voluntária, então vejo aviso "Arrependimento (7 dias) e defeito continuam valendo por lei" e o prazo voluntário vira 0. O **piso legal (7 dias de arrependimento e defeito) é fixo e não editável por nenhum perfil** (DEC-011, DEC-023b). Ao religar, o prazo volta ao padrão `troca_voluntaria_dias_padrao` e a loja confirma antes de salvar (R-26).
 - **C3** Dado a política salva, então vale para novos pedidos; pedidos já feitos mantêm a política vigente no momento da compra (snapshot).
 - **C4** Dado a página da loja, então a política aparece resumida (WB-016).
 
 ### WB-060 Criar e editar produto com fotos — Must — dep: WB-054, WB-106
 Como lojista, quero cadastrar produto com foto, preço e descrição, para vender.
-- **C1** Dado novo produto, então informo nome (até 80 caracteres), categoria (do admin), descrição (até 1.000), preço, foto principal e ao menos 1 variação (ou "sem variação", com estoque); salvar como rascunho é permitido.
+- **C1** Dado novo produto, então informo nome (até 80 caracteres), categoria (do admin), descrição (até 1.000), preço, foto principal e ao menos 1 variação (ou "sem variação", com estoque); salvar como rascunho é permitido **só com o nome preenchido**; o resto é obrigatório apenas ao publicar (R-38).
 - **C2** Dado fotos, então até 8 por produto, com recorte e compressão no navegador (origem até 5 MB, destino <= 300 KB, lado maior até 1.600 px); a 1ª é a capa; arrastar muda a ordem.
 - **C3** Dado campo obrigatório vazio ou preço inválido (RN-05), então erro no campo e não publica.
 - **C4** Dado publicar, então o produto fica ATIVO e visível se a loja estiver visível; "Pausar" tira da vitrine sem apagar.
 - **C5** Dado excluir produto com pedido em andamento, então é bloqueado ("Há pedidos em andamento"); sem pedidos, vai para arquivado (histórico preservado).
-- **C6** Dado produto de categoria proibida (lista do admin), então vejo "Esse tipo de produto não é permitido no Webag".
+- **C6** Dado produto cuja categoria está na lista de **categorias proibidas** (do admin), então o cadastro é recusado com "Esse tipo de produto não é permitido no Webag". É a lista que **bloqueia**; a lista de **palavras suspeitas** apenas sinaliza o produto para a fila "Revisar" (WB-107 C3, HIP-029). São duas listas distintas (R-12a, R-12b).
+- **C7** Dado produto pausado ou removido pelo admin (moderação), então o lojista **não** consegue reativá-lo: o status de moderação é separado do status do lojista e só o admin o altera (R-12d).
 
 ### WB-061 Variações e estoque por variação — Must — dep: WB-060
 Como lojista, quero cadastrar tamanhos, cores e outras variações com estoque próprio, para não vender o que não tenho.
-- **C1** Dado atributos (tamanho, cor, outro com nome livre), então até 3 atributos e `variacoes_max` (100) combinações; cada combinação tem estoque (inteiro >= 0) e, opcionalmente, preço e código próprios.
+- **C1** Dado atributos (tamanho, cor, outro com nome livre), então até 3 atributos e `variacoes_max` (100) combinações; cada combinação tem estoque (inteiro de 0 a 99.999) e, opcionalmente, preço e código (SKU) próprios; o código, quando informado, é único na loja (R-25a, R-25b).
 - **C2** Dado combinação duplicada, então erro "Essa combinação já existe".
 - **C3** Dado estoque 0, então a variação vira "Esgotado" na vitrine; dado todas esgotadas, o produto sai das ofertas e buscas (RN-03).
 - **C4** Dado reduzir estoque abaixo do reservado, então bloqueio com "X unidades estão reservadas em pedidos" (RN-06).
-- **C5** Dado preço por variação vazio, então vale o preço do produto.
+- **C5** Dado preço por variação vazio, então vale o preço do produto. Dado variação com preço próprio, então herda o desconto percentual da promoção do produto (WB-062 C5; R-25c).
 
 ### WB-062 Preço e promoção com período — Must — dep: WB-060
 Como lojista, quero colocar produto em promoção por período, para atrair clientes.
-- **C1** Dado preço promocional menor que o normal, início e fim, então o cliente vê de/por e % apenas dentro do período (RN-05).
+- **C1** Dado preço promocional menor que o normal, início e fim, então o cliente vê de/por e % apenas dentro do período (RN-05). Início e fim são **data e hora** em `America/Sao_Paulo`; o início é inclusivo e o fim é inclusivo até o minuto informado; a tela pede a hora, com padrão 00:00 (início) e 23:59 (fim) (R-13).
 - **C2** Dado promocional >= normal ou fim anterior ao início, então erro.
 - **C3** Dado fim da promoção, então o preço volta ao normal sozinho, sem ação.
 - **C4** Dado alterar o preço com carrinho aberto de clientes, então eles são avisados no checkout (WB-023 C5).
+- **C5** Dado a promoção, então ela é definida **no produto** (não por variação); variação com preço próprio recebe o mesmo desconto percentual (R-25c).
 
 ### WB-063 Seções da vitrine — Should — dep: WB-060
 Como lojista, quero organizar produtos em seções (ex.: "Camisetas", "Promoções"), para o cliente achar rápido.
@@ -168,7 +177,7 @@ Como lojista, quero organizar produtos em seções (ex.: "Camisetas", "Promoçõ
 ### WB-064 Pausar produto e estoque baixo — Must — dep: WB-061
 Como lojista, quero pausar produto e ser avisado de estoque baixo, para não vender o que acabou.
 - **C1** Dado a lista de produtos, então pauso/reativo com 1 toque e vejo o status.
-- **C2** Dado estoque disponível <= `estoque_baixo_un`, então a variação aparece com selo "Baixo" e uma notificação (WB-192) é enviada 1 vez por variação até o estoque subir.
+- **C2** Dado estoque disponível <= `estoque_baixo_un`, então a variação aparece com selo "Baixo" e uma notificação (WB-192) é enviada 1 vez por variação; o alerta **rearma quando `disponível > estoque_baixo_un`** e dispara de novo ao voltar a `<=` (R-14).
 - **C3** Dado ajuste rápido de estoque (+/-) na lista, então salva na hora; erro mostra o motivo.
 
 ### WB-065 Importar produtos por planilha — Should — dep: WB-060, WB-061
@@ -252,7 +261,7 @@ Como lojista, quero responder avaliações, para mostrar atenção.
 
 ### WB-075 Equipe e permissões — Must — dep: WB-050
 Como dono, quero convidar funcionários com permissões, para dividir o trabalho sem dar acesso ao dinheiro.
-- **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações.
+- **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações. A conta criada pelo link **nasce com o e-mail confirmado** (o clique prova a posse; não cai em SEC-008b). Reenviar o convite invalida o anterior (R-09b, R-09e).
 - **C2** Dado funcionário, então nunca vê financeiro, conta de recebimento, equipe nem configurações da loja (RN-13).
 - **C3** Dado remover funcionário, então as sessões e renovações dele terminam e a conexão em tempo real do painel é derrubada em até 5 s (WB-219); a próxima requisição com o acesso antigo recebe 401.
 - **C4** Dado e-mail já usado em outra loja, então erro "Esse e-mail já participa de outra loja".
