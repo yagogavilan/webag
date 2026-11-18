@@ -1,3 +1,4 @@
+import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
@@ -268,7 +269,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         })
         .where(eq(webhookEvents.id, event.id));
       if (dead) await this.alert(null, 'webhook_failed', { eventId: event.id, providerPaymentId: event.providerPaymentId });
-      this.logger.warn(`webhook ${event.id} falhou (tentativa ${attempts}): ${(error as Error).message}`);
+      this.logger.warn(`webhook ${event.id} falhou (tentativa ${attempts}): ${safeErrorMessage(error)}`);
     }
   }
 
@@ -446,7 +447,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         await this.refundInternal(intent.attemptId, intent.amountCents, intent.reason, intent.idempotencyKey);
         recovered++;
       } catch (error) {
-        this.logger.warn(`recuperação de estorno ${intent.id} falhou: ${(error as Error).message}`);
+        this.logger.warn(`recuperação de estorno ${intent.id} falhou: ${safeErrorMessage(error)}`);
         await this.alert(intent.attemptId, 'refund_unresolved', { intentId: intent.id });
       }
     }
@@ -519,7 +520,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         await this.db.update(paymentAttempts).set({ updatedAt: new Date() }).where(eq(paymentAttempts.id, attempt.id));
       } catch (error) {
         failures++;
-        this.logger.warn(`conciliação do pagamento ${attempt.id} falhou: ${(error as Error).message}`);
+        this.logger.warn(`conciliação do pagamento ${attempt.id} falhou: ${safeErrorMessage(error)}`);
       }
     }
     // Taxa alta de falhas no provedor vira alerta (o provedor pode estar fora do ar).
@@ -559,7 +560,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         });
         await this.completeCreation(attempt.id, remote);
       } catch (error) {
-        this.logger.warn(`recuperação da criação ${attempt.id} falhou: ${(error as Error).message}`);
+        this.logger.warn(`recuperação da criação ${attempt.id} falhou: ${safeErrorMessage(error)}`);
       }
     }
   }

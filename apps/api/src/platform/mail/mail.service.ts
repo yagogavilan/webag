@@ -1,3 +1,4 @@
+import { safeErrorMessage } from '../logging/mask.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
@@ -55,7 +56,7 @@ export class MailService {
     } catch (error) {
       const delay = this.retryDelaysMs[attempt];
       // Não loga destinatário nem conteúdo (pode ter código).
-      this.logger.warn(`Falha ao enviar e-mail (tentativa ${attempt + 1}): ${(error as Error).message}`);
+      this.logger.warn(`Falha ao enviar e-mail (tentativa ${attempt + 1}): ${safeErrorMessage(error)}`);
       if (delay === undefined) return;
       setTimeout(() => void this.sendWithRetry(message, attempt + 1), delay).unref();
     }

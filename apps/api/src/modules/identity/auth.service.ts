@@ -1,3 +1,4 @@
+import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
@@ -102,7 +103,7 @@ export class AuthService {
 
     await this.sendVerificationCode(created, ctx).catch((error: unknown) => {
       // O cadastro já está feito; o cliente pede "Reenviar" (WB-194 C2).
-      this.logger.warn(`Falha ao enviar código de confirmação: ${(error as Error).message}`);
+      this.logger.warn(`Falha ao enviar código de confirmação: ${safeErrorMessage(error)}`);
     });
     return { user: this.summary(created), tokens: result.tokens, mfaSetupRequired: false };
   }

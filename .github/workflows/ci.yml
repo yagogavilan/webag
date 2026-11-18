@@ -78,6 +78,8 @@ jobs:
         run: |
           GITLEAKS_VERSION=8.28.0
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          # SEC-127: o checksum fica no repositório (publicado em gitleaks_${GITLEAKS_VERSION}_checksums.txt); trocar a versão exige trocar o hash.
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks git --redact --no-banner --config .gitleaks.toml --exit-code 1 .
           rm -f gitleaks gitleaks.tar.gz
