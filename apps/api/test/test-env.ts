@@ -9,7 +9,11 @@ const adminDatabaseUrl =
   process.env.DATABASE_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag';
 
 const testDb = new URL(adminDatabaseUrl);
-const testDbName = process.env.TEST_DB_NAME ?? `${testDb.pathname.replace(/^\//, '').replace(/_test$/, '')}_test`;
+// S9: sem TEST_DB_NAME/TEST_REDIS_DB cada execução ganha banco e Redis próprios (pid) e os publica em `process.env`, que os
+// workers do vitest herdam. Execuções simultâneas (dev, QA, CI local) deixam de se corromper.
+process.env.TEST_DB_NAME ??= `${testDb.pathname.replace(/^\//, '').replace(/_test$/, '')}_${process.pid}_test`;
+process.env.TEST_REDIS_DB ??= String(1 + (process.pid % 14)); // 1 a 14; o 0 é do dev e o 15, de quem fixa o valor
+const testDbName = process.env.TEST_DB_NAME;
 if (!/^[a-z0-9_]+_test$/.test(testDbName)) throw new Error(`TEST_DB_NAME inválido: ${testDbName} (use letras minúsculas, números e _, terminando em _test)`);
 testDb.pathname = `/${testDbName}`;
 

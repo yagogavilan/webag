@@ -150,6 +150,26 @@ describe('Pagamentos: endurecimento (review I2-I6)', () => {
       expect(done?.status).toBe('done');
       expect(await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, pix.id))).toHaveLength(1);
     });
+
+    it('N1: estorno concluído pela conciliação é auditado com o ATOR ORIGINAL (não "sistema") e marcado como concluído por conciliação', async () => {
+      const pix = await create({ amountCents: 10_000 });
+      await approve(pix.id);
+      vi.spyOn(fake, 'refund').mockRejectedValueOnce(new ProviderTimeoutError());
+      const actorId = user.userId;
+      const requestCtx = { ip: null, userAgent: null, requestId: 'req-n1', deviceId: null, principal: { userId: actorId, roles: ['admin'], adminProfile: 'finance' } };
+      await expect(payments.refund(pix.id, 4000, 'pedido do suporte', 'n1-1', requestCtx as never)).rejects.toMatchObject({ name: 'ProviderTimeoutError' });
+      expect(await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, pix.id))).toHaveLength(0);
+
+      vi.restoreAllMocks();
+      await payments.reconcile(new Date(Date.now() + 10 * 60_000));
+      const trail = await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, pix.id));
+      expect(trail).toHaveLength(1);
+      expect(trail[0]).toMatchObject({ action: 'payment.refund', actorId, actorRole: 'finance', requestId: 'req-n1' });
+      expect(trail[0]?.after).toMatchObject({ amountCents: 4000, concludedBy: 'reconciliation' });
+      // a repetição da conciliação não duplica a trilha
+      await payments.reconcile(new Date(Date.now() + 20 * 60_000));
+      expect(await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, pix.id))).toHaveLength(1);
+    });
   });
 
   it('I5: erro do provedor em UM pagamento não aborta a conciliação; os demais são conciliados e a falha é contada', async () => {

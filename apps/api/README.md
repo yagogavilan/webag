@@ -14,7 +14,7 @@ Sem Docker: `SKIP_DOCKER=1 pnpm run setup` com Postgres 16+ e Redis próprios (`
 `pnpm --filter @webag/api db:generate` gera a migração a partir do schema (`src/modules/*/db/schema.ts`); `pnpm db:migrate` aplica; `pnpm db:seed` semeia (idempotente). Em container: `node dist/platform/database/migrate.js`.
 
 ## Testes
-`pnpm --filter @webag/api test:unit` (sem infra) e `test:e2e` (Postgres e Redis reais: recria o banco `<db>_test` e usa o Redis lógico 15; nunca toca nos dados de dev). O e-mail nos testes é capturado em memória; em dev vai ao Mailpit. **Duas execuções ao mesmo tempo na mesma máquina** (duas sessões, dois worktrees) precisam de banco e Redis próprios, senão uma derruba a outra (`database "webag_test" does not exist`, cache zerado no meio do teste): `TEST_DB_NAME=webag_minha_test TEST_REDIS_DB=8 pnpm --filter @webag/api test:e2e` (nome termina em `_test`; Redis de 0 a 15).
+`pnpm --filter @webag/api test:unit` (sem infra) e `test:e2e` (Postgres e Redis reais: recria o banco `<db>_test` e usa um Redis lógico próprio; nunca toca nos dados de dev). O e-mail nos testes é capturado em memória; em dev vai ao Mailpit. **Execuções simultâneas (S9):** sem variáveis, cada execução cria o banco `<db>_<pid>_test` e usa um Redis lógico de 1 a 14 derivado do pid (apagado ao final); para fixar (ex.: inspecionar depois) use `TEST_DB_NAME=webag_minha_test TEST_REDIS_DB=8 pnpm --filter @webag/api test:e2e` (nome termina em `_test`; Redis de 0 a 15).
 
 ## Simulação de pagamento (só fora de produção)
 Com `PAYMENT_PROVIDER=fake` (padrão) existem rotas autenticadas que não fazem parte do contrato e não existem em produção (404):
