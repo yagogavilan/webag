@@ -114,7 +114,7 @@ export async function makeStore(ctx: TestContext, options: TestStoreOptions): Pr
     .where(eq(storeSettings.storeId, row.id));
   if (options.tiers) await ctx.db.insert(storeDeliveryTiers).values(options.tiers.map((t, position) => ({ storeId: row.id, position, ...t })));
   if (options.open !== false) {
-    await ctx.db.insert(storeHours).values([0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ storeId: row.id, weekday, startMin: 0, endMin: 1439 })));
+    await ctx.db.insert(storeHours).values([0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ storeId: row.id, weekday, startMin: 0, endMin: 1440 })));
   }
   if (options.payment !== false) {
     await ctx.db.insert(paymentAccounts).values({ storeId: row.id, provider: 'fake', providerAccountId: `t-${row.id}`, status: 'active', holderDocumentMasked: '***', holderMatchesStore: true, tokensEnc: 'x', connectedBy: owner.userId });

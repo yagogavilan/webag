@@ -107,6 +107,18 @@ describe('Códigos por e-mail, confirmação e reset de senha (WB-007, WB-009, S
       await ctx.http.post('/v1/auth/email/verify').set(bearer(user.accessToken)).send({ code: ctx.mail.lastCode(newEmail) }).expect(204);
       expect(ctx.mail.to(user.email).length).toBe(before);
     });
+
+    it('O-1: "Corrigir e-mail" bloqueado pelo intervalo de envio (429) NÃO grava o e-mail novo nem derruba o código antigo', async () => {
+      const user = await registerUser(ctx); // o cadastro acabou de enviar o código: o intervalo de 60 s está ativo
+      const oldCode = ctx.mail.lastCode(user.email);
+      const newEmail = uniqueEmail('corrigido');
+      const blocked = await ctx.http.post('/v1/auth/email/correct').set(bearer(user.accessToken)).send({ newEmail, password: user.password }).expect(429);
+      expect(blocked.body.code).toBe('RATE_LIMITED');
+      const [row] = await ctx.db.select().from(users).where(eq(users.id, user.userId));
+      expect(row?.email).toBe(user.email); // não mudou
+      expect(ctx.mail.to(newEmail)).toHaveLength(0);
+      await ctx.http.post('/v1/auth/email/verify').set(bearer(user.accessToken)).send({ code: oldCode }).expect(204); // o código antigo segue valendo
+    });
   });
 
   describe('esqueci a senha', () => {

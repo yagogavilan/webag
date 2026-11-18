@@ -139,6 +139,9 @@ export class AuthService {
     const user = await this.getUser(principal.userId);
     if (user.emailVerifiedAt) throw errors.forbidden('EMAIL_ALREADY_VERIFIED', 'E-mail confirmado só muda por troca de e-mail com código.');
     await this.assertPassword(user, password, ctx, 'correct_email');
+    // O-1: os limites de envio valem ANTES de gravar. Antes, o 429 do intervalo de 60 s vinha depois do UPDATE: o
+    // cliente via erro, mas o e-mail já tinha mudado, o código antigo caía e nenhum código novo saía.
+    await this.codes.enforceSendLimits(user.id, 'verify_email', newEmail, ctx);
     try {
       await this.db.update(users).set({ email: newEmail, updatedAt: new Date() }).where(eq(users.id, user.id));
     } catch (error) {
@@ -148,7 +151,7 @@ export class AuthService {
     // SEC-124: código de QUALQUER finalidade e ticket aberto enviados ao endereço errado deixam de valer.
     for (const purpose of CODE_PURPOSES) await this.codes.invalidateActive(user.id, purpose);
     await this.tickets.invalidateAll(user.id);
-    await this.sendVerificationCode({ ...user, email: newEmail }, ctx);
+    await this.codes.issue(user.id, 'verify_email', newEmail);
   }
 
   // ------------------------------------------------------------------- login
