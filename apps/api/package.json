@@ -15,7 +15,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/platform/database/migrate.ts",
-    "db:seed": "tsx --env-file-if-exists=../../.env seed/index.ts"
+    "db:seed": "tsx --env-file-if-exists=../../.env seed/index.ts",
+    "db:migrate:prod": "node dist/platform/database/migrate.js"
   },
   "dependencies": {
     "@nestjs/common": "12.5.1",
@@ -61,6 +62,7 @@
     "vitest": "4.1.12"
   },
   "files": [
-    "dist"
+    "dist",
+    "drizzle"
   ]
 }
