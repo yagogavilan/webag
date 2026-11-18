@@ -3,6 +3,32 @@
 Status: v1 | Dono: product-owner | Data: 2026-11-18
 Fonte de escopo: `docs/00-visao/brief.md` §3 e §4. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043). Personas: `personas.md`. Pesquisa: `pesquisa-mercado.md`.
 
+## Alterações 2026-11 (alinhamento ao parecer do Security e a DEC-014 a DEC-018)
+Origem: `docs/seguranca/revisao-adrs.md` (SEC-101 a SEC-112), `requisitos-seguranca.md` e `docs/decisoes.md`. Só foi alterado o que o parecer pede.
+
+| Item | O que mudou | Onde |
+|---|---|---|
+| HIP-023 (SEC-102) | Saiu "bloqueio da conta após 5 falhas". Entrou espera de 15 min só para o dispositivo/IP que errou e step-up por e-mail acima de 20 falhas/h; a conta nunca trava. Parâmetro `login_bloqueio_min` virou `login_espera_min` | `decisoes.md`, `regras-de-negocio.md`, WB-008 C3, WB-100 C2, WB-221 |
+| WB-006/007/008/009, WB-023, WB-022 (DEC-014/015, SEC-008) | 1 pedido pago antes de confirmar o e-mail; 2º pedido, cupom da plataforma/1ª compra, exportação, troca de e-mail, papel de lojista e convite exigem confirmação; e-mail não confirmado recebe só o código; "Corrigir e-mail" e sugestão de domínio. WB-009: código de **10 min** (era 15; SEC-112 a) e reset confirma o e-mail | `prd/cliente.md`, WB-224 |
+| WB-213/214 (DEC-015) | Exclusão de conta só com a **senha** (sem código), inclusive com e-mail não confirmado; WB-213 C8 e C9 ajustados; WB-214 C6 (web, e-mail não confirmado) com pendência para o Security | `prd/lgpd.md` |
+| SEC-105 / DEC-016 | Removido "reter/ajustar/descontar repasse" no modo split: WB-154 C6, WB-109 C4, WB-110 C4, WB-112 C2-C4, WB-076 C4-C5, WB-159 C1-C2, WB-037 C2, WB-104 C4, WB-213 C8, WB-155 C2, RN-10 e parâmetros. Repasse do split é informativo; recurso = estorno pelo admin a partir da conta do lojista, suspensão e Termos do Lojista | `prd/pagamentos.md`, `prd/admin.md`, `prd/lojista.md`, `prd/cliente.md`, `regras-de-negocio.md` |
+| Cupom da plataforma (SEC-060/061, DEC-016) | WB-116 C6-C8: desconto e frete grátis da plataforma <= comissão do pedido no split; autoconsumo recusado; 1ª compra exige e-mail confirmado. WB-022 C6-C7 | `prd/admin.md`, `prd/cliente.md`, RN-09/RN-10 |
+| Loja nova (SEC-062) | Nova WB-225 (limite de R$ 500 por pedido por 30 dias/20 pedidos `[HIPÓTESE]` + alerta de risco); WB-023 C8; WB-104 C5 | `prd/seguranca-acesso.md` |
+| Admin (SEC-015, SEC-016, SEC-017, SEC-106; DEC-018) | TOTP obrigatório (WB-222) e painel em endereço próprio (WB-223); WB-100 C2 e C6; convite de admin de **48 h** (WB-101 C1, era 7 dias); estorno pede TOTP (WB-109 C8); fechada a pergunta "2FA de admin" | `prd/admin.md`, `prd/seguranca-acesso.md` |
+| WB-079 (SEC-015, SEC-112 e) | Subiu de Could para **Should** (2FA opcional do dono). O C3 (trocar conta de recebimento exige senha, aviso e auditoria) virou **Must** dentro de WB-053 C4; WB-053 ganhou C1 (só dono), C6 (`state` do OAuth) e C7 (titular da conta MP) para SEC-109/047/048 | `prd/lojista.md` |
+| SEC-101, SEC-103 | Novas WB-219 (revogação derruba acesso e socket em 5 s) e WB-220 (janela de 30 s na renovação). WB-075 C3 ajustado | `prd/seguranca-acesso.md`, `prd/lojista.md` |
+| SEC-104 (webhook) | WB-153 C7-C10: anti-replay (300 s, `x-request-id` 24 h), loja resolvida pela tentativa gravada, aprovação só se valor/referência/recebedor/comissão baterem, segredo por ambiente | `prd/pagamentos.md` |
+| SEC-107 (WebView do cartão) | WB-152 C7 e WB-025 C4: link de 10 min e uso único, sem token na URL, sem scripts de terceiros, navegação limitada, plano B no navegador do sistema | `prd/pagamentos.md`, `prd/cliente.md` |
+| SEC-108 (PDF sem antivírus, DEC-017) | WB-052 C5: risco aceito registrado, link de 5 min pela origem do storage | `prd/lojista.md` |
+| SEC-111 (SSRF) | WB-065 C6 condicionada ao ADR-005 (fetch de mídia externa seguro); se não estiver pronto, a coluna "URL da foto" sai | `prd/lojista.md` |
+| SEC-112 (inconsistências) | (a) código 10 min; (c) provedor chama-se **`fake`** (WB-150, WB-160); (d) 2FA decidido; (e) WB-079 C3 virou Must em WB-053 C4. (b) PIX 15 min já alinhado no ADR-002 | vários |
+| SEC-110 (HMAC do código) | Sem mudança de PRD: é implementação coberta por SEC-002 (backend-dev) | n/a |
+| WB-226 (SEC-067) | Nova, **Should**, com flag: código de entrega de 4 dígitos para o lojista concluir a entrega | `prd/seguranca-acesso.md` |
+
+**Histórias novas (IDs seguintes ao último em uso, WB-218):** WB-219 a WB-226, em `prd/seguranca-acesso.md`: 7 Must (219 a 225) e 1 Should (226). Total da 1.0: 134 para **142**.
+
+**Riscos e pendências que este ajuste deixa abertos** (detalhe em §7): (1) sem retenção no split, o risco "lojista recebe e some" é residual e já aceito em DEC-016; a mitigação é parcial; (2) valores de loja nova são `[HIPÓTESE]`; (3) captcha de terceiro e cobertura do estorno com dinheiro da Webag dependem do fundador; (4) WB-214 C6 e WB-053 C7 aguardam o Security.
+
 **Onde estão as histórias.** Cada história (WB-###) com "Como..., quero..., para..." e critérios Dado/Quando/Então está no PRD do épico (fonte única, sem duplicar aqui). Este arquivo é o índice: prioridade, ordem de construção, dependências e fase 2.
 
 | Épico | PRD | IDs |
@@ -14,6 +40,7 @@ Fonte de escopo: `docs/00-visao/brief.md` §3 e §4. Regras: `regras-de-negocio.
 | Trocas ("Retira Troca") | `prd/trocas.md` | WB-170 a 178 |
 | Notificações | `prd/notificacoes.md` | WB-190 a 199 |
 | LGPD | `prd/lgpd.md` | WB-210 a 218 |
+| Segurança de acesso e risco de loja | `prd/seguranca-acesso.md` | WB-219 a 226 |
 | Fase 2 (sem Gherkin até entrar no roadmap) | este arquivo §6 | WB-300 a 334 |
 
 ## 1. Como priorizei
@@ -25,13 +52,13 @@ Fonte de escopo: `docs/00-visao/brief.md` §3 e §4. Regras: `regras-de-negocio.
 
 | MoSCoW | Qtde |
 |---|---|
-| Must | 109 |
-| Should | 21 |
-| Could | 3 (WB-010, 079, 199) |
+| Must | 116 (109 + WB-219 a 225) |
+| Should | 23 (21 + WB-079, que desceu de Could, + WB-226) |
+| Could | 2 (WB-010, 199) |
 | Won't (1.0) | 1 (WB-161) |
-| **Total 1.0** | **134** |
+| **Total 1.0** | **142** |
 
-Crítica ao escopo: 109 Must é muito para uma "1.0 de piloto". Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
+Crítica ao escopo: 116 Must é muito para uma "1.0 de piloto". Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
 
 ## 3. Ordem sugerida de construção
 
@@ -59,6 +86,12 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 17 | WB-150 | PaymentProvider e provedor simulado | Must | | S |
 | 18 | WB-155 | Recebimento do lojista: ADR split vs. centralizado | Must | pesquisa | S |
 | 19 | WB-153 | Webhooks seguros e reprocessamento | Must | 150 | S |
+| 19a | WB-221 | Proteção contra senha adivinhada sem travar o dono | Must | 008 | S |
+| 19b | WB-219 | Encerrar acesso na hora (revogação de sessão e socket) | Must | 008, 075 | S |
+| 19c | WB-220 | Renovação de sessão tolerante a rede instável | Must | 008 | S |
+| 19d | WB-222 | TOTP obrigatório para admin | Must | 100 | S |
+| 19e | WB-223 | Painel admin em endereço próprio | Must | 100 | S |
+| 19f | WB-224 | E-mail não confirmado: 1 pedido, limites e correção | Must | 006, 007, 023 | S |
 
 ### Onda 1: oferta (lojista, aprovação, catálogo)
 | # | ID | História | P | Depende de | TM |
@@ -82,6 +115,7 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 36 | WB-063 | Seções da vitrine | Should | 060 | |
 | 37 | WB-075 | Equipe e permissões | Must | 050 | S |
 | 38 | WB-107 | Moderação de produtos | Must | 060 | |
+| 38a | WB-225 | Limite de exposição da loja nova e alertas de risco | Must | 057, 067 (alerta: 198) | S |
 
 ### Onda 2: descoberta do cliente
 | # | ID | História | P | Depende de | TM |
@@ -137,6 +171,7 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 83 | WB-070 | Item indisponível: estorno parcial | Should | 068, 154 | |
 | 84 | WB-071 | Imprimir comanda | Should | 067 | |
 | 85 | WB-072 | Histórico de pedidos (lojista) | Must | 067 | |
+| 85a | WB-226 | Código de entrega do cliente (flag) | Should | 069, 027 | S |
 
 ### Onda 4: pós-venda, dinheiro e gestão
 | # | ID | História | P | Depende de | TM |
@@ -192,16 +227,17 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 130 | WB-198 | Alertas ao admin | Should | 123 | |
 | 131 | WB-199 | Carrinho esquecido | Could | 196 | |
 | 132 | WB-010 | Login Google e Apple (preparado, flag desligada) | Could | 008, 120 | S |
-| 133 | WB-079 | Segurança de acesso do lojista (2FA) | Could | 050 | S |
+| 133 | WB-079 | Segurança de acesso do lojista (2FA opcional) | Should (era Could; SEC-015) | 050 | S |
 | 134 | WB-161 | Segundo adaptador de pagamento | Won't (1.0) | 150 | |
 
-Observações de dependência: WB-038 e WB-124 são um par (cliente denuncia, admin trata) e devem ir na mesma sprint, antes de G5 (exigência de lojas de apps para conteúdo de usuário). WB-213 e WB-214 também bloqueiam G5. WB-155 (ADR) precisa estar decidido **antes** de WB-053, WB-151 e WB-152. WB-018 mostra avaliações vazias até WB-031 existir.
+Observações de dependência: WB-219 a 224 não bloqueiam o início de outras histórias, mas WB-219/220/221/222/223 precisam estar prontas antes de G4 (requisitos G4 do Security: SEC-004, 010, 011, 015, 082). WB-225 depende de WB-198 apenas para o alerta (o limite funciona sem ele). WB-038 e WB-124 são um par (cliente denuncia, admin trata) e devem ir na mesma sprint, antes de G5 (exigência de lojas de apps para conteúdo de usuário). WB-213 e WB-214 também bloqueiam G5. WB-155 (ADR) precisa estar decidido **antes** de WB-053, WB-151 e WB-152. WB-018 mostra avaliações vazias até WB-031 existir.
 
 ## 4. Cobertura do brief (rastreabilidade)
 
 | Brief | Funcionalidade | Histórias |
 |---|---|---|
-| §3.1 | Entrada sem fricção, cadastro completo, confirmação por código, esqueci a senha, login Google/Apple preparado | 005, 006, 007, 008, 009, 010 |
+| §3.1 | Entrada sem fricção, cadastro completo, confirmação por código, esqueci a senha, login Google/Apple preparado | 005, 006, 007, 008, 009, 010, 219 a 221, 224 |
+| §6 (segurança) | Admin com 2FA e origem própria; limite de loja nova; código de entrega | 222, 223, 225, 226 |
 | §3.1 | Endereço: localização, CEP, vários endereços, só lojas que entregam | 001, 002, 003, 004, RN-03 |
 | §3.1 | Início: banners, categorias, perto, ofertas, mais vendidos, lojas novas | 011, 012, 115 |
 | §3.1 | Busca, filtros (categoria, preço, distância, grátis, avaliação, aceita troca), histórico | 013, 014, 015 |
@@ -234,10 +270,10 @@ Observações de dependência: WB-038 e WB-124 são um par (cliente denuncia, ad
 Itens do brief §7/§8 que **não** são histórias de usuário (devs/PM): seed, docker compose, CI, Dockerfiles, guia de deploy, README, testes de carga, capturas de tela. Requisitos do PO para o **seed de demonstração**: 4 cidades do DEC-009 com bairros reais de Francisco Morato e Franco da Rocha; 12 ou mais lojas fictícias de 6+ categorias (algumas fechadas, 1 pausada, 1 em análise, 1 suspensa, 1 sem troca); produtos com variações e estoque (alguns esgotados e em promoção vigente/vencida); pedidos em **cada** estado de RN-07; trocas em cada estado de RN-11; avaliações (inclusive loja "Nova" com menos de 3); cupons válidos, vencidos e esgotados; 1 divergência de conciliação; credenciais demo de cliente, lojista dono, lojista funcionário (só pedidos) e admin (um por perfil).
 
 ## 5. Cortes se o prazo apertar (ordem sugerida)
-1. Could: WB-199, WB-010, WB-079.
+1. Could: WB-199, WB-010. Depois WB-079 e WB-226 (Should; WB-226 é a primeira a cair, e o risco de "entregue falso" passa a depender só de WB-225 e do estorno pelo admin).
 2. Should de menor impacto: WB-195, WB-198, WB-066, WB-065, WB-071, WB-036, WB-019, WB-015, WB-033.
 3. Should de gestão: WB-125, WB-121, WB-114, WB-077, WB-063.
-4. Nunca cortar sem decisão do fundador: tudo em LGPD (210-218), exclusão de conta, denúncia (038/124), pagamentos (150-158, 160), arrependimento (178), auditoria (123), minimização (216). São requisitos de lei, de loja de apps ou de dinheiro.
+4. Nunca cortar sem decisão do fundador: segurança de acesso (219-225, exigência de G4 do Security), tudo em LGPD (210-218), exclusão de conta, denúncia (038/124), pagamentos (150-158, 160), arrependimento (178), auditoria (123), minimização (216). São requisitos de lei, de loja de apps ou de dinheiro.
 
 ## 6. Fase 2 (fora da 1.0; modelo de dados preparado)
 
@@ -292,6 +328,10 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 | 6 | Textos de termos, privacidade, política de trocas; encarregado de dados | Minuta técnica do PO; revisão do fundador/jurídico antes de G5 | PRD LGPD |
 | 7 | Lojista é painel web (não app): CLAUDE.md §2 ainda cita app para lojista | Seguir o brief; CEO atualizar CLAUDE.md | DEC-005 |
 | 8 | CLAUDE.md §1 lista Cajamar; o brief e DEC-009 listam Campo Limpo Paulista | Seguir o brief | DEC-009 |
+| 9 | Sem retenção no split (DEC-016), quem cobre o estorno quando o lojista não tem saldo? Teto de exposição da Webag | Decisão do fundador caso a caso, com teto; começar com loja nova limitada (WB-225) | `prd/pagamentos.md` WB-154 C8 |
+| 10 | Valores de loja nova (R$ 500, 30 dias, 20 pedidos) `[HIPÓTESE]` | Validar com 5 lojas do piloto (V1/V4); parâmetros editáveis | WB-225 |
+| 11 | Captcha de terceiro na 1.0 | Não; começar com atraso progressivo e step-up por e-mail | WB-221 |
+| 12 | Termos do Lojista com cláusula de ressarcimento por pedido pago e não entregue | Jurídico/fundador antes de G5 | DEC-016 |
 
 ## 8. Aceite do PO (como vou validar)
 Uma história só é aceita se: (1) todos os critérios Dado/Quando/Então do PRD passam, incluindo erro, vazio e limites, verificados pelo QA; (2) DoD da skill `definicao-de-pronto` cumprida; (3) valores numéricos batem com `regras-de-negocio.md`; (4) eventos de analytics do PRD instrumentados. Recuso com motivo objetivo apontando o critério (ex.: "WB-068 C4: timeout de 10 min não cancelou o pedido").

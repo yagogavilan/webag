@@ -1,6 +1,6 @@
 # Design System Webag
 
-> Autor: product-designer. Data: 2026-11-18. Versão 0.1.0. Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
+> Autor: product-designer. Data: 2026-11-18. Versão 0.2.0 (0.2.0: PasswordField com confirmação por DEC-012; §3.3 componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
 > Alvos: app Expo (cliente) e web Next.js (lojista e admin). Mesma linguagem, componentes implementados nos dois, comportamento nativo de cada plataforma quando divergir (§8).
 
 ## 1. Princípios
@@ -63,7 +63,7 @@ Todo componente interativo tem **alvo ≥ 48**, rótulo de acessibilidade, anel 
 |---|---|
 | **Radio / Checkbox / Switch** | Visual 24 (switch 52×32), alvo 48 incluindo o rótulo. Marcado: preenchimento `brand.600` + ícone (check ou ponto). Switch mostra "Ligado/Desligado" em texto em telas de configuração |
 | **OTPInput** (código de 6 dígitos) | 6 caixas 48×56, foco automático, avança sozinha, aceita colar o código inteiro e preenchimento automático (`oneTimeCode`), Backspace volta. Abaixo: "Reenviar código em 0:30" |
-| **PasswordField** | Botão olho 48 (mostrar/ocultar). Medidor: 4 segmentos + palavra "Fraca", "Média" ou "Forte" (nunca só cor). Aceita colar e gerenciador de senhas |
+| **PasswordField** | Botão olho 48 (mostrar/ocultar). Medidor: 4 segmentos + palavra "Fraca", "Média" ou "Forte" (nunca só cor). Aceita colar e gerenciador de senhas. **Variante com confirmação (DEC-012):** em todo lugar que define senha nova (cadastro do cliente e do lojista, convite de funcionário, redefinir senha, alterar senha) vêm dois campos, "Senha" e "Confirmar senha"; **um único olho** controla os dois; a confirmação valida ao sair do campo ou ao igualar o tamanho ("As senhas são iguais." com check / "As senhas não são iguais."); `autocomplete="new-password"` nos dois, para o gerenciador preencher juntos |
 | **AddressField (CEP)** | CEP com máscara; ao completar 8 dígitos preenche rua, bairro e cidade (skeleton nesses campos); usuário só digita número e complemento; "Sem número" como caixa de seleção |
 | **PixPayment** | QR 240 (mín. 200) com margem 16 branca; código copia e cola em 2 linhas truncado; **botão "Copiar código" `lg` 56 largura total**; contagem regressiva em `numeral`; "Como pagar" em 3 linhas com ícone. Estados: gerando, aguardando, copiado, vence em < 2 min, vencido, pago, falha ao gerar (§5.5) |
 | **Rating** | Exibir: estrela Fill + nota em número + total ("4,8 · 120"). Informar: 5 estrelas de 48, com texto ("Ótimo") e tipo ajustável |

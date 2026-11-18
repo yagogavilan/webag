@@ -21,36 +21,38 @@ Definição: do toque no ícone do app até o **pagamento PIX confirmado**, para
 | 3 | Loja: tocar num produto | 1 | 0 | 6 |
 | 4 | Produto: tamanho, cor, "Adicionar" | 3 | 0 | 9 |
 | 5 | "Ver sacola", conferir, "Ir para o pagamento" | 2 | 0 | 8 |
-| 6 | Criar conta: nome, celular, e-mail, senha, aceite, "Criar conta" | 2 | 4 | 35 |
+| 6 | Criar conta (abre direto no formulário): nome, e-mail, celular, senha, **confirmar senha** (DEC-012), caixa de aceite, "Criar conta" | 2 | 5 | 42 |
 | 7 | Checkout (1 tela): confirmar número do endereço, "Pagar com PIX" | 1 | 1 | 12 |
 | 8 | PIX: "Copiar código" | 1 | 0 | 3 |
-| | **Subtotal no Webag** | **13** | **5** | **86 s** |
+| | **Subtotal no Webag** | **13** | **6** | **93 s** |
 | 9 | Pagar no app do banco (fora do Webag) [HIPÓTESE] | n/a | n/a | 25 s |
-| | **Total até confirmar** | | | **≈ 111 s (meta < 120 s)** |
+| | **Total até confirmar** | | | **≈ 118 s (meta < 120 s; folga ≈ 2 s)** |
 
-**Variante B (se a confirmação de e-mail por código bloquear a compra):** +1 a 2 toques e ≈ +45 s (sair para o app de e-mail, ler, voltar, colar) = **≈ 156 s, estoura a meta**. Por isso o desenho padrão é **A: confirmar o e-mail depois do pedido, sem bloquear** (HIP-D07). Exige parecer do Security (risco: conta criada com e-mail não confirmado; mitigação: PIX gera pedido já pago, e confirmação obrigatória para trocar senha, trocar e-mail, exportar dados e excluir conta).
+**Efeito de DEC-012 (2026-11-18):** o campo "Confirmar senha" foi mantido (o brief §3.1 pede confirmação de senha). Custo: +1 campo e ≈ +7 s no cadastro (antes ≈ 111 s, agora ≈ 118 s). A meta fecha, **mas sem folga**: qualquer campo a mais estoura (ver alavancas). Mitigações já no desenho: um único olho mostra senha e confirmação juntas; colar e gerenciador de senhas liberados (o autopreenchimento preenche as duas e o custo cai a ≈ 0); a tela de conta abre direto em "Criar conta" (a tela "e-mail primeiro" foi retirada: poupava nada a quem é novo e custava 1 toque e ≈ 2 s).
+
+**Variante B (se a confirmação de e-mail por código bloquear a compra):** +1 a 2 toques e ≈ +45 s (sair para o app de e-mail, ler, voltar, colar) = **≈ 163 s, estoura a meta**. Por isso o desenho padrão é **A: confirmar o e-mail depois do pedido, sem bloquear** (HIP-D07; aguarda parecer do Security, assumido não bloqueante). Risco: conta criada com e-mail não confirmado; mitigação: PIX gera pedido já pago, e confirmação obrigatória para trocar senha, trocar e-mail, exportar dados e excluir conta.
 
 **Usuário que volta (logado, endereço salvo):** 9 a 10 toques, 0 campos, **≈ 42 s no Webag + 25 s do banco = ≈ 67 s**.
 
-**Folga é pequena (≈ 9 s) no caso novo.** Alavancas, em ordem de ganho, se o teste estourar:
-1. **Entrar com Google** no lançamento (substitui o passo 6: 2 toques, ≈ 6 s, economia ≈ 29 s). Quase todo Android tem conta Google. No iOS, Apple é obrigatória se houver Google (App Store). O brief pede "preparado para"; recomendo **ligar no lançamento**. Depende de contas do fundador.
-2. Autopreenchimento do Android/iOS para nome, celular e e-mail.
-3. Remover "confirmar senha" (já aplicado, HIP-D06) e usar olho para mostrar a senha.
-4. Cadastro pede CPF só se o Mercado Pago exigir, e só no checkout.
+**Folga é mínima (≈ 2 s) no caso novo.** Alavancas, em ordem de ganho, se o teste estourar:
+1. **Entrar com Google** no lançamento (substitui o passo 6: 2 toques, ≈ 6 s, economia ≈ 36 s). Quase todo Android tem conta Google. No iOS, Apple é obrigatória se houver Google (App Store). O brief pede "preparado para"; recomendo **ligar no lançamento**. Depende de contas do fundador.
+2. Autopreenchimento do Android/iOS e gerenciador de senhas (preenchem nome, celular, e-mail, senha e confirmação).
+3. CPF no checkout **só se o Mercado Pago exigir** (HIP-D10): se exigir, +1 campo e ≈ +8 s = **≈ 126 s, estoura**; nesse caso, pedir o CPF só no cartão ou ligar o Google.
+4. (Descartada) remover "confirmar senha": rejeitada por DEC-012.
 
 **Metas de usabilidade dos 4 fluxos** (medir no teste do brief §7):
 
 | Tarefa | Telas | Toques | Campos | Palavras na tela de decisão | Tempo |
 |---|---|---|---|---|---|
-| Comprar (novo) | 7 | ≤ 13 | ≤ 5 | ≤ 25 | ≤ 86 s no app |
+| Comprar (novo) | 7 | ≤ 13 | ≤ 6 | ≤ 25 | ≤ 93 s no app |
 | Comprar (recorrente) | 6 | ≤ 10 | 0 | ≤ 25 | ≤ 45 s |
-| Cadastrar loja (lojista) | 5 passos + revisão | ≤ 20 | ≤ 14 | ≤ 40 por passo | ≤ 10 min [HIPÓTESE] |
+| Cadastrar loja (lojista) | Conta + 4 etapas + revisão | ≤ 20 | ≤ 13 (+ 3 ou 4 documentos) | ≤ 40 por passo | ≤ 10 min [HIPÓTESE] |
 | Aprovar loja (admin) | 1 caso | ≤ 10 | 0 a 1 | n/a | ≤ 90 s por loja |
 | Pedir troca | 5 | ≤ 11 | 0 a 1 (texto livre opcional) | ≤ 25 | ≤ 90 s |
 
 ## 3. Fluxo 1: Comprar (cliente, app)
 
-Decisões: explorar sem conta; cadastro só no checkout (brief §3.1); **e-mail primeiro** na tela de entrar (se já tem conta pede só a senha; senão abre o cadastro); checkout em **1 tela** (Receber ou retirar + endereço + pagamento + resumo), total de 3 passos reais (Sacola, Checkout, PIX); PIX é o método pré-selecionado; frete e taxas já aparecem na Sacola.
+Decisões: explorar sem conta; cadastro só no checkout (brief §3.1); a tela de conta abre **direto em "Criar conta"** (nome, e-mail, celular, senha, confirmar senha, aceite; DEC-012), com o link "Já tenho conta" para entrar (a tela "e-mail primeiro" foi retirada: custava 1 toque e ≈ 2 s, e o orçamento ficou sem folga); checkout em **1 tela** (Receber ou retirar + endereço + pagamento + resumo), total de 3 passos reais (Sacola, Checkout, PIX); PIX é o método pré-selecionado; frete e taxas já aparecem na Sacola.
 
 ```mermaid
 flowchart TD
@@ -83,12 +85,10 @@ flowchart TD
   R -->|Não| R1["Faltam R$ 12,00: botão vira Adicionar mais itens"]
   R1 --> J
   R -->|Sim| S{"Está logado?"}
-  S -->|Não| T["Entrar ou criar conta: e-mail primeiro"]
-  T --> U{"E-mail já tem conta?"}
-  U -->|Sim| U1["Digitar a senha"]
+  S -->|Não| T["Criar conta: nome, e-mail, celular, senha, confirmar senha, aceite"]
+  T -->|Já tenho conta| U1["Entrar: e-mail e senha"]
   U1 --> V
-  U -->|Não| U2["Criar conta: nome, celular, senha, aceite"]
-  U2 --> V["Conta pronta, e-mail confirmado depois do pedido"]
+  T --> V["Conta pronta, e-mail confirmado depois do pedido"]
   S -->|Sim| W
   V --> W["Checkout em 1 tela: Receber ou Retirar, endereço, pagamento, resumo"]
   W --> X{"Forma de pagamento"}
@@ -121,25 +121,25 @@ flowchart TD
 
 ## 4. Fluxo 2: Cadastrar loja (lojista, painel web responsivo)
 
-Decisões: **5 passos com rascunho automático** (pode sair e voltar pelo e-mail); um assunto por passo; documentos fotografados pelo celular; recebimento via OAuth do Mercado Pago (split, brief §4); enquanto a loja está em análise o lojista **já pode cadastrar produtos** (reduz o tempo morto); a loja só fica visível ao cliente com aprovação + conta de recebimento ativa + 1 produto ativo (HIP-030). Código de e-mail: 6 dígitos, 10 min (HIP-022).
+Decisões: **Conta + 4 etapas + revisão, com rascunho automático** (pode sair e voltar pelo e-mail; alinhado ao PRD "Etapa X de 4"); um assunto por passo; logo e capa ficam fora do onboarding (entram em Minha loja); documentos fotografados pelo celular; recebimento via OAuth do Mercado Pago (split, brief §4); enquanto a loja está em análise o lojista **já pode cadastrar produtos** (reduz o tempo morto); a loja só fica visível ao cliente com aprovação + conta de recebimento ativa + 1 produto ativo (HIP-030). Código de e-mail: 6 dígitos, 10 min (HIP-022).
 
 ```mermaid
 flowchart TD
-  A(["Lojista abre a página de cadastro da loja"]) --> B["Passo 1 Conta: e-mail, senha, aceite dos termos"]
+  A(["Lojista abre a página de cadastro da loja"]) --> B["Conta: nome, e-mail, celular, senha, confirmar senha, aceite dos termos"]
   B --> C{"E-mail já cadastrado?"}
   C -->|Sim| C1["Entrar para continuar o cadastro"]
   C1 --> D
   C -->|Não| C2["Confirmar e-mail com código de 6 dígitos"]
-  C2 --> D["Passo 2 Quem é você: CPF ou CNPJ incluindo MEI, nome, celular"]
+  C2 --> D["Etapa 1 Quem é você: CPF ou CNPJ incluindo MEI"]
   D --> D1{"Documento válido?"}
   D1 -->|Não| D2["Confira o CNPJ: dígitos não conferem"]
   D2 --> D
-  D1 -->|Sim| E["Passo 3 Sua loja: nome, categorias, endereço por CEP, WhatsApp, logo"]
-  E --> F["Passo 4 Documentos: foto do documento e comprovante de endereço"]
+  D1 -->|Sim| E["Etapa 2 Sua loja: nome, categoria, WhatsApp, endereço por CEP"]
+  E --> F["Etapa 3 Documentos: foto do documento e comprovante de endereço"]
   F --> F1{"Arquivo ok: tipo, até 5 MB, legível?"}
   F1 -->|Não| F2["Esse arquivo tem 8 MB. O máximo é 5 MB. Tire outra foto"]
   F2 --> F
-  F1 -->|Sim| G["Passo 5 Receber: conectar conta Mercado Pago"]
+  F1 -->|Sim| G["Etapa 4 Receber: conectar conta Mercado Pago"]
   G --> G1{"Conectou?"}
   G1 -->|Cancelou ou falhou| G2["Conectar depois: a loja só vai ao ar depois de conectar"]
   G2 --> H
@@ -153,7 +153,7 @@ flowchart TD
 ```
 
 **Pontos de projeto**
-- Passo 1 e 2 juntos têm 6 campos; total ≤ 14 campos em 5 passos. Barra "Passo 3 de 5", botões Voltar e Continuar fixos no rodapé (ao alcance do polegar no celular).
+- Conta tem 5 campos (nome, e-mail, celular, senha, confirmar senha; DEC-012) e as etapas somam 7 a 8: total 12 a 13 campos, mais 3 ou 4 documentos. Barra "Etapa 3 de 4", botões Voltar e Continuar fixos no rodapé (ao alcance do polegar no celular). Nome e celular **não** são pedidos de novo na etapa 1 (WCAG 3.3.7).
 - CNPJ: consulta e preenche razão social e endereço **[HIPÓTESE]** (depende de fonte de dados; backend avalia). MEI: aceita CPF do titular.
 - Documento: botão "Tirar foto" abre a câmera; detecta imagem escura ou tremida **[HIPÓTESE, só aviso simples]**.
 - Pós-aprovação: lista de 3 tarefas ("Cadastrar o primeiro produto", "Definir horário", "Testar o som dos pedidos") com progresso; sem tutorial em vídeo.
@@ -171,9 +171,9 @@ flowchart TD
   C --> D["Abrir caso: documentos à esquerda, dados à direita"]
   D --> E["Checklist: documento legível, CPF ou CNPJ confere e está ativo, endereço, categoria, fotos adequadas, WhatsApp"]
   E --> F{"Tudo conferido?"}
-  F -->|Sim| G["Revisar comissão: padrão da plataforma, editável"]
+  F -->|Sim| G["Ver comissão: padrão da plataforma (edição entra com WB-105, onda 4)"]
   G --> H["Aprovar loja"]
-  H --> H1["Confirmar: Aprovar Casa Bela? Ela passa a aparecer para clientes"]
+  H --> H1["Confirmar: Aprovar Casa Bela? O lojista é avisado. A loja só aparece com 1 produto ativo e conta conectada"]
   H1 --> I{"Outro admin já decidiu?"}
   I -->|Sim| I1["Esta loja já foi decidida por Ana às 10:42. Ver decisão"]
   I1 --> C
@@ -345,11 +345,11 @@ Consentimento e base legal da coleta: **Security e PO** definem (LGPD).
 
 | # | Para | Pergunta ou pendência |
 |---|---|---|
-| 1 | PO | "Confirmação" no cadastro (brief §3.1) significa confirmar senha? Proponho remover o campo (HIP-D06) |
-| 2 | Security | Aceitar confirmação de e-mail **depois** do pedido (HIP-D07)? Sem isso a meta de 2 minutos não fecha para quem nunca usou |
+| 1 | (resolvida) | DEC-012: "confirmar senha" mantido; orçamento recalculado na §2 (≈ 118 s, folga ≈ 2 s). HIP-D06 rejeitada |
+| 2 | Security | Aceitar confirmação de e-mail **depois** do pedido (HIP-D07)? Sem isso a meta de 2 minutos não fecha para quem nunca usou. Parecer pendente; o desenho assume não bloqueante e prevê a variante B (≈ 163 s) por flag |
 | 3 | PO + jurídico | Validar HIP-017 (arrependimento 7 dias e defeito 30 dias como piso legal) e a cobrança da taxa de coleta só após a aprovação da loja, em vez de "ao solicitar" (HIP-018), §6 |
 | 4 | Backend | O Mercado Pago exige CPF para PIX e cartão? Se sim, entra 1 campo no checkout (HIP-D10) |
 | 5 | PO | Habilitar login com Google no lançamento (maior ganho de tempo na 1ª compra) |
 | 6 | PO | Os textos de prazo da interface ("responde em até 2 dias", "reembolso em até 2 dias úteis") devem ser lidos das hipóteses configuráveis (HIP-019, HIP-030, HIP-020), não fixados no código |
 | 7 | PO | UI usa "Sacola" em vez de "Carrinho" (HIP-D05) |
-| 8 | PO | Mapa na escolha de endereço fica fora da 1.0 (custo e dados de terceiros); CEP + localização bastam? |
+| 8 | PO | Mapa na escolha de endereço: fora do caminho normal. Só como exceção quando a geocodificação falha (WB-002 C3, ADR-008) e no endereço da loja (painel). CEP + localização bastam no caminho normal |

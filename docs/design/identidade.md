@@ -190,6 +190,7 @@ Dados de demonstração (brief §8): só imagens de licença livre (ex.: Unsplas
 | Pagamento aprovado | "Pagamento confirmado. A loja já recebeu seu pedido!" Botão "Acompanhar pedido" |
 | Cartão recusado | "O banco não aprovou esse cartão. Tente outro cartão ou pague com PIX." Botões "Trocar cartão" / "Pagar com PIX" |
 | Senha fraca | "Senha fraca. Use 8 caracteres ou mais, com letras e números." |
+| Senhas diferentes / iguais | "As senhas não são iguais." / "As senhas são iguais." |
 | E-mail já existe | "Já existe uma conta com esse e-mail." Botão "Entrar" |
 | Código errado | "Código incorreto. Confira o código que enviamos para o seu e-mail." Link "Reenviar código" |
 | Sem conexão | "Sem conexão. Mostrando o que já carregou." Botão "Tentar de novo" |
@@ -220,10 +221,10 @@ Dados de demonstração (brief §8): só imagens de licença livre (ex.: Unsplas
 | HIP-D03 | Phosphor (plano B Lucide) | Verificar a porta React Native e o peso do bundle |
 | HIP-D04 | Símbolo sacola + "w" | Teste de reconhecimento a 16 px; contratar refino gráfico antes do G5 se o fundador quiser |
 | HIP-D05 | Texto da interface usa "Sacola" (como iFood [M]) em vez de "Carrinho", reforça o nome Webag | Teste de compreensão; trocar é só texto |
-| HIP-D06 | Cadastro sem campo "confirmar senha" (mostrar/ocultar senha no lugar), se o brief quis dizer isso | Aprovação do PO; ver `fluxos.md` §3 |
+| HIP-D06 | ~~Cadastro sem campo "confirmar senha"~~ **Rejeitada por DEC-012**: o campo fica, com um único olho para as duas senhas. Custo no orçamento: ≈ +7 s (`fluxos.md` §2) | Encerrada |
 | HIP-D07 | Confirmação de e-mail por código não bloqueia a compra (confirma depois do pedido) | Parecer do Security; custo em `fluxos.md` §2 |
 | HIP-D08 | Orçamento de tempo da compra (modelo de toques e segundos) | Teste de usabilidade cronometrado (brief §7) |
 | HIP-D09 | Taxa de coleta da troca cobrada após a aprovação da loja (diverge de HIP-018) | Decisão do PO |
-| HIP-D10 | CPF só pedido no checkout, e só se o Mercado Pago exigir; sem mapa na escolha de endereço | Backend confirma com a API do MP |
+| HIP-D10 | CPF só pedido no checkout, e só se o Mercado Pago exigir; mapa **só como exceção** (geocodificação falhou, WB-002 C3 e ADR-008) e no endereço da loja, nunca no caminho normal | Backend confirma com a API do MP |
 
 Tema escuro fica fora da 1.0 (registrado em HIP-D01).
