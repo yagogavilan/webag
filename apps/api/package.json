@@ -12,7 +12,10 @@
     "lint": "eslint .",
     "test": "vitest run && vitest run --config ./vitest.config.e2e.ts",
     "test:unit": "vitest run",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/platform/database/migrate.ts",
+    "db:seed": "tsx --env-file-if-exists=../../.env seed/index.ts"
   },
   "dependencies": {
     "@nestjs/common": "12.5.1",
