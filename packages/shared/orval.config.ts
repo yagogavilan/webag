@@ -13,7 +13,10 @@ export default defineConfig({
       target: './src/generated/client.ts',
       client: 'fetch',
       clean: false,
-      prettier: false,
+      // nodenext: imports relativos com extensão .js (o pacote também roda no Node, na API).
+      tsconfig: './tsconfig.json',
+      // URL base e cabeçalhos configuráveis em tempo de execução por app.
+      override: { mutator: { path: './src/http/api-fetch.ts', name: 'apiFetch' } },
     },
   },
   // Schemas Zod para validar entrada na API e formulários nos apps.
@@ -24,7 +27,7 @@ export default defineConfig({
       target: './src/generated/zod.ts',
       client: 'zod',
       clean: false,
-      prettier: false,
+      tsconfig: './tsconfig.json',
     },
   },
 });

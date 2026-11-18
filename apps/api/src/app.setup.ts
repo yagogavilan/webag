@@ -1,0 +1,33 @@
+import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { Logger } from 'nestjs-pino';
+import type { Env } from './platform/config/env.js';
+import { findContractPath, loadContract, setupContractDocs } from './platform/openapi/contract-docs.js';
+
+/** Configuração HTTP compartilhada por main.ts e pelos testes E2E (o teste sobe o app como em produção). */
+export function configureApp(app: NestExpressApplication): void {
+  const config = app.get<ConfigService<Env, true>>(ConfigService);
+
+  app.useLogger(app.get(Logger));
+  app.disable('x-powered-by');
+  // Graceful shutdown: SIGTERM fecha HTTP, pool do Postgres e Redis (OnApplicationShutdown).
+  app.enableShutdownHooks();
+
+  const origins = config.get('CORS_ORIGINS', { infer: true });
+  // Sem origens configuradas, nenhuma origem de navegador é aceita (CORS restrito por padrão).
+  app.enableCors({ origin: origins.length > 0 ? origins : false, credentials: true });
+
+  const docsEnabled =
+    config.get('API_DOCS_ENABLED', { infer: true }) ??
+    config.get('NODE_ENV', { infer: true }) !== 'production';
+  if (docsEnabled) {
+    const contractPath =
+      config.get('OPENAPI_SPEC_PATH', { infer: true }) ?? findContractPath(process.cwd());
+    if (!contractPath) {
+      throw new Error(
+        'Contrato OpenAPI não encontrado: defina OPENAPI_SPEC_PATH ou API_DOCS_ENABLED=false',
+      );
+    }
+    setupContractDocs(app, loadContract(contractPath));
+  }
+}

@@ -1,9 +1,18 @@
-import { Global, Inject, Injectable, Module, type OnApplicationShutdown } from '@nestjs/common';
+import {
+  Global,
+  Inject,
+  Injectable,
+  Logger,
+  Module,
+  type OnApplicationShutdown,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import type { Env } from '../config/env.js';
 
 export const REDIS = Symbol('REDIS');
+
+const logger = new Logger('Redis');
 
 @Injectable()
 class RedisLifecycle implements OnApplicationShutdown {
@@ -21,14 +30,19 @@ class RedisLifecycle implements OnApplicationShutdown {
     {
       provide: REDIS,
       inject: [ConfigService],
-      useFactory: (config: ConfigService<Env, true>) =>
-        new Redis(config.get('REDIS_URL', { infer: true }), {
+      useFactory: (config: ConfigService<Env, true>) => {
+        const client = new Redis(config.get('REDIS_URL', { infer: true }), {
           lazyConnect: true,
           maxRetriesPerRequest: 1,
           connectTimeout: 3_000,
           // Sem fila offline: comando com Redis fora falha na hora em vez de ficar pendurado.
           enableOfflineQueue: false,
-        }),
+        });
+        // Sem listener o ioredis imprime "Unhandled error event" fora do logger estruturado.
+        // A URL não entra no log (pode conter senha).
+        client.on('error', (error: Error) => logger.warn(`Redis indisponível: ${error.message}`));
+        return client;
+      },
     },
     RedisLifecycle,
   ],

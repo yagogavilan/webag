@@ -1,28 +1,55 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json"],
+  "globalDependencies": [
+    "tsconfig.base.json"
+  ],
   "tasks": {
     "generate": {
-      "inputs": ["$TURBO_ROOT$/docs/arquitetura/api/openapi.yaml", "orval.config.*"],
-      "outputs": ["src/generated/**"]
+      "inputs": [
+        "$TURBO_ROOT$/docs/arquitetura/api/openapi.yaml",
+        "orval.config.*"
+      ],
+      "outputs": [
+        "src/generated/**"
+      ]
     },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [],
+      "passThroughEnv": [
+        "E2E_DEPS",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "CI"
+      ]
     },
     "dev": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": false,
       "persistent": true
     }

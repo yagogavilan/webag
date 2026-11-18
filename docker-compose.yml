@@ -1,6 +1,7 @@
 # Infra de desenvolvimento local do Webag.
 # Uso: cp .env.example .env && docker compose up -d
 # Serviços: PostgreSQL 18 + PostGIS 3.6, Redis 8, RustFS (S3, ver ADR-005), Mailpit (e-mail de teste).
+# API em container: docker compose --profile app up -d --build
 name: webag
 
 services:
@@ -78,6 +79,31 @@ services:
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: 'true'
       MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
+
+  api:
+    # API em container (perfil "app"): docker compose --profile app up -d --build
+    # No dia a dia, prefira `pnpm dev` com só a infra no compose.
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:8081}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD:-webag_dev_only}@postgres:5432/${POSTGRES_DB:-webag}
+      REDIS_URL: redis://redis:6379
+      # /docs desligado em produção por padrão; ligado aqui porque é ambiente local.
+      API_DOCS_ENABLED: 'true'
+    ports:
+      - '${API_PORT:-3000}:3000'
 
 volumes:
   postgres-data:
