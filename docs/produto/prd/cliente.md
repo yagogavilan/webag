@@ -100,11 +100,12 @@ Como visitante, quero criar conta com poucos campos, para finalizar a compra.
 - **C2** Dado senha com menos de `senha_min` caracteres, ou comum/vazada, quando digito, então o medidor mostra "Fraca" e o botão Continuar fica inativo; com 8+ e score >= médio, "Boa".
 - **C3** Dado e-mail já cadastrado, então vejo "Esse e-mail já tem conta. Entrar?" sem revelar se a conta foi confirmada.
 - **C4** Dado termos não marcados, então o botão fica inativo e o texto de privacidade abre em tela própria (link visível).
-- **C5** Dado o cadastro concluído, então a conta fica "não confirmada" até WB-007 e eu não consigo finalizar pedido antes disso.
+- **C5** Dado o cadastro concluído, então a conta fica "não confirmada" até WB-007, mas **posso finalizar o 1º pedido pago antes de confirmar** (DEC-014/015); os limites de uma conta não confirmada (2º pedido, cupom, exportação etc.) estão em WB-224.
+- **C6** Dado e-mail com domínio provavelmente errado (ex.: "gmial.com"), então vejo a sugestão "Você quis dizer gmail.com?" e posso aceitar ou manter (WB-224 C5).
 
 ### WB-007 Confirmar conta por código — Must — dep: WB-006, WB-194
 Como novo usuário, quero confirmar meu e-mail por código, para provar que a conta é minha.
-- **C1** Dado cadastro concluído, então recebo e-mail com código de 6 dígitos válido por `otp_validade_min` (10 min).
+- **C1** Dado cadastro concluído, então recebo e-mail com código de 6 dígitos válido por `otp_validade_min` (10 min); o e-mail traz só o código e texto genérico, sem nome, endereço, itens ou valores (WB-224 C6).
 - **C2** Dado código correto dentro do prazo, então a conta é confirmada e sigo para onde estava.
 - **C3** Dado código errado, então vejo "Código incorreto" e restam tentativas; após `otp_tentativas` (5) erros, o código é invalidado e preciso pedir outro.
 - **C4** Dado "Reenviar", então só é possível após 60 s e no máximo 5 vezes por hora; o código anterior é invalidado.
@@ -114,14 +115,14 @@ Como novo usuário, quero confirmar meu e-mail por código, para provar que a co
 Como cliente, quero entrar com e-mail e senha, para acessar meus pedidos.
 - **C1** Dado credenciais corretas, então entro e continuo logado por até 30 dias neste aparelho.
 - **C2** Dado credenciais erradas, então vejo "E-mail ou senha incorretos" (mesma mensagem para e-mail inexistente).
-- **C3** Dado `login_falhas` (5) falhas seguidas, então a conta fica bloqueada por 15 min com a mensagem "Muitas tentativas. Tente em 15 minutos ou redefina a senha".
+- **C3** Dado `login_falhas` (5) falhas seguidas **do mesmo dispositivo/IP contra a mesma conta**, então esse dispositivo/IP espera `login_espera_min` (15 min) e vê "Muitas tentativas. Tente em 15 minutos ou redefina a senha". **A conta nunca é bloqueada para o dono**: quem erra de outro dispositivo/IP não afeta quem tem a senha certa (WB-221; SEC-102).
 - **C4** Dado conta bloqueada pelo admin, então vejo "Conta indisponível. Fale com o suporte" com link de contato.
-- **C5** Dado conta não confirmada, então sou levado a WB-007.
+- **C5** Dado conta não confirmada, então entro normalmente e vejo o aviso "Confirme seu e-mail" (WB-007); só o que WB-224 limita fica bloqueado.
 
 ### WB-009 Esqueci a senha — Must — dep: WB-008, WB-194
 Como cliente, quero redefinir a senha dentro do app, para voltar a entrar.
 - **C1** Dado e-mail informado (cadastrado ou não), então vejo sempre "Se o e-mail existir, enviamos um código" (sem revelar existência).
-- **C2** Dado código válido por 15 min (6 dígitos, 5 tentativas), quando defino nova senha (regras de WB-006), então a senha muda, todas as sessões antigas são encerradas e eu entro.
+- **C2** Dado código válido por `otp_validade_min` (10 min; 6 dígitos, 5 tentativas), quando defino nova senha (regras de WB-006), então a senha muda, o e-mail passa a "confirmado", todas as sessões e renovações antigas são encerradas (WB-219) e eu entro.
 - **C3** Dado código inválido ou expirado, então vejo o erro e posso pedir novo código.
 - **C4** Dado a troca de senha, então recebo e-mail de aviso "Sua senha foi alterada".
 
@@ -223,16 +224,20 @@ Como cliente, quero aplicar um cupom, para pagar menos.
 - **C3** Dado um cupom já aplicado, quando aplico outro, então ele substitui o primeiro (não cumulativo).
 - **C4** Dado cupom que zeraria o total, então o total mínimo cobrado é R$ 1,00 (HIP-037).
 - **C5** Dado "Remover cupom", então o total volta ao original.
+- **C6** Dado conta com e-mail não confirmado e cupom da plataforma ou de primeira compra, então vejo "Confirme seu e-mail para usar este cupom" e o total não muda (WB-224 C2).
+- **C7** Dado cupom da plataforma que, no modo split, excederia a comissão do pedido, então o desconto aplicado é limitado a esse teto e o resumo mostra o valor realmente aplicado (WB-116 C6).
 
 ### WB-023 Checkout: entrega ou retirada — Must — dep: WB-020, WB-003, WB-005
 Como cliente, quero escolher entrega ou retirada e confirmar o endereço, para fechar o pedido em poucos toques.
-- **C1** Dado login confirmado, então o checkout tem no máximo: (1) entrega/retirada + endereço, (2) pagamento, (3) revisar e pagar; nenhum campo extra além de CPF quando o provedor exigir.
+- **C1** Dado login (e-mail confirmado ou, no 1º pedido pago, ainda não confirmado, WB-224), então o checkout tem no máximo: (1) entrega/retirada + endereço, (2) pagamento, (3) revisar e pagar; nenhum campo extra além de CPF quando o provedor exigir.
 - **C2** Dado resumo, então vejo subtotal, desconto, frete (ou "Grátis"), taxa de serviço (se houver) e **total** antes de pagar, com o mesmo valor que será cobrado.
 - **C3** Dado loja que não aceita retirada, então a opção não aparece; dado endereço fora do raio, então só retirada (se houver) ou aviso para trocar de endereço.
 - **C4** Dado loja fechada, pausada ou que fechou durante o checkout, então bloqueio com "Loja fechada" e o carrinho é mantido.
 - **C5** Dado alteração de preço, estoque ou frete desde o carrinho, então vejo "Algo mudou" com o que mudou e confirmo antes de pagar (RN-05).
 - **C6** Dado total acima de `pedido_max_cents` (R$ 2.000,00), então bloqueio com mensagem clara.
 - **C7** Dado que o provedor exige CPF, então pedimos CPF com máscara e validação, uma vez, e guardamos para os próximos pedidos (LGPD: finalidade pagamento).
+- **C8** Dado loja nova com total acima do limite de WB-225, então bloqueio com "Esta loja é nova e aceita pedidos de até R$ X por enquanto" e o carrinho é mantido.
+- **C9** Dado conta não confirmada que já fez 1 pedido pago, então o checkout pede a confirmação do e-mail antes de pagar (WB-224 C1).
 
 ### WB-024 Pagar com PIX — Must — dep: WB-023, WB-151
 Como cliente, quero pagar por PIX com QR ou copia e cola, para confirmar na hora.
@@ -248,7 +253,7 @@ Como cliente, quero pagar com cartão com segurança, para parcelar quando preci
 - **C1** Dado "Cartão", então número, validade, CVV e nome são digitados no campo seguro do provedor (nunca nos nossos servidores) e vejo as parcelas (1x a `parcelas_max`, parcela >= R$ 30) com o **total final com juros**.
 - **C2** Dado aprovação, então o pedido segue para RECEBIDO.
 - **C3** Dado recusa, então vejo o motivo amigável (saldo, dados incorretos, recusado pelo banco) e posso tentar outro cartão ou PIX sem perder o carrinho; o pedido continua AGUARDANDO_PAGAMENTO até expirar.
-- **C4** Dado 3DS exigido pelo provedor, então o desafio abre dentro do app e, ao concluir, volta ao pedido.
+- **C4** Dado 3DS exigido pelo provedor, então o desafio abre dentro do app (ou, se a tela interna não suportar o banco emissor, no navegador do sistema) e, ao concluir, volta ao pedido (WB-152 C7).
 - **C5** Dado 5 tentativas de cartão em 1 hora, então bloqueio temporário de cartão com sugestão de PIX.
 - **C6** Dado timeout do provedor, então vejo "Estamos confirmando seu pagamento" e o app consulta o status; nunca cobra duas vezes.
 
@@ -300,7 +305,7 @@ Como cliente, quero avaliar após receber, para ajudar outros e premiar a loja.
 
 ### WB-032 Perfil e dados pessoais — Must — dep: WB-008
 Como cliente, quero ver e editar meus dados, para mantê-los corretos.
-- **C1** Dado perfil, então posso editar nome e celular (máscara) e ver e-mail; trocar e-mail exige confirmar por código no novo e-mail.
+- **C1** Dado perfil, então posso editar nome e celular (máscara) e ver e-mail; trocar e-mail exige a senha (reautenticação de 5 min) e confirmar por código no **novo** e-mail, com aviso ao e-mail antigo; conta com e-mail ainda não confirmado não troca e-mail por este caminho, usa "Corrigir e-mail" (WB-224 C4).
 - **C2** Dado "Alterar senha", então peço a atual, a nova e a confirmação (regras de WB-006) e encerro outras sessões.
 - **C3** Dado "Sair", então o app limpa tokens do aparelho; os favoritos e o carrinho continuam na conta.
 - **C4** Dado dados inválidos, então erro no campo e nada é salvo.
@@ -334,7 +339,7 @@ Como cliente, quero alternar para Retirada, para ver lojas onde posso buscar.
 ### WB-037 "Não recebi meu pedido" — Must — dep: WB-027, WB-110
 Como cliente, quero avisar que o pedido não chegou, para ser atendido sem esperar o prazo automático.
 - **C1** Dado SAIU_PARA_ENTREGA há mais de 2 h ou ENTREGUE há <= 48 h, então vejo "Não recebi".
-- **C2** Dado que toco e confirmo, então o pedido entra em disputa (admin notificado, loja notificada, repasse retido) e vejo o protocolo.
+- **C2** Dado que toco e confirmo, então o pedido entra em disputa (admin notificado, loja notificada) e vejo o protocolo; o admin pode estornar a partir da conta do lojista (WB-110 C4), sem depender de retenção de repasse.
 - **C3** Dado a disputa aberta, então a conclusão automática de 24 h (RN-07) fica suspensa.
 - **C4** Dado resolução do admin, então recebo notificação com o resultado (estorno ou confirmação).
 

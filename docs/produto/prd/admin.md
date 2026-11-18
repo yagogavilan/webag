@@ -59,7 +59,7 @@ RN-02 (parâmetros), RN-03, RN-07, RN-08, RN-10, RN-11, RN-13 (perfis), RN-15 (m
 | Ver auditoria | Sim | Leitura própria | Leitura própria | Leitura própria |
 
 ## Requisitos não funcionais
-- **Segurança:** RBAC no servidor; senha forte; sessão curta com expiração por inatividade (30 min) `[HIPÓTESE]`; 2FA para super admin e financeiro recomendado `[security-engineer decide]`; rate limit; toda ação sensível pede motivo e entra na auditoria.
+- **Segurança:** RBAC no servidor; senha forte; sessão curta com expiração por inatividade (30 min) `[HIPÓTESE]`; **TOTP obrigatório para todo admin** (DEC-018, SEC-015; WB-222); painel em endereço próprio, separado do lojista (DEC-018; WB-223); reautenticação de 5 min para estorno e para revelar dado pessoal (SEC-016); rate limit; toda ação sensível pede motivo e entra na auditoria.
 - **Auditoria:** log append-only, sem edição/exclusão por qualquer perfil; guarda quem, quando, IP, ação, antes/depois; retenção 5 anos (HIP-035).
 - **Desempenho:** listas paginadas (50), filtros no servidor; exportação > 10 mil linhas assíncrona com link por e-mail.
 - **Usabilidade:** uso em desktop e tablet; confirmação explícita em ações destrutivas; sem emoji; WCAG 2.2 AA.
@@ -70,14 +70,15 @@ RN-02 (parâmetros), RN-03, RN-07, RN-08, RN-10, RN-11, RN-13 (perfis), RN-15 (m
 ### WB-100 Login admin e perfis — Must — dep: base de auth
 Como admin, quero entrar com meu perfil, para ver só o que me cabe.
 - **C1** Dado credenciais corretas de um admin ativo, então entro e vejo apenas o menu do meu perfil; URL de tela sem permissão responde 403.
-- **C2** Dado 5 falhas seguidas, então bloqueio por 15 min e o evento vai à auditoria.
+- **C2** Dado 5 falhas seguidas do mesmo dispositivo/IP contra um admin, então esse dispositivo/IP espera 15 min e o evento vai à auditoria; a conta do admin **não** é bloqueada para quem tem a senha certa em outro dispositivo (WB-221).
 - **C3** Dado 30 min sem atividade, então a sessão expira com aviso.
 - **C4** Dado usuário não admin (cliente/lojista) tentando as rotas admin, então 403 e registro.
 - **C5** Dado a matriz de RN-13/PRD, então cada rota e cada ação da API valida o perfil no servidor.
+- **C6** Dado senha correta de admin sem TOTP configurado, então só vejo a tela de configurar o TOTP (WB-222); o painel admin só abre no endereço próprio do admin (WB-223).
 
 ### WB-101 Gerenciar admins — Must — dep: WB-100
 Como super admin, quero criar e desativar admins, para dar acesso conforme a função.
-- **C1** Dado novo admin (nome, e-mail, perfil), então ele recebe convite válido por 7 dias para criar senha.
+- **C1** Dado novo admin (nome, e-mail, perfil), então ele recebe convite de uso único, ligado ao e-mail e válido por **48 h** (SEC-017) para criar senha e configurar o TOTP (WB-222); convite vencido ou usado: "Convite inválido" (410).
 - **C2** Dado trocar o perfil ou desativar, então vale na hora e as sessões ativas são encerradas.
 - **C3** Dado tentar remover o último super admin, então é bloqueado ("Precisa existir ao menos 1 super admin").
 - **C4** Dado qualquer mudança, então vai à auditoria.
@@ -103,7 +104,8 @@ Como operação, quero suspender ou corrigir uma loja, para proteger clientes.
 - **C1** Dado "Suspender" com motivo, então a loja some do app imediatamente, não recebe novos pedidos, e os pedidos em andamento ficam sinalizados para ação; o lojista é notificado.
 - **C2** Dado "Reativar", então volta a ser visível se continuar atendendo RN-03.
 - **C3** Dado editar qualquer dado da loja (perfil, horário, entrega, trocas), então a alteração é salva com antes/depois na auditoria.
-- **C4** Dado loja com repasse pendente, então a suspensão não apaga o saldo e o financeiro é avisado.
+- **C4** Dado loja com repasse pendente (modo centralizado) ou estorno pendente por saldo (split), então a suspensão não apaga o saldo/dívida e o financeiro é avisado.
+- **C5** Dado alerta de risco da loja (WB-225: "não recebi" > 5% ou cancelamento > 15%), então vejo a loja na fila "Em risco" com a ação "Suspender" a um toque.
 
 ### WB-105 Comissão por loja e por categoria — Must — dep: WB-111
 Como financeiro, quero definir comissão por loja e por categoria, para negociar e incentivar.
@@ -141,17 +143,18 @@ Como operação/financeiro, quero cancelar e estornar um pedido, para corrigir p
 - **C1** Dado pedido em qualquer estado não terminal, então posso "Cancelar" com motivo obrigatório; estorno total automático.
 - **C2** Dado "Estornar parcialmente", então informo valor (> 0 e <= pago menos já estornado) e motivo; vejo o efeito na comissão antes de confirmar.
 - **C3** Dado valor acima de R$ 500,00 e perfil financeiro, então a ação exige super admin (HIP-039); vejo "Peça aprovação a um super admin".
-- **C4** Dado ENTREGUE, então só estorno (parcial ou total) com motivo, e o repasse é ajustado.
+- **C4** Dado ENTREGUE, então só estorno (parcial ou total) com motivo; no split o estorno sai da conta do lojista no provedor e **não há ajuste de repasse** (DEC-016); se faltar saldo ao lojista, vale WB-154 C6 e posso suspender a loja (WB-104).
 - **C5** Dado confirmação dupla (duplo clique), então um só estorno (idempotência).
 - **C6** Dado falha do provedor no estorno, então o pedido fica "Estorno pendente" e há tentativa automática; o admin vê o erro e pode reprocessar (WB-153).
 - **C7** Dado qualquer intervenção, então cliente e loja são notificados e a ação vai à auditoria.
+- **C8** Dado estorno, então exige reautenticação com TOTP vigente (5 min; WB-222) além do motivo.
 
 ### WB-110 Mediar trocas e disputas — Must — dep: WB-172, WB-037
 Como operação, quero decidir trocas contestadas e disputas "não recebi", para resolver com justiça e prazo.
 - **C1** Dado a fila "Em mediação" ordenada por prazo (`mediacao_dias_uteis`), então vejo pedido, motivo, fotos, mensagens, política da loja e histórico.
 - **C2** Dado decisão "A favor do cliente" ou "A favor da loja" com justificativa obrigatória, então o fluxo continua (troca aprovada/estorno ou recusa final) e as partes são notificadas.
 - **C3** Dado arrependimento (7 dias) ou defeito dentro do prazo, então o sistema alerta que a recusa da loja não é permitida por lei e sugere aprovar.
-- **C4** Dado disputa "não recebi", então posso estornar total, confirmar entrega ou pedir comprovante à loja; o repasse fica retido até a decisão.
+- **C4** Dado disputa "não recebi", então posso estornar total (a partir da conta do lojista, WB-154 C6), confirmar entrega ou pedir comprovante à loja; no modo centralizado o repasse do pedido fica retido até a decisão, no split não há retenção e a ação é o estorno e, se for o caso, a suspensão da loja (DEC-016).
 - **C5** Dado prazo estourado, então o item sobe para "Atrasado".
 
 ### WB-111 Comissões padrão e taxa de serviço — Must — dep: WB-119
@@ -164,9 +167,9 @@ Como financeiro, quero definir comissão padrão e taxa de serviço, para ajusta
 ### WB-112 Repasses — Must — dep: WB-156
 Como financeiro, quero acompanhar e executar repasses, para pagar certo e no prazo.
 - **C1** Dado o ciclo (`repasse_periodicidade`), então o sistema gera o lote por loja com pedidos elegíveis (ENTREGUE há >= `repasse_carencia_dias`, sem troca/disputa) e o saldo líquido.
-- **C2** Dado lote, então vejo composição por pedido e posso retirar um pedido com motivo (ex.: disputa).
-- **C3** Dado modo split, então o lote é informativo e mostra o status vindo do provedor; dado modo centralizado, então "Executar repasse" cria a transferência e registra o comprovante.
-- **C4** Dado saldo negativo da loja, então abate do próximo ciclo e fica sinalizado.
+- **C2** Dado lote (modo centralizado), então vejo composição por pedido e posso retirar um pedido com motivo (ex.: disputa); no split vejo só a composição.
+- **C3** Dado modo split, então o lote é **somente informativo** (mostra o status vindo do provedor; sem retirar pedido nem reter valor, pois a Webag não custodia o dinheiro; DEC-016); dado modo centralizado, então "Executar repasse" cria a transferência e registra o comprovante.
+- **C4** Dado saldo negativo da loja no modo centralizado, então abate do próximo ciclo e fica sinalizado; no split, a dívida fica registrada no ledger e é tratada por estorno/suspensão/Termos (WB-154 C6), nunca por desconto automático.
 - **C5** Dado falha de transferência, então o lote fica "Falhou" com o motivo e pode ser reprocessado sem duplicar.
 - **C6** Dado executar o mesmo lote duas vezes, então só uma execução ocorre.
 
@@ -199,6 +202,9 @@ Como operação, quero criar cupons Webag, para campanhas e primeira compra.
 - **C3** Dado limite de usos atingido, então novos usos falham com "Cupom esgotado".
 - **C4** Dado pausar, então deixa de valer imediatamente.
 - **C5** Dado relatório do cupom, então vejo usos, desconto total e pedidos.
+- **C6** Dado modo split, então o desconto da plataforma (cupom de valor, percentual ou frete grátis subsidiado) em cada pedido é limitado à comissão (`application_fee`) daquele pedido (DEC-016, SEC-060); ao salvar o cupom, o painel mostra o aviso "Em pedidos com comissão menor, o desconto será cortado em R$ [comissão]". Um cupom que exigisse mais que isso fica desligado até haver mecanismo de pagamento ao lojista aprovado pelo fundador.
+- **C7** Dado cupom da plataforma, então é recusado quando telefone, e-mail ou dispositivo do cliente coincide com membro da loja do pedido (autoconsumo, SEC-061); a loja com > 30% dos usos de um cupom `[HIPÓTESE]` gera alerta ao admin.
+- **C8** Dado "primeira compra", então exige e-mail confirmado e nenhum pedido pago anterior do mesmo dispositivo, telefone ou endereço normalizado (SEC-060; WB-224 C2).
 
 ### WB-117 Termos e privacidade editáveis — Must — dep: WB-210
 Como super admin, quero editar termos e política de privacidade, para refletir mudanças legais sem deploy.
@@ -270,7 +276,8 @@ Como admin, quero ver o estado da operação ao entrar, para priorizar o dia.
 | Item | Tipo | Mitigação |
 |---|---|---|
 | Operação de 1 pessoa: fila e mediações podem estourar | Risco operacional | SLA visível, alertas (WB-198), perfis para delegar |
-| Dinheiro (estorno/repasse) com erro humano | Risco financeiro | Motivo obrigatório, limite HIP-039, auditoria fail-closed |
+| Dinheiro (estorno/repasse) com erro humano | Risco financeiro | Motivo obrigatório, limite HIP-039, TOTP no estorno, auditoria fail-closed |
+| Conta admin comprometida ou XSS de lojista chegando ao admin | Risco de segurança (SEC-106) | TOTP (WB-222), endereço próprio e cookies separados (WB-223) |
 | Documentos de lojistas são dado sensível | LGPD/segurança | URL assinada, acesso registrado, retenção HIP-035; threat model do security |
 | Parâmetros mal configurados (ex.: comissão 0 por engano) | Risco | Faixas, motivo, histórico, não retroativo |
 | Modo manutenção bloqueando webhook | Risco | WB-121 C2 |
@@ -278,6 +285,6 @@ Como admin, quero ver o estado da operação ao entrar, para priorizar o dia.
 ## Perguntas em aberto
 | Pergunta | Quem responde |
 |---|---|
-| 2FA obrigatório para admin | security-engineer |
+| ~~2FA obrigatório para admin~~ | Decidido: obrigatório (DEC-018, SEC-015) |
 | Retenção e formato final dos logs de auditoria | security-engineer + tech-lead |
 | Texto legal de termos | fundador/jurídico |

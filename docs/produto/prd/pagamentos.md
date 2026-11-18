@@ -46,7 +46,9 @@ Cliente (PIX e cartão), lojista (recebe e vê extrato), financeiro/admin (estor
 - Valores, comissão, taxa e repasse: RN-10. Preço e total cobrados = os exibidos (RN-05).
 - Cartão: captura conforme HIP-010; PIX: validade `pix_expiracao_min`. Parcelas: HIP-011. Máx. por pedido: HIP-012.
 - **Segurança de segredo:** chaves e tokens só em `.env`/cofre; token OAuth do lojista criptografado em repouso.
-- **Provedor simulado:** proibido em produção (a aplicação recusa subir com `PAYMENT_PROVIDER=simulated` em `NODE_ENV=production`).
+- **Provedor simulado:** o valor de configuração é `PAYMENT_PROVIDER=fake` (nome do ADR-002; "simulated" foi abandonado, SEC-112 c). Proibido em produção: a aplicação recusa subir com `fake` em `NODE_ENV=production`.
+- **Split não retém dinheiro (DEC-016, SEC-105):** no modo split o valor cai direto na conta do lojista e a Webag recebe só a comissão (`application_fee`). Não existe "repasse retido, ajustado ou descontado" pela Webag; o repasse do split é **informativo**. Recursos contra lojista que recebe e não entrega: estorno pelo admin a partir da conta do lojista, suspensão da loja, limite de exposição de loja nova (WB-225) e cobrança pelos Termos do Lojista (jurídico, fora do sistema).
+- **Cupom/frete grátis da plataforma no split:** desconto da plataforma por pedido <= comissão (`application_fee`) do pedido (WB-116 C6); acima disso o desconto é cortado no teto. Subsídio maior só com mecanismo de pagamento ao lojista aprovado pelo fundador.
 - **Regulatório:** modelo centralizado só após parecer jurídico (`pesquisa-mercado.md` §6); split é o preferido.
 
 ## Requisitos não funcionais
@@ -60,11 +62,11 @@ Cliente (PIX e cartão), lojista (recebe e vê extrato), financeiro/admin (estor
 
 ### WB-150 PaymentProvider e provedor simulado — Must — dep: nenhuma
 Como dev, quero uma interface de provedor e um simulado, para o app funcionar ponta a ponta sem chaves.
-- **C1** Dado `PAYMENT_PROVIDER=simulated`, então criar PIX devolve um QR/código falso e o pedido fica AGUARDANDO_PAGAMENTO.
+- **C1** Dado `PAYMENT_PROVIDER=fake`, então criar PIX devolve um QR/código falso e o pedido fica AGUARDANDO_PAGAMENTO.
 - **C2** Dado o painel/endpoint de simulação (só em dev), então "aprovar" ou "recusar" dispara o webhook interno e o pedido muda de estado como no real.
 - **C3** Dado cartão de teste (final 0000 aprova, 0001 recusa por saldo, 0002 exige 3DS, 0003 dá timeout), então o resultado correspondente é produzido.
 - **C4** Dado estorno no simulado, então total e parcial seguem as mesmas regras e geram eventos.
-- **C5** Dado produção, então o simulado não sobe (RN do PRD).
+- **C5** Dado produção, então o provedor `fake` não sobe (RN do PRD).
 - **C6** Dado a interface `PaymentProvider`, então outra implementação (ex.: Mercado Pago) pode ser plugada sem mudar o domínio do pedido (contrato único de criar, consultar, estornar, interpretar webhook).
 
 ### WB-151 Mercado Pago: PIX — Must — dep: WB-150, WB-155
@@ -83,6 +85,7 @@ Como cliente, quero pagar com cartão sem expor dados, para parcelar.
 - **C4** Dado 3DS, então o fluxo de desafio é suportado.
 - **C5** Dado captura posterior (HIP-010) viável, então: autoriza na criação, captura na aceitação da loja, cancela a autorização se recusado/timeout; senão captura imediata e estorna em caso de recusa.
 - **C6** Dado auditoria de código, então busca por padrões de cartão (PAN, CVV) nos logs e no banco retorna zero.
+- **C7** Dado a página/WebView do cartão, então o link da tentativa vale 10 min e uso único e o token não vai na query da URL; a página não carrega script além do próprio e do provedor; a navegação da WebView é limitada à lista permitida (inclui domínios do 3DS) e, se o 3DS do emissor não abrir, o fluxo cai para o navegador do sistema (SEC-107).
 
 ### WB-153 Webhooks seguros e reprocessamento — Must — dep: WB-150
 Como financeiro/dev, quero que cada evento do provedor seja processado uma vez, com segurança, para não perder nem duplicar dinheiro.
@@ -92,6 +95,10 @@ Como financeiro/dev, quero que cada evento do provedor seja processado uma vez, 
 - **C4** Dado "Reprocessar" no admin (perfil financeiro/super), então reexecuta com a mesma idempotência e audita.
 - **C5** Dado eventos fora de ordem (estorno antes da aprovação), então são ordenados por consulta ao provedor, sem estado incoerente.
 - **C6** Dado modo manutenção, então o webhook continua sendo aceito (WB-121 C2).
+- **C7** Dado notificação com `ts` fora de 300 s, ou com `x-request-id` já visto nas últimas 24 h, então é rejeitada/ignorada (anti-replay); notificação sem assinatura (IPN legado) é rejeitada (SEC-104).
+- **C8** Dado a notificação, então a loja e o token usados na re-consulta vêm da **tentativa de pagamento gravada na criação** (não de campo do corpo).
+- **C9** Dado a re-consulta ao provedor, então o pagamento só é aprovado se referência do pedido, valor, moeda, recebedor e comissão (`application_fee`) baterem com o pedido; divergência vira alerta ao admin e o pedido não avança.
+- **C10** Dado ambientes distintos, então cada um tem segredo de webhook próprio.
 
 ### WB-154 Estorno total e parcial — Must — dep: WB-151, WB-152
 Como sistema, quero estornar corretamente, para devolver o dinheiro ao cliente.
@@ -100,13 +107,14 @@ Como sistema, quero estornar corretamente, para devolver o dinheiro ao cliente.
 - **C3** Dado estorno, então comissão e taxa de serviço são devolvidas proporcionalmente e o ledger reflete (RN-10).
 - **C4** Dado mesma solicitação duas vezes, então 1 estorno (idempotência).
 - **C5** Dado provedor indisponível, então o estorno fica "pendente" e é retentado; cliente vê "Estorno em processamento".
-- **C6** Dado split, então a divisão entre lojista e Webag segue o provedor (proporcional); sem saldo do lojista, o sistema registra o que a Webag cobriu e lança como débito a recuperar no próximo repasse.
+- **C6** Dado split, então a divisão entre lojista e Webag segue o provedor (proporcional) e o estorno sai da conta do lojista; se o provedor recusar por saldo insuficiente do lojista, o estorno fica "pendente por saldo do lojista", o admin é alertado (WB-198) e decide entre suspender a loja e acionar a cobrança pelos Termos do Lojista. **Não há débito automático em repasse futuro** (DEC-016) [comportamento do MP com saldo negativo: verificar no sandbox, backend-dev].
 - **C7** Dado PIX estornado, então volta à conta de origem; cartão, conforme o emissor; o app informa o prazo.
+- **C8** Dado estorno "pendente por saldo do lojista" há mais de 48 h, então o admin recebe alerta crítico; cobrir o estorno com dinheiro da Webag e cobrar do lojista depois é decisão do fundador caso a caso (limite de exposição: WB-225).
 
 ### WB-155 Recebimento do lojista: split ou centralizado — Must — dep: pesquisa + ADR
 Como Webag, quero reter a comissão e repassar ao lojista, para ter receita sem risco regulatório.
 - **C1** Dado a pesquisa do MP (`pesquisa-mercado.md` §6), então o backend entrega um ADR em `docs/arquitetura/adr/` com a decisão split vs. centralizado, custos, KYC exigido do lojista e riscos, antes do código de produção do pagamento.
-- **C2** Dado split, então o lojista conecta por OAuth (WB-053), os tokens são guardados criptografados, renovados antes de expirar, e cada pagamento leva a comissão (RN-10).
+- **C2** Dado split, então o lojista conecta por OAuth (WB-053), os tokens são guardados criptografados, renovados antes de expirar, e cada pagamento leva a comissão (RN-10). A Webag **não retém, ajusta nem desconta** valores do lojista depois do pagamento (DEC-016); o repasse mostrado ao lojista é informativo.
 - **C3** Dado token revogado ou expirado e não renovável, então a loja fica "Conexão com pagamento pendente", novos pedidos não entram e o lojista é avisado.
 - **C4** Dado centralizado, então todo pagamento entra na conta da Webag e o ledger controla o saldo de cada loja e o repasse (WB-112); só ativo em produção após parecer jurídico registrado em `docs/decisoes.md`.
 - **C5** Dado qualquer modo, então o extrato do lojista mostra os mesmos campos (RN-10).
@@ -137,8 +145,8 @@ Como sistema, quero tratar pagamento fora de hora, para nunca reter dinheiro ind
 
 ### WB-159 Chargeback — Should — dep: WB-153
 Como financeiro, quero ser avisado de contestação de cartão, para me defender e ajustar o extrato.
-- **C1** Dado webhook de chargeback, então o pagamento vira CONTESTADO, o admin é alertado e o pedido/repasse correspondente fica retido.
-- **C2** Dado perda da contestação, então o ledger lança o débito à loja conforme as regras dos Termos e o extrato mostra o motivo.
+- **C1** Dado webhook de chargeback, então o pagamento vira CONTESTADO e o admin é alertado; no modo centralizado o repasse correspondente fica retido, no split nada é retido pela Webag (o impacto segue o provedor, C4).
+- **C2** Dado perda da contestação, então o ledger registra o débito à loja e o extrato mostra o motivo; no split a recuperação é pelos Termos do Lojista, não por desconto em repasse.
 - **C3** Dado ganho, então libera a retenção.
 - **C4** Dado split, então o impacto segue o provedor e o ledger registra.
 
@@ -146,9 +154,9 @@ Como financeiro, quero ser avisado de contestação de cartão, para me defender
 Como dev/fundador, quero trocar para o Mercado Pago só preenchendo o `.env`, para ligar sem mexer em código.
 - **C1** Dado `.env.example`, então lista Access Token, Public Key, Client ID/Secret (OAuth), segredo do webhook e URLs, com valores de exemplo (nenhum segredo real).
 - **C2** Dado o README, então explica onde obter cada chave, como cadastrar a URL do webhook e como testar com contas de teste do MP.
-- **C3** Dado chaves ausentes com `PAYMENT_PROVIDER=mercadopago`, então a aplicação falha ao iniciar com mensagem clara (não em runtime do pedido).
+- **C3** Dado chaves ausentes com `PAYMENT_PROVIDER=mercadopago` (e segredo de webhook por ambiente, WB-153 C10), então a aplicação falha ao iniciar com mensagem clara (não em runtime do pedido).
 - **C4** Dado health check, então reporta provedor ativo e se está configurado (sem expor segredos).
-- **C5** Dado produção, então bloqueia o simulado (WB-150 C5).
+- **C5** Dado produção, então bloqueia o provedor `fake` (WB-150 C5).
 
 ### WB-161 Segundo adaptador (Pagar.me ou Asaas) — Won't (1.0) — dep: WB-150
 Como Webag, quero um segundo provedor, para reduzir dependência.
@@ -164,10 +172,13 @@ Como Webag, quero um segundo provedor, para reduzir dependência.
 | Captura posterior com split pode não ser suportada | Risco técnico | HIP-010; ADR |
 | Taxas reais do MP no Transparente não confirmadas | Risco de margem | Taxas parametrizáveis no ledger; validar com o MP |
 | Chargeback e fraude no início | Risco financeiro | Limite R$ 2.000 (HIP-012), antifraude do MP |
+| Lojista recebe, saca e some; estorno falha por saldo (SEC-105; sem retenção possível no split) | Risco financeiro, **risco residual aceito em DEC-016** | Limite de loja nova e alertas (WB-225), código de entrega (WB-226), estorno pelo admin e suspensão (WB-109), cobrança pelos Termos do Lojista |
 
 ## Perguntas em aberto
 | Pergunta | Quem responde |
 |---|---|
 | Split suporta autorização+captura posterior e parcelamento? | backend-dev (ADR) |
+| O MP permite ao marketplace definir prazo de liberação ao lojista (`money_release_days` ou equivalente)? E como se comporta com saldo negativo do lojista? | backend-dev (sandbox/contrato) |
+| Quando o estorno falha por saldo do lojista, a Webag cobre com recurso próprio? Qual teto? | fundador |
 | Tabela de taxas do Checkout Transparente e prazo de liberação ao lojista | fundador (conta MP) / backend-dev |
 | Parecer sobre recebimento centralizado | fundador/jurídico, security-engineer |

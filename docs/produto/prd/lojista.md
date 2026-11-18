@@ -60,7 +60,7 @@ Como lojista, quero criar minha conta, para começar o cadastro da loja.
 - **C1** Dado a tela inicial, então peço nome, e-mail, celular, senha (regras WB-006) e aceite de termos do lojista.
 - **C2** Dado e-mail já cadastrado como cliente, então posso usar a mesma credencial e adicionar o papel de lojista, sem recriar a conta.
 - **C3** Dado cadastro de lojista desligado (feature flag), então vejo "Cadastro de lojas indisponível" com opção de lista de espera por e-mail.
-- **C4** Dado e-mail não confirmado, então confirmo por código (mesmas regras de WB-007) antes de seguir.
+- **C4** Dado e-mail não confirmado (inclusive conta de cliente que quer virar lojista), então confirmo por código (mesmas regras de WB-007) antes de seguir; o papel de lojista não é concedido a e-mail não confirmado (WB-224 C2).
 
 ### WB-051 Onboarding: dados da loja e CPF/CNPJ — Must — dep: WB-050, WB-118
 Como lojista, quero informar os dados da loja em etapas curtas, para enviá-la à aprovação.
@@ -76,14 +76,17 @@ Como lojista, quero enviar meus documentos pelo celular, para provar quem sou.
 - **C2** Dado arquivo inválido (tipo ou tamanho), então vejo o motivo e posso reenviar.
 - **C3** Dado envio, então os arquivos ficam em área privada, visíveis só ao admin (acesso registrado, WB-218).
 - **C4** Dado foto escura ou cortada, então posso refazer antes de enviar (pré-visualização).
+- **C5** Dado PDF enviado, então o admin o abre por link de 5 min servido pela origem do storage (não do painel), sem varredura de antivírus na 1.0 (risco aceito, DEC-017; ClamAV na fase 2) e com imagens limitadas a 40 megapixels (SEC-108).
 
 ### WB-053 Onboarding: conta de recebimento — Must — dep: WB-051, WB-155
 Como lojista, quero informar onde recebo, para ser pago pelas vendas.
-- **C1** Dado modo split, então toco "Conectar Mercado Pago", autorizo por OAuth e volto ao painel com status "Conta conectada".
+- **C1** Dado modo split, então toco "Conectar Mercado Pago", autorizo por OAuth e volto ao painel com status "Conta conectada". Só o **dono** conecta, com senha digitada há <= 5 min; funcionário recebe 403 (SEC-109).
 - **C2** Dado a autorização negada ou conta sem nível exigido, então vejo o motivo e como resolver (abrir/ajustar conta no provedor) e a etapa fica pendente.
 - **C3** Dado modo centralizado (fallback do ADR), então informo chave PIX ou conta bancária do titular, e o titular deve ter o mesmo CPF/CNPJ da loja; divergência bloqueia o envio.
-- **C4** Dado qualquer modo, então os dados de recebimento ficam visíveis só ao dono, mascarados, e alterá-los exige senha.
-- **C5** Dado provedor simulado (dev), então a etapa conclui com "Conta de teste conectada".
+- **C4** Dado qualquer modo, então os dados de recebimento ficam visíveis só ao dono, mascarados, e **trocar ou desconectar a conta de recebimento** exige senha de <= 5 min, envia e-mail de aviso ao dono, grava auditoria e alerta o admin (SEC-048; antes era WB-079 C3, agora Must).
+- **C5** Dado provedor `fake` (dev), então a etapa conclui com "Conta de teste conectada".
+- **C6** Dado retorno do OAuth, então só vale se o `state` for o gerado para esta sessão e esta loja, de uso único e com no máximo 10 min; caso contrário vejo "Link expirado. Conecte de novo" e nada é vinculado (SEC-109).
+- **C7** Dado o titular da conta Mercado Pago com CPF/CNPJ diferente do da loja, então a conexão fica "Em análise" e o admin é alertado antes de a loja poder vender (SEC-047) `[regra de bloqueio vs. alerta: confirmar com o security-engineer]`.
 
 ### WB-054 Acompanhar aprovação — Must — dep: WB-052, WB-103
 Como lojista, quero saber em que pé está minha loja, para não ficar no escuro.
@@ -175,7 +178,7 @@ Como lojista, quero importar uma planilha, para não digitar 100 produtos.
 - **C3** Dado confirmar, então cria apenas as válidas, como rascunho; vejo o relatório final e baixo as linhas com erro.
 - **C4** Dado arquivo acima do limite, formato inválido ou cabeçalho errado, então vejo erro e nada é criado.
 - **C5** Dado a mesma planilha importada duas vezes, então o sistema avisa "X produtos já existem (mesmo código)" e atualiza só se eu escolher "Atualizar".
-- **C6** Dado URLs de foto, então só HTTPS e imagens válidas são baixadas; falha na foto não impede o produto.
+- **C6** *(condicionada a SEC-111/SEC-053: só entra se o ADR-005 incluir o "fetch de mídia externa" seguro, com bloqueio de endereços internos e de redirecionamentos para eles; se não estiver pronto na sprint, a coluna "URL da foto" sai do modelo e o lojista sobe as fotos pelo app, sem mudar o resto da história)* Dado URLs de foto, então só HTTPS e imagens válidas são baixadas; falha na foto não impede o produto; URL que aponte para endereço interno ou privado é recusada com "URL de foto não permitida".
 
 ### WB-066 Ação em massa — Should — dep: WB-064
 Como lojista, quero pausar ou mudar preço de vários produtos, para ganhar tempo.
@@ -206,7 +209,7 @@ Como lojista, quero avançar o pedido, para o cliente acompanhar.
 - **C1** Dado ACEITO, então posso "Iniciar separação" ou ir direto para "Saiu para entrega"/"Pronto para retirada" (RN-07).
 - **C2** Dado EM_SEPARACAO, então avanço para SAIU_PARA_ENTREGA (entrega) ou PRONTO_PARA_RETIRADA (retirada).
 - **C3** Dado PRONTO_PARA_RETIRADA, então para "Entregue" informo o código de 4 dígitos do cliente; código errado: "Código incorreto" (5 tentativas, depois exige o admin).
-- **C4** Dado SAIU_PARA_ENTREGA, então "Marcar entregue" conclui o pedido e inicia a contagem do repasse.
+- **C4** Dado SAIU_PARA_ENTREGA, então "Marcar entregue" conclui o pedido (com o código de entrega do cliente, se `codigo_entrega` ligado: WB-226) e inicia a contagem do repasse (no modo centralizado; no split o repasse é informativo).
 - **C5** Dado voltar um status, então é bloqueado (só admin com auditoria).
 - **C6** Dado SAIU_PARA_ENTREGA e "entrega não realizada", então exijo motivo; o pedido é cancelado e estornado (admin é notificado).
 - **C7** Dado cada transição, então grava ator, hora e motivo e notifica o cliente (WB-191).
@@ -251,17 +254,17 @@ Como lojista, quero responder avaliações, para mostrar atenção.
 Como dono, quero convidar funcionários com permissões, para dividir o trabalho sem dar acesso ao dinheiro.
 - **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações.
 - **C2** Dado funcionário, então nunca vê financeiro, conta de recebimento, equipe nem configurações da loja (RN-13).
-- **C3** Dado remover funcionário, então as sessões dele terminam na hora.
+- **C3** Dado remover funcionário, então as sessões e renovações dele terminam e a conexão em tempo real do painel é derrubada em até 5 s (WB-219); a próxima requisição com o acesso antigo recebe 401.
 - **C4** Dado e-mail já usado em outra loja, então erro "Esse e-mail já participa de outra loja".
 - **C5** Dado alterar permissões, então valem na próxima requisição; tudo fica no log da loja.
 
 ### WB-076 Financeiro: resumo, a receber e repasses — Must — dep: WB-156
 Como dono, quero ver quanto vendi, quanto é comissão e quando recebo, para confiar nos números.
 - **C1** Dado o período, então vejo vendas brutas, comissão Webag, taxa do provedor, estornos, líquido, "em carência", "a receber" e "já repassado".
-- **C2** Dado um pedido, então vejo a composição (RN-10) e o status do repasse.
+- **C2** Dado um pedido, então vejo a composição (RN-10) e o status do repasse (no split, o status vem do provedor e é informativo).
 - **C3** Dado funcionário, então não vê (só dono).
-- **C4** Dado nenhum repasse, então "Ainda sem repasses. O primeiro sai em [data]".
-- **C5** Dado repasse retido por disputa ou troca aberta, então o motivo aparece ao lado do pedido.
+- **C4** Dado nenhum repasse, então "Ainda sem repasses. O primeiro sai em [data]" (modo centralizado) ou "Você recebe direto na sua conta Mercado Pago" (split).
+- **C5** Dado repasse retido por disputa ou troca aberta (só no modo centralizado), então o motivo aparece ao lado do pedido; no split, pedido em disputa mostra "Em disputa" e o aviso de que um estorno pode sair da sua conta Mercado Pago.
 
 ### WB-077 Extrato exportável — Should — dep: WB-076
 Como dono, quero exportar o extrato, para o meu contador.
@@ -276,16 +279,18 @@ Como lojista, quero ver como a loja está indo, para decidir o dia.
 - **C3** Dado os números, então seguem RN-15 (pedidos que chegaram a RECEBIDO, sem cancelados).
 - **C4** Dado pendências (pedido sem aceite, troca aguardando, estoque baixo, loja pausada), então aparecem no topo.
 
-### WB-079 Segurança de acesso do lojista — Could — dep: WB-050
+### WB-079 Segurança de acesso do lojista (2FA opcional) — Should — dep: WB-050
 Como dono, quero proteger minha conta, para ninguém mexer no meu dinheiro.
 - **C1** Dado ativar verificação em duas etapas (app autenticador), então o login passa a pedir o código.
-- **C2** Dado perder o aparelho, então posso usar códigos de recuperação gerados na ativação.
-- **C3** Dado alteração de conta de recebimento, então exige senha e envia e-mail de aviso.
+- **C2** Dado perder o aparelho, então posso usar códigos de recuperação gerados na ativação (10 códigos de uso único).
+- **C3** *(movido para WB-053 C4, Must: reautenticação e aviso na troca da conta de recebimento)*.
+- **Nota:** o 2FA do dono é opcional na 1.0 (SEC-015); sobe de Could para Should. O 2FA do admin é obrigatório (WB-222).
 
 ## Dependências e riscos
 | Item | Tipo | Mitigação |
 |---|---|---|
 | Split MP exige conta e KYC do lojista (`pesquisa-mercado.md` §6) | Risco de adoção | Onboarding assistido; fallback centralizado só com parecer jurídico |
+| Lojista recebe direto no split e some sem entregar (Webag não retém dinheiro; DEC-016) | Risco financeiro residual | Limite de loja nova e alertas (WB-225), código de entrega (WB-226), estorno pelo admin, suspensão, Termos do Lojista com cláusula de ressarcimento (jurídico) |
 | Lojista com aba fechada perde pedido | Risco operacional | Web Push (WB-192), e-mail, timeout de 10 min, lembrete aos 5 |
 | Cadastro de 20+ produtos é trabalhoso | Risco de ativação | Planilha (WB-065); equipe Webag ajuda no piloto (fora do software) |
 | Loja CPF sem regularização fiscal | Risco jurídico/fiscal | Aceite em WB-051; encaminhado ao fundador/contador |
@@ -298,3 +303,4 @@ Como dono, quero proteger minha conta, para ninguém mexer no meu dinheiro.
 | Split vs. centralizado (viabilidade e KYC do MP) | backend-dev (ADR) + fundador (conta MP) |
 | Documentos exigidos por tipo de loja (revisão jurídica) | fundador/jurídico |
 | Web Push em iOS (limita a PWA instalada) e alternativa | mobile-dev/tech-lead |
+| Titular MP diferente do CPF/CNPJ da loja: bloquear ou só alertar o admin (WB-053 C7)? | security-engineer + fundador |

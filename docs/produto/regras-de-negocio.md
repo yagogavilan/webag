@@ -34,7 +34,11 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `mediacao_dias_uteis` / `contestacao_dias` | 5 / 7 | 1-15 | HIP-020 |
 | `avaliacao_janela_dias` / `avaliacao_min_exibicao` | 30 / 3 | 7-90 / 1-10 | HIP-021 |
 | `otp_validade_min` / `otp_tentativas` / `otp_reenvio_s` | 10 / 5 / 60 | 5-30 / 3-10 / 30-120 | HIP-022 |
-| `login_falhas` / `login_bloqueio_min` / `senha_min` | 5 / 15 / 8 | 3-10 / 5-60 / 8+ | HIP-023 |
+| `login_falhas` / `login_espera_min` / `senha_min` | 5 / 15 / 8 | 3-10 / 5-60 / 8+ | HIP-023 (espera por conta+IP/dispositivo; **sem bloqueio da conta**) |
+| `login_stepup_falhas_h` | 20 | 10-100 | HIP-023, WB-221 |
+| `email_nao_confirmado_pedidos_max` | 1 | 0-3 | DEC-014, WB-224 |
+| `loja_nova_dias` / `loja_nova_pedidos` / `loja_nova_pedido_max_cents` | 30 / 20 / 50000 `[HIPÓTESE]` | 7-90 / 5-100 / 10000+ | DEC-016, WB-225 |
+| `reauth_min` | 5 | 1-15 | SEC-016 |
 | `exclusao_anonimizacao_dias` / `retencao_fiscal_anos` | 15 / 5 | 0-30 / 5 | HIP-024 |
 | `exportacao_validade_dias` | 7 | 1-30 | HIP-025 |
 | `push_mkt_max_semana` / `push_mkt_janela` | 2 / 09:00-20:00 | 0-7 | HIP-027 |
@@ -121,6 +125,8 @@ Prazos: aceite `loja_aceite_timeout_min` (cancelamento automático + estorno tot
 - Campos: código (único, 4-20 caracteres A-Z0-9), início, fim, pedido mínimo, limite total de usos, limite por cliente (padrão 1), só primeira compra (opcional), loja(s)/categoria(s) alvo (plataforma).
 - 1 cupom por pedido, não cumulativo com outro (HIP-037). Desconto <= subtotal. Percentual com teto opcional.
 - Comissão incide sobre o subtotal após **cupom da loja**, e **antes** do cupom da plataforma.
+- **No modo split, o desconto da plataforma (cupom ou frete grátis subsidiado) em um pedido é limitado à comissão do pedido** (`application_fee` não pode ser negativa; DEC-016, SEC-060). Acima do teto o desconto é cortado e o cliente vê o valor aplicado. Cupom que exija mais fica desligado até haver mecanismo de pagamento ao lojista aprovado pelo fundador.
+- Cupom da plataforma e "primeira compra" exigem e-mail confirmado (DEC-014) e são recusados em autoconsumo (membro da loja; SEC-061).
 
 ## RN-10 Comissão, taxa de serviço e repasse
 Fórmulas (por pedido ENTREGUE ou conforme ledger do pagamento):
@@ -130,14 +136,15 @@ comissao        = round_half_up(base_comissao × pct)       pct: loja > categori
 taxa_servico    = parametro (paga pelo cliente; receita Webag)
 total_cliente   = subtotal_produtos − cupom_loja − cupom_plataforma + frete + taxa_servico
 taxa_provedor   = cobrada pelo provedor sobre total_cliente
-liquido_lojista = total_cliente + cupom_plataforma_reembolsado_pela_webag − taxa_servico − comissao − taxa_provedor
-receita_webag   = comissao + taxa_servico − cupom_plataforma
+liquido_lojista = total_cliente + cupom_plataforma − taxa_servico − comissao − taxa_provedor
+receita_webag   = comissao + taxa_servico − cupom_plataforma     (>= 0)
 ```
+No split, o "reembolso" do cupom da plataforma é a própria `application_fee` menor: `application_fee = comissao + taxa_servico − cupom_plataforma`, com `cupom_plataforma <= comissao` (a Webag nunca paga ao lojista por fora). O termo `cupom_plataforma_reembolsado_pela_webag` deixa de existir.
 Exemplo: subtotal R$ 100,00, cupom da loja R$ 10,00, frete R$ 8,00, sem taxa de serviço, PIX. Base = R$ 90,00; comissão 10% = R$ 9,00; total do cliente R$ 98,00; taxa PIX 0,99% = R$ 0,97 (taxa do MP, a confirmar); líquido do lojista = R$ 88,03. Com cartão 4,98%: taxa R$ 4,88 e líquido R$ 84,12.
 - Precedência de comissão: loja (com vigência opcional) > categoria do produto > padrão. Pedido com produtos de categorias diferentes: usa a categoria de cada item sobre sua parte da base.
 - Comissão congela no pedido (snapshot) no momento do pagamento; mudança posterior não é retroativa.
 - Estorno total: devolve comissão e taxa de serviço. Estorno parcial: devolve proporcional. Taxa do provedor não volta (HIP-016).
-- Repasse (modo centralizado): semanal (segunda), de pedidos ENTREGUE há `repasse_carencia_dias` sem troca ou disputa aberta; saldo negativo (estornos acima de vendas) abate do próximo repasse. Em split (OAuth MP), a liberação segue o provedor e o extrato mostra o que o provedor reteve. Decisão split vs. centralizado: ADR de pagamentos (WB-155).
+- Repasse (modo centralizado, só com parecer jurídico): semanal (segunda), de pedidos ENTREGUE há `repasse_carencia_dias` sem troca ou disputa aberta; saldo negativo (estornos acima de vendas) abate do próximo repasse. **Em split (OAuth MP, modo preferido), não existe repasse controlado pela Webag**: o dinheiro cai na conta do lojista, a liberação segue o provedor, o "repasse" é informativo, e **a Webag não retém, ajusta nem desconta** (DEC-016). Estorno de pedido do lojista sai da conta dele; se faltar saldo, o recurso é suspensão da loja, estorno pelo admin e cobrança pelos Termos do Lojista. Decisão split vs. centralizado: ADR de pagamentos (WB-155).
 - Extrato do lojista lista, por pedido: bruto, comissão, taxa do provedor, estornos, líquido, status (a receber, em carência, repassado).
 
 ## RN-11 Trocas ("Retira Troca") e arrependimento

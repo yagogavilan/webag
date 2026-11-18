@@ -96,14 +96,15 @@ Como titular, quero baixar uma cópia dos meus dados, para ver o que o Webag gua
 
 ### WB-213 Excluir conta no app — Must — dep: WB-032
 Como cliente, quero excluir minha conta dentro do app, para sair do Webag (exigência Apple e LGPD).
-- **C1** Dado Conta > "Excluir minha conta", então vejo o que acontece (o que será apagado e o que a lei obriga a guardar), peço a senha (ou nova autenticação) e uma confirmação "Excluir".
+- **C1** Dado Conta > "Excluir minha conta", então vejo o que acontece (o que será apagado e o que a lei obriga a guardar), peço **só a senha** (sem código por e-mail, mesmo com e-mail não confirmado; DEC-014/015, SEC-008 c) e uma confirmação "Excluir". Conta criada só com login social (sem senha) confirma com nova autenticação do provedor.
 - **C2** Dado pedido ou troca em aberto, então bloqueio com a lista e "Conclua antes de excluir" (HIP-024).
 - **C3** Dado confirmar, então a conta é desativada na hora (sessões e tokens de push encerrados, login impossível) e a anonimização de nome, e-mail, celular, endereços, favoritos, histórico de busca e fotos ocorre em até `exclusao_anonimizacao_dias` (15); pedidos/pagamentos ficam sem identificação pessoal direta, exceto o exigido pela obrigação fiscal.
 - **C4** Dado e-mail de confirmação, então recebo aviso "Sua conta foi excluída" (sem dados).
 - **C5** Dado conta com login social, então o vínculo é revogado (WB-010 C4).
 - **C6** Dado o mesmo e-mail depois, então posso criar nova conta sem herdar dados.
 - **C7** Dado o fluxo, então não exige contato com o suporte nem espera por aprovação manual.
-- **C8** Dado lojista dono, então a exclusão da conta exige antes encerrar a loja (pedidos em aberto concluídos e repasse quitado).
+- **C8** Dado lojista dono, então a exclusão da conta exige antes encerrar a loja (pedidos em aberto concluídos, sem estorno ou disputa pendente e, no modo centralizado, repasse quitado).
+- **C9** Dado senha errada, então a exclusão não ocorre e a tentativa conta no limite de WB-221.
 
 ### WB-214 Excluir conta pela web — Must — dep: WB-213
 Como ex-usuário sem o app, quero pedir exclusão pela web, para atender o Google Play.
@@ -112,6 +113,7 @@ Como ex-usuário sem o app, quero pedir exclusão pela web, para atender o Googl
 - **C3** Dado e-mail sem conta, então resposta idêntica ("Se existir, enviamos um código") sem revelar a existência.
 - **C4** Dado a URL, então consta no formulário Data Safety e na política de privacidade.
 - **C5** Dado excesso de tentativas (5 por hora por IP/e-mail), então bloqueio temporário.
+- **C6** Dado conta com e-mail ainda não confirmado, então a exclusão também é possível pela web informando e-mail e **senha** (sem código), com resposta igual exista ou não a conta [confirmar com o security-engineer: SEC-002 prevê código com finalidade delete_web].
 
 ### WB-215 Retenção e anonimização — Must — dep: WB-213
 Como Webag, quero aplicar retenção e anonimização automaticamente, para não guardar dado além do necessário.

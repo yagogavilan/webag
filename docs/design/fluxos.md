@@ -6,7 +6,8 @@
 
 - Retângulo = tela ou passo; losango = decisão; arredondado = início/fim.
 - Todo fluxo tem **caminho de erro**. Falha de rede em qualquer passo cai no ErrorState padrão (`design-system.md` §5.3) com "Tentar de novo", mantendo o que o usuário digitou.
-- "Toque" conta cada toque ou clique; digitar um campo conta 1 toque + o campo.
+- "Toque" conta cada toque ou clique em botão, link, caixa ou item; digitar conta como **campo** (não como toque: o teclado avança com "Próximo").
+- Telas detalhadas: `docs/design/telas/` (onda 2: lojista e admin; onda 3: descoberta; onda 4: transação).
 - Eventos de analytics na §8 (para combinar com o PO).
 
 ## 2. Orçamento: compra em menos de 2 minutos
