@@ -23,7 +23,10 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
     (await ctx.http.post('/v1/dev/payments').set(auth()).send({ amountCents: 5000, method: 'pix', storeId, applicationFeeCents: 500, externalReference: `order-${randomUUID()}`, ...over }).expect(201)).body as {
       id: string; status: string; amount: { amount: number; currency: string }; pixCopyPaste: string | null; expiresAt: string | null;
     };
-  const row = async (id: string) => (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.id, id)))[0]!;
+  const row = async (id: string) => {
+    const found = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.id, id)))[0]!;
+    return { ...found, providerPaymentId: found.providerPaymentId as string };
+  };
   const alertsOf = (id: string) => ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.attemptId, id));
   const ctxless = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 
@@ -52,7 +55,7 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
       expect(Number.isInteger(pix.amount.amount)).toBe(true);
     });
 
-    it('cartão de teste: 0000 aprova, 0001 recusa por saldo, 0002 pede 3DS, 0003 dá timeout sem gravar nada', async () => {
+    it('cartão de teste: 0000 aprova, 0001 recusa por saldo, 0002 pede 3DS, 0003 dá timeout e deixa a tentativa em `creating` para a conciliação', async () => {
       const card = (token: string, extra: Record<string, unknown> = {}) =>
         ctx.http.post('/v1/dev/payments').set(auth()).send({ amountCents: 9000, method: 'card', storeId, cardToken: token, ...extra });
       expect((await card('tok_0000').expect(201)).body.status).toBe('approved');
@@ -65,7 +68,9 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
       const before = (await ctx.db.select().from(paymentAttempts)).length;
       const timeout = await card('tok_0003').expect(504);
       expect(timeout.body.code).toBe('PROVIDER_TIMEOUT');
-      expect((await ctx.db.select().from(paymentAttempts)).length).toBe(before);
+      // review I3: a tentativa é gravada antes de cobrar; no timeout ela fica `creating` (a conciliação resolve)
+      expect((await ctx.db.select().from(paymentAttempts)).length).toBe(before + 1);
+      expect((await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.status, 'creating'))).length).toBeGreaterThanOrEqual(1);
 
       // 3DS pendente termina aprovado pelo mesmo caminho do webhook
       const approved = await ctx.http.post(`/v1/dev/payments/${threeDs.id}/approve`).set(auth()).send({}).expect(200);

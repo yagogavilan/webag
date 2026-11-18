@@ -1,4 +1,4 @@
-import { DEV_AUTH_HMAC_KEY, DEV_JWT_ACCESS_SECRET, DEV_MFA_ENC_KEY, validateEnv } from './env.js';
+import { DEV_AUTH_HMAC_KEY, DEV_CODE_HMAC_KEY, DEV_JWT_ACCESS_SECRET, DEV_MFA_ENC_KEY, DEV_RECOVERY_HMAC_KEY, validateEnv } from './env.js';
 
 const base = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
@@ -36,7 +36,10 @@ describe('validateEnv', () => {
       NODE_ENV: 'production',
       JWT_ACCESS_SECRET: 'a-very-long-random-production-secret-0123456789',
       AUTH_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210',
+      CODE_HMAC_KEY: 'code-hmac-very-long-random-production-key-1111111111',
+      RECOVERY_HMAC_KEY: 'recovery-hmac-very-long-random-production-key-2222222',
       MFA_ENC_KEY: 'yet-another-very-long-random-production-mfa-key-1234567890',
+      TRUST_PROXY: '1',
       CORS_ORIGINS: 'https://app.webag.com.br',
       PAYMENT_PROVIDER: 'mercadopago',
       MP_ACCESS_TOKEN: 'APP_USR-123',
@@ -53,6 +56,10 @@ describe('validateEnv', () => {
       ['JWT_ACCESS_SECRET curto', { JWT_ACCESS_SECRET: 'curto' }, /JWT_ACCESS_SECRET/],
       ['AUTH_HMAC_KEY de desenvolvimento', { AUTH_HMAC_KEY: DEV_AUTH_HMAC_KEY }, /AUTH_HMAC_KEY/],
       ['MFA_ENC_KEY de desenvolvimento', { MFA_ENC_KEY: DEV_MFA_ENC_KEY }, /MFA_ENC_KEY/],
+      ['CODE_HMAC_KEY de desenvolvimento', { CODE_HMAC_KEY: DEV_CODE_HMAC_KEY }, /CODE_HMAC_KEY/],
+      ['RECOVERY_HMAC_KEY de desenvolvimento', { RECOVERY_HMAC_KEY: DEV_RECOVERY_HMAC_KEY }, /RECOVERY_HMAC_KEY/],
+      ['CODE_HMAC_KEY igual à AUTH_HMAC_KEY', { CODE_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210' }, /CODE_HMAC_KEY/],
+      ['TRUST_PROXY ausente (I8)', { TRUST_PROXY: undefined }, /TRUST_PROXY/],
       ['MFA_ENC_KEY igual à AUTH_HMAC_KEY', { MFA_ENC_KEY: 'another-very-long-random-production-hmac-key-9876543210' }, /MFA_ENC_KEY/],
       ['CORS_ORIGINS vazio', { CORS_ORIGINS: '' }, /CORS_ORIGINS/],
       ['CORS_ORIGINS com *', { CORS_ORIGINS: '*' }, /CORS_ORIGINS/],

@@ -26,6 +26,8 @@ export interface SimulateOptions {
 }
 
 const KEY = (id: string): string => `fake-provider:payment:${id}`;
+const IDEM_CREATE = (attemptId: string): string => `fake-provider:idem:create:${attemptId}`;
+const IDEM_REFUND = (id: string, key: string): string => `fake-provider:idem:refund:${id}:${key}`;
 const TTL_SECONDS = 7 * 86_400;
 
 /**
@@ -53,6 +55,12 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async createPayment(input: CreateProviderPaymentInput): Promise<ProviderPayment> {
+    // Idempotência como a do MP (X-Idempotency-Key): a mesma `attemptId` devolve o MESMO pagamento (review I3).
+    const known = await this.redis.get(IDEM_CREATE(input.attemptId));
+    if (known) {
+      const existing = await this.getPayment(known);
+      if (existing) return existing;
+    }
     // `fk` + hex minúsculo: alfanumérico, como o ID de pagamento do MP (o manifesto lê o data.id em minúsculas).
     const id = `fk${randomBytes(12).toString('hex')}`;
     const base: ProviderPayment = {
@@ -78,6 +86,7 @@ export class FakePaymentProvider implements PaymentProvider {
       else Object.assign(base, { status: 'declined', declineReason: 'invalid_card' });
     }
     await this.save(base);
+    await this.redis.set(IDEM_CREATE(input.attemptId), id, 'EX', TTL_SECONDS);
     return base;
   }
 
@@ -86,7 +95,10 @@ export class FakePaymentProvider implements PaymentProvider {
     return raw ? (JSON.parse(raw) as ProviderPayment) : null;
   }
 
-  async refund(id: string, amountCents: number): Promise<{ providerRefundId: string; amountCents: number }> {
+  async refund(id: string, amountCents: number, idempotencyKey: string): Promise<{ providerRefundId: string; amountCents: number }> {
+    // O MP deduplica por X-Idempotency-Key: repetir a chave devolve o mesmo estorno, sem estornar de novo (review I4b).
+    const done = await this.redis.get(IDEM_REFUND(id, idempotencyKey));
+    if (done) return JSON.parse(done) as { providerRefundId: string; amountCents: number };
     const payment = await this.getPayment(id);
     if (!payment) throw new AppError(404, 'PROVIDER_PAYMENT_NOT_FOUND', 'Pagamento não encontrado no provedor');
     if (payment.status !== 'approved' && payment.status !== 'refunded') {
@@ -98,7 +110,9 @@ export class FakePaymentProvider implements PaymentProvider {
     payment.refundedCents += amountCents;
     if (payment.refundedCents === payment.amountCents) payment.status = 'refunded';
     await this.save(payment);
-    return { providerRefundId: `fkrf${randomBytes(8).toString('hex')}`, amountCents };
+    const result = { providerRefundId: `fkrf${randomBytes(8).toString('hex')}`, amountCents };
+    await this.redis.set(IDEM_REFUND(id, idempotencyKey), JSON.stringify(result), 'EX', TTL_SECONDS);
+    return result;
   }
 
   /** Lado do "provedor": muda o estado como se o cliente tivesse pago/recusado e devolve a notificação assinada. */

@@ -29,7 +29,7 @@ export class CodeService {
   ) {}
 
   private hash(userId: string, purpose: CodePurpose, code: string): string {
-    return hmacHex(this.config.get('AUTH_HMAC_KEY', { infer: true }), `code:${userId}:${purpose}:${code}`);
+    return hmacHex(this.config.get('CODE_HMAC_KEY', { infer: true }), `code:${userId}:${purpose}:${code}`);
   }
 
   /**

@@ -8,7 +8,8 @@ import type { Env } from '../../platform/config/env.js';
 import { hmacHex, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
-import { accessLog, refreshTokens, sessions, users } from './db/schema.js';
+import { ParametersService } from '../admin/index.js';
+import { accessLog, adminProfiles, refreshTokens, sessions, users } from './db/schema.js';
 
 export const JWT_ISSUER = 'webag-api';
 export const JWT_AUDIENCE = 'webag-clients';
@@ -43,6 +44,7 @@ export class SessionService {
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<Env, true>,
+    private readonly params: ParametersService,
   ) {}
 
   private get hmacKey(): string {
@@ -136,7 +138,12 @@ export class SessionService {
     const hash = sha256Hex(rawToken);
     const windowMs = this.config.get('REFRESH_REUSE_WINDOW_SECONDS', { infer: true }) * 1000;
 
+    // Review I1: a inatividade do admin (WB-100 C3) vale também para o refresh, senão um refresh roubado renovaria a
+    // sessão por até 30 dias. Lê o parâmetro antes da transação para não segurar o lock durante a consulta.
+    const adminIdleMs = (await this.params.getNumber('admin_inatividade_min')) * 60_000;
+
     type Outcome =
+      | { kind: 'idle'; userId: string; sessionId: string }
       | { kind: 'ok'; userId: string; sessionId: string; refresh: string }
       | { kind: 'reuse'; userId: string; sessionId: string }
       | { kind: 'invalid'; code: string };
@@ -156,6 +163,11 @@ export class SessionService {
       if (row.userStatus !== 'active') return { kind: 'invalid', code: 'SESSION_REVOKED' } as const;
       if (token.expiresAt <= now || session.absoluteExpiresAt <= now) return { kind: 'invalid', code: 'REFRESH_EXPIRED' } as const;
 
+      const [admin] = await tx.select({ active: adminProfiles.active }).from(adminProfiles).where(eq(adminProfiles.userId, session.userId));
+      if (admin?.active && now.getTime() - session.lastUsedAt.getTime() > adminIdleMs) {
+        return { kind: 'idle', userId: session.userId, sessionId: session.id } as const;
+      }
+
       const next = this.deriveNextRefresh(hash);
       if (token.usedAt) {
         if (now.getTime() - token.usedAt.getTime() <= windowMs) {
@@ -174,6 +186,10 @@ export class SessionService {
       return { kind: 'ok', userId: session.userId, sessionId: session.id, refresh: next } as const;
     });
 
+    if (outcome.kind === 'idle') {
+      await this.revokeSessions(this.db, outcome.userId, 'admin_idle', { onlySessionId: outcome.sessionId });
+      throw new AppError(401, 'SESSION_IDLE', 'Sessão expirada por inatividade', { detail: 'Entre de novo.' });
+    }
     if (outcome.kind === 'reuse') {
       // Fora da janela: alguém repetiu um token já trocado. Derruba a família inteira (RFC 9700).
       await this.revokeSessions(this.db, outcome.userId, 'refresh_reuse', { onlySessionId: outcome.sessionId });

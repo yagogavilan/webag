@@ -106,8 +106,9 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
 
     it('SEC-015: TOTP não pode ser reusado no mesmo passo (anti-replay)', async () => {
       const admin = await createAdmin(ctx, 'support');
-      const used = totpAt(admin.totpSecret!);
-      // o login do helper já gastou o código do passo atual
+      // o login do helper já gastou o código do passo registrado (não do "agora": o passo pode virar entre as chamadas)
+      const [profile] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
+      const used = totpAt(admin.totpSecret!, (profile?.totpLastStep ?? 0) - Math.floor(Date.now() / 30_000));
       const res = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: used }).expect(401);
       expect(res.body.code).toBe('INVALID_CREDENTIALS');
     });

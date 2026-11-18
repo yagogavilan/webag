@@ -14,6 +14,8 @@ import {
 export const PAYMENT_METHODS = ['pix', 'card'] as const;
 /** Estados da tentativa. Só avançam (approved nunca volta a pending; refunded é final). */
 export const PAYMENT_STATUSES = [
+  /** Gravada ANTES de falar com o provedor (review I3). `provider_payment_id` ainda nulo. */
+  'creating',
   'pending',
   'pending_3ds',
   'approved',
@@ -35,13 +37,14 @@ export const paymentAttempts = pgTable(
   {
     id: uuid().primaryKey().default(sql`gen_random_uuid()`),
     provider: text().notNull(),
-    providerPaymentId: text().notNull(),
+    /** Nulo só enquanto `status = 'creating'` (a tentativa é gravada antes da cobrança, review I3). */
+    providerPaymentId: text(),
     /** Referência ao pedido (Onda 4); hoje um identificador livre. */
     externalReference: text().notNull(),
     /** Loja recebedora, resolvida na criação (SEC-034). */
     storeId: uuid(),
     method: text({ enum: PAYMENT_METHODS }).notNull(),
-    status: text({ enum: PAYMENT_STATUSES }).notNull().default('pending'),
+    status: text({ enum: PAYMENT_STATUSES }).notNull().default('creating'),
     amountCents: integer().notNull(),
     currency: text().notNull().default('BRL'),
     applicationFeeCents: integer().notNull().default(0),
@@ -77,6 +80,30 @@ export const paymentRefunds = pgTable(
     index('payment_refunds_attempt_idx').on(t.attemptId),
     uniqueIndex('payment_refunds_idempotency_uq').on(t.attemptId, t.idempotencyKey),
   ],
+);
+
+export const REFUND_INTENT_STATUSES = ['pending', 'done', 'failed'] as const;
+
+/**
+ * Intenção de estorno (review I4): gravada na transação que trava a tentativa e confere a soma, ANTES de chamar o
+ * provedor (fora da transação). `payment_refunds` continua append-only e só recebe o estorno confirmado.
+ */
+export const paymentRefundIntents = pgTable(
+  'payment_refund_intents',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    attemptId: uuid()
+      .notNull()
+      .references(() => paymentAttempts.id),
+    idempotencyKey: text().notNull(),
+    amountCents: integer().notNull(),
+    reason: text().notNull(),
+    status: text({ enum: REFUND_INTENT_STATUSES }).notNull().default('pending'),
+    providerRefundId: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('payment_refund_intents_key_uq').on(t.attemptId, t.idempotencyKey), index('payment_refund_intents_pending_idx').on(t.status, t.updatedAt)],
 );
 
 export const WEBHOOK_STATUSES = ['pending', 'processed', 'failed', 'discarded'] as const;

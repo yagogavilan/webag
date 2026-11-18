@@ -50,6 +50,7 @@ export class PaymentsDevController {
   /** Muda o estado no "provedor" e entrega a notificação assinada pelo mesmo caminho do webhook real. */
   private async simulate(attemptId: string, outcome: FakeOutcome, options: z.infer<typeof devSimulateSchema>) {
     const attempt = await this.payments.getAttempt(uuid(attemptId));
+    if (!attempt.providerPaymentId) throw errors.conflict('DEV_PAYMENT_NOT_CREATED', 'Pagamento ainda não foi criado no provedor');
     if (attempt.provider !== 'fake') throw errors.conflict('DEV_PROVIDER_NOT_FAKE', 'Só funciona com o provedor fake');
     const notification = await this.fake.simulate(attempt.providerPaymentId, { outcome, ...options });
     const webhook = await this.payments.receiveWebhook(notification);

@@ -154,7 +154,7 @@ export const authCodes = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     purpose: text({ enum: CODE_PURPOSES }).notNull(),
-    /** HMAC-SHA256(AUTH_HMAC_KEY, userId:purpose:code). */
+    /** HMAC-SHA256(CODE_HMAC_KEY, userId:purpose:code). */
     codeHash: text().notNull(),
     destinationEmail: text().notNull(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),

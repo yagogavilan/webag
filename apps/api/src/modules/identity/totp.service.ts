@@ -60,7 +60,7 @@ export class TotpService {
   }
 
   private recoveryHash(userId: string, code: string): string {
-    return hmacHex(this.config.get('AUTH_HMAC_KEY', { infer: true }), `recovery:${userId}:${normalizeRecoveryCode(code)}`);
+    return hmacHex(this.config.get('RECOVERY_HMAC_KEY', { infer: true }), `recovery:${userId}:${normalizeRecoveryCode(code)}`);
   }
 
   private requireAdmin(principal: Principal): void {
@@ -304,6 +304,11 @@ export class TotpService {
       await tx.delete(adminRecoveryCodes).where(eq(adminRecoveryCodes.userId, input.targetUserId));
       await tx.update(users).set({ passwordHash: null, updatedAt: new Date() }).where(eq(users.id, input.targetUserId));
       await this.sessions.revokeSessions(tx, input.targetUserId, 'access_reset');
+      // Review I7: links de reativação anteriores do mesmo usuário deixam de valer (só o mais novo funciona).
+      await tx
+        .update(invitations)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(invitations.kind, 'admin'), eq(invitations.email, user.email), isNull(invitations.usedAt), isNull(invitations.revokedAt)));
       await tx.insert(invitations).values({
         kind: 'admin',
         email: user.email,

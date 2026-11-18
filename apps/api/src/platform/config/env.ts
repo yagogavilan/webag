@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const DEV_JWT_ACCESS_SECRET = 'dev-only-insecure-change-me-0123456789abcdef';
 export const DEV_AUTH_HMAC_KEY = 'dev-only-insecure-hmac-key-0123456789abcdef-change-me';
 export const DEV_FAKE_WEBHOOK_SECRET = 'dev-only-fake-webhook-secret';
+export const DEV_CODE_HMAC_KEY = 'dev-only-insecure-code-hmac-key-0123456789abcdef-change-me';
+export const DEV_RECOVERY_HMAC_KEY = 'dev-only-insecure-recovery-hmac-key-0123456789abcdef-change-me';
 export const DEV_MFA_ENC_KEY = 'dev-only-insecure-mfa-key-0123456789abcdef-change-me';
 
 const csv = z
@@ -33,8 +35,12 @@ export const envSchema = z
       .enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'])
       .default('info'),
     CORS_ORIGINS: csv,
-    /** Quantos proxies confiáveis existem na frente da API (nginx = 1). 0 = usa o IP do socket. */
-    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+    /**
+     * Quantos proxies confiáveis existem na frente da API (nginx = 1). 0 = usa o IP do socket. Em produção NÃO tem
+     * padrão: sem ele todo `req.ip` vira o IP do proxy e o limite por conta+IP passa a valer para o mundo inteiro
+     * (review I8). Fora de produção, o padrão é 0.
+     */
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).optional(),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     /** Caminho do contrato OpenAPI servido em /docs. Padrão: procura docs/arquitetura/api/openapi.yaml subindo a partir do cwd. */
@@ -45,8 +51,12 @@ export const envSchema = z
     // --- Autenticação (ADR-003, SEC-010/011) ---
     JWT_ACCESS_SECRET: z.string().min(32).default(DEV_JWT_ACCESS_SECRET),
     JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
-    /** Chave do servidor para HMAC de códigos e derivação de refresh. */
+    /** HMAC da derivação do refresh token (ADR-009 #1). Cada finalidade tem a sua chave (review I10). */
     AUTH_HMAC_KEY: z.string().min(32).default(DEV_AUTH_HMAC_KEY),
+    /** HMAC dos códigos de 6 dígitos enviados por e-mail (SEC-002). */
+    CODE_HMAC_KEY: z.string().min(32).default(DEV_CODE_HMAC_KEY),
+    /** HMAC dos códigos de recuperação do TOTP (SEC-092). */
+    RECOVERY_HMAC_KEY: z.string().min(32).default(DEV_RECOVERY_HMAC_KEY),
     /** Chave própria da cifra do segredo TOTP (AES-256-GCM, SEC-090). Separada da AUTH_HMAC_KEY e guardada fora do banco e dos backups dele. */
     MFA_ENC_KEY: z.string().min(32).default(DEV_MFA_ENC_KEY),
     REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
@@ -80,10 +90,24 @@ export const envSchema = z
       fail('JWT_ACCESS_SECRET', 'valor de desenvolvimento não é aceito em produção');
     if (env.AUTH_HMAC_KEY === DEV_AUTH_HMAC_KEY)
       fail('AUTH_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.CODE_HMAC_KEY === DEV_CODE_HMAC_KEY) fail('CODE_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.RECOVERY_HMAC_KEY === DEV_RECOVERY_HMAC_KEY) fail('RECOVERY_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
     if (env.MFA_ENC_KEY === DEV_MFA_ENC_KEY)
       fail('MFA_ENC_KEY', 'valor de desenvolvimento não é aceito em produção');
-    if (env.MFA_ENC_KEY === env.AUTH_HMAC_KEY)
-      fail('MFA_ENC_KEY', 'precisa ser diferente da AUTH_HMAC_KEY (SEC-090)');
+    // Um vazamento não pode servir para outra finalidade (SEC-090, review I10): todas as chaves são distintas.
+    const keys: [string, string][] = [
+      ['JWT_ACCESS_SECRET', env.JWT_ACCESS_SECRET],
+      ['AUTH_HMAC_KEY', env.AUTH_HMAC_KEY],
+      ['CODE_HMAC_KEY', env.CODE_HMAC_KEY],
+      ['RECOVERY_HMAC_KEY', env.RECOVERY_HMAC_KEY],
+      ['MFA_ENC_KEY', env.MFA_ENC_KEY],
+    ];
+    for (const [i, [name, value]] of keys.entries()) {
+      const other = keys.slice(0, i).find(([, v]) => v === value);
+      if (other) fail(name, `precisa ser diferente de ${other[0]} (uma chave por finalidade)`);
+    }
+    if (env.TRUST_PROXY === undefined)
+      fail('TRUST_PROXY', 'obrigatório em produção (nginx na frente = 1; sem proxy = 0). Sem ele o IP do cliente é perdido');
     if (env.CORS_ORIGINS.length === 0 || env.CORS_ORIGINS.includes('*'))
       fail('CORS_ORIGINS', 'em produção precisa listar origens exatas (sem vazio nem "*")');
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');

@@ -12,7 +12,7 @@ export function configureApp(app: NestExpressApplication): void {
   app.useLogger(app.get(Logger));
   app.disable('x-powered-by');
   // IP real atrás do proxy (rate limit, auditoria). 0 = usa o IP do socket.
-  app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }));
+  app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }) ?? 0);
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');

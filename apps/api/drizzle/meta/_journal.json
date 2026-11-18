@@ -29,6 +29,13 @@
       "when": 1795002869662,
       "tag": "0003_onda1_hardening_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795003094494,
+      "tag": "0004_payments_hardening",
+      "breakpoints": true
     }
   ]
 }

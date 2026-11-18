@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
@@ -10,6 +10,7 @@ import { AuditService, FeatureFlagsService, ParametersService } from '../admin/i
 import {
   paymentAlerts,
   paymentAttempts,
+  paymentRefundIntents,
   paymentRefunds,
   webhookEvents,
   type PaymentMethod,
@@ -37,6 +38,7 @@ const REPLAY_TTL_SECONDS = 86_400;
 
 /** Transições permitidas da tentativa (SEC-033): só avança; evento repetido ou regressivo é ignorado. */
 const ALLOWED: Record<PaymentStatus, readonly PaymentStatus[]> = {
+  creating: ['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled'],
   pending: ['pending_3ds', 'approved', 'declined', 'expired', 'cancelled'],
   pending_3ds: ['approved', 'declined', 'expired', 'cancelled'],
   approved: ['refunded'],
@@ -109,7 +111,21 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     const pixMinutes = await this.params.getNumber('pix_expiracao_min');
     const expiresAt = input.method === 'pix' ? new Date(Date.now() + pixMinutes * 60_000) : undefined;
     const attemptId = crypto.randomUUID();
-    // Timeout do provedor propaga como 504; nada foi gravado, então repetir é seguro (X-Idempotency-Key = attemptId).
+    // Review I3: a tentativa é gravada ANTES de cobrar. Se o banco falhar depois da cobrança no provedor, a linha já
+    // existe e a conciliação repete a criação com o mesmo `attemptId` (X-Idempotency-Key do provedor).
+    await this.db.insert(paymentAttempts).values({
+      id: attemptId,
+      provider: this.provider.name,
+      providerPaymentId: null,
+      externalReference: input.externalReference,
+      storeId: input.storeId,
+      method: input.method,
+      status: 'creating',
+      amountCents: input.amountCents,
+      applicationFeeCents: fee,
+      installments,
+      expiresAt: expiresAt ?? null,
+    });
     let remote: ProviderPayment;
     try {
       remote = await this.provider.createPayment({
@@ -125,31 +141,34 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'ProviderTimeoutError') {
+        // Pode ter sido criado do outro lado: a tentativa fica `creating` e a conciliação resolve (PIX repete com a
+        // mesma chave; cartão vira alerta). O cliente pode tentar de novo.
         throw new AppError(504, 'PROVIDER_TIMEOUT', 'O provedor de pagamento demorou a responder', { detail: 'Tente novamente.', retryAfterSeconds: 3 });
       }
+      await this.db
+        .update(paymentAttempts)
+        .set({ status: 'cancelled', declineReason: 'provider_error', updatedAt: new Date() })
+        .where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')));
       throw error;
     }
+    return this.completeCreation(attemptId, remote);
+  }
 
+  /** Preenche a tentativa `creating` com a resposta do provedor (também usada pela conciliação). */
+  private async completeCreation(attemptId: string, remote: ProviderPayment): Promise<PaymentAttempt> {
     const [attempt] = await this.db
-      .insert(paymentAttempts)
-      .values({
-        id: attemptId,
-        provider: this.provider.name,
+      .update(paymentAttempts)
+      .set({
         providerPaymentId: remote.providerPaymentId,
-        externalReference: input.externalReference,
-        storeId: input.storeId,
-        method: input.method,
         status: remote.status,
-        amountCents: input.amountCents,
-        applicationFeeCents: fee,
-        installments,
         pixCopyPaste: remote.pixCopyPaste ?? null,
-        expiresAt: expiresAt ?? null,
         declineReason: remote.declineReason ?? null,
+        updatedAt: new Date(),
       })
+      .where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')))
       .returning();
-    if (!attempt) throw new Error('Falha ao gravar tentativa de pagamento');
-    return attempt;
+    if (attempt) return attempt;
+    return this.getAttempt(attemptId);
   }
 
   async getAttempt(id: string): Promise<PaymentAttempt> {
@@ -166,12 +185,16 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
    */
   async receiveWebhook(input: { headers: Record<string, string | string[] | undefined>; query: Record<string, unknown> }): Promise<{ queued: boolean }> {
     const notification = this.provider.verifyWebhook(input);
+    // Review I6: o MP também notifica `merchant_order` e outros tipos; o `data.id` deles não é de pagamento.
+    if (notification.type !== 'payment') return { queued: false };
 
-    const first = await this.redis
-      .set(`webhook:seen:${this.provider.name}:${notification.eventKey}`, '1', 'EX', REPLAY_TTL_SECONDS, 'NX')
-      .catch(() => 'OK'); // Redis fora: a unicidade do banco abaixo continua garantindo a idempotência.
-    if (first === null) return { queued: false };
+    const seenKey = `webhook:seen:${this.provider.name}:${notification.eventKey}`;
+    // Atalho no Redis (só leitura): se já vimos E gravamos antes, nem vai ao banco.
+    const seen = await this.redis.get(seenKey).catch(() => null);
+    if (seen !== null) return { queued: false };
 
+    // Review I2: grava no banco PRIMEIRO. Se falhar, lança (500), a chave do Redis NÃO foi marcada e a reentrega do
+    // provedor processa. A unicidade `(provider, event_key)` é a garantia real de idempotência.
     const inserted = await this.db
       .insert(webhookEvents)
       .values({
@@ -182,6 +205,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       })
       .onConflictDoNothing()
       .returning({ id: webhookEvents.id });
+    await this.redis.set(seenKey, '1', 'EX', REPLAY_TTL_SECONDS).catch(() => undefined);
     if (inserted.length === 0) return { queued: false };
 
     // Processa em seguida, fora do ciclo da resposta (a fila durável retenta se falhar).
@@ -261,9 +285,9 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       await this.alert(null, 'unknown_payment', { providerPaymentId: event.providerPaymentId });
       return 'discarded';
     }
-    const remote = await this.provider.getPayment(attempt.providerPaymentId, { storeId: attempt.storeId });
+    const remote = await this.provider.getPayment(event.providerPaymentId, { storeId: attempt.storeId });
     if (!remote) {
-      await this.alert(attempt.id, 'provider_payment_missing', { providerPaymentId: attempt.providerPaymentId });
+      await this.alert(attempt.id, 'provider_payment_missing', { providerPaymentId: event.providerPaymentId });
       return 'discarded';
     }
     await this.sync(attempt, remote);
@@ -310,99 +334,234 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   /**
    * Estorno ao meio original (SEC-039, parte de dados): lock da linha e soma de estornos <= pago. Quem pode estornar,
-   * limites por perfil e reautenticação ficam no endpoint do admin (Onda 4A).
+   * limites por perfil e reautenticação ficam no endpoint do admin (Onda 4A). Auditoria na MESMA transação que confirma
+   * o estorno (SEC-074).
    */
   async refund(attemptId: string, amountCents: number, reason: string, idempotencyKey: string, ctx: RequestContext): Promise<void> {
-    const refund = await this.refundInternal(attemptId, amountCents, reason, idempotencyKey);
-    await this.audit.recordStandalone(ctx, {
-      action: 'payment.refund',
-      targetType: 'payment_attempt',
-      targetId: attemptId,
-      after: { amountCents, reason, providerRefundId: refund?.providerRefundId ?? null },
-      reason,
+    await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, async (tx, remote) => {
+      await this.audit.record(tx, ctx, {
+        action: 'payment.refund',
+        targetType: 'payment_attempt',
+        targetId: attemptId,
+        after: { amountCents, reason, providerRefundId: remote.providerRefundId },
+        reason,
+      });
     });
   }
 
-  private async refundInternal(attemptId: string, amountCents: number, reason: string, idempotencyKey: string) {
-    return this.db.transaction(async (tx) => {
+  /**
+   * Review I4. Fase 1 (transação curta, com lock): confere estado e soma e grava a INTENÇÃO (`pending`). Fase 2 (sem
+   * transação): chama o provedor com a chave de idempotência. Fase 3 (transação): grava o estorno confirmado, fecha a
+   * intenção, atualiza o status e audita. A mesma chave com valor diferente é 422; repetir a chave não estorna de novo.
+   */
+  private async refundInternal(
+    attemptId: string,
+    amountCents: number,
+    reason: string,
+    idempotencyKey: string,
+    onConfirmed?: (tx: Parameters<Parameters<Db['transaction']>[0]>[0], remote: { providerRefundId: string }) => Promise<void>,
+  ): Promise<{ providerRefundId: string } | null> {
+    if (!Number.isInteger(amountCents) || amountCents <= 0) throw errors.validation([{ field: 'amountCents', message: 'Valor inválido.' }]);
+
+    const phase1 = await this.db.transaction(async (tx) => {
       const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
       if (!attempt) throw errors.notFound('Pagamento não encontrado.');
-      if (!Number.isInteger(amountCents) || amountCents <= 0) throw errors.validation([{ field: 'amountCents', message: 'Valor inválido.' }]);
-      // Repetição da mesma chave: devolve o estorno já feito (idempotência).
-      const [existing] = await tx.select().from(paymentRefunds).where(and(eq(paymentRefunds.attemptId, attemptId), eq(paymentRefunds.idempotencyKey, idempotencyKey)));
-      if (existing) return null;
+      const [existing] = await tx
+        .select()
+        .from(paymentRefundIntents)
+        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+      if (existing) {
+        if (existing.amountCents !== amountCents) {
+          throw errors.unprocessable('IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro valor', { detail: 'Use outra chave para outro estorno.' });
+        }
+        if (existing.status === 'done') return { kind: 'already' as const };
+        if (existing.status === 'failed') {
+          await tx.update(paymentRefundIntents).set({ status: 'pending', updatedAt: new Date() }).where(eq(paymentRefundIntents.id, existing.id));
+        }
+        return { kind: 'go' as const, attempt };
+      }
 
       const [{ total } = { total: 0 }] = await tx
-        .select({ total: sql<number>`coalesce(sum(${paymentRefunds.amountCents}), 0)::int` })
-        .from(paymentRefunds)
-        .where(eq(paymentRefunds.attemptId, attemptId));
+        .select({ total: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
+        .from(paymentRefundIntents)
+        .where(and(eq(paymentRefundIntents.attemptId, attemptId), ne(paymentRefundIntents.status, 'failed')));
       const refundable = attempt.status === 'approved' || attempt.status === 'expired' || attempt.status === 'cancelled';
-      if (!refundable) throw errors.conflict('PAYMENT_NOT_REFUNDABLE', 'Pagamento não pode ser estornado');
+      if (!refundable || !attempt.providerPaymentId) throw errors.conflict('PAYMENT_NOT_REFUNDABLE', 'Pagamento não pode ser estornado');
       if (total + amountCents > attempt.amountCents) {
         throw errors.unprocessable('REFUND_EXCEEDS_PAID', 'Estorno maior que o valor pago');
       }
-      const remote = await this.provider.refund(attempt.providerPaymentId, amountCents, idempotencyKey, { storeId: attempt.storeId });
-      await tx.insert(paymentRefunds).values({
-        attemptId,
-        providerRefundId: remote.providerRefundId,
-        idempotencyKey,
-        amountCents,
-        reason,
-      });
-      if (total + amountCents === attempt.amountCents) {
+      await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason });
+      return { kind: 'go' as const, attempt };
+    });
+    if (phase1.kind === 'already') return null;
+    const { attempt } = phase1;
+
+    let remote: { providerRefundId: string };
+    try {
+      remote = await this.provider.refund(attempt.providerPaymentId!, amountCents, idempotencyKey, { storeId: attempt.storeId });
+    } catch (error) {
+      // Timeout é ambíguo (o provedor pode ter estornado): a intenção fica `pending` e a conciliação repete com a mesma chave.
+      if (!(error instanceof Error && error.name === 'ProviderTimeoutError')) {
+        await this.db
+          .update(paymentRefundIntents)
+          .set({ status: 'failed', updatedAt: new Date() })
+          .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+      }
+      throw error;
+    }
+
+    await this.db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
+      await tx
+        .insert(paymentRefunds)
+        .values({ attemptId, providerRefundId: remote.providerRefundId, idempotencyKey, amountCents, reason })
+        .onConflictDoNothing();
+      await tx
+        .update(paymentRefundIntents)
+        .set({ status: 'done', providerRefundId: remote.providerRefundId, updatedAt: new Date() })
+        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+      const [{ done } = { done: 0 }] = await tx
+        .select({ done: sql<number>`coalesce(sum(${paymentRefunds.amountCents}), 0)::int` })
+        .from(paymentRefunds)
+        .where(eq(paymentRefunds.attemptId, attemptId));
+      if (locked && done === locked.amountCents) {
         await tx.update(paymentAttempts).set({ status: 'refunded', updatedAt: new Date() }).where(eq(paymentAttempts.id, attemptId));
       }
-      return remote;
+      if (onConfirmed) await onConfirmed(tx, remote);
     });
+    return remote;
+  }
+
+  /** Repete, com a mesma chave, estornos que ficaram `pending` (timeout, queda entre o provedor e o commit). */
+  private async recoverRefundIntents(now: Date): Promise<number> {
+    const stale = await this.db
+      .select()
+      .from(paymentRefundIntents)
+      .where(and(eq(paymentRefundIntents.status, 'pending'), lt(paymentRefundIntents.updatedAt, new Date(now.getTime() - 2 * 60_000))))
+      .orderBy(asc(paymentRefundIntents.updatedAt))
+      .limit(50);
+    let recovered = 0;
+    for (const intent of stale) {
+      try {
+        await this.refundInternal(intent.attemptId, intent.amountCents, intent.reason, intent.idempotencyKey);
+        recovered++;
+      } catch (error) {
+        this.logger.warn(`recuperação de estorno ${intent.id} falhou: ${(error as Error).message}`);
+        await this.alert(intent.attemptId, 'refund_unresolved', { intentId: intent.id });
+      }
+    }
+    return recovered;
   }
 
   // ------------------------------------------------------------------ conciliação
 
   /**
    * SEC-042: compara com o provedor o que ficou pendente há mais de 5 min e o que foi aprovado nas últimas 48 h.
-   * Pega pagamento sem webhook (perdido) e divergência de valor/comissão; gera alerta.
+   * Pega pagamento sem webhook (perdido) e divergência de valor/comissão; gera alerta. Review I5: um erro do provedor em
+   * UM pagamento não derruba o laço (conta falhas), a ordem é estável e só uma instância concilia por vez.
    */
-  async reconcile(now = new Date()): Promise<{ checked: number; synced: number; alerts: number }> {
+  async reconcile(now = new Date()): Promise<{ checked: number; synced: number; alerts: number; failures: number; skipped?: true }> {
+    // Trava entre instâncias: a transação segura o lock até o fim; o trabalho em si usa o pool normal.
+    return this.db.transaction(async (lockTx) => {
+      const [lock] = (await lockTx.execute(sql`select pg_try_advisory_xact_lock(hashtext('webag:payments:reconcile')) as ok`)).rows as { ok: boolean }[];
+      if (!lock?.ok) return { checked: 0, synced: 0, alerts: 0, failures: 0, skipped: true as const };
+      return this.reconcileLocked(now);
+    });
+  }
+
+  private async reconcileLocked(now: Date): Promise<{ checked: number; synced: number; alerts: number; failures: number }> {
     const pendingBefore = new Date(now.getTime() - 5 * 60_000);
     const since48h = new Date(now.getTime() - 48 * 3_600_000);
+    await this.recoverCreating(new Date(now.getTime() - 2 * 60_000)).catch((e: Error) => this.logger.error(`conciliação (creating): ${e.message}`));
+    await this.recoverRefundIntents(now).catch((e: Error) => this.logger.error(`conciliação (estornos): ${e.message}`));
+
     const candidates = await this.db
       .select()
       .from(paymentAttempts)
       .where(
         and(
           eq(paymentAttempts.provider, this.provider.name),
+          isNotNull(paymentAttempts.providerPaymentId),
           or(
             and(inArray(paymentAttempts.status, ['pending', 'pending_3ds']), lt(paymentAttempts.createdAt, pendingBefore)),
             and(eq(paymentAttempts.status, 'approved'), gte(paymentAttempts.createdAt, since48h)),
           ),
         ),
       )
+      .orderBy(asc(paymentAttempts.updatedAt), asc(paymentAttempts.id))
       .limit(200);
 
     let synced = 0;
     let alerts = 0;
+    let failures = 0;
     for (const attempt of candidates) {
-      const remote = await this.provider.getPayment(attempt.providerPaymentId, { storeId: attempt.storeId });
-      if (!remote) {
-        await this.alert(attempt.id, 'provider_payment_missing', { providerPaymentId: attempt.providerPaymentId });
-        alerts++;
-        continue;
+      try {
+        const remote = await this.provider.getPayment(attempt.providerPaymentId!, { storeId: attempt.storeId });
+        if (!remote) {
+          await this.alert(attempt.id, 'provider_payment_missing', { providerPaymentId: attempt.providerPaymentId });
+          alerts++;
+          continue;
+        }
+        const before = attempt.status;
+        const mismatches = remote.status === 'approved' || attempt.status === 'approved' ? this.mismatches(attempt, remote) : [];
+        if (mismatches.length > 0) {
+          await this.sync(attempt, { ...remote, status: 'approved' });
+          alerts++;
+          continue;
+        }
+        // PIX vencido que o provedor ainda mostra pendente: expira aqui (a reserva de estoque cai junto, Onda 4).
+        const effective: ProviderPayment =
+          remote.status === 'pending' && attempt.expiresAt && attempt.expiresAt <= now ? { ...remote, status: 'expired' } : remote;
+        await this.sync(attempt, effective);
+        const [after] = await this.db.select({ status: paymentAttempts.status }).from(paymentAttempts).where(eq(paymentAttempts.id, attempt.id));
+        if (after && after.status !== before) synced++;
+        // `updatedAt` marca "visto agora" e faz a próxima rodada começar pelos mais antigos.
+        await this.db.update(paymentAttempts).set({ updatedAt: new Date() }).where(eq(paymentAttempts.id, attempt.id));
+      } catch (error) {
+        failures++;
+        this.logger.warn(`conciliação do pagamento ${attempt.id} falhou: ${(error as Error).message}`);
       }
-      const before = attempt.status;
-      const mismatches = remote.status === 'approved' || attempt.status === 'approved' ? this.mismatches(attempt, remote) : [];
-      if (mismatches.length > 0) {
-        await this.sync(attempt, { ...remote, status: 'approved' });
-        alerts++;
-        continue;
-      }
-      // PIX vencido que o provedor ainda mostra pendente: expira aqui (a reserva de estoque cai junto, Onda 4).
-      const effective: ProviderPayment =
-        remote.status === 'pending' && attempt.expiresAt && attempt.expiresAt <= now ? { ...remote, status: 'expired' } : remote;
-      await this.sync(attempt, effective);
-      const [after] = await this.db.select({ status: paymentAttempts.status }).from(paymentAttempts).where(eq(paymentAttempts.id, attempt.id));
-      if (after && after.status !== before) synced++;
     }
-    return { checked: candidates.length, synced, alerts };
+    // Taxa alta de falhas no provedor vira alerta (o provedor pode estar fora do ar).
+    if (candidates.length >= 5 && failures / candidates.length > 0.5) {
+      await this.alert(null, 'reconcile_provider_failures', { failures, checked: candidates.length, day: now.toISOString().slice(0, 13) });
+    }
+    return { checked: candidates.length, synced, alerts, failures };
+  }
+
+  /**
+   * Tentativas `creating` há mais de 2 min: o processo caiu entre gravar e cobrar (ou entre cobrar e gravar a
+   * resposta). PIX: repete a criação com o MESMO `attemptId` (idempotente no provedor). Cartão: não temos o token,
+   * então vira alerta para o admin resolver (nunca cobra de novo).
+   */
+  private async recoverCreating(before: Date): Promise<void> {
+    const stuck = await this.db
+      .select()
+      .from(paymentAttempts)
+      .where(and(eq(paymentAttempts.status, 'creating'), eq(paymentAttempts.provider, this.provider.name), lt(paymentAttempts.createdAt, before)))
+      .orderBy(asc(paymentAttempts.createdAt))
+      .limit(50);
+    for (const attempt of stuck) {
+      try {
+        if (attempt.method !== 'pix') {
+          await this.alert(attempt.id, 'creation_unresolved', { method: attempt.method });
+          continue;
+        }
+        const remote = await this.provider.createPayment({
+          attemptId: attempt.id,
+          method: 'pix',
+          amountCents: attempt.amountCents,
+          applicationFeeCents: attempt.applicationFeeCents,
+          externalReference: attempt.externalReference,
+          storeId: attempt.storeId,
+          installments: 1,
+          expiresAt: attempt.expiresAt ?? undefined,
+        });
+        await this.completeCreation(attempt.id, remote);
+      } catch (error) {
+        this.logger.warn(`recuperação da criação ${attempt.id} falhou: ${(error as Error).message}`);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------- admin

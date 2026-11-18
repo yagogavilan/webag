@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { adminProfiles, authTickets, sessions, users } from '../src/platform/database/schema.js';
+import { adminProfiles, authTickets, invitations, sessions, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, totpAt, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureLegalDocs, loginAdmin } from './helpers/fixtures.js';
 
@@ -143,6 +143,47 @@ describe('MFA em 2 passos e B1: reset anônimo não toca o 2º fator do admin', 
       const before = await ctx.db.select().from(sessions).where(eq(sessions.userId, admin.userId));
       await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password }).expect(200);
       expect(await ctx.db.select().from(sessions).where(eq(sessions.userId, admin.userId))).toHaveLength(before.length);
+    });
+  });
+
+  describe('endurecimento do review (I1, I7)', () => {
+    it('I1: refresh de admin parado por mais de 30 min é recusado (SESSION_IDLE) e a sessão é revogada; menos que isso renova', async () => {
+      const admin = await createAdmin(ctx, 'operations');
+      await ctx.db.update(sessions).set({ lastUsedAt: new Date(Date.now() - 29 * 60_000) }).where(eq(sessions.userId, admin.userId));
+      const ok = await ctx.http.post('/v1/auth/refresh').set('X-Forwarded-For', randomIp()).send({ refreshToken: admin.refreshToken }).expect(200);
+
+      await ctx.db.update(sessions).set({ lastUsedAt: new Date(Date.now() - 31 * 60_000) }).where(eq(sessions.userId, admin.userId));
+      const idle = await ctx.http.post('/v1/auth/refresh').set('X-Forwarded-For', randomIp()).send({ refreshToken: ok.body.refreshToken }).expect(401);
+      expect(idle.body.code).toBe('SESSION_IDLE');
+      const [session] = await ctx.db.select().from(sessions).where(eq(sessions.userId, admin.userId));
+      expect(session?.revokedAt).not.toBeNull();
+      await ctx.http.get('/v1/admin/regions/cities').set(bearer(ok.body.accessToken)).expect(401);
+    });
+
+    it('I1: refresh de cliente não é afetado pela inatividade de admin', async () => {
+      const { registerUser } = await import('./helpers/fixtures.js');
+      const user = await registerUser(ctx);
+      await ctx.db.update(sessions).set({ lastUsedAt: new Date(Date.now() - 5 * 3_600_000) }).where(eq(sessions.userId, user.userId));
+      await ctx.http.post('/v1/auth/refresh').set('X-Forwarded-For', randomIp()).send({ refreshToken: user.refreshToken }).expect(200);
+    });
+
+    it('I7: redefinir o acesso duas vezes revoga o link anterior; os OUTROS super admins são avisados', async () => {
+      const boss = await createAdmin(ctx, 'super_admin');
+      const other = await createAdmin(ctx, 'super_admin');
+      const target = await createAdmin(ctx, 'finance');
+      const body = { reason: 'Perdeu o aparelho; identidade conferida por vídeo', verifiedChannel: 'video_call' };
+      const reset = () => ctx.http.post(`/v1/admin/admins/${target.userId}/totp/reset`).set(bearer(boss.accessToken)).send(body);
+      await reset().expect(204);
+      const linkOf = () => /token=([A-Za-z0-9_-]+)/.exec(ctx.mail.to(target.email).findLast((m) => /token=/.test(m.text))?.text ?? '')?.[1];
+      const first = linkOf();
+      await reset().expect(204);
+      const second = linkOf();
+      expect(second).not.toBe(first);
+      await ctx.http.post('/v1/auth/invitations/accept').set('X-Forwarded-For', randomIp()).send({ token: first, password: 'senha-nova-reativada-77' }).expect(410);
+      await ctx.http.post('/v1/auth/invitations/accept').set('X-Forwarded-For', randomIp()).send({ token: second, password: 'senha-nova-reativada-77' }).expect(200);
+      expect((await ctx.db.select().from(invitations).where(eq(invitations.email, target.email))).filter((i) => !i.usedAt && !i.revokedAt)).toHaveLength(0);
+      // aviso aos demais super admins (não ao que executou? o executor também é super admin e recebe o aviso)
+      expect(ctx.mail.to(other.email).some((m) => m.subject.includes('Acesso ao painel'))).toBe(true);
     });
   });
 });
