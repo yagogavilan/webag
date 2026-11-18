@@ -153,3 +153,8 @@ export interface LegalDoc {
   type: 'customer_terms' | 'merchant_terms' | 'privacy';
   version: number;
 }
+
+/** Versão vigente de cada documento legal (aceite versionado: o cliente envia o que mostrou ao usuário). */
+export async function currentLegalRefs(types: LegalDoc['type'][]): Promise<LegalDoc[]> {
+  return Promise.all(types.map((type) => apiRequest<LegalDoc>('lojista', `legal/${type}`).then((doc) => ({ type: doc.type, version: doc.version }))));
+}
