@@ -27,7 +27,18 @@ Origem: `docs/seguranca/revisao-adrs.md` (SEC-101 a SEC-112), `requisitos-segura
 
 **Histórias novas (IDs seguintes ao último em uso, WB-218):** WB-219 a WB-226, em `prd/seguranca-acesso.md`: 7 Must (219 a 225) e 1 Should (226). Total da 1.0: 134 para **142**.
 
-**Riscos e pendências que este ajuste deixa abertos** (detalhe em §7): (1) sem retenção no split, o risco "lojista recebe e some" é residual e já aceito em DEC-016; a mitigação é parcial; (2) valores de loja nova são `[HIPÓTESE]`; (3) captcha de terceiro e cobertura do estorno com dinheiro da Webag dependem do fundador; (4) WB-214 C6 e WB-053 C7 aguardam o Security.
+**Riscos e pendências que este ajuste deixa abertos** (detalhe em §7): (1) sem retenção no split, o risco "lojista recebe e some" é residual e já aceito em DEC-016; a mitigação é parcial; (2) valores de loja nova são `[HIPÓTESE]`; (3) captcha de terceiro e cobertura do estorno com dinheiro da Webag dependem do fundador; (4) ~~WB-214 C6 e WB-053 C7 aguardam o Security~~: resolvidos por DEC-020 (d, e) e DEC-023 (WB-214 C6: senha; WB-053 C7: bloqueia).
+
+## Alterações 2026-11-18 (revisão de testabilidade do QA, DEC-023)
+Origem: `docs/qa/revisao-testabilidade.md` (R-01 a R-40; status por item no fim daquele arquivo). Sem história nova; só critérios reescritos. Exceção: R-06 e R-07 (TOTP) seguem com o Security.
+
+| Item | O que mudou | Onde |
+|---|---|---|
+| Conflitos (DEC-023 a, b, c) | WB-053 C7 **bloqueia** e ganha liberação pelo admin (WB-103 C6-C7); piso legal de troca **não editável por ninguém** (HIP-017, WB-119 C5, WB-059 C2, RN-02 corrigidos); e-mail de pedido para conta não confirmada só com texto genérico (WB-194 C1) | `prd/lojista.md`, `prd/admin.md`, `prd/notificacoes.md`, `decisoes.md` |
+| Máquina de estados da loja | Nova **RN-16** (Rascunho, Em análise, Correção pedida, Recusada, Aprovada, Suspensa; SLA pausado); WB-103 C3 com 3 desfechos; WB-054 C3, C5, C6 | `regras-de-negocio.md`, `prd/admin.md`, `prd/lojista.md` |
+| Moderação | Duas listas: categorias proibidas bloqueiam (WB-060 C6), palavras suspeitas sinalizam (WB-107 C3); palavra inteira, sem acento nem caixa; lojista não reativa o que o admin removeu (WB-060 C7, WB-107 C5) | `prd/lojista.md`, `prd/admin.md` |
+| Abuso e contas | WB-050 C2 (login antes de ganhar papel), WB-075 (convite nasce confirmado, mensagem genérica, dono não se remove), WB-053 C8-C9 (1 conta MP = 1 loja; 1 `state`), WB-101 C1 (admin só com e-mail exclusivo), WB-224 C10 (limite atômico na criação do pedido), WB-225 C1 e C5 (loja nova = 30 dias **e** 20 pedidos; total cobrado) | `prd/lojista.md`, `prd/admin.md`, `prd/seguranca-acesso.md` |
+| Critérios numéricos e de borda | Cadastro (WB-006 C2: zxcvbn), sessão 30/90 dias (WB-008 C1), reset (WB-009 C5-C6), promoção em data e hora (WB-062 C1), faixas de frete `[de, até)` (WB-057), horários (WB-056), estoque e SKU (WB-061), rearme do estoque baixo (WB-064 C2), flags e parâmetros (WB-119 C6, WB-120 C1), webhooks (WB-153 C3), `fake` (WB-150 C3), termos (WB-210 C3, WB-117 C2), documentos (WB-052 C3/C6/C7, WB-218) | vários PRDs |
 
 **Onde estão as histórias.** Cada história (WB-###) com "Como..., quero..., para..." e critérios Dado/Quando/Então está no PRD do épico (fonte única, sem duplicar aqui). Este arquivo é o índice: prioridade, ordem de construção, dependências e fase 2.
 

@@ -71,14 +71,14 @@ RN-02 (parâmetros), RN-03, RN-07, RN-08, RN-10, RN-11, RN-13 (perfis), RN-15 (m
 Como admin, quero entrar com meu perfil, para ver só o que me cabe.
 - **C1** Dado credenciais corretas de um admin ativo, então entro e vejo apenas o menu do meu perfil; URL de tela sem permissão responde 403.
 - **C2** Dado 5 falhas seguidas do mesmo dispositivo/IP contra um admin, então esse dispositivo/IP espera 15 min e o evento vai à auditoria; a conta do admin **não** é bloqueada para quem tem a senha certa em outro dispositivo (WB-221).
-- **C3** Dado 30 min sem atividade, então a sessão expira com aviso.
+- **C3** Dado 30 min sem atividade, então a sessão expira com aviso. "Atividade" = requisição autenticada iniciada pelo usuário (polling e atualização automática não contam); o refresh do admin vale 30 min deslizantes, sem os 30 dias do cliente (R-04).
 - **C4** Dado usuário não admin (cliente/lojista) tentando as rotas admin, então 403 e registro.
 - **C5** Dado a matriz de RN-13/PRD, então cada rota e cada ação da API valida o perfil no servidor.
 - **C6** Dado senha correta de admin sem TOTP configurado, então só vejo a tela de configurar o TOTP (WB-222); o painel admin só abre no endereço próprio do admin (WB-223).
 
 ### WB-101 Gerenciar admins — Must — dep: WB-100
 Como super admin, quero criar e desativar admins, para dar acesso conforme a função.
-- **C1** Dado novo admin (nome, e-mail, perfil), então ele recebe convite de uso único, ligado ao e-mail e válido por **48 h** (SEC-017) para criar senha e configurar o TOTP (WB-222); convite vencido ou usado: "Convite inválido" (410).
+- **C1** Dado novo admin (nome, e-mail, perfil), então ele recebe convite de uso único, ligado ao e-mail e válido por **48 h** (SEC-017) para criar senha e configurar o TOTP (WB-222); convite vencido ou usado: "Convite inválido" (410). Se o e-mail já pertence a um cliente ou lojista, o convite é **recusado** (sem criar segunda conta nem converter a existente): o admin usa e-mail exclusivo, de domínio da Webag (R-36).
 - **C2** Dado trocar o perfil ou desativar, então vale na hora e as sessões ativas são encerradas.
 - **C3** Dado tentar remover o último super admin, então é bloqueado ("Precisa existir ao menos 1 super admin").
 - **C4** Dado qualquer mudança, então vai à auditoria.
@@ -93,15 +93,17 @@ Como suporte/operação, quero achar um usuário e agir, para resolver problemas
 
 ### WB-103 Fila de aprovação de lojas — Must — dep: WB-052
 Como operação, quero revisar lojas novas, para só aprovar as legítimas.
-- **C1** Dado a fila, então vejo lojas "Em análise" por data de envio, com tempo de espera e destaque em vermelho acima de `aprovacao_loja_sla_dias_uteis`.
-- **C2** Dado abrir uma loja, então vejo dados, documentos (visualização por URL assinada de curta duração, acesso registrado) e checagem de CPF/CNPJ duplicado.
-- **C3** Dado "Aprovar", então a loja vira APROVADA e o lojista é notificado; dado "Reprovar", então exijo motivo por item e o lojista pode reenviar.
+- **C1** Dado a fila, então vejo lojas "Em análise" por data de envio, com tempo de espera e destaque em vermelho acima de `aprovacao_loja_sla_dias_uteis`. Dia útil = segunda a sexta, **sem calendário de feriados na 1.0** (documentado; tabela editável de feriados é melhoria futura; R-15a). Loja em "Correção pedida" sai da contagem do prazo até o reenvio (RN-16).
+- **C2** Dado abrir uma loja, então vejo dados, documentos (visualização por URL assinada de curta duração, acesso registrado com motivo obrigatório: análise inicial, dúvida ou denúncia; WB-218) e a situação do CPF/CNPJ: como WB-051 C2 já impede duplicidade no cadastro, a fila mostra apenas o vínculo com loja reprovada (documento livre se não teve pedidos) ou suspensa (continua ocupado) (R-15b, R-28a).
+- **C3** Dado a loja "Em análise", então tenho 3 desfechos distintos conforme a máquina de estados RN-16: **"Aprovar"** (vira APROVADA e o lojista é notificado), **"Pedir correção"** (motivo por item; status "Aguardando lojista", prazo pausado; o lojista reenvia e a loja volta a "Em análise") e **"Recusar"** (final, com motivo; novo cadastro só com o suporte). Transição inválida (ex.: Recusada ou Suspensa direto para Aprovada) é recusada com erro e auditada (R-29).
 - **C4** Dado dois admins na mesma loja, então a segunda decisão vê "Já decidida por [nome]".
 - **C5** Dado fila vazia, então "Nenhuma loja aguardando".
+- **C6** Dado a loja com a conexão Mercado Pago "Em análise" por titular divergente (WB-053 C7), então aparece na fila com o selo "Titular divergente" e a ativação da venda está **bloqueada** (DEC-020e, DEC-023a).
+- **C7** Dado o selo "Titular divergente", então "Liberar" (perfil operação ou super admin) exige motivo obrigatório (mín. 10 caracteres), reautenticação com TOTP vigente (WB-222) e grava auditoria (quem, quando, motivo, CPF/CNPJ do titular mascarado); "Recusar conta" mantém o bloqueio e o lojista é notificado para conectar outra conta. Alerta ao admin em até 1 min da conexão (SEC-047).
 
 ### WB-104 Suspender, reativar e editar loja — Must — dep: WB-103
 Como operação, quero suspender ou corrigir uma loja, para proteger clientes.
-- **C1** Dado "Suspender" com motivo, então a loja some do app imediatamente, não recebe novos pedidos, e os pedidos em andamento ficam sinalizados para ação; o lojista é notificado.
+- **C1** Dado "Suspender" com motivo, então a loja some do app imediatamente, não recebe novos pedidos, e os pedidos em andamento ficam sinalizados com "Atenção" no WB-108; o **admin decide caso a caso** (concluir ou cancelar com estorno); o prazo de aceite `loja_aceite_timeout_min` já cobre os pedidos em RECEBIDO; o lojista é notificado (R-24).
 - **C2** Dado "Reativar", então volta a ser visível se continuar atendendo RN-03.
 - **C3** Dado editar qualquer dado da loja (perfil, horário, entrega, trocas), então a alteração é salva com antes/depois na auditoria.
 - **C4** Dado loja com repasse pendente (modo centralizado) ou estorno pendente por saldo (split), então a suspensão não apaga o saldo/dívida e o financeiro é avisado.
@@ -117,17 +119,18 @@ Como financeiro, quero definir comissão por loja e por categoria, para negociar
 
 ### WB-106 Categorias e subcategorias — Must — dep: WB-100
 Como operação, quero gerenciar categorias, para organizar o app.
-- **C1** Dado criar categoria ou subcategoria (2 níveis), então informo nome (até 30), ícone de uma biblioteca fixa, ordem e ativa/inativa.
+- **C1** Dado criar categoria ou subcategoria (2 níveis), então informo nome (até 30), ícone da biblioteca Phosphor (HIP-D03; lista de nomes versionada no código), ordem e ativa/inativa (R-27).
 - **C2** Dado reordenar, então o app reflete na próxima abertura.
 - **C3** Dado inativar categoria com produtos, então ela some do app e das buscas; os produtos ficam preservados e o lojista é avisado.
 - **C4** Dado excluir categoria com produtos ou lojas, então é bloqueado ("Mova antes ou inative"); sem vínculos, exclui.
-- **C5** Dado nome duplicado no mesmo nível, então erro.
+- **C5** Dado nome duplicado no mesmo nível, então erro; a comparação ignora acento e caixa ("Calçados" = "calcados") (R-27).
 
 ### WB-107 Moderação de produtos — Must — dep: WB-060
 Como operação, quero remover ou pausar produtos impróprios, para cumprir a lei e as regras das lojas de apps.
 - **C1** Dado a lista de produtos com filtro por loja, categoria, data, denunciados, então posso abrir, "Remover" (motivo obrigatório) ou "Pausar".
 - **C2** Dado remoção, então o produto sai do app, o lojista é notificado com o motivo e pode contestar por e-mail ao suporte; histórico preservado.
-- **C3** Dado a lista de palavras e categorias proibidas (editável), então produtos novos que casarem entram em "Revisar" sinalizados (não bloqueados automaticamente, HIP-029).
+- **C3** Há **duas listas editáveis**: (a) **categorias proibidas**, que **bloqueiam** o cadastro (WB-060 C6); (b) **palavras suspeitas**, que apenas **sinalizam**: produto novo que casar entra em "Revisar", sem bloqueio automático (HIP-029). A palavra casa como **palavra inteira, sem distinção de caixa nem acento** (não por trecho: "pistola" não casa "pistolão"; R-12c).
+- **C5** Dado produto removido ou pausado pelo admin, então o status de moderação é separado do status do lojista e o lojista **não** o reativa; só o admin reverte, com auditoria (R-12d).
 - **C4** Dado reincidência (3 remoções na loja em 30 dias), então a loja é sinalizada para análise de suspensão.
 
 ### WB-108 Pedidos: visão geral e filtros — Must — dep: WB-067
@@ -209,7 +212,7 @@ Como operação, quero criar cupons Webag, para campanhas e primeira compra.
 ### WB-117 Termos e privacidade editáveis — Must — dep: WB-210
 Como super admin, quero editar termos e política de privacidade, para refletir mudanças legais sem deploy.
 - **C1** Dado o editor (texto formatado simples), então salvo como nova **versão** com data de vigência; versões antigas ficam guardadas e consultáveis.
-- **C2** Dado marcar "mudança relevante", então usuários ativos precisam aceitar a nova versão no próximo uso (WB-210).
+- **C2** Dado marcar "mudança relevante", então **todos os usuários** do tipo correspondente precisam aceitar a nova versão no próximo uso (WB-210; não só quem entrou nos últimos X dias). Reaceite dos Termos do Lojista vale para o dono; o funcionário aceita só termos de uso e privacidade. A versão publicada é **imutável**: correção = nova versão (R-32).
 - **C3** Dado publicação, então as páginas públicas web `/termos` e `/privacidade` e os links do app mostram a versão vigente.
 - **C4** Dado texto vazio ou sem data, então não publica.
 - **C5** Dado tipos separados (termos do cliente, termos do lojista, privacidade), então cada um tem versionamento próprio.
@@ -228,11 +231,12 @@ Como super admin, quero editar os parâmetros do negócio, para ajustar sem depl
 - **C2** Dado valor fora da faixa, então erro e não salva.
 - **C3** Dado salvar, então exijo motivo, a mudança vale a partir de agora (não retroativa a pedidos já criados que têm snapshot) e entra no histórico/auditoria.
 - **C4** Dado "Restaurar padrão", então volta ao valor de seed com confirmação.
-- **C5** Dado pisos legais (7 dias arrependimento, 30 defeito), então só o super admin edita e a tela avisa o risco jurídico.
+- **C5** Dado os pisos legais (7 dias de arrependimento, 30 de defeito), então são **fixos e não editáveis por nenhum perfil, nem pelo super admin**: a validação recusa valor menor que o piso e a tela mostra a chave bloqueada; o super admin só pode **aumentar** a parte voluntária. Mudar o piso exige alteração de código e registro em `docs/decisoes.md` (DEC-011, DEC-023b; R-02).
+- **C6** Dado alteração de parâmetro, então vale com o mesmo cache de até 60 s das flags (C3 e WB-120 C4); a edição usa controle de versão: se outro admin salvou a mesma chave antes, a resposta é 409 "Este valor foi alterado por [nome]. Recarregue" (R-22).
 
 ### WB-120 Feature flags — Must — dep: WB-119
 Como super admin, quero ligar e desligar funções, para reagir a problemas.
-- **C1** Dado a lista (cartão, PIX, retirada, login social, taxa de serviço, cadastro de lojista, trocas voluntárias, push de marketing), então alterno cada uma com confirmação.
+- **C1** Dado a lista fechada da 1.0 (cartão, PIX, retirada, login social, taxa de serviço, cadastro de lojista, trocas voluntárias, push de marketing, `email_nao_confirmado_compra` [HIP-D07, WB-224 C9] e `codigo_entrega` [WB-226]), então alterno cada uma com confirmação (R-34).
 - **C2** Dado desligar cartão ou PIX, então o checkout deixa de mostrá-lo na próxima abertura; pedidos já criados seguem.
 - **C3** Dado a flag desligada mantendo a função em andamento (ex.: trocas já abertas), então processos existentes terminam normalmente.
 - **C4** Dado mudança, então é auditada e o app obtém o valor em até 60 s (cache curto).

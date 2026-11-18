@@ -118,7 +118,7 @@ Como cliente e lojista, quero ser avisado de cada passo da troca, para cumprir o
 
 ### WB-194 E-mails transacionais — Must — dep: infraestrutura SMTP
 Como usuário, quero receber e-mails importantes, para ter registro.
-- **C1** Dado os eventos de código (confirmação, redefinição), pedido (confirmação com resumo e valores, cancelamento, estorno), troca e conta (senha alterada, exclusão), então o e-mail é enviado em pt-BR com remetente único e assunto claro.
+- **C1** Dado os eventos de código (confirmação, redefinição), pedido (confirmação com resumo e valores, cancelamento, estorno), troca e conta (senha alterada, exclusão), então o e-mail é enviado em pt-BR com remetente único e assunto claro. **Exceção (DEC-023c, SEC-008d):** para conta com e-mail **não confirmado**, o e-mail de pedido sai com texto genérico ("Recebemos seu pedido, veja no app"), **sem itens, valores, nome nem endereço**; só o código de confirmação é o conteúdo dinâmico permitido. Após a confirmação, vale o e-mail completo (R-33).
 - **C2** Dado falha do SMTP, então retentativa com espera crescente (até 5 vezes) e registro; o fluxo do usuário não é bloqueado, exceto códigos (que oferecem "Reenviar").
 - **C3** Dado ambiente de dev, então os e-mails vão ao Mailpit e nunca a endereços reais.
 - **C4** Dado o e-mail, então traz link de ajuda e não traz dados sensíveis (sem CPF, sem senha, sem endereço completo).

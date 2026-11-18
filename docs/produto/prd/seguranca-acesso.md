@@ -84,16 +84,17 @@ Como novo cliente, quero comprar antes de confirmar o e-mail, mas com limites, p
 - **C6** Dado e-mail enviado a endereço não confirmado, então traz só o código e texto genérico, sem nome, endereço, itens ou valores.
 - **C7** Dado redefinição de senha concluída, então o e-mail passa a "confirmado" (WB-009 C2).
 - **C8** Dado login social (se a flag ligar), então não se vincula a conta existente não confirmada (WB-010).
-- **C9** Dado a flag desligada (HIP-D07 "Sim (flag)"), então volta a valer "confirmar antes de comprar" (156 s) sem mudança de código.
+- **C9** Dado a flag `email_nao_confirmado_compra` desligada (HIP-D07 "Sim (flag)"; WB-120 C1), então volta a valer "confirmar antes de comprar" (156 s) sem mudança de código.
+- **C10** O limite de C1 é aplicado **na criação do pedido**, por **contador atômico por conta** (pedidos pagos + pendentes <= `email_nao_confirmado_pedidos_max`); pedido pago e depois estornado **não conta**; com dois checkouts abertos ao mesmo tempo, só um cria o pedido e o outro recebe a mensagem de C1. Teste de concorrência obrigatório (R-11).
 - **Evento:** `email_verification_required`, `email_corrected`; métrica: % de contas que confirmam em 24 h e fraude de 1ª compra `[HIPÓTESE]`.
 
 ### WB-225 Limite de exposição da loja nova e alertas de risco — Must — dep: WB-057, WB-067, WB-198
 Como Webag, quero limitar o valor por pedido de lojas novas e ser avisada de comportamento de risco, para reduzir o prejuízo de um lojista que recebe e não entrega (DEC-016: no split não há como reter).
-- **C1** Dado loja nova (até `loja_nova_dias` = 30 dias da aprovação **ou** até `loja_nova_pedidos` = 20 pedidos ENTREGUE, o que durar mais) `[HIPÓTESE; valores no admin]`, quando o cliente fecha pedido acima de `loja_nova_pedido_max_cents` (R$ 500,00), então recebe "Esta loja é nova e aceita pedidos de até R$ 500,00 por enquanto" (422) e o carrinho é mantido.
+- **C1** Dado loja nova, definida como a que **ainda não cumpriu as duas condições**: `loja_nova_dias` = 30 dias desde a aprovação **e** `loja_nova_pedidos` = 20 pedidos ENTREGUE (deixa de ser nova só quando cumpre ambas; é a leitura mais conservadora de SEC-062) `[HIPÓTESE; valores no admin]`, quando o **total cobrado do cliente** (itens + frete + taxa de serviço - desconto; é o valor exposto) passa de `loja_nova_pedido_max_cents` (R$ 500,00), então recebe "Esta loja é nova e aceita pedidos de até R$ [valor do parâmetro] por enquanto" (422; a mensagem **lê o parâmetro**, não um texto fixo) e o carrinho é mantido (R-10).
 - **C2** Dado o limite, então aparece no painel do lojista ("Loja nova: pedidos de até R$ 500,00 até [data/pedidos]") e o admin pode liberar a loja antes (com motivo, auditado) ou ajustar o limite por loja.
 - **C3** Dado loja com "não recebi" > 5% ou cancelamento causado pela loja > 15% nos últimos 30 dias, com no mínimo 10 pedidos, então o admin recebe alerta "Loja em risco" (WB-198) e a loja entra na fila "Em risco" (WB-104 C5). **Sem suspensão automática**.
 - **C4** Dado conta de recebimento trocada nos últimos 7 dias, então a loja também entra no alerta de risco (WB-053 C4).
-- **C5** Dado loja com mais de 20 pedidos ENTREGUE e 30 dias, então o limite cai e vale só `pedido_max_cents` global (R$ 2.000,00).
+- **C5** Dado loja que cumpriu as duas condições do C1 (>= 30 dias **e** >= 20 pedidos ENTREGUE), então o limite cai e vale só `pedido_max_cents` global (R$ 2.000,00).
 - **C6** Dado que o piloto tem poucas lojas, então a métrica mostra quantos pedidos foram barrados pelo limite, para recalibrar (HIP).
 
 ### WB-226 Código de entrega do cliente — Should — dep: WB-069, WB-027, WB-190

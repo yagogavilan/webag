@@ -97,8 +97,8 @@ Como visitante, quero explorar lojas, produtos e preços sem criar conta, para d
 ### WB-006 Cadastro de conta — Must — dep: WB-210
 Como visitante, quero criar conta com poucos campos, para finalizar a compra.
 - **C1** Dado a tela de cadastro, então peço nome, e-mail, celular (máscara (11) 99999-9999), senha, confirmação da senha e aceite de termos/privacidade, e declaração de 18+ (HIP-026); não peço CPF, endereço nem data de nascimento.
-- **C2** Dado senha com menos de `senha_min` caracteres, ou comum/vazada, quando digito, então o medidor mostra "Fraca" e o botão Continuar fica inativo; com 8+ e score >= médio, "Boa".
-- **C3** Dado e-mail já cadastrado, então vejo "Esse e-mail já tem conta. Entrar?" sem revelar se a conta foi confirmada.
+- **C2** Dado senha com menos de `senha_min` caracteres, ou comum/vazada, quando digito, então o medidor mostra "Fraca" e o botão Continuar fica inativo; com 8+ e score >= médio, "Boa". Medidor do app: zxcvbn, nota 0-4 (0-1 "Fraca", 2 "Média", 3-4 "Boa"); "Continuar" fica ativo só com nota >= 2 **e** senha fora da lista de senhas comuns/vazadas (>= 10 mil entradas, SEC-001). O servidor repete a validação e decide de verdade; o medidor é só orientação (R-05).
+- **C3** Dado e-mail já cadastrado, então vejo "Esse e-mail já tem conta. Entrar?" sem revelar se a conta foi confirmada. Esta rota (e `exists`) é enumeração de e-mail conhecida, risco **aceito** na 1.0 (DEC-017) e limitada por rate limit (SEC-005); o teste de QA verifica os limites, e o Security registra o parecer (R-31).
 - **C4** Dado termos não marcados, então o botão fica inativo e o texto de privacidade abre em tela própria (link visível).
 - **C5** Dado o cadastro concluído, então a conta fica "não confirmada" até WB-007, mas **posso finalizar o 1º pedido pago antes de confirmar** (DEC-014/015); os limites de uma conta não confirmada (2º pedido, cupom, exportação etc.) estão em WB-224.
 - **C6** Dado e-mail com domínio provavelmente errado (ex.: "gmial.com"), então vejo a sugestão "Você quis dizer gmail.com?" e posso aceitar ou manter (WB-224 C5).
@@ -113,7 +113,7 @@ Como novo usuário, quero confirmar meu e-mail por código, para provar que a co
 
 ### WB-008 Entrar com e-mail e senha — Must — dep: WB-006
 Como cliente, quero entrar com e-mail e senha, para acessar meus pedidos.
-- **C1** Dado credenciais corretas, então entro e continuo logado por até 30 dias neste aparelho.
+- **C1** Dado credenciais corretas, então entro e continuo logado por até 30 dias **deslizantes** neste aparelho, com limite **absoluto de 90 dias** (SEC-011). No dia 91 de uso contínuo preciso entrar de novo, com o texto "Entre de novo por segurança" (R-03).
 - **C2** Dado credenciais erradas, então vejo "E-mail ou senha incorretos" (mesma mensagem para e-mail inexistente).
 - **C3** Dado `login_falhas` (5) falhas seguidas **do mesmo dispositivo/IP contra a mesma conta**, então esse dispositivo/IP espera `login_espera_min` (15 min) e vê "Muitas tentativas. Tente em 15 minutos ou redefina a senha". **A conta nunca é bloqueada para o dono**: quem erra de outro dispositivo/IP não afeta quem tem a senha certa (WB-221; SEC-102).
 - **C4** Dado conta bloqueada pelo admin, então vejo "Conta indisponível. Fale com o suporte" com link de contato.
@@ -124,6 +124,8 @@ Como cliente, quero redefinir a senha dentro do app, para voltar a entrar.
 - **C1** Dado e-mail informado (cadastrado ou não), então vejo sempre "Se o e-mail existir, enviamos um código" (sem revelar existência).
 - **C2** Dado código válido por `otp_validade_min` (10 min; 6 dígitos, 5 tentativas), quando defino nova senha (regras de WB-006), então a senha muda, o e-mail passa a "confirmado", todas as sessões e renovações antigas são encerradas (WB-219) e eu entro.
 - **C3** Dado código inválido ou expirado, então vejo o erro e posso pedir novo código.
+- **C5** Dado nova senha recusada por ser fraca ou vazada, então o código **não é consumido** e posso tentar outra senha dentro da validade (R-21a).
+- **C6** Dado conta bloqueada pelo admin, então o reset funciona (a senha muda) mas o login segue "Conta indisponível" (WB-008 C4) (R-21b).
 - **C4** Dado a troca de senha, então recebo e-mail de aviso "Sua senha foi alterada".
 
 ### WB-010 Login Google e Apple (preparado) — Could — dep: WB-008, WB-120

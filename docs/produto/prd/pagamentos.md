@@ -64,7 +64,7 @@ Cliente (PIX e cartão), lojista (recebe e vê extrato), financeiro/admin (estor
 Como dev, quero uma interface de provedor e um simulado, para o app funcionar ponta a ponta sem chaves.
 - **C1** Dado `PAYMENT_PROVIDER=fake`, então criar PIX devolve um QR/código falso e o pedido fica AGUARDANDO_PAGAMENTO.
 - **C2** Dado o painel/endpoint de simulação (só em dev), então "aprovar" ou "recusar" dispara o webhook interno e o pedido muda de estado como no real.
-- **C3** Dado cartão de teste (final 0000 aprova, 0001 recusa por saldo, 0002 exige 3DS, 0003 dá timeout), então o resultado correspondente é produzido.
+- **C3** Dado que o número do cartão nunca chega à API (só o token do Brick; WB-152 C1, SEC-037), então o provedor `fake` recebe **tokens de texto**: `fake_tok_approved` (aprova), `fake_tok_insufficient` (recusa por saldo), `fake_tok_3ds` (exige 3DS) e `fake_tok_timeout` (timeout), e produz o resultado correspondente. A convenção fica documentada no README do back-end (R-19).
 - **C4** Dado estorno no simulado, então total e parcial seguem as mesmas regras e geram eventos.
 - **C5** Dado produção, então o provedor `fake` não sobe (RN do PRD).
 - **C6** Dado a interface `PaymentProvider`, então outra implementação (ex.: Mercado Pago) pode ser plugada sem mudar o domínio do pedido (contrato único de criar, consultar, estornar, interpretar webhook).
@@ -91,7 +91,7 @@ Como cliente, quero pagar com cartão sem expor dados, para parcelar.
 Como financeiro/dev, quero que cada evento do provedor seja processado uma vez, com segurança, para não perder nem duplicar dinheiro.
 - **C1** Dado webhook com assinatura inválida, então responde 401 e registra (sem processar).
 - **C2** Dado o mesmo evento 2 vezes, então a segunda é ignorada com 200 (idempotência).
-- **C3** Dado falha ao processar, então reprocessa com retentativas exponenciais e, esgotadas, vai a "falhas" no admin com payload mascarado.
+- **C3** Dado falha ao processar, então reprocessa com **5 tentativas, em 1, 5, 30, 120 e 720 min** e, esgotadas, vai a "falhas" no admin com payload mascarado. O evento é **gravado no banco antes de ser enfileirado** (outbox): se o Redis estiver fora quando o webhook chegar, a notificação não se perde e é enfileirada quando o Redis voltar (R-20).
 - **C4** Dado "Reprocessar" no admin (perfil financeiro/super), então reexecuta com a mesma idempotência e audita.
 - **C5** Dado eventos fora de ordem (estorno antes da aprovação), então são ordenados por consulta ao provedor, sem estado incoerente.
 - **C6** Dado modo manutenção, então o webhook continua sendo aceito (WB-121 C2).

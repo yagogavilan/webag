@@ -98,9 +98,9 @@ Como lojista, quero saber em que pé está minha loja, para não ficar no escuro
 - **C1** Dado envio, então o status vira "Em análise" com a mensagem "Respondemos em até 2 dias úteis" (HIP-030).
 - **C2** Dado aprovação, então recebo e-mail e notificação, a loja pode ser configurada para ficar visível ao cliente quando tiver 1 produto ativo e conta de recebimento ativa.
 - **C3** Dado "Correção pedida", então vejo o motivo por item, com **um item por documento exigido mais "dados da loja"**, e posso corrigir e reenviar sem refazer tudo; o prazo de 2 dias úteis fica pausado até o reenvio (RN-16; R-28c, R-29).
+- **C4** Dado loja aprovada mas sem produto ativo, então o painel mostra "Cadastre 1 produto para aparecer no app".
 - **C5** Dado "Recusada" (final), então vejo o motivo e a orientação de falar com o suporte; novo cadastro só com o suporte (RN-16).
 - **C6** Dado loja ainda em análise, então posso criar e salvar produtos (ficam ATIVOS mas invisíveis, RN-03); a loja só aparece no app após aprovação, conta de recebimento ativa e 1 produto ativo (R-40).
-- **C4** Dado loja aprovada mas sem produto ativo, então o painel mostra "Cadastre 1 produto para aparecer no app".
 
 ### WB-055 Perfil da loja — Must — dep: WB-054
 Como lojista, quero personalizar logo, capa, descrição, categorias e WhatsApp, para a loja ter cara de loja.
@@ -264,7 +264,8 @@ Como dono, quero convidar funcionários com permissões, para dividir o trabalho
 - **C1** Dado convite por e-mail, então o funcionário recebe link válido por 7 dias para criar senha, e marco permissões: pedidos, catálogo/estoque, trocas, cupons, avaliações. A conta criada pelo link **nasce com o e-mail confirmado** (o clique prova a posse; não cai em SEC-008b). Reenviar o convite invalida o anterior (R-09b, R-09e).
 - **C2** Dado funcionário, então nunca vê financeiro, conta de recebimento, equipe nem configurações da loja (RN-13).
 - **C3** Dado remover funcionário, então as sessões e renovações dele terminam e a conexão em tempo real do painel é derrubada em até 5 s (WB-219); a próxima requisição com o acesso antigo recebe 401.
-- **C4** Dado e-mail já usado em outra loja, então erro "Esse e-mail já participa de outra loja".
+- **C4** Dado e-mail já vinculado a uma loja, então a mensagem é a genérica "Não foi possível convidar este e-mail", sem revelar o motivo (anti-enumeração, SEC-017). Funcionário em duas lojas continua proibido na 1.0, para simplificar o RBAC (registrado; R-09a, R-09c).
+- **C6** Dado o dono, então ele **não pode se remover** da própria loja; transferência de propriedade fica fora da 1.0 (R-09d).
 - **C5** Dado alterar permissões, então valem na próxima requisição; tudo fica no log da loja.
 
 ### WB-076 Financeiro: resumo, a receber e repasses — Must — dep: WB-156

@@ -73,7 +73,7 @@ Carla pede para excluir a conta; pede cópia dos dados; recusa marketing. Seu Ma
 Como titular, quero saber o que aceito, para decidir com clareza.
 - **C1** Dado o cadastro, então vejo os links "Termos de Uso" e "Política de Privacidade" (abrem em tela própria) e um resumo curto "Usamos seus dados para..." antes de marcar o aceite.
 - **C2** Dado aceitar, então grava versão dos dois documentos, data/hora, IP e plataforma.
-- **C3** Dado nova versão marcada como relevante (WB-117 C2), então no próximo uso o app/painel exige aceitar de novo antes de continuar; recusar leva ao logout e à opção de excluir a conta.
+- **C3** Dado nova versão marcada como relevante (WB-117 C2), então no próximo uso o app/painel exige aceitar de novo antes de continuar; recusar leva ao logout e à opção de excluir a conta. A API responde com o código de erro específico `terms_acceptance_required` (403) em **toda rota autenticada**, exceto aceite, logout e exclusão de conta; o cliente do app trata esse código levando à tela de aceite. Vale para todos os usuários do tipo afetado, no próximo uso (R-32a, R-35).
 - **C4** Dado lojista, então aceita também os "Termos do Lojista" (incluindo responsabilidade fiscal e papel de controlador da entrega).
 - **C5** Dado as páginas públicas `/termos` e `/privacidade` (web), então carregam sem login e mostram a versão vigente.
 
@@ -113,6 +113,7 @@ Como ex-usuário sem o app, quero pedir exclusão pela web, para atender o Googl
 - **C3** Dado e-mail sem conta, então resposta idêntica ("Se existir, enviamos um código") sem revelar a existência.
 - **C4** Dado a URL, então consta no formulário Data Safety e na política de privacidade.
 - **C5** Dado excesso de tentativas (5 por hora por IP/e-mail), então bloqueio temporário.
+- **C6** Dado conta com **e-mail não confirmado**, então o código enviado ao e-mail não basta (não prova que o solicitante é o dono): a exclusão pela web exige também a **senha** da conta, igual a WB-213 C1 (DEC-020d, SEC-008c; R-30). A pergunta em aberto sobre "senha ou código" está encerrada.
 - **C6** Dado conta com e-mail ainda não confirmado, então a exclusão também é possível pela web informando e-mail e **senha** (sem código), com resposta igual exista ou não a conta [confirmar com o security-engineer: SEC-002 prevê código com finalidade delete_web].
 
 ### WB-215 Retenção e anonimização — Must — dep: WB-213
@@ -141,8 +142,8 @@ Como titular, quero saber a quem pedir, para exercer meus direitos.
 ### WB-218 Proteção e registro de acesso a documentos — Must — dep: WB-052
 Como lojista, quero que meus documentos só sejam vistos por quem precisa, para ficar seguro.
 - **C1** Dado documentos enviados, então só admin (super e operação) acessa, por URL assinada com validade <= 5 min.
-- **C2** Dado cada visualização ou download, então grava quem, quando, qual documento e motivo (auditoria, WB-123).
-- **C3** Dado o lojista, então vê quais documentos enviou mas não baixa os de outras lojas; a loja não tem acesso a documentos do cliente.
+- **C2** Dado cada visualização ou download, então o admin **escolhe um motivo obrigatório** (lista curta: análise inicial, dúvida, denúncia) e o sistema grava quem, quando, qual documento e motivo (auditoria, WB-123); sem motivo, o arquivo não abre (R-28a).
+- **C3** Dado o lojista, então vê a lista e a data dos documentos que enviou, mas **não baixa nem os próprios nem os de outras lojas**; a loja não tem acesso a documentos do cliente (R-28b).
 - **C4** Dado reprovada, então os arquivos são apagados em `90` dias (WB-215).
 - **C5** Dado tentativa de acesso sem permissão, então 403 e alerta.
 

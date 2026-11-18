@@ -9,7 +9,7 @@ Fonte única das regras numéricas. PRDs e histórias citam `RN-xx` e `HIP-0xx` 
 - Fuso de todas as regras de horário: `America/Sao_Paulo`.
 
 ## RN-02 Parâmetros configuráveis no admin (WB-119)
-Todo valor abaixo vive em tabela de parâmetros editável (super admin), com histórico e auditoria. "Padrão" é o valor de seed.
+Todo valor abaixo vive em tabela de parâmetros editável (super admin), com histórico e auditoria. "Padrão" é o valor de seed. A alteração vale em até 60 s (mesmo cache das flags) e a edição usa controle de versão (409 se outro admin alterou a mesma chave antes; WB-119 C6, R-22). Os pisos legais de troca são exceção: não são editáveis por ninguém.
 
 | Chave | Padrão | Faixa | Hipótese |
 |---|---|---|---|
@@ -24,8 +24,8 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `retirada_prazo_horas` | 48 | 12-168 | HIP-038 |
 | `auto_conclusao_entrega_h` | 24 | 6-72 | HIP-038 |
 | `repasse_periodicidade` / `repasse_carencia_dias` | semanal (segunda) / 7 | semanal, quinzenal / 0-30 | HIP-015 |
-| `troca_arrependimento_dias` | 7 | piso 7 | HIP-017 |
-| `troca_defeito_dias` | 30 | piso 30 | HIP-017 |
+| `troca_arrependimento_dias` | 7 | **fixo 7, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
+| `troca_defeito_dias` | 30 | **fixo 30, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
 | `troca_voluntaria_dias_padrao` | 7 | 0-30 | HIP-017 |
 | `taxa_coleta_max_cents` | 3000 | 0-10000 | HIP-018 |
 | `troca_resposta_h` | 48 | 12-120 | HIP-019 |
@@ -60,7 +60,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 - **Ordenação da home/lojas perto:** abertas primeiro, depois distância, depois avaliação (HIP-032). "Lojas novas": aprovadas há <= 30 dias. "Mais vendidos": unidades em pedidos ENTREGUE/em andamento nos últimos 30 dias na região, mínimo 5 pedidos. "Ofertas": produtos com promoção vigente, maior desconto percentual primeiro. Seção sem item é ocultada.
 
 ## RN-04 Entrega, frete, pedido mínimo
-- Taxa **fixa** (R$ 0 a R$ 50) ou **por distância**: até 5 faixas `[de_km, ate_km, valor]` contíguas, sem lacuna; última faixa termina no raio da loja.
+- Taxa **fixa** (R$ 0 a R$ 50) ou **por distância**: até 5 faixas `[de_km, ate_km, valor]` contíguas, sem lacuna; última faixa termina no raio da loja. Intervalo `[de, ate)`: o limite superior pertence à faixa seguinte (2,00 km cai em 2-5, não em 0-2); a última faixa inclui o raio (R-17).
 - Distância = linha reta entre loja e endereço (HIP-013). Fora do raio: loja some da lista; se o cliente chegar por link, mostra "Não entrega no seu endereço".
 - **Pedido mínimo** compara com o subtotal de produtos (preço vigente, antes de cupom e frete). Abaixo: checkout bloqueado e texto "Faltam R$ X".
 - **Entrega grátis acima de X:** compara com o mesmo subtotal; frete = R$ 0 se subtotal >= X.
@@ -72,7 +72,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 - 1 loja por carrinho (DEC-006). Adicionar item de outra loja: confirmação "Trocar de loja? Seu carrinho atual será esvaziado."; Cancelar mantém o carrinho.
 - Carrinho de visitante fica no aparelho; no login, junta com o da conta (mesma loja: soma quantidades até o estoque; lojas diferentes: mantém o carrinho da conta e avisa). Expira em `carrinho_validade_dias`.
 - Quantidade por linha: 1 a min(estoque disponível, `item_qtd_max`).
-- **Preço vigente** = promocional se hoje dentro de [início, fim], senão preço normal. Promocional deve ser menor que o normal. Preço mín. R$ 0,01, máx. R$ 99.999,99.
+- **Preço vigente** = promocional se agora estiver dentro de [início, fim], senão preço normal. Início e fim são data e hora em `America/Sao_Paulo`; início inclusivo e fim inclusivo até o minuto informado (padrão da UI: 00:00 e 23:59; R-13). Promocional deve ser menor que o normal. Preço mín. R$ 0,01, máx. R$ 99.999,99.
 - Ao abrir o checkout e ao pagar, preços, estoque, horário e frete são revalidados; se mudou, mostra o que mudou e pede confirmação (nunca cobra valor diferente do exibido). O pedido grava **snapshot** de preço, nome, variação e taxas.
 - Total = subtotal produtos − cupom + frete + taxa de serviço, mínimo `cupom_total_minimo_cents` e máximo `pedido_max_cents`.
 
@@ -81,7 +81,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 - Concorrência: a última unidade vai a quem reservar primeiro (operação atômica). Quem perde vê "Acabou o estoque de X" e volta ao carrinho com a quantidade ajustada.
 - Reintegração ao estoque após troca/devolução: só se a loja marcar "item em condição de revenda" (defeito não reintegra por padrão).
 - Estoque negativo não existe. Lojista ajustando para menos que o reservado: bloqueado com aviso.
-- Estoque baixo: alerta ao lojista quando `disponível <= estoque_baixo_un`.
+- Estoque baixo: alerta ao lojista quando `disponível <= estoque_baixo_un`; rearma quando `disponível > estoque_baixo_un` e alerta de novo ao voltar a `<=` (R-14). Estoque máximo por variação: 99.999 (inteiro); código (SKU) único por loja quando informado (R-25).
 
 ## RN-07 Estados do pedido
 
@@ -185,6 +185,22 @@ Todo acesso é validado no servidor por papel e por loja (nunca só pela interfa
 
 ## RN-14 Dados pessoais (resumo; detalhe no PRD LGPD)
 Lojista vê nome, telefone e endereço do cliente apenas em pedido ativo e por `dados_cliente_visivel_dias` após conclusão; depois mascarados. Documentos de loja só o admin vê, com registro de acesso. Dados fiscais/financeiros retidos `retencao_fiscal_anos` mesmo após exclusão de conta (anonimizados quando possível).
+
+## RN-16 Estados e transições da loja (R-29)
+Dia útil = segunda a sexta, sem feriados na 1.0 (R-15).
+
+| De | Para | Quem aciona | Observação |
+|---|---|---|---|
+| (novo) | RASCUNHO | lojista | etapas de onboarding salvas (WB-051 C4) |
+| RASCUNHO | EM_ANALISE | lojista | ao enviar dados e documentos; começa a contar `aprovacao_loja_sla_dias_uteis` |
+| EM_ANALISE | APROVADA | admin (operação/super) | notifica o lojista; visibilidade conforme RN-03 |
+| EM_ANALISE | CORRECAO_PEDIDA | admin | motivo por item; rótulo "Aguardando lojista"; **o prazo do SLA fica pausado** |
+| CORRECAO_PEDIDA | EM_ANALISE | lojista | ao reenviar; o SLA volta a contar do ponto em que parou |
+| EM_ANALISE | RECUSADA | admin | **final**; motivo obrigatório; novo cadastro só com o suporte |
+| APROVADA | SUSPENSA | admin (WB-104) | motivo obrigatório; some do app |
+| SUSPENSA | APROVADA | admin (WB-104) | reativação; volta visível se atender RN-03 |
+
+Qualquer outra transição (inclusive RECUSADA ou SUSPENSA direto para APROVADA, ou APROVADA para EM_ANALISE por troca de status) é inválida e a API a recusa com erro e auditoria. Alterar nome ou CPF/CNPJ de loja APROVADA abre uma análise de **dados**, mas a loja segue APROVADA, visível e vendendo com os dados antigos até a decisão (WB-055 C4; R-23). Documento de loja RECUSADA sem pedidos fica livre; o de SUSPENSA continua ocupado.
 
 ## RN-15 Definições de métricas
 - **GMV**: soma de `total_cliente` dos pedidos que chegaram a RECEBIDO, exceto cancelados/recusados; "GMV concluído" = só ENTREGUE.
