@@ -2,6 +2,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import ReviewsScreen from '../app/(customer)/reviews';
 import StoreScreen from '../app/(customer)/store/[id]';
 import { ApiError } from '../src/api/problem';
+import { sessionStore } from '../src/api/session';
+import { takePendingFavorite } from '../src/features/favorites/hooks';
 import { cartActions } from '../src/features/cart/store';
 import { modeStore } from '../src/features/catalog/queries';
 import { browseStore, rating, seedAddress } from '../src/test/fixtures';
@@ -13,11 +15,15 @@ const router = expoRouter.__router;
 const mockStore = jest.fn();
 const mockProducts = jest.fn();
 const mockStoreReviews = jest.fn();
+const mockSetFavorite = jest.fn();
+const mockServerFavorites = new Set<string>();
 jest.mock('../src/api/catalog-api', () => ({
   fetchStore: (...a: unknown[]) => mockStore(...a),
   fetchStoreProducts: (...a: unknown[]) => mockProducts(...a),
   fetchStoreReviews: (...a: unknown[]) => mockStoreReviews(...a),
-  fetchFavorites: jest.fn(async () => ({ data: [], nextCursor: null })),
+  fetchFavorites: () =>
+    Promise.resolve({ data: [...mockServerFavorites].map((id) => ({ kind: 'store', unavailable: false, favoritedAt: '', store: { id, name: '', logo: { urls: {} } }, product: null })), nextCursor: null }),
+  setFavoriteStore: (...a: unknown[]) => mockSetFavorite(...a),
 }));
 
 const item = (id: string, over = {}) => ({ id, name: `Produto ${id}`, sectionId: null, image: { urls: { '400': 'https://img.test/x.webp' } }, price: { amount: 5000, currency: 'BRL' }, originalPrice: null, discountPercent: null, available: true, ...over });
@@ -114,6 +120,45 @@ describe('Loja (D8)', () => {
     await renderScreen(<StoreScreen />);
     expect(await screen.findByText('Não conseguimos carregar agora.')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeOnTheScreen();
+  });
+});
+
+describe('Favoritar a loja (D8, WB-005)', () => {
+  const login = () => sessionStore.setSession({ accessToken: 'a', refreshToken: 'r'.repeat(40), accessExpiresAt: Date.now() + 900_000, user: { id: 'u1', name: 'Maria', email: 'm@x.com', emailVerified: true } });
+
+  beforeEach(async () => {
+    mockSetFavorite.mockReset();
+    mockServerFavorites.clear();
+    mockSetFavorite.mockImplementation(async (id: string, on: boolean) => {
+      if (on) mockServerFavorites.add(id);
+      else mockServerFavorites.delete(id);
+    });
+    await sessionStore.clear();
+  });
+
+  it('visitante vai para entrar com retorno exato e a ação fica pendente', async () => {
+    await renderScreen(<StoreScreen />);
+    await fireEvent.press(await screen.findByTestId('store.favorite'));
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/login', params: { returnTo: '/store/s1' } });
+    expect(takePendingFavorite('store', 's1')).toBe(true);
+  });
+
+  it('depois do login a ação pendente roda sozinha e o coração fica marcado', async () => {
+    await renderScreen(<StoreScreen />);
+    await fireEvent.press(await screen.findByTestId('store.favorite'));
+    await login();
+    await waitFor(() => expect(mockSetFavorite).toHaveBeenCalledWith('s1', true));
+    expect(await screen.findByLabelText('Remover Casa Bela dos favoritos')).toBeOnTheScreen();
+    expect(await screen.findByText('Loja salva nos favoritos.')).toBeOnTheScreen();
+  });
+
+  it('logado: favorita e desfavorita pela API', async () => {
+    await login();
+    await renderScreen(<StoreScreen />);
+    await fireEvent.press(await screen.findByLabelText('Salvar Casa Bela nos favoritos'));
+    await waitFor(() => expect(mockSetFavorite).toHaveBeenCalledWith('s1', true));
+    await fireEvent.press(await screen.findByLabelText('Remover Casa Bela dos favoritos'));
+    await waitFor(() => expect(mockSetFavorite).toHaveBeenLastCalledWith('s1', false));
   });
 });
 

@@ -52,8 +52,10 @@ export function useFavoriteIds(): FavoriteIds {
   return query.data ?? EMPTY;
 }
 
+/** Cache de dado da conta (favoritos e histórico de busca da conta): sai do aparelho junto com a sessão (SEC-122). */
 export function clearFavoritesCache(client: QueryClient): void {
   client.removeQueries({ queryKey: ['favorites'] });
+  client.removeQueries({ queryKey: ['search-history'] });
 }
 
 export function registerFavoritesCleanup(client: QueryClient): () => void {

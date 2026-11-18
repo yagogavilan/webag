@@ -28,11 +28,12 @@ const slot = (c: ReactNode | ComponentType | undefined): ReactNode => {
   return c as ReactNode;
 };
 
-export function FlashList<T>({ data, renderItem, keyExtractor, ListHeaderComponent, ListFooterComponent, ListEmptyComponent, testID, numColumns = 1 }: Props<T>) {
+export function FlashList<T>({ data, renderItem, keyExtractor, ListHeaderComponent, ListFooterComponent, ListEmptyComponent, testID, numColumns = 1, onEndReached }: Props<T>) {
   const items = data ?? [];
   const cell = (item: T, index: number) => <View key={keyExtractor ? keyExtractor(item, index) : String(index)} style={numColumns > 1 ? { width: `${100 / numColumns}%` } : undefined}>{renderItem({ item, index })}</View>;
   return (
-    <View testID={testID}>
+    // `onEndReached` fica no elemento para o teste disparar a paginação com fireEvent(lista, 'endReached')
+    <View {...({ onEndReached } as object)} testID={testID}>
       {slot(ListHeaderComponent)}
       {items.length === 0 ? slot(ListEmptyComponent) : <View style={numColumns > 1 ? { flexDirection: 'row', flexWrap: 'wrap' } : undefined}>{items.map(cell)}</View>}
       {slot(ListFooterComponent)}

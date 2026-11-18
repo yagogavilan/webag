@@ -16,7 +16,12 @@ import { createQueryClient, wireQueryManagers } from '../src/api/query-client';
 import { sessionStore, useSession } from '../src/api/session';
 import { addressStore, useAddresses } from '../src/features/address/store';
 import { syncAddresses } from '../src/features/address/sync';
-import { ToastProvider } from '../src/components/Toast';
+import { ToastProvider, useToast } from '../src/components/Toast';
+import { cartActions, cartStore } from '../src/features/cart/store';
+import { modeStore } from '../src/features/catalog/queries';
+import { registerFavoritesCleanup } from '../src/features/favorites/hooks';
+import { searchHistoryStore } from '../src/features/search/history';
+import { t } from '../src/i18n';
 import { theme } from '../src/theme';
 
 void SplashScreen.preventAutoHideAsync();
@@ -26,6 +31,16 @@ configureApiClient({ baseUrl: API_URL });
 const FONT_TIMEOUT_MS = 2_000;
 
 const queryClient = createQueryClient();
+registerFavoritesCleanup(queryClient);
+
+/** Sacola parada há 7 dias é esvaziada ao abrir o app, com aviso único (onda-4 S1 Vazio). */
+function CartExpiredNotice({ expired }: { expired: boolean }) {
+  const toast = useToast();
+  useEffect(() => {
+    if (expired) toast.show(t('cart.expired'));
+  }, [expired, toast]);
+  return null;
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -34,6 +49,8 @@ export default function RootLayout() {
     Figtree_700Bold,
   });
   const [timedOut, setTimedOut] = useState(false);
+  const [localReady, setLocalReady] = useState(false);
+  const [cartExpired, setCartExpired] = useState(false);
   const session = useSession();
   const addresses = useAddresses();
 
@@ -45,6 +62,10 @@ export default function RootLayout() {
   useEffect(() => {
     void sessionStore.bootstrap();
     void addressStore.hydrate();
+    void Promise.all([modeStore.hydrate(), cartStore.hydrate(), searchHistoryStore.hydrate()])
+      .then(() => cartActions.expireIfStale())
+      .then(setCartExpired)
+      .finally(() => setLocalReady(true));
     return wireQueryManagers();
   }, []);
 
@@ -58,7 +79,7 @@ export default function RootLayout() {
     else if (anonymous) void addressStore.bindOwner(null);
   }, [userId, anonymous, addressesReady]);
 
-  const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading' && addresses.status !== 'loading';
+  const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading' && addresses.status !== 'loading' && localReady;
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
@@ -71,6 +92,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <StatusBar style="dark" />
+          <CartExpiredNotice expired={cartExpired} />
           <Stack
             screenOptions={{
               headerShown: false,

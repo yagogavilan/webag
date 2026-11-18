@@ -13,7 +13,7 @@ import { Segmented } from '../../src/components/Segmented';
 import { Skeleton } from '../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
-import { fromBrowseItem, fromProductCard, ProductTile } from '../../src/features/catalog/ProductTile';
+import { fromProductCard, ProductTile } from '../../src/features/catalog/ProductTile';
 import { StoreRow } from '../../src/features/catalog/StoreRow';
 import { useCategoryNames, useDeliveryPoint, useProductResults, useStoreResults } from '../../src/features/catalog/queries';
 import {
