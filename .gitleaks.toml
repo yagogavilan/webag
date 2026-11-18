@@ -1,0 +1,23 @@
+# Configuração do gitleaks (SEC-085). Estende as regras padrão e só libera o que é, comprovadamente, valor de
+# desenvolvimento publicado de propósito. Nunca adicione aqui uma credencial real: revogue e rotacione.
+title = "webag"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Valores de desenvolvimento local e de teste (o boot da API recusa todos em produção, SEC-080)"
+regexTarget = "match"
+regexes = [
+  '''dev-only-[A-Za-z0-9-]+''',
+  '''webag_dev_only''',
+  '''webag_ci_only''',
+  '''webag-dev-secret-only''',
+  '''very-long-random-production[A-Za-z0-9-]*''',
+]
+paths = [
+  '''infra/env\.example''',
+  '''apps/api/test/.*''',
+  '''apps/api/src/.*\.spec\.ts''',
+  '''docker-compose\.yml''',
+]
