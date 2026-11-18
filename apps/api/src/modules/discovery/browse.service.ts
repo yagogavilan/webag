@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit } from '../../platform/http/pagination.js';
@@ -57,7 +57,7 @@ export class BrowseService {
     return { open, opensAt: open ? null : (nextOpening(input, now)?.toISOString() ?? null), hoursToday: hoursToday(input, now) };
   }
 
-  private async ratingOf(where: ReturnType<typeof eq>) {
+  private async ratingOf(where: SQL) {
     const [row] = await this.db
       .select({ avg: sql<number | null>`avg(${reviews.rating})::float8`, count: sql<number>`count(*)::int` })
       .from(reviews)
@@ -230,11 +230,11 @@ export class BrowseService {
   /** Avaliações lidas (WB-018): mais recentes primeiro, 10 por página, só publicadas, nome reduzido (LGPD). */
   async reviewsOf(target: { storeId: string } | { productId: string }, filters: { cursor?: string | undefined; limit?: unknown }) {
     let storeId: string;
-    let scope;
+    let scope: SQL;
     if ('storeId' in target) {
       await this.visibleStore(target.storeId);
       storeId = target.storeId;
-      scope = and(eq(reviews.storeId, storeId), sql`${reviews.productId} is null`);
+      scope = and(eq(reviews.storeId, storeId), sql`${reviews.productId} is null`)!;
     } else {
       const [product] = await this.db.select({ storeId: products.storeId, status: products.status }).from(products).where(eq(products.id, target.productId));
       if (!product || product.status === 'draft' || product.status === 'archived') throw errors.notFound('Produto não encontrado.');
@@ -243,7 +243,7 @@ export class BrowseService {
     }
     const limit = Math.min(Math.max(Number(filters.limit ?? REVIEWS_PAGE) || REVIEWS_PAGE, 1), 50);
     const cursor = decodeCursor<{ at: string; id: string }>(filters.cursor);
-    const summary = await this.ratingOf(scope!);
+    const summary = await this.ratingOf(scope);
     const rows = await this.db
       .select({ review: reviews, name: users.name })
       .from(reviews)

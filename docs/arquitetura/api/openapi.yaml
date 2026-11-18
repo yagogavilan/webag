@@ -54,6 +54,8 @@ tags:
     description: Busca pública de produtos e lojas por posição, com filtros e ordenação
   - name: browse
     description: Loja e produto públicos para o cliente (vitrine, variações, avaliações lidas)
+  - name: favorites
+    description: Favoritos de lojas e produtos da conta
 security:
   - bearerAuth: []
 paths:
@@ -4039,6 +4041,130 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/me/favorites:
+    get:
+      tags: [favorites]
+      operationId: listFavorites
+      summary: Meus favoritos (WB-019)
+      description: "Mais recentes primeiro, paginado por cursor. `kind` filtra por loja ou produto. Favorito de loja ou produto que saiu do ar vem com `unavailable=true` (selo 'Indisponível') e pode ser removido. Teto de 200 por conta."
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [store, product] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Favoritos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoritePage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/favorites/stores/{storeId}:
+    parameters:
+      - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [favorites]
+      operationId: addFavoriteStore
+      summary: Favoritar loja
+      description: "Idempotente: repetir devolve 204 sem duplicar. Loja inexistente ou não visível: 404. 422 `FAVORITES_LIMIT_REACHED` no teto."
+      responses:
+        '204':
+          description: Favoritada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [favorites]
+      operationId: removeFavoriteStore
+      summary: Desfavoritar loja
+      description: "Idempotente: 204 mesmo que não estivesse favoritada."
+      responses:
+        '204':
+          description: Removida
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/favorites/products/{productId}:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [favorites]
+      operationId: addFavoriteProduct
+      summary: Favoritar produto
+      description: "Idempotente. Produto inexistente, inativo ou de loja não aprovada: 404."
+      responses:
+        '204':
+          description: Favoritado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [favorites]
+      operationId: removeFavoriteProduct
+      summary: Desfavoritar produto
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/search-history:
+    get:
+      tags: [search]
+      operationId: listSearchHistory
+      summary: Últimos termos buscados (WB-015)
+      description: "Até 10 termos distintos, do mais recente ao mais antigo. Visitante guarda só no aparelho."
+      responses:
+        '200':
+          description: Histórico
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchHistoryList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [search]
+      operationId: recordSearchTerm
+      summary: Registrar um termo buscado
+      description: "O app chama ao confirmar a busca (não a cada tecla). Termo repetido (sem acento, caixa e espaços extras) só volta ao topo; o 11º mais antigo é descartado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordSearchTermRequest' }
+      responses:
+        '204':
+          description: Registrado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [search]
+      operationId: clearSearchHistory
+      summary: Limpar histórico
+      description: "Apaga tudo da conta (LGPD). O app apaga também o do aparelho."
+      responses:
+        '204':
+          description: Apagado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 components:
   securitySchemes:
     bearerAuth:
@@ -6756,3 +6882,57 @@ components:
         summary: { $ref: '#/components/schemas/Rating' }
         data: { type: array, items: { $ref: '#/components/schemas/Review' } }
         nextCursor: { type: [string, 'null'] }
+    Favorite:
+      type: object
+      required: [kind, unavailable, favoritedAt, store, product]
+      properties:
+        kind: { type: string, enum: [store, product] }
+        unavailable: { type: boolean }
+        favoritedAt: { type: string, format: date-time }
+        store:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, name, logo]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                logo: { $ref: '#/components/schemas/ImageUrls' }
+        product:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, name, image, price, storeId, storeName]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                image: { $ref: '#/components/schemas/ImageUrls' }
+                price: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+                storeId: { type: string, format: uuid }
+                storeName: { type: string }
+    FavoritePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Favorite' } }
+        nextCursor: { type: [string, 'null'] }
+    SearchHistoryList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [term, searchedAt]
+            properties:
+              term: { type: string }
+              searchedAt: { type: string, format: date-time }
+        nextCursor: { type: 'null' }
+    RecordSearchTermRequest:
+      type: object
+      additionalProperties: false
+      required: [term]
+      properties:
+        term: { type: string, minLength: 2, maxLength: 80 }

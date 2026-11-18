@@ -5638,3 +5638,133 @@ export const ListBrowseProductReviewsResponse = zod.object({
 })),
   "nextCursor": zod.string().nullable()
 })
+
+
+/**
+ * Mais recentes primeiro, paginado por cursor. `kind` filtra por loja ou produto. Favorito de loja ou produto que saiu do ar vem com `unavailable=true` (selo 'Indisponível') e pode ser removido. Teto de 200 por conta.
+ * @summary Meus favoritos (WB-019)
+ */
+export const listFavoritesQueryCursorMax = 200;
+
+export const listFavoritesQueryLimitDefault = 20;
+export const listFavoritesQueryLimitMax = 50;
+
+
+
+export const ListFavoritesQueryParams = zod.object({
+  "kind": zod.enum(['store', 'product']).optional(),
+  "cursor": zod.string().max(listFavoritesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listFavoritesQueryLimitMax).default(listFavoritesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListFavoritesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "kind": zod.enum(['store', 'product']),
+  "unavailable": zod.boolean(),
+  "favoritedAt": zod.iso.datetime({"offset":true}),
+  "store": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+})
+})]),
+  "product": zod.union([zod.null(),zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "price": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "storeId": zod.uuid(),
+  "storeName": zod.string()
+})])
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Idempotente: repetir devolve 204 sem duplicar. Loja inexistente ou não visível: 404. 422 `FAVORITES_LIMIT_REACHED` no teto.
+ * @summary Favoritar loja
+ */
+export const AddFavoriteStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const AddFavoriteStoreResponse = zod.void()
+
+
+/**
+ * Idempotente: 204 mesmo que não estivesse favoritada.
+ * @summary Desfavoritar loja
+ */
+export const RemoveFavoriteStoreParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const RemoveFavoriteStoreResponse = zod.void()
+
+
+/**
+ * Idempotente. Produto inexistente, inativo ou de loja não aprovada: 404.
+ * @summary Favoritar produto
+ */
+export const AddFavoriteProductParams = zod.object({
+  "productId": zod.uuid()
+})
+
+export const AddFavoriteProductResponse = zod.void()
+
+
+/**
+ * @summary Desfavoritar produto
+ */
+export const RemoveFavoriteProductParams = zod.object({
+  "productId": zod.uuid()
+})
+
+export const RemoveFavoriteProductResponse = zod.void()
+
+
+/**
+ * Até 10 termos distintos, do mais recente ao mais antigo. Visitante guarda só no aparelho.
+ * @summary Últimos termos buscados (WB-015)
+ */
+export const listSearchHistoryResponseDataMax = 10;
+
+
+
+export const ListSearchHistoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "term": zod.string(),
+  "searchedAt": zod.iso.datetime({"offset":true})
+})).max(listSearchHistoryResponseDataMax),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * O app chama ao confirmar a busca (não a cada tecla). Termo repetido (sem acento, caixa e espaços extras) só volta ao topo; o 11º mais antigo é descartado.
+ * @summary Registrar um termo buscado
+ */
+export const recordSearchTermBodyTermMin = 2;
+export const recordSearchTermBodyTermMax = 80;
+
+
+
+export const RecordSearchTermBody = zod.object({
+  "term": zod.string().min(recordSearchTermBodyTermMin).max(recordSearchTermBodyTermMax)
+})
+
+export const RecordSearchTermResponse = zod.void()
+
+
+/**
+ * Apaga tudo da conta (LGPD). O app apaga também o do aparelho.
+ * @summary Limpar histórico
+ */
+export const ClearSearchHistoryResponse = zod.void()

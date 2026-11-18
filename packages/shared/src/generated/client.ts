@@ -2794,6 +2794,63 @@ export interface ReviewPage {
   nextCursor: string | null;
 }
 
+export type FavoriteKind = typeof FavoriteKind[keyof typeof FavoriteKind];
+
+
+export const FavoriteKind = {
+  store: 'store',
+  product: 'product',
+} as const;
+
+export type FavoriteStore = {
+  id: string;
+  name: string;
+  logo: ImageUrls;
+} | null;
+
+export type FavoriteProduct = {
+  id: string;
+  name: string;
+  image: ImageUrls;
+  price: Money | null;
+  storeId: string;
+  storeName: string;
+} | null;
+
+export interface Favorite {
+  kind: FavoriteKind;
+  unavailable: boolean;
+  favoritedAt: string;
+  store: FavoriteStore;
+  product: FavoriteProduct;
+}
+
+export interface FavoritePage {
+  data: Favorite[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type SearchHistoryListDataItem = {
+  term: string;
+  searchedAt: string;
+};
+
+export interface SearchHistoryList {
+  /** @maxItems 10 */
+  data: SearchHistoryListDataItem[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export interface RecordSearchTermRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  term: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -3306,6 +3363,29 @@ export type ListBrowseProductReviewsParams = {
    */
   limit?: number;
 };
+
+export type ListFavoritesParams = {
+  kind?: ListFavoritesKind;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListFavoritesKind = typeof ListFavoritesKind[keyof typeof ListFavoritesKind];
+
+
+export const ListFavoritesKind = {
+  store: 'store',
+  product: 'product',
+} as const;
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -12154,6 +12234,419 @@ export const listBrowseProductReviews = async (productId: string,
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listFavoritesResponse200 = {
+  data: FavoritePage
+  status: 200
+}
+
+export type listFavoritesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listFavoritesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listFavoritesResponseSuccess = (listFavoritesResponse200) & {
+  headers: Headers;
+};
+export type listFavoritesResponseError = (listFavoritesResponse400 | listFavoritesResponse401) & {
+  headers: Headers;
+};
+
+export type listFavoritesResponse = (listFavoritesResponseSuccess | listFavoritesResponseError)
+
+export const getListFavoritesUrl = (params?: ListFavoritesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/me/favorites?${stringifiedParams}` : `/v1/me/favorites`
+}
+
+/**
+ * Mais recentes primeiro, paginado por cursor. `kind` filtra por loja ou produto. Favorito de loja ou produto que saiu do ar vem com `unavailable=true` (selo 'Indisponível') e pode ser removido. Teto de 200 por conta.
+ * @summary Meus favoritos (WB-019)
+ */
+export const listFavorites = async (params?: ListFavoritesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listFavoritesResponse> => {
+
+  return apiFetch<listFavoritesResponse>(getListFavoritesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type addFavoriteStoreResponse204 = {
+  data: void
+  status: 204
+}
+
+export type addFavoriteStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type addFavoriteStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type addFavoriteStoreResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type addFavoriteStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type addFavoriteStoreResponseSuccess = (addFavoriteStoreResponse204) & {
+  headers: Headers;
+};
+export type addFavoriteStoreResponseError = (addFavoriteStoreResponse401 | addFavoriteStoreResponse404 | addFavoriteStoreResponse422 | addFavoriteStoreResponse429) & {
+  headers: Headers;
+};
+
+export type addFavoriteStoreResponse = (addFavoriteStoreResponseSuccess | addFavoriteStoreResponseError)
+
+export const getAddFavoriteStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/me/favorites/stores/${storeId}`
+}
+
+/**
+ * Idempotente: repetir devolve 204 sem duplicar. Loja inexistente ou não visível: 404. 422 `FAVORITES_LIMIT_REACHED` no teto.
+ * @summary Favoritar loja
+ */
+export const addFavoriteStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<addFavoriteStoreResponse> => {
+
+  return apiFetch<addFavoriteStoreResponse>(getAddFavoriteStoreUrl(storeId),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+export type removeFavoriteStoreResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeFavoriteStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeFavoriteStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeFavoriteStoreResponseSuccess = (removeFavoriteStoreResponse204) & {
+  headers: Headers;
+};
+export type removeFavoriteStoreResponseError = (removeFavoriteStoreResponse401 | removeFavoriteStoreResponse404) & {
+  headers: Headers;
+};
+
+export type removeFavoriteStoreResponse = (removeFavoriteStoreResponseSuccess | removeFavoriteStoreResponseError)
+
+export const getRemoveFavoriteStoreUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/me/favorites/stores/${storeId}`
+}
+
+/**
+ * Idempotente: 204 mesmo que não estivesse favoritada.
+ * @summary Desfavoritar loja
+ */
+export const removeFavoriteStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<removeFavoriteStoreResponse> => {
+
+  return apiFetch<removeFavoriteStoreResponse>(getRemoveFavoriteStoreUrl(storeId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type addFavoriteProductResponse204 = {
+  data: void
+  status: 204
+}
+
+export type addFavoriteProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type addFavoriteProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type addFavoriteProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type addFavoriteProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type addFavoriteProductResponseSuccess = (addFavoriteProductResponse204) & {
+  headers: Headers;
+};
+export type addFavoriteProductResponseError = (addFavoriteProductResponse401 | addFavoriteProductResponse404 | addFavoriteProductResponse422 | addFavoriteProductResponse429) & {
+  headers: Headers;
+};
+
+export type addFavoriteProductResponse = (addFavoriteProductResponseSuccess | addFavoriteProductResponseError)
+
+export const getAddFavoriteProductUrl = (productId: string,) => {
+
+
+
+
+  return `/v1/me/favorites/products/${productId}`
+}
+
+/**
+ * Idempotente. Produto inexistente, inativo ou de loja não aprovada: 404.
+ * @summary Favoritar produto
+ */
+export const addFavoriteProduct = async (productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<addFavoriteProductResponse> => {
+
+  return apiFetch<addFavoriteProductResponse>(getAddFavoriteProductUrl(productId),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+export type removeFavoriteProductResponse204 = {
+  data: void
+  status: 204
+}
+
+export type removeFavoriteProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeFavoriteProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeFavoriteProductResponseSuccess = (removeFavoriteProductResponse204) & {
+  headers: Headers;
+};
+export type removeFavoriteProductResponseError = (removeFavoriteProductResponse401 | removeFavoriteProductResponse404) & {
+  headers: Headers;
+};
+
+export type removeFavoriteProductResponse = (removeFavoriteProductResponseSuccess | removeFavoriteProductResponseError)
+
+export const getRemoveFavoriteProductUrl = (productId: string,) => {
+
+
+
+
+  return `/v1/me/favorites/products/${productId}`
+}
+
+/**
+ * @summary Desfavoritar produto
+ */
+export const removeFavoriteProduct = async (productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<removeFavoriteProductResponse> => {
+
+  return apiFetch<removeFavoriteProductResponse>(getRemoveFavoriteProductUrl(productId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listSearchHistoryResponse200 = {
+  data: SearchHistoryList
+  status: 200
+}
+
+export type listSearchHistoryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listSearchHistoryResponseSuccess = (listSearchHistoryResponse200) & {
+  headers: Headers;
+};
+export type listSearchHistoryResponseError = (listSearchHistoryResponse401) & {
+  headers: Headers;
+};
+
+export type listSearchHistoryResponse = (listSearchHistoryResponseSuccess | listSearchHistoryResponseError)
+
+export const getListSearchHistoryUrl = () => {
+
+
+
+
+  return `/v1/me/search-history`
+}
+
+/**
+ * Até 10 termos distintos, do mais recente ao mais antigo. Visitante guarda só no aparelho.
+ * @summary Últimos termos buscados (WB-015)
+ */
+export const listSearchHistory = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listSearchHistoryResponse> => {
+
+  return apiFetch<listSearchHistoryResponse>(getListSearchHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type recordSearchTermResponse204 = {
+  data: void
+  status: 204
+}
+
+export type recordSearchTermResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type recordSearchTermResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type recordSearchTermResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type recordSearchTermResponseSuccess = (recordSearchTermResponse204) & {
+  headers: Headers;
+};
+export type recordSearchTermResponseError = (recordSearchTermResponse400 | recordSearchTermResponse401 | recordSearchTermResponse429) & {
+  headers: Headers;
+};
+
+export type recordSearchTermResponse = (recordSearchTermResponseSuccess | recordSearchTermResponseError)
+
+export const getRecordSearchTermUrl = () => {
+
+
+
+
+  return `/v1/me/search-history`
+}
+
+/**
+ * O app chama ao confirmar a busca (não a cada tecla). Termo repetido (sem acento, caixa e espaços extras) só volta ao topo; o 11º mais antigo é descartado.
+ * @summary Registrar um termo buscado
+ */
+export const recordSearchTerm = async (recordSearchTermRequest: RecordSearchTermRequest, options?: Parameters<typeof apiFetch>[1]): Promise<recordSearchTermResponse> => {
+
+  return apiFetch<recordSearchTermResponse>(getRecordSearchTermUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(recordSearchTermRequest)
+  }
+);}
+
+
+
+export type clearSearchHistoryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type clearSearchHistoryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type clearSearchHistoryResponseSuccess = (clearSearchHistoryResponse204) & {
+  headers: Headers;
+};
+export type clearSearchHistoryResponseError = (clearSearchHistoryResponse401) & {
+  headers: Headers;
+};
+
+export type clearSearchHistoryResponse = (clearSearchHistoryResponseSuccess | clearSearchHistoryResponseError)
+
+export const getClearSearchHistoryUrl = () => {
+
+
+
+
+  return `/v1/me/search-history`
+}
+
+/**
+ * Apaga tudo da conta (LGPD). O app apaga também o do aparelho.
+ * @summary Limpar histórico
+ */
+export const clearSearchHistory = async ( options?: Parameters<typeof apiFetch>[1]): Promise<clearSearchHistoryResponse> => {
+
+  return apiFetch<clearSearchHistoryResponse>(getClearSearchHistoryUrl(),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }
