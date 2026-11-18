@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { AreaShell } from '@/components/area-shell';
-import { PANEL_AREAS } from '@/lib/areas';
 
-const area = PANEL_AREAS.admin;
+// Origem própria do admin: o título da aba é fixo (anti página falsa, onda-1b §0.6) e nada é pré-renderizado
+// estaticamente (cookie de sessão e CSP com nonce dependem de cada requisição).
+export const metadata: Metadata = { title: { default: 'Webag Admin', template: '%s | Webag Admin' } };
+export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: area.title };
-
-export default function Layout({ children }: { children: ReactNode }) {
-  return <AreaShell area={area}>{children}</AreaShell>;
+export default function AdminRootLayout({ children }: { children: ReactNode }) {
+  return children;
 }

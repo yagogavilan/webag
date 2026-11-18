@@ -1,0 +1,83 @@
+import { ApiError, networkError, toApiError } from './errors';
+
+export type Area = 'admin' | 'lojista';
+
+type Listener = (reason: 'expired' | 'idle') => void;
+const listeners = new Set<Listener>();
+
+/** A tela de sessão expirada se inscreve aqui: qualquer 401 depois da tentativa de renovação do BFF dispara. */
+export function onSessionLost(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  query?: Record<string, string | number | undefined | null>;
+  signal?: AbortSignal;
+}
+
+function queryString(query: RequestOptions['query']): string {
+  if (!query) return '';
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
+
+/**
+ * Chamada ao BFF (`/api/proxy/<area>/...`), que anexa o token do cookie HttpOnly. O navegador nunca vê tokens.
+ * Contrato provisório: os tipos vêm de `./admin` até o OpenAPI publicar estes endpoints (DT-014).
+ */
+export async function apiRequest<T>(area: Area, path: string, options: RequestOptions = {}): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/proxy/${area}/${path}${queryString(options.query)}`, {
+      method: options.method ?? 'GET',
+      headers: {
+        accept: 'application/json',
+        'x-webag-client': 'web',
+        ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      credentials: 'same-origin',
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw networkError();
+  }
+  if (!response.ok) {
+    const error = await toApiError(response);
+    if (response.status === 401) {
+      const reason = error.code === 'SESSION_IDLE' ? 'idle' : 'expired';
+      listeners.forEach((listener) => listener(reason));
+    }
+    throw error;
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/** Chamada às rotas de sessão do BFF (login, logout, convite). Não dispara "sessão perdida". */
+export async function sessionRequest<T>(area: Area, action: 'login' | 'logout' | 'accept-invite', body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/session/${area}/${action}`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'x-webag-client': 'web', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+  } catch {
+    throw networkError();
+  }
+  if (!response.ok) throw await toApiError(response);
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export { ApiError };
