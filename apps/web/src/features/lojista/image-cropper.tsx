@@ -15,6 +15,8 @@ interface Props {
   /** Largura dividida pela altura da moldura (documento: 4 por 3). */
   aspect: number;
   title?: string;
+  /** Maior lado da imagem de saída (logo e capa saem menores que o documento: ≤ 300 KB, onda-2 C2). */
+  maxSide?: number;
   onAccept: (result: Prepared) => void;
   onCancel: () => void;
 }
@@ -23,7 +25,7 @@ interface Props {
  * Recorte de imagem (onda-2 C2): moldura fixa, arrastar para mover, zoom por barra e botões, girar, alternativa por
  * teclado (setas movem, `+`/`-` aproximam, `r` gira). Tudo no navegador; sai em JPEG comprimido e sem metadados.
  */
-export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAccept, onCancel }: Props) {
+export function ImageCropper({ source, aspect, title = 'Recortar imagem', maxSide, onAccept, onCancel }: Props) {
   const frameHeight = Math.round(FRAME_WIDTH / aspect);
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
   const [quarter, setQuarter] = useState<Quarter>(0);
@@ -113,7 +115,7 @@ export function ImageCropper({ source, aspect, title = 'Recortar imagem', onAcce
     if (!canvas || !full) return;
     setBusy(true);
     try {
-      onAccept(await finish(cropToCanvas(canvas, cropRect(full))));
+      onAccept(await finish(cropToCanvas(canvas, cropRect(full), maxSide)));
     } catch {
       setBusy(false);
       setError('Não foi possível preparar a imagem. Tente de novo.');

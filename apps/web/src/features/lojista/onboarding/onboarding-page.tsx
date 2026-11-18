@@ -30,6 +30,8 @@ export function onboardingRedirect(store: MerchantStore | null, step: Onboarding
   if (store && store.status !== 'draft') {
     if (store.status === 'in_review' && step === 'revisao') return null;
     if (store.status === 'correction_requested' && correction && (step === '1' || step === '2')) return null;
+    // Loja já enviada: conectar (ou trocar) a conta de recebimento continua possível, e é para onde volta o OAuth do Mercado Pago.
+    if (step === '4' && store.status !== 'rejected' && store.status !== 'suspended') return null;
     return '/lojista';
   }
   const done = store?.step ?? 0;
@@ -54,7 +56,7 @@ export function OnboardingPage({ step, fromReview, correction, oauth }: Props) {
         if (target) return <SkeletonRows rows={2} height={64} label="Abrindo a etapa certa" />;
         const previous = PREVIOUS[step];
         const backHref = correction || fromReview ? (step === 'revisao' ? onboardingPath('4') : correction ? '/lojista' : onboardingPath('revisao')) : previous ? onboardingPath(previous) : undefined;
-        const next = correction ? '/lojista' : fromReview && step !== 'revisao' ? onboardingPath('revisao') : step === 'revisao' ? '/lojista' : onboardingPath(NEXT[step]);
+        const next = correction ? '/lojista' : step === '4' && store && store.status !== 'draft' ? '/lojista/loja' : fromReview && step !== 'revisao' ? onboardingPath('revisao') : step === 'revisao' ? '/lojista' : onboardingPath(NEXT[step]);
         switch (step) {
           case '1':
             return <Step1 store={store} next={next} backHref={backHref} />;

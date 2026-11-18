@@ -271,9 +271,9 @@ export const merchantApi = {
     return loadStore();
   },
   cep: (cep: string) => apiRequest<CepResult>('lojista', `cep/${cep}`),
-  createUpload: (body: { storeId: string; purpose: 'store_document'; contentType: string; sizeBytes: number }) =>
+  createUpload: (body: { storeId: string; purpose: 'store_document' | 'store_logo' | 'store_cover'; contentType: string; sizeBytes: number }) =>
     apiRequest<{ id: string; upload: { url: string; fields: Record<string, string> } }>('lojista', 'uploads', { method: 'POST', body }).then((created): UploadPolicy => ({ uploadId: created.id, url: created.upload.url, fields: created.upload.fields })),
-  completeUpload: (uploadId: string) => apiRequest<unknown>('lojista', `uploads/${uploadId}/complete`, { method: 'POST' }),
+  completeUpload: (uploadId: string) => apiRequest<{ id: string; status: string; urls: Record<string, string> | null; rejectionReason: string | null }>('lojista', `uploads/${uploadId}/complete`, { method: 'POST' }),
   attachDocument: (storeId: string, kind: DocumentKind, uploadId: string) => apiRequest<void>('lojista', `stores/${storeId}/documents`, { method: 'POST', body: { kind, uploadId } }),
   /** Exige senha de até 5 min (`REAUTH_REQUIRED`): chame dentro de `useReauth().guard`. */
   connectPayout: (storeId: string) => apiRequest<{ authorizationUrl: string; state: string; expiresInSeconds: number }>('lojista', `stores/${storeId}/payment-account/connect`, { method: 'POST' }),

@@ -1,0 +1,245 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { StoreSettings } from '@/lib/api/store-settings';
+import { parseCents, centsInput, parseDecimal } from '@/lib/money';
+import { json, mockFetch } from '../../../test/render';
+import { fakeStore, renderLojista, storeHandlers } from '../../../test/lojista';
+import { DeliveryPage } from './delivery-page';
+import { ExchangePage } from './exchange-page';
+import { HoursPage, maskTime, validateDay } from './hours-page';
+import { StoreMenu, hoursSummary } from './store-menu';
+
+const push = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }), usePathname: () => '/lojista/loja' }));
+
+const settings = (over: Partial<StoreSettings> = {}): StoreSettings => ({
+  isOpenNow: true,
+  hours: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, intervals: [{ start: '09:00', end: '18:00' }] })),
+  holidays: [],
+  pause: { active: false, until: null, indefinitely: false },
+  delivery: { acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, tiers: [], minOrderCents: 3000, freeAboveCents: 0, etaMinMinutes: 30, etaMaxMinutes: 45 },
+  pickup: { enabled: false, useStoreAddress: true, address: null, instructions: null, prepMinMinutes: 15, prepMaxMinutes: 30 },
+  exchangePolicy: { voluntaryDays: 7, collectionFeeCents: 0, version: 1, legalFloor: { withdrawalDays: 7, defectDays: 90 } },
+  lowStockThreshold: 5,
+  ...over,
+});
+
+/** Loja aprovada + `GET stores/s1/settings`; as escritas ficam registradas em `calls`. */
+function server(current: StoreSettings = settings(), onWrite?: (url: URL, init: RequestInit) => Response | undefined) {
+  const store = fakeStore({ status: 'approved', step: 4, name: 'Casa Bela', payout: { status: 'connected', maskedAccount: 'Titular ***.982.247-**', simulated: true } });
+  return mockFetch(
+    ...(onWrite ? [onWrite] : []),
+    (url) => (url.pathname === '/api/proxy/lojista/stores/s1/settings' ? json(current) : undefined),
+    ...storeHandlers(store),
+  );
+}
+
+afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => push.mockClear());
+
+describe('formatação', () => {
+  it('converte reais digitados em centavos e volta', () => {
+    expect(parseCents('7,50')).toBe(750);
+    expect(parseCents('R$ 1.250,00')).toBe(125000);
+    expect(parseCents('7')).toBe(700);
+    expect(parseCents('abc')).toBeNull();
+    expect(centsInput(500)).toBe('5,00');
+    expect(parseDecimal('2,5')).toBe(2.5);
+  });
+  it('máscara de horário e validação do dia (C3)', () => {
+    expect(maskTime('0930')).toBe('09:30');
+    expect(validateDay([{ start: '09:00', end: '08:00' }])).toBe('O horário de fechar precisa ser depois do de abrir.');
+    expect(validateDay([{ start: '09:00', end: '13:00' }, { start: '12:00', end: '18:00' }])).toBe('Os dois horários não podem se sobrepor.');
+    expect(validateDay([{ start: '9:0', end: '18:00' }])).toBe('Confira o horário (ex.: 09:00).');
+    expect(validateDay([{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }])).toBeNull();
+  });
+  it('resumo dos horários', () => {
+    expect(hoursSummary(settings().hours)).toBe('Seg a sex, 9h às 18h');
+    expect(hoursSummary([])).toBeNull();
+  });
+});
+
+describe('Minha loja (C1)', () => {
+  it('mostra o estado, os resumos e a pendência do horário', async () => {
+    vi.stubGlobal('fetch', server(settings({ hours: [] })).impl);
+    renderLojista(<StoreMenu />);
+    expect(await screen.findByText('Loja aberta')).toBeInTheDocument();
+    expect(screen.getByTestId('lojista.minha-loja.item-delivery')).toHaveTextContent('Entrega até 5 km');
+    expect(screen.getByTestId('lojista.minha-loja.item-hours')).toHaveTextContent('Falta o horário');
+    expect(screen.getByTestId('lojista.minha-loja.item-exchange')).toHaveTextContent('Troca em até 7 dias');
+    expect(screen.getByTestId('lojista.minha-loja.item-payout')).toHaveTextContent('Titular');
+  });
+
+  it('pausar: pede confirmação e manda o tempo escolhido; pausada mostra "Reabrir agora"', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (url.pathname.endsWith('/stores/s1/pause') && init.method === 'POST' ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<StoreMenu />);
+    await userEvent.click(await screen.findByTestId('lojista.minha-loja.pause-chip-2h'));
+    await userEvent.click(screen.getByTestId('lojista.minha-loja.pause-open'));
+    expect(screen.getByText('Pausar a loja?')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lojista.minha-loja.pause-submit'));
+    await waitFor(() => expect(JSON.parse(String(calls.find((c) => c.init.method === 'POST' && c.url.pathname.endsWith('/pause'))!.init.body))).toEqual({ kind: '2h' }));
+  });
+
+  it('loja pausada oferece reabrir', async () => {
+    vi.stubGlobal('fetch', server(settings({ pause: { active: true, until: '2026-11-18T18:30:00Z', indefinitely: false } })).impl);
+    renderLojista(<StoreMenu />);
+    expect(await screen.findByTestId('lojista.minha-loja.reopen')).toBeInTheDocument();
+  });
+
+  it('funcionário não tem acesso', async () => {
+    const staff = fakeStore({ status: 'approved', role: 'staff' });
+    vi.stubGlobal('fetch', mockFetch(...storeHandlers(staff)).impl);
+    renderLojista(<StoreMenu />);
+    expect(await screen.findByText('Peça ao dono da loja para liberar.')).toBeInTheDocument();
+  });
+
+  it('erro ao carregar oferece tentar de novo', async () => {
+    const store = fakeStore({ status: 'approved', step: 4 });
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/settings') ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined), ...storeHandlers(store)).impl);
+    renderLojista(<StoreMenu />);
+    expect(await screen.findByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
+  });
+});
+
+describe('Horários (C3)', () => {
+  it('valida o horário e salva horários e feriados', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' && /hours|holidays/.test(url.pathname) ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<HoursPage />);
+    const close = await screen.findByTestId('lojista.horarios.day-1-close-1');
+    await userEvent.clear(close);
+    await userEvent.type(close, '0800');
+    await userEvent.click(screen.getByTestId('lojista.horarios.submit'));
+    expect(await screen.findByText('O horário de fechar precisa ser depois do de abrir.')).toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'PUT')).toBe(false);
+
+    await userEvent.clear(close);
+    await userEvent.type(close, '1900');
+    await userEvent.type(screen.getByTestId('lojista.horarios.holiday-date'), '2026-12-25');
+    await userEvent.type(screen.getByTestId('lojista.horarios.holiday-label'), 'Natal');
+    await userEvent.click(screen.getByTestId('lojista.horarios.holiday-add'));
+    await userEvent.click(screen.getByTestId('lojista.horarios.submit'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/lojista/loja'));
+    const hours = JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/hours'))!.init.body));
+    expect(hours.days).toHaveLength(7);
+    expect(hours.days.find((d: { weekday: number }) => d.weekday === 1).intervals).toEqual([{ start: '09:00', end: '19:00' }]);
+    expect(hours.days.find((d: { weekday: number }) => d.weekday === 0).intervals).toEqual([]);
+    expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/holidays'))!.init.body))).toEqual({ holidays: [{ date: '2026-12-25', label: 'Natal' }] });
+  });
+
+  it('sem horário: aviso e atalhos', async () => {
+    vi.stubGlobal('fetch', server(settings({ hours: [] })).impl);
+    renderLojista(<HoursPage />);
+    expect(await screen.findByText('Sua loja está sem horário e aparece como fechada.')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lojista.horarios.preset-all'));
+    expect(screen.getByTestId('lojista.horarios.day-0-open-1')).toHaveValue('09:00');
+  });
+
+  it('sair com alteração pede confirmação', async () => {
+    vi.stubGlobal('fetch', server().impl);
+    renderLojista(<HoursPage />);
+    await userEvent.click(await screen.findByTestId('lojista.horarios.preset-all'));
+    await userEvent.click(screen.getByTestId('lojista.horarios.back'));
+    expect(screen.getByText('Sair sem salvar?')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lojista.horarios.leave-stay'));
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('Entrega e retirada (C4)', () => {
+  it('não deixa desligar a única opção ligada', async () => {
+    vi.stubGlobal('fetch', server().impl);
+    renderLojista(<DeliveryPage />);
+    await userEvent.click(await screen.findByRole('switch', { name: /Entregar em casa/ }));
+    expect(screen.getByText('Ligue a entrega ou a retirada. A loja precisa de ao menos uma.')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /Entregar em casa/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('valida tempo e "grátis acima de"; salva entrega e retirada', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' && /delivery|pickup/.test(url.pathname) ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<DeliveryPage />);
+    await userEvent.type(await screen.findByTestId('lojista.entrega.free-above-input'), '20');
+    await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
+    expect(await screen.findByText('Precisa ser maior que o pedido mínimo de R$ 30,00.')).toBeInTheDocument();
+    await userEvent.clear(screen.getByTestId('lojista.entrega.free-above-input'));
+    await userEvent.type(screen.getByTestId('lojista.entrega.free-above-input'), '100');
+    await userEvent.clear(screen.getByTestId('lojista.entrega.eta-min-input'));
+    await userEvent.type(screen.getByTestId('lojista.entrega.eta-min-input'), '60');
+    await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
+    expect(await screen.findByText('O mínimo precisa ser menor que o máximo.')).toBeInTheDocument();
+    await userEvent.clear(screen.getByTestId('lojista.entrega.eta-min-input'));
+    await userEvent.type(screen.getByTestId('lojista.entrega.eta-min-input'), '25');
+    await userEvent.click(screen.getByRole('switch', { name: /Retirada na loja/ }));
+    await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/lojista/loja'));
+    const body = JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery') && c.init.method === 'PUT')!.init.body));
+    expect(body).toMatchObject({ acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, minOrderCents: 3000, freeAboveCents: 10000, etaMinMinutes: 25, etaMaxMinutes: 45, tiers: [] });
+    expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/pickup'))!.init.body))).toMatchObject({ enabled: true, useStoreAddress: true });
+  });
+
+  it('taxa por distância monta as faixas seguidas até o raio', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<DeliveryPage />);
+    await userEvent.click(await screen.findByTestId('lojista.entrega.fee-mode-distance'));
+    await userEvent.type(screen.getByTestId('lojista.entrega.band-1-fee'), '5');
+    await userEvent.click(screen.getByTestId('lojista.entrega.band-add'));
+    const first = screen.getByTestId('lojista.entrega.band-1-to');
+    await userEvent.clear(first);
+    await userEvent.type(first, '2');
+    await userEvent.clear(screen.getByTestId('lojista.entrega.band-2-fee'));
+    await userEvent.type(screen.getByTestId('lojista.entrega.band-2-fee'), '9');
+    await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    const body = JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery'))!.init.body));
+    expect(body.tiers).toEqual([
+      { fromKm: 0, toKm: 2, feeCents: 500 },
+      { fromKm: 2, toKm: 5, feeCents: 900 },
+    ]);
+  });
+
+  it('prévia: dentro e fora do raio, e sem conexão avisa', async () => {
+    let fee = 700;
+    const { impl } = server(settings(), (url) => (url.pathname.endsWith('/delivery/preview') ? json({ available: fee > 0, distanceM: 2300, feeCents: fee, freeShipping: false, belowMinimum: false }) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<DeliveryPage />);
+    await userEvent.type(await screen.findByTestId('lojista.entrega.preview-cep'), '07900000');
+    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
+    expect(await screen.findByText(/Para o CEP 07900-000 o cliente paga R\$\s7,00 e recebe em 30 a 45 min \(2,3 km\)/)).toBeInTheDocument();
+    fee = 0;
+    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
+    expect(await screen.findByText(/grátis/)).toBeInTheDocument();
+  });
+});
+
+describe('Política de trocas (C5)', () => {
+  it('salva prazo e taxa; o cartão legal é fixo', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' && url.pathname.endsWith('/exchange-policy') ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<ExchangePage />);
+    expect(await screen.findByTestId('lojista.trocas.legal-card')).toHaveTextContent('arrependimento em até 7 dias');
+    await userEvent.click(screen.getByTestId('lojista.trocas.days-plus'));
+    await userEvent.type(screen.getByTestId('lojista.trocas.pickup-fee-input'), '5');
+    expect(screen.getByTestId('lojista.trocas.preview')).toHaveTextContent('Troca por tamanho ou cor em até 8 dias. Coleta em casa: R$');
+    await userEvent.click(screen.getByTestId('lojista.trocas.submit'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/lojista/loja'));
+    expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/exchange-policy'))!.init.body))).toEqual({ voluntaryDays: 8, collectionFeeCents: 500 });
+  });
+
+  it('taxa acima de R$ 30,00 é recusada; desligar manda prazo zero', async () => {
+    const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' ? json(null, 204) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<ExchangePage />);
+    await userEvent.type(await screen.findByTestId('lojista.trocas.pickup-fee-input'), '40');
+    await userEvent.click(screen.getByTestId('lojista.trocas.submit'));
+    expect(await screen.findByText('A taxa vai até R$ 30,00.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: /Aceito troca/ }));
+    expect(screen.getByTestId('lojista.trocas.legal-card')).toHaveTextContent('continuam valendo por lei');
+    await userEvent.click(screen.getByTestId('lojista.trocas.submit'));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/exchange-policy'))!.init.body))).toEqual({ voluntaryDays: 0, collectionFeeCents: 0 });
+  });
+});

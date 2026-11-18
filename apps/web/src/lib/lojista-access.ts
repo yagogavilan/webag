@@ -11,7 +11,7 @@ export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   suspended: 'Suspensa',
 };
 
-export type LojistaSection = 'inicio' | 'equipe';
+export type LojistaSection = 'inicio' | 'loja' | 'equipe';
 
 export interface LojistaNavItem {
   section: LojistaSection;
@@ -23,6 +23,7 @@ export interface LojistaNavItem {
 
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
   { section: 'inicio', label: 'Início', href: '/lojista' },
+  { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
   { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', ownerOnly: true },
 ];
 

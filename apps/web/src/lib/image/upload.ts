@@ -53,3 +53,18 @@ export const uploadStoreDocument: UploadDocumentFn = async (storeId, kind, blob,
   await merchantApi.attachDocument(storeId, kind, policy.uploadId);
   return { kind, uploadedAt: new Date().toISOString(), fileName, mimeType: blob.type, sizeBytes: blob.size };
 };
+
+export interface UploadedImage {
+  assetId: string;
+  /** URLs públicas por largura (variantes geradas pelo servidor). */
+  urls: Record<string, string> | null;
+}
+
+/** Logo ou capa: mesmo caminho do documento (política, armazenamento, confirmação), sem vincular a slot; o id vai no perfil. */
+export async function uploadStoreImage(storeId: string, purpose: 'store_logo' | 'store_cover', blob: Blob, fileName: string, hooks: UploadHooks = {}): Promise<UploadedImage> {
+  const policy = await merchantApi.createUpload({ storeId, purpose, contentType: blob.type || 'image/jpeg', sizeBytes: blob.size });
+  await postToStorage(policy, blob, fileName, hooks);
+  const asset = await merchantApi.completeUpload(policy.uploadId);
+  if (asset.status === 'rejected' || asset.rejectionReason) throw new ApiError({ status: 422, code: 'UPLOAD_REJECTED', title: 'Imagem recusada', detail: asset.rejectionReason ?? 'Use outra imagem.' });
+  return { assetId: asset.id, urls: asset.urls };
+}

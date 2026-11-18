@@ -2,7 +2,7 @@
 
 import { CaretLeft } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Banner, Button, Dialog, cx, ui } from '@/components/ui';
 import { useOnline } from '@/lib/use-online';
 import { ltid } from '@/lib/testid';
@@ -29,6 +29,9 @@ export function SettingsFrame({ screen, title, description, dirty, busy, submitL
   const router = useRouter();
   const online = useOnline();
   const [leaving, setLeaving] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  // Foco no título só ao abrir a tela (onda-2 §0.3): um `ref` inline roubaria o foco do campo a cada tecla.
+  useEffect(() => heading.current?.focus({ preventScroll: true }), []);
 
   useEffect(() => {
     if (!dirty) return;
@@ -51,7 +54,7 @@ export function SettingsFrame({ screen, title, description, dirty, busy, submitL
         </Button>
       </div>
       <div>
-        <h1 className="wb-text-title1" tabIndex={-1} ref={(node) => node?.focus({ preventScroll: true })} style={{ margin: 0, outline: 'none' }}>
+        <h1 ref={heading} className="wb-text-title1" tabIndex={-1} style={{ margin: 0, outline: 'none' }}>
           {title}
         </h1>
         {description ? <p className={cx('wb-text-body', ui.muted)} style={{ margin: '4px 0 0' }}>{description}</p> : null}

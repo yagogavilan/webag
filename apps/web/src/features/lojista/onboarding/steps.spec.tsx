@@ -339,5 +339,8 @@ describe('guarda de ordem das etapas', () => {
     expect(onboardingRedirect(store, '2', true)).toBeNull();
     expect(onboardingRedirect(store, '3', true)).toBe('/lojista');
     expect(onboardingRedirect(store, '2', false)).toBe('/lojista');
+    // Conectar a conta de recebimento continua possível depois do envio (e é o retorno do OAuth).
+    expect(onboardingRedirect(fakeStore({ status: 'approved', step: 4 }), '4', false)).toBeNull();
+    expect(onboardingRedirect(fakeStore({ status: 'suspended', step: 4 }), '4', false)).toBe('/lojista');
   });
 });

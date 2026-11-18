@@ -28,6 +28,15 @@ export function validateDocumentFile(file: { type: string; name: string; size: n
   return null;
 }
 
+/** Foto de logo ou capa: JPG, PNG ou WebP, até 5 MB (onda-2 C2). */
+export function validateStoreImage(file: { type: string; name: string; size: number }): string | null {
+  const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || (file.type === '' && /\.(jpe?g|png|webp)$/i.test(file.name));
+  if (!ok) return 'Use uma foto JPG, PNG ou WebP.';
+  if (file.size > MAX_FILE_BYTES) return `Esse arquivo tem ${(file.size / (1024 * 1024)).toFixed(0)} MB. O máximo é 5 MB.`;
+  if (file.size === 0) return 'Esse arquivo está vazio. Escolha outro.';
+  return null;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;

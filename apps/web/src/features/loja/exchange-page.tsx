@@ -27,11 +27,11 @@ export function ExchangeForm({ storeId, current, refresh }: { storeId: string; c
   const toast = useToast();
   const [on, setOn] = useState(current.voluntaryDays > 0);
   const [days, setDays] = useState(current.voluntaryDays > 0 ? current.voluntaryDays : 7);
-  const [fee, setFee] = useState(centsInput(current.collectionFeeCents));
+  const [fee, setFee] = useState(current.collectionFeeCents > 0 ? centsInput(current.collectionFeeCents) : '');
   const [errors, setErrors] = useState<{ days?: string; fee?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const feeCents = parseCents(fee);
+  const feeCents = fee.trim() === '' ? 0 : parseCents(fee);
   const dirty = on !== current.voluntaryDays > 0 || (on && (days !== current.voluntaryDays || (feeCents ?? -1) !== current.collectionFeeCents));
   const setDaysClamped = (next: number) => setDays(Math.min(30, Math.max(1, next)));
 
