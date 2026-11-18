@@ -157,7 +157,7 @@ export class AuthService {
    * errou 5 vezes, step-up por e-mail após 20 falhas/h na conta, sem bloqueio da conta do dono.
    */
   async login(
-    input: { email: string; password: string; totpCode?: string; code?: string },
+    input: { email: string; password: string; code?: string },
     ctx: RequestContext,
   ): Promise<AuthResult | MfaChallenge> {
     const maxFails = await this.params.getNumber('login_falhas');
@@ -177,7 +177,7 @@ export class AuthService {
       await this.registerFailure(failKey, user ?? null, maxFails, waitSeconds, ctx, attempt.count);
       throw INVALID_CREDENTIALS();
     }
-    // Senha certa: devolve a contagem. Falha de 2º fator (caminho legado) volta a contar em registerFailure.
+    // Senha certa: devolve a contagem (o 2º fator tem o limite próprio por conta, SEC-091).
     await this.limiter.release(failKey);
 
     if (user.status !== 'active') {
@@ -199,7 +199,6 @@ export class AuthService {
 
     const [admin] = await this.db.select().from(adminProfiles).where(eq(adminProfiles.userId, user.id));
     const activeAdmin = admin?.active ? admin : null;
-    let factor: VerifiedFactor | null = null;
     if (activeAdmin && !hasSecondFactor(activeAdmin) && activeAdmin.totpSetupDeadlineAt.getTime() <= Date.now()) {
       // SEC-113 (5): nunca configurou o 2º fator e o prazo de 48 h do convite/reativação acabou: senha sozinha não abre sessão.
       throw new AppError(403, 'ENROLLMENT_EXPIRED', 'Prazo de configuração vencido', {
@@ -207,22 +206,13 @@ export class AuthService {
       });
     }
     if (activeAdmin && hasSecondFactor(activeAdmin)) {
-      if (!input.totpCode) {
-        // SEC-090: 2 passos. A senha certa devolve só um token opaco; sessão só depois do código.
-        const mfaToken = await this.tickets.issue('mfa_login', user.id, MFA_TOKEN_TTL_SECONDS);
-        return { mfaRequired: true, mfaToken, expiresIn: MFA_TOKEN_TTL_SECONDS };
-      }
-      // Caminho de 1 passo (obsoleto, mantido enquanto o painel migra para o `mfaToken`): mesmos limites por conta.
-      factor = await this.totp.verifyWithLimits(user.id, input.totpCode, ctx);
-      if (!factor) {
-        // WB-222 C4: não diz qual passo falhou; conta no mesmo limite de falhas.
-        await this.registerFailure(failKey, user, maxFails, waitSeconds, ctx);
-        throw INVALID_CREDENTIALS();
-      }
+      // SEC-090: 2 passos. A senha certa devolve só um token opaco; sessão só depois do código (`/auth/mfa/verify`).
+      const mfaToken = await this.tickets.issue('mfa_login', user.id, MFA_TOKEN_TTL_SECONDS);
+      return { mfaRequired: true, mfaToken, expiresIn: MFA_TOKEN_TTL_SECONDS };
     }
     await this.limiter.reset(failKey);
     if (needsStepUp) await this.limiter.reset(`lfa:${user.id}`);
-    return this.openSession(user, activeAdmin?.profile ?? null, factor, ctx);
+    return this.openSession(user, activeAdmin?.profile ?? null, null, ctx);
   }
 
   /**
@@ -319,7 +309,7 @@ export class AuthService {
    * ticket. Admin não ganha sessão (o TOTP continua exigido no login).
    */
   async resetPassword(
-    input: { email: string; code: string; newPassword: string; totpCode?: string },
+    input: { email: string; code: string; newPassword: string },
     ctx: RequestContext,
   ): Promise<{ tokens: TokenPair | null; mfaRequired?: true; resetTicket?: string; expiresIn?: number }> {
     const [user] = await this.db.select().from(users).where(eq(users.email, input.email));
@@ -341,9 +331,7 @@ export class AuthService {
     }
     if (admin?.active) {
       const resetTicket = await this.tickets.issue('password_reset', user.id, RESET_TICKET_TTL_SECONDS, { emailVerified: true });
-      if (!input.totpCode) return { tokens: null, mfaRequired: true, resetTicket, expiresIn: RESET_TICKET_TTL_SECONDS };
-      // Compatibilidade: cliente antigo manda o TOTP na mesma chamada. Passa pelo mesmo ticket.
-      return this.completeReset({ resetTicket, totpCode: input.totpCode, newPassword: input.newPassword }, ctx);
+      return { tokens: null, mfaRequired: true, resetTicket, expiresIn: RESET_TICKET_TTL_SECONDS };
     }
     return { tokens: await this.applyNewPassword(user, input.newPassword, null, ctx) };
   }

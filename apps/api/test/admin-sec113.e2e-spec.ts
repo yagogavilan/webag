@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
+import { TotpService } from '../src/modules/identity/totp.service.js';
 import { adminProfiles, auditLog, sessions, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, totpAt, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureLegalDocs } from './helpers/fixtures.js';
+import { createAdmin, ensureLegalDocs, loginWithMfa } from './helpers/fixtures.js';
 
 /** Revisão de segurança da Onda 1: SEC-113 (recuperação não dispensa o 2º fator), SEC-117 (corrida), SEC-118, SEC-124/125. */
 describe('SEC-113: reenrolamento, reset e prazo de configuração do admin', () => {
@@ -31,7 +32,7 @@ describe('SEC-113: reenrolamento, reset e prazo de configuração do admin', () 
   it('reenrolamento: reset de senha só com o código do e-mail NÃO troca a senha; precisa de código de recuperação restante', async () => {
     const admin = await adminWithRecovery();
     const [first, second] = admin.codes;
-    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: first }).expect(200);
+    await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: first, ip: randomIp() }).expect(200);
 
     const newPassword = 'senha-nova-reenrolamento-55';
     await ask(admin.email);
@@ -84,7 +85,7 @@ describe('SEC-113: reenrolamento, reset e prazo de configuração do admin', () 
 
   it('usar código de recuperação grava auditoria sem o código e avisa o titular', async () => {
     const admin = await adminWithRecovery('finance');
-    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: admin.codes[0] }).expect(200);
+    await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: admin.codes[0], ip: randomIp() }).expect(200);
     const rows = await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, admin.userId));
     const used = rows.find((r) => r.action === 'admin.recovery_code_used');
     expect(used).toBeDefined();
@@ -93,18 +94,15 @@ describe('SEC-113: reenrolamento, reset e prazo de configuração do admin', () 
   });
 
   describe('SEC-117: limite do 2º fator e da senha resiste a requisições paralelas', () => {
-    it('20 logins paralelos com TOTP errado (IPs distintos): no máximo 5 conferências, o resto 429 sem conferir', async () => {
+    it('20 verificações paralelas do 2º fator com código errado: no máximo 5 conferem, o resto leva 429 sem conferir', async () => {
       const admin = await createAdmin(ctx, 'operations');
-      const results = await Promise.all(
-        Array.from({ length: 20 }, () =>
-          ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }),
-        ),
-      );
-      const checked = results.filter((r) => r.status === 401).length;
-      const limited = results.filter((r) => r.status === 429).length;
+      const totp = ctx.app.get(TotpService);
+      const context = { ip: randomIp(), userAgent: null, requestId: null, deviceId: null, principal: null };
+      const results = await Promise.allSettled(Array.from({ length: 20 }, () => totp.verifyWithLimits(admin.userId, '000000', context)));
+      const checked = results.filter((r) => r.status === 'fulfilled').length;
+      const limited = results.filter((r) => r.status === 'rejected' && (r.reason as { code?: string }).code === 'MFA_RATE_LIMITED').length;
       expect(checked).toBeLessThanOrEqual(5);
       expect(checked + limited).toBe(20);
-      expect(limited).toBeGreaterThanOrEqual(15);
     });
 
     it('20 logins paralelos com senha errada do mesmo IP: exatamente 5 conferências', async () => {
@@ -120,10 +118,10 @@ describe('SEC-113: reenrolamento, reset e prazo de configuração do admin', () 
     it('acerto devolve a contagem: 4 erros + acerto + 4 erros não travam o passo', async () => {
       const admin = await createAdmin(ctx, 'finance');
       for (let i = 0; i < 4; i++) {
-        await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }).expect(401);
+        await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: '000000', ip: randomIp() }).expect(401);
       }
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: totpAt(admin.totpSecret!) }).expect(200);
+      await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: totpAt(admin.totpSecret!), ip: randomIp() }).expect(200);
       expect(Number(await ctx.redis.get(`mfa:15:${admin.userId}`))).toBe(4);
     });
   });

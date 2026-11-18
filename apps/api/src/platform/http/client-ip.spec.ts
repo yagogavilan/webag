@@ -14,24 +14,30 @@ describe('parseTrustProxy (SEC-114)', () => {
 });
 
 describe('bffClientIp', () => {
+  const SECRET = 's'.repeat(32);
   const run = (secret: string | undefined, headers: Record<string, string>) => {
-    const req = { headers: { ...headers }, ip: '10.0.0.9' } as unknown as Parameters<ReturnType<typeof bffClientIp>>[0];
+    const req = { headers: { ...headers }, ip: '10.0.0.9', socket: { remoteAddress: '172.18.0.5' } } as unknown as Parameters<ReturnType<typeof bffClientIp>>[0];
     bffClientIp(secret)(req, {} as never, () => undefined);
     return req;
   };
 
-  it('com o segredo certo, usa o IP informado e remove o segredo', () => {
-    const req = run('s'.repeat(32), { 'x-webag-bff-secret': 's'.repeat(32), 'x-webag-client-ip': '203.0.113.7' });
+  it('com o segredo certo, usa o IP do X-Forwarded-For e remove o segredo', () => {
+    const req = run(SECRET, { 'x-webag-bff-secret': SECRET, 'x-forwarded-for': '203.0.113.7' });
     expect(req.ip).toBe('203.0.113.7');
     expect(req.headers['x-webag-bff-secret']).toBeUndefined();
   });
 
+  it('com o segredo certo e lista, vale o primeiro; sem XFF (ou inválido), vale o IP da conexão', () => {
+    expect(run(SECRET, { 'x-webag-bff-secret': SECRET, 'x-forwarded-for': '203.0.113.7, 172.18.0.5' }).ip).toBe('203.0.113.7');
+    expect(run(SECRET, { 'x-webag-bff-secret': SECRET }).ip).toBe('172.18.0.5');
+    expect(run(SECRET, { 'x-webag-bff-secret': SECRET, 'x-forwarded-for': 'lixo' }).ip).toBe('172.18.0.5');
+  });
+
   it.each([
-    ['segredo errado', 's'.repeat(32), { 'x-webag-bff-secret': 'x'.repeat(32), 'x-webag-client-ip': '203.0.113.7' }],
-    ['sem segredo configurado', undefined, { 'x-webag-bff-secret': 'x', 'x-webag-client-ip': '203.0.113.7' }],
-    ['sem segredo no pedido', 's'.repeat(32), { 'x-webag-client-ip': '203.0.113.7' }],
-    ['IP inválido', 's'.repeat(32), { 'x-webag-bff-secret': 's'.repeat(32), 'x-webag-client-ip': 'nao-e-ip' }],
-  ])('ignora o IP informado: %s', (_name, secret, headers) => {
+    ['segredo errado', SECRET, { 'x-webag-bff-secret': 'x'.repeat(32), 'x-forwarded-for': '203.0.113.7' }],
+    ['sem segredo configurado', undefined, { 'x-webag-bff-secret': 'x', 'x-forwarded-for': '203.0.113.7' }],
+    ['sem segredo no pedido', SECRET, { 'x-forwarded-for': '203.0.113.7' }],
+  ])('não muda o IP resolvido pelo trust proxy: %s', (_name, secret, headers) => {
     expect(run(secret, headers).ip).toBe('10.0.0.9');
   });
 });

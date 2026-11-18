@@ -41,8 +41,6 @@ export const registerSchema = z.strictObject({
 export const loginSchema = z.strictObject({
   email: emailSchema,
   password: passwordSchema,
-  /** Admin: código TOTP de 6 dígitos ou código de recuperação. */
-  totpCode: z.string().trim().min(6).max(32).optional(),
   /** Step-up por e-mail (SEC-004). */
   code: codeSchema.optional(),
 });
@@ -56,11 +54,6 @@ export const resetPasswordSchema = z.strictObject({
   email: emailSchema,
   code: codeSchema,
   newPassword: passwordSchema,
-  /**
-   * Obsoleto: admin com TOTP conclui em 2 chamadas (SEC-095). Aceito para clientes antigos; só é avaliado DEPOIS
-   * do código do e-mail, nunca antes (review B1).
-   */
-  totpCode: z.string().trim().min(6).max(32).optional(),
 });
 export const mfaVerifySchema = z.strictObject({
   mfaToken: z.string().min(20).max(200),

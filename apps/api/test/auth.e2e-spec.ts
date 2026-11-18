@@ -269,24 +269,24 @@ describe('SEC-114: IP informado pelo BFF só vale com o segredo', () => {
     await ctx.close();
   });
   const SECRET = 'test-bff-shared-secret-0123456789abcdef';
+  const wrong = { email: '', password: 'senha-errada-aqui-1' };
 
-  it('com o segredo, o limite por conta+IP vale para o IP do navegador mesmo se o X-Forwarded-For mudar', async () => {
+  it('com o segredo, o limite por conta+IP vale para o IP que o BFF declarou', async () => {
     const user = await registerUser(ctx);
-    const browserIp = `198.51.100.${Math.floor(Math.random() * 250)}`;
-    for (let i = 0; i < 5; i++) {
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).set('X-Webag-BFF-Secret', SECRET).set('X-Webag-Client-IP', browserIp).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(401);
-    }
-    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).set('X-Webag-BFF-Secret', SECRET).set('X-Webag-Client-IP', browserIp).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(429);
+    const browserIp = randomIp();
+    const attempt = () => ctx.http.post('/v1/auth/login').set('X-Forwarded-For', browserIp).set('X-Webag-BFF-Secret', SECRET).send({ ...wrong, email: user.email });
+    for (let i = 0; i < 5; i++) await attempt().expect(401);
+    await attempt().expect(429);
+    // o dono, de outro IP declarado, entra normalmente
+    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).set('X-Webag-BFF-Secret', SECRET).send({ email: user.email, password: user.password }).expect(200);
   });
 
-  it('sem o segredo (ou com segredo errado), X-Webag-Client-IP é ignorado: não dá para escolher o IP', async () => {
+  it('sem o segredo (ou errado), o valor da esquerda do X-Forwarded-For não escolhe o IP: vale o do proxy confiável (direita)', async () => {
     const user = await registerUser(ctx);
-    const fixed = `198.51.100.${Math.floor(Math.random() * 250)}`;
-    const ip = randomIp();
-    // 6 tentativas do MESMO IP real (XFF) com um IP falso diferente a cada vez: a 6ª continua sendo barrada
+    const realIp = randomIp();
     for (let i = 0; i < 5; i++) {
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).set('X-Webag-BFF-Secret', 'segredo-errado-0123456789abcdef0123456789').set('X-Webag-Client-IP', `${fixed.slice(0, -1)}${i}`).send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(401);
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', `${randomIp()}, ${realIp}`).set('X-Webag-BFF-Secret', 'segredo-errado-0123456789abcdef0123456789').send({ ...wrong, email: user.email }).expect(401);
     }
-    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).set('X-Webag-Client-IP', '203.0.113.99').send({ email: user.email, password: 'senha-errada-aqui-1' }).expect(429);
+    await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', `${randomIp()}, ${realIp}`).send({ ...wrong, email: user.email }).expect(429);
   });
 });

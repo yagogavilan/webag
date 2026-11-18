@@ -2,9 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { NextFunction, Request, Response } from 'express';
 
-/** Cabeçalhos que só o BFF do painel web (Next) manda, junto com o segredo compartilhado (SEC-114). */
+/** Cabeçalho que só o BFF do painel web (Next) manda, junto com o segredo compartilhado (SEC-114). */
 export const BFF_SECRET_HEADER = 'x-webag-bff-secret';
-export const BFF_CLIENT_IP_HEADER = 'x-webag-client-ip';
 
 /**
  * `TRUST_PROXY` (SEC-114): inteiro 0..5 (saltos) OU lista de IPs/sub-redes separados por vírgula. Lista é preferível:
@@ -39,16 +38,19 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
- * O BFF do painel fala com a API dentro da rede; o IP real do navegador chega no cabeçalho `X-Webag-Client-IP`, valendo
- * SOMENTE com o segredo correto em `X-Webag-BFF-Secret`. Sem segredo (ou errado), o cabeçalho é ignorado e vale o IP
- * resolvido por `trust proxy`. O BFF deve derivar o IP de fonte confiável (N-ésimo valor da direita do XFF).
+ * O BFF do painel fala com a API dentro da rede e manda o IP do navegador (já resolvido por ele, de fonte confiável) em
+ * `X-Forwarded-For`. Esse valor vale SOMENTE com o segredo correto em `X-Webag-Bff-Secret` (comparação em tempo
+ * constante); vale o primeiro IP válido da lista (se um proxy acrescentou o dele depois). Com o segredo certo e sem
+ * XFF, vale o IP da conexão. Sem segredo (ou errado), nada muda: vale o IP resolvido por `trust proxy` (lista de CIDR).
  */
 export function bffClientIp(secret: string | undefined) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const given = req.headers[BFF_SECRET_HEADER];
-    const ip = req.headers[BFF_CLIENT_IP_HEADER];
-    if (secret && typeof given === 'string' && safeEqual(given, secret) && typeof ip === 'string' && isIP(ip.trim()) !== 0) {
-      Object.defineProperty(req, 'ip', { value: ip.trim(), configurable: true });
+    if (secret && typeof given === 'string' && safeEqual(given, secret)) {
+      const forwarded = req.headers['x-forwarded-for'];
+      const first = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined)?.trim();
+      const ip = first && isIP(first) !== 0 ? first : (req.socket.remoteAddress ?? null);
+      if (ip) Object.defineProperty(req, 'ip', { value: ip, configurable: true });
     }
     // Nunca deixa o segredo seguir adiante (logs, proxies).
     delete req.headers[BFF_SECRET_HEADER];

@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardText, FileText, Flag, List, MapPin, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
+import { ClipboardText, FileText, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -20,6 +20,7 @@ type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'du
 
 const ICONS: Record<AdminSection, IconType> = {
   lojas: Storefront,
+  moderacao: ShieldCheck,
   regioes: MapPin,
   categorias: Tag,
   parametros: SlidersHorizontal,

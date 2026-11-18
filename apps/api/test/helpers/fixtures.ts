@@ -125,6 +125,30 @@ export async function createAdmin(ctx: TestContext, profile: AdminProfile, optio
   return { userId: user.id, email, password, profile, totpSecret, ...login };
 }
 
+/**
+ * Login em 2 passos do admin (SEC-090): `/auth/login` devolve o `mfaToken` e `/auth/mfa/verify` abre a sessão.
+ * Sem `code`, devolve a resposta do 1º passo. Com o mesmo IP nos dois passos (`ip`), como faz o BFF.
+ */
+export type LoginCall = Promise<import('supertest').Response> & { expect: (status: number) => Promise<import('supertest').Response> };
+
+export function loginWithMfa(ctx: TestContext, input: { email: string; password: string; code?: string; ip?: string }): LoginCall {
+  const call = runLogin(ctx, input);
+  return Object.assign(call, {
+    expect: async (status: number) => {
+      const res = await call;
+      if (res.status !== status) throw new Error(`esperado ${status}, veio ${res.status}: ${JSON.stringify(res.body)}`);
+      return res;
+    },
+  });
+}
+
+async function runLogin(ctx: TestContext, input: { email: string; password: string; code?: string; ip?: string }): Promise<import('supertest').Response> {
+  const ip = input.ip ?? randomIp();
+  const first = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email: input.email, password: input.password });
+  if (input.code === undefined || first.status !== 200 || !(first.body as { mfaRequired?: boolean }).mfaRequired) return first;
+  return ctx.http.post('/v1/auth/mfa/verify').set('X-Forwarded-For', ip).send({ mfaToken: (first.body as { mfaToken: string }).mfaToken, code: input.code });
+}
+
 /** Login de admin. Zera o anti-replay do TOTP antes (vários logins no mesmo passo de 30 s nos testes). */
 export async function loginAdmin(
   ctx: TestContext,
@@ -133,10 +157,7 @@ export async function loginAdmin(
   await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(
     eq(adminProfiles.userId, (await ctx.db.select({ id: users.id }).from(users).where(eq(users.email, input.email)))[0]?.id ?? ''),
   );
-  const response = await ctx.http
-    .post('/v1/auth/login')
-    .set('X-Forwarded-For', randomIp())
-    .send({ email: input.email, password: input.password, ...(input.totpSecret ? { totpCode: totpAt(input.totpSecret) } : {}) });
+  const response = await loginWithMfa(ctx, { email: input.email, password: input.password, code: input.totpSecret ? totpAt(input.totpSecret) : undefined });
   if (response.status !== 200) throw new Error(`Login admin falhou: ${response.status} ${JSON.stringify(response.body)}`);
   const tokens = (response.body as { tokens: { accessToken: string; refreshToken: string } }).tokens;
   return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };

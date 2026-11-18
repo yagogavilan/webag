@@ -25,11 +25,11 @@ describe('MFA em 2 passos e B1: reset anônimo não toca o 2º fator do admin', 
 
       for (let i = 0; i < 10; i++) {
         // `rl:reset-confirm` limita 10 por e-mail em 15 min: as 10 passam e a 11ª é 429 (sem contar no MFA).
-        const res = await resetAnon(admin.email, { code: '000000', totpCode: '000000' });
+        const res = await resetAnon(admin.email, { code: '000000' });
         expect(res.status).toBe(400);
         expect(res.body.code).toBe('CODE_INVALID');
       }
-      await resetAnon(admin.email, { code: '000000', totpCode: '000000' }).expect(429);
+      await resetAnon(admin.email, { code: '000000' }).expect(429);
 
       // contadores do 2º fator intactos e senha igual
       expect(await ctx.redis.get(`mfa:15:${admin.userId}`)).toBeNull();
@@ -47,7 +47,7 @@ describe('MFA em 2 passos e B1: reset anônimo não toca o 2º fator do admin', 
       await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email: admin.email }).expect(202);
       const real = ctx.mail.lastCode(admin.email);
       const wrong = real === '123456' ? '654321' : '123456';
-      for (let i = 0; i < 4; i++) await resetAnon(admin.email, { code: wrong, totpCode: totpAt(admin.totpSecret!) }).expect(400);
+      for (let i = 0; i < 4; i++) await resetAnon(admin.email, { code: wrong }).expect(400);
       expect(await ctx.redis.get(`mfa:15:${admin.userId}`)).toBeNull();
       const [profile] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
       expect(profile?.totpConfirmedAt).not.toBeNull();
@@ -56,7 +56,7 @@ describe('MFA em 2 passos e B1: reset anônimo não toca o 2º fator do admin', 
     it('com 2º lote após a janela: a senha do admin continua válida (SEC-091c não é acionável por anônimo)', async () => {
       const admin = await createAdmin(ctx, 'finance');
       for (let batch = 0; batch < 2; batch++) {
-        for (let i = 0; i < 5; i++) await resetAnon(admin.email, { code: '000000', totpCode: '000000' }).expect(400);
+        for (let i = 0; i < 5; i++) await resetAnon(admin.email, { code: '000000' }).expect(400);
         await ctx.redis.del(`rl:reset-confirm:${(await import('../src/platform/crypto/crypto.js')).sha256Hex(admin.email)}`);
       }
       const [row] = await ctx.db.select().from(users).where(eq(users.id, admin.userId));
@@ -64,12 +64,12 @@ describe('MFA em 2 passos e B1: reset anônimo não toca o 2º fator do admin', 
       await loginAdmin(ctx, { email: admin.email, password: admin.password, totpSecret: admin.totpSecret });
     });
 
-    it('cliente antigo que manda o TOTP junto com o código certo ainda funciona (compatibilidade), passando pelo ticket', async () => {
+    it('SEC-115: o caminho legado de 1 passo saiu da API: `totpCode` no login ou no reset é 400 (campo desconhecido)', async () => {
       const admin = await createAdmin(ctx, 'support');
       await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email: admin.email }).expect(202);
-      await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      const ok = await resetAnon(admin.email, { code: ctx.mail.lastCode(admin.email), totpCode: totpAt(admin.totpSecret!) }).expect(200);
-      expect(ok.body.tokens).toBeNull();
+      const reset = await resetAnon(admin.email, { code: ctx.mail.lastCode(admin.email), totpCode: totpAt(admin.totpSecret!) }).expect(400);
+      expect(reset.body.code).toBe('VALIDATION_FAILED');
+      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: totpAt(admin.totpSecret!) }).expect(400);
     });
   });
 

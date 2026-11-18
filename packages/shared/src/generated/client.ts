@@ -168,12 +168,6 @@ export interface LoginRequest {
   email: string;
   password: string;
   /**
-     * Admin; TOTP de 6 dígitos ou código de recuperação
-     * @minLength 6
-     * @maxLength 32
-     */
-  totpCode?: string;
-  /**
      * Step-up por e-mail
      * @pattern ^[0-9]{6}$
      */
@@ -207,13 +201,6 @@ export interface ResetPasswordRequest {
   /** @pattern ^[0-9]{6}$ */
   code: string;
   newPassword: string;
-  /**
-     * Obsoleto. Admin com TOTP usa `/auth/password/reset/complete`. Se vier, só é avaliado depois do código do e-mail, passando pelo mesmo ticket.
-     * @deprecated
-     * @minLength 6
-     * @maxLength 32
-     */
-  totpCode?: string;
 }
 
 export interface ResetPasswordResponse {
@@ -1983,7 +1970,7 @@ export const getLoginUrl = () => {
 }
 
 /**
- * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). Enviar `totpCode` junto é o caminho antigo de 1 passo: continua aceito, está obsoleto e será removido quando o painel migrar. SEC-113: admin que já teve 2º fator (TOTP ativo OU em reenrolamento após usar código de recuperação) NUNCA abre sessão só com a senha: sempre recebe o `mfaToken`. Código de recuperação vale uma vez, invalida o segredo antigo, MANTÉM os demais códigos e abre sessão sem MFA concluído (`mfaSetupRequired: true`, só reconfigura o TOTP). Admin que nunca configurou o TOTP entra só dentro de 48 h do convite/reativação; depois, 403 `ENROLLMENT_EXPIRED` (peça novo convite). Cliente de admin deve usar os 2 passos; `totpCode` no login será removido assim que o painel web migrar (SEC-115).
+ * Mensagem única para e-mail inexistente e senha errada. Após 5 falhas de um IP contra a conta, esse IP espera 15 min (429); a conta nunca é bloqueada para o dono. Após 20 falhas/h na conta, a resposta é 403 `LOGIN_CODE_REQUIRED` e o cliente repete o login com o `code` recebido por e-mail. Admin com TOTP: a senha certa devolve só `{ mfaRequired, mfaToken, expiresIn }` (sem sessão) e o cliente conclui em `/auth/mfa/verify` (SEC-090). O caminho antigo de 1 passo (`totpCode` no login) foi REMOVIDO (SEC-115): enviar o campo é 400. SEC-113: admin que já teve 2º fator (TOTP ativo OU em reenrolamento após usar código de recuperação) NUNCA abre sessão só com a senha: sempre recebe o `mfaToken`. Código de recuperação vale uma vez, invalida o segredo antigo, MANTÉM os demais códigos e abre sessão sem MFA concluído (`mfaSetupRequired: true`, só reconfigura o TOTP). Admin que nunca configurou o TOTP entra só dentro de 48 h do convite/reativação; depois, 403 `ENROLLMENT_EXPIRED` (peça novo convite).
  * @summary Entrar com e-mail e senha
  */
 export const login = async (loginRequest: LoginRequest, options?: Parameters<typeof apiFetch>[1]): Promise<loginResponse> => {

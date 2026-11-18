@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { adminProfiles, adminRecoveryCodes, auditLog, authTickets, invitations, sessions, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, totpAt, uniqueEmail, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureLegalDocs, loginAdmin, type TestAdmin } from './helpers/fixtures.js';
+import { createAdmin, ensureLegalDocs, loginAdmin, loginWithMfa, type TestAdmin } from './helpers/fixtures.js';
 
 describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/017, WB-100/101/222)', () => {
   let ctx: TestContext;
@@ -59,10 +59,10 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       const noCode = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD }).expect(200);
       expect(noCode.body).toMatchObject({ mfaRequired: true });
       expect(noCode.body.tokens).toBeUndefined();
-      const wrong = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD, totpCode: '000000' }).expect(401);
-      expect(wrong.body.code).toBe('INVALID_CREDENTIALS');
+      const wrong = await loginWithMfa(ctx, { email: email, password: STRONG_PASSWORD, code: '000000', ip: ip }).expect(401);
+      expect(wrong.body.code).toBe('MFA_INVALID');
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.profile, 'operations'));
-      const ok = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password: STRONG_PASSWORD, totpCode: totpAt(setup.body.secret) }).expect(200);
+      const ok = await loginWithMfa(ctx, { email: email, password: STRONG_PASSWORD, code: totpAt(setup.body.secret), ip: ip }).expect(200);
       await ctx.http.get('/v1/admin/regions/cities').set(bearer(ok.body.tokens.accessToken)).expect(200);
     });
 
@@ -109,8 +109,8 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       // o login do helper já gastou o código do passo registrado (não do "agora": o passo pode virar entre as chamadas)
       const [profile] = await ctx.db.select().from(adminProfiles).where(eq(adminProfiles.userId, admin.userId));
       const used = totpAt(admin.totpSecret!, (profile?.totpLastStep ?? 0) - Math.floor(Date.now() / 30_000));
-      const res = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: used }).expect(401);
-      expect(res.body.code).toBe('INVALID_CREDENTIALS');
+      const res = await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: used, ip: randomIp() }).expect(401);
+      expect(res.body.code).toBe('MFA_INVALID');
     });
 
     it('SEC-113: código de recuperação vale uma vez, NÃO dispensa o 2º fator e mantém os demais códigos (WB-222 C5)', async () => {
@@ -120,7 +120,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       const confirm = await ctx.http.post('/v1/admin/totp/confirm').set(pending).send({ code: totpAt(setup.body.secret) }).expect(200);
       const [recovery, second] = confirm.body.recoveryCodes as string[];
 
-      const login = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: recovery }).expect(200);
+      const login = await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: recovery, ip: randomIp() }).expect(200);
       // entrou, mas sem MFA concluído: só a tela de configurar
       await ctx.http.get('/v1/admin/regions/cities').set(bearer(login.body.tokens.accessToken)).expect(403);
       expect(login.body.mfaSetupRequired).toBe(true);
@@ -168,7 +168,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       const admin = await createAdmin(ctx, 'finance');
       const ip = randomIp();
       for (let i = 0; i < 5; i++) {
-        await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email: admin.email, password: 'senha-errada-aqui-1', totpCode: '000000' }).expect(401);
+        await loginWithMfa(ctx, { email: admin.email, password: 'senha-errada-aqui-1', code: '000000', ip: ip }).expect(401);
       }
       await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', ip).send({ email: admin.email, password: 'senha-errada-aqui-1' }).expect(429);
       const [entry] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.actorId, admin.userId), eq(auditLog.action, 'admin.login_throttled')));
@@ -247,10 +247,10 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
     it('SEC-091: 5 erros do 2º fator na conta (de IPs diferentes) põem o passo em espera, mesmo com o código certo', async () => {
       const admin = await createAdmin(ctx, 'operations');
       for (let i = 0; i < 5; i++) {
-        await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }).expect(401);
+        await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: '000000', ip: randomIp() }).expect(401);
       }
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      const wait = await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: totpAt(admin.totpSecret!) }).expect(429);
+      const wait = await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: totpAt(admin.totpSecret!), ip: randomIp() }).expect(429);
       expect(wait.body.code).toBe('MFA_RATE_LIMITED');
       expect(Number(wait.headers['retry-after'])).toBeGreaterThan(0);
       // 3 erros avisam o titular por e-mail
@@ -261,7 +261,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       const admin = await createAdmin(ctx, 'finance');
       for (let batch = 0; batch < 2; batch++) {
         for (let i = 0; i < 5; i++) {
-          await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: admin.password, totpCode: '000000' }).expect(401);
+          await loginWithMfa(ctx, { email: admin.email, password: admin.password, code: '000000', ip: randomIp() }).expect(401);
         }
         await ctx.redis.del(`mfa:15:${admin.userId}`); // simula a passagem dos 15 min
       }
@@ -286,7 +286,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       expect(stored?.tokenHash).not.toBe(ticket); // só o hash fica no banco
       // a senha ainda é a antiga
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: newPassword, totpCode: totpAt(admin.totpSecret!) }).expect(401);
+      await loginWithMfa(ctx, { email: admin.email, password: newPassword, code: totpAt(admin.totpSecret!), ip: randomIp() }).expect(401);
 
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
       const complete = (extra: Record<string, unknown>) =>
@@ -296,7 +296,7 @@ describe('Admin: TOTP obrigatório, convites e gestão de admins (SEC-015/016/01
       expect(ok.body.tokens).toBeNull(); // admin nunca ganha sessão pelo reset: precisa do login com TOTP
       await complete({ totpCode: totpAt(admin.totpSecret!, 1) }).expect(401); // ticket de uso único
       await ctx.db.update(adminProfiles).set({ totpLastStep: null }).where(eq(adminProfiles.userId, admin.userId));
-      await ctx.http.post('/v1/auth/login').set('X-Forwarded-For', randomIp()).send({ email: admin.email, password: newPassword, totpCode: totpAt(admin.totpSecret!) }).expect(200);
+      await loginWithMfa(ctx, { email: admin.email, password: newPassword, code: totpAt(admin.totpSecret!), ip: randomIp() }).expect(200);
       // SEC-095: aviso ao titular e aos outros super admins
       expect(ctx.mail.to(admin.email).some((m) => m.subject.includes('senha do painel'))).toBe(true);
       expect(ctx.mail.to(superAdmin.email).some((m) => m.subject.includes('senha do painel'))).toBe(true);
