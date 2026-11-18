@@ -1,45 +1,60 @@
-import { tokens } from '@webag/tokens';
-import { maxFontSizeMultiplier, textStyles } from '@webag/tokens/native';
-import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
+import { signOut } from '../../src/api/auth-api';
+import { useSession } from '../../src/api/session';
+import { Button } from '../../src/components/Button';
+import { Screen } from '../../src/components/Screen';
+import { Text } from '../../src/components/Text';
+import { useToast } from '../../src/components/Toast';
+import { EmailVerifyBanner } from '../../src/features/auth/EmailVerifyBanner';
+import { t } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
-/** Início do cliente (esqueleto). A tela real segue a spec do product-designer. */
+/**
+ * Início do cliente (esqueleto até a onda 3B). A tela real segue a spec do product-designer.
+ * Hoje concentra o acesso à conta (entrar, criar conta, sair) e o aviso de e-mail não confirmado (E5a).
+ */
 export default function CustomerHome() {
+  const router = useRouter();
+  const toast = useToast();
+  const session = useSession();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.content}>
-        <Text
-          accessibilityRole="header"
-          maxFontSizeMultiplier={maxFontSizeMultiplier.heading}
-          style={styles.brand}
-        >
-          webag
+    <Screen scroll>
+      <View style={styles.brandBox}>
+        <Text accessibilityRole="header" style={styles.brand} variant="display">
+          {t('common.appName')}
         </Text>
-        <Text maxFontSizeMultiplier={maxFontSizeMultiplier.default} style={styles.subtitle}>
-          Lojas da sua região
-        </Text>
+        <Text color="secondary">Lojas da sua região</Text>
       </View>
-    </SafeAreaView>
+
+      <EmailVerifyBanner />
+
+      {session.status === 'authenticated' ? (
+        <View style={styles.account} testID="home.account">
+          <Text variant="bodyStrong">{t('home.greeting', { name: session.user.name.split(' ')[0] ?? '' })}</Text>
+          <Button
+            label={t('home.signOut')}
+            onPress={() => {
+              void signOut().then(() => toast.show(t('home.signedOut')));
+            }}
+            testID="home.sign-out"
+            variant="secondary"
+          />
+        </View>
+      ) : (
+        <View style={styles.account} testID="home.visitor">
+          <Text color="secondary">{t('home.visitorText')}</Text>
+          <Button label={t('login.submit')} onPress={() => router.push('/login')} testID="home.login" />
+          <Button label={t('signup.submit')} onPress={() => router.push('/signup')} testID="home.signup" variant="secondary" />
+        </View>
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: tokens.color.surface.background,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: tokens.space[2],
-    paddingHorizontal: tokens.layout.screenPaddingX,
-  },
-  brand: {
-    ...textStyles.display,
-    color: tokens.color.text.brand,
-  },
-  subtitle: {
-    ...textStyles.body,
-    color: tokens.color.text.secondary,
-  },
+  brandBox: { gap: theme.space[2], paddingTop: theme.space[10] },
+  brand: { color: theme.color.text.brand },
+  account: { gap: theme.space[3] },
 });

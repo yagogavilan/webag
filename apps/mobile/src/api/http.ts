@@ -46,10 +46,13 @@ async function doRefresh(): Promise<boolean> {
   const stored = sessionStore.getTokens();
   if (!stored) return false;
   let response: Awaited<ReturnType<typeof refreshSession>>;
+  const timeout = timeoutSignal(REQUEST_TIMEOUT_MS);
   try {
-    response = await refreshSession({ refreshToken: stored.refreshToken }, { headers: await baseHeaders(), signal: timeoutSignal(REQUEST_TIMEOUT_MS) });
+    response = await refreshSession({ refreshToken: stored.refreshToken }, { headers: await baseHeaders(), signal: timeout.signal });
   } catch (error) {
     throw networkError(error);
+  } finally {
+    timeout.done();
   }
   if (response.status === 200) {
     const pair = response.data;
@@ -73,13 +76,12 @@ async function baseHeaders(): Promise<Record<string, string>> {
   return { 'X-Device-Id': await getDeviceId() };
 }
 
-function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
+/** Sinal que aborta após `ms` (ou quando `outer` aborta). `done()` cancela o relógio: sem timer pendurado depois da resposta. */
+function timeoutSignal(ms: number, outer?: AbortSignal): { signal: AbortSignal; done: () => void } {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
-  const stop = () => clearTimeout(timer);
-  controller.signal.addEventListener('abort', stop, { once: true });
   outer?.addEventListener('abort', () => controller.abort(), { once: true });
-  return controller.signal;
+  return { signal: controller.signal, done: () => clearTimeout(timer) };
 }
 
 function networkError(error: unknown): ApiError {
@@ -115,7 +117,13 @@ export async function request<R extends ApiResponse>(
       if (auth === 'required' && access) headers.Authorization = `Bearer ${access}`;
       if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
 
-      const response = await call({ headers, signal: timeoutSignal(timeoutMs, signal) });
+      const timeout = timeoutSignal(timeoutMs, signal);
+      let response: R;
+      try {
+        response = await call({ headers, signal: timeout.signal });
+      } finally {
+        timeout.done();
+      }
 
       if (response.status === 401 && auth === 'required' && !renewedOnce && sessionStore.getTokens()) {
         renewedOnce = true;
