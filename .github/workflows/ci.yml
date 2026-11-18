@@ -1,0 +1,88 @@
+# CI do monorepo (ADR-006, skill padroes-backend): install → contrato → tokens → lint → typecheck → test → build.
+# Bloqueia merge se falhar (configurar como status obrigatório na proteção do main).
+# Versões das actions: majors conhecidas em 2026-11-18; conferir releases e fixar por SHA quando o security pedir.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+  EXPO_NO_TELEMETRY: '1'
+
+jobs:
+  checks:
+    name: lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgis/postgis:18-3.6-alpine
+        env:
+          POSTGRES_USER: webag
+          POSTGRES_PASSWORD: webag_ci_only
+          POSTGRES_DB: webag
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U webag -d webag"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      # E2E da API contra Postgres/Redis reais (services acima). Credencial descartável, só do CI.
+      E2E_DEPS: '1'
+      DATABASE_URL: postgresql://webag:webag_ci_only@localhost:5432/webag
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4 # versão vem de "packageManager" no package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Cliente gerado está em dia com o openapi.yaml
+        run: pnpm generate:check
+
+      - name: Tokens gerados em dia e contraste WCAG AA
+        run: |
+          pnpm --filter @webag/tokens build
+          git diff --exit-code -- packages/tokens
+          pnpm --filter @webag/tokens check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Testes (unitários + E2E da API)
+        run: pnpm test
+
+      - name: Build (API, shared, web e bundle do app)
+        run: pnpm build
+
+      - name: Imagem Docker da API (só build, sem push)
+        run: docker build -f apps/api/Dockerfile -t webag-api:ci .
