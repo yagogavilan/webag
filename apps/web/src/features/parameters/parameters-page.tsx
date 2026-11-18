@@ -11,6 +11,8 @@ import { useSession } from '@/components/panel/session-context';
 import { SplitLayout } from '@/components/panel/split-layout';
 import { Badge, Banner, Button, EmptyState, NoAccessState, QueryBoundary, SelectField, TextArea, TextField, cx, ui, useToast } from '@/components/ui';
 import { adminApi, keys, type Parameter } from '@/lib/api/admin';
+import { asRoute } from '@/lib/routes';
+import { formatClock } from '@/lib/format';
 import { ApiError } from '@/lib/api/errors';
 import { saveErrorMessage } from '@/lib/api/messages';
 import { tid } from '@/lib/testid';
@@ -42,6 +44,7 @@ function EditPanel({ param, canAudit, onSaved }: { param: Parameter; canAudit: b
   const [reasonErr, setReasonErr] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [conflict, setConflict] = useState<Parameter | null>(null);
   const locked = param.legalFloor;
   const finance = FINANCE_OWNED.has(param.key);
   const readOnly = locked || finance;
@@ -56,12 +59,19 @@ function EditPanel({ param, canAudit, onSaved }: { param: Parameter; canAudit: b
       onSaved();
     },
     onError: (error) => {
-      if (error instanceof ApiError && (error.code === 'PARAMETER_OUT_OF_RANGE' || error.code === 'PARAMETER_LOCKED')) setValueError(error.fieldMessage('value') ?? error.detail);
+      if (error instanceof ApiError && error.status === 409) void showConflict();
+      else if (error instanceof ApiError && (error.code === 'PARAMETER_OUT_OF_RANGE' || error.code === 'PARAMETER_LOCKED')) setValueError(error.fieldMessage('value') ?? error.detail);
       else setFormError(error instanceof ApiError && error.status >= 500 ? 'Não foi possível salvar. O valor anterior continua valendo.' : saveErrorMessage(error));
     },
   });
 
-  function submit(event: FormEvent) {
+  /** Concorrência (AD0): outro admin mudou o item depois que o painel abriu. Mostra o aviso e deixa ver o valor atual. */
+  async function showConflict() {
+    const fresh = await adminApi.parameters().catch(() => null);
+    setConflict(fresh?.data.find((p) => p.key === param.key) ?? param);
+  }
+
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
     const parsed = parseInput(param, text);
@@ -70,11 +80,18 @@ function EditPanel({ param, canAudit, onSaved }: { param: Parameter; canAudit: b
     setValueError(vError);
     setReasonErr(rError);
     if (vError || rError || 'error' in parsed) return;
+    // Enquanto a API não confirma a versão no PUT (pendência), confere antes de enviar se o item mudou desde que o painel abriu.
+    const fresh = await adminApi.parameters().catch(() => null);
+    const current = fresh?.data.find((p) => p.key === param.key);
+    if (current && current.updatedAt !== param.updatedAt) {
+      setConflict(current);
+      return;
+    }
     save.mutate(parsed.value);
   }
 
   return (
-    <form onSubmit={submit} className={ui.stack} noValidate>
+    <form onSubmit={(event) => void submit(event)} className={ui.stack} noValidate>
       <p className="wb-text-body" style={{ margin: 0 }}>{param.description}</p>
       <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>{param.key}</p>
       {locked ? (
@@ -92,6 +109,19 @@ function EditPanel({ param, canAudit, onSaved }: { param: Parameter; canAudit: b
       ) : (
         <TextField label="Valor" value={text} onChange={(e) => setText(e.target.value)} disabled={readOnly} inputMode={param.type === 'window' ? 'text' : 'decimal'} error={valueError} hint={`Padrão ${formatParamValue(param.key, param.default)}${range ? ` · ${range}` : ''}`} autoComplete="off" data-testid={T('value-input')} />
       )}
+      {conflict ? (
+        <Banner
+          tone="warning"
+          testId={T('conflict')}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void client.invalidateQueries({ queryKey: keys.parameters }).then(onSaved)} data-testid={T('conflict-reload')}>
+              Ver valor atual
+            </Button>
+          }
+        >
+          {conflict.updatedAt ? `Outra pessoa alterou isso às ${formatClock(conflict.updatedAt)}.` : 'Outra pessoa alterou isso.'} Veja o valor atual antes de salvar.
+        </Banner>
+      ) : null}
       {!readOnly ? (
         <>
           <TextArea label="Motivo" value={reason} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))} counter={{ value: reason.length, max: REASON_MAX }} error={reasonErr} rows={3} data-testid={T('reason-input')} />
@@ -104,7 +134,7 @@ function EditPanel({ param, canAudit, onSaved }: { param: Parameter; canAudit: b
         </>
       ) : null}
       {canAudit ? (
-        <Link href={`/admin/auditoria?targetType=parameter&targetId=${encodeURIComponent(param.key)}`} className="wb-text-body" data-testid={T('history-link')}>
+        <Link href={asRoute(`/admin/auditoria?targetType=parameter&targetId=${encodeURIComponent(param.key)}`)} className="wb-text-body" data-testid={T('history-link')}>
           Ver histórico
         </Link>
       ) : null}
@@ -132,6 +162,7 @@ export function ParametersPage() {
   const query = useQuery({ queryKey: keys.parameters, queryFn: adminApi.parameters });
   const [search, setSearch] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [reloads, setReloads] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   if (!canView('parametros')) return <NoAccessState />;
 
@@ -180,7 +211,7 @@ export function ParametersPage() {
                   )}
                 </div>
               }
-              panel={selected ? <EditPanel key={`${selected.key}-${String(selected.value)}`} param={selected} canAudit={canView('auditoria')} onSaved={() => undefined} /> : null}
+              panel={selected ? <EditPanel key={`${selected.key}-${String(selected.value)}-${selected.updatedAt ?? ''}-${reloads}`} param={selected} canAudit={canView('auditoria')} onSaved={() => setReloads((n) => n + 1)} /> : null}
             />
           );
         }}
