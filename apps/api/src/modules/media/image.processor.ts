@@ -5,9 +5,38 @@ export const MAX_PIXELS = 40_000_000;
 export const PROCESS_TIMEOUT_MS = 10_000;
 export const VARIANT_WIDTHS = [160, 400, 800, 1600] as const;
 
+/** I8: PNG não tem shrink-on-load (decodifica inteiro): teto menor; JPEG celular de 48/50 MP passa. */
+export const MAX_PIXELS_PNG = 25_000_000;
+/** I8: no máximo N processamentos de imagem ao mesmo tempo no processo que atende HTTP. */
+export const MAX_CONCURRENT_IMAGE_JOBS = 2;
+sharp.concurrency(MAX_CONCURRENT_IMAGE_JOBS);
+
 export class ImageRejected extends Error {}
 
-const withTimeout = async <T>(work: Promise<T>): Promise<T> => {
+/** Semáforo em memória: a vaga só volta quando o trabalho do sharp termina de verdade (o timeout não o interrompe). */
+let running = 0;
+const waiting: (() => void)[] = [];
+async function withSlot<T>(work: () => Promise<T>): Promise<T> {
+  if (running >= MAX_CONCURRENT_IMAGE_JOBS) await new Promise<void>((resolve) => waiting.push(resolve));
+  else running += 1;
+  const release = () => {
+    const next = waiting.shift();
+    if (next) next(); // a vaga passa direto para o próximo
+    else running -= 1;
+  };
+  let pending: Promise<T>;
+  try {
+    pending = work();
+  } catch (error) {
+    release();
+    throw error;
+  }
+  void pending.then(release, release);
+  return pending;
+}
+
+const withTimeout = async <T>(job: () => Promise<T>): Promise<T> => {
+  const work = withSlot(job);
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
@@ -29,9 +58,10 @@ export interface ImageInfo {
 /** Lê só o cabeçalho (barato) e recusa antes de decodificar o que passa de 40 MP. */
 export async function inspectImage(buf: Buffer): Promise<ImageInfo> {
   try {
-    const meta = await withTimeout(sharp(buf, { limitInputPixels: MAX_PIXELS, failOn: 'error' }).metadata());
+    const meta = await withTimeout(() => sharp(buf, { limitInputPixels: MAX_PIXELS, failOn: 'error' }).metadata());
     if (!meta.width || !meta.height) throw new ImageRejected('Imagem inválida.');
     if (meta.width * meta.height > MAX_PIXELS) throw new ImageRejected('A imagem é grande demais (máximo de 40 megapixels).');
+    if (meta.format === 'png' && meta.width * meta.height > MAX_PIXELS_PNG) throw new ImageRejected('A imagem PNG é grande demais (máximo de 25 megapixels). Envie em JPG.');
     if ((meta.pages ?? 1) > 1) throw new ImageRejected('Imagens animadas não são aceitas.');
     return { width: meta.width, height: meta.height };
   } catch (error) {
@@ -43,7 +73,7 @@ export async function inspectImage(buf: Buffer): Promise<ImageInfo> {
 /** WebP re-codificado: aplica a rotação do EXIF e descarta TODOS os metadados (o padrão do sharp é não copiar). */
 export async function renderVariant(buf: Buffer, width: number): Promise<Buffer> {
   try {
-    return await withTimeout(
+    return await withTimeout(() =>
       sharp(buf, { limitInputPixels: MAX_PIXELS, failOn: 'error' })
         .rotate()
         .resize({ width, withoutEnlargement: true })
@@ -58,3 +88,18 @@ export async function renderVariant(buf: Buffer, width: number): Promise<Buffer>
 
 /** Proporção largura/altura dentro da tolerância (logo 1:1, capa 16:9). */
 export const ratioWithin = (info: ImageInfo, target: number, tolerance: number): boolean => Math.abs(info.width / info.height - target) / target <= tolerance;
+
+/**
+ * Todas as larguras com UMA decodificação do original (I8): a maior sai do original (com a rotação do EXIF) e as menores
+ * derivam dela (já sem metadados). `widths` em qualquer ordem; devolve por largura.
+ */
+export async function renderVariants(buf: Buffer, widths: readonly number[]): Promise<Map<number, Buffer>> {
+  const sorted = [...widths].sort((a, b) => b - a);
+  const out = new Map<number, Buffer>();
+  const largest = sorted[0];
+  if (largest === undefined) return out;
+  const first = await renderVariant(buf, largest);
+  out.set(largest, first);
+  for (const width of sorted.slice(1)) out.set(width, await renderVariant(first, width));
+  return out;
+}

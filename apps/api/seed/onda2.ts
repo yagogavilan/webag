@@ -28,7 +28,7 @@ import {
 /**
  * Seed da Onda 2: 7 lojas FICTÍCIAS em bairros reais de Francisco Morato e Franco da Rocha, com produtos, variações,
  * estoque, promoções, seções e fotos. Idempotente (identifica a loja pelo e-mail do dono) e só roda em desenvolvimento
- * (em produção exige `SEED_ONDA2=true` e `SEED_MERCHANT_PASSWORD`).
+ * (nunca em produção: DEC-030d).
  *
  * FONTE DOS DADOS (registro de origem):
  * - Nomes de lojas, donos, produtos, preços, estoques e endereços: inventados para teste. Nenhuma pessoa, empresa ou
@@ -241,7 +241,8 @@ export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise
 /** Cria as lojas da lista que ainda não existem (idempotente pelo e-mail do dono). Usado pelas Ondas 2 e 3. */
 export async function seedStores(db: Db, seeds: SeedStore[], options: SeedOnda2Options = {}): Promise<void> {
   const log = options.log ?? (() => undefined);
-  if (options.production && !options.merchantPassword) throw new Error('Em produção o seed da Onda 2 exige SEED_MERCHANT_PASSWORD');
+  // DEC-030d: dados fictícios nunca entram em produção, nem com flag.
+  if (options.production || process.env.NODE_ENV === 'production') throw new Error('Seed de demonstração não roda em produção');
   const password = options.merchantPassword ?? DEV_SEED_MERCHANT_PASSWORD;
   const passwords = new PasswordService();
   passwords.assertPolicy(password, 8);

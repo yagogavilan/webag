@@ -9,3 +9,4 @@ export * from '../../modules/stores/db/schema.js';
 export * from '../../modules/catalog/db/schema.js';
 export * from '../../modules/discovery/db/schema.js';
 export * from '../../modules/cart/db/schema.js';
+export * from '../../modules/idempotency/db/schema.js';

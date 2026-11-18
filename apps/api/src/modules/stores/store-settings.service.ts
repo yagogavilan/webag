@@ -51,16 +51,16 @@ export class StoreSettingsService {
 
   // ------------------------------------------------------------------ leitura
 
-  async weeklyHours(storeId: string): Promise<WeeklyHours> {
-    const rows = await this.db.select().from(storeHours).where(eq(storeHours.storeId, storeId)).orderBy(asc(storeHours.weekday), asc(storeHours.startMin));
+  async weeklyHours(storeId: string, exec: DbOrTx = this.db): Promise<WeeklyHours> {
+    const rows = await exec.select().from(storeHours).where(eq(storeHours.storeId, storeId)).orderBy(asc(storeHours.weekday), asc(storeHours.startMin));
     const hours: WeeklyHours = {};
     for (let d = 0; d < 7; d++) hours[d] = [];
     for (const row of rows) hours[row.weekday]!.push({ startMin: row.startMin, endMin: row.endMin });
     return hours;
   }
 
-  async holidays(storeId: string): Promise<{ date: string; label: string | null }[]> {
-    const rows = await this.db.select().from(storeHolidays).where(eq(storeHolidays.storeId, storeId)).orderBy(asc(storeHolidays.day));
+  async holidays(storeId: string, exec: DbOrTx = this.db): Promise<{ date: string; label: string | null }[]> {
+    const rows = await exec.select().from(storeHolidays).where(eq(storeHolidays.storeId, storeId)).orderBy(asc(storeHolidays.day));
     return rows.map((r) => ({ date: r.day, label: r.label }));
   }
 
@@ -130,8 +130,10 @@ export class StoreSettingsService {
       for (const i of intervals) rows.push({ weekday: day.weekday, ...i });
     });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_HOURS', 'Horários inválidos', { errors: fieldErrors });
-    const before = await this.weeklyHours(store.id);
     await this.db.transaction(async (tx) => {
+      // I5: dois salvamentos simultâneos se enfileiram na linha de configuração (mesmo padrão de setDelivery).
+      await tx.select({ id: storeSettings.storeId }).from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
+      const before = await this.weeklyHours(store.id, tx);
       await tx.delete(storeHours).where(eq(storeHours.storeId, store.id));
       if (rows.length > 0) await tx.insert(storeHours).values(rows.map((r) => ({ storeId: store.id, ...r })));
       await this.record(tx, store, actor, ctx, 'hours', before, rows);
@@ -141,8 +143,9 @@ export class StoreSettingsService {
   async setHolidays(store: Store, holidays: { date: string; label?: string }[], actor: Actor, ctx: RequestContext): Promise<void> {
     this.assertEditable(store, actor);
     if (new Set(holidays.map((h) => h.date)).size !== holidays.length) throw errors.validation([{ field: 'holidays', message: 'Data repetida.' }]);
-    const before = await this.holidays(store.id);
     await this.db.transaction(async (tx) => {
+      await tx.select({ id: storeSettings.storeId }).from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
+      const before = await this.holidays(store.id, tx);
       await tx.delete(storeHolidays).where(eq(storeHolidays.storeId, store.id));
       if (holidays.length > 0) await tx.insert(storeHolidays).values(holidays.map((h) => ({ storeId: store.id, day: h.date, label: h.label ?? null })));
       await this.record(tx, store, actor, ctx, 'holidays', before, holidays);

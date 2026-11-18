@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { AppError, errors, type FieldError } from '../../platform/http/app-error.js';
-import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
+import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { MailService } from '../../platform/mail/mail.service.js';
 import { lowStockEmail } from '../../platform/mail/templates.js';
 import { categories } from '../admin/db/schema.js';
@@ -216,10 +216,10 @@ export class CatalogService {
           filters.lowStock
             ? sql`exists (select 1 from product_variants v where v.product_id = ${products.id} and v.active and v.stock - v.reserved <= ${threshold})`
             : undefined,
-          cursor ? or(lt(products.createdAt, new Date(cursor.at)), and(eq(products.createdAt, new Date(cursor.at)), lt(products.id, cursor.id))) : undefined,
+          timestampCursorBefore(products.createdAt, products.id, cursor),
         ),
       )
-      .orderBy(desc(products.createdAt), desc(products.id))
+      .orderBy(...timestampOrderDesc(products.createdAt, products.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
     const ids = page.map((p) => p.id);
@@ -316,6 +316,7 @@ export class CatalogService {
         promoEndsAt: input.promoEndsAt !== undefined ? (input.promoEndsAt ? endOfMinute(new Date(input.promoEndsAt)) : null) : current.promoEndsAt,
       };
       if (current.status === 'active' && base === null) throw errors.unprocessable('PRICE_REQUIRED', 'Preço obrigatório', { errors: [{ field: 'basePriceCents', message: 'Produto ativo precisa de preço.' }] });
+      if (current.status === 'active' && input.categoryId === null) throw errors.unprocessable('PRODUCT_INCOMPLETE', 'Produto incompleto', { errors: [{ field: 'categoryId', message: 'Produto ativo precisa de categoria.' }] });
       const hasPromo = promo.promoPriceCents !== null || promo.promoStartsAt !== null || promo.promoEndsAt !== null;
       if (hasPromo) {
         const problem = base === null ? 'Informe o preço normal antes da promoção.' : validatePromotion(base, promo);
@@ -710,29 +711,33 @@ export class CatalogService {
     const summary = { totalLines: plan.totalLines, valid: plan.totalLines - plan.errors.length, invalid: plan.errors.length, errors: plan.errors, productsToCreate: plan.products.length - alreadyExist.length, alreadyExist: alreadyExist.length };
     if (mode === 'preview') return { ...summary, committed: false, created: 0, updated: 0, skipped: 0 };
 
-    let created = 0;
-    let updated = 0;
-    let skipped = 0;
-    for (const planned of plan.products) {
-      const matches = planned.variants.filter((v) => v.sku && existingBySku.has(v.sku.toLowerCase()));
-      if (matches.length > 0) {
-        if (onExisting === 'skip') {
-          skipped += 1;
-          continue;
+    // I9: uma transação por arquivo (tudo ou nada); falha no meio não deixa importação parcial.
+    const counts = await this.db.transaction(async (tx) => {
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      for (const planned of plan.products) {
+        const matches = planned.variants.filter((v) => v.sku && existingBySku.has(v.sku.toLowerCase()));
+        if (matches.length > 0) {
+          if (onExisting === 'skip') {
+            skipped += 1;
+            continue;
+          }
+          await this.updateFromImport(tx, store, planned, existingBySku);
+          updated += 1;
+        } else {
+          await this.createFromImport(tx, store, planned);
+          created += 1;
         }
-        await this.updateFromImport(store, actor, planned, existingBySku);
-        updated += 1;
-      } else {
-        await this.createFromImport(store, actor, planned);
-        created += 1;
       }
-    }
-    await this.stores.logActivity(this.db, store.id, actor.userId, 'catalog.import', { created, updated, skipped, errors: plan.errors.length });
-    return { ...summary, committed: true, created, updated, skipped };
+      await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.import', { created, updated, skipped, errors: plan.errors.length });
+      return { created, updated, skipped };
+    });
+    return { ...summary, committed: true, ...counts };
   }
 
-  private async createFromImport(store: Store, actor: CatalogActor, planned: ImportedProduct): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  private async createFromImport(tx: DbOrTx, store: Store, planned: ImportedProduct): Promise<void> {
+    {
       const [product] = await tx
         .insert(products)
         .values({
@@ -749,12 +754,11 @@ export class CatalogService {
         .returning();
       if (!product) throw new Error('Falha ao importar produto');
       await tx.insert(productVariants).values(planned.variants.map((v) => ({ productId: product.id, storeId: store.id, attributes: v.attributes, attributesKey: attributesKey(v.attributes), sku: v.sku, stock: v.stock })));
-    });
-    void actor;
+    }
   }
 
-  private async updateFromImport(store: Store, actor: CatalogActor, planned: ImportedProduct, existingBySku: Map<string, Variant>): Promise<void> {
-    await this.db.transaction(async (tx) => {
+  private async updateFromImport(tx: DbOrTx, store: Store, planned: ImportedProduct, existingBySku: Map<string, Variant>): Promise<void> {
+    {
       const productIds = new Set(planned.variants.map((v) => (v.sku ? existingBySku.get(v.sku.toLowerCase())?.productId : undefined)).filter((id): id is string => Boolean(id)));
       for (const productId of productIds) {
         const product = await this.requireProduct(store.id, productId, tx, true);
@@ -769,8 +773,7 @@ export class CatalogService {
         const next = applyAdjust(locked.stock, locked.reserved, { set: wanted.stock });
         if ('stock' in next) await tx.update(productVariants).set({ stock: next.stock, updatedAt: new Date() }).where(eq(productVariants.id, locked.id));
       }
-    });
-    void actor;
+    }
   }
 }
 

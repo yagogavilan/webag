@@ -19,7 +19,7 @@ import { closedLabel, closesAtToday, formatDistance, formatEta, formatFee, forma
 import { fromBrowseItem, ProductTile } from '../../../src/features/catalog/ProductTile';
 import { modeStore, useDeliveryPoint, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
 import { AboutStoreSheet, ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
-import { subtotalOf, useCart } from '../../../src/features/cart/store';
+import { useCartView } from '../../../src/features/cart/hooks';
 import { useApplyPendingFavorite, useFavorite } from '../../../src/features/favorites/hooks';
 import { t } from '../../../src/i18n';
 import { formatMoney } from '../../../src/lib/format';
@@ -44,7 +44,7 @@ export default function StoreScreen() {
   const store = useStoreQuery(id, point);
   const [sectionId, setSectionId] = useState<string | null>(null);
   const products = useStoreProductsQuery(id, sectionId);
-  const cart = useCart();
+  const { view: cart } = useCartView();
   const [sheet, setSheet] = useState<'exchange' | 'about' | null>(null);
   const favorite = useFavorite('store', id, store.data?.name ?? '');
   useApplyPendingFavorite(favorite.applyPending, Boolean(store.data));
@@ -99,8 +99,8 @@ export default function StoreScreen() {
   }
 
   const data = store.data;
-  const sameStoreCart = cart.storeId === data.id && cart.items.length > 0;
-  const cartCount = cart.items.reduce((n, i) => n + i.quantity, 0);
+  const sameStoreCart = cart !== null && cart.storeId === data.id;
+  const cartCount = cart?.count ?? 0;
   const noun = cartCount === 1 ? t('cart.itemOne') : t('cart.itemMany');
 
   const renderRow = ({ item }: { item: Row }) => {
@@ -168,8 +168,8 @@ export default function StoreScreen() {
       footer={
         sameStoreCart ? (
           <Button
-            accessibilityLabel={t('store.cartBarA11y', { count: cartCount, noun, total: formatMoney(subtotalOf(cart.items)) })}
-            label={t('store.cartBar', { count: cartCount, noun, total: formatMoney(subtotalOf(cart.items)) })}
+            accessibilityLabel={t('store.cartBarA11y', { count: cartCount, noun, total: formatMoney(cart?.subtotalCents ?? 0) })}
+            label={t('store.cartBar', { count: cartCount, noun, total: formatMoney(cart?.subtotalCents ?? 0) })}
             onPress={() => router.push('/cart')}
             size="lg"
             testID="store.cart-bar"

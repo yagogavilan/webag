@@ -308,7 +308,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       }
       // SEC-040: PIX tardio ou pagamento em tentativa já encerrada → estorno total automático e idempotente.
       if (attempt.status === 'expired' || attempt.status === 'cancelled') {
-        await this.refundInternal(attempt.id, attempt.amountCents, 'late_payment', `auto-refund:${attempt.id}`);
+        await this.refundBySystem(attempt.id, attempt.amountCents, 'late_payment', `auto-refund:${attempt.id}`);
         await this.alert(attempt.id, 'late_payment_refunded', { previousStatus: attempt.status });
         return;
       }
@@ -339,15 +339,16 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
    * o estorno (SEC-074).
    */
   async refund(attemptId: string, amountCents: number, reason: string, idempotencyKey: string, ctx: RequestContext): Promise<void> {
-    await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, async (tx, remote) => {
-      await this.audit.record(tx, ctx, {
-        action: 'payment.refund',
-        targetType: 'payment_attempt',
-        targetId: attemptId,
-        after: { amountCents, reason, providerRefundId: remote.providerRefundId },
-        reason,
-      });
+    await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, {
+      actorId: ctx.principal?.userId ?? null,
+      actorRole: ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null,
+      requestId: ctx.requestId,
     });
+  }
+
+  /** Estorno do sistema (pedido cancelado/recusado/expirado, PIX tardio): ator nulo, trilha com `actorRole = system`. */
+  async refundBySystem(attemptId: string, amountCents: number, reason: string, idempotencyKey: string): Promise<void> {
+    await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, { actorId: null, actorRole: 'system', requestId: null });
   }
 
   /**
@@ -360,7 +361,8 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     amountCents: number,
     reason: string,
     idempotencyKey: string,
-    onConfirmed?: (tx: Parameters<Parameters<Db['transaction']>[0]>[0], remote: { providerRefundId: string }) => Promise<void>,
+    actor: { actorId: string | null; actorRole: string | null; requestId: string | null } = { actorId: null, actorRole: 'system', requestId: null },
+    recovered = false,
   ): Promise<{ providerRefundId: string } | null> {
     if (!Number.isInteger(amountCents) || amountCents <= 0) throw errors.validation([{ field: 'amountCents', message: 'Valor inválido.' }]);
 
@@ -391,7 +393,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       if (total + amountCents > attempt.amountCents) {
         throw errors.unprocessable('REFUND_EXCEEDS_PAID', 'Estorno maior que o valor pago');
       }
-      await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason });
+      await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason, actorId: actor.actorId, actorRole: actor.actorRole, requestId: actor.requestId });
       return { kind: 'go' as const, attempt };
     });
     if (phase1.kind === 'already') return null;
@@ -428,7 +430,25 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       if (locked && done === locked.amountCents) {
         await tx.update(paymentAttempts).set({ status: 'refunded', updatedAt: new Date() }).where(eq(paymentAttempts.id, attemptId));
       }
-      if (onConfirmed) await onConfirmed(tx, remote);
+      // N1: a auditoria vale para TODO estorno confirmado, inclusive o concluído pela conciliação (usa o ator gravado na
+      // intenção, não o de quem rodou a recuperação). Na mesma transação: falha de auditoria desfaz o estorno gravado.
+      const [intent] = await tx
+        .select()
+        .from(paymentRefundIntents)
+        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+      await this.audit.record(
+        tx,
+        { ip: null, userAgent: null, requestId: intent?.requestId ?? null, deviceId: null, principal: null },
+        {
+          action: 'payment.refund',
+          targetType: 'payment_attempt',
+          targetId: attemptId,
+          after: { amountCents, reason, providerRefundId: remote.providerRefundId, ...(recovered ? { concludedBy: 'reconciliation' } : {}) },
+          reason,
+          actorId: intent?.actorId ?? null,
+          actorRole: intent?.actorRole ?? 'system',
+        },
+      );
     });
     return remote;
   }
@@ -444,7 +464,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     let recovered = 0;
     for (const intent of stale) {
       try {
-        await this.refundInternal(intent.attemptId, intent.amountCents, intent.reason, intent.idempotencyKey);
+        await this.refundInternal(intent.attemptId, intent.amountCents, intent.reason, intent.idempotencyKey, { actorId: intent.actorId, actorRole: intent.actorRole, requestId: intent.requestId }, true);
         recovered++;
       } catch (error) {
         this.logger.warn(`recuperação de estorno ${intent.id} falhou: ${safeErrorMessage(error)}`);

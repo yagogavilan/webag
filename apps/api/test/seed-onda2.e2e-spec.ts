@@ -74,7 +74,7 @@ describe('Seed da Onda 2: lojas fictícias em Francisco Morato e Franco da Rocha
     for (const cpf of cpfs) expect(isValidCpf(cpf)).toBe(true);
   });
 
-  it('em produção o seed exige senha explícita', async () => {
-    await expect(seedOnda2(ctx.db, { production: true })).rejects.toThrow(/SEED_MERCHANT_PASSWORD/);
+  it('em produção o seed de demonstração se recusa a rodar (DEC-030d)', async () => {
+    await expect(seedOnda2(ctx.db, { production: true })).rejects.toThrow(/não roda em produção/);
   });
 });

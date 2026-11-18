@@ -99,6 +99,10 @@ export const paymentRefundIntents = pgTable(
     amountCents: integer().notNull(),
     reason: text().notNull(),
     status: text({ enum: REFUND_INTENT_STATUSES }).notNull().default('pending'),
+    /** Quem pediu (N1): a conciliação conclui o estorno depois e a auditoria precisa do ator original. Nulo = sistema. */
+    actorId: uuid(),
+    actorRole: text(),
+    requestId: text(),
     providerRefundId: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

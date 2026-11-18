@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { STAFF_ASSIGNABLE_PERMISSIONS } from '../../platform/auth/permissions.js';
 import type { Env } from '../../platform/config/env.js';
@@ -75,15 +75,21 @@ export class TeamService {
   }
 
   async revokeInvitation(store: Store, principal: Principal, invitationId: string): Promise<void> {
+    // I1: a loja entra no WHERE; convite de outra loja nunca é tocado (404 sem efeito).
     const rows = await this.db
       .update(invitations)
       .set({ revokedAt: new Date() })
-      .where(and(eq(invitations.id, invitationId), eq(invitations.kind, 'store_staff'), isNull(invitations.usedAt), isNull(invitations.revokedAt)))
-      .returning({ id: invitations.id, payload: invitations.payload });
-    const row = rows[0];
-    if (!row || (row.payload as { storeId?: string }).storeId !== store.id) {
-      throw errors.notFound('Convite não encontrado.');
-    }
+      .where(
+        and(
+          eq(invitations.id, invitationId),
+          eq(invitations.kind, 'store_staff'),
+          sql`${invitations.payload}->>'storeId' = ${store.id}`,
+          isNull(invitations.usedAt),
+          isNull(invitations.revokedAt),
+        ),
+      )
+      .returning({ id: invitations.id });
+    if (!rows[0]) throw errors.notFound('Convite não encontrado.');
     await this.log(store.id, principal.userId, 'team.invite_revoke', {});
   }
 
@@ -126,9 +132,18 @@ export class TeamService {
       .from(storeMembers)
       .innerJoin(users, eq(users.id, storeMembers.userId))
       .where(eq(storeMembers.storeId, storeId));
-    const pending = (await this.db.select().from(invitations).where(and(eq(invitations.kind, 'store_staff'), isNull(invitations.usedAt), isNull(invitations.revokedAt)))).filter(
-      (i) => (i.payload as { storeId?: string }).storeId === storeId && i.expiresAt > new Date(),
-    );
+    const pending = await this.db
+      .select()
+      .from(invitations)
+      .where(
+        and(
+          eq(invitations.kind, 'store_staff'),
+          sql`${invitations.payload}->>'storeId' = ${storeId}`,
+          isNull(invitations.usedAt),
+          isNull(invitations.revokedAt),
+          gt(invitations.expiresAt, new Date()),
+        ),
+      );
     return {
       members: members.map((m) => ({ ...m, since: m.since.toISOString() })),
       invitations: pending.map((i) => ({ id: i.id, email: i.email, name: i.name, permissions: (i.payload as { permissions: string[] }).permissions, expiresAt: i.expiresAt.toISOString() })),
@@ -165,7 +180,7 @@ export class TeamService {
       .from(storeActivity)
       .leftJoin(users, eq(users.id, storeActivity.actorId))
       .where(eq(storeActivity.storeId, storeId))
-      .orderBy(storeActivity.createdAt)
+      .orderBy(desc(storeActivity.createdAt), desc(storeActivity.id))
       .limit(limit);
     return rows.map((r) => ({ action: r.action, at: r.createdAt.toISOString(), actor: r.actorName }));
   }

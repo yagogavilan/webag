@@ -8,7 +8,7 @@ import { seedOnda3 } from './onda3.js';
 
 /**
  * Seed de desenvolvimento: `pnpm --filter @webag/api db:seed`. Idempotente. Cada onda soma um arquivo aqui.
- * Em produção só cria o admin se SEED_ADMIN_PASSWORD estiver definida de propósito.
+ * Em produção só roda o seed base (Onda 1); o admin só é criado se SEED_ADMIN_PASSWORD estiver definida de propósito.
  */
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -21,9 +21,11 @@ async function main(): Promise<void> {
       adminPassword: process.env.SEED_ADMIN_PASSWORD,
       log: (message) => console.log(`[seed] ${message}`),
     });
-    // Onda 2: lojas fictícias com produtos e fotos geradas. Só em desenvolvimento (em produção: SEED_ONDA2=true + senha).
+    // Ondas 2 e seguintes: dados fictícios (lojas, clientes, pedidos). NUNCA em produção (DEC-030d, I10): não há flag que libere.
     const production = process.env.NODE_ENV === 'production';
-    if (!production || process.env.SEED_ONDA2 === 'true') {
+    if (production) {
+      console.log('[seed] produção: só o seed base (admin, categorias, regiões, parâmetros, termos); dados de demonstração ignorados');
+    } else {
       const storage = new S3ObjectStorage({
         endpoint: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
         region: process.env.S3_REGION ?? 'us-east-1',
@@ -35,10 +37,8 @@ async function main(): Promise<void> {
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       });
       await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
-      // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners (em produção: SEED_ONDA3=true).
-      if (!production || process.env.SEED_ONDA3 === 'true') {
-        await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
-      }
+      // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners.
+      await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
     }
     console.log('[seed] concluído');
   } finally {

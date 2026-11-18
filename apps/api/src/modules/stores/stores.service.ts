@@ -234,6 +234,7 @@ export class StoresService {
     const updated = await this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(stores).where(eq(stores.id, store.id)).for('update');
       if (!before) throw errors.notFound('Loja não encontrada.');
+      if (actor.kind === 'merchant') this.assertProfileEditable(before); // I6: status relido sob lock
       const [row] = await tx
         .update(stores)
         .set({ ...patch, ...(Object.keys(pending).length > 0 ? { pendingChanges: { ...(before.pendingChanges ?? {}), ...pending } } : {}), updatedAt: new Date() })
@@ -286,6 +287,11 @@ export class StoresService {
     }
     const asset = await this.media.requireReady(uploadId, { storeId: store.id, purposes: ['store_document'] });
     await this.db.transaction(async (tx) => {
+      // I6: trava a loja e reavalia o status (o `submit` concorrente muda para `in_review`); anexos simultâneos se enfileiram.
+      const [locked] = await tx.select().from(stores).where(eq(stores.id, store.id)).for('update');
+      if (!locked) throw errors.notFound('Loja não encontrada.');
+      this.assertProfileEditable(locked);
+      if (locked.status === 'approved') throw errors.conflict('STORE_NOT_EDITABLE', 'Documentos só mudam durante o cadastro ou a correção');
       await tx
         .update(storeDocuments)
         .set({ supersededAt: new Date() })

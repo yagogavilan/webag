@@ -193,7 +193,11 @@ export const storeDocuments = pgTable(
     supersededAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('store_documents_store_idx').on(t.storeId, t.kind)],
+  (t) => [
+    index('store_documents_store_idx').on(t.storeId, t.kind),
+    // I6: um documento vigente por (loja, tipo).
+    uniqueIndex('store_documents_current_uq').on(t.storeId, t.kind).where(sql`${t.supersededAt} is null`),
+  ],
 );
 
 /** Itens reprovados pelo admin ("um item por documento exigido mais 'dados da loja'", WB-054 C3). */

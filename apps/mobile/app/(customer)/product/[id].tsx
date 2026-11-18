@@ -23,7 +23,8 @@ import { Price } from '../../../src/features/catalog/Price';
 import { useProductQuery, useReviewsQuery, useStoreQuery, useDeliveryPoint } from '../../../src/features/catalog/queries';
 import { ReviewItem } from '../../../src/features/catalog/ReviewItem';
 import { buildGroups, findVariant, missingAttributes, selectOption, shownPrice, variantLabel, type Selection } from '../../../src/features/catalog/variants';
-import { cartActions, type NewItem } from '../../../src/features/cart/store';
+import { useCartActions, type AddOutcome } from '../../../src/features/cart/hooks';
+import type { NewItem } from '../../../src/features/cart/store';
 import { ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
 import { useApplyPendingFavorite, useFavorite } from '../../../src/features/favorites/hooks';
 import { t } from '../../../src/i18n';
@@ -58,7 +59,8 @@ export default function ProductScreen() {
   const [added, setAdded] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [exchangeOpen, setExchangeOpen] = useState(false);
-  const [conflict, setConflict] = useState<{ item: NewItem; storeName: string; currentStoreName: string; itemCount: number } | null>(null);
+  const [conflict, setConflict] = useState<{ currentStoreName: string; itemCount: number; confirm: () => Promise<AddOutcome> } | null>(null);
+  const cartApi = useCartActions();
   const scroller = useRef<ScrollViewInstance>(null);
   const variantsY = useRef(0);
 
@@ -96,16 +98,18 @@ export default function ProductScreen() {
   const attributes = product.variantAttributes ?? [];
   const hasVariants = variants.length > 0 && attributes.length > 0;
   const groups = hasVariants ? buildGroups(attributes, variants, selection) : [];
-  const selected = hasVariants ? findVariant(attributes, variants, selection) : undefined;
+  // Produto sem opções (só uma variação padrão): a variação já está escolhida. A sacola sempre trabalha por variação.
+  const selected = hasVariants ? findVariant(attributes, variants, selection) : variants.length === 1 ? variants[0] : undefined;
   const price = shownPrice(product, variants, selected);
   const allSoldOut = !product.available || (hasVariants && variants.every((v) => !v.available));
-  const maxQty = selected ? Math.max(1, selected.maxQuantity) : hasVariants ? DEFAULT_MAX_QTY : DEFAULT_MAX_QTY;
+  const maxQty = selected ? Math.max(1, selected.maxQuantity) : DEFAULT_MAX_QTY;
   const qty = Math.min(quantity, maxQty);
   const storeOpen = product.store.open;
   const exchangeDays = store.data?.exchangePolicy.voluntaryDays ?? 0;
   const images = [...(product.images ?? [])].sort((a, b) => a.position - b.position);
   const stockWarning = selected?.lastUnits ? (selected.lastUnits === 1 ? t('product.lastUnit') : t('product.lastUnits', { n: selected.lastUnits })) : null;
   const atMax = qty >= maxQty && Boolean(selected);
+  const cannotAdd = variants.length === 0;
   const description = product.description ?? '';
 
   const onChoose = (name: string, value: string) => {
@@ -114,21 +118,17 @@ export default function ProductScreen() {
     setAdded(false);
   };
 
-  const buildItem = (v: BrowseVariant | undefined, current: BrowseProduct): NewItem => {
-    const unit = v ? v.price.amount : (current.price?.amount ?? 0);
-    const original = v ? (v.originalPrice?.amount ?? null) : (current.originalPrice?.amount ?? null);
-    return {
-      productId: current.id,
-      variantId: v?.id ?? null,
-      name: current.name,
-      variantLabel: v ? variantLabel(attributes, selection) : null,
-      urls: images[0]?.urls ?? {},
-      unitPriceCents: unit,
-      originalPriceCents: original,
-      quantity: qty,
-      maxQuantity: v ? Math.max(1, v.maxQuantity) : DEFAULT_MAX_QTY,
-    };
-  };
+  const buildItem = (v: BrowseVariant, current: BrowseProduct): NewItem => ({
+    productId: current.id,
+    variantId: v.id,
+    name: current.name,
+    variantLabel: hasVariants ? variantLabel(attributes, selection) : null,
+    urls: images[0]?.urls ?? {},
+    unitPriceCents: v.price.amount,
+    originalPriceCents: v.originalPrice?.amount ?? null,
+    quantity: qty,
+    maxQuantity: Math.max(1, v.maxQuantity),
+  });
 
   const onAdd = async () => {
     if (adding) return;
@@ -157,24 +157,33 @@ export default function ProductScreen() {
         }
       }
       const freshVariants = fresh.variants ?? [];
-      const variant = hasVariants ? findVariant(attributes, freshVariants, selection) : undefined;
-      if (checked && (!fresh.available || (hasVariants && !variant?.available))) {
+      const variant = hasVariants ? findVariant(attributes, freshVariants, selection) : freshVariants.length === 1 ? freshVariants[0] : undefined;
+      const base = variant ?? selected;
+      if (!base) return;
+      if (checked && (!fresh.available || !base.available)) {
         void haptic('error');
         toast.show(t('cart.warnSoldOut'));
         return;
       }
-      const item = buildItem(variant ?? selected, fresh);
+      const item = buildItem(base, fresh);
       const shownCents = selected ? selected.price.amount : (product.price?.amount ?? item.unitPriceCents);
-      const result = await cartActions.add(product.store.id, product.store.name, item);
-      if (result.kind === 'store-conflict') {
-        setConflict({ item, storeName: product.store.name, currentStoreName: result.currentStoreName, itemCount: result.itemCount });
+      const outcome = await cartApi.add({ storeId: product.store.id, storeName: product.store.name, item });
+      if (outcome.kind === 'conflict') {
+        setConflict(outcome);
+        return;
+      }
+      if (outcome.kind === 'failed') {
+        void haptic('error');
+        toast.show(outcome.offline ? t('cart.addOffline') : t('cart.addError'));
         return;
       }
       void haptic('light');
       setAdded(true);
       setTimeout(() => setAdded(false), 2_000);
-      if (checked && item.unitPriceCents !== shownCents) toast.show(t('product.promoEnded', { price: formatMoney(item.unitPriceCents) }), { label: t('product.viewBag'), onPress: () => router.push('/cart') });
-      else toast.show(online ? t('product.addedToast') : t('product.addedOffline'), { label: t('product.viewBag'), onPress: () => router.push('/cart') });
+      const viewBag = { label: t('product.viewBag'), onPress: () => router.push('/cart') };
+      if (outcome.adjustedTo !== undefined) toast.show(t('cart.warnQty', { n: outcome.adjustedTo }), viewBag);
+      else if (checked && item.unitPriceCents !== shownCents) toast.show(t('product.promoEnded', { price: formatMoney(item.unitPriceCents) }), viewBag);
+      else toast.show(online ? t('product.addedToast') : t('product.addedOffline'), viewBag);
     } finally {
       setAdding(false);
     }
@@ -184,7 +193,11 @@ export default function ProductScreen() {
     if (!conflict) return;
     const c = conflict;
     setConflict(null);
-    await cartActions.replaceWith(product.store.id, c.storeName, c.item);
+    const outcome = await c.confirm();
+    if (outcome.kind === 'failed') {
+      toast.show(outcome.offline ? t('cart.addOffline') : t('cart.addError'));
+      return;
+    }
     void haptic('success');
     toast.show(t('cart.switchDone'), { label: t('product.viewBag'), onPress: () => router.push('/cart') });
   };
@@ -195,7 +208,7 @@ export default function ProductScreen() {
   return (
     <Screen
       footer={
-        allSoldOut ? (
+        allSoldOut || cannotAdd ? (
           <Button label={t('product.seeOthers')} onPress={() => router.push(`/store/${product.store.id}`)} size="lg" testID="product.see-others" />
         ) : (
           <View style={styles.bar}>

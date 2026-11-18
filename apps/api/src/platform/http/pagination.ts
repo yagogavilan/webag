@@ -1,3 +1,4 @@
+import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { errors } from './app-error.js';
 
 export const DEFAULT_LIMIT = 20;
@@ -28,3 +29,21 @@ export function decodeCursor<T extends Record<string, string | number>>(cursor: 
   }
   throw errors.validation([{ field: 'cursor', message: 'Cursor inválido.' }]);
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Cursor por (timestamp, id) estável (I3): o cursor leva o instante em milissegundos (ISO do `Date`), mas a coluna
+ * `timestamptz` tem microssegundos. Comparar e ordenar sempre por `date_trunc('milliseconds', col)` + id.
+ * Ordem DESC: a próxima página é "estritamente anterior" ao cursor.
+ */
+export function timestampCursorBefore(column: SQLWrapper, idColumn: SQLWrapper, cursor: { at: string; id: string } | null): SQL | undefined {
+  if (!cursor) return undefined;
+  if (typeof cursor.at !== 'string' || Number.isNaN(Date.parse(cursor.at)) || typeof cursor.id !== 'string' || !UUID_RE.test(cursor.id)) {
+    throw errors.validation([{ field: 'cursor', message: 'Cursor inválido.' }]);
+  }
+  return sql`(date_trunc('milliseconds', ${column}), ${idColumn}) < (${new Date(cursor.at).toISOString()}::timestamptz, ${cursor.id}::uuid)`;
+}
+
+/** `ORDER BY` correspondente (DESC) para `timestampCursorBefore`. */
+export const timestampOrderDesc = (column: SQLWrapper, idColumn: SQLWrapper): SQL[] => [sql`date_trunc('milliseconds', ${column}) desc`, sql`${idColumn} desc`];

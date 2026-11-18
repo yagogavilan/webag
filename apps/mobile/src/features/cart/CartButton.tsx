@@ -5,7 +5,7 @@ import { Handbag } from '../../components/icons';
 import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { theme } from '../../theme';
-import { useCartCount } from './store';
+import { useCartCount } from './hooks';
 
 /** Ícone da sacola com contador, no header do Início e da Loja (testID `home.cart`). */
 export function CartButton({ testID = 'home.cart' }: { testID?: string }) {

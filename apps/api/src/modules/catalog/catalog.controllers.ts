@@ -4,6 +4,7 @@ import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, type Principal, type
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
+import { IdempotencyService, parseIdempotencyKey } from '../idempotency/index.js';
 import { StoresService, uuidParam } from '../stores/index.js';
 import { adminProductsQuerySchema, bulkSchema, createProductSchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, updateProductSchema } from './catalog.schemas.js';
 import { CatalogService } from './catalog.service.js';
@@ -17,6 +18,7 @@ export class CatalogController {
   constructor(
     private readonly catalog: CatalogService,
     private readonly stores: StoresService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   private store(storeId: string) {
@@ -60,16 +62,27 @@ export class CatalogController {
     @Param('storeId') storeId: string,
     @Query(new ZodPipe(importQuerySchema)) query: In<typeof importQuerySchema>,
     @Body() body: unknown,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (typeof body !== 'string') throw errors.validation([{ field: 'file', message: 'Envie o arquivo CSV com Content-Type text/csv.' }]);
-    return this.catalog.importCsv(await this.store(storeId), { userId: principal.userId }, body, query.mode, query.onExisting);
+    const store = await this.store(storeId);
+    const run = () => this.catalog.importCsv(store, { userId: principal.userId }, body, query.mode, query.onExisting);
+    // I9: só o commit muda dados; a prévia não precisa de chave.
+    if (query.mode !== 'commit') return run();
+    return this.idempotency.run(`import:${store.id}`, parseIdempotencyKey(idempotencyKey), { csv: body, ...query }, run);
   }
 
   @StorePermission('catalog')
   @HttpCode(200)
   @Post('products/bulk')
-  async bulk(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string, @Body(new ZodPipe(bulkSchema)) body: In<typeof bulkSchema>) {
-    return this.catalog.bulk(await this.store(storeId), { userId: principal.userId }, body);
+  async bulk(
+    @CurrentPrincipal() principal: Principal,
+    @Param('storeId') storeId: string,
+    @Body(new ZodPipe(bulkSchema)) body: In<typeof bulkSchema>,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const store = await this.store(storeId);
+    return this.idempotency.run(`bulk:${store.id}`, parseIdempotencyKey(idempotencyKey), body, () => this.catalog.bulk(store, { userId: principal.userId }, body));
   }
 
   @StorePermission('catalog')
@@ -109,8 +122,13 @@ export class CatalogController {
     @Param('productId') productId: string,
     @Param('variantId') variantId: string,
     @Body(new ZodPipe(stockAdjustSchema)) body: In<typeof stockAdjustSchema>,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.catalog.adjustStock(await this.store(storeId), { userId: principal.userId }, uuidParam(productId), uuidParam(variantId), body);
+    const store = await this.store(storeId);
+    const ids = { productId: uuidParam(productId), variantId: uuidParam(variantId) };
+    return this.idempotency.run(`stock:${store.id}`, parseIdempotencyKey(idempotencyKey), { ...ids, ...body }, () =>
+      this.catalog.adjustStock(store, { userId: principal.userId }, ids.productId, ids.variantId, body),
+    );
   }
 
   @StorePermission('catalog')

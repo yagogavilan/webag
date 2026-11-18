@@ -113,7 +113,7 @@ async function bannerImage(hue: number): Promise<Buffer> {
 
 export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise<void> {
   const log = options.log ?? (() => undefined);
-  if (options.production && !options.merchantPassword) throw new Error('Em produção o seed da Onda 3 exige SEED_MERCHANT_PASSWORD');
+  if (options.production || process.env.NODE_ENV === 'production') throw new Error('Seed de demonstração não roda em produção');
   const password = options.merchantPassword ?? DEV_SEED_MERCHANT_PASSWORD;
 
   // 1. Mais lojas e produtos (mesma rotina da Onda 2; pula as que já existem).

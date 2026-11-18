@@ -14,6 +14,8 @@ export class ApiError extends Error {
   readonly fields: FieldProblem[];
   /** Segundos de espera (429, cabeçalho Retry-After). */
   readonly retryAfter: number | undefined;
+  /** Corpo do problema (campos extras do contrato, ex.: `currentStore` e `itemCount` de CART_STORE_CONFLICT). */
+  readonly body: Record<string, unknown>;
 
   constructor(init: {
     kind: ApiErrorKind;
@@ -22,6 +24,7 @@ export class ApiError extends Error {
     detail?: string | undefined;
     fields?: FieldProblem[];
     retryAfter?: number | undefined;
+    body?: Record<string, unknown>;
   }) {
     super(init.code ?? init.kind);
     this.name = 'ApiError';
@@ -31,6 +34,7 @@ export class ApiError extends Error {
     this.detail = init.detail;
     this.fields = init.fields ?? [];
     this.retryAfter = init.retryAfter;
+    this.body = init.body ?? {};
   }
 
   /** Falha de conexão (sem resposta útil do servidor): a tela mostra "tente de novo" e preserva o formulário. */
@@ -60,5 +64,6 @@ export function toApiError(status: number, data: unknown, headers?: Headers): Ap
     detail: typeof body.detail === 'string' ? body.detail : undefined,
     fields,
     retryAfter: Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : undefined,
+    body: body as Record<string, unknown>,
   });
 }

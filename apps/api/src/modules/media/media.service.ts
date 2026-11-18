@@ -8,7 +8,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { OBJECT_STORAGE, type ObjectStorage } from '../../platform/storage/object-storage.js';
 import { ParametersService } from '../admin/index.js';
 import { PrincipalService } from '../identity/index.js';
-import { ImageRejected, inspectImage, ratioWithin, renderVariant, VARIANT_WIDTHS } from './image.processor.js';
+import { ImageRejected, inspectImage, ratioWithin, renderVariants, VARIANT_WIDTHS } from './image.processor.js';
 import { mediaAssets, type MediaPurpose } from './db/schema.js';
 import { detectType, isImage, type DetectedType } from './sniff.js';
 
@@ -123,16 +123,11 @@ export class MediaService {
       let variants: Record<string, string> | null = null;
       if (PUBLIC_PURPOSES.includes(asset.purpose)) {
         variants = {};
-        for (const width of VARIANT_WIDTHS) {
-          if (width > Math.max(info.width, VARIANT_WIDTHS[0])) continue;
+        const widths = VARIANT_WIDTHS.filter((width) => width <= Math.max(info.width, VARIANT_WIDTHS[0]));
+        for (const [width, rendered] of await renderVariants(body, widths.length > 0 ? widths : [VARIANT_WIDTHS[0]])) {
           const key = `media/${asset.id}/${width}.webp`;
-          await this.storage.putObject('public', key, await renderVariant(body, width), 'image/webp');
+          await this.storage.putObject('public', key, rendered, 'image/webp');
           variants[String(width)] = key;
-        }
-        if (Object.keys(variants).length === 0) {
-          const key = `media/${asset.id}/${VARIANT_WIDTHS[0]}.webp`;
-          await this.storage.putObject('public', key, await renderVariant(body, VARIANT_WIDTHS[0]), 'image/webp');
-          variants[String(VARIANT_WIDTHS[0])] = key;
         }
       }
       return this.ready(asset, detected, body.length, info, variants);

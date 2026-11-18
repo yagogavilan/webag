@@ -85,6 +85,27 @@
       "when": 1795026986723,
       "tag": "0011_onda3_cart_coupons",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795028454017,
+      "tag": "0012_idempotency_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795028571660,
+      "tag": "0013_store_documents_current_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795028703167,
+      "tag": "0014_refund_intent_actor",
+      "breakpoints": true
     }
   ]
 }

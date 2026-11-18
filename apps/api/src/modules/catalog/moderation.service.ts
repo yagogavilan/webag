@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
-import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
+import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { MailService } from '../../platform/mail/mail.service.js';
 import { productRemovedEmail } from '../../platform/mail/templates.js';
 import { AuditService } from '../admin/index.js';
@@ -41,10 +41,10 @@ export class ModerationService {
           filters.from ? gte(products.createdAt, filters.from) : undefined,
           filters.to ? lte(products.createdAt, filters.to) : undefined,
           escaped ? ilike(products.name, `%${escaped}%`) : undefined,
-          cursor ? or(lt(products.createdAt, new Date(cursor.at)), and(eq(products.createdAt, new Date(cursor.at)), lt(products.id, cursor.id))) : undefined,
+          timestampCursorBefore(products.createdAt, products.id, cursor),
         ),
       )
-      .orderBy(desc(products.createdAt), desc(products.id))
+      .orderBy(...timestampOrderDesc(products.createdAt, products.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
     const last = page.at(-1)?.product;

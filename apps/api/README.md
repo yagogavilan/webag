@@ -33,6 +33,6 @@ Com `PAYMENT_PROVIDER=fake` (padrão) existem rotas autenticadas que não fazem 
 
 ## Seed da Onda 2 (lojas fictícias)
 
-`pnpm --filter @webag/api db:seed` (depois do seed da Onda 1) cria 7 lojas fictícias em bairros reais de Francisco Morato e Franco da Rocha, com 6 produtos cada (variações, estoque, promoções, seções) e fotos geradas. Login dos donos: `lojista.<slug>@seed.webag.local`, senha `webag-seed-lojista-2026` (só desenvolvimento; use `SEED_MERCHANT_PASSWORD` para trocar). Em produção só roda com `SEED_ONDA2=true` e `SEED_MERCHANT_PASSWORD`. Fotos precisam do armazenamento local no ar (RustFS, `docker compose up`); sem ele as lojas nascem sem foto.
+`pnpm --filter @webag/api db:seed` (depois do seed da Onda 1) cria 7 lojas fictícias em bairros reais de Francisco Morato e Franco da Rocha, com 6 produtos cada (variações, estoque, promoções, seções) e fotos geradas. Login dos donos: `lojista.<slug>@seed.webag.local`, senha `webag-seed-lojista-2026` (só desenvolvimento; use `SEED_MERCHANT_PASSWORD` para trocar). Em produção NÃO roda (DEC-030d): produção só recebe o seed base; não existe flag que libere. Fotos precisam do armazenamento local no ar (RustFS, `docker compose up`); sem ele as lojas nascem sem foto.
 
 Fonte dos dados (detalhe no cabeçalho de `seed/onda2.ts`): nomes, donos, produtos, preços e endereços inventados; bairros reais com coordenadas aproximadas do bairro; CPFs fictícios com dígitos válidos; fotos geradas por código com `sharp` (gradiente e formas, sem terceiros, sem direito autoral); conta de recebimento do provedor `fake`.

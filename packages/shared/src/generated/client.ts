@@ -4668,7 +4668,7 @@ export const getCorrectEmailUrl = () => {
 }
 
 /**
- * Exige a senha. O código anterior deixa de valer e o novo e-mail recebe um código novo.
+ * Exige a senha. Os limites de envio (60 s entre envios, 5 por hora) valem ANTES de gravar: um 429 não muda o e-mail nem invalida o código anterior. Passando, o código anterior deixa de valer e o novo e-mail recebe um código novo.
  * @summary Corrigir o e-mail ainda não confirmado
  */
 export const correctEmail = async (correctEmailRequest: CorrectEmailRequest, options?: Parameters<typeof apiFetch>[1]): Promise<correctEmailResponse> => {

@@ -16,28 +16,7 @@ import {
   type TestMerchant,
 } from './helpers/fixtures.js';
 
-/**
- * Regressão da Onda 2 pedida pelo QA a partir da revisão do tech-lead (`docs/arquitetura/reviews/review-onda2-api.md`, achados I1 a I9).
- * Escritos contra a API real (Postgres e Redis reais) como COMPORTAMENTO esperado, não como implementação.
- *
- * `stillBroken(BUG, comportamentoEsperado)`: a preparação do teste roda normalmente (se ela falhar, o teste fica vermelho) e só o
- * comportamento correto fica dentro do callback. Enquanto o defeito existir o callback falha e o teste fica verde; quando o
- * defeito for corrigido o callback passa e o teste fica VERMELHO pedindo para trocar por `expect` direto e fechar o BUG-###
- * em `docs/qa/bugs/`. Assim o CI não fica vermelho por bug conhecido, a correção não passa despercebida, e um erro de
- * preparação (que `it.fails` esconderia) continua aparecendo.
- */
-async function stillBroken(bug: string, expected: () => unknown, rounds = 1): Promise<void> {
-  // `rounds` > 1 só para corrida (concorrência): o defeito aparece em algumas rodadas, não em todas.
-  for (let round = 0; round < rounds; round++) {
-    try {
-      await expected();
-    } catch {
-      return;
-    }
-  }
-  throw new Error(`${bug} parece corrigido: troque \`stillBroken\` por asserções diretas neste teste e feche o bug em docs/qa/bugs/.`);
-}
-
+/** Regressão da Onda 2 pedida pelo QA a partir da revisão do tech-lead (`docs/arquitetura/reviews/review-onda2-api.md`, I1 a I9), contra Postgres e Redis reais. */
 describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', () => {
   let ctx: TestContext;
   let ops: TestAdmin;
@@ -94,7 +73,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       await ctx.http.delete(`/v1/stores/${otherStoreId}/members/invitations/${invitationId}`).set(as(other)).expect(404);
 
       const [row] = await ctx.db.select().from(invitations).where(eq(invitations.id, invitationId));
-      await stillBroken('BUG-001', () => expect(row?.revokedAt).toBeNull());
+      expect(row?.revokedAt).toBeNull();
     });
 
     it('o dono da própria loja revoga o convite normalmente (caminho feliz continua valendo)', async () => {
@@ -114,8 +93,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       );
       const res = await ctx.http.get(`/v1/stores/${storeId}/activity`).set(as(owner)).expect(200);
       const actions = (res.body.data as { action: string }[]).map((e) => e.action);
-      expect(actions).toContain('qa.evento.00'); // preparação: os eventos existem e a rota os lista
-      await stillBroken('BUG-002', () => expect(actions).toContain('qa.evento.59'));
+      expect(actions).toContain('qa.evento.59');
     });
   });
 
@@ -138,7 +116,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
         if (!cursor) break;
       }
       expect(seen.length).toBeGreaterThanOrEqual(2); // preparação: a 1ª página veio cheia
-      await stillBroken('BUG-003', () => expect(new Set(seen).size).toBe(5));
+      expect(new Set(seen).size).toBe(5);
     });
 
     it('BUG-003: fila de moderação do admin paginada de 2 em 2 devolve os 5 produtos (mesmo defeito)', async () => {
@@ -153,7 +131,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
         if (!cursor) break;
       }
       expect(seen.length).toBeGreaterThanOrEqual(2);
-      await stillBroken('BUG-003', () => expect(new Set(seen).size).toBe(5));
+      expect(new Set(seen).size).toBe(5);
     });
 
     it('controle: produtos com created_at distinto (milissegundos diferentes) paginam sem perda', async () => {
@@ -181,7 +159,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       await ctx.http.post(url).set(as(owner)).set('Idempotency-Key', key).send({ delta: 2 }).expect(200);
       const [variant] = await ctx.db.select().from(productVariants).where(eq(productVariants.id, variantId));
       expect(variant?.stock).toBeGreaterThanOrEqual(12); // preparação: o ajuste foi aplicado ao menos uma vez
-      await stillBroken('BUG-004', () => expect(variant?.stock).toBe(12));
+      expect(variant?.stock).toBe(12);
     });
 
     it('BUG-004: reajuste de preço em massa por percentual repetido com a mesma chave aplica uma vez só', async () => {
@@ -192,7 +170,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       await ctx.http.post(products_('/bulk')).set(as(owner)).set('Idempotency-Key', key).send(body).expect(200);
       const [row] = await ctx.db.select().from(products).where(eq(products.id, id));
       expect(row?.basePriceCents).toBeGreaterThanOrEqual(5500); // preparação: o reajuste de 10% foi aplicado ao menos uma vez
-      await stillBroken('BUG-004', () => expect(row?.basePriceCents).toBe(5500));
+      expect(row?.basePriceCents).toBe(5500);
     });
 
     it('controle: sem chave, duas chamadas são duas operações (comportamento atual do contrato)', async () => {
@@ -211,15 +189,11 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       const hoursStore = (await insertStoreRow(ctx, own.userId, { status: 'approved', name: 'Loja Horários QA' })).id;
       const days = [{ weekday: 1, intervals: [{ start: '08:00', end: '12:00' }, { start: '14:00', end: '18:00' }] }];
       await ctx.http.put(`/v1/stores/${hoursStore}/hours`).set(as(own)).send({ days }).expect(204);
-      await stillBroken(
-        'BUG-005',
-        async () => {
-          const results = await Promise.all(Array.from({ length: 8 }, () => ctx.http.put(`/v1/stores/${hoursStore}/hours`).set(as(own)).send({ days })));
-          expect(results.every((r) => r.status === 204)).toBe(true);
-          expect(await ctx.db.select().from(storeHours).where(eq(storeHours.storeId, hoursStore))).toHaveLength(2);
-        },
-        10,
-      );
+      for (let round = 0; round < 5; round++) {
+        const results = await Promise.all(Array.from({ length: 8 }, () => ctx.http.put(`/v1/stores/${hoursStore}/hours`).set(as(own)).send({ days })));
+        expect(results.every((r) => r.status === 204)).toBe(true);
+        expect(await ctx.db.select().from(storeHours).where(eq(storeHours.storeId, hoursStore))).toHaveLength(2);
+      }
     });
 
     it('BUG-005: 6 `PUT /holidays` simultâneos iguais terminam sem erro 500 (hoje a violação de unicidade vaza)', async () => {
@@ -227,14 +201,10 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       const holidayStore = (await insertStoreRow(ctx, own.userId, { status: 'approved', name: 'Loja Feriados QA' })).id;
       const body = { holidays: [{ date: '2027-12-25', label: 'Natal' }] };
       await ctx.http.put(`/v1/stores/${holidayStore}/holidays`).set(as(own)).send(body).expect(204);
-      await stillBroken(
-        'BUG-005',
-        async () => {
-          const results = await Promise.all(Array.from({ length: 6 }, () => ctx.http.put(`/v1/stores/${holidayStore}/holidays`).set(as(own)).send(body)));
-          expect(results.filter((r) => r.status >= 500)).toHaveLength(0);
-        },
-        10,
-      );
+      for (let round = 0; round < 5; round++) {
+        const results = await Promise.all(Array.from({ length: 6 }, () => ctx.http.put(`/v1/stores/${holidayStore}/holidays`).set(as(own)).send(body)));
+        expect(results.filter((r) => r.status >= 500)).toHaveLength(0);
+      }
     });
   });
 
@@ -242,20 +212,15 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
     it('BUG-006: 6 anexos simultâneos do mesmo tipo deixam um único documento vigente', async () => {
       const own = await createMerchant(ctx);
       const draft = await createStoreViaApi(ctx, own);
-      await stillBroken(
-        'BUG-006',
-        async () => {
-          const uploads: string[] = [];
-          for (let i = 0; i < 6; i++) {
-            const sent = await uploadFile(ctx, own, { storeId: draft.id, purpose: 'store_document', contentType: 'image/jpeg', body: await jpegBuffer(600 + i, 400) });
-            uploads.push((sent.completed!.body as { id: string }).id);
-          }
-          await Promise.all(uploads.map((uploadId) => ctx.http.post(`/v1/stores/${draft.id}/documents`).set(as(own)).send({ kind: CPF_DOCS[0], uploadId })));
-          const rows = await ctx.db.select().from(storeDocuments).where(eq(storeDocuments.storeId, draft.id));
-          expect(rows.filter((r) => r.kind === CPF_DOCS[0] && r.supersededAt === null)).toHaveLength(1);
-        },
-        10,
-      );
+      const uploads: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const sent = await uploadFile(ctx, own, { storeId: draft.id, purpose: 'store_document', contentType: 'image/jpeg', body: await jpegBuffer(600 + i, 400) });
+        uploads.push((sent.completed!.body as { id: string }).id);
+      }
+      const results = await Promise.all(uploads.map((uploadId) => ctx.http.post(`/v1/stores/${draft.id}/documents`).set(as(own)).send({ kind: CPF_DOCS[0], uploadId })));
+      expect(results.filter((r) => r.status >= 500)).toHaveLength(0);
+      const rows = await ctx.db.select().from(storeDocuments).where(eq(storeDocuments.storeId, draft.id));
+      expect(rows.filter((r) => r.kind === CPF_DOCS[0] && r.supersededAt === null)).toHaveLength(1);
     });
   });
 
@@ -264,11 +229,9 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       const { id } = await activeProduct();
       const [before] = await ctx.db.select().from(products).where(eq(products.id, id));
       expect(before).toMatchObject({ status: 'active', categoryId }); // preparação
-      await stillBroken('BUG-007', async () => {
-        await ctx.http.patch(products_(`/${id}`)).set(as(owner)).send({ categoryId: null }).expect(422);
-        const [row] = await ctx.db.select().from(products).where(eq(products.id, id));
-        expect(row?.categoryId).toBe(categoryId);
-      });
+      await ctx.http.patch(products_(`/${id}`)).set(as(owner)).send({ categoryId: null }).expect(422);
+      const [row] = await ctx.db.select().from(products).where(eq(products.id, id));
+      expect(row?.categoryId).toBe(categoryId);
     });
 
     it('rascunho pode ficar sem categoria (regra só vale para ativo)', async () => {
@@ -296,7 +259,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       expect(first.body.created).toBe(2);
       const rows = await ctx.db.select().from(products).where(eq(products.storeId, importStore));
       expect(rows.length).toBeGreaterThanOrEqual(2);
-      await stillBroken('BUG-008', () => expect(rows).toHaveLength(2));
+      expect(rows).toHaveLength(2);
     });
   });
 });
