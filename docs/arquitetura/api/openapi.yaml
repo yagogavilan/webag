@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: Webag API
+  version: 0.1.0
+  description: |
+    Contrato da API do Webag (fonte da verdade — ver skill `contrato-api` e ADR-007).
+    Recursos de negócio ficam sob `/v1`. Endpoints operacionais (`/health`) ficam fora do versionamento.
+    Erros seguem RFC 9457 (`application/problem+json`).
+servers:
+  - url: http://localhost:3000
+    description: Desenvolvimento local
+tags:
+  - name: ops
+    description: Endpoints operacionais
+paths:
+  /health:
+    get:
+      tags: [ops]
+      operationId: getHealth
+      summary: Liveness — o processo está de pé
+      description: Não consulta dependências. Usado pelo orquestrador para reiniciar o processo.
+      responses:
+        '200':
+          description: Processo ativo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: ok
+                info: {}
+                error: {}
+                details: {}
+  /health/ready:
+    get:
+      tags: [ops]
+      operationId: getReadiness
+      summary: Readiness — dependências (PostgreSQL e Redis) respondem
+      responses:
+        '200':
+          description: Pronto para receber tráfego
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: ok
+                info:
+                  database: { status: up }
+                  redis: { status: up }
+                error: {}
+                details:
+                  database: { status: up }
+                  redis: { status: up }
+        '503':
+          description: Alguma dependência fora do ar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: error
+                info:
+                  redis: { status: up }
+                error:
+                  database: { status: down, message: connect ECONNREFUSED }
+                details:
+                  database: { status: down, message: connect ECONNREFUSED }
+                  redis: { status: up }
+components:
+  schemas:
+    HealthIndicator:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [up, down]
+        message:
+          type: string
+    HealthStatus:
+      type: object
+      required: [status, info, error, details]
+      properties:
+        status:
+          type: string
+          enum: [ok, error, shutting_down]
+        info:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthIndicator'
+        error:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthIndicator'
+        details:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthIndicator'
+    Money:
+      type: object
+      description: Valor monetário em centavos.
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Centavos
+          example: 1990
+        currency:
+          type: string
+          enum: [BRL]
+    Problem:
+      type: object
+      description: Erro no formato RFC 9457.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          description: Código estável; o cliente decide a ação por ele.
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string

@@ -1,0 +1,85 @@
+# Infra de desenvolvimento local do Webag.
+# Uso: cp .env.example .env && docker compose up -d
+# Serviços: PostgreSQL 18 + PostGIS 3.6, Redis 8, RustFS (S3, ver ADR-005), Mailpit (e-mail de teste).
+name: webag
+
+services:
+  postgres:
+    # Apple Silicon: defina POSTGIS_IMAGE=imresamu/postgis:18-3.6-alpine no .env
+    image: ${POSTGIS_IMAGE:-postgis/postgis:18-3.6-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webag_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-webag}
+      TZ: UTC
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  storage:
+    # Substitui o MinIO: a imagem minio/minio não é mais distribuída (ADR-005)
+    image: rustfs/rustfs:1.0.6
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-webag-dev}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-webag-dev-secret-only}
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '9000:9000' # API S3
+      - '9001:9001' # console web
+    volumes:
+      - storage-data:/data
+
+  storage-init:
+    # Cria os buckets e libera leitura anônima no público. Roda uma vez e sai.
+    image: amazon/aws-cli:latest
+    depends_on:
+      - storage
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-webag-dev}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-webag-dev-secret-only}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://storage:9000
+      PUBLIC_BUCKET: ${S3_BUCKET_PUBLIC:-webag-public}
+      PRIVATE_BUCKET: ${S3_BUCKET_PRIVATE:-webag-private}
+    volumes:
+      - ./infra/storage-init.sh:/storage-init.sh:ro
+    entrypoint: ['/bin/sh', '/storage-init.sh']
+    restart: 'no'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # UI
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 'true'
+      MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
+
+volumes:
+  postgres-data:
+  redis-data:
+  storage-data:
