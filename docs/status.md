@@ -12,12 +12,12 @@ G0–G3 aprovados pelo fundador (DEC-002). Fase atual: **Fundação** (pesquisa,
 ## Rodando agora
 | Tarefa | Dono | Status |
 |---|---|---|
-| Onda 1: auth, RBAC, admin config, pagamento fake | backend-dev | Reiniciado após limite de uso |
-| Estratégia e planos de teste (ondas 1 e 2) | qa-engineer | Reiniciado após limite de uso |
-| Specs de tela onda 1B, 5 e 6 | product-designer | Reiniciado após limite de uso |
+| B1 + endurecimento da Onda 1, DT-018 e back-end da Onda 2 (lojista, aprovação, catálogo) | backend-dev | Retomado após limite de uso |
+| Web do admin, Onda 1A (shell, login, regiões e categorias já commitados) | mobile-dev | Retomado após limite de uso |
+| App do cliente: base, cadastro, login, endereço | mobile-dev | Retomado após limite de uso |
 
-Concluídos: design system e tokens; PRDs e backlog (142 histórias); plano de 16 sub-ondas; threat model (70 SEC); ADRs 001-008; esqueleto do monorepo com CI; specs de tela das ondas 2 a 4 (44 telas). Decisões DEC-001 a DEC-022.
-Incidentes: reinício do container (1x) e limite de uso de 5 h (1x, 06:50 UTC) derrubaram agentes; o que estava commitado sobreviveu.
+Concluídos: design system e tokens; 44 + 40 telas especificadas; PRDs e backlog (144 histórias); threat model e SEC-001 a 096; plano de 16 sub-ondas; planos de teste (337 casos); back-end da Onda 1 (117 testes de integração, OpenAPI 57 operações), revisado pelo tech-lead (reprovado por 1 bloqueante, B1, em correção). Decisões DEC-001 a DEC-027.
+Incidentes: 1 reinício do container e 2 limites de uso de 5 h (06:50 e 11:50 UTC). O que estava commitado sobreviveu.
 
 ## Falta (plano de fases)
 1. Fundação (acima)
