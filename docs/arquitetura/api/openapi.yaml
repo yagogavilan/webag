@@ -718,6 +718,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+  /v1/admin/totp/recovery-codes:
+    post:
+      tags: [admin-users]
+      operationId: regenerateRecoveryCodes
+      summary: Gerar novos códigos de recuperação (SEC-092)
+      description: "Exige TOTP ativo e reautenticação recente (403 `REAUTH_REQUIRED`). Os 10 códigos novos aparecem uma única vez; os anteriores deixam de valer e o titular recebe e-mail. 409 `TOTP_NOT_CONFIGURED` sem TOTP."
+      responses:
+        '200':
+          description: Códigos novos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpConfirmResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/totp/status:
+    get:
+      tags: [admin-users]
+      operationId: getTotpStatus
+      summary: Estado do 2º fator do próprio admin
+      description: "Quantos códigos de recuperação restam; `recoveryCodesLow` é verdadeiro com 3 ou menos (o painel pede novos)."
+      responses:
+        '200':
+          description: Estado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/totp/confirm:
     post:
       tags: [admin-users]
@@ -1052,7 +1088,7 @@ paths:
       tags: [config]
       operationId: updateParameter
       summary: Alterar parâmetro
-      description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
         - { name: key, in: path, required: true, description: Chave do parâmetro, schema: { type: string } }
       requestBody:
@@ -1076,6 +1112,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/admin/parameters/{key}/reset:
@@ -1107,6 +1145,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/config/flags:
@@ -1244,7 +1284,7 @@ paths:
       tags: [audit]
       operationId: listAuditLog
       summary: Trilha de auditoria
-      description: "Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Permissão de admin: `audit:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      description: "Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Super admin vê tudo; os demais perfis veem só as PRÓPRIAS ações (o filtro `actorId` é forçado no servidor). Permissão de admin: `audit:own` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
         - { name: actorId, in: query, schema: { type: string, format: uuid } }
         - { name: action, in: query, schema: { type: string, maxLength: 80 } }
@@ -1267,6 +1307,33 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/audit-log/export:
+    get:
+      tags: [audit]
+      operationId: exportAuditLog
+      summary: Exportar a auditoria em CSV
+      description: "Mesmos filtros da listagem (sem cursor), até 5.000 linhas mais recentes; `X-Export-Truncated: true` quando há mais. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo (sem execução em planilha). A exportação é registrada na auditoria (`audit.export`). Limite de 10 por minuto. Permissão de admin: `audit:own`."
+      parameters:
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: action, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: targetType, in: query, schema: { type: string, maxLength: 40 } }
+        - { name: targetId, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Arquivo CSV (UTF-8 com BOM)
+          content:
+            text/csv:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /v1/webhooks/{provider}:
     post:
       tags: [payments]
@@ -3285,6 +3352,27 @@ components:
         profile: { $ref: '#/components/schemas/AdminProfile' }
         active: { type: boolean }
         totpConfigured: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time, description: Último login com sucesso }
+    PendingAdminInvitation:
+      type: object
+      required: [id, name, email, profile, reactivation, expired, invitedByName, createdAt, expiresAt]
+      properties:
+        id: { type: string, format: uuid, description: ID do convite (para revogar em DELETE /admin/admins/invitations/{invitationId}) }
+        name: { type: string }
+        email: { type: string, format: email }
+        profile: { $ref: '#/components/schemas/AdminProfile' }
+        reactivation: { type: boolean, description: Link de reativação (redefinição de acesso), não convite novo }
+        expired: { type: boolean }
+        invitedByName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    TotpStatus:
+      type: object
+      required: [configured, recoveryCodesRemaining, recoveryCodesLow]
+      properties:
+        configured: { type: boolean }
+        recoveryCodesRemaining: { type: integer }
+        recoveryCodesLow: { type: boolean }
     AdminList:
       type: object
       required: [data, nextCursor]
@@ -3292,6 +3380,9 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/AdminView' }
+        pendingInvitations:
+          type: array
+          items: { $ref: '#/components/schemas/PendingAdminInvitation' }
         nextCursor: { type: [string, 'null'] }
     InviteAdminRequest:
       type: object
@@ -3313,6 +3404,7 @@ components:
       properties:
         profile: { $ref: '#/components/schemas/AdminProfile' }
         active: { type: boolean }
+        reason: { type: string, minLength: 5, maxLength: 300, description: Motivo da mudança (vai à auditoria) }
     ResetAdminAccessRequest:
       type: object
       additionalProperties: false
@@ -3523,12 +3615,14 @@ components:
       properties:
         value: { oneOf: [{ type: number }, { type: string, maxLength: 40 }] }
         reason: { type: string, minLength: 5, maxLength: 300 }
+        expectedUpdatedAt: { type: [string, 'null'], format: date-time, description: "Versão que o painel viu (`updatedAt` do parâmetro; null = nunca editado). Se outro admin alterou antes, 409 `PARAMETER_CONFLICT`. Omitido = sem controle de versão." }
     ResetParameterRequest:
       type: object
       additionalProperties: false
       required: [reason]
       properties:
         reason: { type: string, minLength: 5, maxLength: 300 }
+        expectedUpdatedAt: { type: [string, 'null'], format: date-time }
     FlagView:
       type: object
       required: [key, enabled, description, updatedAt]
@@ -3551,6 +3645,7 @@ components:
       required: [enabled]
       properties:
         enabled: { type: boolean }
+        reason: { type: string, minLength: 5, maxLength: 300, description: Motivo (vai à auditoria) }
     PublicFlags:
       type: object
       required: [flags]
@@ -3563,6 +3658,9 @@ components:
       type: object
       required: [id, type, version, title, content, effectiveAt, relevantChange, createdAt]
       properties:
+        changeSummary: { type: [string, 'null'], description: O que mudou nesta versão }
+        publishedByName: { type: [string, 'null'], description: Nome de quem publicou (só nas rotas de admin) }
+        acceptances: { type: [integer, 'null'], description: Quantos usuários aceitaram esta versão (só nas rotas de admin) }
         id: { type: string, format: uuid }
         type: { $ref: '#/components/schemas/LegalDocumentType' }
         version: { type: integer }
@@ -3588,10 +3686,13 @@ components:
         content: { type: string, minLength: 20, maxLength: 200000 }
         effectiveAt: { type: string, format: date-time }
         relevantChange: { type: boolean, default: false }
+        changeSummary: { type: string, minLength: 5, maxLength: 500, description: O que mudou (mostrado ao usuário no aceite) }
     AuditEntry:
       type: object
       required: [id, at, actorId, actorRole, action, targetType, targetId, before, after, ip, requestId, reason]
       properties:
+        actorName: { type: [string, 'null'], description: Nome do ator no cadastro }
+        device: { type: [string, 'null'], example: Chrome em Windows, description: Rótulo curto do aparelho }
         id: { type: integer }
         at: { type: string, format: date-time }
         actorId: { type: [string, 'null'], format: uuid }

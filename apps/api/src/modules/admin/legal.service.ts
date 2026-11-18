@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, lte, max, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, lte, max, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService } from './audit.service.js';
+import { users } from '../identity/db/schema.js';
+import { termsAcceptances } from '../users/db/schema.js';
 import { legalDocuments, type LegalDocumentType } from './db/schema.js';
 
 export type LegalDocument = typeof legalDocuments.$inferSelect;
@@ -14,6 +16,7 @@ export interface PublishInput {
   content: string;
   effectiveAt: Date;
   relevantChange: boolean;
+  changeSummary?: string | null;
 }
 
 /** WB-117: termos e privacidade versionados (imutáveis); cada tipo tem sua própria sequência. */
@@ -41,6 +44,7 @@ export class LegalService {
           content: input.content,
           effectiveAt: input.effectiveAt,
           relevantChange: input.relevantChange,
+          changeSummary: input.changeSummary ?? null,
           publishedBy: ctx.principal?.userId ?? null,
         })
         .returning();
@@ -49,7 +53,7 @@ export class LegalService {
         action: 'legal.publish',
         targetType: 'legal_document',
         targetId: created.id,
-        after: { type: created.type, version: created.version, relevantChange: created.relevantChange, effectiveAt: created.effectiveAt },
+        after: { type: created.type, version: created.version, relevantChange: created.relevantChange, effectiveAt: created.effectiveAt, changeSummary: created.changeSummary },
       });
       return created;
     });
@@ -68,6 +72,27 @@ export class LegalService {
 
   async versions(type: LegalDocumentType): Promise<LegalDocument[]> {
     return this.db.select().from(legalDocuments).where(eq(legalDocuments.type, type)).orderBy(desc(legalDocuments.version));
+  }
+
+  /** Autor (nome) e quantos usuários aceitaram cada versão, para o histórico do painel (WB-100/101). */
+  async annotate(docs: LegalDocument[]): Promise<Map<string, { publishedByName: string | null; acceptances: number }>> {
+    const result = new Map<string, { publishedByName: string | null; acceptances: number }>();
+    if (docs.length === 0) return result;
+    const ids = docs.map((doc) => doc.id);
+    const counts = await this.db
+      .select({ documentId: termsAcceptances.documentId, total: count() })
+      .from(termsAcceptances)
+      .where(inArray(termsAcceptances.documentId, ids))
+      .groupBy(termsAcceptances.documentId);
+    const authorIds = [...new Set(docs.map((doc) => doc.publishedBy).filter((id): id is string => id !== null))];
+    const authors = authorIds.length > 0 ? await this.db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, authorIds)) : [];
+    for (const doc of docs) {
+      result.set(doc.id, {
+        publishedByName: authors.find((author) => author.id === doc.publishedBy)?.name ?? null,
+        acceptances: counts.find((row) => row.documentId === doc.id)?.total ?? 0,
+      });
+    }
+    return result;
   }
 
   async byId(id: string): Promise<LegalDocument> {

@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Patch, Query, Header } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
-import { AdminOnly, Ctx, Public, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, Public, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
-import { AuditService } from './audit.service.js';
+import { AuditService, type AuditRow } from './audit.service.js';
 import { CATEGORY_ICONS } from './categories.icons.js';
 import { CategoriesService } from './categories.service.js';
 import { LEGAL_DOCUMENT_TYPES, type LegalDocumentType } from './db/schema.js';
@@ -45,14 +46,17 @@ const categoryPatchSchema = z.strictObject({
 });
 const reorderSchema = z.strictObject({ ids: z.array(z.uuid()).min(1).max(100) });
 const reasonSchema = z.string().trim().min(5, 'Informe o motivo (mínimo 5 caracteres).').max(300);
-const parameterUpdateSchema = z.strictObject({ value: z.union([z.number(), z.string().max(40)]), reason: reasonSchema });
-const parameterResetSchema = z.strictObject({ reason: reasonSchema });
-const flagSchema = z.strictObject({ enabled: z.boolean() });
+/** RN-02: versão que o painel viu (`updatedAt` do parâmetro; `null` = nunca editado). Divergiu: 409 PARAMETER_CONFLICT. */
+const expectedUpdatedAt = z.iso.datetime().nullable().optional();
+const parameterUpdateSchema = z.strictObject({ value: z.union([z.number(), z.string().max(40)]), reason: reasonSchema, expectedUpdatedAt });
+const parameterResetSchema = z.strictObject({ reason: reasonSchema, expectedUpdatedAt });
+const flagSchema = z.strictObject({ enabled: z.boolean(), reason: reasonSchema.optional() });
 const legalSchema = z.strictObject({
   title: z.string().trim().min(3).max(120),
   content: z.string().trim().min(20, 'O texto não pode ficar vazio.').max(200_000),
   effectiveAt: z.iso.datetime({ message: 'Informe a data de vigência.' }),
   relevantChange: z.boolean().default(false),
+  changeSummary: z.string().trim().min(5).max(500).optional(),
 });
 const auditQuerySchema = z.strictObject({
   actorId: z.uuid().optional(),
@@ -64,6 +68,7 @@ const auditQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
   limit: z.string().max(4).optional(),
 });
+const auditExportQuerySchema = auditQuerySchema.omit({ cursor: true, limit: true });
 
 // ------------------------------------------------------------------ regiões
 @Controller('v1')
@@ -176,14 +181,14 @@ export class ConfigController {
   @AdminOnly('parameters:write')
   @Put('admin/parameters/:key')
   updateParameter(@Param('key') key: string, @Body(new ZodPipe(parameterUpdateSchema)) body: z.infer<typeof parameterUpdateSchema>, @Ctx() ctx: RequestContext) {
-    return this.parameters.update(key, body.value, body.reason, ctx);
+    return this.parameters.update(key, body.value, body.reason, ctx, body.expectedUpdatedAt);
   }
 
   @AdminOnly('parameters:write')
   @Post('admin/parameters/:key/reset')
   @HttpCode(200)
   resetParameter(@Param('key') key: string, @Body(new ZodPipe(parameterResetSchema)) body: z.infer<typeof parameterResetSchema>, @Ctx() ctx: RequestContext) {
-    return this.parameters.reset(key, body.reason, ctx);
+    return this.parameters.reset(key, body.reason, ctx, body.expectedUpdatedAt);
   }
 
   /** Público: o app lê as flags e as guarda por até 60 s (WB-120 C4). */
@@ -203,7 +208,7 @@ export class ConfigController {
   @AdminOnly('flags:write')
   @Put('admin/feature-flags/:key')
   setFlag(@Param('key') key: string, @Body(new ZodPipe(flagSchema)) body: z.infer<typeof flagSchema>, @Ctx() ctx: RequestContext) {
-    return this.flags.set(key, body.enabled, ctx);
+    return this.flags.set(key, body.enabled, ctx, body.reason);
   }
 }
 
@@ -229,31 +234,60 @@ export class LegalController {
   @AdminOnly('legal:read')
   @Get('admin/legal/:type')
   async versions(@Param('type') type: string) {
-    return { data: (await this.legal.versions(legalType(type))).map((doc) => this.present(doc)), nextCursor: null };
+    const docs = await this.legal.versions(legalType(type));
+    const extra = await this.legal.annotate(docs);
+    return { data: docs.map((doc) => this.present(doc, extra.get(doc.id))), nextCursor: null };
   }
 
   @AdminOnly('legal:write')
   @Post('admin/legal/:type')
   async publish(@Param('type') type: string, @Body(new ZodPipe(legalSchema)) body: z.infer<typeof legalSchema>, @Ctx() ctx: RequestContext) {
     const doc = await this.legal.publish({ type: legalType(type), ...body, effectiveAt: new Date(body.effectiveAt) }, ctx);
-    return this.present(doc);
+    const extra = await this.legal.annotate([doc]);
+    return this.present(doc, extra.get(doc.id));
   }
 
-  @AdminOnly('audit:read')
+  /** Super admin vê tudo; os demais perfis só as PRÓPRIAS ações (WB-123): o filtro de ator é forçado no servidor. */
+  @AdminOnly('audit:own')
   @Get('admin/audit-log')
-  async auditLog(@Query(new ZodPipe(auditQuerySchema)) query: z.infer<typeof auditQuerySchema>) {
-    const page = await this.audit.search({
-      ...query,
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
-    });
+  async auditLog(@CurrentPrincipal() principal: Principal, @Query(new ZodPipe(auditQuerySchema)) query: z.infer<typeof auditQuerySchema>) {
+    const page = await this.audit.search(this.auditFilters(principal, query));
     return {
       data: page.data.map((row) => ({ ...row, at: iso(row.at) })),
       nextCursor: page.nextCursor,
     };
   }
 
-  private present(doc: Awaited<ReturnType<LegalService['byId']>>) {
+  /** CSV com os mesmos filtros (até 5.000 linhas mais recentes). A própria exportação entra na auditoria. */
+  @AdminOnly('audit:own')
+  @RateLimit({ name: 'audit-export', limit: 10, windowSeconds: 60 })
+  @Get('admin/audit-log/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Cache-Control', 'no-store')
+  async exportAudit(
+    @CurrentPrincipal() principal: Principal,
+    @Query(new ZodPipe(auditExportQuerySchema)) query: z.infer<typeof auditExportQuerySchema>,
+    @Ctx() ctx: RequestContext,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<string> {
+    const filters = this.auditFilters(principal, query);
+    const { rows, truncated } = await this.audit.export(filters);
+    await this.audit.recordStandalone(ctx, { action: 'audit.export', targetType: 'audit_log', after: { rows: rows.length, truncated, filters: { ...query } } });
+    res.setHeader('Content-Disposition', `attachment; filename="auditoria-${new Date().toISOString().slice(0, 10)}.csv"`);
+    if (truncated) res.setHeader('X-Export-Truncated', 'true');
+    return auditCsv(rows);
+  }
+
+  private auditFilters(principal: Principal, query: z.infer<typeof auditQuerySchema>) {
+    return {
+      ...query,
+      actorId: principal.adminProfile === 'super_admin' ? query.actorId : principal.userId,
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+    };
+  }
+
+  private present(doc: Awaited<ReturnType<LegalService['byId']>>, extra?: { publishedByName: string | null; acceptances: number }) {
     return {
       id: doc.id,
       type: doc.type,
@@ -262,7 +296,25 @@ export class LegalController {
       content: doc.content,
       effectiveAt: iso(doc.effectiveAt),
       relevantChange: doc.relevantChange,
+      changeSummary: doc.changeSummary,
+      publishedByName: extra?.publishedByName ?? null,
+      acceptances: extra?.acceptances ?? null,
       createdAt: iso(doc.createdAt),
     };
   }
+}
+
+const CSV_COLUMNS = ['id', 'at', 'actorName', 'actorId', 'actorRole', 'action', 'targetType', 'targetId', 'reason', 'ip', 'device', 'requestId', 'before', 'after'] as const;
+
+/** Escapa para CSV e neutraliza fórmulas de planilha (`=`, `+`, `-`, `@`) para o texto não executar no Excel. */
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  let text = value instanceof Date ? value.toISOString() : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function auditCsv(rows: AuditRow[]): string {
+  const lines = rows.map((row) => CSV_COLUMNS.map((column) => csvCell(row[column])).join(','));
+  return `\uFEFF${[CSV_COLUMNS.join(','), ...lines].join('\r\n')}\r\n`;
 }

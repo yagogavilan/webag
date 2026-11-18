@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import type { Env } from '../../platform/config/env.js';
 import { randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
@@ -37,6 +37,7 @@ export class AdminUsersService {
       profile: AdminProfile;
       active: boolean;
       totpConfigured: boolean;
+      lastLoginAt: string | null;
     }[]
   > {
     const rows = await this.db
@@ -51,7 +52,35 @@ export class AdminUsersService {
       profile: admin.profile,
       active: admin.active,
       totpConfigured: admin.totpConfirmedAt !== null,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     }));
+  }
+
+  /** WB-228: convites (e links de reativação) ainda não usados nem revogados; vencidos aparecem marcados. */
+  async pendingInvitations(): Promise<
+    { id: string; name: string; email: string; profile: AdminProfile; reactivation: boolean; expired: boolean; invitedByName: string | null; createdAt: string; expiresAt: string }[]
+  > {
+    const rows = await this.db
+      .select({ invite: invitations, invitedByName: users.name })
+      .from(invitations)
+      .leftJoin(users, eq(users.id, invitations.invitedBy))
+      .where(and(eq(invitations.kind, 'admin'), isNull(invitations.usedAt), isNull(invitations.revokedAt)))
+      .orderBy(desc(invitations.createdAt))
+      .limit(100);
+    return rows.map(({ invite, invitedByName }) => {
+      const payload = invite.payload as { profile: AdminProfile; reactivateUserId?: string };
+      return {
+        id: invite.id,
+        name: invite.name,
+        email: invite.email,
+        profile: payload.profile,
+        reactivation: payload.reactivateUserId !== undefined,
+        expired: invite.expiresAt <= new Date(),
+        invitedByName,
+        createdAt: invite.createdAt.toISOString(),
+        expiresAt: invite.expiresAt.toISOString(),
+      };
+    });
   }
 
   /** WB-101 C1: convite de uso único, ligado ao e-mail, com hash no banco e validade de 48 h. */
@@ -154,7 +183,7 @@ export class AdminUsersService {
    * WB-101 C2/C3: muda perfil ou ativa/desativa; vale na hora e encerra as sessões; nunca deixa o sistema sem
    * super admin ativo (checado com lock para duas desativações simultâneas não passarem juntas).
    */
-  async update(targetId: string, patch: { profile?: AdminProfile; active?: boolean }, ctx: RequestContext): Promise<void> {
+  async update(targetId: string, patch: { profile?: AdminProfile; active?: boolean; reason?: string }, ctx: RequestContext): Promise<void> {
     await this.db.transaction(async (tx) => {
       // Serializa mudanças de admins: o teste "último super admin" depende de enxergar o estado final.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('admins:update'))`);
@@ -178,6 +207,7 @@ export class AdminUsersService {
         targetId,
         before: { profile: target.profile, active: target.active },
         after: { profile: nextProfile, active: nextActive },
+        reason: patch.reason,
       });
     });
   }

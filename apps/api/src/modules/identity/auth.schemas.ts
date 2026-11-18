@@ -88,5 +88,7 @@ export const inviteAdminSchema = z.strictObject({
 export const updateAdminSchema = z.strictObject({
   profile: z.enum(['super_admin', 'operations', 'finance', 'support']).optional(),
   active: z.boolean().optional(),
+  /** Motivo da mudança (vai à auditoria). */
+  reason: z.string().trim().min(5, 'Informe o motivo (mínimo 5 caracteres).').max(300).optional(),
 });
 export const totpConfirmSchema = z.strictObject({ code: z.string().trim().regex(/^\d{6}$/, 'O código tem 6 dígitos.') });

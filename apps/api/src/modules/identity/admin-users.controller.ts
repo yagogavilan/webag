@@ -32,7 +32,7 @@ export class AdminUsersController {
   @AdminOnly('admins:manage')
   @Get()
   async list() {
-    return { data: await this.adminUsers.list(), nextCursor: null };
+    return { data: await this.adminUsers.list(), pendingInvitations: await this.adminUsers.pendingInvitations(), nextCursor: null };
   }
 
   @AdminOnly('admins:manage')
@@ -86,6 +86,20 @@ export class AdminTotpController {
   @Post('setup')
   setup(@CurrentPrincipal() principal: Principal) {
     return this.totp.setup(principal);
+  }
+
+  /** SEC-092: 10 códigos novos, os antigos morrem. Reautenticação por TOTP recente; avisa o titular por e-mail. */
+  @RequireReauth()
+  @HttpCode(200)
+  @Post('recovery-codes')
+  regenerate(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext) {
+    return this.totp.regenerateRecoveryCodes(principal, ctx);
+  }
+
+  /** Quantos códigos de recuperação restam (o painel avisa com 3 ou menos). */
+  @Get('status')
+  status(@CurrentPrincipal() principal: Principal) {
+    return this.totp.status(principal);
   }
 
   @AllowPendingMfa()

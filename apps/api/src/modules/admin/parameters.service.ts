@@ -78,22 +78,22 @@ export class ParametersService {
   }
 
   /** WB-119 C2/C3: valida faixa, exige motivo, grava histórico e auditoria na mesma transação. */
-  async update(key: string, value: unknown, reason: string, ctx: RequestContext): Promise<ParameterView> {
+  async update(key: string, value: unknown, reason: string, ctx: RequestContext, expectedUpdatedAt?: string | null): Promise<ParameterView> {
     const definition = PARAMETER_BY_KEY.get(key);
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
     if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
     const problem = validateParameterValue(definition, value);
     if (problem) throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: problem, errors: [{ field: 'value', message: problem }] });
-    await this.write(definition, value as string | number, reason, ctx, 'parameter.update');
+    await this.write(definition, value as string | number, reason, ctx, 'parameter.update', expectedUpdatedAt);
     return this.view(key);
   }
 
   /** WB-119 C4: volta ao padrão de seed. */
-  async reset(key: string, reason: string, ctx: RequestContext): Promise<ParameterView> {
+  async reset(key: string, reason: string, ctx: RequestContext, expectedUpdatedAt?: string | null): Promise<ParameterView> {
     const definition = PARAMETER_BY_KEY.get(key);
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
     if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
-    await this.write(definition, definition.default, reason, ctx, 'parameter.reset');
+    await this.write(definition, definition.default, reason, ctx, 'parameter.reset', expectedUpdatedAt);
     return this.view(key);
   }
 
@@ -111,9 +111,18 @@ export class ParametersService {
     reason: string,
     ctx: RequestContext,
     action: string,
+    expectedUpdatedAt?: string | null,
   ): Promise<void> {
     await this.db.transaction(async (tx) => {
       const [current] = await tx.select().from(parameters).where(eq(parameters.key, definition.key)).for('update');
+      // RN-02: edição concorrente. `undefined` = cliente sem controle de versão; `null` = "nunca foi editado".
+      if (expectedUpdatedAt !== undefined) {
+        const currentVersion = current?.updatedAt?.getTime() ?? null;
+        const expectedVersion = expectedUpdatedAt === null ? null : new Date(expectedUpdatedAt).getTime();
+        if (currentVersion !== expectedVersion) {
+          throw errors.conflict('PARAMETER_CONFLICT', 'Parâmetro alterado por outra pessoa', 'Outro admin alterou este parâmetro. Recarregue para ver o valor atual.');
+        }
+      }
       const before = current?.value ?? definition.default;
       await tx
         .insert(parameters)

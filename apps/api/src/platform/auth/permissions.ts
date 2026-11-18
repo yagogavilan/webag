@@ -23,7 +23,8 @@ export const ADMIN_PERMISSIONS = {
   'flags:write': [SUPER],
   'legal:read': [SUPER, OPS, FIN, SUP],
   'legal:write': [SUPER],
-  'audit:read': [SUPER],
+  /** Auditoria: super admin vê tudo; os demais perfis só as próprias ações (o filtro é forçado no controller). */
+  'audit:own': [SUPER, OPS, FIN, SUP],
   'admins:manage': [SUPER],
   // Lojas (RN-13, WB-103/104/218): operação e super decidem e veem documentos; financeiro e suporte só leem.
   'stores:read': [SUPER, OPS, FIN, SUP],

@@ -36,7 +36,7 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'flags:write': null,
   'legal:read': { method: 'get', path: '/v1/admin/legal/privacy' },
   'legal:write': null,
-  'audit:read': { method: 'get', path: '/v1/admin/audit-log' },
+  'audit:own': { method: 'get', path: '/v1/admin/audit-log' },
   'admins:manage': { method: 'get', path: '/v1/admin/admins' },
   'stores:read': { method: 'get', path: '/v1/admin/stores' },
   'stores:write': null,

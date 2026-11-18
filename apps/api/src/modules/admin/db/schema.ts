@@ -114,6 +114,8 @@ export const legalDocuments = pgTable(
     effectiveAt: timestamp({ withTimezone: true }).notNull(),
     /** Mudança relevante: exige novo aceite no próximo uso (WB-117 C2). */
     relevantChange: boolean().notNull().default(false),
+    /** "O que mudou", para a tela de aceite e o histórico (WB-117). */
+    changeSummary: text(),
     publishedBy: uuid().references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -135,6 +137,8 @@ export const auditLog = pgTable(
     before: jsonb().$type<Record<string, unknown> | null>(),
     after: jsonb().$type<Record<string, unknown> | null>(),
     ip: text(),
+    /** Aparelho de quem agiu (cabeçalho cortado em 300 caracteres); mostrado como rótulo curto no painel. */
+    userAgent: text(),
     requestId: text(),
     reason: text(),
   },

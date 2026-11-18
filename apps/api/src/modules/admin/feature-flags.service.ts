@@ -46,7 +46,7 @@ export class FeatureFlagsService {
     return found.enabled;
   }
 
-  async set(key: string, enabled: boolean, ctx: RequestContext): Promise<FlagView> {
+  async set(key: string, enabled: boolean, ctx: RequestContext, reason?: string): Promise<FlagView> {
     const definition = FEATURE_FLAG_DEFINITIONS.find((flag) => flag.key === key);
     if (!definition || !FLAG_KEYS.has(key)) throw errors.notFound('Feature flag não encontrada.');
     await this.db.transaction(async (tx) => {
@@ -65,6 +65,7 @@ export class FeatureFlagsService {
         targetId: key,
         before: { enabled: before },
         after: { enabled },
+        reason,
       });
     });
     const view = (await this.list()).find((flag) => flag.key === key);
