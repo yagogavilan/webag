@@ -137,6 +137,9 @@ export const envSchema = z
     }
     if (env.TRUST_PROXY === undefined)
       fail('TRUST_PROXY', 'obrigatório em produção (nginx na frente = 1; sem proxy = 0). Sem ele o IP do cliente é perdido');
+    // SEC-129: sem o segredo do BFF, todos os usuários do painel web compartilham o IP do BFF (limites por IP viram globais).
+    if (!env.BFF_SHARED_SECRET) fail('BFF_SHARED_SECRET', 'obrigatório em produção (o painel web declara o IP do cliente com ele; mínimo 32 caracteres)');
+    else if (keys.some(([, value]) => value === env.BFF_SHARED_SECRET)) fail('BFF_SHARED_SECRET', 'precisa ser diferente das demais chaves (uma chave por finalidade)');
     if (env.CORS_ORIGINS.length === 0 || env.CORS_ORIGINS.includes('*'))
       fail('CORS_ORIGINS', 'em produção precisa listar origens exatas (sem vazio nem "*")');
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');

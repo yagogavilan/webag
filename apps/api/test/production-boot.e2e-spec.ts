@@ -21,6 +21,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     RECOVERY_HMAC_KEY: 'recovery-hmac-very-long-random-production-key-2222222',
     MFA_ENC_KEY: 'yet-another-very-long-random-production-mfa-key-1234567890',
     TRUST_PROXY: '1',
+    BFF_SHARED_SECRET: 'bff-shared-very-long-random-production-secret-5555555',
     STORAGE_DRIVER: 's3',
     S3_ACCESS_KEY: 'prod-access',
     S3_SECRET_KEY: 'prod-secret-long',
