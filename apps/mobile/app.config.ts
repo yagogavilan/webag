@@ -18,6 +18,9 @@ const config: ExpoConfig = {
   android: {
     // Edge-to-edge é obrigatório no SDK atual: telas usam safe areas.
     package: 'br.com.webag.app',
+    // SEC-012 / MASVS-STORAGE (revisão Onda 1, SEC-120): sem backup automático no Google Drive. Endereços (AsyncStorage) e o
+    // id do aparelho não saem do aparelho; o SecureStore restaurado em outro aparelho não decifra e só geraria erro.
+    allowBackup: false,
     // Só localização aproximada, só durante o uso (SEC-084, minimização). Revisar se o MapPinPicker exigir ponto preciso.
     blockedPermissions: ['android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_BACKGROUND_LOCATION'],
   },
