@@ -30,10 +30,18 @@ export async function ensureLegalDocs(ctx: TestContext): Promise<void> {
   }
 }
 
-export const ACCEPTED_CUSTOMER = [
-  { type: 'customer_terms', version: 1 },
-  { type: 'privacy', version: 1 },
-];
+/** Versões vigentes dos documentos (os testes de termos publicam versões novas; nada de "versão 1" fixa). */
+export async function currentDocs(ctx: TestContext, types: string[]): Promise<{ type: string; version: number }[]> {
+  const docs: { type: string; version: number }[] = [];
+  for (const type of types) {
+    const res = await ctx.http.get(`/v1/legal/${type}`).expect(200);
+    docs.push({ type, version: (res.body as { version: number }).version });
+  }
+  return docs;
+}
+
+export const acceptedCustomer = (ctx: TestContext) => currentDocs(ctx, ['customer_terms', 'privacy']);
+export const acceptedMerchant = (ctx: TestContext) => currentDocs(ctx, ['merchant_terms']);
 
 export interface RegisteredUser {
   email: string;
@@ -57,7 +65,7 @@ export async function registerUser(ctx: TestContext, overrides: Record<string, u
       phone: '(11) 98888-7777',
       password: STRONG_PASSWORD,
       adultDeclaration: true,
-      acceptedDocuments: ACCEPTED_CUSTOMER,
+      acceptedDocuments: await acceptedCustomer(ctx),
       ...overrides,
     });
   if (response.status !== 201) throw new Error(`Cadastro falhou: ${response.status} ${JSON.stringify(response.body)}`);

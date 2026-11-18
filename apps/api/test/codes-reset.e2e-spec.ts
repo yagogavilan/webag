@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { authCodes, featureFlags, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, uniqueEmail, type TestContext } from './helpers/app.js';
-import { ensureLegalDocs, registerUser, verifyEmailOf } from './helpers/fixtures.js';
+import { acceptedMerchant, ensureLegalDocs, registerUser, verifyEmailOf } from './helpers/fixtures.js';
 
 describe('Códigos por e-mail, confirmação e reset de senha (WB-007, WB-009, SEC-002/003/006/007/008)', () => {
   let ctx: TestContext;
@@ -203,15 +203,15 @@ describe('Códigos por e-mail, confirmação e reset de senha (WB-007, WB-009, S
   });
 
   describe('papel de lojista (WB-050, SEC-008b)', () => {
-    const merchantTerms = [{ type: 'merchant_terms', version: 1 }];
 
     it('e-mail não confirmado → 403 EMAIL_VERIFICATION_REQUIRED; confirmado → vira lojista com aceite dos termos do lojista', async () => {
+      const merchantTerms = await acceptedMerchant(ctx);
       const user = await registerUser(ctx);
       const denied = await ctx.http.post('/v1/me/merchant-role').set(bearer(user.accessToken)).send({ acceptedDocuments: merchantTerms }).expect(403);
       expect(denied.body.code).toBe('EMAIL_VERIFICATION_REQUIRED');
 
       await verifyEmailOf(ctx, user);
-      await ctx.http.post('/v1/me/merchant-role').set(bearer(user.accessToken)).send({ acceptedDocuments: [{ type: 'merchant_terms', version: 7 }] }).expect(409);
+      await ctx.http.post('/v1/me/merchant-role').set(bearer(user.accessToken)).send({ acceptedDocuments: [{ type: 'merchant_terms', version: 999 }] }).expect(409);
       await ctx.http.post('/v1/me/merchant-role').set(bearer(user.accessToken)).send({ acceptedDocuments: merchantTerms }).expect(204);
       const me = await ctx.http.get('/v1/me').set(bearer(user.accessToken)).expect(200);
       expect(me.body.roles.sort()).toEqual(['customer', 'merchant']);
@@ -219,6 +219,7 @@ describe('Códigos por e-mail, confirmação e reset de senha (WB-007, WB-009, S
     });
 
     it('cadastro de lojistas desligado pela feature flag → 403 MERCHANT_SIGNUP_DISABLED (WB-050 C3)', async () => {
+      const merchantTerms = await acceptedMerchant(ctx);
       const user = await registerUser(ctx);
       await verifyEmailOf(ctx, user);
       await ctx.db.insert(featureFlags).values({ key: 'cadastro_lojista', enabled: false, description: 'x' }).onConflictDoUpdate({ target: featureFlags.key, set: { enabled: false } });

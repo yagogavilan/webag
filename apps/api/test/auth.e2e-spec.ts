@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { refreshTokens, sessions, users } from '../src/platform/database/schema.js';
 import { sha256Hex } from '../src/platform/crypto/crypto.js';
 import { bearer, createTestApp, randomIp, STRONG_PASSWORD, uniqueEmail, type TestContext } from './helpers/app.js';
-import { ACCEPTED_CUSTOMER, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
+import { acceptedCustomer, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
 
 describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/010/011)', () => {
   let ctx: TestContext;
@@ -35,9 +35,10 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
     });
 
     it('SEC-001: 12345678 e senha123 voltam 422; 129 caracteres 422; 128 caracteres 201', async () => {
+      const accepted = await acceptedCustomer(ctx);
       const attempt = (password: string) =>
         ctx.http.post('/v1/auth/register').set('X-Forwarded-For', randomIp()).send({
-          name: 'Teste', email: uniqueEmail(), phone: '11977776666', password, adultDeclaration: true, acceptedDocuments: ACCEPTED_CUSTOMER,
+          name: 'Teste', email: uniqueEmail(), phone: '11977776666', password, adultDeclaration: true, acceptedDocuments: accepted,
         });
       for (const weak of ['12345678', 'senha123', 'a'.repeat(129)]) {
         const res = await attempt(weak).expect(422);
@@ -48,7 +49,7 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
     });
 
     it('recusa campo desconhecido (SEC-022) e termos desatualizados', async () => {
-      const base = { name: 'Teste', email: uniqueEmail(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: ACCEPTED_CUSTOMER };
+      const base = { name: 'Teste', email: uniqueEmail(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: await acceptedCustomer(ctx) };
       const ip = randomIp();
       await ctx.http.post('/v1/auth/register').set('X-Forwarded-For', ip).send({ ...base, role: 'admin' }).expect(400);
       await ctx.http.post('/v1/auth/register').set('X-Forwarded-For', ip).send({ ...base, emailVerified: true }).expect(400);
@@ -64,14 +65,15 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
       const first = await registerUser(ctx);
       const res = await ctx.http
         .post('/v1/auth/register').set('X-Forwarded-For', randomIp())
-        .send({ name: 'Outra', email: first.email.toUpperCase(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: ACCEPTED_CUSTOMER })
+        .send({ name: 'Outra', email: first.email.toUpperCase(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: await acceptedCustomer(ctx) })
         .expect(409);
       expect(res.body.code).toBe('EMAIL_ALREADY_REGISTERED');
     });
 
     it('SEC-063: 4ª conta no mesmo dispositivo é barrada (429)', async () => {
       const device = `dev-${uniqueEmail().slice(0, 8)}-abcd`;
-      const payload = () => ({ name: 'Teste', email: uniqueEmail(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: ACCEPTED_CUSTOMER });
+      const accepted = await acceptedCustomer(ctx);
+      const payload = () => ({ name: 'Teste', email: uniqueEmail(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: accepted });
       for (let i = 0; i < 3; i++) {
         await ctx.http.post('/v1/auth/register').set('X-Forwarded-For', randomIp()).set('X-Device-Id', device).send(payload()).expect(201);
       }
