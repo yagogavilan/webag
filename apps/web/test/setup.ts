@@ -3,6 +3,6 @@ import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 // jsdom não implementa rolagem.
-Element.prototype.scrollIntoView ??= () => undefined;
+if (typeof Element !== 'undefined') Element.prototype.scrollIntoView ??= () => undefined;
 
 afterEach(() => cleanup());
