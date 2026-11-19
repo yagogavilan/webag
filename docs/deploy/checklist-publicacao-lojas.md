@@ -1,24 +1,29 @@
 # Checklist de publicação nas lojas (Google Play e App Store)
 
-Base: skill `publicacao-lojas`, `apps/mobile/app.config.ts`, `apps/mobile/eas.json`, backlog (WB-010, WB-038/124, WB-213/214, WB-217) e `docs/gestao/board.md` (R-08). Escrito em 2026-11-18.
+Base: skill `publicacao-lojas`, `apps/mobile/app.config.ts`, `apps/mobile/eas.json`, backlog (WB-010, WB-038/124, WB-213/214, WB-217) e `docs/gestao/board.md` (R-08). Escrito em 2026-11-18; **conferido contra o estado do código em 2026-11-19** (Onda 7).
 
 > Regras das lojas mudam. Tudo marcado `[HIPÓTESE]` foi escrito de memória e **precisa ser conferido** nas páginas oficiais (Google Play Console Help; App Store Review Guidelines e App Store Connect Help) no dia do envio. Anote a data da conferência em cada seção (campo "Conferido em").
 > Publicar é o gate **G5**: só com G4 aprovado (QA e Security) e **autorização escrita do fundador** em `docs/decisoes.md` (CLAUDE.md, regra 3). Contratar conta paga também exige autorização (regra 6).
 
 ## 0. Estado hoje (o que já está pronto e o que bloqueia)
 
+Verificado em 2026-11-19 no repositório (não de memória). "Pronto" = existe e foi testado pelo time; **não** significa aprovado pelo Security/QA nem pela loja.
+
 | Item | Estado | Onde |
 |---|---|---|
 | `eas.json` com perfis `development`, `preview`, `production` (sem credenciais) | Pronto | `apps/mobile/eas.json` |
-| Ícone 1024 (sem transparência), ícone adaptativo Android, splash | Pronto (rascunho de marca, ver 4.1) | `apps/mobile/assets/` |
+| Ícone 1024 (sem transparência), ícone adaptativo Android, splash | Pronto (marca v3/v4a; conferir 4.1) | `apps/mobile/assets/` |
 | Bundle id / package | `br.com.webag.app` nas duas lojas. **Não dá para trocar depois de publicado** | `apps/mobile/app.config.ts` |
 | Sem backup automático do Android (`allowBackup: false`), localização só aproximada e só em uso | Pronto | `app.config.ts` (SEC-012, SEC-084) |
 | Pergunta de criptografia da Apple respondida (`ITSAppUsesNonExemptEncryption: false`) | Pronto (só HTTPS padrão) | `app.config.ts` |
-| **Exclusão de conta dentro do app e por página web** | **NÃO existe** no app nem no contrato da API (verificado em 2026-11-18). WB-213/WB-214 | Bloqueia o G5 (Apple 5.1.1(v), Google) |
-| **Denúncia/moderação de conteúdo de usuário** (avaliações, lojas) | Backlog (WB-038/124) | Apple 1.2 exige |
-| Política de privacidade e termos em URL pública | Textos existem no admin (`apps/web/src/features/legal`); **falta hospedar a URL pública** | Ver seção 5 |
-| Conta demo para o revisor | Falta definir (ver 8) | |
-| Feature graphic 1024x500, screenshots finais, textos finais | Falta (ver 4 e 6) | Designer + PO |
+| **Exclusão de conta**: no app, na web e na API | Implementada: app `apps/mobile/app/privacy/delete.tsx` (com arrependimento de 72 h), página pública `/excluir-conta` (vias A e B), API `/v1/auth/account-deletion/*`. **Falta**: o parecer do Security reverificar a página pública e o SEC-168 (DEC-056) e o QA testar a página | Apple 5.1.1(v), Google Play (URL no Data Safety) |
+| **Exportar meus dados** (LGPD art. 18) | Implementada no app (`privacy/export.tsx`) e na API | |
+| **Denúncia de conteúdo** (avaliações, produtos, lojas) | Implementada: `POST /v1/reports`, fila no admin (`content_reports`), botão no app | Apple 1.2 |
+| Política de privacidade, termos, suporte, ajuda e licenças em URL pública | **As páginas existem** no site público (`/privacidade`, `/termos`, `/suporte`, `/ajuda`, `/licencas`, `/excluir-conta`). **Falta**: o domínio (fundador), o deploy com o `PUBLIC_HOST` (guia de deploy, seção 5) e a revisão jurídica dos textos | Seção 5 |
+| Tela "Licenças de código aberto" no app | **Não existe** (só a página web `/licencas`). Solar (CC BY 4.0) exige atribuição | Seção 3; `THIRD_PARTY_NOTICES.md`, Pendências |
+| Versão do app | `0.1.0` em `app.config.ts`; trocar para `1.0.0` no envio | Seção 2 |
+| Conta demo para o revisor | **Decisão aberta** (ver 6): produção não recebe dados de demonstração | |
+| Feature graphic 1024x500, screenshots finais, textos finais | Falta (ver 4) | Designer + PO |
 | Contas Apple/Google/Expo | Dependem do fundador | Seção 1 |
 
 ## 1. Contas e acessos (dependem do fundador)
@@ -30,7 +35,7 @@ Conferido em: ____/____/______
 | Expo / EAS (https://expo.dev) | Grátis (plano com fila de build; planos pagos para build prioritário) | E-mail | Guarda as credenciais de assinatura. Crie com um e-mail da empresa, não pessoal |
 | Google Play Console | US$ 25, uma vez | Conta Google; documento; cartão | Conta **pessoal nova**: a Google exige um período de **teste fechado** (referência: 12 testadores por 14 dias seguidos) antes de liberar produção; **confirmar a regra vigente**. Conta de **organização** exige CNPJ e D-U-N-S |
 | Apple Developer Program | US$ 99/ano | Apple ID com 2 fatores; individual (CPF) ou organização (CNPJ + D-U-N-S, leva dias) | Individual mostra o **seu nome** como vendedor; organização mostra a empresa. Decisão do fundador |
-| Domínio com páginas públicas | ~R$ 40/ano | `docs/deploy/guia-deploy.md` seção 5 | Política de privacidade, termos e suporte em URLs públicas |
+| Domínio com páginas públicas | ~R$ 40/ano | `docs/deploy/guia-deploy.md` seção 5 | Já é o mesmo domínio do servidor (`PUBLIC_HOST`): privacidade, termos, suporte e exclusão de conta em URLs públicas |
 | Conta de teste de pagamento | Grátis | Mercado Pago | Para testar PIX/cartão antes de publicar |
 
 - [ ] Fundador decide: conta de **pessoa física ou CNPJ** nas duas lojas (CNPJ evita mostrar o nome pessoal e é a base para vender como empresa) e registra em `docs/decisoes.md`.
@@ -47,10 +52,13 @@ pnpm dlx eas-cli@latest init             # cria o projeto no Expo e mostra o pro
 ```
 
 1. O `eas init` mostra um `projectId` (não é segredo). Como o `app.config.ts` é dinâmico, ele não grava sozinho: coloque o valor na variável `EAS_PROJECT_ID` (veja o passo 2) **ou** cole em `extra.eas.projectId` no `app.config.ts`.
-2. Variáveis por ambiente (**públicas**: tudo que está no app é público; nunca ponha chave secreta aqui):
+2. Variáveis por ambiente (lista completa em `docs/deploy/guia-deploy.md`, seção 6.4; **públicas**: tudo que está no app é público; nunca ponha chave secreta aqui):
 
    ```bash
    pnpm dlx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_API_URL --value https://api.SEU-DOMINIO --visibility plaintext
+   pnpm dlx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_WEB_URL --value https://SEU-DOMINIO     --visibility plaintext   # o cartão abre SEU-DOMINIO/pagar/cartao; o app só abre esta origem
+   pnpm dlx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_APP_ENV --value production               --visibility plaintext
+   pnpm dlx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_MP_PUBLIC_KEY --value <chave pública do Mercado Pago> --visibility plaintext   # a mesma de MP_PUBLIC_KEY; não é segredo
    pnpm dlx eas-cli@latest env:create --environment production --name EAS_PROJECT_ID    --value <projectId>             --visibility plaintext
    # repita com --environment preview (API de ensaio, se houver) e --environment development
    ```
@@ -84,7 +92,10 @@ Observações:
 
 ## 3. Segurança e conformidade do binário (checar antes do envio)
 
-- [ ] `EXPO_PUBLIC_API_URL` de produção aponta para `https://api.<domínio>` (nunca HTTP, nunca `localhost`).
+- [ ] `EXPO_PUBLIC_API_URL` de produção aponta para `https://api.<domínio>` e `EXPO_PUBLIC_WEB_URL` para `https://<domínio>` (nunca HTTP, nunca `localhost`; o IP da máquina de desenvolvimento só vale no Expo Go).
+- [ ] `EXPO_PUBLIC_APP_ENV=production` no perfil `production` (senão o app aceitaria o cartão simulado) e `EXPO_PUBLIC_MP_PUBLIC_KEY` preenchida.
+- [ ] **Licenças**: tela "Licenças de código aberto" no app (ou link para `https://<domínio>/licencas`) com a atribuição do Solar Icon Set (CC BY 4.0). Ver `THIRD_PARTY_NOTICES.md`, Pendências 1 a 3.
+- [ ] `version` do `app.config.ts` em `1.0.0` e `phosphor-react-native` removida se continuar sem uso.
 - [ ] Nenhuma chave secreta em variável `EXPO_PUBLIC_*` (tudo ali vai embutido no app). Tokens ficam só no `expo-secure-store`.
 - [ ] Só as permissões usadas: localização **aproximada, apenas em uso** (as de localização precisa e em segundo plano estão bloqueadas). Texto do diálogo em `app.config.ts`, explicado em tela própria antes (design-system §5.6).
 - [ ] Sem funcionalidade "em breve", tela vazia ou link quebrado (`docs/qa/`).
@@ -128,28 +139,32 @@ Os PNGs saíram de `docs/design/assets/webag-icone-app.svg` (rascunho vetorial: 
 
 ## 5. Privacidade
 
-- [ ] **Política de privacidade** em URL pública (`https://<domínio>/privacidade`) e dentro do app (`apps/mobile/app/legal/[type].tsx` já abre os textos do servidor). O texto passa por revisão do fundador/jurídico antes do G5 (HIP-D20; o time não substitui advogado).
+- [ ] **Política de privacidade** em URL pública (`https://<domínio>/privacidade`, página pronta) e dentro do app (`apps/mobile/app/legal/[type].tsx` já abre os textos do servidor). O texto passa por revisão do fundador/jurídico antes do G5 (HIP-D20; o time não substitui advogado).
 - [ ] **Termos de uso** em URL pública e no app.
 - [ ] **Encarregado (DPO)** e canal do titular publicados (WB-217).
-- [ ] **Exclusão de conta**: ver seção 7 (bloqueio).
+- [ ] **Exclusão de conta**: página `https://<domínio>/excluir-conta` (é a URL do Data Safety) e fluxo no app; ver seções 7 e 8.
 
 ### Formulários de privacidade (devem bater com o app real)
 
-Conferir com o `security-engineer` e com `docs/seguranca/` antes de marcar. Rascunho do que o app coleta (`[HIPÓTESE]`, a validar):
+Conferir com o `security-engineer` antes de marcar. Inventário conferido contra o código em `docs/seguranca/revisao-onda6-frontends.md` (tabela "Inventário para os formulários"); resumo em 2026-11-19:
 
-| Dado | Coletado? | Finalidade | Vinculado ao usuário | Compartilhado com |
-|---|---|---|---|---|
-| E-mail, nome, telefone | Sim | Conta e contato do pedido | Sim | Lojista (nome e contato do pedido) |
-| Endereço de entrega | Sim | Entregar o pedido | Sim | Lojista/entregador |
-| CPF | Só se o Mercado Pago exigir (HIP-D10) | Pagamento | Sim | Mercado Pago |
-| Localização aproximada | Sim, só em uso | Mostrar lojas que entregam perto | Não precisa associar `[verificar]` | Não |
-| Histórico de pedidos e compras | Sim | Funcionamento, suporte, trocas | Sim | Lojista |
-| Identificador do aparelho (id gerado pelo app) | Sim | Segurança de sessão | Sim | Não |
-| Diagnóstico/erros | Só quando o Sentry for ligado (DT-039) | Estabilidade | `[verificar]` | Sentry (operador) |
-| Dados de cartão | **Nunca** (checkout do Mercado Pago) | | | |
-| Publicidade/rastreamento entre apps | **Não** | | | |
+| Dado | Google (categoria) | Apple (tipo) | Obrigatório? | Vinculado | Compartilhado com terceiros | Finalidade |
+|---|---|---|---|---|---|---|
+| Nome, e-mail, celular | Informações pessoais | Contact Info | Sim | Sim | Lojista do pedido | Conta, pedido, suporte |
+| Endereço e ponto no mapa | Informações pessoais: endereço | Contact Info: Physical Address | Para entrega | Sim | Lojista e logística do pedido; **ViaCEP recebe o CEP e o IP direto do app** | Entrega |
+| Localização aproximada (só em uso) | Local aproximado | Coarse Location | Não | Não precisa | Não | Lojas perto |
+| CPF (só se o Mercado Pago exigir) | Informações pessoais: outras | Other Data | Condicional | Sim | Mercado Pago | Pagamento |
+| Histórico de compras | Informações financeiras: histórico de compras | Purchases | Sim | Sim | Lojista (o próprio pedido) | Funcionamento, trocas, fiscal |
+| Fotos (defeito na troca) | Fotos e vídeos | Photos or Videos | Não | Sim | Lojista da troca | Troca |
+| Avaliações, "como vestiu", denúncias | Atividade no app: conteúdo gerado | User Content: Other | Não | Sim | Público (avaliação, sem o nome completo) | Reputação e moderação |
+| Busca no app | Atividade no app: histórico de pesquisa | Search History | Não | Sim | Não | Últimas buscas |
+| Abertura de push de campanha | Atividade no app: interações | Product Interaction | Não | Sim | Não | Medir campanha (com consentimento) |
+| Token de push e id aleatório do aparelho | IDs do dispositivo ou outros | Device ID | Sim | Sim | Expo/FCM/APNs (operadores) | Notificação e segurança da sessão |
+| Dados de cartão | **Não coletados pelo app** (página segura do Mercado Pago no navegador) | Não | | | Mercado Pago direto | |
+| Diagnóstico/crash | **Não declarar no app**: o Sentry só roda na API (servidor); o app não tem Sentry (DT-039). Revisar se o app ganhar Sentry | Não | | | | |
+| Rastreamento entre apps / publicidade | Não | Não (sem ATT) | | | | |
 
-- **Google Play, Data Safety**: preencher conforme a tabela; marcar "dados criptografados em trânsito" (HTTPS) e "usuários podem pedir a exclusão" (depende de WB-213/214).
+- **Google Play, Data Safety**: preencher conforme a tabela; marcar "dados criptografados em trânsito" (HTTPS) e "usuários podem pedir a exclusão" (no app e em `https://<domínio>/excluir-conta`).
 - **App Store, App Privacy ("nutrition labels")**: idem; "não rastreamos" (não precisa do prompt de ATT).
 - Apple: confira também o **Privacy Manifest** (`PrivacyInfo.xcprivacy`); o Expo traz o dos módulos oficiais, e o `expo-doctor`/build avisam sobre APIs de "motivo obrigatório" `[HIPÓTESE]`.
 
@@ -157,16 +172,16 @@ Conferir com o `security-engineer` e com `docs/seguranca/` antes de marcar. Rasc
 
 - [ ] **Classificação etária**: questionário IARC (Google) e perguntas da Apple. Conteúdo gerado por usuários (avaliações) e compras em dinheiro real: responda com honestidade (sem bebida alcoólica/tabaco no catálogo? Se o catálogo permitir, a classificação sobe: alinhar com o PO).
 - [ ] **Conta de teste para o revisor** (cliente e lojista), com dados de demonstração e **instruções passo a passo** no campo "App access"/"Notas para revisão": e-mail, senha, endereço de teste dentro da área atendida (o app só atende a região; um revisor nos EUA vai cair em "região indisponível" se não houver instrução de endereço de teste).
-- [ ] **Como o revisor conclui um pedido sem pagar de verdade?** Em produção o provedor simulado é recusado (a API só sobe com Mercado Pago real). **Decisão aberta** para PO/backend-dev: (a) cupom de 100% reservado à conta do revisor, se pedido de valor zero for suportado; (b) loja de demonstração com produto de R$ 0,01 pago de verdade pelo fundador; (c) instruções + vídeo do fluxo. Sem uma delas o revisor trava no PIX e rejeita. `[HIPÓTESE]`
-- [ ] A conta demo e a loja demo existem **em produção** e são marcadas como demonstração (não aparecem a clientes reais).
+- [ ] **Como o revisor conclui um pedido sem pagar de verdade?** Em produção o provedor simulado é recusado (a API só sobe com Mercado Pago real) e o app em `production` exige o cartão real. O ambiente `staging` aceita o provedor simulado, mas **não** tem as rotas de simulação de PIX (SEC-135) e o app de produção não aponta para ele. **Decisão aberta** para PO/backend-dev (verificado 2026-11-19, sem solução pronta): (a) cupom de 100% reservado à conta do revisor, se pedido de valor zero for suportado; (b) loja de demonstração com produto de R$ 0,01 pago de verdade pelo fundador; (c) um ambiente de demonstração e um build próprio para a revisão (aceito pela Apple se for descrito nas notas, mas é um segundo servidor a manter); (c) instruções + vídeo do fluxo. Sem uma delas o revisor trava no PIX e rejeita. `[HIPÓTESE]`
+- [ ] A conta demo e a loja demo existem **em produção** e são marcadas como demonstração (não aparecem a clientes reais). O seed de produção **não** cria lojas nem clientes de demonstração (DEC-030d); as contas `*@seed.webag.local` do desenvolvimento nunca existem lá. Criar a conta do revisor é um passo manual.
 
 ## 7. Específico da Apple (App Store)
 
 Conferido em: ____/____/______ (App Store Review Guidelines)
 
-- [ ] **5.1.1(v), exclusão de conta**: o app precisa permitir **iniciar a exclusão dentro do app** (não basta mandar e-mail). **Pendente (WB-213)**: não existe hoje. O fluxo está no backlog (senha para confirmar, DEC-015).
-- [ ] **4.8, Sign in with Apple**: obrigatório **se** o app oferecer login com Google/Facebook etc. O WB-010 prevê Google **e** Apple juntos, atrás de uma flag. **Mantenha a flag de login social DESLIGADA** no lançamento (se ligar, é preciso oferecer Apple; precisa de conta Apple Developer, Services ID e chaves, e a configuração `usesAppleSignIn` no `app.config.ts`).
-- [ ] **1.2, conteúdo de usuário**: avaliações e lojas exigem filtro, **denúncia, bloqueio** e contato do suporte publicado (WB-038/124).
+- [ ] **5.1.1(v), exclusão de conta**: o app permite **iniciar a exclusão dentro do app** (senha para confirmar, arrependimento de 72 h; implementado). Testar no `.ipa` enviado, com a conta demo.
+- [ ] **4.8, Sign in with Apple**: obrigatório **se** o app oferecer login com Google/Facebook etc. O WB-010 previa Google **e** Apple juntos; hoje o login social **não existe** na API (DT-064), então a regra 4.8 não se aplica. Se um dia entrar, é preciso oferecer Apple (conta Apple Developer, Services ID e chaves, e a configuração `usesAppleSignIn` no `app.config.ts`).
+- [ ] **1.2, conteúdo de usuário**: avaliações e lojas exigem filtro, **denúncia, bloqueio** e contato do suporte publicado. Denúncia e fila de moderação existem; **bloqueio de usuário** não foi verificado `[verificar com o PO se a Apple aceitará só a denúncia]`; o contato de suporte está em `/suporte`.
 - [ ] **3.1.1 / 3.1.3(e), pagamentos**: bens físicos com PIX/cartão via Mercado Pago, sem In-App Purchase. Mencione isso nas notas de revisão.
 - [ ] **2.1, desempenho e completude**: sem travar, sem tela vazia, conta demo funcionando, **testar o `.ipa` enviado**.
 - [ ] **4.2, funcionalidade mínima**: não parecer "site embrulhado": o app é nativo (Expo Router).
@@ -179,7 +194,7 @@ Conferido em: ____/____/______ (App Store Review Guidelines)
 
 Conferido em: ____/____/______ (Google Play Console Help)
 
-- [ ] **Exclusão de conta**: além do botão no app, o Data Safety pede uma **URL na web** onde o usuário solicita a exclusão (WB-214). **Pendente.**
+- [ ] **Exclusão de conta**: além do botão no app, o Data Safety pede uma **URL na web** onde o usuário solicita a exclusão: `https://<domínio>/excluir-conta` (página pronta; falta o deploy e a reverificação do Security, DEC-056).
 - [ ] **Teste fechado**: se a conta for pessoal nova, cumprir o requisito de testadores/dias antes da produção.
 - [ ] **Público-alvo e conteúdo**, **classificação IARC**, **declaração de anúncios** (não há), **Data Safety** e **App access** (credenciais demo) preenchidos.
 - [ ] **Nível de API alvo**: o Expo SDK 58 atende ao exigido na data do envio `[HIPÓTESE]`; confirme em Play Console > Qualidade do app.
@@ -208,13 +223,16 @@ Conferido em: ____/____/______ (Google Play Console Help)
 - [ ] Decidir como o revisor conclui um pedido (seção 6).
 - [ ] Decidir se o login social entra na 1.0 (se sim, Sign in with Apple junto).
 
-## 11. Pendências de código que bloqueiam o G5
+## 11. Pendências que bloqueiam o G5 (atualizado em 2026-11-19)
 
-| Pendência | História | Dono |
+| Pendência | Estado | Dono |
 |---|---|---|
-| Exclusão de conta no app e por página web | WB-213, WB-214 | backend-dev, mobile-dev |
-| Denúncia e moderação de conteúdo | WB-038, WB-124 | backend-dev, mobile-dev |
-| Páginas públicas (privacidade, termos, suporte) hospedadas | WB-217, landing | mobile-dev (web), PO |
-| Forma de o revisor concluir um pedido | A criar | PO, backend-dev |
-| Sentry no app e na API (se for declarado no formulário de privacidade) | DT-039 | backend-dev, mobile-dev |
+| Exclusão de conta no app e por página web | Código pronto; falta reverificação do Security (SEC-166, SEC-168) e teste do QA da página `/excluir-conta` | security-engineer, qa-engineer |
+| Páginas públicas (privacidade, termos, suporte) no ar | Páginas prontas; falta o domínio e o deploy com `PUBLIC_HOST` | Fundador (domínio), quem fizer o deploy |
+| Revisão jurídica dos textos (privacidade, termos, prazos, IP truncado) | Aberta | Fundador / advogado |
+| Tela de licenças no app (atribuição do Solar, CC BY 4.0) e remoção de `phosphor-react-native` | Aberta | mobile-dev |
+| Forma de o revisor concluir um pedido | Aberta (seção 6) | PO, backend-dev |
+| Mercado Pago real exercitado no sandbox (PIX, cartão, estorno, split) | **Nunca foi feito**; `[confirmar no sandbox]` em `apps/api/README.md` | Fundador (chaves), backend-dev |
+| Push real (`PUSH_PROVIDER=expo`, FCM/APNs no EAS) | Depende das contas do fundador | Fundador, mobile-dev |
+| Sentry no app e no painel web, se for declarado no formulário | Só a API tem (DT-039) | mobile-dev |
 | `expo-updates` (OTA), se quiser correção rápida de JavaScript | A criar | mobile-dev |
