@@ -135,6 +135,7 @@ async function payPixAndTrack(page, shot, { pickup }) {
   await visible(page, 'confirmed.title', 120000);
   await visible(page, 'confirmed.order-number');
   if (pickup) await visible(page, 'confirmed.pickup-code');
+  await page.waitForTimeout(4500); // celebração e avisos (toast de 4 s) terminam: a captura mostra a tela em repouso
   await shot('05-pedido-confirmado');
   await click(page, 'confirmed.track');
   await visible(page, 'order.screen');
@@ -225,6 +226,7 @@ const flows = {
     // quem confirma é o servidor: o app só muda de tela quando o pedido existe
     await visible(page, 'confirmed.title', 120000);
     await visible(page, 'confirmed.order-number');
+    await page.waitForTimeout(4500);
     await shot('05-pedido-confirmado');
     await click(page, 'confirmed.track');
     await visible(page, 'order.screen');

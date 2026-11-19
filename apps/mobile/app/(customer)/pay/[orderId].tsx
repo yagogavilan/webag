@@ -127,8 +127,9 @@ export default function PixScreen() {
     setSimulating(true);
     try {
       await simulatePayment(id);
-      toast.show(t('pix.simulateDone'));
-      await Promise.all([order.refetch(), payment.refetch()]);
+      const [o] = await Promise.all([order.refetch(), payment.refetch()]);
+      // Se o servidor já confirmou, a tela troca sozinha para "Pedido confirmado": o aviso ficaria por cima dos botões da próxima tela.
+      if (!o.data || o.data.status === 'awaiting_payment') toast.show(t('pix.simulateDone'));
     } catch (error) {
       void haptic('error');
       toast.show(error instanceof ApiError && error.status === 404 ? t('pix.simulateMissing') : t('pix.simulateError'));

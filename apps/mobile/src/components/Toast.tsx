@@ -75,6 +75,8 @@ function ToastView({ item, onDone }: { item: ToastItem; onDone: () => void }) {
       <Animated.View
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
+        // sem ação, o aviso é só informação: o toque atravessa para o botão que estiver por baixo (nunca bloqueia um CTA)
+        pointerEvents={item.actionLabel ? 'auto' : 'none'}
         style={[styles.toast, { opacity }]}
         testID="toast"
       >
