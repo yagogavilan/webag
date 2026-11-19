@@ -46,7 +46,12 @@ const config: ExpoConfig = {
     bundleIdentifier: 'br.com.webag.app',
     supportsTablet: false,
     // O app só usa criptografia padrão (HTTPS): evita a pergunta de conformidade de exportação a cada envio à App Store.
-    infoPlist: { ITSAppUsesNonExemptEncryption: false },
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      // SEC-179 / minimização: o sistema entrega localização aproximada por padrão (o app só precisa do bairro e da cidade). Com
+      // isso o App Privacy declara Coarse Location, igual ao Android (ACCESS_FINE_LOCATION bloqueada). Ver inventario-lojas.md §5.
+      NSLocationDefaultAccuracyReduced: true,
+    },
   },
   android: {
     // Edge-to-edge é obrigatório no SDK atual: telas usam safe areas.

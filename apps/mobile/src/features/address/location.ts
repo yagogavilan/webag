@@ -6,6 +6,10 @@ import * as Location from 'expo-location';
  */
 const GPS_TIMEOUT_MS = 10_000;
 
+/** Casas decimais da posição guardada e enviada ao geocodificador: 2 casas = cerca de 1 km (SEC-179, minimização). */
+const COORD_DECIMALS = 2;
+export const roundCoord = (value: number): number => Number(value.toFixed(COORD_DECIMALS));
+
 export type PermissionResult = 'granted' | 'denied' | 'blocked';
 
 export interface ApproxPlace {
@@ -50,17 +54,17 @@ export async function locateApproximately(): Promise<GpsOutcome> {
     const permission = await requestLocationPermission();
     if (permission !== 'granted') return { kind: permission };
     const position = await withTimeout(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), GPS_TIMEOUT_MS);
-    const [place] = await withTimeout(
-      Location.reverseGeocodeAsync({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-      GPS_TIMEOUT_MS,
-    );
+    // Arredonda ANTES de qualquer uso: nem o geocodificador do sistema nem a busca recebem o ponto exato.
+    const latitude = roundCoord(position.coords.latitude);
+    const longitude = roundCoord(position.coords.longitude);
+    const [place] = await withTimeout(Location.reverseGeocodeAsync({ latitude, longitude }), GPS_TIMEOUT_MS);
     const city = place?.city ?? place?.subregion ?? '';
     if (!city) return { kind: 'failed' };
     return {
       kind: 'ok',
       place: {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
+        latitude,
+        longitude,
         city,
         district: place?.district ?? '',
         state: place?.region ?? '',
