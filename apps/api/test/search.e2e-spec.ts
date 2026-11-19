@@ -1,4 +1,5 @@
 import { createTestApp, type TestContext } from './helpers/app.js';
+import { restoreFees, useFeeTable } from './helpers/fees.js';
 import { isolatedPoint, makeStore, northOf, type TestPoint } from './helpers/discovery.js';
 import { ensureCategory, ensureLegalDocs } from './helpers/fixtures.js';
 
@@ -43,6 +44,8 @@ describe('Busca de produtos e lojas com filtros (WB-013, WB-014)', () => {
   });
 
   it('filtros combinam em E: categoria (inclui filhas), preço, distância, entrega grátis, avaliação e aceita troca', async () => {
+    // Taxa da tabela do admin por faixa (DEC-036): até 2 km grátis, depois R$ 7,00.
+    await useFeeTable(ctx, [{ fromM: 0, toM: 2_000, feeCents: 0 }, { fromM: 2_000, toM: 15_000, feeCents: 700 }]);
     const origin = isolatedPoint();
     const root = await ensureCategory(ctx);
     const child = await ensureCategory(ctx);
@@ -51,8 +54,8 @@ describe('Busca de produtos e lojas com filtros (WB-013, WB-014)', () => {
     const { eq } = await import('drizzle-orm');
     await ctx.db.update(categories).set({ parentId: root }).where(eq(categories.id, child));
 
-    await makeStore(ctx, { name: 'Perto Gratis Troca', at: await northOf(ctx, origin, 800), feeFixedCents: 0, voluntaryExchangeDays: 7, ratings: [5, 5, 4], categoryId: child, products: [{ name: 'Item Barato', priceCents: 1500, categoryId: child }, { name: 'Item Caro', priceCents: 9000, categoryId: child }, { name: 'Item Outro', priceCents: 1550, categoryId: other }] });
-    await makeStore(ctx, { name: 'Longe Pago', at: await northOf(ctx, origin, 4000), feeFixedCents: 700, ratings: [2, 2, 3], categoryId: other, products: [{ name: 'Item Longe', priceCents: 2000, categoryId: child }] });
+    await makeStore(ctx, { name: 'Perto Gratis Troca', at: await northOf(ctx, origin, 800), voluntaryExchangeDays: 7, ratings: [5, 5, 4], categoryId: child, products: [{ name: 'Item Barato', priceCents: 1500, categoryId: child }, { name: 'Item Caro', priceCents: 9000, categoryId: child }, { name: 'Item Outro', priceCents: 1550, categoryId: other }] });
+    await makeStore(ctx, { name: 'Longe Pago', at: await northOf(ctx, origin, 4000), ratings: [2, 2, 3], categoryId: other, products: [{ name: 'Item Longe', priceCents: 2000, categoryId: child }] });
 
     expect(names((await products(origin, '&q=item&sort=price_asc')).data)).toEqual(['Item Barato', 'Item Outro', 'Item Longe', 'Item Caro']);
     expect(names((await products(origin, `&q=item&categoryId=${root}&sort=price_asc`)).data)).toEqual(['Item Barato', 'Item Longe', 'Item Caro']); // raiz inclui a filha
@@ -69,6 +72,7 @@ describe('Busca de produtos e lojas com filtros (WB-013, WB-014)', () => {
     expect(names((await stores(origin, '&sort=distance')).data)).toEqual(['Perto Gratis Troca', 'Longe Pago']);
     expect(names((await stores(origin, '&sort=rating')).data)).toEqual(['Perto Gratis Troca', 'Longe Pago']);
     expect(names((await stores(origin, '&sort=fee')).data)).toEqual(['Perto Gratis Troca', 'Longe Pago']);
+    await restoreFees(ctx);
   });
 
   it('avaliação: média só aparece com 3+ avaliações; antes disso é "Novo" e o filtro de nota não a considera', async () => {

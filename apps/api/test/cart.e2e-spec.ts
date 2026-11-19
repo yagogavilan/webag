@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { restoreFees, useFeeTable, useParam } from './helpers/fees.js';
 import { createTestApp, bearer, type TestContext } from './helpers/app.js';
 import { isolatedPoint, makeStore, northOf, variantOf, type TestPoint } from './helpers/discovery.js';
 import { createCustomer, ensureCity, ensureLegalDocs, registerUser, type RegisteredUser } from './helpers/fixtures.js';
@@ -157,9 +158,14 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
   });
 
   it('pedido mínimo, frete grátis acima de X e fora do raio mudam os bloqueios e o frete (RN-04)', async () => {
+    // DEC-036: taxa, mínimo, entrega grátis e raio são globais do admin.
+    await useParam(ctx, 'raio_max_km', 5);
+    await useParam(ctx, 'pedido_minimo_cents', 5_000);
+    await useParam(ctx, 'frete_gratis_acima_cents', 8_000);
+    await useFeeTable(ctx, [{ fromM: 0, toM: 5_000, feeCents: 700 }]);
     const origin = isolatedPoint();
-    const near = await shop(origin, { feeFixedCents: 700, minOrderCents: 5_000, freeAboveCents: 8_000 }, [{ name: 'Barato', priceCents: 2_000 }]);
-    const far = await shop(origin, { name: 'Longe', radiusM: 1_000 }, [{ name: 'Item Longe', priceCents: 2_000 }]);
+    const near = await shop(origin, {}, [{ name: 'Barato', priceCents: 2_000 }]);
+    const far = await shop(origin, { name: 'Longe' }, [{ name: 'Item Longe', priceCents: 2_000 }]);
     await ctx.db.update(stores).set({ lat: (await northOf(ctx, origin, 6_000)).lat }).where(eq(stores.id, far.store.id));
     const user = await createCustomer(ctx);
     const addressId = await addressAt(user, origin);
@@ -178,6 +184,7 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
     cart = await get(user, `?addressId=${addressId}`);
     expect(cart.delivery.available).toBe(false);
     expect(cart.checkout.blockers).toContain('OUT_OF_RANGE');
+    await restoreFees(ctx);
   });
 
   it('retirada: sem frete; sem retirada ativa, bloqueia', async () => {
@@ -262,8 +269,9 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
     });
 
     it('cupom que zera o total cobra R$ 1,00 (HIP-037); cupom da plataforma não passa da comissão; frete grátis desconta o frete', async () => {
+      await useFeeTable(ctx, [{ fromM: 0, toM: 15_000, feeCents: 0 }]); // taxa global de R$ 0 (DEC-036)
       const origin = isolatedPoint();
-      const { variants, store } = await shop(origin, { feeFixedCents: 0 }, [{ name: 'Barato', priceCents: 1_000 }]);
+      const { variants, store } = await shop(origin, {}, [{ name: 'Barato', priceCents: 1_000 }]);
       const user = await createCustomer(ctx);
       await put(user, variants[0]!, { quantity: 1 }).expect(200);
       const free = await makeCoupon({ scope: 'store', storeId: store.id, value: 1_000 });
@@ -272,11 +280,12 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
       const platform = await makeCoupon({ value: 5_000 }); // comissão padrão 10% de R$ 10,00 = R$ 1,00
       cart = (await ctx.http.put('/v1/cart/coupon').set(as(user)).send({ code: platform.code }).expect(200)).body as CartBody;
       expect(cart.summary).toMatchObject({ discount: { amount: 100 }, total: { amount: 900 } });
+      await restoreFees(ctx);
     });
 
     it('tirar itens abaixo do mínimo do cupom o deixa "não aplicado" na leitura, sem perder o código', async () => {
       const origin = isolatedPoint();
-      const { variants, store } = await shop(origin, { feeFixedCents: 0 }, [{ name: 'A', priceCents: 6_000 }, { name: 'B', priceCents: 6_000 }]);
+      const { variants, store } = await shop(origin, {}, [{ name: 'A', priceCents: 6_000 }, { name: 'B', priceCents: 6_000 }]);
       const user = await createCustomer(ctx);
       await put(user, variants[0]!, { quantity: 1 }).expect(200);
       await put(user, variants[1]!, { quantity: 1 }).expect(200);

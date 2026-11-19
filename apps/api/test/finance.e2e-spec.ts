@@ -32,7 +32,7 @@ describe('Finanças: comissão por loja/categoria e ledger de dupla entrada (WB-
   });
   afterAll(() => ctx.close());
 
-  const finance = () => computeOrderFinance({ items: [{ subtotalCents: 10_000, pctBp: 1000 }], storeCouponCents: 1000, platformDiscountCents: 0, deliveryFeeCents: 800, serviceFeeCents: 0 });
+  const finance = () => computeOrderFinance({ items: [{ subtotalCents: 10_000, pctBp: 1500 }], storeCouponCents: 1000, platformDiscountCents: 0, deliveryFeeCents: 800, serviceFeeCents: 0 });
 
   describe('comissão efetiva (precedência com o banco)', () => {
     it('padrão do parâmetro > categoria > loja, e a vigência futura só vale depois', async () => {
@@ -76,20 +76,20 @@ describe('Finanças: comissão por loja/categoria e ledger de dupla entrada (WB-
       await ctx.db.transaction((tx) => ledger.recordSale(tx, { orderId, storeId, attemptId: null, finance: f }));
       await ctx.db.insert(parameters).values({ key: 'comissao_padrao_pct', value: 25 }).onConflictDoUpdate({ target: parameters.key, set: { value: 25 } });
       const [sale] = await ctx.db.select().from(ledgerTransactions).where(eq(ledgerTransactions.orderId, orderId));
-      expect((sale!.meta as { finance: { commissionCents: number } }).finance.commissionCents).toBe(900);
+      expect((sale!.meta as { finance: { commissionCents: number } }).finance.commissionCents).toBe(1350);
       await ctx.db.delete(parameters).where(eq(parameters.key, 'comissao_padrao_pct'));
     });
   });
 
   describe('ledger', () => {
-    it('venda do exemplo da RN-10 lança 98,00 / 88,03 loja / 9,00 Webag; repetir a gravação não duplica', async () => {
+    it('venda do exemplo da RN-10 lança 98,00 / 75,53 loja / 13,50 comissão + 8,00 entrega da Webag; repetir a gravação não duplica', async () => {
       const orderId = randomUUID();
       const f = finance();
       expect(await ctx.db.transaction((tx) => ledger.recordSale(tx, { orderId, storeId, attemptId: null, finance: f }))).toBe(true);
       expect(await ctx.db.transaction((tx) => ledger.recordSale(tx, { orderId, storeId, attemptId: null, finance: f }))).toBe(false);
       await ctx.db.transaction((tx) => ledger.recordProviderFee(tx, { orderId, storeId, attemptId: null, feeCents: 97 }));
       const b = await ledger.balances(orderId);
-      expect(b).toMatchObject({ paidCents: 9800, merchantPayable: 8803, commissionRevenue: 900, providerClearing: 9800 - 97, providerFeeCents: 97 });
+      expect(b).toMatchObject({ paidCents: 9800, merchantPayable: 7553, commissionRevenue: 1350, deliveryFeeRevenue: 800, providerClearing: 9800 - 97, providerFeeCents: 97 });
       expect(await ledger.verifyOrder(orderId)).toEqual({ ok: true, problems: [] });
     });
 
@@ -100,10 +100,10 @@ describe('Finanças: comissão por loja/categoria e ledger de dupla entrada (WB-
       expect(await ctx.db.transaction((tx) => ledger.recordRefund(tx, { orderId, refundCents: 3000, refundKey: 'r1' }))).toBe(true);
       expect(await ctx.db.transaction((tx) => ledger.recordRefund(tx, { orderId, refundCents: 3000, refundKey: 'r1' }))).toBe(false);
       let b = await ledger.balances(orderId);
-      expect(b).toMatchObject({ refundedCents: 3000, providerClearing: 6800, commissionRevenue: 900 - 276 });
+      expect(b).toMatchObject({ refundedCents: 3000, providerClearing: 6800, commissionRevenue: 1350 - 413, deliveryFeeRevenue: 800 - 245 });
       await ctx.db.transaction((tx) => ledger.recordRefund(tx, { orderId, refundCents: 6800, refundKey: 'r2' }));
       b = await ledger.balances(orderId);
-      expect(b).toMatchObject({ refundedCents: 9800, providerClearing: 0, commissionRevenue: 0, merchantPayable: 0 });
+      expect(b).toMatchObject({ refundedCents: 9800, providerClearing: 0, commissionRevenue: 0, deliveryFeeRevenue: 0, merchantPayable: 0 });
       expect((await ledger.verifyOrder(orderId)).ok).toBe(true);
       await expect(ctx.db.transaction((tx) => ledger.recordRefund(tx, { orderId, refundCents: 1, refundKey: 'r3' }))).rejects.toThrow();
     });

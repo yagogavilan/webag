@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { createTestApp, type TestContext } from './helpers/app.js';
+import { restoreFees, useFeeTable, useParam } from './helpers/fees.js';
 import { distanceM, isolatedPoint, makeStore, northOf, type TestPoint } from './helpers/discovery.js';
 import { ensureCategory, ensureLegalDocs } from './helpers/fixtures.js';
 import { paymentAccounts, products, productVariants, storeSettings } from '../src/platform/database/schema.js';
@@ -16,35 +17,37 @@ describe('Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012)', () => 
     await ctx.redis.flushdb(); // cache de 30 s: cada teste começa limpo
   });
   afterAll(async () => {
+    await restoreFees(ctx);
     await ctx.close();
   });
 
   const home = async (p: TestPoint, extra = '') => (await ctx.http.get(`/v1/home?${q(p, extra)}`).expect(200)).body;
   const names = (list: { name: string }[]) => list.map((s) => s.name);
 
-  it('limite do raio: a loja a exatamente `radiusM` aparece; 1 m a menos de raio e ela some', async () => {
+  it('raio global (DEC-036b): a loja dentro de `raio_max_km` aparece; um pouco além, some', async () => {
+    await useParam(ctx, 'raio_max_km', 3);
+    await useFeeTable(ctx, [{ fromM: 0, toM: 3_000, feeCents: 500 }]);
     const origin = isolatedPoint();
-    const at = await northOf(ctx, origin, 3000);
-    const exact = await distanceM(ctx, origin, at);
-    const store = await makeStore(ctx, { name: 'Loja Borda', at, radiusM: exact });
-    expect((await home(origin)).nearbyStores.map((s: { name: string }) => s.name)).toEqual(['Loja Borda']);
-    expect((await home(origin)).nearbyStores[0].distanceM).toBe(exact);
-
-    await ctx.db.update(storeSettings).set({ radiusM: exact - 1 }).where(eq(storeSettings.storeId, store.id));
+    await makeStore(ctx, { name: 'Loja Dentro', at: await northOf(ctx, origin, 2950) });
+    await makeStore(ctx, { name: 'Loja Fora', at: await northOf(ctx, origin, 3050) });
+    const body = await home(origin);
+    expect(names(body.nearbyStores)).toEqual(['Loja Dentro']);
+    await restoreFees(ctx);
     await ctx.redis.flushdb();
-    const gone = await home(origin);
-    expect(gone.nearbyStores).toEqual([]);
-    expect(gone.empty).toBe(true);
+    expect(names((await home(origin)).nearbyStores)).toEqual(['Loja Dentro', 'Loja Fora']);
   });
 
   it('loja fora do raio some da home e da busca, mesmo estando perto de outra loja que entrega', async () => {
+    await useParam(ctx, 'raio_max_km', 5);
+    await useFeeTable(ctx, [{ fromM: 0, toM: 5_000, feeCents: 500 }]);
     const origin = isolatedPoint();
-    await makeStore(ctx, { name: 'Perto', at: await northOf(ctx, origin, 1000), radiusM: 2000, products: [{ name: 'Pao Perto' }] });
-    await makeStore(ctx, { name: 'Longe', at: await northOf(ctx, origin, 6000), radiusM: 5000, products: [{ name: 'Pao Longe' }] });
-    await makeStore(ctx, { name: 'Raio Curto', at: await northOf(ctx, origin, 2500), radiusM: 2000, products: [{ name: 'Pao Curto' }] });
-    expect(names((await home(origin)).nearbyStores)).toEqual(['Perto']);
-    expect(names((await ctx.http.get(`/v1/search/stores?${q(origin)}`).expect(200)).body.data)).toEqual(['Perto']);
-    expect(names((await ctx.http.get(`/v1/search/products?${q(origin, '&q=pao')}`).expect(200)).body.data)).toEqual(['Pao Perto']);
+    await makeStore(ctx, { name: 'Perto', at: await northOf(ctx, origin, 1000), products: [{ name: 'Pao Perto' }] });
+    await makeStore(ctx, { name: 'Longe', at: await northOf(ctx, origin, 6000), products: [{ name: 'Pao Longe' }] });
+    await makeStore(ctx, { name: 'Meio', at: await northOf(ctx, origin, 2500), products: [{ name: 'Pao Meio' }] });
+    expect(names((await home(origin)).nearbyStores)).toEqual(['Perto', 'Meio']);
+    expect(names((await ctx.http.get(`/v1/search/stores?${q(origin)}`).expect(200)).body.data)).toEqual(['Perto', 'Meio']);
+    expect(names((await ctx.http.get(`/v1/search/products?${q(origin, '&q=pao')}`).expect(200)).body.data).sort()).toEqual(['Pao Meio', 'Pao Perto']);
+    await restoreFees(ctx);
   });
 
   it('ordena por abertas primeiro, depois distância, depois avaliação', async () => {
@@ -61,20 +64,15 @@ describe('Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012)', () => 
     expect(distances[2]!).toBeGreaterThan(distances[1]!);
   });
 
-  it('faixas de taxa [de, até): na fronteira exata vale a faixa seguinte; a última faixa inclui o raio', async () => {
+  it('faixas da tabela do admin [de, até): na fronteira exata vale a faixa seguinte', async () => {
     const origin = isolatedPoint();
     const at = await northOf(ctx, origin, 2000);
     const d = await distanceM(ctx, origin, at);
-    await makeStore(ctx, { name: 'Faixas', at, radiusM: d + 1000, feeMode: 'by_distance', tiers: [{ fromM: 0, toM: d, feeCents: 300 }, { fromM: d, toM: d + 1000, feeCents: 900 }] });
+    await useFeeTable(ctx, [{ fromM: 0, toM: d, feeCents: 300 }, { fromM: d, toM: 15_000, feeCents: 900 }]);
+    await makeStore(ctx, { name: 'Faixas', at });
     const [card] = (await home(origin)).nearbyStores;
     expect(card.delivery).toMatchObject({ available: true, feeCents: 900, freeShipping: false });
-    // Última faixa termina em d + 1000: a loja exatamente nesse limite ainda entrega.
-    const far = await northOf(ctx, origin, 4000);
-    const dFar = await distanceM(ctx, origin, far);
-    await makeStore(ctx, { name: 'Ultima Faixa', at: far, radiusM: dFar, feeMode: 'by_distance', tiers: [{ fromM: 0, toM: dFar, feeCents: 700 }] });
-    await ctx.redis.flushdb();
-    const list = (await home(origin)).nearbyStores as { name: string; delivery: { feeCents: number } }[];
-    expect(list.find((s) => s.name === 'Ultima Faixa')?.delivery.feeCents).toBe(700);
+    await restoreFees(ctx);
   });
 
   it('visibilidade RN-03: loja não aprovada, sem conta de recebimento ou sem produto ativo não aparece', async () => {
@@ -96,13 +94,13 @@ describe('Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012)', () => 
 
   it('modo Retirada (WB-036): só lojas com retirada ativa dentro de `retirada_distancia_max_km`', async () => {
     const origin = isolatedPoint();
-    await makeStore(ctx, { name: 'Retira Perto', at: await northOf(ctx, origin, 4000), pickupEnabled: true, radiusM: 1000 });
+    await makeStore(ctx, { name: 'Retira Perto', at: await northOf(ctx, origin, 4000), pickupEnabled: true, acceptsDelivery: false });
     await makeStore(ctx, { name: 'Retira Longe', at: await northOf(ctx, origin, 12_000), pickupEnabled: true });
     await makeStore(ctx, { name: 'So Entrega', at: await northOf(ctx, origin, 1000) });
     const pickup = await home(origin, '&mode=pickup');
-    expect(names(pickup.nearbyStores)).toEqual(['Retira Perto']); // entrega não é exigida (raio 1 km < 4 km)
+    expect(names(pickup.nearbyStores)).toEqual(['Retira Perto']); // entrega não é exigida (só retirada)
     expect(pickup.offers).toEqual([]);
-    expect(names((await home(origin)).nearbyStores)).toEqual(['So Entrega']);
+    expect(names((await home(origin)).nearbyStores)).toEqual(['So Entrega', 'Retira Longe']); // o raio de entrega é global (15 km)
   });
 
   it('ofertas: só promoção vigente de produto com estoque, maior desconto primeiro; novas: aprovadas há <= 30 dias', async () => {

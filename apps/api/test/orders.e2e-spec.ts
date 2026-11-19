@@ -116,7 +116,7 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
       const created = (await placeOrder(ctx, user, addressId)).body;
       const attempt = await attemptOf(ctx, created.id);
-      expect(attempt).toMatchObject({ amountCents: 10_500, applicationFeeCents: 1_000, storeId: shop.store.id });
+      expect(attempt).toMatchObject({ amountCents: 10_500, applicationFeeCents: 1_500, storeId: shop.store.id }); // comissão 10,00 + entrega 5,00 (DEC-036)
       await approve(ctx, user, attempt.id);
 
       const order = (await ctx.http.get(`/v1/orders/${created.id}`).set(bearer(user.accessToken)).expect(200)).body;
@@ -124,11 +124,11 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       expect(order.timeline.map((t: { status: string }) => t.status)).toEqual(['awaiting_payment', 'received']);
       expect(await variantRow(shop.variants[0]!)).toMatchObject({ stock: 4, reserved: 0 });
       const row = await orderRow(ctx, created.id);
-      expect(row).toMatchObject({ stockState: 'sold', commissionCents: 1_000, applicationFeeCents: 1_000 });
+      expect(row).toMatchObject({ stockState: 'sold', commissionCents: 1_000, applicationFeeCents: 1_500 });
       expect(row.acceptDeadlineAt!.getTime()).toBeGreaterThan(Date.now() + 9 * 60_000);
       const balances = await ledger.balances(created.id);
-      // venda 105,00: loja 100,00 - comissão 10,00 + frete 5,00 = 95,00 antes da tarifa; tarifa PIX 0,99% de 105,00 = 1,04
-      expect(balances).toMatchObject({ paidCents: 10_500, commissionRevenue: 1_000, providerFeeCents: 1_04, merchantPayable: 9_500 - 104 });
+      // venda 105,00: a loja recebe só os itens menos a comissão (100,00 - 10,00 = 90,00); o frete de 5,00 é receita da Webag; tarifa PIX 0,99% de 105,00 = 1,04
+      expect(balances).toMatchObject({ paidCents: 10_500, commissionRevenue: 1_000, deliveryFeeRevenue: 500, providerFeeCents: 1_04, merchantPayable: 9_000 - 104 });
       expect((await ledger.verifyOrder(created.id)).ok).toBe(true);
     });
 
@@ -262,23 +262,23 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
   });
 
   describe('comissão e cupons no pedido', () => {
-    it('comissão da loja congelada por item e cupom da plataforma LIMITADO à comissão (DEC-016, SEC-060)', async () => {
+    it('comissão da loja congelada por item e cupom da plataforma LIMITADO à application_fee: comissão + entrega (DEC-016, SEC-060, DEC-036)', async () => {
       const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 10_000, stock: 5 }]);
       await ctx.app.get(CommissionService).setStoreRate(shop.store.id, { pctBp: 500, reason: 'negociação teste' }, null);
-      const coupon = await makeCoupon(ctx, { kind: 'percent', scope: 'platform', value: 50 }); // 50% = 5.000 de face; comissão 5% = 500
+      const coupon = await makeCoupon(ctx, { kind: 'percent', scope: 'platform', value: 50 }); // 50% = 5.000 de face; teto = comissão 5% (500) + entrega (500)
       const { user, addressId } = await customerAt(ctx, shop.origin);
       await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
       await ctx.http.put('/v1/cart/coupon').set(bearer(user.accessToken)).send({ code: coupon.code }).expect(200);
       const res = await placeOrder(ctx, user, addressId);
       expect(res.status, JSON.stringify(res.body)).toBe(201);
-      expect(res.body.summary).toMatchObject({ discount: { amount: 500 }, platformDiscountCapped: true, total: { amount: 10_000 - 500 + 500 } });
+      expect(res.body.summary).toMatchObject({ discount: { amount: 1_000 }, platformDiscountCapped: true, total: { amount: 10_000 - 1_000 + 500 } });
       const row = await orderRow(ctx, res.body.id);
-      expect(row).toMatchObject({ commissionCents: 500, platformDiscountCents: 500, applicationFeeCents: 0, storeCouponCents: 0 });
+      expect(row).toMatchObject({ commissionCents: 500, platformDiscountCents: 1_000, applicationFeeCents: 0, storeCouponCents: 0 });
       expect((await ctx.db.select().from(orderItems).where(eq(orderItems.orderId, row.id)))[0]!.commissionPctBp).toBe(500);
       // a Webag não paga ao lojista por fora: receita zero, nunca negativa
       await approve(ctx, user, (await attemptOf(ctx, row.id)).id);
       const b = await ledger.balances(row.id);
-      expect(b.commissionRevenue - b.platformPromoExpense).toBe(0);
+      expect(b.commissionRevenue + b.deliveryFeeRevenue - b.platformPromoExpense).toBe(0);
       expect((await ledger.verifyOrder(row.id)).ok).toBe(true);
     });
 
@@ -296,7 +296,7 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       expect(winners).toHaveLength(1);
       expect([ra, rb].filter((r) => r.status === 422)[0]!.body.code).toBe('COUPON_EXHAUSTED');
       const row = await orderRow(ctx, winners[0]!.body.id);
-      expect(row).toMatchObject({ storeCouponCents: 1_000, commissionCents: 900, applicationFeeCents: 900, totalCents: 10_000 - 1_000 + 500 });
+      expect(row).toMatchObject({ storeCouponCents: 1_000, commissionCents: 900, applicationFeeCents: 900 + 500, totalCents: 10_000 - 1_000 + 500 });
       expect(await ctx.db.select().from(couponRedemptions).where(eq(couponRedemptions.couponId, coupon.id))).toHaveLength(1);
     });
   });

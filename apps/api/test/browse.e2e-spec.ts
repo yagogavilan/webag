@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { restoreFees, useFeeTable, useParam } from './helpers/fees.js';
 import { createTestApp, type TestContext } from './helpers/app.js';
 import { isolatedPoint, makeStore, northOf } from './helpers/discovery.js';
 import { ensureLegalDocs, registerUser } from './helpers/fixtures.js';
@@ -13,19 +14,20 @@ describe('Loja e produto públicos (WB-016, WB-017, WB-018, DEC-022)', () => {
     await ensureLegalDocs(ctx);
   });
   afterAll(async () => {
+    await restoreFees(ctx);
     await ctx.close();
   });
 
   const pos = (p: { lat: number; lng: number }) => `lat=${p.lat}&lng=${p.lng}`;
 
   it('página da loja com posição: nota "Novo", horário de hoje, taxa e distância, seções e identificação mascarada', async () => {
+    await useFeeTable(ctx, [{ fromM: 0, toM: 15_000, feeCents: 600 }]); // taxa, mínimo e entrega grátis são globais (DEC-036)
+    await useParam(ctx, 'pedido_minimo_cents', 2000);
+    await useParam(ctx, 'frete_gratis_acima_cents', 8000);
     const origin = isolatedPoint();
     const store = await makeStore(ctx, {
       name: 'Loja Pagina',
       at: await northOf(ctx, origin, 1000),
-      feeFixedCents: 600,
-      minOrderCents: 2000,
-      freeAboveCents: 8000,
       voluntaryExchangeDays: 7,
       ratings: [5, 4],
       products: [{ name: 'Item A', section: 'Destaques' }, { name: 'Item B', section: 'Outros' }],
@@ -52,9 +54,13 @@ describe('Loja e produto públicos (WB-016, WB-017, WB-018, DEC-022)', () => {
   });
 
   it('loja fora do raio por link: "não entrega" e retirada oferecida só se estiver a até 10 km (WB-016 C4)', async () => {
+    await useParam(ctx, 'pedido_minimo_cents', 0);
+    await useParam(ctx, 'frete_gratis_acima_cents', 0);
+    await useParam(ctx, 'raio_max_km', 5); // raio global (DEC-036b)
+    await useFeeTable(ctx, [{ fromM: 0, toM: 5_000, feeCents: 500 }]);
     const origin = isolatedPoint();
-    const near = await makeStore(ctx, { name: 'Longe Mas Retira', at: await northOf(ctx, origin, 8000), radiusM: 3000, pickupEnabled: true });
-    const far = await makeStore(ctx, { name: 'Longe Demais', at: await northOf(ctx, origin, 12_000), radiusM: 3000, pickupEnabled: true });
+    const near = await makeStore(ctx, { name: 'Longe Mas Retira', at: await northOf(ctx, origin, 8000), pickupEnabled: true });
+    const far = await makeStore(ctx, { name: 'Longe Demais', at: await northOf(ctx, origin, 12_000), pickupEnabled: true });
     const a = (await ctx.http.get(`/v1/browse/stores/${near.id}?${pos(origin)}`).expect(200)).body;
     expect(a.delivery).toMatchObject({ available: false, feeCents: null });
     expect(a.pickup).toMatchObject({ enabled: true, offered: true });

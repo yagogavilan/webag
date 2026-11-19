@@ -168,7 +168,7 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     const detail = (await ctx.http.get(`${base(shop)}/${id}`).set(owner(shop)).expect(200)).body;
     expect(detail.customer).toMatchObject({ firstName: 'Maria', phone: expect.any(String) });
     expect(detail.delivery.address).toMatchObject({ street: 'Rua Teste', number: '10' });
-    expect(detail.values).toMatchObject({ subtotal: { amount: 10_000 }, delivery: { amount: 500 }, total: { amount: 10_500 }, commission: { amount: 1_000 }, netBeforeProviderFee: { amount: 9_500 } });
+    expect(detail.values).toMatchObject({ subtotal: { amount: 10_000 }, delivery: { amount: 500 }, total: { amount: 10_500 }, commission: { amount: 1_000 }, netBeforeProviderFee: { amount: 9_000 } });
     expect(detail.items[0]).toMatchObject({ name: 'Camiseta', quantity: 1, unitPrice: { amount: 10_000 } });
     const ticket = (await ctx.http.get(`${base(shop)}/${id}/ticket`).set(owner(shop)).expect(200)).body;
     expect(ticket).toMatchObject({ mode: 'delivery', customerFirstName: 'Maria', destination: expect.stringContaining('Rua Teste'), items: [{ quantity: 1, name: 'Camiseta' }] });

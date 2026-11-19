@@ -11,25 +11,56 @@ const rng = (seed: number) => () => {
 };
 const int = (r: () => number, min: number, max: number) => min + Math.floor(r() * (max - min + 1));
 
-describe('exemplo da RN-10 (WB-156 C3)', () => {
-  const finance = computeOrderFinance({ items: [{ subtotalCents: 10_000, pctBp: pctToBp(10) }], storeCouponCents: 1000, platformDiscountCents: 0, deliveryFeeCents: 800, serviceFeeCents: 0 });
-  it('base 90,00, comissão 9,00, total do cliente 98,00', () => {
-    expect(finance).toMatchObject({ baseCents: 9000, commissionCents: 900, totalCents: 9800, applicationFeeCents: 900, platformRevenueCents: 900 });
+describe('exemplo da RN-10 com a logística da Webag (WB-156 C3, WB-238 C2, DEC-036)', () => {
+  // Subtotal R$ 100,00, cupom da loja R$ 10,00, entrega R$ 8,00, comissão 15%.
+  const finance = computeOrderFinance({ items: [{ subtotalCents: 10_000, pctBp: pctToBp(15) }], storeCouponCents: 1000, platformDiscountCents: 0, deliveryFeeCents: 800, serviceFeeCents: 0 });
+  it('base 90,00, comissão 13,50, total do cliente 98,00 e application_fee = comissão + entrega = 21,50', () => {
+    expect(finance).toMatchObject({ baseCents: 9000, commissionCents: 1350, totalCents: 9800, merchantGrossCents: 9000, applicationFeeCents: 2150, platformRevenueCents: 2150 });
   });
-  it('PIX 0,99%: taxa 97 e líquido do lojista 88,03; cartão 4,98%: taxa 488 e líquido 84,12', () => {
+  it('PIX 0,99%: taxa 97 e líquido do lojista 75,53; cartão 4,98%: taxa 488 e líquido 71,62', () => {
     const pixFee = applyBp(9800, 99);
     expect(pixFee).toBe(97);
-    expect(finance.merchantNetBeforeProviderFeeCents - pixFee).toBe(8803);
+    expect(finance.merchantNetBeforeProviderFeeCents).toBe(7650);
+    expect(finance.merchantNetBeforeProviderFeeCents - pixFee).toBe(7553);
     const cardFee = applyBp(9800, 498);
     expect(cardFee).toBe(488);
-    expect(finance.merchantNetBeforeProviderFeeCents - cardFee).toBe(8412);
+    expect(finance.merchantNetBeforeProviderFeeCents - cardFee).toBe(7162);
   });
-  it('o ledger fecha e dá líquido 88,03 à loja e 9,00 à Webag', () => {
+  it('o ledger fecha: loja 75,53, comissão 13,50 e taxa de entrega 8,00 são da Webag (receita 21,50)', () => {
     const lines = [...saleLines(finance), ...providerFeeLines(97)];
     expect(isBalanced(lines)).toBe(true);
-    expect(-accountBalance(lines, 'merchant_payable')).toBe(8803);
-    expect(-accountBalance(lines, 'commission_revenue') - accountBalance(lines, 'platform_promo_expense')).toBe(900);
+    expect(-accountBalance(lines, 'merchant_payable')).toBe(7553);
+    expect(-accountBalance(lines, 'commission_revenue')).toBe(1350);
+    expect(-accountBalance(lines, 'delivery_fee_revenue')).toBe(800);
     expect(accountBalance(lines, 'provider_clearing')).toBe(9800 - 97);
+  });
+  it('estorno total devolve comissão e entrega e zera a loja; parcial devolve proporcional e a soma fecha sem perder centavo', () => {
+    const sale = saleLines(finance);
+    const total = refundLines(finance, 0, 9800);
+    expect(isBalanced(total)).toBe(true);
+    expect(accountBalance([...sale, ...total], 'delivery_fee_revenue')).toBe(0);
+    expect(accountBalance([...sale, ...total], 'commission_revenue')).toBe(0);
+    expect(accountBalance([...sale, ...total], 'merchant_payable')).toBe(0);
+    // 3 estornos parciais somam o mesmo que o total
+    const parts = [3000, 3333, 3467].reduce<{ before: number; lines: ReturnType<typeof refundLines> }>((acc, cents) => ({ before: acc.before + cents, lines: [...acc.lines, ...refundLines(finance, acc.before, cents)] }), { before: 0, lines: [] });
+    expect(accountBalance([...sale, ...parts.lines], 'delivery_fee_revenue')).toBe(0);
+    expect(accountBalance([...sale, ...parts.lines], 'commission_revenue')).toBe(0);
+    expect(accountBalance([...sale, ...parts.lines], 'merchant_payable')).toBe(0);
+  });
+});
+
+describe('frete grátis é subsídio da Webag (RN-04, RN-10)', () => {
+  it('cupom de frete grátis (desconto da plataforma) reduz só a parte da Webag; o lojista recebe o mesmo', () => {
+    const base = { items: [{ subtotalCents: 10_000, pctBp: 1500 }], storeCouponCents: 0, deliveryFeeCents: 800, serviceFeeCents: 0 };
+    const paid = computeOrderFinance({ ...base, platformDiscountCents: 0 });
+    const free = computeOrderFinance({ ...base, platformDiscountCents: 800 });
+    expect(free.merchantNetBeforeProviderFeeCents).toBe(paid.merchantNetBeforeProviderFeeCents); // 8.500
+    expect(free.totalCents).toBe(10_000);
+    expect(free.applicationFeeCents).toBe(1500); // comissão; a entrega foi subsidiada
+  });
+  it('o desconto da plataforma é limitado à application_fee inteira (comissão + entrega + serviço), nunca ao lojista', () => {
+    const f = computeOrderFinance({ items: [{ subtotalCents: 5000, pctBp: 1000 }], storeCouponCents: 0, platformDiscountCents: 5000, deliveryFeeCents: 800, serviceFeeCents: 200 });
+    expect(f).toMatchObject({ platformDiscountCents: 1500, platformDiscountCapped: true, applicationFeeCents: 0, merchantNetBeforeProviderFeeCents: 4500, totalCents: 5000 + 800 + 200 - 1500 });
   });
 });
 
@@ -70,10 +101,10 @@ describe('cupom da plataforma limitado à comissão (DEC-016, SEC-060)', () => {
     const f = computeOrderFinance({ items: [{ subtotalCents: 5000, pctBp: 1000 }], storeCouponCents: 0, platformDiscountCents: 2000, deliveryFeeCents: 0, serviceFeeCents: 0 });
     expect(f).toMatchObject({ commissionCents: 500, platformDiscountCents: 500, platformDiscountCapped: true, applicationFeeCents: 0, totalCents: 4500 });
   });
-  it('a taxa de serviço não amplia o teto do desconto', () => {
+  it('a taxa de serviço e a de entrega ampliam o teto: o desconto sai da application_fee inteira (RN-09)', () => {
     const f = computeOrderFinance({ items: [{ subtotalCents: 5000, pctBp: 1000 }], storeCouponCents: 0, platformDiscountCents: 700, deliveryFeeCents: 0, serviceFeeCents: 300 });
-    expect(f.platformDiscountCents).toBe(500);
-    expect(f.applicationFeeCents).toBe(300);
+    expect(f.platformDiscountCents).toBe(700);
+    expect(f.applicationFeeCents).toBe(100);
   });
   it('comissão zero (loja negociada) zera o desconto da plataforma', () => {
     const f = computeOrderFinance({ items: [{ subtotalCents: 5000, pctBp: 0 }], storeCouponCents: 0, platformDiscountCents: 300, deliveryFeeCents: 0, serviceFeeCents: 0 });
@@ -102,13 +133,13 @@ describe('propriedades do ledger (SEC-041, WB-156 C4), 3000 pedidos aleatórios'
       const f = computeOrderFinance(randomInput(r));
       const lines = saleLines(f);
       expect(isBalanced(lines)).toBe(true);
-      expect(f.totalCents).toBe(f.merchantGrossCents - f.platformDiscountCents + f.serviceFeeCents);
+      expect(f.totalCents).toBe(f.merchantGrossCents - f.platformDiscountCents + f.serviceFeeCents + f.deliveryFeeCents);
       expect(f.applicationFeeCents).toBeGreaterThanOrEqual(0);
-      expect(f.platformDiscountCents).toBeLessThanOrEqual(f.commissionCents);
+      expect(f.platformDiscountCents).toBeLessThanOrEqual(f.commissionCents + f.deliveryFeeCents + f.serviceFeeCents);
       expect(f.commissionCents).toBe(f.items.reduce((s, i) => s + i.commissionCents, 0));
       expect(f.items.reduce((s, i) => s + i.baseCents, 0)).toBe(f.baseCents);
-      // a conta da loja: líquido = total + cupom da plataforma - taxa de serviço - comissão
-      expect(f.merchantNetBeforeProviderFeeCents).toBe(f.totalCents + f.platformDiscountCents - f.serviceFeeCents - f.commissionCents);
+      // a conta da loja: líquido = total + cupom da plataforma - taxa de serviço - entrega - comissão (= itens - cupom da loja - comissão)
+      expect(f.merchantNetBeforeProviderFeeCents).toBe(f.totalCents + f.platformDiscountCents - f.serviceFeeCents - f.deliveryFeeCents - f.commissionCents);
       expect(-accountBalance(lines, 'merchant_payable')).toBe(f.merchantNetBeforeProviderFeeCents);
       expect(accountBalance(lines, 'provider_clearing')).toBe(f.totalCents);
     }
