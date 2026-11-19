@@ -56,12 +56,51 @@ describe('SEC-168: arrependimento da exclusão sob força bruta distribuída', (
     expect((await cancel({ email: user.email, password: user.password, code })).status).toBe(401);
   });
 
-  it('há limite por e-mail sem o IP: 11 tentativas de IPs diferentes e a seguinte é 429', async () => {
+  it('SEC-176 (D1): 11+ tentativas de terceiros de IPs diferentes (só com o e-mail) NUNCA bloqueiam o dono: a senha certa pede o código do e-mail e, com ele, reabre', async () => {
     const user = await pendingUser();
     const statuses: number[] = [];
-    for (let i = 0; i < 12; i += 1) statuses.push((await cancel({ email: user.email, password: 'errada-errada-1' })).status);
-    expect(statuses.slice(0, 10).every((s) => s === 401)).toBe(true);
-    expect(statuses.at(-1)).toBe(429);
+    for (let i = 0; i < 13; i += 1) statuses.push((await cancel({ email: user.email, password: 'errada-errada-1' })).status);
+    expect(statuses.every((s) => s === 401)).toBe(true); // nunca 429 para quem erra de IPs diferentes: o atacante só aprende que errou
+    ctx.mail.outbox.length = 0;
+    // o dono, de outro IP, com a senha certa: step-up em vez de 429
+    const owner = await cancel({ email: user.email, password: user.password });
+    expect(owner.status).toBe(403);
+    expect(owner.body.code).toBe('LOGIN_CODE_REQUIRED');
+    const code = ctx.mail.lastCode(user.email);
+    expect((await cancel({ email: user.email, password: user.password, code: code === '000000' ? '111111' : '000000' })).status).toBe(400); // CODE_INVALID
+    await cancel({ email: user.email, password: user.password, code }).expect(204);
+    await ctx.http.post('/v1/auth/login').send({ email: user.email, password: user.password }).expect(200);
+  });
+
+  it('SEC-176: só o contador por e-mail estourado (sem falha na conta) já liga o step-up para a senha certa, e nunca o 429', async () => {
+    const user = await pendingUser();
+    const limiter = ctx.app.get(RateLimitService);
+    for (let i = 0; i < 11; i += 1) await limiter.hit(`deletion-cancel:email:${sha256Hex(user.email)}`, 3600);
+    expect((await limiter.peek(`lfa:${user.userId}`)).count).toBe(0);
+    expect((await cancel({ email: user.email, password: user.password })).body.code).toBe('LOGIN_CODE_REQUIRED');
+    await cancel({ email: user.email, password: user.password, code: ctx.mail.lastCode(user.email) }).expect(204);
+    expect((await limiter.peek(`deletion-cancel:email:${sha256Hex(user.email)}`)).count).toBe(0); // o dono provou quem é: contador zerado
+  });
+
+  it('SEC-176: o terceiro com o e-mail e SEM a senha não recebe código nem consome o limite de envio; senha errada com código segue 401', async () => {
+    const user = await pendingUser();
+    for (let i = 0; i < 12; i += 1) await cancel({ email: user.email, password: 'errada-errada-1' }).expect(401);
+    ctx.mail.outbox.length = 0;
+    const withCode = await cancel({ email: user.email, password: 'errada-errada-1', code: '123456' });
+    expect(withCode.status).toBe(401);
+    expect(ctx.mail.outbox.filter((m) => m.to === user.email)).toHaveLength(0); // nenhum código enviado a quem não tem a senha
+    const sends = await ctx.app.get(RateLimitService).peek(`code:h:${sha256Hex(user.email)}:delete_web`);
+    expect(sends.count).toBe(0);
+  });
+
+  it('o limite por IP + e-mail segue valendo: o MESMO IP insistindo recebe 429 (outro IP não é afetado)', async () => {
+    const user = await pendingUser();
+    const same = ipOf();
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i += 1) statuses.push((await cancel({ email: user.email, password: 'errada-errada-1' }, same)).status);
+    expect(statuses.slice(0, 5).every((s) => s === 401)).toBe(true);
+    expect(statuses.slice(5).every((s) => s === 429)).toBe(true);
+    await cancel({ email: user.email, password: user.password }).expect(204); // o dono, de outro IP, entra (sem step-up: só 7 tentativas)
   });
 
   it('conta sem e-mail confirmado sob ataque recebe a resposta genérica, nunca o código', async () => {

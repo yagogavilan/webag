@@ -6674,7 +6674,17 @@ paths:
       tags: [privacy]
       operationId: cancelAccountDeletion
       summary: Arrependimento - cancelar a exclusão da conta
-      description: "SEC-168: limite de 5 por hora por e-mail e IP e 10 por hora por e-mail (sem o IP). Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP."
+      description: |
+        Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. Qualquer falha (e-mail inexistente, conta que não está em exclusão, senha errada) responde 401 `INVALID_CREDENTIALS`, igual ao login: não revela se a conta existe nem se está em exclusão.
+
+        **Fluxo do código de step-up (SEC-168/176; app e `/lojista/desistir-da-exclusao` usam o mesmo):**
+        1. `POST` com `{ email, password }`. Sem ataque em curso: `204` e a conta reabre.
+        2. Se a conta está sob ataque (5 falhas/h na conta, contador compartilhado com o login, ou mais de 10 tentativas/h no e-mail, de qualquer IP) e a senha está CERTA: `403` com `code = LOGIN_CODE_REQUIRED`; o código `delete_web` (6 dígitos, 10 min, uso único) é enviado ao e-mail. O app mostra "Enviamos um código ao seu e-mail" e o campo de 6 dígitos.
+        3. Repetir o `POST` com `{ email, password, code }`: `204`. Código errado ou usado: `400 CODE_INVALID`; vencido: `400 CODE_EXPIRED` (repita o passo 1 sem `code` para receber outro). **Reenviar o código = repetir o passo 1 sem `code`**; o reenvio respeita `otp_reenvio_s` (429 `Retry-After`).
+        4. Senha errada recebe sempre `401 INVALID_CREDENTIALS`, com ou sem `code`, e NUNCA dispara o envio de código (quem só sabe o e-mail não consegue esgotar o limite de envio nem bloquear o dono).
+        5. E-mail não confirmado sob ataque: a mesma `401` genérica (não há para onde enviar o código; o suporte resolve).
+
+        **Limites:** 5 por hora por e-mail + IP (`429` com `Retry-After`; só quem insiste do mesmo IP é barrado). O contador por e-mail (sem IP) NUNCA devolve 429: acima de 10/h ele só liga o passo 2 para a senha certa. Sucesso zera os contadores.
       security: []
       requestBody:
         required: true
@@ -6682,20 +6692,36 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CancelAccountDeletionRequest'
+            examples:
+              primeiraTentativa: { summary: Passo 1, value: { email: ana@example.com, password: "senha-certa-1" } }
+              comCodigo: { summary: Passo 3 (depois do 403), value: { email: ana@example.com, password: "senha-certa-1", code: "482913" } }
       responses:
         '204':
           description: Conta reativada (e loja do dono reaberta no estado anterior)
         '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          description: "SEC-168: conta sob ataque (as falhas somam no contador por conta, o mesmo do login). Com e-mail confirmado: `LOGIN_CODE_REQUIRED`, o código `delete_web` vai ao e-mail e a chamada se repete com `code`. Sem e-mail confirmado a resposta é a 401 genérica."
+          description: "Validação do corpo (`VALIDATION_ERROR`) ou, no passo 3, `CODE_INVALID` (código errado, usado ou invalidado) / `CODE_EXPIRED` (vencido)."
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                codigoErrado: { value: { type: 'https://api.webag.com.br/errors/code-invalid', title: Código incorreto, status: 400, detail: Confira o código ou peça um novo., code: CODE_INVALID } }
+        '401':
+          description: "`INVALID_CREDENTIALS`: e-mail ou senha incorretos (mensagem única, inclusive para conta inexistente, fora de exclusão, com prazo vencido, ou e-mail não confirmado sob ataque)."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: "`LOGIN_CODE_REQUIRED` (senha certa, conta sob ataque, e-mail confirmado): o código `delete_web` foi enviado ao e-mail; repita a chamada com `code`."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                stepUp: { value: { type: 'https://api.webag.com.br/errors/login-code-required', title: Confirme com o código, status: 403, detail: 'Para sua segurança, confirme com o código enviado ao seu e-mail.', code: LOGIN_CODE_REQUIRED } }
         '429':
-          $ref: '#/components/responses/TooManyRequests'
+          description: "Mais de 5 tentativas na hora do mesmo IP para o mesmo e-mail, ou reenvio do código antes de `otp_reenvio_s`. Traz `Retry-After`."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /v1/me/data-exports:
     get:
       tags: [privacy]

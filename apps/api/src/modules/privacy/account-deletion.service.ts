@@ -199,16 +199,24 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
   /**
    * Arrependimento (WB-213, período configurável): e-mail e senha da conta fechada, antes de `effective_at`. A resposta de falha é a
    * mesma do login (não revela se a conta existe nem se está em exclusão).
+   *
+   * SEC-168/176: quem só sabe o e-mail NUNCA consegue bloquear o dono.
+   * - Limite por IP + e-mail (5/h): 429 só para quem insiste do MESMO IP; outro IP não é afetado.
+   * - Contador por e-mail (sem IP): conta as tentativas, mas acima de 10/h NÃO devolve 429. Ele liga o step-up: a senha certa passa a
+   *   exigir também o código `delete_web` enviado ao e-mail (`403 LOGIN_CODE_REQUIRED`; reenviar e-mail, senha e `code`). Quem não tem a
+   *   senha continua recebendo 401 genérico e nunca consome o limite de envio de códigos (o código só sai com a senha certa).
+   * - O mesmo step-up vale com 5 falhas na conta (`lfa`, compartilhado com o login). E-mail não confirmado sob ataque: 401 genérico.
    */
   async cancel(email: string, password: string, ctx: RequestContext, code?: string): Promise<void> {
     const invalid = () => new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', { detail: 'E-mail ou senha incorretos.' });
     const ip = ctx.ip ?? 'unknown';
-    const key = `deletion-cancel:${sha256Hex(email)}:${ip}`;
+    const emailHash = sha256Hex(email);
+    const key = `deletion-cancel:${emailHash}:${ip}`;
     const { count, ttlSeconds } = await this.limiter.hit(key, 3600);
     if (count > 5) throw errors.tooMany(ttlSeconds || 3600, 'Muitas tentativas. Tente novamente mais tarde.');
-    // SEC-168: limite por e-mail SEM o IP (um botnet com IPs diferentes não escapa): 10 por hora.
-    const byEmail = await this.limiter.hit(`deletion-cancel:email:${sha256Hex(email)}`, 3600);
-    if (byEmail.count > 10) throw errors.tooMany(byEmail.ttlSeconds || 3600, 'Muitas tentativas. Tente novamente mais tarde.');
+    // Conta antes, confere depois (SEC-117): requisições paralelas não furam o teto. Passar do limite liga o step-up, não o 429.
+    const byEmail = await this.limiter.hit(`deletion-cancel:email:${emailHash}`, 3600);
+    const emailUnderAttack = byEmail.count > 10;
 
     const [row] = await this.db
       .select({ user: t.users, deletion: accountDeletions })
@@ -221,13 +229,13 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       if (row) await this.limiter.hit(`lfa:${row.user.id}`, 3600);
       throw invalid();
     }
-    // SEC-168: conta sob ataque (step-up do login ativo) não reabre só com a senha. E-mail confirmado: exige o código enviado ao e-mail;
-    // não confirmado: a mesma resposta genérica de senha errada (nunca revela o motivo).
+    // Conta sob ataque (step-up do login ativo ou muitas tentativas no e-mail) não reabre só com a senha. E-mail confirmado: exige o
+    // código enviado ao e-mail; não confirmado: a mesma resposta genérica de senha errada (nunca revela o motivo).
     const accountFails = await this.limiter.peek(`lfa:${row.user.id}`);
-    if (accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
+    if (emailUnderAttack || accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
       if (row.user.emailVerifiedAt === null) throw invalid();
       if (!code) {
-        await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx);
+        await this.codes.enforceSendLimits(emailHash, 'delete_web', email, ctx);
         await this.codes.issue(row.user.id, 'delete_web', email);
         throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Para sua segurança, confirme com o código enviado ao seu e-mail.');
       }
@@ -251,6 +259,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     });
     if (!restored) throw invalid();
     await this.limiter.reset(key);
+    await this.limiter.reset(`deletion-cancel:email:${emailHash}`); // o dono provou quem é: o ruído de terceiros não pesa mais
     this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail() });
   }
 

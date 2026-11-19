@@ -22586,12 +22586,12 @@ export type cancelAccountDeletionResponse204 = {
 }
 
 export type cancelAccountDeletionResponse400 = {
-  data: ValidationErrorResponse
+  data: Problem
   status: 400
 }
 
 export type cancelAccountDeletionResponse401 = {
-  data: UnauthorizedResponse
+  data: Problem
   status: 401
 }
 
@@ -22601,7 +22601,7 @@ export type cancelAccountDeletionResponse403 = {
 }
 
 export type cancelAccountDeletionResponse429 = {
-  data: TooManyRequestsResponse
+  data: Problem
   status: 429
 }
 
@@ -22623,7 +22623,16 @@ export const getCancelAccountDeletionUrl = () => {
 }
 
 /**
- * SEC-168: limite de 5 por hora por e-mail e IP e 10 por hora por e-mail (sem o IP). Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP.
+ * Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. Qualquer falha (e-mail inexistente, conta que não está em exclusão, senha errada) responde 401 `INVALID_CREDENTIALS`, igual ao login: não revela se a conta existe nem se está em exclusão.
+ *
+ * **Fluxo do código de step-up (SEC-168/176; app e `/lojista/desistir-da-exclusao` usam o mesmo):**
+ * 1. `POST` com `{ email, password }`. Sem ataque em curso: `204` e a conta reabre.
+ * 2. Se a conta está sob ataque (5 falhas/h na conta, contador compartilhado com o login, ou mais de 10 tentativas/h no e-mail, de qualquer IP) e a senha está CERTA: `403` com `code = LOGIN_CODE_REQUIRED`; o código `delete_web` (6 dígitos, 10 min, uso único) é enviado ao e-mail. O app mostra "Enviamos um código ao seu e-mail" e o campo de 6 dígitos.
+ * 3. Repetir o `POST` com `{ email, password, code }`: `204`. Código errado ou usado: `400 CODE_INVALID`; vencido: `400 CODE_EXPIRED` (repita o passo 1 sem `code` para receber outro). **Reenviar o código = repetir o passo 1 sem `code`**; o reenvio respeita `otp_reenvio_s` (429 `Retry-After`).
+ * 4. Senha errada recebe sempre `401 INVALID_CREDENTIALS`, com ou sem `code`, e NUNCA dispara o envio de código (quem só sabe o e-mail não consegue esgotar o limite de envio nem bloquear o dono).
+ * 5. E-mail não confirmado sob ataque: a mesma `401` genérica (não há para onde enviar o código; o suporte resolve).
+ *
+ * **Limites:** 5 por hora por e-mail + IP (`429` com `Retry-After`; só quem insiste do mesmo IP é barrado). O contador por e-mail (sem IP) NUNCA devolve 429: acima de 10/h ele só liga o passo 2 para a senha certa. Sucesso zera os contadores.
  * @summary Arrependimento - cancelar a exclusão da conta
  */
 export const cancelAccountDeletion = async (cancelAccountDeletionRequest: CancelAccountDeletionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelAccountDeletionResponse> => {
