@@ -37,6 +37,13 @@ export function deservesCompensation(order: { mode: OrderMode; etaToAt: Date | n
   return order.mode === 'delivery' && order.etaToAt !== null && deliveredAt.getTime() > order.etaToAt.getTime() + toleranceMin * 60_000;
 }
 
+/**
+ * SEC-177: motivos de "não entregue" atribuíveis ao cliente/endereço. Corrida que passou por um deles não gera compensação por atraso,
+ * mesmo entregue depois (reentrega): o atraso não foi da Webag. [HIPÓTESE: RN-19 4c a ajustar pelo PO; ver `fila-backend-dev.md`.]
+ */
+export const CUSTOMER_FAULT_REASONS = ['customer_absent', 'address_not_found', 'customer_refused'] as const;
+export const isCustomerFault = (reason: string | null | undefined): boolean => (CUSTOMER_FAULT_REASONS as readonly string[]).includes(reason ?? '');
+
 export type CompensationKind = 'frete_gratis_proximo' | 'cupom_valor' | 'nenhuma';
 
 /** Cupom pessoal da compensação; `null` quando o tipo é `nenhuma` ou o valor do `cupom_valor` é zero. */

@@ -36,4 +36,11 @@ describe('catálogo de notificações', () => {
     expect(storeExchangeNotice(exchange({ from: 'requested', to: 'approved', actor: 'system', reason: 'Aprovada automaticamente' }))?.push?.title).toContain('sistema');
     expect(customerExchangeNotice(exchange({ from: 'requested', to: 'rejected', reason: 'Item usado' }))?.push?.body).toContain('Item usado');
   });
+  it('WB-241 C7: coleta atrasada avisa o cliente com o novo prazo (data de São Paulo) e texto neutro', () => {
+    const notice = customerExchangeNotice(exchange({ from: 'approved', to: 'approved', actor: 'system', notice: 'collection_late', newDeadlineAt: new Date('2026-12-03T02:30:00Z') }));
+    expect(notice?.push?.title).toBe('A coleta da sua troca atrasou');
+    expect(notice?.push?.body).toContain('TR-ABCDE');
+    expect(notice?.push?.body).toContain('até 02/12'); // 23:30 do dia 02 em São Paulo
+    expect(notice?.push?.body).not.toMatch(/culpa|erro nosso/i);
+  });
 });

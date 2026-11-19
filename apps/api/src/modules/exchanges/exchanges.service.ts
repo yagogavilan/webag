@@ -670,6 +670,14 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     }
   }
 
+  /** WB-241 C7: coleta sem motoboy depois do prazo: avisa o cliente do novo prazo (uma vez por corrida; o alerta da operação já saiu). */
+  async onCollectionLate(delivery: Delivery, newDeadlineAt: Date): Promise<void> {
+    if (!delivery.exchangeId || delivery.kind !== 'exchange_pickup') return;
+    const [ex] = await this.db.select().from(exchangeRequests).where(eq(exchangeRequests.id, delivery.exchangeId));
+    if (!ex || !['approved', 'awaiting_fee'].includes(ex.status)) return;
+    await this.bus.emit({ ...this.eventOf(ex, ex.status, ex.status, 'system', null, new Date()), notice: 'collection_late', newDeadlineAt });
+  }
+
   async afterDeliveryChange(delivery: Delivery): Promise<void> {
     for (const event of this.pendingEvents.get(delivery.id) ?? []) await this.bus.emit(event);
     this.pendingEvents.delete(delivery.id);

@@ -131,7 +131,8 @@ export const orderEvents = pgTable(
   (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
 );
 
-export const CANCEL_REQUEST_STATUSES = ['pending', 'approved', 'refused'] as const;
+/** `superseded` (SEC-175): o pedido ou a corrida mudou de estado antes da resposta (entregue, não entregue, cancelado); nada foi aceito. */
+export const CANCEL_REQUEST_STATUSES = ['pending', 'approved', 'refused', 'superseded'] as const;
 /** `preparation`: pedido em separação, a loja decide (BUG-015). `late`: entrega atrasada em SAIU, a operação decide (WB-253 C3). */
 export const CANCEL_REQUEST_KINDS = ['preparation', 'late'] as const;
 

@@ -11,7 +11,7 @@ import { AuditService, FeatureFlagsService, ParametersService } from '../admin/i
 import { LedgerService } from '../finance/index.js';
 import { PaymentsService } from '../payments/index.js';
 import { couriers, deliveries, deliveryEvents } from './db/schema.js';
-import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES, type DeliveryKind, type DeliveryStatus, type NotDeliveredReason } from './domain/state.js';
+import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES, WITH_COURIER, type DeliveryKind, type DeliveryStatus, type NotDeliveredReason } from './domain/state.js';
 import { buildCourierMessage, whatsappLink, type DeliveryMessageData } from './domain/whatsapp.js';
 
 export type Delivery = typeof deliveries.$inferSelect;
@@ -35,6 +35,8 @@ export interface DeliveryListener {
   onDeliveryChange?(tx: Tx, delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void>;
   /** Depois do commit (aviso ao cliente, tempo real): falha aqui não desfaz nada. */
   afterDeliveryChange?(delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void>;
+  /** WB-241 C7: a coleta de troca estourou o prazo sem motoboy (uma vez por corrida, depois do commit); `newDeadlineAt` é o novo prazo ao cliente. */
+  onCollectionLate?(delivery: Delivery, newDeadlineAt: Date): Promise<void>;
 }
 
 export interface CreateDeliveryInput {
@@ -56,6 +58,12 @@ export interface CreateDeliveryInput {
   actor?: DeliveryActor;
 }
 
+export interface ActInput {
+  reason?: string | undefined;
+  code?: string | undefined;
+  failReason?: NotDeliveredReason | undefined;
+  overrideReason?: string | undefined;
+}
 export type DeliveryAction = 'confirm' | 'picked_up' | 'delivered' | 'not_delivered' | 'reattempt' | 'return_confirmed' | 'reassign' | 'cancel';
 const ACTION_TARGET: Record<DeliveryAction, DeliveryStatus> = {
   confirm: 'courier_en_route',
@@ -206,8 +214,9 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
   }
 
   /** Corrida de entrega do pedido (ou `null`). Para o pedido mostrar o acompanhamento ao cliente. */
-  async forOrder(orderId: string, exec: Db | Tx = this.db): Promise<Delivery | null> {
-    const [row] = await exec.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery')));
+  async forOrder(orderId: string, exec: Db | Tx = this.db, lock = false): Promise<Delivery | null> {
+    const query = exec.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery')));
+    const [row] = lock ? await query.for('update') : await query;
     return row ?? null;
   }
 
@@ -219,7 +228,10 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const [current] = await tx.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery'))).for('update');
     if (!current || TERMINAL_STATUSES.includes(current.status)) return;
     const [updated] = await tx.update(deliveries).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(deliveries.id, current.id)).returning();
-    await this.record(tx, ctx, actor, current, updated!, 'cancel', reason, { source: 'order_cancelled' });
+    const hadCourier = WITH_COURIER.includes(current.status);
+    await this.record(tx, ctx, actor, current, updated!, 'cancel', reason, { source: 'order_cancelled', ...(hadCourier ? { hadCourier: true } : {}) });
+    // SEC-175 item 4: o motoboy já estava com a corrida (a caminho ou com o pacote) e o pedido foi encerrado: a operação precisa avisá-lo.
+    if (hadCourier) await this.payments.raiseAlertIn(tx, 'delivery_cancelled_with_courier', { deliveryId: current.id, orderId, status: current.status, courierId: current.courierId });
   }
 
   /** Cancela as corridas ainda canceláveis de uma troca (cliente desistiu, taxa não paga, prazo vencido). Corrida já com o pacote fica como está. */
@@ -328,9 +340,31 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       const [claimed] = await this.db.update(deliveries).set({ lateAlertedAt: now }).where(and(eq(deliveries.id, d.id), isNull(deliveries.lateAlertedAt))).returning({ id: deliveries.id });
       if (!claimed) continue;
       await this.payments.raiseAlert(null, d.kind === 'exchange_pickup' ? 'collection_late' : 'delivery_late', { deliveryId: d.id, orderId: d.orderId, status: d.status, overdueMinutes }).catch((e: Error) => this.logger.error(e.message));
+      if (d.kind === 'exchange_pickup') await this.noticeCollectionLate(d, now, collectionDays);
       alerted += 1;
     }
     return alerted;
+  }
+
+  /**
+   * WB-241 C7: o cliente é avisado do novo prazo da coleta atrasada. Novo prazo = `coleta_agendamento_dias_uteis` dias úteis a contar
+   * do aviso [HIPÓTESE: o PRD não fixa o número; ver `docs/gestao/fila-backend-dev.md`]. Fica no histórico da corrida; falha de canal
+   * nunca desfaz nada.
+   */
+  private async noticeCollectionLate(d: Delivery, now: Date, collectionDays: number): Promise<void> {
+    const newDeadlineAt = businessDeadline(now, collectionDays);
+    try {
+      await this.db.insert(deliveryEvents).values({ deliveryId: d.id, fromStatus: d.status, toStatus: d.status, action: 'collection_late_notice', actorId: null, actorRole: 'system', meta: { newDeadlineAt: newDeadlineAt.toISOString() } });
+    } catch (error) {
+      this.logger.warn(`histórico do aviso de coleta atrasada ${d.id}: ${safeErrorMessage(error)}`);
+    }
+    for (const listener of this.listeners) {
+      try {
+        await listener.onCollectionLate?.(d, newDeadlineAt);
+      } catch (error) {
+        this.logger.warn(`aviso de coleta atrasada da corrida ${d.id}: ${safeErrorMessage(error)}`);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ atribuição
@@ -425,12 +459,10 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
    * Avança a corrida (WB-233). Só as transições válidas de RN-18; voltar (reatribuir, cancelar) exige motivo. "Entregue" confere o
    * código de entrega quando a flag está ligada (5 erros bloqueiam; super admin conclui com motivo, auditado).
    */
-  async act(id: string, action: DeliveryAction, input: { reason?: string | undefined; code?: string | undefined; failReason?: NotDeliveredReason | undefined; overrideReason?: string | undefined }, ctx: RequestContext): Promise<Delivery> {
+  async act(id: string, action: DeliveryAction, input: ActInput, ctx: RequestContext): Promise<Delivery> {
     const actor = this.actorOf(ctx);
     const to = ACTION_TARGET[action];
-    if ((action === 'reassign' || action === 'cancel') && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Informe o motivo.' }]);
-    if (action === 'not_delivered' && !input.failReason) throw errors.validation([{ field: 'failReason', message: 'Informe o motivo da falha.' }]);
-    if (action === 'not_delivered' && input.failReason === 'other' && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Descreva o motivo.' }]);
+    this.validateAction(action, input);
 
     const before = await this.get(id);
     if (!canMove(before.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', `A corrida não pode ir de ${before.status} para ${to}.`);
@@ -442,31 +474,56 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
 
     const result = await this.db.transaction(async (tx) => {
       await this.lockParent(tx, before);
-      const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
-      if (!current || !canMove(current.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
-      const set: Partial<typeof deliveries.$inferInsert> = { status: to, updatedAt: new Date() };
-      if (action === 'reassign') {
-        set.courierId = null;
-        set.whatsappSentAt = null;
-      }
-      if (action === 'not_delivered') {
-        set.failReason = input.failReason!;
-        set.failNote = input.reason?.slice(0, 200) ?? null;
-      }
-      if (action === 'reattempt') set.attempts = current.attempts + 1;
-      if (action === 'delivered') set.deliveryCode = null; // o código de uso único não vale depois da entrega
-      const [updated] = await tx.update(deliveries).set(set).where(and(eq(deliveries.id, id), eq(deliveries.status, current.status))).returning();
-      if (!updated) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
-      const meta: Record<string, unknown> = {
-        ...(action === 'not_delivered' ? { failReason: input.failReason, storeFault: isStoreFault(input.failReason!) } : {}),
-        ...(action === 'reassign' ? { previousCourierId: current.courierId, keepsReadyAt: current.readyAt.toISOString() } : {}),
-        ...(action === 'delivered' && input.overrideReason ? { codeOverrideReason: input.overrideReason } : {}),
-      };
-      await this.record(tx, ctx, actor, current, updated, action, input.reason ?? null, meta);
-      return updated;
+      return this.applyInTx(tx, id, action, input, ctx, actor);
     });
     await this.notifyAfter(result, before.status, to, actor, input.reason ?? null);
     return result;
+  }
+
+  /**
+   * SEC-175: a mesma transição, dentro da transação de quem chama (o aceite do cancelamento por atraso). O CHAMADOR já travou o pai
+   * (pedido ou troca, I7) e roda `after()` DEPOIS do commit. Só vale para ações do sistema/operação que não conferem código
+   * (`not_delivered`, `cancel`, `reassign`...): `delivered` pede o código e continua só em `act`.
+   */
+  async actInTx(tx: Tx, id: string, action: Exclude<DeliveryAction, 'delivered'>, input: ActInput, ctx: RequestContext): Promise<{ delivery: Delivery; after: () => Promise<void> }> {
+    const actor = this.actorOf(ctx);
+    this.validateAction(action, input);
+    const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id));
+    if (!current) throw errors.notFound('Corrida não encontrada.');
+    const delivery = await this.applyInTx(tx, id, action, input, ctx, actor);
+    return { delivery, after: () => this.notifyAfter(delivery, current.status, ACTION_TARGET[action], actor, input.reason ?? null) };
+  }
+
+  private validateAction(action: DeliveryAction, input: ActInput): void {
+    if ((action === 'reassign' || action === 'cancel') && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Informe o motivo.' }]);
+    if (action === 'not_delivered' && !input.failReason) throw errors.validation([{ field: 'failReason', message: 'Informe o motivo da falha.' }]);
+    if (action === 'not_delivered' && input.failReason === 'other' && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Descreva o motivo.' }]);
+  }
+
+  private async applyInTx(tx: Tx, id: string, action: DeliveryAction, input: ActInput, ctx: RequestContext, actor: DeliveryActor): Promise<Delivery> {
+    const to = ACTION_TARGET[action];
+    const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
+    if (!current || !canMove(current.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
+    const set: Partial<typeof deliveries.$inferInsert> = { status: to, updatedAt: new Date() };
+    if (action === 'reassign') {
+      set.courierId = null;
+      set.whatsappSentAt = null;
+    }
+    if (action === 'not_delivered') {
+      set.failReason = input.failReason!;
+      set.failNote = input.reason?.slice(0, 200) ?? null;
+    }
+    if (action === 'reattempt') set.attempts = current.attempts + 1;
+    if (action === 'delivered') set.deliveryCode = null; // o código de uso único não vale depois da entrega
+    const [updated] = await tx.update(deliveries).set(set).where(and(eq(deliveries.id, id), eq(deliveries.status, current.status))).returning();
+    if (!updated) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
+    const meta: Record<string, unknown> = {
+      ...(action === 'not_delivered' ? { failReason: input.failReason, storeFault: isStoreFault(input.failReason!) } : {}),
+      ...(action === 'reassign' ? { previousCourierId: current.courierId, keepsReadyAt: current.readyAt.toISOString() } : {}),
+      ...(action === 'delivered' && input.overrideReason ? { codeOverrideReason: input.overrideReason } : {}),
+    };
+    await this.record(tx, ctx, actor, current, updated, action, input.reason ?? null, meta);
+    return updated;
   }
 
   private async checkCode(delivery: Delivery, input: { code?: string | undefined; overrideReason?: string | undefined }, actor: DeliveryActor): Promise<void> {

@@ -1,7 +1,9 @@
 import { and, eq } from 'drizzle-orm';
+import { vi } from 'vitest';
+import { DeliveriesService } from '../src/modules/logistics/index.js';
 import { LedgerService } from '../src/modules/finance/index.js';
 import { LateDeliveryService, OrderEventBus, type OrderEvent } from '../src/modules/orders/index.js';
-import { coupons, deliveries, orderCancelRequests, orders, paymentRefunds } from '../src/platform/database/schema.js';
+import { coupons, deliveries, deliveryEvents, orderCancelRequests, orders, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { restoreFees, useParam } from './helpers/fees.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
@@ -216,6 +218,115 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       const r = await deliver(30);
       const b = await ctx.app.get(LedgerService).balances(r.orderId);
       expect(b).toMatchObject({ deliveryFeeRevenue: 500 });
+    });
+  });
+
+  describe('SEC-175: cancelamento por atraso não "aceita" o que já mudou de estado', () => {
+    const requestOf = async (orderId: string) => (await ctx.db.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'late'))))[0]!;
+    const acceptedEvents = (orderId: string) => events.filter((e) => e.orderId === orderId && e.reason === 'Cancelamento por atraso aceito');
+    const reopen = (requestId: string) => ctx.db.update(orderCancelRequests).set({ status: 'pending', decidedAt: null, decidedBy: null, decisionNote: null }).where(eq(orderCancelRequests.id, requestId));
+
+    it('L1: entregue antes do aceite: o pedido de cancelamento vira "superseded", sem evento "aceito" e sem estorno; o aceite automático é no-op, mesmo com o pedido reaberto à força', async () => {
+      const r = await outForDelivery();
+      await late(r.orderId, 20);
+      expect((await cancelLate(r)).status).toBe(200);
+      const code = (await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.deliveryCode!;
+      await act(r.delivery.id, { action: 'delivered', code }).expect(200);
+      const request = await requestOf(r.orderId);
+      expect(request).toMatchObject({ status: 'superseded', decidedBy: 'system' }); // encerrado na mesma transação da entrega
+      const svc = ctx.app.get(LateDeliveryService);
+      const before = events.length;
+      await svc.autoAccept(new Date(Date.now() + 11 * 60_000));
+      await reopen(request.id); // defesa em profundidade: mesmo pendente, a decisão confere o estado sob trava
+      await svc.autoAccept(new Date(Date.now() + 11 * 60_000));
+      await svc.autoAccept(new Date(Date.now() + 11 * 60_000)); // idempotente
+      expect((await requestOf(r.orderId)).status).toBe('superseded');
+      expect(acceptedEvents(r.orderId)).toHaveLength(0);
+      expect(events.slice(before).filter((e) => e.orderId === r.orderId)).toHaveLength(0);
+      expect((await orderRow(ctx, r.orderId)).status).toBe('delivered');
+      expect(await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, r.attempt.id))).toHaveLength(0);
+    });
+
+    it('L1 pelo admin: responder "aceitar" a um pedido já entregue devolve o pedido superseded e não avisa o cliente', async () => {
+      const r = await outForDelivery();
+      await late(r.orderId, 20);
+      await cancelLate(r).expect(200);
+      const request = await requestOf(r.orderId);
+      const code = (await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.deliveryCode!;
+      await act(r.delivery.id, { action: 'delivered', code }).expect(200);
+      await reopen(request.id);
+      const res = await ctx.http.post(`/v1/admin/orders/${r.orderId}/late-cancel/respond`).set(bearer(ops.accessToken)).send({ action: 'accept' });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.status).toBe('superseded');
+      expect(acceptedEvents(r.orderId)).toHaveLength(0);
+      expect((await ctx.http.post(`/v1/admin/orders/${r.orderId}/late-cancel/respond`).set(bearer(ops.accessToken)).send({ action: 'accept' })).status).toBe(409); // nada pendente
+    });
+
+    it('L5: corrida "não entregue" antes do aceite: superseded, nenhum "aceito"', async () => {
+      const r = await outForDelivery();
+      await late(r.orderId, 20);
+      await cancelLate(r).expect(200);
+      await act(r.delivery.id, { action: 'not_delivered', failReason: 'customer_absent' }).expect(200);
+      const request = await requestOf(r.orderId);
+      expect(request.status).toBe('superseded');
+      await reopen(request.id);
+      await ctx.app.get(LateDeliveryService).autoAccept(new Date(Date.now() + 11 * 60_000));
+      expect((await requestOf(r.orderId)).status).toBe('superseded');
+      expect(acceptedEvents(r.orderId)).toHaveLength(0);
+    });
+
+    it('se a corrida não puder mudar, nada é aceito: o pedido segue pendente e a varredura seguinte conclui (mesma transação)', async () => {
+      const r = await outForDelivery();
+      await late(r.orderId, 20);
+      await cancelLate(r).expect(200);
+      const svc = ctx.app.get(LateDeliveryService);
+      const spy = vi.spyOn(ctx.app.get(DeliveriesService), 'actInTx').mockRejectedValueOnce(new Error('falha simulada'));
+      expect(await svc.autoAccept(new Date(Date.now() + 11 * 60_000))).toBe(0);
+      spy.mockRestore();
+      expect((await requestOf(r.orderId)).status).toBe('pending');
+      expect(acceptedEvents(r.orderId)).toHaveLength(0);
+      expect(await svc.autoAccept(new Date(Date.now() + 11 * 60_000))).toBeGreaterThanOrEqual(1);
+      expect((await requestOf(r.orderId)).status).toBe('approved');
+      expect((await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.status).toBe('not_delivered');
+      expect(acceptedEvents(r.orderId)).toHaveLength(1);
+    });
+
+    it('cancelamento do cliente com o motoboy já designado alerta a operação (e a corrida fica cancelada)', async () => {
+      const r = await readyForCollection();
+      const m = await courier();
+      await ctx.http.post(`${base}/deliveries/${r.delivery.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: m.id }).expect(200);
+      await late(r.orderId, 20);
+      await cancelLate(r).expect(200);
+      expect((await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.status).toBe('cancelled');
+      const alerts = (await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'delivery_cancelled_with_courier'))).filter((a) => (a.details as { orderId?: string }).orderId === r.orderId);
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.details).toMatchObject({ deliveryId: r.delivery.id, status: 'awaiting_courier' });
+    });
+  });
+
+  describe('SEC-177: sem compensação quando o atraso foi do cliente', () => {
+    const couponsOf = (orderId: string) => ctx.db.select().from(coupons).where(eq(coupons.sourceOrderId, orderId));
+    async function failThenDeliver(failReason: string) {
+      const r = await outForDelivery();
+      await act(r.delivery.id, { action: 'not_delivered', failReason, ...(failReason === 'other' ? { reason: 'Motivo livre' } : {}) }).expect(200);
+      await act(r.delivery.id, { action: 'reattempt' }).expect(200);
+      await late(r.orderId, 40);
+      const code = (await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.deliveryCode!;
+      await act(r.delivery.id, { action: 'delivered', code }).expect(200);
+      return r;
+    }
+
+    it.each(['customer_absent', 'address_not_found', 'customer_refused'])('L4: %s -> reentrega -> entregue tarde: nenhum cupom e causa registrada', async (reason) => {
+      const r = await failThenDeliver(reason);
+      expect(await couponsOf(r.orderId)).toHaveLength(0);
+      const [skipped] = await ctx.db.select().from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, r.delivery.id), eq(deliveryEvents.action, 'compensation_skipped')));
+      expect(skipped?.meta).toMatchObject({ cause: reason });
+      expect(events.some((e) => e.orderId === r.orderId && e.notice === 'late_compensation')).toBe(false);
+    });
+
+    it('falha de outro motivo (a Webag/loja) com reentrega e atraso mantém a compensação', async () => {
+      const r = await failThenDeliver('other');
+      expect(await couponsOf(r.orderId)).toHaveLength(1);
     });
   });
 });

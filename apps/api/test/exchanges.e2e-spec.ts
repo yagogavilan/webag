@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { ParametersService } from '../src/modules/admin/index.js';
-import { ExchangesService } from '../src/modules/exchanges/index.js';
+import { ExchangeEventBus, ExchangesService, type ExchangeEvent } from '../src/modules/exchanges/index.js';
 import { deliveries, exchangeRequests, orderItems, orders, paymentAlerts, paymentAttempts, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, jpegBuffer, memoryStorage, type RegisteredUser } from './helpers/fixtures.js';
@@ -397,15 +397,22 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     return { d, id, run: run! };
   }
 
-  it('BUG-017 / WB-241 C7: coleta sem motoboy depois de `coleta_agendamento_dias_uteis` dias úteis fica "Atrasada" e alerta o admin uma vez', async () => {
-    const { run } = await paidPickup();
+  it('BUG-017 / WB-241 C7: coleta sem motoboy depois de `coleta_agendamento_dias_uteis` dias úteis fica "Atrasada", alerta o admin uma vez e avisa o cliente do novo prazo', async () => {
+    const { d, id, run } = await paidPickup();
     const listed = async () => ((await ctx.http.get(`${base}/deliveries`).query({ kind: 'exchange_pickup', limit: '100' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; overdue: boolean }[]).find((x) => x.id === run.id)!;
     expect(await listed()).toMatchObject({ overdue: false });
     await ctx.db.update(deliveries).set({ readyAt: new Date(Date.now() - 8 * 86_400_000) }).where(eq(deliveries.id, run.id)); // 8 dias corridos = pelo menos 5 úteis
     expect(await listed()).toMatchObject({ overdue: true });
     const { DeliveriesService } = await import('../src/modules/logistics/index.js');
+    const notices: ExchangeEvent[] = [];
+    ctx.app.get(ExchangeEventBus).subscribe((e) => void (e.notice === 'collection_late' && notices.push(e)));
     await ctx.app.get(DeliveriesService).alertLateDue();
     await ctx.app.get(DeliveriesService).alertLateDue();
+    // WB-241 C7: o cliente é avisado do novo prazo, uma única vez, e o prazo está no futuro
+    const mine = notices.filter((e) => e.exchangeId === id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.userId).toBe(d.buyer.user.userId);
+    expect(mine[0]!.newDeadlineAt!.getTime()).toBeGreaterThan(Date.now());
     const alerts = (await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'collection_late'))).filter((a) => (a.details as { deliveryId?: string }).deliveryId === run.id);
     expect(alerts).toHaveLength(1);
     // o prazo é parâmetro: com 10 dias úteis a mesma coleta deixa de estar atrasada

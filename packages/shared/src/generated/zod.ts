@@ -2566,7 +2566,7 @@ export const AdminConfirmStoreReturnResponse = zod.object({
 
 
 /**
- * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático).
+ * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático). SEC-175: se o pedido ou a corrida já não está em `out_for_delivery` (entregue, não entregue, cancelado), o pedido de cancelamento vira `superseded` (200, sem aceitar nem avisar o cliente); o aceite e a transição da corrida são uma só transação (se a corrida não puder mudar, nada é aceito e o pedido segue `pending`).
  * @summary Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
  */
 export const AdminRespondLateCancelParams = zod.object({
@@ -2584,7 +2584,7 @@ export const AdminRespondLateCancelBody = zod.object({
 
 export const AdminRespondLateCancelResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -8690,7 +8690,7 @@ export const GetStoreOrderParams = zod.object({
 export const GetStoreOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -8825,7 +8825,7 @@ export const AcceptOrderParams = zod.object({
 export const AcceptOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -8946,7 +8946,7 @@ export const RefuseOrderBody = zod.object({
 export const RefuseOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9072,7 +9072,7 @@ export const AdvanceOrderBody = zod.object({
 export const AdvanceOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9184,7 +9184,7 @@ export const ConfirmReturnReceivedByStoreParams = zod.object({
 export const ConfirmReturnReceivedByStoreResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9305,7 +9305,7 @@ export const CancelOrderByStoreBody = zod.object({
 export const CancelOrderByStoreResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9460,7 +9460,7 @@ export const CreateOrderBody = zod.object({
 export const CreateOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9475,7 +9475,7 @@ export const CreateOrderResponse = zod.object({
   "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9678,7 +9678,7 @@ export const GetOrderParams = zod.object({
 export const GetOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9693,7 +9693,7 @@ export const GetOrderResponse = zod.object({
   "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9858,7 +9858,7 @@ export const RequestOrderCancelBody = zod.object({
 
 export const RequestOrderCancelResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9883,7 +9883,7 @@ export const CancelOrderLateBody = zod.object({
 export const CancelOrderLateResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -9898,7 +9898,7 @@ export const CancelOrderLateResponse = zod.object({
   "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -10057,7 +10057,7 @@ export const AcceptStoreOrderCancelRequestParams = zod.object({
 export const AcceptStoreOrderCancelRequestResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -10178,7 +10178,7 @@ export const RejectStoreOrderCancelRequestBody = zod.object({
 export const RejectStoreOrderCancelRequestResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -10297,7 +10297,7 @@ export const CancelOrderBody = zod.object({
 export const CancelOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
@@ -10312,7 +10312,7 @@ export const CancelOrderResponse = zod.object({
   "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['pending', 'approved', 'refused']),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),

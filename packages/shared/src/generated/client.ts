@@ -2940,6 +2940,9 @@ export interface LogisticsPause {
   pausedAt: string;
 }
 
+/**
+ * `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'.
+ */
 export type CancelRequestStatus = typeof CancelRequestStatus[keyof typeof CancelRequestStatus];
 
 
@@ -2947,6 +2950,7 @@ export const CancelRequestStatus = {
   pending: 'pending',
   approved: 'approved',
   refused: 'refused',
+  superseded: 'superseded',
 } as const;
 
 /**
@@ -2966,6 +2970,7 @@ export const CancelRequestDecidedBy = {
  */
 export interface CancelRequest {
   id: string;
+  /** `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'. */
   status: CancelRequestStatus;
   /** @nullable */
   reason: string | null;
@@ -12901,7 +12906,7 @@ export const getAdminRespondLateCancelUrl = (orderId: string,) => {
 }
 
 /**
- * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático).
+ * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático). SEC-175: se o pedido ou a corrida já não está em `out_for_delivery` (entregue, não entregue, cancelado), o pedido de cancelamento vira `superseded` (200, sem aceitar nem avisar o cliente); o aceite e a transição da corrida são uma só transação (se a corrida não puder mudar, nada é aceito e o pedido segue `pending`).
  * @summary Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
  */
 export const adminRespondLateCancel = async (orderId: string,

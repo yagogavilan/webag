@@ -1289,7 +1289,7 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
 
 export interface CancelRequestView {
   id: string;
-  status: 'pending' | 'approved' | 'refused';
+  status: 'pending' | 'approved' | 'refused' | 'superseded';
   reason: string | null;
   requestedAt: string;
   /** Até quando a loja decide; passado o prazo o admin decide. */

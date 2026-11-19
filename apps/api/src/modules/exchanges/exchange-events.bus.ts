@@ -14,6 +14,9 @@ export interface ExchangeEvent {
   actor: ExchangeActor;
   reason: string | null;
   at: Date;
+  /** Aviso avulso ao cliente, sem mudança de estado (WB-241 C7): coleta atrasada, com o novo prazo. */
+  notice?: 'collection_late';
+  newDeadlineAt?: Date;
 }
 
 /** Lembrete à loja do fim do SLA de resposta (DT-050): não muda o estado, só avisa. */

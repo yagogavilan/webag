@@ -48,6 +48,7 @@ export class NotificationsService implements OnModuleInit {
 
   private async onExchange(e: ExchangeEvent): Promise<void> {
     await this.deliver([e.userId], customerExchangeNotice(e));
+    if (e.notice) return; // aviso avulso ao cliente (coleta atrasada): a loja não recebe a notificação de mudança de estado
     const notice = storeExchangeNotice(e);
     if (notice) await this.deliver(await this.storeUserIds(e.storeId, 'exchanges'), notice);
   }

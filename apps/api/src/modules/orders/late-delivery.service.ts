@@ -1,19 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import { coupons } from '../cart/db/schema.js';
-import { DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
+import { deliveryEvents, DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
 import { PaymentsService } from '../payments/index.js';
 import { orderCancelRequests, orders } from './db/schema.js';
-import { COMPENSATION_VALID_DAYS, compensationCoupon, deservesCompensation, LATE_IMMEDIATE_CANCEL_STATUSES, LATE_TRACKED_STATUSES, lateStateOf, type CompensationKind } from './domain/late.js';
+import { COMPENSATION_VALID_DAYS, compensationCoupon, CUSTOMER_FAULT_REASONS, deservesCompensation, LATE_IMMEDIATE_CANCEL_STATUSES, LATE_TRACKED_STATUSES, lateStateOf, type CompensationKind } from './domain/late.js';
 import { OrderEventBus, type OrderEvent } from './order-events.bus.js';
 import { OrdersService, type CancelRequestView } from './orders.service.js';
 
 export const LATE_CANCEL_REASON = 'Atraso na entrega';
+const SUPERSEDED_NOTE = 'Encerrado: o pedido já mudou de estado antes da resposta';
 const SYSTEM_CTX: RequestContext = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -112,28 +113,42 @@ export class LateDeliveryService implements DeliveryListener, OnModuleInit, OnAp
     return this.decide(orderId, input.action === 'accept' ? 'approved' : 'refused', input.note ?? null, ctx.principal ? 'admin' : 'system', ctx);
   }
 
+  /**
+   * SEC-175: tudo sob trava (pedido, pedido de cancelamento e corrida, na ordem global PEDIDO -> CORRIDA). Só decide se o pedido e a
+   * corrida AINDA estão em `out_for_delivery`; se um deles já mudou (entregue, não entregue, cancelado), o pedido de cancelamento vira
+   * `superseded` e nada é aceito nem avisado (no-op idempotente). O aceite e a transição da corrida ocorrem na MESMA transação: se a
+   * corrida não puder mudar, nada é aceito e o pedido fica `pending` para a varredura repetir.
+   */
   private async decide(orderId: string, decision: 'approved' | 'refused', note: string | null, by: 'admin' | 'system', ctx: RequestContext): Promise<CancelRequestView> {
     let order: typeof orders.$inferSelect | undefined;
-    let delivery: Delivery | null = null;
+    let superseded = false;
+    let afterAct: (() => Promise<void>) | null = null;
     const noteText = note?.slice(0, 200) ?? (decision === 'refused' ? 'Chegamos em até 10 minutos' : null);
     await this.db.transaction(async (tx) => {
       [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
       if (!order) throw errors.notFound('Pedido não encontrado.');
       const [request] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'late'), eq(orderCancelRequests.status, 'pending'))).for('update');
       if (!request) throw errors.conflict('NO_CANCEL_REQUEST', 'Não há pedido de cancelamento por atraso', 'O cliente não pediu o cancelamento, ou ele já foi respondido.');
+      const delivery = await this.deliveries.forOrder(orderId, tx, true);
+      if (order.status !== 'out_for_delivery' || !delivery || delivery.status !== 'out_for_delivery') {
+        superseded = true;
+        await tx.update(orderCancelRequests).set({ status: 'superseded', decidedAt: new Date(), decidedBy: by, decisionNote: SUPERSEDED_NOTE }).where(eq(orderCancelRequests.id, request.id));
+        await this.audit.record(tx, ctx, { action: 'order.late_cancel_superseded', targetType: 'order', targetId: orderId, after: { decidedBy: by, orderStatus: order.status, deliveryStatus: delivery?.status ?? null } });
+        return;
+      }
       await tx.update(orderCancelRequests).set({ status: decision, decidedAt: new Date(), decidedBy: by, decisionNote: noteText }).where(eq(orderCancelRequests.id, request.id));
       await this.audit.record(tx, ctx, { action: `order.late_cancel_${decision === 'approved' ? 'accepted' : 'answered'}`, targetType: 'order', targetId: orderId, after: { decidedBy: by, note: noteText } });
-      if (decision === 'approved') delivery = await this.deliveries.forOrder(orderId, tx);
+      // A corrida segue o fluxo existente: "não entregue" -> devolução à loja -> a loja confirma -> pedido cancelado e estorno total (SEC-143).
+      if (decision === 'approved') {
+        const moved = await this.deliveries.actInTx(tx, delivery.id, 'not_delivered', { failReason: 'other', reason: 'Cancelamento por atraso aceito: devolver à loja' }, ctx);
+        afterAct = moved.after;
+      }
     });
     const current = order as unknown as typeof orders.$inferSelect;
-    if (decision === 'approved') {
-      const d = delivery as Delivery | null;
-      // A corrida segue o fluxo existente: "não entregue" -> devolução à loja -> a loja confirma -> pedido cancelado e estorno total (SEC-143).
-      if (d && d.status === 'out_for_delivery') {
-        await this.deliveries.act(d.id, 'not_delivered', { failReason: 'other', reason: 'Cancelamento por atraso aceito: devolver à loja' }, ctx);
-      }
+    if (!superseded) {
+      if (afterAct) await (afterAct as () => Promise<void>)();
+      await this.bus.emit({ orderId, number: current.number, userId: current.userId, storeId: current.storeId, from: current.status, to: current.status, actor: by, reason: decision === 'approved' ? 'Cancelamento por atraso aceito' : noteText, at: new Date() }).catch(() => undefined);
     }
-    await this.bus.emit({ orderId, number: current.number, userId: current.userId, storeId: current.storeId, from: current.status, to: current.status, actor: by, reason: decision === 'approved' ? 'Cancelamento por atraso aceito' : noteText, at: new Date() }).catch(() => undefined);
     return (await this.orders.lateCancelRequestOf(orderId))!;
   }
 
@@ -182,12 +197,31 @@ export class LateDeliveryService implements DeliveryListener, OnModuleInit, OnAp
 
   /** Na mesma transação da entrega concluída: cria o cupom pessoal se passou do fim da faixa + tolerância. Um por pedido. */
   async onDeliveryChange(tx: Tx, delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
-    if (to !== 'delivered' || delivery.kind !== 'delivery') return;
+    if (delivery.kind !== 'delivery') return;
+    // SEC-175: a corrida terminou (ou falhou) com um pedido de cancelamento por atraso ainda sem resposta: ele perde o objeto e é encerrado
+    // aqui, na mesma transação (o pedido já está travado por quem muda a corrida), para que o aceite automático nunca "aceite" depois.
+    if (to === 'delivered' || to === 'not_delivered' || to === 'cancelled' || to === 'returned_to_store') {
+      await tx
+        .update(orderCancelRequests)
+        .set({ status: 'superseded', decidedAt: new Date(), decidedBy: 'system', decisionNote: SUPERSEDED_NOTE })
+        .where(and(eq(orderCancelRequests.orderId, delivery.orderId), eq(orderCancelRequests.kind, 'late'), eq(orderCancelRequests.status, 'pending')));
+    }
+    if (to !== 'delivered') return;
     const [order] = await tx.select().from(orders).where(eq(orders.id, delivery.orderId));
     if (!order) return;
     const [tolerance, kind, valueCents] = await Promise.all([this.params.getNumber('entrega_atraso_tolerancia_min'), this.params.get('entrega_compensacao_tipo'), this.params.getNumber('entrega_compensacao_cents')]);
     const now = new Date();
     if (!deservesCompensation(order, now, tolerance)) return;
+    // SEC-177: o atraso foi causado pelo cliente/endereço (ausente, endereço não encontrado, recusou) se a corrida já falhou por um desses motivos.
+    const [fault] = await tx
+      .select({ reason: sql<string>`${deliveryEvents.meta} ->> 'failReason'` })
+      .from(deliveryEvents)
+      .where(and(eq(deliveryEvents.deliveryId, delivery.id), eq(deliveryEvents.toStatus, 'not_delivered'), sql`${deliveryEvents.meta} ->> 'failReason' in (${sql.join(CUSTOMER_FAULT_REASONS.map((r) => sql`${r}`), sql`, `)})`))
+      .limit(1);
+    if (fault) {
+      await tx.insert(deliveryEvents).values({ deliveryId: delivery.id, fromStatus: 'delivered', toStatus: 'delivered', action: 'compensation_skipped', actorId: null, actorRole: 'system', meta: { cause: fault.reason } });
+      return;
+    }
     const spec = compensationCoupon(String(kind) as CompensationKind, valueCents);
     if (!spec) return;
     const [created] = await tx

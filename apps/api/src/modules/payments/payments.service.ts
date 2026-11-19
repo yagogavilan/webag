@@ -917,14 +917,19 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     await this.alert(attemptId, kind, details);
   }
 
-  private async alert(attemptId: string | null, kind: string, details: Record<string, unknown>): Promise<void> {
+  /** Mesmo alerta, na transação de quem chama (o alerta nasce junto com o fato, ou não nasce). */
+  async raiseAlertIn(tx: Tx, kind: string, details: Record<string, unknown>): Promise<void> {
+    await this.alert(null, kind, details, tx);
+  }
+
+  private async alert(attemptId: string | null, kind: string, details: Record<string, unknown>, exec: Db | Tx = this.db): Promise<void> {
     // Não duplica o mesmo alerta aberto da mesma tentativa e tipo.
-    const [open] = await this.db
+    const [open] = await exec
       .select({ id: paymentAlerts.id })
       .from(paymentAlerts)
       .where(and(attemptId ? eq(paymentAlerts.attemptId, attemptId) : isNull(paymentAlerts.attemptId), eq(paymentAlerts.kind, kind), isNull(paymentAlerts.resolvedAt), sql`${paymentAlerts.details} = ${JSON.stringify(details)}::jsonb`));
     if (open) return;
-    await this.db.insert(paymentAlerts).values({ attemptId, kind, details });
+    await exec.insert(paymentAlerts).values({ attemptId, kind, details });
     this.logger.warn(`alerta de pagamento: ${kind}`);
   }
 

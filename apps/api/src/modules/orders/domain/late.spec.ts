@@ -1,4 +1,4 @@
-import { compensationCoupon, deservesCompensation, lateStateOf } from './late.js';
+import { compensationCoupon, deservesCompensation, isCustomerFault, lateStateOf } from './late.js';
 
 const end = new Date('2026-11-19T16:00:00Z');
 const at = (min: number) => new Date(end.getTime() + min * 60_000);
@@ -30,5 +30,9 @@ describe('atraso da entrega (RN-19 item 4)', () => {
     expect(compensationCoupon('cupom_valor', 1000)).toEqual({ kind: 'fixed', value: 1000 });
     expect(compensationCoupon('cupom_valor', 0)).toBeNull();
     expect(compensationCoupon('nenhuma', 1000)).toBeNull();
+  });
+  it('SEC-177: ausente, endereço não encontrado e recusa são do cliente; o resto não', () => {
+    for (const r of ['customer_absent', 'address_not_found', 'customer_refused']) expect(isCustomerFault(r)).toBe(true);
+    for (const r of ['store_fault', 'safety_risk', 'other', '', null, undefined]) expect(isCustomerFault(r)).toBe(false);
   });
 });

@@ -70,10 +70,21 @@ export function storeOrderNotice(e: OrderEvent): Notice | null {
 
 const exchangeWord: Record<string, string> = { withdrawal: 'desistência', defect: 'troca por defeito', size_color: 'troca por tamanho ou cor' };
 
+/** `DD/MM` no fuso de São Paulo (UTC-3, sem horário de verão). */
+function formatDayBr(date: Date): string {
+  const local = new Date(date.getTime() - 3 * 3_600_000).toISOString();
+  return `${local.slice(8, 10)}/${local.slice(5, 7)}`;
+}
+
 export function customerExchangeNotice(e: ExchangeEvent): Notice | null {
   const data = { type: 'exchange', exchangeId: e.exchangeId, orderId: e.orderId };
   const what = exchangeWord[e.type] ?? 'troca';
   const reason = e.reason ? ` ${e.reason}.` : '';
+  if (e.notice === 'collection_late') {
+    // WB-241 C7: coleta atrasada; texto neutro (sem admitir culpa) e com o novo prazo. Data no fuso de São Paulo.
+    const until = e.newDeadlineAt ? ` Nova previsão: até ${formatDayBr(e.newDeadlineAt)}.` : '';
+    return { push: { title: 'A coleta da sua troca atrasou', body: `A coleta da troca ${e.number} está levando mais tempo que o previsto.${until} Já estamos cuidando disso.`, data } };
+  }
   switch (e.to) {
     case 'requested':
       // Confirmação imediata do pedido de desistência com protocolo (Decreto 7.962/2013, WB-178 C7).
