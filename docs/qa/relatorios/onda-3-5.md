@@ -35,8 +35,8 @@ Ambiente: Node 22.23, Postgres 16 e Redis locais iniciados por mim; bancos `weba
 |---|---|
 | API unit (`vitest run`) | 30 arquivos, 257 testes, todos OK |
 | API `tsc --noEmit` e `eslint .` | OK (inclui os testes novos) |
-| API e2e, linha de base (51 arquivos, antes dos meus) | 495 passaram, 1 falhou (`seed-onda3` banners: 2 em vez de 3; passa sozinho e em par com `banners`; ver BUG-019), 1 ignorado, 204 s |
-| API e2e completa com os meus 5 arquivos | ver §2.1 |
+| API e2e, linha de base (51 arquivos, antes dos meus) | 495 passaram, 1 falhou (`seed-onda3` banners: 2 em vez de 3; passa sozinho e em par com `banners`; BUG-019b), 1 ignorado, 204 s |
+| API e2e completa com os meus 5 arquivos (execução final, 03:31 UTC, 62 arquivos) | 563 passaram, 8 "falham como esperado" (`it.fails` dos bugs abertos), 1 ignorado, **3 falhas fora das ondas 3 a 5**: `seed-orders` (BUG-019c, passa sozinho) e 2 em `marketing-push` (Onda 6 do backend em andamento: o working tree tem mudanças não commitadas dele e o teste commitado já não bate), 237 s. `logistics-report` passou depois das 03:30 UTC (confirma BUG-019a) |
 | Web: vitest | 51 arquivos, 430 testes, OK |
 | Web: Playwright com API falsa (`apps/web/e2e`, PW_CHANNEL=chrome) | 19 de 19 OK (49 s) |
 | **Web: Playwright contra a API REAL (spec novo `e2e-real/04-pedido-entrega-troca`)** | **3 de 3 OK (45 s)**: lojista aceita e marca pronto na tela, operação atribui o motoboy na tela Logística e fecha a entrega com o código do cliente, loja aprova a troca |
@@ -157,7 +157,7 @@ Arquivos: OLG order-logistics, LOG logistics, LRP logistics-report, S143 sec143-
 | BUG-018 | Média | P3 | "Mais vendidos" fixo em vazio | Não |
 | BUG-019 | Baixa | P3 | Testes frágeis por horário e ordem (ver abaixo) | Não |
 
-BUG-019: (a) `logistics-report.e2e-spec.ts` falha nos primeiros 30 minutos depois da meia-noite de Brasília (cria a corrida "pronta há 30 min" e filtra pelo dia civil de hoje; reproduzido às 00:01 BRT, com 3 falhas; deve passar fora dessa janela); (b) `seed-onda3` conta TODOS os banners do banco compartilhado e falhou 1 de 2 execuções completas (passa sozinho): depende da ordem dos arquivos. Sugestão: relógio injetado e filtro por dados do próprio teste. Não é defeito de produto.
+BUG-019 (`docs/qa/bugs/BUG-019.md`): (a) `logistics-report.e2e-spec.ts` falha nos primeiros 30 minutos depois da meia-noite de Brasília (cria a corrida "pronta há 30 min" e filtra pelo dia civil de hoje; reproduzido às 00:01 BRT, com 3 falhas; deve passar fora dessa janela); (b) `seed-onda3` conta TODOS os banners do banco compartilhado e falhou 1 de 2 execuções completas (passa sozinho): depende da ordem dos arquivos; (c) `seed-orders` casa `WB-DM%` e um pedido comum de número aleatório `WB-DM8RG` o derrubou (chance de ~1 em 4 por execução). Sugestão: relógio injetado e filtro por dados do próprio teste. Não é defeito de produto.
 
 ## 7. Verificação dos achados de segurança (SEC como critério)
 
