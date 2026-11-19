@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ExchangeEvent } from '../../exchanges/exchange-events.bus.js';
 import type { OrderEvent } from '../../orders/order-events.bus.js';
-import { customerExchangeNotice, customerOrderNotice, storeExchangeNotice, storeOrderNotice } from './catalog.js';
+import { customerExchangeNotice, customerOrderNotice, storeExchangeNotice, storeOrderEmail, storeOrderNotice, type StoreOrderEmailContext } from './catalog.js';
 
 const order = (over: Partial<OrderEvent>): OrderEvent => ({ orderId: 'o1', number: 'WB-ABCDE', userId: 'u1', storeId: 's1', from: 'awaiting_payment', to: 'received', actor: 'system', reason: null, at: new Date(), ...over });
 const exchange = (over: Partial<ExchangeEvent>): ExchangeEvent => ({ exchangeId: 'x1', number: 'TR-ABCDE', orderId: 'o1', userId: 'u1', storeId: 's1', type: 'size_color', from: null, to: 'requested', actor: 'customer', reason: null, at: new Date(), ...over });
@@ -42,5 +42,34 @@ describe('catálogo de notificações', () => {
     expect(notice?.push?.body).toContain('TR-ABCDE');
     expect(notice?.push?.body).toContain('até 02/12'); // 23:30 do dia 02 em São Paulo
     expect(notice?.push?.body).not.toMatch(/culpa|erro nosso/i);
+  });
+});
+
+describe('e-mail de pedido novo à loja (B2)', () => {
+  const base: StoreOrderEmailContext = {
+    kind: 'new',
+    number: 'WB-ABCDE',
+    mode: 'delivery',
+    storeName: 'Loja do Zé',
+    items: [{ quantity: 2, name: 'Camiseta', attributes: { Tamanho: 'M', Cor: 'Azul' } }, { quantity: 1, name: 'Boné', attributes: {} }],
+    acceptBy: new Date('2026-11-19T17:12:00.000Z'), // 14:12 em Brasília
+    now: new Date('2026-11-19T17:02:30.000Z'),
+    panelUrl: 'https://painel.webag.com.br/lojista/pedidos/abc',
+  };
+  it('pedido novo: número, itens com a variação, prazo em horário de Brasília e o link; sem valor nem dado do cliente', () => {
+    const mail = storeOrderEmail(base);
+    expect(mail.subject).toBe('Novo pedido WB-ABCDE em Loja do Zé: aceite em até 10 min');
+    expect(mail.text).toContain('- 2x Camiseta (M, Azul)');
+    expect(mail.text).toContain('- 1x Boné');
+    expect(mail.text).toContain('Aceite até 14:12 (horário de Brasília), em 10 min');
+    expect(mail.text).toContain('https://painel.webag.com.br/lojista/pedidos/abc');
+    expect(mail.text).not.toMatch(/R\$/);
+  });
+  it('lembrete: assunto "Aceite agora" com os minutos que faltam (nunca negativo); mais de 5 itens viram "e mais N"', () => {
+    const items = Array.from({ length: 6 }, (_, i) => ({ quantity: 1, name: `P${i}`, attributes: {} }));
+    const reminder = storeOrderEmail({ ...base, kind: 'reminder', items, now: new Date('2026-11-19T17:20:00.000Z') });
+    expect(reminder.subject).toBe('Aceite agora: o pedido WB-ABCDE vence em 0 min');
+    expect(reminder.text).toContain('- e mais 1 item');
+    expect(reminder.text).not.toContain('P5');
   });
 });

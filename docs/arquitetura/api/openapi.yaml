@@ -3378,6 +3378,38 @@ paths:
           $ref: "#/components/responses/Forbidden"
         '404':
           $ref: "#/components/responses/NotFound"
+  /v1/stores/{storeId}/notifications:
+    put:
+      tags:
+      - stores
+      operationId: setStoreNotifications
+      summary: "Liga ou desliga o e-mail de pedido novo e de lembrete de aceite da loja (B2, WB-192)"
+      description: |
+        Só o dono (permissão `settings`). Padrão ligado. O e-mail vai ao dono e aos funcionários com a permissão `orders` quando o pagamento do pedido é aprovado e de novo, uma vez, quando falta `loja_aceite_lembrete_min` de espera (antes do cancelamento por `loja_aceite_timeout_min`). Traz número, entrega ou retirada, itens resumidos, prazo de aceite e o link do pedido no painel; não traz nome, endereço ou telefone do cliente nem valores. Desligar só afeta o e-mail: o push do app e o aviso sonoro do painel continuam. Auditado em `GET /v1/stores/{storeId}/activity`.
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreNotificationsRequest"
+      responses:
+        '204':
+          description: Salvo
+        '400':
+          $ref: "#/components/responses/ValidationError"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '403':
+          $ref: "#/components/responses/Forbidden"
+        '404':
+          $ref: "#/components/responses/NotFound"
   /v1/cep/{cep}:
     get:
       tags:
@@ -10287,6 +10319,12 @@ components:
           description: "Ignorado (DEC-037): a taxa de coleta da troca é da tabela do admin por região (`exchangeFeeCents` das faixas), cobrada só depois da aprovação."
         confirmDefault:
           type: boolean
+    StoreNotificationsRequest:
+      type: object
+      additionalProperties: false
+      required: [newOrderEmail]
+      properties:
+        newOrderEmail: { type: boolean }
     LowStockRequest:
       type: object
       additionalProperties: false
@@ -10462,6 +10500,14 @@ components:
                   description: "BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável)."
         lowStockThreshold:
           type: integer
+        notifications:
+          type: object
+          description: "B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo"
+          required: [newOrderEmail]
+          properties:
+            newOrderEmail:
+              type: boolean
+              description: "E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite (\"Aceite agora\"), com o painel fechado. Sem dado do cliente e sem valor em R$"
     CepResult:
       type: object
       required:

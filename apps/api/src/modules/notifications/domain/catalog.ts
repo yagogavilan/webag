@@ -68,6 +68,74 @@ export function storeOrderNotice(e: OrderEvent): Notice | null {
   return { push: { title: 'Novo pedido', body: `Pedido ${e.number} pago. Aceite em poucos minutos.`, data: { type: 'store_order', orderId: e.orderId, storeId: e.storeId } } };
 }
 
+export interface StoreOrderEmailContext {
+  kind: 'new' | 'reminder';
+  number: string;
+  mode: 'delivery' | 'pickup';
+  storeName: string;
+  items: { quantity: number; name: string; attributes: Record<string, string> }[];
+  /** Fim do prazo de aceite (`acceptDeadlineAt`). */
+  acceptBy: Date;
+  now: Date;
+  /** Link do pedido no painel do lojista. */
+  panelUrl: string;
+}
+
+const MAX_EMAIL_ITEMS = 5;
+
+/** `HH:MM` no fuso de São Paulo (UTC-3, sem horário de verão desde 2019). */
+function formatClockBr(date: Date): string {
+  return new Date(date.getTime() - 3 * 3_600_000).toISOString().slice(11, 16);
+}
+
+/**
+ * B2 / WB-192 C2 e C3 (DEC-073): e-mail ao lojista com o painel fechado. Só o que a loja precisa para decidir: número, entrega ou retirada, itens
+ * resumidos, prazo de aceite e o link do painel. NADA do cliente (nome, endereço, telefone) e nenhum valor em R$ (o funcionário sem a permissão
+ * `sales_values` não vê preços; o e-mail iria além do painel). Sem emoji.
+ */
+export function storeOrderEmail(c: StoreOrderEmailContext): { subject: string; text: string } {
+  const minutesLeft = Math.max(0, Math.ceil((c.acceptBy.getTime() - c.now.getTime()) / 60_000));
+  const lines = c.items.slice(0, MAX_EMAIL_ITEMS).map((i) => {
+    const variation = Object.values(i.attributes).filter(Boolean).join(', ');
+    return `- ${i.quantity}x ${i.name}${variation ? ` (${variation})` : ''}`;
+  });
+  const hidden = c.items.length - MAX_EMAIL_ITEMS;
+  if (hidden > 0) lines.push(`- e mais ${hidden} ${hidden === 1 ? 'item' : 'itens'}`);
+  const mode = c.mode === 'delivery' ? 'Entrega pela Webag' : 'Retirada na loja';
+  const deadline = `Aceite até ${formatClockBr(c.acceptBy)} (horário de Brasília)`;
+  const footer = 'Para parar de receber este e-mail, desligue o aviso de pedido por e-mail em Minha loja, nas configurações do painel.';
+  if (c.kind === 'new') {
+    return {
+      subject: `Novo pedido ${c.number} em ${c.storeName}: aceite em até ${minutesLeft} min`,
+      text: [
+        `Novo pedido pago em ${c.storeName}.`,
+        '',
+        `Pedido ${c.number} (${mode})`,
+        ...lines,
+        '',
+        `${deadline}, em ${minutesLeft} min. Sem resposta até lá o pedido é cancelado e o cliente é estornado.`,
+        '',
+        `Abrir o pedido no painel: ${c.panelUrl}`,
+        '',
+        footer,
+      ].join('\n'),
+    };
+  }
+  return {
+    subject: `Aceite agora: o pedido ${c.number} vence em ${minutesLeft} min`,
+    text: [
+      `O pedido ${c.number} de ${c.storeName} ainda não foi aceito.`,
+      '',
+      `${deadline}: faltam ${minutesLeft} min. Depois disso o pedido é cancelado e o cliente é estornado.`,
+      ...lines,
+      '',
+      `Aceitar ou recusar agora: ${c.panelUrl}`,
+      '',
+      footer,
+    ].join('\n'),
+  };
+}
+
 const exchangeWord: Record<string, string> = { withdrawal: 'desistência', defect: 'troca por defeito', size_color: 'troca por tamanho ou cor' };
 
 /** `DD/MM` no fuso de São Paulo (UTC-3, sem horário de verão). */

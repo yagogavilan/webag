@@ -22,6 +22,7 @@ import {
   inviteStaffSchema,
   lowStockSchema,
   memberPermissionsSchema,
+  notificationsSchema,
   pauseSchema,
   pickupSchema,
   previewSchema,
@@ -236,6 +237,14 @@ export class StoresController {
   @Put('stores/:storeId/exchange-policy')
   async exchange(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Body(new ZodPipe(exchangePolicySchema)) body: In<typeof exchangePolicySchema>): Promise<void> {
     await this.settings.setExchangePolicy(await this.stores.getStore(uuidParam(storeId)), body, this.owner(principal), ctx);
+  }
+
+  /** B2 / WB-192: o dono liga ou desliga o e-mail de pedido novo e de lembrete de aceite da loja (padrão ligado). Só o dono (`settings`). */
+  @StorePermission('settings')
+  @HttpCode(204)
+  @Put('stores/:storeId/notifications')
+  async notifications(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Body(new ZodPipe(notificationsSchema)) body: In<typeof notificationsSchema>): Promise<void> {
+    await this.settings.setNotifications(await this.stores.getStore(uuidParam(storeId)), body.newOrderEmail, this.owner(principal), ctx);
   }
 
   @StorePermission('settings')

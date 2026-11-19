@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
-import { useKeepAwake } from 'expo-keep-awake';
+import { useSafeKeepAwake } from '../../../src/lib/keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, BackHandler, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { Banner } from '../../../src/components/Banner';
 import { Button } from '../../../src/components/Button';
 import { Dialog } from '../../../src/components/Dialog';
@@ -48,7 +48,7 @@ export default function PixScreen() {
   const reduced = useReducedMotion();
   const client = useQueryClient();
   const cartParams = useCartParams();
-  useKeepAwake();
+  useSafeKeepAwake();
 
   const { connected } = useInvalidateOnEvent(id);
   const order = useOrder(id, { connected });
@@ -103,6 +103,7 @@ export default function PixScreen() {
   }, [paid, expired, cancelled, router]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return; // o navegador não tem botão voltar do sistema (a lib avisa no console)
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       askLeave();
       return true;

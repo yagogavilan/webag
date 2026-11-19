@@ -126,6 +126,8 @@ export const exchangePolicySchema = z.strictObject({
   confirmDefault: z.boolean().optional(),
 });
 
+/** B2 / WB-192: liga/desliga por loja do e-mail de pedido novo e de lembrete de aceite. */
+export const notificationsSchema = z.strictObject({ newOrderEmail: z.boolean() });
 export const lowStockSchema = z.strictObject({ threshold: z.number().int().min(0).max(100).nullable() });
 
 export const previewSchema = z.strictObject({

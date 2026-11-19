@@ -123,6 +123,8 @@ export const storeSettings = pgTable('store_settings', {
   lowStockThreshold: integer(),
   pausedUntil: timestamp({ withTimezone: true }),
   pausedIndefinitely: boolean().notNull().default(false),
+  /** B2 / WB-192: e-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite, com o painel fechado. Liga por padrão: sem ele o lojista perde pedido por timeout. */
+  notifyNewOrderEmail: boolean().notNull().default(true),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 

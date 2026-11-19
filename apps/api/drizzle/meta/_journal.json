@@ -365,6 +365,13 @@
       "when": 1795122040631,
       "tag": "0051_wb121_maintenance_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795122288373,
+      "tag": "0052_b2_store_order_email",
+      "breakpoints": true
     }
   ]
 }

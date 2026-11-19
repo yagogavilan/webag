@@ -3240,7 +3240,10 @@ export const CreateStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -3353,7 +3356,10 @@ export const ListMyStoresResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })),
   "nextCursor": zod.string().nullable()
@@ -3471,7 +3477,10 @@ export const GetStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -3628,7 +3637,10 @@ export const UpdateStoreProfileResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -3803,7 +3815,10 @@ export const SubmitStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -3875,7 +3890,10 @@ export const GetStoreSettingsResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 })
 
 
@@ -4092,6 +4110,21 @@ export const SetStoreLowStockBody = zod.object({
 })
 
 export const SetStoreLowStockResponse = zod.void()
+
+
+/**
+ * Só o dono (permissão `settings`). Padrão ligado. O e-mail vai ao dono e aos funcionários com a permissão `orders` quando o pagamento do pedido é aprovado e de novo, uma vez, quando falta `loja_aceite_lembrete_min` de espera (antes do cancelamento por `loja_aceite_timeout_min`). Traz número, entrega ou retirada, itens resumidos, prazo de aceite e o link do pedido no painel; não traz nome, endereço ou telefone do cliente nem valores. Desligar só afeta o e-mail: o push do app e o aviso sonoro do painel continuam. Auditado em `GET /v1/stores/{storeId}/activity`.
+ * @summary Liga ou desliga o e-mail de pedido novo e de lembrete de aceite da loja (B2, WB-192)
+ */
+export const SetStoreNotificationsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const SetStoreNotificationsBody = zod.object({
+  "newOrderEmail": zod.boolean()
+})
+
+export const SetStoreNotificationsResponse = zod.void()
 
 
 /**
@@ -4480,7 +4513,10 @@ export const GetAdminStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 }),
   "owner": zod.object({
@@ -4567,7 +4603,10 @@ export const GetAdminStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 })
 })
 
@@ -4730,7 +4769,10 @@ export const EditAdminStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -4866,7 +4908,10 @@ export const ApproveStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -4982,7 +5027,10 @@ export const ReactivateStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -5112,7 +5160,10 @@ export const RequestStoreCorrectionResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -5237,7 +5288,10 @@ export const RejectStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -5362,7 +5416,10 @@ export const SuspendStoreResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 
@@ -5524,7 +5581,10 @@ export const DecideStoreDataReviewResponse = zod.object({
   "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
 })
 }),
-  "lowStockThreshold": zod.int()
+  "lowStockThreshold": zod.int(),
+  "notifications": zod.object({
+  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
+}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
 

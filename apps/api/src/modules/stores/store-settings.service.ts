@@ -120,6 +120,8 @@ export class StoreSettingsService {
         legalFloor: { withdrawalDays: await this.params.getNumber('troca_arrependimento_dias'), defectDays: await this.params.getNumber('troca_defeito_dias'), defectDurableDays: await this.params.getNumber('troca_defeito_duravel_dias') },
       },
       lowStockThreshold: settings.lowStockThreshold ?? lowDefault,
+      /** B2: e-mail de pedido novo e de lembrete de aceite (padrão ligado). */
+      notifications: { newOrderEmail: settings.notifyNewOrderEmail },
     };
   }
 
@@ -266,6 +268,16 @@ export class StoreSettingsService {
   async lowStockThresholdFor(storeId: string): Promise<number> {
     const settings = await this.stores.getSettings(storeId);
     return settings.lowStockThreshold ?? (await this.params.getNumber('estoque_baixo_un'));
+  }
+
+  /** B2: preferência mínima de e-mail da loja (liga/desliga). Auditada como as demais configurações (quem, quando, antes e depois). */
+  async setNotifications(store: Store, newOrderEmail: boolean, actor: Actor, ctx: RequestContext): Promise<void> {
+    this.assertEditable(store, actor);
+    await this.db.transaction(async (tx) => {
+      const [before] = await tx.select({ on: storeSettings.notifyNewOrderEmail }).from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
+      await tx.update(storeSettings).set({ notifyNewOrderEmail: newOrderEmail, updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
+      await this.record(tx, store, actor, ctx, 'notifications', { newOrderEmail: before?.on ?? true }, { newOrderEmail });
+    });
   }
 
   async setLowStockThreshold(store: Store, threshold: number | null, actor: Actor, ctx: RequestContext): Promise<void> {

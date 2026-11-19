@@ -73,6 +73,8 @@ export const orders = pgTable(
     lateNotifiedAt: timestamp({ withTimezone: true }),
     /** BUG-017: lembrete à loja de pedido sem aceite (`loja_aceite_lembrete_min`); nulo = ainda não lembrou. */
     acceptRemindedAt: timestamp({ withTimezone: true }),
+    /** B2: o e-mail de pedido novo à loja saiu; reivindicação atômica (nulo = ainda não), para um pedido nunca avisar duas vezes. */
+    storeNotifiedAt: timestamp({ withTimezone: true }),
     /** BUG-014: aviso ao cliente 24 h antes de a retirada vencer; nulo = ainda não avisou. */
     pickupRemindedAt: timestamp({ withTimezone: true }),
     /** BUG-020 (RN-07): primeiro "não recebi" do cliente. Enquanto preenchido, a auto-conclusão de 24 h não fecha a corrida: a operação decide. */

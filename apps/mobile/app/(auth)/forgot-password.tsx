@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { BackHandler } from 'react-native';
+import { BackHandler, Platform } from 'react-native';
 import { requestPasswordCode, resetPasswordWithCode } from '../../src/api/auth-api';
 import { ApiError } from '../../src/api/problem';
 import { Banner } from '../../src/components/Banner';
@@ -41,7 +41,7 @@ export default function ForgotPasswordScreen() {
 
   // voltar do sistema (Android) desce uma vista antes de sair da rota
   useEffect(() => {
-    if (step === 1) return;
+    if (step === 1 || Platform.OS === 'web') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       setStep((s) => (s === 3 ? 2 : 1));
       return true;

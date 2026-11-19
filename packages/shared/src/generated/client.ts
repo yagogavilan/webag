@@ -1748,6 +1748,14 @@ export type StoreSettingsExchangePolicy = {
   legalFloor: StoreSettingsExchangePolicyLegalFloor;
 };
 
+/**
+ * B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo
+ */
+export type StoreSettingsNotifications = {
+  /** E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$ */
+  newOrderEmail: boolean;
+};
+
 export interface StoreSettings {
   isOpenNow: boolean;
   hours: StoreSettingsHoursItem[];
@@ -1758,6 +1766,8 @@ export interface StoreSettings {
   pickup: StoreSettingsPickup;
   exchangePolicy: StoreSettingsExchangePolicy;
   lowStockThreshold: number;
+  /** B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo */
+  notifications?: StoreSettingsNotifications;
 }
 
 export interface Store {
@@ -2014,6 +2024,10 @@ export interface ExchangePolicyRequest {
      */
   collectionFeeCents?: number;
   confirmDefault?: boolean;
+}
+
+export interface StoreNotificationsRequest {
+  newOrderEmail: boolean;
 }
 
 export interface LowStockRequest {
@@ -15530,6 +15544,66 @@ export const setStoreLowStock = async (storeId: string,
     method: 'PUT',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(lowStockRequest)
+  }
+);}
+
+
+
+export type setStoreNotificationsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type setStoreNotificationsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setStoreNotificationsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setStoreNotificationsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setStoreNotificationsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setStoreNotificationsResponseSuccess = (setStoreNotificationsResponse204) & {
+  headers: Headers;
+};
+export type setStoreNotificationsResponseError = (setStoreNotificationsResponse400 | setStoreNotificationsResponse401 | setStoreNotificationsResponse403 | setStoreNotificationsResponse404) & {
+  headers: Headers;
+};
+
+export type setStoreNotificationsResponse = (setStoreNotificationsResponseSuccess | setStoreNotificationsResponseError)
+
+export const getSetStoreNotificationsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/notifications`
+}
+
+/**
+ * Só o dono (permissão `settings`). Padrão ligado. O e-mail vai ao dono e aos funcionários com a permissão `orders` quando o pagamento do pedido é aprovado e de novo, uma vez, quando falta `loja_aceite_lembrete_min` de espera (antes do cancelamento por `loja_aceite_timeout_min`). Traz número, entrega ou retirada, itens resumidos, prazo de aceite e o link do pedido no painel; não traz nome, endereço ou telefone do cliente nem valores. Desligar só afeta o e-mail: o push do app e o aviso sonoro do painel continuam. Auditado em `GET /v1/stores/{storeId}/activity`.
+ * @summary Liga ou desliga o e-mail de pedido novo e de lembrete de aceite da loja (B2, WB-192)
+ */
+export const setStoreNotifications = async (storeId: string,
+    storeNotificationsRequest: StoreNotificationsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setStoreNotificationsResponse> => {
+
+  return apiFetch<setStoreNotificationsResponse>(getSetStoreNotificationsUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(storeNotificationsRequest)
   }
 );}
 
