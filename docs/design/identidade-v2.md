@@ -209,3 +209,15 @@ Apps: trocar fundo do splash e do ícone adaptativo no `app.config.ts` para `tok
 - **PO:** copy de banner e manchete `hero` (DEC-040a: sem mensagem regional).
 - **QA/Tech Lead:** rodar `pnpm --filter @webag/tokens build`, `check` e `typecheck`; abrir os SVGs; aparelho de referência para medir as linhas animadas.
 - **Teste com moradores [HIPÓTESE]:** 5 segundos, "parece confiável? parece moderno? parece com qual app?" (cuidado com Nubank), v1 contra v2.
+
+## 10. Ajustes feitos no protótipo HTML v2 (2026-11-19, `docs/prototipo/app-cliente.html`)
+
+| Ajuste | Por quê |
+|---|---|
+| Sobre `brand.500` só existe texto Fredoka 700 de 20 px ou mais (manchetes, ETA, número do pedido). Endereço e busca ficam em pílula branca dentro da faixa | Branco sobre `500` = 3,88:1: só passa como texto grande |
+| Logo e símbolo embutidos são os arquivos atuais de `docs/design/logo/` (v3, "Sacola Veloz", SVG sólido sem máscara), sempre em branco sobre magenta; ilustrações de estado usam o símbolo em `brand.200`. A cor `#C02EF0` do v3 **não** foi aplicada: tokens seguem `#C44DD9` até o fundador aprovar o v3 | Trocar logo é regerar 3 funções (`symSvg`, `logoW`, `WORDMARK`) |
+| Tiles de categoria: moda lilás, calçados pêssego, beleza rosa, eletrônicos céu, casa manteiga, papelaria menta, pet lilás (7 categorias, 6 slots) | Só 1 repetição, nas pontas |
+| Sol `#FFC93C` só no selo "% off" e no selo "Oferta" do banner | Regra do ≤ 3% e texto escuro |
+| Troca: sem selo na lista, sem filtro na busca, sem banner; só uma linha discreta no produto, "Trocas e devoluções" na loja e a ação no pedido entregue | DEC-040a e `posicionamento.md` §7 |
+| PIX: contador em Figtree com barra linear fina que esvazia (plano B do anel de `direcao-visual-v2` P7); sem linhas de velocidade na zona Dinheiro | Fps desconhecido em Android de entrada |
+| Abertura: `?nosplash` na URL pula o splash (≤ 1 s); com "reduzir movimento" nenhuma animação roda | Testes automatizados e a11y |

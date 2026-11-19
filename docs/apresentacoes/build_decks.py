@@ -2,7 +2,7 @@
 """Gera cliente.html e lojista.html (apresentações v2). Rode: python3 build_decks.py, depois o render de PDF."""
 import html
 
-LOGO = '<div class="logo"><img src="../design/assets/webag-simbolo.svg" alt="">webag</div>'
+LOGO = '<div class="logo"><img src="../design/logo/webag-logo-branca.svg" alt="Webag"></div>'
 
 
 def phone(name, h=520, extra=''):
@@ -236,13 +236,12 @@ l.append(slide('brand', f'''
     <div class="split-txt">
       <div class="kicker">Quanto você recebe</div>
       <h2>Sem mensalidade. Uma comissão só quando vende.</h2>
-      <p class="lead" style="font-size:21px">Um percentual de cada venda pelo app, combinado com cada loja. Cadastre o preço já considerando a comissão.</p>
+      <p class="lead" style="font-size:21px">Um percentual de cada venda pelo app, combinado com cada loja. Cadastre o preço já considerando a comissão. Exemplo com 15%, combinado no cadastro.</p>
       <div class="calc dark-calc">
         <div class="cr"><span>Produto no app</span><b>R$ 100,00</b></div>
         <div class="cr"><span>Comissão Webag (15%)</span><b>- R$ 15,00</b></div>
         <div class="cr res"><span>Você recebe</span><b>R$ 85,00</b></div>
       </div>
-      <p class="note" style="color:#CBE6E6">Exemplo com 15%, combinado no cadastro. O painel mostra o valor estimado antes de publicar.</p>
     </div>
     <div class="split-img">{win('l-financeiro', 560, 'border-color:#fff')}</div>
   </div>''', 7))
