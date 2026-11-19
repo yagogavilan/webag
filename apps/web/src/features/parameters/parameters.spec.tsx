@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, mockFetch, renderPanel } from '../../../test/render';
-import { parseInput, groupOf, formatParamValue } from './catalog';
+import { parseInput, groupOf, formatParamValue, estimateEta, maxReachKm, etaParamsFrom } from './catalog';
 import { ParametersPage } from './parameters-page';
 
 const param = (key: string, value: number | string, over: object = {}) => ({ key, value, default: value, type: 'int', min: 5, max: 60, values: null, description: `Desc ${key}`, ref: 'RN-02', legalFloor: false, updatedAt: null, ...over });
@@ -93,5 +93,49 @@ describe('ParametersPage (AD3)', () => {
     vi.stubGlobal('fetch', mockFetch(() => json(rows)).impl);
     renderPanel(<ParametersPage />, 'operations');
     expect(await screen.findByTestId('no-access')).toBeInTheDocument();
+  });
+});
+
+describe('prazo de entrega (DEC-053)', () => {
+  const eta = [
+    param('entrega_preparo_padrao_min', 20, { min: 5, max: 120 }),
+    param('entrega_despacho_min', 15, { min: 0, max: 60 }),
+    param('entrega_rota_fator_pct', 130, { min: 100, max: 250 }),
+    param('entrega_min_por_km', 6, { type: 'decimal', min: 1, max: 30 }),
+    param('entrega_faixa_min', 15, { min: 0, max: 60 }),
+    param('entrega_max_min', 120, { min: 30, max: 240 }),
+    param('raio_max_km', 15, { min: 1, max: 50 }),
+  ];
+  const cfg = etaParamsFrom(eta as never)!;
+
+  it('agrupa os parâmetros do prazo e usa a unidade certa de minutos por km', () => {
+    expect(groupOf('entrega_min_por_km')).toBe('prazo');
+    expect(groupOf('entrega_max_min')).toBe('prazo');
+    expect(groupOf('entrega_custo_max_cents')).toBe('entrega');
+    expect(formatParamValue('entrega_min_por_km', 6)).toBe('6 min por km');
+  });
+  it('mesma conta da API: 20 + 15 + 5 km x 1,3 x 6 = 74 min, faixa de 59 a 89', () => {
+    const r = estimateEta(cfg, 5);
+    expect(r).toMatchObject({ travelMin: 39, estimateMin: 74, fromMin: 59, toMin: 89, withinCeiling: true });
+    expect(estimateEta(cfg, 12).withinCeiling).toBe(false);
+    expect(estimateEta(cfg, 5, 40).estimateMin).toBe(94);
+    expect(maxReachKm(cfg)).toBe(10.8);
+    expect(etaParamsFrom(eta.slice(0, 3) as never)).toBeNull();
+  });
+  it('o simulador mostra a faixa, o fora da área e avisa quando o raio passa do alcance do teto', async () => {
+    vi.stubGlobal('fetch', mockFetch(() => json(list(eta))).impl);
+    renderPanel(<ParametersPage />);
+    expect(await screen.findByTestId('admin.parametros.eta-band')).toHaveTextContent('de 59 a 89 min');
+    expect(screen.getByTestId('admin.parametros.eta-radius-warning')).toHaveTextContent('15 km');
+    const km = screen.getByTestId('admin.parametros.eta-km');
+    await userEvent.clear(km);
+    await userEvent.type(km, '14');
+    expect(await screen.findByTestId('admin.parametros.eta-outside')).toHaveTextContent('fora da área');
+  });
+  it('sem os parâmetros na API o simulador não aparece', async () => {
+    vi.stubGlobal('fetch', mockFetch(() => json(list([param('pix_expiracao_min', 15)]))).impl);
+    renderPanel(<ParametersPage />);
+    await screen.findByTestId('admin.parametros.param-pix_expiracao_min');
+    expect(screen.queryByTestId('admin.parametros.eta-simulator')).not.toBeInTheDocument();
   });
 });

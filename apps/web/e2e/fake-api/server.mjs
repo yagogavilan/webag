@@ -42,6 +42,7 @@ function addAdmin({ email, name, password, profile, secret }) {
 }
 addAdmin({ email: 'admin@webag.local', name: 'Ana Souza', password: 'Webag-Admin-Dev-2026', profile: 'super_admin', secret: SUPER_SECRET });
 addAdmin({ email: 'operacao@webag.local', name: 'Caio Lima', password: 'Webag-Admin-Dev-2026', profile: 'operations', secret: SUPER_SECRET });
+addAdmin({ email: 'suporte@webag.local', name: 'Sara Dias', password: 'Webag-Admin-Dev-2026', profile: 'support', secret: SUPER_SECRET });
 addAdmin({ email: 'novo@webag.local', name: 'Nina Alves', password: 'Webag-Admin-Dev-2026', profile: 'support', secret: null });
 users.set('lojista', { id: randomUUID(), email: 'lojista@webag.local', name: 'Marcos Silva', password: 'Lojista-Dev-2026', profile: null, active: true, roles: ['customer', 'merchant'], emailVerified: true });
 users.set('customer', { id: randomUUID(), email: 'cliente@webag.local', name: 'Cliente', password: 'Cliente-Dev-2026', profile: null, active: true });
@@ -63,6 +64,13 @@ const ICONS = ['basket', 'shopping-bag', 'storefront', 'pizza', 'hamburger', 'br
 const param = (key, type, def, min, max, description, legalFloor = false, extra = {}) => ({ key, value: def, default: def, type, min: min ?? null, max: max ?? null, values: null, description, ref: 'HIP', legalFloor, updatedAt: null, ...extra });
 const parameters = [
   param('pix_expiracao_min', 'int', 15, 5, 60, 'Validade do PIX (min)'),
+  param('entrega_preparo_padrao_min', 'int', 20, 5, 120, 'ETA: preparo padrão da loja (min); a loja pode definir o seu'),
+  param('entrega_despacho_min', 'int', 15, 0, 60, 'ETA: espera de despacho até o motoboy sair (min)'),
+  param('entrega_rota_fator_pct', 'int', 130, 100, 250, 'ETA: fator de rota sobre a distância em linha reta (130 = 1,30)'),
+  param('entrega_min_por_km', 'decimal', 6, 1, 30, 'ETA: minutos de deslocamento por km de rota'),
+  param('entrega_faixa_min', 'int', 15, 0, 60, 'ETA: folga da faixa para cada lado da estimativa (min)'),
+  param('entrega_max_min', 'int', 120, 30, 240, 'ETA: teto da estimativa; acima disso a loja não entrega para o endereço'),
+  param('raio_max_km', 'int', 15, 1, 50, 'Raio máximo de entrega (km)'),
   param('loja_aceite_timeout_min', 'int', 10, 3, 30, 'Tempo da loja para aceitar o pedido (min)'),
   param('parcelas_max', 'int', 3, 1, 12, 'Máximo de parcelas no cartão'),
   param('pedido_max_cents', 'int', 200000, 10000, null, 'Valor máximo por pedido (centavos)'),
@@ -156,6 +164,8 @@ const PERMS = {
   'stores:documents': ['super_admin', 'operations'],
   'logistics:read': ['super_admin', 'operations', 'finance', 'support'],
   'logistics:write': ['super_admin', 'operations'],
+  'logistics:contact': ['super_admin', 'operations', 'finance', 'support'],
+  'exchanges:mediate': ['super_admin', 'operations'],
 };
 function me(user) {
   return { id: user.id, email: user.email, emailVerified: user.emailVerified ?? true, name: user.name, phone: null, roles: user.roles ?? ['customer'], adminProfile: user.profile && user.active ? user.profile : null, pendingTerms: [] };
@@ -1008,7 +1018,7 @@ const orderDetail = (o) => ({ ...orderSummary(o), acceptedAt: null, customer: { 
 const mineStore = (ctx) => [...stores.values()].find((s) => s.ownerId === ctx.user?.id);
 const deliveryView = (d) => {
   const wait = Math.max(0, Math.floor((Date.now() - Date.parse(d.readyAt)) / 60_000));
-  return { id: d.id, kind: d.kind, orderId: d.orderId, orderNumber: d.orderNumber, storeId: d.storeId, storeName: d.storeName, status: d.status, readyAt: d.readyAt, waitingMinutes: d.status === 'ready_for_collection' ? wait : null, sla: d.status === 'ready_for_collection' ? (wait >= 20 ? 'late' : wait >= 10 ? 'long' : 'ok') : null, courier: d.courier, volumes: d.volumes, note: d.note ?? null, destination: 'Jardim Alvorada, Francisco Morato', fee: money(700), expectedCost: money(600), cost: d.cost ?? null, attempts: 0, failReason: null, whatsappSentAt: d.whatsappSentAt ?? null, codeRequired: false, allowedActions: d.status === 'ready_for_collection' ? ['assign', 'cancel'] : d.status === 'awaiting_courier' ? ['confirm', 'reassign', 'cancel'] : d.status === 'courier_en_route' ? ['picked_up', 'not_delivered', 'cancel'] : d.status === 'out_for_delivery' ? ['delivered', 'not_delivered'] : [], updatedAt: now() };
+  return { id: d.id, kind: d.kind, orderId: d.orderId, orderNumber: d.orderNumber, storeId: d.storeId, storeName: d.storeName, status: d.status, readyAt: d.readyAt, waitingMinutes: d.status === 'ready_for_collection' ? wait : null, sla: d.status === 'ready_for_collection' ? (wait >= 20 ? 'late' : wait >= 10 ? 'long' : 'ok') : null, courier: d.courier, volumes: d.volumes, note: d.note ?? null, destination: 'Jardim Alvorada, Francisco Morato', fee: money(700), expectedCost: money(600), cost: d.cost ?? null, attempts: 0, failReason: null, etaToAt: d.etaToAt ?? null, overdue: d.etaToAt ? Date.parse(d.etaToAt) < Date.now() && d.status !== 'delivered' : false, overdueMinutes: d.etaToAt && Date.parse(d.etaToAt) < Date.now() ? Math.round((Date.now() - Date.parse(d.etaToAt)) / 60_000) : null, area: { key: 'jardim-alvorada', readyCount: [...deliveries.values()].filter((x) => x.status === 'ready_for_collection').length }, contactRevealable: true, customerPhoneMasked: '(11) 9****-4321', whatsappSentAt: d.whatsappSentAt ?? null, codeRequired: false, allowedActions: d.status === 'ready_for_collection' ? ['assign', 'cancel'] : d.status === 'awaiting_courier' ? ['confirm', 'reassign', 'cancel'] : d.status === 'courier_en_route' ? ['picked_up', 'not_delivered', 'cancel'] : d.status === 'out_for_delivery' ? ['delivered', 'not_delivered'] : [], updatedAt: now() };
 };
 const courierView = (c) => ({ id: c.id, name: c.name, phone: c.phone, note: c.note ?? null, active: c.active, documentsCheckedAt: now(), deliveriesLast7Days: 3, busyNow: [...deliveries.values()].some((d) => d.courier?.id === c.id && !['delivered', 'cancelled', 'not_delivered', 'returned_to_store'].includes(d.status)), createdAt: now() });
 const lojistaStore = (res, ctx) => {
@@ -1033,7 +1043,7 @@ route('POST', '/__test/seed-exchange', { public: true }, (req, res, ctx) => {
 });
 route('POST', '/__test/seed-delivery', { public: true }, (req, res, ctx) => {
   const s = stores.get(ctx.body.storeId);
-  const d = { id: randomUUID(), kind: 'delivery', orderId: randomUUID(), orderNumber: `WB-${++orderSeq}`.slice(0, 8), storeId: s.id, storeName: s.name, status: 'ready_for_collection', readyAt: new Date(Date.now() - 12 * 60_000).toISOString(), courier: null, volumes: 2, note: null };
+  const d = { id: randomUUID(), kind: 'delivery', orderId: randomUUID(), orderNumber: `WB-${++orderSeq}`.slice(0, 8), storeId: s.id, storeName: s.name, status: 'ready_for_collection', readyAt: new Date(Date.now() - 12 * 60_000).toISOString(), courier: null, volumes: 2, note: null, etaToAt: ctx.body.etaToMin === undefined ? null : new Date(Date.now() + ctx.body.etaToMin * 60_000).toISOString() };
   deliveries.set(d.id, d);
   json(res, 201, { id: d.id, number: d.orderNumber });
 });
@@ -1091,6 +1101,74 @@ route('POST', '/v1/stores/:id/exchanges/:xid/accept', {}, (req, res, ctx) => {
   x.status = 'approved';
   json(res, 200, { id: x.id, number: x.number, status: x.status });
 });
+// ---------------------------------------------------------------- Onda 6: avaliações, ajuda, conta, mediação
+const reviews = new Map();
+route('POST', '/__test/seed-review', { public: true }, (req, res, ctx) => {
+  const id = randomUUID();
+  reviews.set(id, { id, storeId: ctx.body.storeId, rating: ctx.body.rating ?? 4, comment: ctx.body.comment ?? 'Chegou bem embalado.', fit: null, reviewer: 'Joana L.', target: { type: 'store', id: ctx.body.storeId, name: 'Casa Bela' }, createdAt: now(), storeReply: null, storeRepliedAt: null });
+  json(res, 201, { id });
+});
+route('GET', '/v1/stores/:id/reviews', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  if (!s) return;
+  const replied = ctx.query.get('replied');
+  const list = [...reviews.values()].filter((r) => r.storeId === s.id && (replied === null || (replied === 'true') === Boolean(r.storeReply)));
+  json(res, 200, { data: list, nextCursor: null });
+});
+route('PUT', '/v1/stores/:id/reviews/:rid/reply', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const r = s && reviews.get(ctx.params[1]);
+  if (!r) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  r.storeReply = String(ctx.body.text ?? '').slice(0, 500);
+  r.storeRepliedAt = now();
+  json(res, 200, { id: r.id, storeReply: r.storeReply, storeRepliedAt: r.storeRepliedAt });
+});
+route('DELETE', '/v1/stores/:id/reviews/:rid/reply', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const r = s && reviews.get(ctx.params[1]);
+  if (!r) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  r.storeReply = null;
+  r.storeRepliedAt = null;
+  empty(res);
+});
+route('GET', '/v1/help', { public: true }, (req, res) => json(res, 200, { audience: 'merchant', contacts: { whatsapp: '11999990000', email: 'ajuda@webag.local', hours: 'Seg a sex, 9h às 18h' }, privacy: { officerName: 'Encarregado de dados', officerEmail: 'dados@webag.local' }, groups: [{ id: 'orders', label: 'Pedidos', items: [{ id: randomUUID(), question: 'Como aceito um pedido?', answer: 'Toque em Aceitar no alerta. Você tem 10 minutos.' }] }] }));
+const deletions = new Map();
+route('GET', '/v1/me/deletion', {}, (req, res) => json(res, 200, { canDelete: true, blockers: [], hasPassword: true, ownsStore: true, anonymizationDays: 30, fiscalRetentionYears: 5, regretHours: 72 }));
+route('POST', '/v1/me/deletion', {}, (req, res, ctx) => {
+  const user = ctx.user;
+  if (!user || user.password !== ctx.body.password) return problem(res, 403, 'INVALID_PASSWORD', 'Senha incorreta');
+  deletions.set(user.id, true);
+  json(res, 200, { status: 'pending', effectiveAt: new Date(Date.now() + 72 * 3_600_000).toISOString(), cancelableUntil: new Date(Date.now() + 72 * 3_600_000).toISOString() });
+});
+const exportsByUser = new Map();
+route('GET', '/v1/me/data-exports', {}, (req, res, ctx) => json(res, 200, { latest: exportsByUser.get(ctx.user.id) ?? null, nextRequestAt: exportsByUser.has(ctx.user.id) ? new Date(Date.now() + 86_400_000).toISOString() : null }));
+route('POST', '/v1/me/data-exports', {}, (req, res, ctx) => {
+  if (ctx.user.password !== ctx.body.password) return problem(res, 403, 'INVALID_PASSWORD', 'Senha incorreta');
+  const status = { id: randomUUID(), status: 'queued', requestedAt: now(), readyAt: null, expiresAt: null, sizeBytes: null };
+  exportsByUser.set(ctx.user.id, status);
+  json(res, 202, status);
+});
+const mediations = new Map();
+route('POST', '/__test/seed-mediation', { public: true }, (req, res, ctx) => {
+  const id = randomUUID();
+  mediations.set(id, { id, number: `TR-${2000 + mediations.size}`, orderId: randomUUID(), storeId: ctx.body.storeId ?? randomUUID(), type: 'defect', resolution: 'refund', origin: 'store_refusal', storeReason: 'Mau uso do produto', customerText: 'Veio com defeito de fábrica.', photoCount: 2, startedAt: now(), deadlineAt: new Date(Date.now() + 5 * 86_400_000).toISOString(), overdue: false, refusalNotAllowedByLaw: true });
+  json(res, 201, { id, number: mediations.get(id).number });
+});
+route('GET', '/v1/admin/exchanges/mediations', { perm: 'exchanges:mediate' }, (req, res) => json(res, 200, { data: [...mediations.values()], nextCursor: null }));
+route('POST', '/v1/admin/exchanges/mediations/:id/decision', { perm: 'exchanges:mediate' }, (req, res, ctx) => {
+  const m = mediations.get(ctx.params[0]);
+  if (!m) return problem(res, 409, 'EXCHANGE_NOT_IN_MEDIATION', 'Já decidida');
+  if (!['customer', 'store'].includes(ctx.body.decision) || String(ctx.body.reason ?? '').trim().length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  record(req, ctx, { action: 'exchange.mediation_decided', targetType: 'exchange', targetId: m.id, reason: ctx.body.reason, after: { decision: ctx.body.decision } });
+  mediations.delete(m.id);
+  json(res, 200, { status: 'decided' });
+});
+route('POST', '/v1/auth/account-deletion/cancel', { public: true }, (req, res, ctx) => {
+  const user = [...users.values()].find((u) => u.email === String(ctx.body.email).toLowerCase());
+  if (!user || user.password !== ctx.body.password || !deletions.get(user.id)) return problem(res, 401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
+  deletions.delete(user.id);
+  empty(res);
+});
 route('GET', '/v1/admin/logistics/deliveries', { perm: 'logistics:read' }, (req, res, ctx) => {
   const done = ctx.query.get('tab') === 'done';
   const finished = ['delivered', 'cancelled', 'not_delivered', 'returned_to_store'];
@@ -1100,7 +1178,16 @@ route('GET', '/v1/admin/logistics/deliveries', { perm: 'logistics:read' }, (req,
 route('GET', '/v1/admin/logistics/deliveries/:id', { perm: 'logistics:read' }, (req, res, ctx) => {
   const d = deliveries.get(ctx.params[0]);
   if (!d) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
-  json(res, 200, { ...deliveryView(d), contact: { pickupAddress: 'Rua das Flores, 10 - Centro', storePhone: '1140028922', dropoffAddress: 'Rua Azul, 55 - Jardim Alvorada', customerFirstName: 'Carla', customerPhone: '11987654321' }, timeline: [] });
+  const canDispatch = (PERMS['logistics:write'] ?? []).includes(ctx.user?.profile);
+  json(res, 200, { ...deliveryView(d), ...(canDispatch ? { contact: { pickupAddress: 'Rua das Flores, 10 - Centro', storePhone: '1140028922', dropoffAddress: 'Rua Azul, 55 - Jardim Alvorada', customerFirstName: 'Carla', customerPhone: '11987654321' } } : {}), timeline: [] });
+});
+route('POST', '/v1/admin/logistics/deliveries/:id/contact-reveal', { perm: 'logistics:contact' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (!d) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  const reason = String(ctx.body.reason ?? '');
+  if (reason.trim().length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  record(req, ctx, { action: 'delivery.contact_revealed', targetType: 'delivery', targetId: d.id, reason });
+  json(res, 200, { contact: { pickupAddress: 'Rua das Flores, 10 - Centro', storePhone: '1140028922', dropoffAddress: 'Rua Azul, 55 - Jardim Alvorada', customerFirstName: 'Carla', customerPhone: '11987654321' } });
 });
 route('GET', '/v1/admin/logistics/couriers', { perm: 'logistics:read' }, (req, res, ctx) => {
   const onlyActive = ctx.query.get('active') === 'true';
@@ -1121,6 +1208,25 @@ route('POST', '/v1/admin/logistics/deliveries/:id/assign', { perm: 'logistics:wr
   d.courier = { id: c.id, name: c.name };
   const o = orders.get(d.orderId);
   json(res, 200, { ...deliveryView(d), contact: {}, timeline: [], _order: o?.number });
+});
+route('POST', '/v1/admin/logistics/deliveries/assign-batch', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const ids = [...new Set(ctx.body.deliveryIds ?? [])];
+  if (ids.length < 2 || ids.length > 10) return problem(res, 422, 'INVALID_BATCH', 'Lote inválido', 'Escolha de 2 a 4 corridas.');
+  const c = couriers.get(ctx.body.courierId);
+  if (!c) return problem(res, 404, 'NOT_FOUND', 'Motoboy não encontrado');
+  const assigned = [];
+  const failed = [];
+  for (const id of ids) {
+    const d = deliveries.get(id);
+    if (!d || d.status !== 'ready_for_collection') {
+      failed.push({ deliveryId: id, code: 'DELIVERY_ALREADY_ASSIGNED' });
+      continue;
+    }
+    d.status = 'awaiting_courier';
+    d.courier = { id: c.id, name: c.name };
+    assigned.push({ ...deliveryView(d), contact: {}, timeline: [] });
+  }
+  json(res, 200, { assigned, failed });
 });
 route('GET', '/v1/admin/logistics/deliveries/:id/whatsapp', { perm: 'logistics:write' }, (req, res, ctx) => {
   const d = deliveries.get(ctx.params[0]);

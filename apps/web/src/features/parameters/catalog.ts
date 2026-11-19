@@ -3,6 +3,7 @@ import { formatCents } from '@/lib/format';
 
 /** Agrupamento e unidade dos parâmetros (onda-1b §AD3). Os valores e faixas vêm da API; isto só organiza a tela. */
 export const GROUPS = [
+  { id: 'prazo', label: 'Prazo de entrega (faixa de horário)' },
   { id: 'pedido', label: 'Pedido e pagamento' },
   { id: 'entrega', label: 'Entrega e retirada' },
   { id: 'trocas', label: 'Trocas' },
@@ -17,8 +18,9 @@ export const GROUPS = [
 export type GroupId = (typeof GROUPS)[number]['id'];
 
 const RULES: [RegExp, GroupId][] = [
+  [/^(entrega_(preparo_padrao|despacho|rota_fator|min_por_km|faixa|max_min)|logistica_alerta_entrega)/, 'prazo'],
   [/^(comissao|taxa_servico|pix_|loja_aceite|parcela|pedido_max|cupom_|carrinho_|item_qtd|estorno_|cancelamento_loja)/, 'pedido'],
-  [/^(raio_|retirada_|auto_conclusao|codigo_retirada|enderecos_)/, 'entrega'],
+  [/^(raio_|retirada_|auto_conclusao|codigo_retirada|enderecos_|entrega_|logistica_|pii_corrida)/, 'entrega'],
   [/^(troca_|taxa_coleta|coleta_|reembolso_|mediacao_|contestacao_)/, 'trocas'],
   [/^avaliacao_/, 'avaliacoes'],
   [/^(otp_|login_|senha_|reauth_|admin_inatividade)/, 'acesso'],
@@ -41,6 +43,7 @@ const UNIT_OVERRIDES: Record<string, Unit> = {
   login_stepup_falhas_h: { kind: 'text', text: 'falhas' },
   login_falhas: { kind: 'text', text: 'falhas' },
   taxa_servico_valor: { kind: 'none' },
+  entrega_min_por_km: { kind: 'text', text: 'min por km' },
   push_mkt_max_semana: { kind: 'text', text: 'por semana' },
   email_nao_confirmado_pedidos_max: { kind: 'text', text: 'pedido(s)' },
   loja_nova_pedidos: { kind: 'text', text: 'pedidos' },
@@ -121,4 +124,59 @@ export function parseInput(p: Parameter, text: string): { value: string | number
 export function toInput(p: Parameter): string {
   if (typeof p.value === 'string') return p.value;
   return unitOf(p.key).kind === 'money' ? (p.value / 100).toFixed(2).replace('.', ',') : num(p.value);
+}
+
+// ---- Prazo de entrega (DEC-053) ----------------------------------------------------------------------------------------------
+// A MESMA conta da API (`apps/api/.../logistics/domain/eta.ts`): preparo + despacho + deslocamento, faixa com folga, teto.
+// Aqui serve só para o admin ver o efeito de uma mudança antes de salvar; quem manda é o servidor.
+
+export interface EtaParams {
+  prepMin: number;
+  dispatchMin: number;
+  routeFactorPct: number;
+  minPerKm: number;
+  bandMin: number;
+  maxMin: number;
+}
+const ETA_KEY_MAP: Record<keyof EtaParams, string> = {
+  prepMin: 'entrega_preparo_padrao_min',
+  dispatchMin: 'entrega_despacho_min',
+  routeFactorPct: 'entrega_rota_fator_pct',
+  minPerKm: 'entrega_min_por_km',
+  bandMin: 'entrega_faixa_min',
+  maxMin: 'entrega_max_min',
+};
+
+/** `null` se a API ainda não publica algum dos parâmetros (o simulador some em vez de chutar um padrão). */
+export function etaParamsFrom(params: Parameter[]): EtaParams | null {
+  const out: Partial<EtaParams> = {};
+  for (const [field, key] of Object.entries(ETA_KEY_MAP) as [keyof EtaParams, string][]) {
+    const found = params.find((p) => p.key === key);
+    if (!found || typeof found.value !== 'number') return null;
+    out[field] = found.value;
+  }
+  return out as EtaParams;
+}
+
+export interface EtaResult {
+  prepMin: number;
+  dispatchMin: number;
+  travelMin: number;
+  estimateMin: number;
+  fromMin: number;
+  toMin: number;
+  withinCeiling: boolean;
+}
+export function estimateEta(cfg: EtaParams, km: number, prepMin?: number): EtaResult {
+  const prep = prepMin ?? cfg.prepMin;
+  const travelMin = Math.ceil((km * (cfg.routeFactorPct / 100) * cfg.minPerKm) - 1e-9);
+  const estimateMin = prep + cfg.dispatchMin + travelMin;
+  return { prepMin: prep, dispatchMin: cfg.dispatchMin, travelMin, estimateMin, fromMin: Math.max(5, estimateMin - cfg.bandMin), toMin: estimateMin + cfg.bandMin, withinCeiling: estimateMin <= cfg.maxMin };
+}
+/** Distância máxima (km, 1 casa) que ainda cabe no teto, para uma loja com este preparo; 0 se nem o preparo cabe. */
+export function maxReachKm(cfg: EtaParams, prepMin?: number): number {
+  const room = cfg.maxMin - (prepMin ?? cfg.prepMin) - cfg.dispatchMin;
+  const perKm = (cfg.routeFactorPct / 100) * cfg.minPerKm;
+  if (room <= 0 || perKm <= 0) return 0;
+  return Math.floor((room / perKm) * 10) / 10;
 }

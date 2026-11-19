@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowsClockwise, CurrencyCircleDollar, House, Package, Question, Receipt, SignOut, Storefront, UsersThree } from '@phosphor-icons/react';
+import { ArrowsClockwise, CurrencyCircleDollar, House, Package, Question, Receipt, SignOut, Star, Storefront, UserCircle, UsersThree } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -12,14 +12,14 @@ import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
 import { ReauthProvider } from './reauth';
 import { Badge, Banner, Logo, SpeedLines, ToastProvider, cx, useToast } from '@/components/ui';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
-import { STORE_STATUS_LABEL, supportHref, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
+import { STORE_STATUS_LABEL, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
 import { createPanelQueryClient } from '@/lib/query-client';
 import type { Me } from '@/lib/session-types';
 import { useOnline } from '@/lib/use-online';
 import s from './lojista-shell.module.css';
 
 type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'duotone'; 'aria-hidden'?: boolean | 'true' }>;
-const ICONS: Record<LojistaSection, IconType> = { inicio: House, pedidos: Receipt, trocas: ArrowsClockwise, produtos: Package, financeiro: CurrencyCircleDollar, loja: Storefront, equipe: UsersThree };
+const ICONS: Record<LojistaSection, IconType> = { inicio: House, pedidos: Receipt, trocas: ArrowsClockwise, produtos: Package, financeiro: CurrencyCircleDollar, loja: Storefront, equipe: UsersThree, avaliacoes: Star };
 
 /** Sessão perdida, sair e aviso de volta à rede: comportamento comum ao painel e ao fluxo de cadastro. */
 function useShellBehavior() {
@@ -91,10 +91,14 @@ function GlobalBanner({ online }: { online: boolean }) {
 function HeaderActions({ onLogout }: { onLogout: () => void }) {
   return (
     <>
-      <a href={supportHref()} target="_blank" rel="noopener noreferrer" className={s.headerLink} aria-label="Ajuda (abre o WhatsApp do Webag)" data-testid="lojista.shell.help">
+      <Link href={'/lojista/ajuda' as never} className={s.headerLink} aria-label="Ajuda" data-testid="lojista.shell.help">
         <Question size={24} aria-hidden="true" />
         <span className={cx('wb-text-label', s.headerLabel)}>Ajuda</span>
-      </a>
+      </Link>
+      <Link href={'/lojista/conta' as never} className={s.headerLink} aria-label="Minha conta" data-testid="lojista.shell.account">
+        <UserCircle size={24} aria-hidden="true" />
+        <span className={cx('wb-text-label', s.headerLabel)}>Conta</span>
+      </Link>
       <button type="button" className={s.headerLink} onClick={onLogout} data-testid="lojista.shell.logout">
         <SignOut size={24} aria-hidden="true" />
         <span className={cx('wb-text-label', s.headerLabel)}>Sair</span>
@@ -106,7 +110,7 @@ function HeaderActions({ onLogout }: { onLogout: () => void }) {
 function Nav({ variant }: { variant: 'side' | 'bottom' }) {
   const pathname = usePathname();
   const { store } = useMerchant();
-  const items = visibleLojistaNav(store.data);
+  const items = visibleLojistaNav(store.data).filter((item) => variant === 'side' || !item.sideOnly);
   const { pending } = useOrdersRuntime();
   return (
     <nav className={variant === 'side' ? s.nav : undefined} style={variant === 'bottom' ? { display: 'flex', width: '100%' } : undefined} aria-label={variant === 'side' ? 'Menu do painel' : 'Menu principal'}>

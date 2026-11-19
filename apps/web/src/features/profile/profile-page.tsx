@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { DataExportCard, DeleteAccountCard } from '@/features/account/account-page';
 import { PageHeader } from '@/components/panel/page-header';
 import { RecoveryCodes } from '@/components/panel/recovery-codes';
 import { useReauth } from '@/components/panel/reauth';
@@ -206,6 +207,8 @@ export function ProfilePage() {
         <PasswordSection />
         <RecoverySection />
         <DevicesSection />
+        <DataExportCard area="admin" />
+        <DeleteAccountCard area="admin" />
         {canView('auditoria') ? (
           <Link href={asRoute(`/admin/auditoria?actorId=${encodeURIComponent(user.id)}`)} className="wb-text-body-strong" data-testid={T('activity-link')}>Ver minha atividade</Link>
         ) : null}

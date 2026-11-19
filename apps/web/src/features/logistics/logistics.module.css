@@ -17,6 +17,7 @@
 .wait { display: inline-flex; align-items: center; gap: var(--wb-space-1); min-height: 28px; padding: 0 var(--wb-space-3); border-radius: var(--wb-radius-pill); background: var(--wb-color-surface-sunken); color: var(--wb-color-text-primary); }
 .waitWarning { background: var(--wb-color-feedback-warning-subtle); color: var(--wb-color-text-warning); }
 .waitLate { background: var(--wb-color-feedback-danger-subtle); color: var(--wb-color-text-danger); }
+.batchRow { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); flex-wrap: wrap; min-height: var(--wb-size-touch-min); }
 .muted { margin: 0; color: var(--wb-color-text-secondary); }
 .rowAction { min-width: 160px; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }

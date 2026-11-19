@@ -15,7 +15,7 @@ type Area = 'admin' | 'lojista';
 
 const PUBLIC_PATHS: Record<Area, string[]> = {
   admin: ['/admin/entrar', '/admin/convite', '/admin/esqueci-a-senha'],
-  lojista: ['/lojista/entrar', '/lojista/cadastro', '/lojista/convite', '/lojista/esqueci-a-senha'],
+  lojista: ['/lojista/entrar', '/lojista/cadastro', '/lojista/convite', '/lojista/esqueci-a-senha', '/lojista/desistir-da-exclusao'],
 };
 
 /** Origem do armazenamento de objetos (upload direto com POST pré-assinado e documentos por URL assinada, ADR-005). */

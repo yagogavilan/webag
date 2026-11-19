@@ -117,6 +117,9 @@ export function MerchantLoginForm() {
           <Link href="/lojista/esqueci-a-senha" className={s.link} data-testid={ltid('login', 'forgot-password')}>
             Esqueci a senha
           </Link>
+          <Link href="/lojista/desistir-da-exclusao" className={s.link} data-testid={ltid('login', 'cancel-deletion')}>
+            Desistir da exclusão da conta
+          </Link>
           <Link href={signup as never} className={s.link} data-testid={ltid('login', 'signup-link')}>
             Quero cadastrar minha loja
           </Link>

@@ -28,3 +28,17 @@
 .num { font-variant-numeric: tabular-nums; text-align: right; }
 .row { display: flex; align-items: center; gap: var(--wb-space-3); flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .todoItem { transition: none; } .todoItem:hover { transform: none; } }
+
+/* Gráfico de vendas por dia (WB-198): barras em CSS; a tabela equivalente cobre leitor de tela e daltonismo. */
+.chart { position: relative; display: flex; flex-direction: column; gap: var(--wb-space-1); }
+.chartMax { color: var(--wb-color-text-secondary); font-variant-numeric: tabular-nums; }
+.bars { display: flex; align-items: stretch; gap: 2px; height: 160px; border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-strong); }
+.barCol { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bar { display: block; width: 100%; max-width: 28px; border-radius: 6px 6px 0 0; background: var(--wb-color-action-primary); }
+.barEmpty { height: 2px; background: var(--wb-color-border-strong); }
+.barLabel { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); white-space: nowrap; color: var(--wb-color-text-secondary); font-size: 11px; line-height: 16px; padding-top: 2px; }
+.chart { padding-bottom: 20px; }
+.chartTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.chartTable th, .chartTable td { padding: var(--wb-space-2); border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); text-align: left; }
+.chartTable caption { text-align: left; color: var(--wb-color-text-secondary); padding-bottom: var(--wb-space-1); }
+.chartTable .num { text-align: right; }

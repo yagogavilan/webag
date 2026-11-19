@@ -18,7 +18,7 @@ const settings = (over: Partial<StoreSettings> = {}): StoreSettings => ({
   hours: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, intervals: [{ start: '09:00', end: '18:00' }] })),
   holidays: [],
   pause: { active: false, until: null, indefinitely: false },
-  delivery: { acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, tiers: [], minOrderCents: 3000, freeAboveCents: 0, etaMinMinutes: 30, etaMaxMinutes: 45 },
+  delivery: { acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, tiers: [], minOrderCents: 3000, freeAboveCents: 0, etaMinMinutes: 30, etaMaxMinutes: 45, prepMinutes: 25, prepMinutesIsDefault: false },
   pickup: { enabled: false, useStoreAddress: true, address: null, instructions: null, prepMinMinutes: 15, prepMaxMinutes: 30 },
   exchangePolicy: { voluntaryDays: 7, collectionFeeCents: 0, version: 1, legalFloor: { withdrawalDays: 7, defectDays: 90 } },
   lowStockThreshold: 5,
@@ -65,7 +65,7 @@ describe('Minha loja (C1)', () => {
     vi.stubGlobal('fetch', server(settings({ hours: [] })).impl);
     renderLojista(<StoreMenu />);
     expect(await screen.findByText('Loja aberta')).toBeInTheDocument();
-    expect(screen.getByTestId('lojista.minha-loja.item-delivery')).toHaveTextContent('Entrega até 5 km');
+    expect(screen.getByTestId('lojista.minha-loja.item-delivery')).toHaveTextContent('Entrega pela Webag · preparo 25 min');
     expect(screen.getByTestId('lojista.minha-loja.item-hours')).toHaveTextContent('Falta o horário');
     expect(screen.getByTestId('lojista.minha-loja.item-exchange')).toHaveTextContent('Troca em até 7 dias');
     expect(screen.getByTestId('lojista.minha-loja.item-payout')).toHaveTextContent('Titular');
@@ -157,61 +157,60 @@ describe('Entrega e retirada (C4)', () => {
     expect(screen.getByRole('switch', { name: /Entregar em casa/ })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('valida tempo e "grátis acima de"; salva entrega e retirada', async () => {
+  it('valida o preparo (5 a 120 min) e salva entrega e retirada com o tempo de preparo da loja', async () => {
     const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' && /delivery|pickup/.test(url.pathname) ? json(null, 204) : undefined));
     vi.stubGlobal('fetch', impl);
     renderLojista(<DeliveryPage />);
-    await userEvent.type(await screen.findByTestId('lojista.entrega.free-above-input'), '20');
+    const prep = await screen.findByTestId('lojista.entrega.prep-input');
+    expect(prep).toHaveValue('25');
+    expect(screen.getByTestId('lojista.entrega.webag-delivers')).toHaveTextContent('A Webag cuida do motoboy');
+    expect(screen.queryByTestId('lojista.entrega.radius-input')).not.toBeInTheDocument();
+    await userEvent.clear(prep);
+    await userEvent.type(prep, '3');
     await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
-    expect(await screen.findByText('Precisa ser maior que o pedido mínimo de R$ 30,00.')).toBeInTheDocument();
-    await userEvent.clear(screen.getByTestId('lojista.entrega.free-above-input'));
-    await userEvent.type(screen.getByTestId('lojista.entrega.free-above-input'), '100');
-    await userEvent.clear(screen.getByTestId('lojista.entrega.eta-min-input'));
-    await userEvent.type(screen.getByTestId('lojista.entrega.eta-min-input'), '60');
-    await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
-    expect(await screen.findByText('O mínimo precisa ser menor que o máximo.')).toBeInTheDocument();
-    await userEvent.clear(screen.getByTestId('lojista.entrega.eta-min-input'));
-    await userEvent.type(screen.getByTestId('lojista.entrega.eta-min-input'), '25');
+    expect(await screen.findByText('Digite os minutos de preparo, de 5 a 120.')).toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'PUT')).toBe(false);
+    await userEvent.clear(prep);
+    await userEvent.type(prep, '35');
     await userEvent.click(screen.getByRole('switch', { name: /Retirada na loja/ }));
     await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/lojista/loja'));
     const body = JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery') && c.init.method === 'PUT')!.init.body));
-    expect(body).toMatchObject({ acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, minOrderCents: 3000, freeAboveCents: 10000, etaMinMinutes: 25, etaMaxMinutes: 45, tiers: [] });
+    expect(body).toEqual({ acceptsDelivery: true, prepMinutes: 35 });
     expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/pickup'))!.init.body))).toMatchObject({ enabled: true, useStoreAddress: true });
   });
 
-  it('taxa por distância monta as faixas seguidas até o raio', async () => {
+  it('quando vale o padrão da Webag o campo vem vazio e a dica diz quanto é', async () => {
+    vi.stubGlobal('fetch', server(settings({ delivery: { ...settings().delivery, prepMinutes: 20, prepMinutesIsDefault: true } })).impl);
+    renderLojista(<DeliveryPage />);
+    expect(await screen.findByTestId('lojista.entrega.prep-input')).toHaveValue('');
+    expect(screen.getByText(/Hoje vale o padrão da Webag, 20 min/)).toBeInTheDocument();
+  });
+
+  it('preparo vazio volta ao padrão da Webag (null)', async () => {
     const { impl, calls } = server(settings(), (url, init) => (init.method === 'PUT' ? json(null, 204) : undefined));
     vi.stubGlobal('fetch', impl);
     renderLojista(<DeliveryPage />);
-    await userEvent.click(await screen.findByTestId('lojista.entrega.fee-mode-distance'));
-    await userEvent.type(screen.getByTestId('lojista.entrega.band-1-fee'), '5');
-    await userEvent.click(screen.getByTestId('lojista.entrega.band-add'));
-    const first = screen.getByTestId('lojista.entrega.band-1-to');
-    await userEvent.clear(first);
-    await userEvent.type(first, '2');
-    await userEvent.clear(screen.getByTestId('lojista.entrega.band-2-fee'));
-    await userEvent.type(screen.getByTestId('lojista.entrega.band-2-fee'), '9');
+    await userEvent.clear(await screen.findByTestId('lojista.entrega.prep-input'));
     await userEvent.click(screen.getByTestId('lojista.entrega.submit'));
     await waitFor(() => expect(push).toHaveBeenCalled());
-    const body = JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery'))!.init.body));
-    expect(body.tiers).toEqual([
-      { fromKm: 0, toKm: 2, feeCents: 500 },
-      { fromKm: 2, toKm: 5, feeCents: 900 },
-    ]);
+    expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery'))!.init.body)).prepMinutes).toBeNull();
   });
 
   it('prévia: dentro e fora do raio, e sem conexão avisa', async () => {
     let fee = 700;
-    const { impl } = server(settings(), (url) => (url.pathname.endsWith('/delivery/preview') ? json({ available: fee > 0, distanceM: 2300, feeCents: fee, freeShipping: false, belowMinimum: false }) : undefined));
+    const { impl } = server(settings(), (url) => (url.pathname.endsWith('/delivery/preview') ? json({ available: fee >= 0, distanceM: fee < 0 ? null : 2300, feeCents: fee, freeShipping: false, belowMinimum: false, eta: { minMinutes: 55, maxMinutes: 85 } }) : undefined));
     vi.stubGlobal('fetch', impl);
     renderLojista(<DeliveryPage />);
     await userEvent.type(await screen.findByTestId('lojista.entrega.preview-cep'), '07900000');
     await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
-    expect(await screen.findByText(/Para o CEP 07900-000 o cliente paga R\$\s7,00 e recebe em 30 a 45 min \(2,3 km\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/Para o CEP 07900-000 o cliente paga R\$\s7,00 e recebe em 55 a 85 min \(2,3 km\)/)).toBeInTheDocument();
     fee = 0;
     await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
-    expect(await screen.findByText(/grátis/)).toBeInTheDocument();
+    expect(await screen.findByText(/paga nada \(grátis\)/)).toBeInTheDocument();
+    fee = -1;
+    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
+    expect(await screen.findByText(/Fora da área/)).toBeInTheDocument();
   });
 });
 

@@ -28,6 +28,15 @@ export interface DeliverySettings {
   freeAboveCents: number;
   etaMinMinutes: number;
   etaMaxMinutes: number;
+  /** Preparo em uso, em minutos (DEC-053): o da loja ou, se `prepMinutesIsDefault`, o padrão do admin (`entrega_preparo_padrao_min`). */
+  prepMinutes?: number;
+  prepMinutesIsDefault?: boolean;
+}
+/** Corpo de `PUT /stores/:id/delivery` (DEC-036): só o que a loja decide. Os campos legados (raio, taxa, faixas) a API aceita e ignora. */
+export interface DeliveryInput {
+  acceptsDelivery: boolean;
+  /** Preparo da loja (DEC-053, 5 a 120); `null` volta ao padrão da Webag; ausente não muda. `etaMin/etaMax` são legados e não vão mais. */
+  prepMinutes?: number | null;
 }
 export interface PickupSettings {
   enabled: boolean;
@@ -67,6 +76,8 @@ export interface DeliveryPreview {
   feeCents: number | null;
   freeShipping: boolean;
   belowMinimum: boolean;
+  /** Faixa para o CEP testado (DEC-053). PROVISÓRIO: `EtaRange` ainda não faz parte de `DeliveryPreview` no openapi.yaml (pendência O6-3). */
+  eta?: { minMinutes: number; maxMinutes: number } | null;
 }
 
 export interface ProfileView {
@@ -103,7 +114,7 @@ export const settingsApi = {
   setHolidays: (storeId: string, holidays: { date: string; label?: string }[]) => apiRequest<void>(L, `stores/${storeId}/holidays`, { method: 'PUT', body: { holidays } }),
   pause: (storeId: string, kind: PauseKind) => apiRequest<void>(L, `stores/${storeId}/pause`, { method: 'POST', body: { kind } }),
   resume: (storeId: string) => apiRequest<void>(L, `stores/${storeId}/pause`, { method: 'DELETE' }),
-  setDelivery: (storeId: string, body: DeliverySettings) => apiRequest<void>(L, `stores/${storeId}/delivery`, { method: 'PUT', body }),
+  setDelivery: (storeId: string, body: DeliveryInput) => apiRequest<void>(L, `stores/${storeId}/delivery`, { method: 'PUT', body }),
   preview: (storeId: string, body: { cep: string; subtotalCents: number }) => apiRequest<DeliveryPreview>(L, `stores/${storeId}/delivery/preview`, { method: 'POST', body }),
   setPickup: (storeId: string, body: { enabled: boolean; useStoreAddress: boolean; address?: string; instructions?: string; prepMinMinutes: number; prepMaxMinutes: number }) => apiRequest<void>(L, `stores/${storeId}/pickup`, { method: 'PUT', body }),
   setExchange: (storeId: string, body: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }) => apiRequest<void>(L, `stores/${storeId}/exchange-policy`, { method: 'PUT', body }),

@@ -4,7 +4,6 @@ import { ShieldCheck, Warning } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { ReasonDialog } from '@/components/panel/reason-dialog';
 import { useSession } from '@/components/panel/session-context';
 import { Badge, Banner, Button, Dialog, EmptyState, NoAccessState, QueryBoundary, RadioCards, TabPanel, Tabs, TextField, cx, useToast } from '@/components/ui';
 import k from '@/components/panel/kit.module.css';
@@ -142,7 +141,7 @@ function RemoveDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: 
   return (
     <Dialog title="Remover a avaliação?" onClose={onClose} locked={busy} testId={T('remove-dialog')} actions={<><Button variant="destructive" loading={busy} loadingLabel="Removendo…" onClick={() => void confirm()} data-testid={T('remove-confirm')}>Remover avaliação</Button><Button variant="text" onClick={onClose} disabled={busy}>Cancelar</Button></>}>
       <div className={k.form}>
-        <p className="wb-text-body" style={{ margin: 0 }}>A nota deixa de contar e o autor é avisado. Não existe o motivo "avaliação negativa".</p>
+        <p className="wb-text-body" style={{ margin: 0 }}>A nota deixa de contar e o autor é avisado. Avaliação negativa, por si só, não é motivo para remover.</p>
         <RadioCards legend="Motivo" name="remove-reason" value={code} onChange={setCode} options={REMOVE_REASONS.map((r) => ({ value: r.id, label: r.label, testId: T(`remove-reason-${r.id}`) }))} />
         <TextField label="Observação (opcional)" value={note} onChange={(e) => setNote(e.target.value.slice(0, 150))} counter={{ value: note.length, max: 150 }} />
         {error ? <Banner tone="danger">{error}</Banner> : null}

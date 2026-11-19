@@ -11,7 +11,7 @@ export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   suspended: 'Suspensa',
 };
 
-export type LojistaSection = 'inicio' | 'pedidos' | 'trocas' | 'produtos' | 'financeiro' | 'loja' | 'equipe';
+export type LojistaSection = 'inicio' | 'pedidos' | 'trocas' | 'produtos' | 'avaliacoes' | 'financeiro' | 'loja' | 'equipe';
 
 export interface LojistaNavItem {
   section: LojistaSection;
@@ -19,6 +19,10 @@ export interface LojistaNavItem {
   href: string;
   /** Só o dono vê (RN-13). */
   ownerOnly?: boolean;
+  /** Fora da barra de baixo do celular (cabem 5 a 7 itens): vira atalho no painel inicial e fica no menu lateral. */
+  sideOnly?: boolean;
+  /** Só o dono ou o funcionário com esta permissão (lista vazia = desconhecida, a tela abre e a API decide). */
+  permission?: string;
 }
 
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
@@ -26,6 +30,7 @@ export const LOJISTA_NAV: readonly LojistaNavItem[] = [
   { section: 'pedidos', label: 'Pedidos', href: '/lojista/pedidos' },
   { section: 'trocas', label: 'Trocas', href: '/lojista/trocas' },
   { section: 'produtos', label: 'Produtos', href: '/lojista/produtos' },
+  { section: 'avaliacoes', label: 'Avaliações', href: '/lojista/avaliacoes', sideOnly: true, permission: 'reviews' },
   { section: 'financeiro', label: 'Financeiro', href: '/lojista/financeiro', ownerOnly: true },
   { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
   { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', ownerOnly: true },
@@ -53,8 +58,15 @@ export function ordersAvailable(store: MerchantStore | null | undefined): boolea
 export const canSeeFinance = (store: MerchantStore | null | undefined): boolean => store?.role === 'owner';
 
 export function visibleLojistaNav(store: MerchantStore | null | undefined): LojistaNavItem[] {
-  return LOJISTA_NAV.filter((item) => !item.ownerOnly || isOwner(store));
+  return LOJISTA_NAV.filter((item) => (!item.ownerOnly || isOwner(store)) && (!item.permission || hasPermission(store, item.permission)));
 }
+
+/** Dono, ou funcionário com a permissão. `GET /stores/mine` ainda pode vir sem as permissões (C4): lista vazia = a API decide. */
+export function hasPermission(store: MerchantStore | null | undefined, permission: string): boolean {
+  if (!store) return false;
+  return store.role === 'owner' || store.permissions.length === 0 || store.permissions.includes(permission);
+}
+export const canReplyReviews = (store: MerchantStore | null | undefined): boolean => hasPermission(store, 'reviews');
 
 /** Etapas do cadastro (onda-2 Parte A). A revisão não conta no "Etapa X de 4". */
 export const ONBOARDING_STEPS = ['1', '2', '3', '4', 'revisao'] as const;
@@ -79,7 +91,7 @@ export function isOnboarding(store: MerchantStore | null): boolean {
 /** Destino pós-login seguro: só caminhos internos do painel do lojista (evita open redirect). */
 export function safeLojistaNext(value: string | null | undefined): string | null {
   if (!value || !value.startsWith('/lojista') || value.startsWith('//') || value.includes('\\')) return null;
-  if (/^\/lojista\/(entrar|cadastro|convite|esqueci-a-senha)/.test(value)) return null;
+  if (/^\/lojista\/(entrar|cadastro|convite|esqueci-a-senha|desistir-da-exclusao)/.test(value)) return null;
   return value;
 }
 

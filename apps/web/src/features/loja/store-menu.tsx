@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { Badge, cx, ui } from '@/components/ui';
 import { formatCents } from '@/lib/format';
-import { kmInput } from '@/lib/money';
 import { asRoute } from '@/lib/routes';
 import type { StoreSettings } from '@/lib/api/store-settings';
 import type { MerchantStore } from '@/lib/api/lojista';
@@ -43,7 +42,7 @@ function Menu({ store, settings, refresh }: { store: MerchantStore; settings: St
   const hours = hoursSummary(settings.hours);
   const d = settings.delivery;
   const p = settings.pickup;
-  const delivery = [d.acceptsDelivery ? `Entrega até ${kmInput(d.radiusKm)} km` : null, p.enabled ? 'Retirada ligada' : null].filter(Boolean).join(' · ');
+  const delivery = [d.acceptsDelivery ? `Entrega pela Webag${d.prepMinutes ? ` · preparo ${d.prepMinutes} min${d.prepMinutesIsDefault ? ' (padrão)' : ''}` : ''}` : null, p.enabled ? 'Retirada ligada' : null].filter(Boolean).join(' · ');
   const exchange = settings.exchangePolicy.voluntaryDays > 0 ? `Troca em até ${settings.exchangePolicy.voluntaryDays} dias${settings.exchangePolicy.collectionFeeCents > 0 ? ` · coleta ${formatCents(settings.exchangePolicy.collectionFeeCents)}` : ''}` : 'Sem troca por tamanho ou cor';
   const connected = store.payout.status === 'connected';
   const items: { id: string; href: string; title: string; summary: string; alert?: string }[] = [

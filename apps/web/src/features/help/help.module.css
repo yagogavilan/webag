@@ -1,0 +1,12 @@
+/* Ajuda do lojista (WB-034). Perguntas em <details> nativo: teclado e leitor de tela de graça. */
+.page { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.contact { display: flex; flex-direction: column; gap: var(--wb-space-3); padding: var(--wb-space-4); border-radius: 24px 24px 24px 6px; background: var(--wb-color-tile-1); color: var(--wb-color-text-primary); }
+.contactActions { display: flex; flex-wrap: wrap; gap: var(--wb-space-3); }
+.contactLink { display: inline-flex; align-items: center; justify-content: center; gap: var(--wb-space-2); min-height: 48px; padding: 0 var(--wb-space-5); border-radius: var(--wb-radius-pill); background: var(--wb-color-action-primary); color: var(--wb-color-text-on-brand); font-weight: var(--wb-font-weight-semibold); text-decoration: none; }
+.contactLink:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.faqList { display: flex; flex-direction: column; gap: var(--wb-space-2); }
+.faq { padding: var(--wb-space-2) var(--wb-space-4); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-card); }
+.faq summary { min-height: var(--wb-size-touch-min); display: flex; align-items: center; cursor: pointer; }
+.faq summary:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.faq[open] { padding-bottom: var(--wb-space-4); }
+.faq p { margin-top: var(--wb-space-2); }

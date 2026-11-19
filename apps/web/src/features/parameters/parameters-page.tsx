@@ -16,7 +16,8 @@ import { formatClock } from '@/lib/format';
 import { ApiError } from '@/lib/api/errors';
 import { saveErrorMessage } from '@/lib/api/messages';
 import { tid } from '@/lib/testid';
-import { FINANCE_OWNED, GROUPS, formatParamValue, groupOf, isChanged, parseInput, rangeText, toInput } from './catalog';
+import { FINANCE_OWNED, GROUPS, etaParamsFrom, formatParamValue, groupOf, isChanged, parseInput, rangeText, toInput } from './catalog';
+import { EtaSimulator } from './eta-simulator';
 
 const T = (id: string) => tid('parametros', id);
 
@@ -174,6 +175,8 @@ export function ParametersPage() {
         {(page) => {
           const filtered = page.data.filter((p) => !term || p.description.toLowerCase().includes(term) || p.key.toLowerCase().includes(term));
           const selected = page.data.find((p) => p.key === selectedKey) ?? null;
+          const etaCfg = etaParamsFrom(page.data);
+          const raioMax = page.data.find((p) => p.key === 'raio_max_km');
           return (
             <SplitLayout
               panelOpen={selected !== null}
@@ -182,6 +185,7 @@ export function ParametersPage() {
               list={
                 <div className={ui.stack}>
                   <TextField label="Buscar parâmetro" type="search" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" data-testid={T('search-input')} />
+                  {etaCfg && !term ? <EtaSimulator cfg={etaCfg} radiusMaxKm={typeof raioMax?.value === 'number' ? raioMax.value : null} /> : null}
                   {filtered.length === 0 ? (
                     <EmptyState icon={MagnifyingGlass} title="Nenhum parâmetro com esse nome." text="Confira a escrita ou tente uma palavra mais simples." actionLabel="Limpar busca" onAction={() => setSearch('')} />
                   ) : (

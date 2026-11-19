@@ -6,12 +6,14 @@ import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
 import { Banner, Button, EmptyState, ErrorState, NoAccessState, SkeletonRows, Switch, Tabs, cx, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
-import { KIND_LABEL, STATUS_LABEL, sortQueue, waitLevel, waitText, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
+import { KIND_LABEL, STATUS_LABEL, batchesOf, etaBandText, etaLevel, etaLevelText, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
 import { formatCents } from '@/lib/format';
 import { createAlertSound } from '@/lib/orders/alert-sound';
 import { tid } from '@/lib/testid';
+import { useNow } from '@/lib/use-now';
 import { useOnline } from '@/lib/use-online';
 import { AssignDialog } from './assign-dialog';
+import { BatchAssignDialog } from './batch-dialog';
 import { CouriersTab } from './couriers-tab';
 import { DeliveryDialog } from './delivery-dialog';
 import { HistoryTab } from './history-tab';
@@ -28,6 +30,21 @@ export function WaitChip({ delivery }: { delivery: Pick<Delivery, 'sla' | 'waiti
     <span className={cx('wb-text-caption-strong', s.wait, level === 'warning' && s.waitWarning, level === 'late' && s.waitLate)} data-testid={T('wait')}>
       {level === 'warning' ? <Warning size={16} weight="fill" aria-hidden="true" /> : level === 'late' ? <WarningCircle size={16} weight="fill" aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
       {waitText(delivery)}
+    </span>
+  );
+}
+
+/** Faixa prometida ao cliente e o alerta pelo FIM da faixa (DEC-053). Sempre ícone e texto; sem faixa do servidor, não mostra nada. */
+export function EtaChip({ delivery, now }: { delivery: Delivery; now: number }) {
+  const band = etaBandText(delivery);
+  if (!band) return null;
+  const level = etaLevel(delivery, now);
+  const text = etaLevelText(delivery, now);
+  return (
+    <span className={cx('wb-text-caption-strong', s.wait, level === 'ending' && s.waitWarning, level === 'late' && s.waitLate)} data-testid={T('eta')} data-level={level ?? undefined}>
+      {level === 'late' ? <WarningCircle size={16} weight="fill" aria-hidden="true" /> : level === 'ending' ? <Warning size={16} weight="fill" aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
+      {band}
+      {level && level !== 'on_time' && text ? ` · ${text}` : ''}
     </span>
   );
 }
@@ -56,6 +73,8 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
   const [kind, setKind] = useState<KindFilter>('all');
   const [assigning, setAssigning] = useState<Delivery | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [batching, setBatching] = useState<AreaBatch | null>(null);
+  const now = useNow(30_000);
 
   // ---- alerta de pronto para coleta: som opcional, título da aba e toast (onda-4d §0.7)
   const [sound] = useState(createAlertSound);
@@ -85,9 +104,12 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
 
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const filterKind = (row: Delivery) => kind === 'all' || (kind === 'delivery' ? row.kind === 'delivery' : row.kind !== 'delivery');
-  const queue = useMemo(() => sortQueue(rows.filter((row) => row.status === 'ready_for_collection' && filterKind(row))), [rows, kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const queue = useMemo(() => sortQueueByEta(rows.filter((row) => row.status === 'ready_for_collection' && filterKind(row)), now), [rows, kind, now]); // eslint-disable-line react-hooks/exhaustive-deps
   const progress = useMemo(() => rows.filter((row) => row.status !== 'ready_for_collection' && filterKind(row)).sort((a, b) => Date.parse(a.readyAt) - Date.parse(b.readyAt)), [rows, kind]); // eslint-disable-line react-hooks/exhaustive-deps
   const longest = Math.max(0, ...waiting.map((row) => row.waitingMinutes ?? 0));
+  const lateByEta = useMemo(() => rows.filter((row) => etaLevel(row, now) === 'late').length, [rows, now]);
+  const hasEta = rows.some((row) => row.etaToAt);
+  const batches = useMemo(() => batchesOf(queue), [queue]);
 
   async function enableSound() {
     await sound.enable();
@@ -115,7 +137,7 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
       ) : (
         <ul className={s.list} aria-label={tab === 'queue' ? 'Fila de coleta' : 'Em andamento'}>
           {list.map((row, index) => (
-            <Row key={row.id} row={row} tab={tab} primary={index === 0} canWrite={canWrite} online={online} onAssign={() => setAssigning(row)} onOpen={() => setOpenId(row.id)} />
+            <Row key={row.id} row={row} now={now} tab={tab} primary={index === 0} canWrite={canWrite} online={online} onAssign={() => setAssigning(row)} onOpen={() => setOpenId(row.id)} />
           ))}
         </ul>
       );
@@ -150,6 +172,12 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
           <p className={s.kpiValue}>{progress.length}</p>
           <p className={cx('wb-text-caption', s.kpiLabel)}>em andamento</p>
         </li>
+        {hasEta ? (
+          <li className={s.kpi} data-testid={T('summary-late')}>
+            <p className={s.kpiValue}>{lateByEta}</p>
+            <p className={cx('wb-text-caption', s.kpiLabel)}>{lateByEta === 1 ? 'passou do fim da faixa' : 'passaram do fim da faixa'}</p>
+          </li>
+        ) : null}
       </ul>
       <Tabs
         label="Logística"
@@ -171,14 +199,30 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
           ))}
         </div>
       ) : null}
+      {tab === 'queue' && canWrite && batches.length > 0 ? (
+        <section className={s.block} aria-labelledby="lg-batches" data-testid={T('batches')}>
+          <h2 id="lg-batches" className="wb-text-body-strong" style={{ margin: 0 }}>Mesma área, uma ida só</h2>
+          <ul className={s.list} aria-label="Lotes por área">
+            {batches.map((batch) => (
+              <li key={batch.area} className={s.batchRow}>
+                <span className="wb-text-body">{batch.label} · {batch.rows.length} pedidos esperando</span>
+                <Button variant="secondary" size="sm" onClick={() => setBatching(batch)} disabled={!online} aria-label={`Atribuir o lote de ${batch.label}, ${batch.rows.length} pedidos`} data-testid={T(`batch-${batch.rows[0]!.id}`)}>
+                  Atribuir o lote
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {body}
+      {batching ? <BatchAssignDialog batch={batching} onClose={() => setBatching(null)} /> : null}
       {assigning ? <AssignDialog delivery={assigning} onClose={() => setAssigning(null)} /> : null}
       {openId ? <DeliveryDialog id={openId} canWrite={canWrite} onClose={() => setOpenId(null)} onAssign={(delivery) => { setOpenId(null); setAssigning(delivery); }} /> : null}
     </div>
   );
 }
 
-function Row({ row, tab, primary, canWrite, online, onAssign, onOpen }: { row: Delivery; tab: Tab; primary: boolean; canWrite: boolean; online: boolean; onAssign: () => void; onOpen: () => void }) {
+function Row({ row, now, tab, primary, canWrite, online, onAssign, onOpen }: { row: Delivery; now: number; tab: Tab; primary: boolean; canWrite: boolean; online: boolean; onAssign: () => void; onOpen: () => void }) {
   const queueRow = tab === 'queue';
   return (
     <li>
@@ -188,6 +232,7 @@ function Row({ row, tab, primary, canWrite, online, onAssign, onOpen }: { row: D
             {queueRow ? <WaitChip delivery={row} /> : <span className={cx('wb-text-caption-strong', s.wait)}>{STATUS_LABEL[row.status]}{row.courier?.name ? ` · ${row.courier.name}` : ''}</span>}
             <KindBadge kind={row.kind as DeliveryKind} />
           </span>
+          <EtaChip delivery={row} now={now} />
           <span className="wb-text-body-strong">{row.storeName ?? 'Loja'}{row.destination ? ` > ${row.destination}` : ''}</span>
           <span className={cx('wb-text-caption', s.muted)}>
             {row.orderNumber ? `#${row.orderNumber} · ` : ''}

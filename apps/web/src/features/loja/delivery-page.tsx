@@ -1,6 +1,5 @@
 'use client';
 
-import { Minus, Plus } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Banner, Button, RadioCards, Switch, TextArea, TextField, ui, useToast } from '@/components/ui';
@@ -9,7 +8,7 @@ import { saveErrorMessage } from '@/lib/api/messages';
 import { settingsApi, type DeliveryPreview, type StoreSettings } from '@/lib/api/store-settings';
 import { maskCep, onlyDigits } from '@/lib/br/mask';
 import { formatCents } from '@/lib/format';
-import { centsInput, kmInput, parseCents, parseDecimal } from '@/lib/money';
+import { parseDecimal } from '@/lib/money';
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
@@ -17,25 +16,23 @@ import { SettingsFrame } from './settings-frame';
 import { SettingsScreen } from './settings-screen';
 
 const T = (id: string) => ltid('entrega', id);
-const MAX_TIERS = 5;
-const MAX_FEE = 5000;
 const MAX_MINUTES = 1440;
+/** Faixa aceita para o preparo da loja: a mesma do parâmetro `entrega_preparo_padrao_min` (5 a 120 min). */
+export const PREP_MIN = 5;
+export const PREP_MAX = 120;
 
-interface Band {
-  to: string;
-  fee: string;
+type Errors = Partial<Record<'prep' | 'pickupEta' | 'pickupAddress', string>>;
+
+/** Valor do campo: só o preparo que a loja definiu; se vale o padrão da Webag, o campo fica vazio. */
+function storePrep(d: StoreSettings['delivery']): string {
+  return d.prepMinutes && d.prepMinutesIsDefault !== true ? String(d.prepMinutes) : '';
 }
-type Errors = Partial<Record<'radius' | 'fee' | 'bands' | 'minOrder' | 'freeAbove' | 'eta' | 'mode' | 'pickupEta' | 'pickupAddress', string>>;
 
 export function DeliveryPage() {
   return <SettingsScreen>{({ store, settings, refresh }) => <DeliveryForm storeId={store.id} settings={settings} refresh={refresh} />}</SettingsScreen>;
 }
 
-function bandsFrom(settings: StoreSettings['delivery']): Band[] {
-  return settings.tiers.length > 0 ? settings.tiers.map((t) => ({ to: kmInput(t.toKm), fee: t.feeCents > 0 ? centsInput(t.feeCents) : '' })) : [{ to: kmInput(settings.radiusKm), fee: '' }];
-}
-
-/** C4: entrega (raio, taxa fixa ou por faixa, mínimo, grátis acima de, tempo) e retirada. */
+/** C4 (DEC-036, DEC-053): a loja liga a entrega pela Webag e diz o tempo de preparo; taxa, raio e pedido mínimo são do admin. Retirada na loja. */
 export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; settings: StoreSettings; refresh: () => Promise<unknown> }) {
   const router = useRouter();
   const toast = useToast();
@@ -43,14 +40,7 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
   const d = settings.delivery;
   const p = settings.pickup;
   const [delivery, setDelivery] = useState(d.acceptsDelivery);
-  const [radius, setRadius] = useState(kmInput(d.radiusKm));
-  const [mode, setMode] = useState(d.feeMode);
-  const [fixed, setFixed] = useState(d.feeFixedCents > 0 ? centsInput(d.feeFixedCents) : '');
-  const [bands, setBands] = useState<Band[]>(bandsFrom(d));
-  const [minOrder, setMinOrder] = useState(d.minOrderCents > 0 ? centsInput(d.minOrderCents) : '');
-  const [freeAbove, setFreeAbove] = useState(d.freeAboveCents > 0 ? centsInput(d.freeAboveCents) : '');
-  const [etaMin, setEtaMin] = useState(String(d.etaMinMinutes));
-  const [etaMax, setEtaMax] = useState(String(d.etaMaxMinutes));
+  const [prep, setPrep] = useState(storePrep(d));
   const [pickup, setPickup] = useState(p.enabled);
   const [useStore, setUseStore] = useState(p.useStoreAddress);
   const [pickupAddress, setPickupAddress] = useState(p.address ?? '');
@@ -66,12 +56,8 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
   const [preview, setPreview] = useState<{ cep: string; result: DeliveryPreview } | { error: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
-  const radiusKm = parseDecimal(radius);
-  const etaMinN = parseDecimal(etaMin);
-  const etaMaxN = parseDecimal(etaMax);
-
-  const initial = JSON.stringify([d.acceptsDelivery, kmInput(d.radiusKm), d.feeMode, (d.feeFixedCents > 0 ? centsInput(d.feeFixedCents) : ''), bandsFrom(d), d.minOrderCents > 0 ? centsInput(d.minOrderCents) : '', d.freeAboveCents > 0 ? centsInput(d.freeAboveCents) : '', String(d.etaMinMinutes), String(d.etaMaxMinutes), p.enabled, p.useStoreAddress, p.address ?? '', p.instructions ?? '', String(p.prepMinMinutes), String(p.prepMaxMinutes)]);
-  const dirty = JSON.stringify([delivery, radius, mode, fixed, bands, minOrder, freeAbove, etaMin, etaMax, pickup, useStore, pickupAddress, notes, prepMin, prepMax]) !== initial;
+  const initial = JSON.stringify([d.acceptsDelivery, storePrep(d), p.enabled, p.useStoreAddress, p.address ?? '', p.instructions ?? '', String(p.prepMinMinutes), String(p.prepMaxMinutes)]);
+  const dirty = JSON.stringify([delivery, prep, pickup, useStore, pickupAddress, notes, prepMin, prepMax]) !== initial;
 
   /** Ao menos uma das duas fica ligada (C6): o switch que seria o último não desliga. */
   function toggleDelivery(next: boolean) {
@@ -85,42 +71,10 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
     setPickup(next);
   }
 
-  const setBand = (index: number, patch: Partial<Band>) => setBands((current) => current.map((band, i) => (i === index ? { ...band, ...patch } : band)));
-  function addBand() {
-    setBands((current) => {
-      const last = current[current.length - 1]!;
-      const from = current.length > 1 ? (parseDecimal(current[current.length - 2]!.to) ?? 0) : 0;
-      const end = radiusKm ?? parseDecimal(last.to) ?? 5;
-      const middle = Math.max(from + 0.1, Math.round(((from + end) / 2) * 10) / 10);
-      return [...current.slice(0, -1), { ...last, to: kmInput(middle) }, { to: kmInput(end), fee: last.fee }];
-    });
-  }
-
   async function submit() {
     const next: Errors = {};
-    if (delivery) {
-      if (radiusKm === null || radiusKm < 1) next.radius = 'O raio mínimo é 1 km.';
-      if (mode === 'fixed') {
-        const fee = fixed.trim() === '' ? 0 : parseCents(fixed);
-        if (fee === null || fee > MAX_FEE) next.fee = 'A taxa vai de R$ 0,00 a R$ 50,00.';
-      } else if (radiusKm !== null) {
-        let from = 0;
-        bands.forEach((band, index) => {
-          const to = index === bands.length - 1 ? radiusKm : parseDecimal(band.to);
-          const fee = band.fee.trim() === '' ? 0 : parseCents(band.fee);
-          if (to === null || to <= from || fee === null || fee > MAX_FEE) next.bands = next.bands ?? `Confira a faixa ${index + 1}: o "Até" precisa passar do anterior e a taxa vai até R$ 50,00.`;
-          from = to ?? from;
-        });
-      }
-      const min = minOrder ? parseCents(minOrder) : 0;
-      const free = freeAbove ? parseCents(freeAbove) : 0;
-      if (min === null) next.minOrder = 'Digite um valor em reais.';
-      if (free === null) next.freeAbove = 'Digite um valor em reais.';
-      else if (free > 0 && min !== null && free <= min) next.freeAbove = `Precisa ser maior que o pedido mínimo de ${formatCents(min)}.`;
-      if (etaMinN === null || etaMaxN === null || etaMinN < 1) next.eta = 'Digite os minutos.';
-      else if (etaMinN >= etaMaxN) next.eta = 'O mínimo precisa ser menor que o máximo.';
-      else if (etaMaxN > MAX_MINUTES) next.eta = 'O máximo é 1.440 minutos.';
-    }
+    const prepN = prep.trim() === '' ? null : parseDecimal(prep);
+    if (delivery && prep.trim() !== '' && (prepN === null || !Number.isInteger(prepN) || prepN < PREP_MIN || prepN > PREP_MAX)) next.prep = `Digite os minutos de preparo, de ${PREP_MIN} a ${PREP_MAX}.`;
     if (pickup) {
       const a = parseDecimal(prepMin);
       const b = parseDecimal(prepMax);
@@ -135,26 +89,9 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
     setBusy(true);
     setFormError(null);
     try {
-      const tiers = (() => {
-        if (mode !== 'by_distance') return [];
-        let from = 0;
-        return bands.map((band, index) => {
-          const to = index === bands.length - 1 ? radiusKm! : parseDecimal(band.to)!;
-          const tier = { fromKm: from, toKm: to, feeCents: band.fee.trim() === '' ? 0 : (parseCents(band.fee) ?? 0) };
-          from = to;
-          return tier;
-        });
-      })();
       await settingsApi.setDelivery(storeId, {
         acceptsDelivery: delivery,
-        radiusKm: radiusKm ?? d.radiusKm,
-        feeMode: mode,
-        feeFixedCents: mode === 'fixed' ? (fixed.trim() === '' ? 0 : (parseCents(fixed) ?? 0)) : 0,
-        tiers,
-        minOrderCents: (minOrder ? parseCents(minOrder) : 0) ?? 0,
-        freeAboveCents: (freeAbove ? parseCents(freeAbove) : 0) ?? 0,
-        etaMinMinutes: etaMinN ?? d.etaMinMinutes,
-        etaMaxMinutes: etaMaxN ?? d.etaMaxMinutes,
+        prepMinutes: prepN,
       });
       await settingsApi.setPickup(storeId, {
         enabled: pickup,
@@ -186,14 +123,12 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
     }
   }
 
-  const etaText = etaMinN && etaMaxN ? `${etaMinN} a ${etaMaxN} min` : '';
-  const stepper = (value: string, set: (v: string) => void, label: string, testId: string, error?: string) => (
-    <div className={ui.row} style={{ alignItems: 'flex-end' }}>
-      <Button variant="secondary" icon={<Minus size={20} aria-hidden="true" />} aria-label={`Diminuir ${label}`} onClick={() => set(kmInput(Math.max(1, (parseDecimal(value) ?? 1) - 1)))} />
-      <TextField label={label} inputMode="decimal" value={value} onChange={(e) => set(e.target.value)} error={error} data-testid={testId} />
-      <Button variant="secondary" icon={<Plus size={20} aria-hidden="true" />} aria-label={`Aumentar ${label}`} onClick={() => set(kmInput((parseDecimal(value) ?? 0) + 1))} />
-    </div>
-  );
+  const previewText = (cep: string, r: DeliveryPreview): string => {
+    if (!r.available) return 'Fora da área: o cliente não vê sua loja nesse endereço.';
+    const fee = (r.feeCents ?? 0) === 0 ? 'nada (grátis)' : formatCents(r.feeCents ?? 0);
+    const eta = r.eta ? ` e recebe em ${r.eta.minMinutes} a ${r.eta.maxMinutes} min` : '';
+    return `Para o CEP ${cep} o cliente paga ${fee}${eta} (${((r.distanceM ?? 0) / 1000).toFixed(1).replace('.', ',')} km).`;
+  };
 
   return (
     <SettingsFrame
@@ -216,63 +151,28 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
           {!online ? <p className="wb-text-caption" style={{ margin: 0 }}>Conecte-se para ver a prévia.</p> : null}
           {preview ? (
             <p className="wb-text-body" role="status" style={{ margin: 0 }} data-testid={T('preview-result')}>
-              {'error' in preview
-                ? preview.error
-                : preview.result.available
-                  ? `Para o CEP ${preview.cep} o cliente paga ${(preview.result.feeCents ?? 0) === 0 ? 'nada (grátis)' : formatCents(preview.result.feeCents ?? 0)} e recebe em ${d.etaMinMinutes} a ${d.etaMaxMinutes} min (${((preview.result.distanceM ?? 0) / 1000).toFixed(1).replace('.', ',')} km).`
-                  : 'Fora do raio: o cliente não vê sua loja nesse endereço.'}
+              {'error' in preview ? preview.error : previewText(preview.cep, preview.result)}
             </p>
           ) : null}
         </div>
       }
     >
       <section className={ui.stack} aria-labelledby="entrega-titulo">
-        <h2 id="entrega-titulo" className="wb-text-title2" style={{ margin: 0 }}>Entrega</h2>
+        <h2 id="entrega-titulo" className="wb-text-title2" style={{ margin: 0 }}>Entrega pela Webag</h2>
         <Switch checked={delivery} onChange={toggleDelivery} label="Entregar em casa" onText="Ligado" offText="Desligado" testId={T('delivery-switch')} />
         {lastOff ? <p role="alert" className="wb-text-caption" style={{ margin: 0, color: 'var(--wb-color-text-danger)' }} data-testid={T('last-off')}>Ligue a entrega ou a retirada. A loja precisa de ao menos uma.</p> : null}
         {delivery ? (
           <>
-            {stepper(radius, setRadius, 'Raio de entrega (km)', T("radius-input"), errors.radius)}
-            <div role="group" aria-label="Como cobrar a taxa" className={ui.row}>
-              <button type="button" className={ui.chip} aria-pressed={mode === 'fixed'} onClick={() => setMode('fixed')} data-testid={T('fee-mode-fixed')}>Taxa fixa</button>
-              <button type="button" className={ui.chip} aria-pressed={mode === 'by_distance'} onClick={() => setMode('by_distance')} data-testid={T('fee-mode-distance')}>Por distância</button>
-            </div>
-            {mode === 'fixed' ? (
-              <TextField label="Taxa de entrega" inputMode="decimal" value={fixed} onChange={(e) => setFixed(e.target.value)} hint={fixed.trim() === '' || parseCents(fixed) === 0 ? 'Grátis. Digite um valor para cobrar (até R$ 50,00).' : 'De R$ 0,00 a R$ 50,00.'} error={errors.fee} data-testid={T('fee-input')} />
-            ) : (
-              <div className={ui.stack}>
-                {bands.map((band, index) => {
-                  const last = index === bands.length - 1;
-                  const from = index === 0 ? 0 : (parseDecimal(bands[index - 1]!.to) ?? 0);
-                  return (
-                    <div key={index} className="wb-text-body" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 12, alignItems: 'end' }}>
-                      <span style={{ paddingBottom: 12 }}>De {kmInput(from)} km</span>
-                      <TextField label="Até (km)" inputMode="decimal" value={last ? (radiusKm !== null ? kmInput(radiusKm) : '') : band.to} disabled={last} hint={last ? 'Vai até o raio' : undefined} onChange={(e) => setBand(index, { to: e.target.value })} data-testid={T(`band-${index + 1}-to`)} />
-                      <TextField label="Valor" inputMode="decimal" value={band.fee} onChange={(e) => setBand(index, { fee: e.target.value })} data-testid={T(`band-${index + 1}-fee`)} />
-                    </div>
-                  );
-                })}
-                {errors.bands ? <p role="alert" className="wb-text-caption" style={{ margin: 0, color: 'var(--wb-color-text-danger)' }}>{errors.bands}</p> : null}
-                <div className={ui.row}>
-                  {bands.length < MAX_TIERS ? (
-                    <Button variant="secondary" size="sm" onClick={addBand} data-testid={T('band-add')}>Adicionar faixa</Button>
-                  ) : (
-                    <span className="wb-text-caption">Máximo de 5 faixas</span>
-                  )}
-                  {bands.length > 1 ? <Button variant="text" size="sm" onClick={() => setBands((current) => current.slice(0, -1))} data-testid={T('band-remove')}>Remover a última faixa</Button> : null}
-                </div>
-              </div>
-            )}
-            <TextField label="Pedido mínimo (opcional)" inputMode="decimal" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} error={errors.minOrder} data-testid={T('min-order-input')} />
-            <TextField label="Entrega grátis a partir de (opcional)" inputMode="decimal" value={freeAbove} onChange={(e) => setFreeAbove(e.target.value)} error={errors.freeAbove} data-testid={T('free-above-input')} />
-            <div className={ui.stack}>
-              <div className={ui.row} style={{ alignItems: 'flex-end' }}>
-                <TextField label="Tempo estimado, de (min)" inputMode="numeric" value={etaMin} onChange={(e) => setEtaMin(e.target.value)} data-testid={T('eta-min-input')} />
-                <TextField label="até (min)" inputMode="numeric" value={etaMax} onChange={(e) => setEtaMax(e.target.value)} data-testid={T('eta-max-input')} />
-                <span className="wb-text-body-strong" aria-live="polite" style={{ paddingBottom: 12 }}>{etaText}</span>
-              </div>
-              {errors.eta ? <p role="alert" className="wb-text-caption" style={{ margin: 0, color: 'var(--wb-color-text-danger)' }}>{errors.eta}</p> : null}
-            </div>
+            <Banner tone="info" testId={T('webag-delivers')}>A Webag cuida do motoboy. A taxa, o raio e o pedido mínimo são definidos por região, e o cliente vê uma faixa de horário para receber.</Banner>
+            <TextField
+              label="Tempo de preparo (min)"
+              inputMode="numeric"
+              value={prep}
+              onChange={(e) => setPrep(e.target.value.replace(/\D/g, '').slice(0, 3))}
+              error={errors.prep}
+              hint={`Do aceite até o pedido ficar pronto para coleta, de ${PREP_MIN} a ${PREP_MAX} min. ${d.prepMinutesIsDefault && d.prepMinutes ? `Hoje vale o padrão da Webag, ${d.prepMinutes} min. ` : ''}Vazio usa o padrão da Webag. Preparo longo aumenta a faixa que o cliente vê.`}
+              data-testid={T('prep-input')}
+            />
           </>
         ) : null}
       </section>

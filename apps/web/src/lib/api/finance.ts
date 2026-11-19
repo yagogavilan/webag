@@ -1,8 +1,8 @@
-import type { StatementPage, StoreFinanceSummary, StoreSales } from '@webag/shared';
+import type { StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily } from '@webag/shared';
 import { apiRequest } from './client';
 
 /** Financeiro da loja (WB-075 a 077). Vendas: `sales_values`; resumo e extrato: só o dono (RN-13). */
-export type { StatementPage, StoreFinanceSummary, StoreSales };
+export type { StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily };
 export interface Period {
   from: string;
   to: string;
@@ -13,6 +13,7 @@ const base = (storeId: string) => `stores/${storeId}/finance`;
 
 export const financeApi = {
   sales: (storeId: string, period: Period) => apiRequest<StoreSales>(L, `${base(storeId)}/sales`, { query: { ...period } }),
+  salesDaily: (storeId: string, period: Period) => apiRequest<StoreSalesDaily>(L, `${base(storeId)}/sales/daily`, { query: { ...period } }),
   summary: (storeId: string, period: Period) => apiRequest<StoreFinanceSummary>(L, `${base(storeId)}/summary`, { query: { ...period } }),
   statement: (storeId: string, period: Period, cursor?: string) => apiRequest<StatementPage>(L, `${base(storeId)}/statement`, { query: { ...period, limit: 20, cursor } }),
   csvUrl: (storeId: string, period: Period) => `/api/proxy/${L}/${base(storeId)}/statement.csv?from=${period.from}&to=${period.to}`,
@@ -20,6 +21,7 @@ export const financeApi = {
 
 export const financeKeys = {
   sales: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'sales', period.from, period.to] as const,
+  salesDaily: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'sales-daily', period.from, period.to] as const,
   summary: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'summary', period.from, period.to] as const,
   statement: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'statement', period.from, period.to] as const,
 };

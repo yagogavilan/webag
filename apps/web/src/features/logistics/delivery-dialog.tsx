@@ -1,8 +1,9 @@
 'use client';
 
-import { ChatCircleText, Phone } from '@phosphor-icons/react';
+import { ChatCircleText, Eye, Phone } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { ReasonDialog, UserMessageError } from '@/components/panel/reason-dialog';
 import { Banner, Button, Dialog, OtpInput, RadioCards, SkeletonRows, TextArea, TextField, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { FAIL_REASONS, KIND_LABEL, STATUS_LABEL, logisticsApi, logisticsKeys, type Delivery, type DeliveryDetail, type DeliveryKind, type FailReason } from '@/lib/api/logistics';
@@ -10,8 +11,9 @@ import { formatCents, formatFullDateTime } from '@/lib/format';
 import { parseCents } from '@/lib/money';
 import { formatPhone, whatsappHref } from '@/lib/orders/status';
 import { tid } from '@/lib/testid';
+import { useNow } from '@/lib/use-now';
 import { useOnline } from '@/lib/use-online';
-import { KindBadge, WaitChip } from './logistics-page';
+import { EtaChip, KindBadge, WaitChip } from './logistics-page';
 import s from './logistics.module.css';
 
 const T = (id: string) => tid('logistica', id);
@@ -54,7 +56,11 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
   const [failReason, setFailReason] = useState<FailReason | null>(null);
   const [text, setText] = useState('');
   const allowed = new Set<string>(detail.allowedActions);
-  const contact = detail.contact;
+  const now = useNow(30_000);
+  const [revealed, setRevealed] = useState<DeliveryDetail['contact'] | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const contact = revealed ?? detail.contact;
+  const canReveal = !contact?.customerPhone && detail.contactRevealable === true && !revealed;
   const phoneLink = whatsappHref(contact?.customerPhone ?? null);
 
   async function run(call: () => Promise<unknown>, success: string, after?: () => void) {
@@ -179,6 +185,7 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
         <span className={`wb-text-caption-strong ${s.wait}`} data-testid={T('status')}>{STATUS_LABEL[detail.status]}</span>
         {detail.status === 'ready_for_collection' ? <WaitChip delivery={detail} /> : <KindBadge kind={detail.kind as DeliveryKind} />}
       </div>
+      <EtaChip delivery={detail} now={now} />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {step ? (
         <Button size="lg" onClick={step.go} loading={busy} loadingLabel="Atualizando…" data-testid={T(step.testId)}>
@@ -210,6 +217,35 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
       ) : (
         <p className="wb-text-caption" style={{ margin: 0 }}>Os dados do cliente só aparecem enquanto o trabalho está ativo.</p>
       )}
+      {canReveal ? (
+        <section className={s.block} aria-labelledby="lg-reveal" data-testid={T('reveal-block')}>
+          <h3 id="lg-reveal" className="wb-text-body-strong">Contato do cliente</h3>
+          <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('masked-phone')}>{detail.customerPhoneMasked ?? 'Telefone oculto'}</p>
+          <p className="wb-text-caption" style={{ margin: 0 }}>Ver o telefone e o endereço exige um motivo e fica registrado na auditoria.</p>
+          <div>
+            <Button variant="secondary" size="sm" icon={<Eye size={20} aria-hidden="true" />} onClick={() => setRevealing(true)} disabled={!online} data-testid={T('reveal')}>Revelar contato</Button>
+          </div>
+        </section>
+      ) : null}
+      {revealed ? <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('revealed-note')}>Contato revelado agora. Ficou registrado na auditoria.</p> : null}
+      {revealing ? (
+        <ReasonDialog
+          title="Revelar o contato do cliente?"
+          description="O motivo e o seu nome ficam na auditoria. O telefone e o endereço não são guardados no registro."
+          confirmLabel="Revelar contato"
+          quickReasons={['Cliente não atende o motoboy', 'Conferir o endereço de entrega', 'Atendimento de reclamação']}
+          testIds={{ dialog: T('reveal-dialog'), reason: T('reveal-reason'), confirm: T('reveal-confirm') }}
+          onConfirm={async (reason) => {
+            try {
+              setRevealed((await logisticsApi.revealContact(detail.id, reason)).contact);
+            } catch (caught) {
+              if (caught instanceof ApiError && caught.code === 'CONTACT_NOT_AVAILABLE') throw new UserMessageError('O contato já foi apagado: a corrida terminou há mais dias que o prazo de guarda.');
+              throw caught;
+            }
+          }}
+          onClose={() => setRevealing(false)}
+        />
+      ) : null}
       <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('payment-note')}>Pago online. Não cobrar do cliente.</p>
       <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('cost-value')}>
         {detail.volumes} {detail.volumes === 1 ? 'volume' : 'volumes'} · taxa do cliente {formatCents(detail.fee.amount)} · custo previsto {formatCents(detail.expectedCost.amount)}

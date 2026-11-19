@@ -15,6 +15,7 @@ import { canSeeFinance } from '@/lib/lojista-access';
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
+import { SalesChart } from './sales-chart';
 import s from './finance.module.css';
 
 const T = (id: string) => ltid('financeiro', id);
@@ -114,6 +115,7 @@ function Summary({ storeId, period, view }: { storeId: string; period: { from: s
           <p className={cx('wb-text-caption', s.kpiNote)}>Depois da comissão e da tarifa</p>
         </li>
       </ul>
+      <SalesChart storeId={storeId} period={period} />
       <section className={s.block} aria-labelledby="fin-comp" data-testid={T('summary')}>
         <h2 id="fin-comp" className="wb-text-title2">Como chegamos neste valor</h2>
         <dl className={s.sum}>
