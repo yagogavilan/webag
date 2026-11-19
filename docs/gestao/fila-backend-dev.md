@@ -66,3 +66,9 @@ R.4 [ ] I4: reembolso de troca com cupom de frete grátis; I6: UMA definição d
 R.5 [ ] I7: ordem global de locks (corrida, pedido, troca) sem deadlock, com teste de concorrência; I10: `disconnectSession` na revogação de sessão e limite de taxa por mensagem WebSocket (e `@SubscribeMessage` novo nascer protegido).
 R.6 [ ] I9: eliminar N+1 nas listas de pedidos e usar `/rt` com o ticket no painel (O6.2); DT-053 a 058.
 R.7 [ ] Frontend (mobile-dev, depois): I11 PIX vencido pelo relógio do servidor e um único socket compartilhado no app.
+
+## Bugs do QA das ondas 3 a 5 (DEC-048) — junto com R.1 a R.7
+Q.1 [ ] BUG-011 (ALTA, bloqueia G4): rota do admin para cancelar pedido; estorno total manual deve cancelar o pedido (estado, estoque devolvido, corrida cancelada, auditoria) e a loja não pode mais aceitar; SEC-151 reclassificado para Alta.
+Q.2 [ ] BUG-016: horário e pausa da logística (`logistica_horario`, "pausar entregas") valendo no pedido e no app; BUG-012: cancelar corrida não deixa o pedido parado.
+Q.3 [ ] BUG-014 (retirada 48 h), BUG-015 (rotas de "não recebi meu pedido" e "pedir cancelamento"), BUG-017 (parâmetros do admin sem efeito: listar quais e ligar), BUG-018 ("Mais vendidos" na descoberta), BUG-013/SEC-148, BUG-019 (testes frágeis por horário/ordem e `seed-orders`).
+Os testes `it.fails` de `apps/api/test/qa-onda3-5-lacunas.e2e-spec.ts` ficam vermelhos quando a correção entra: troque para `it` normal.
