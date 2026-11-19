@@ -199,3 +199,24 @@ describe('SEC-116: rotas de sessão e proxy respeitam o host da área', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ticket de tempo real pelo BFF (DEC-045)', () => {
+  it('repassa o ticket com o Bearer do cookie e acrescenta a origem pública do canal, sem expor o JWT', async () => {
+    vi.stubEnv('REALTIME_URL', 'https://api.webag.com.br');
+    vi.stubEnv('COOKIE_SECURE', 'false');
+    fetchMock.mockResolvedValue(json(200, { ticket: 'tkt', expiresInSeconds: 60 }));
+    const res = await proxyPost(post('/api/proxy/lojista/realtime/tickets', { scope: 'store', storeId: '11111111-1111-4111-8111-111111111111' }, { cookie: 'webag_lojista_at=at; webag_lojista_rt=rt' }), ctx('lojista', ['realtime', 'tickets']));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ticket: 'tkt', expiresInSeconds: 60, url: 'https://api.webag.com.br' });
+    expect(apiCall(0).url).toContain('/v1/realtime/tickets');
+  });
+
+  it('sem origem de canal em produção: 503 e nenhum ticket vaza ao navegador', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('REALTIME_URL', '');
+    fetchMock.mockResolvedValue(json(200, { ticket: 'tkt', expiresInSeconds: 60 }));
+    const res = await proxyPost(post('/api/proxy/admin/realtime/tickets', { scope: 'admin' }), ctx('admin', ['realtime', 'tickets']));
+    expect(res.status).toBe(503);
+    expect(JSON.stringify(await res.json())).not.toContain('tkt');
+  });
+});

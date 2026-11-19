@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { clearedCookies, clearedPendingCookie, cookieNames, pendingCookie, pendingCookieName, isSessionArea, sessionCookies, writeCookies, type SessionArea, type TokenPair } from '@/server/cookies';
+import { realtimeOrigin } from '@/server/config';
 import { csrfProblem } from '@/server/csrf';
 import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
@@ -11,9 +12,9 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
  * deixa passar o que cada área usa. A autorização de verdade é da API.
  */
 const ALLOWED: Record<SessionArea, RegExp> = {
-  admin: /^(admin\/.+|me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
+  admin: /^(admin\/.+|me(\/.*)?|realtime\/tickets|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
-    /^(me(\/.*)?|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
+    /^(me(\/.*)?|realtime\/tickets|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
 };
 /** Importação de produtos: o corpo é a planilha (`text/csv`, até 1 MB na API; aqui um pouco mais para a API dar o erro certo). */
 const CSV_IMPORT = /^stores\/[0-9a-f-]{36}\/products\/import$/;
@@ -82,6 +83,14 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   // host (o `complete` só existe no admin, em outro host e outro cookie): descarta o ticket e orienta o caminho certo.
   if (area !== 'admin' && joined === 'auth/password/reset' && result.status === 200 && parseJson<{ resetTicket?: unknown }>(result.text)?.resetTicket) {
     return problem(403, 'ADMIN_ACCOUNT_USE_ADMIN_PANEL', 'Esta conta é de administração', 'Redefina a senha no painel de administração.');
+  }
+
+  // Ticket de tempo real: o navegador também precisa saber ONDE abrir o canal (a API não é alcançável por ele, só o nginx dela).
+  if (joined === 'realtime/tickets' && request.method === 'POST' && result.status === 200) {
+    const origin = realtimeOrigin();
+    const ticket = parseJson<{ ticket?: string; expiresInSeconds?: number }>(result.text);
+    if (!origin || !ticket?.ticket) return problem(503, 'REALTIME_UNAVAILABLE', 'Tempo real indisponível');
+    return NextResponse.json({ ...ticket, url: origin }, { headers: { 'cache-control': 'no-store' } });
   }
 
   const response = respond(result);

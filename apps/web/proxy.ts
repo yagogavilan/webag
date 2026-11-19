@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { realtimeOrigin } from '@/server/config';
 import { clearedCookies, cookieNames, sessionCookies } from '@/server/cookies';
 import { refreshSession } from '@/server/refresh';
 import { areaAllowedOnHost, publicAllowedOnHost } from '@/server/hosts';
@@ -28,6 +29,14 @@ function storageOrigin(): string {
   }
 }
 
+/** Canal em tempo real (Socket.IO por WebSocket): `connect-src` precisa da origem da API e do esquema `wss`. */
+function realtimeSources(): string {
+  const origin = realtimeOrigin();
+  if (!origin) return '';
+  const url = new URL(origin);
+  return ` ${origin} ${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`;
+}
+
 function csp(nonce: string): string {
   const dev = process.env.NODE_ENV !== 'production';
   const storage = storageOrigin();
@@ -37,7 +46,7 @@ function csp(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob:${storage ? ` ${storage}` : ''}`,
     "font-src 'self'",
-    `connect-src 'self'${storage ? ` ${storage}` : ''}`,
+    `connect-src 'self'${storage ? ` ${storage}` : ''}${realtimeSources()}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

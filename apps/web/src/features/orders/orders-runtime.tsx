@@ -1,17 +1,24 @@
 'use client';
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useMerchant } from '@/features/lojista/store-context';
 import { ordersApi, ordersKeys, type StoreOrderPage, type StoreOrderSummary } from '@/lib/api/orders';
 import { ordersAvailable } from '@/lib/lojista-access';
 import { createAlertSound, type AlertSound } from '@/lib/orders/alert-sound';
 import { arrivedAt } from '@/lib/orders/status';
+import { useRealtimeChannel } from '@/lib/realtime/use-realtime-channel';
+import { exchangesKeys } from '@/lib/api/exchanges';
 import { useOnline } from '@/lib/use-online';
 
-/** Novos a cada 4 s (WB-067 C1: aparece em até 3 s com o Socket.IO; por polling, o mais perto que a API suporta); o resto, a cada 10 s. */
+/**
+ * Sem o canal em tempo real (fallback): novos a cada 4 s e o resto a cada 10 s. Com o canal conectado, o evento chama `refresh()` e a
+ * leitura vira só uma reserva lenta (WB-067 C1: o pedido aparece em até 3 s pelo Socket.IO).
+ */
 export const POLL_NEW_MS = 4000;
 export const POLL_PROGRESS_MS = 10_000;
+export const POLL_NEW_CONNECTED_MS = 30_000;
+export const POLL_PROGRESS_CONNECTED_MS = 60_000;
 /** O som repete a cada 15 s até a primeira ação (WB-067 C1) e fica mais forte a partir de 5 min (WB-068 C3). */
 export const ALERT_REPEAT_MS = 15_000;
 export const STRONG_AFTER_MS = 5 * 60_000;
@@ -28,6 +35,8 @@ export interface OrdersRuntime {
   inProgress: StoreOrderSummary[];
   newQuery: UseQueryResult<StoreOrderPage>;
   progressQuery: UseQueryResult<StoreOrderPage>;
+  /** Canal em tempo real (Socket.IO por ticket) conectado. Sem ele, vale o polling. */
+  realtimeConnected: boolean;
   /** Última sincronização bem-sucedida (ms); 0 se ainda não houve. */
   syncedAt: number;
   connectionLost: boolean;
@@ -54,20 +63,33 @@ const byArrival = (a: StoreOrderSummary, b: StoreOrderSummary) => Date.parse(arr
 /**
  * Motor do painel de pedidos: consulta (polling), alerta sonoro persistente, título da aba piscando, vibração e tela acesa.
  * Vive no painel inteiro (não só na tela de pedidos), para o lojista não perder pedido enquanto mexe no catálogo.
- * Quando o Socket.IO existir, o evento de pedido só precisa chamar `refresh()` (e o polling vira reserva).
+ * O evento do Socket.IO só chama `refresh()` (o REST é a verdade); o polling continua como reserva, lento com o canal e rápido sem ele.
  */
 export function OrdersRuntimeProvider({ children, createSound = createAlertSound }: { children: ReactNode; createSound?: () => AlertSound }) {
   const { store } = useMerchant();
   const enabled = ordersAvailable(store.data);
   const storeId = enabled && store.data ? store.data.id : null;
   const online = useOnline();
+  const client = useQueryClient();
+
+  // Tempo real por ticket (DEC-045). Evento = "refaça a leitura": o REST continua sendo a verdade.
+  const { connected: realtimeConnected } = useRealtimeChannel({
+    area: 'lojista',
+    target: { scope: 'store', storeId: storeId ?? 'none' },
+    enabled: storeId !== null,
+    onEvent: (event) => {
+      if (!storeId) return;
+      if (event.type.startsWith('exchange.')) void client.invalidateQueries({ queryKey: exchangesKeys.all(storeId) });
+      else void client.invalidateQueries({ queryKey: ordersKeys.all(storeId) });
+    },
+  });
 
   const newQuery = useQuery({
     queryKey: ordersKeys.live(storeId ?? 'none', 'new'),
     queryFn: () => ordersApi.list(storeId as string, { scope: 'new', limit: 50 }),
     enabled,
     staleTime: 0,
-    refetchInterval: POLL_NEW_MS,
+    refetchInterval: realtimeConnected ? POLL_NEW_CONNECTED_MS : POLL_NEW_MS,
     // O lojista deixa o painel numa aba em segundo plano: o alerta não pode parar.
     refetchIntervalInBackground: true,
     refetchOnReconnect: 'always',
@@ -77,7 +99,7 @@ export function OrdersRuntimeProvider({ children, createSound = createAlertSound
     queryFn: () => ordersApi.list(storeId as string, { scope: 'in_progress', limit: 50 }),
     enabled,
     staleTime: 0,
-    refetchInterval: POLL_PROGRESS_MS,
+    refetchInterval: realtimeConnected ? POLL_PROGRESS_CONNECTED_MS : POLL_PROGRESS_MS,
     refetchIntervalInBackground: true,
     refetchOnReconnect: 'always',
   });
@@ -197,13 +219,14 @@ export function OrdersRuntimeProvider({ children, createSound = createAlertSound
       inProgress,
       newQuery,
       progressQuery,
+      realtimeConnected,
       syncedAt: newQuery.dataUpdatedAt,
       connectionLost: enabled && (!online || newQuery.isError || progressQuery.isError),
       sound: { supported: soundSupported, enabled: soundOn, enable: enableSound, test: testSound },
       wakeLock,
       refresh,
     }),
-    [enabled, storeId, pending, inProgress, newQuery, progressQuery, online, soundSupported, soundOn, enableSound, testSound, wakeLock, refresh],
+    [enabled, storeId, pending, inProgress, newQuery, progressQuery, realtimeConnected, online, soundSupported, soundOn, enableSound, testSound, wakeLock, refresh],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

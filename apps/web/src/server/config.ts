@@ -50,3 +50,20 @@ export function appScheme(): string {
   const value = process.env.APP_SCHEME?.trim().toLowerCase() ?? '';
   return /^[a-z][a-z0-9+.-]{1,30}$/.test(value) ? value : 'webag';
 }
+
+/**
+ * Origem pública do Socket.IO (`/rt`), a que o NAVEGADOR alcança (ex.: `https://api.webag.com.br`; o nginx já faz o upgrade em `/socket.io/`).
+ * O navegador abre o canal com um ticket de uso único (ADR-003/DEC-045); o JWT nunca sai do cookie HttpOnly. Em dev, cai na API local.
+ * Sem origem em produção, não há canal e os painéis ficam só com polling.
+ */
+export function realtimeOrigin(): string | null {
+  const prod = process.env.NODE_ENV === 'production';
+  const raw = process.env.REALTIME_URL?.trim() || (prod ? '' : API_URL);
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' || (!prod && url.protocol === 'http:') ? url.origin : null;
+  } catch {
+    return null;
+  }
+}

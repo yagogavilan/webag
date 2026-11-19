@@ -11,7 +11,7 @@ import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import type { Me } from '@/lib/session-types';
 import { createPanelQueryClient } from '@/lib/query-client';
 import { useOnline } from '@/lib/use-online';
-import { LogisticsNavCount } from '@/features/logistics/nav-count';
+import { AdminRealtimeProvider, LogisticsNavCount } from '@/features/logistics/nav-count';
 import { IdleGuard } from './idle-guard';
 import { ReauthProvider } from './reauth';
 import { SessionProvider } from './session-context';
@@ -165,7 +165,9 @@ export function AdminShell({ user, children }: { user: Me; children: ReactNode }
       <ToastProvider>
         <ReauthProvider>
           <SessionProvider user={user}>
-            <Frame user={user}>{children}</Frame>
+            <AdminRealtimeProvider>
+              <Frame user={user}>{children}</Frame>
+            </AdminRealtimeProvider>
           </SessionProvider>
         </ReauthProvider>
       </ToastProvider>
