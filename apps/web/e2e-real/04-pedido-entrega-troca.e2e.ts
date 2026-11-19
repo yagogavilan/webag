@@ -6,6 +6,8 @@ import { API, adminLogin, lojistaLogin } from './helpers';
  * QA ondas 4 e 5 (O5-JOR-02): a jornada do pedido pelas TELAS contra a API REAL (Postgres e Redis reais, sem API falsa).
  * Usa os pedidos de demonstração do seed (`WB-DMxxx`): a loja aceita e marca pronto na tela, a operação atribui o motoboy na tela
  * Logística, a entrega fecha com o código do cliente, e uma troca de tamanho pedida é aprovada pela loja na tela de trocas.
+ * Preparo (banco e Redis só do QA): criar o banco, `db:migrate`, `SEED_ADMIN_EMAIL=admin@webag.local SEED_ADMIN_PASSWORD=Webag-Admin-Dev-2026 db:seed`, `nest build`, subir `node dist/main.js` (STORAGE_DRIVER=memory) e rodar
+ * `REAL_API_URL=... REAL_DB_URL=... PW_CHANNEL=chrome pnpm exec playwright test -c playwright.real.config.ts e2e-real/04-pedido-entrega-troca.e2e.ts`; use um TMPDIR novo se recriar o banco (o segredo do TOTP do admin fica nele).
  * Variáveis: REAL_DB_URL (psql, só leitura do que o seed criou), senha do seed em SEED_PASSWORD.
  */
 const DB = process.env.REAL_DB_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag_qa35e';
@@ -94,9 +96,9 @@ test.describe('Jornada pelas telas com a API real: aceitar, pronto, motoboy, ent
   });
 
   test('a loja aprova a troca de tamanho pedida (1 toque); a taxa passa a ser devida e só então; a variação nova fica reservada', async ({ page }) => {
-    const [exchangeId, owner, feeCents] = sql(
-      `select e.id, u.email, e.fee_cents from exchange_requests e join orders o on o.id=e.order_id join store_members m on m.store_id=o.store_id and m.role='owner' join users u on u.id=m.user_id where e.status='requested' and e.type='size_color' order by o.number limit 1`,
-    ).split('|') as [string, string, string];
+    const [exchangeId, owner, feeCents, method] = sql(
+      `select e.id, u.email, e.fee_cents, e.method from exchange_requests e join orders o on o.id=e.order_id join store_members m on m.store_id=o.store_id and m.role='owner' join users u on u.id=m.user_id where e.status='requested' and e.type='size_color' order by o.number limit 1`,
+    ).split('|') as [string, string, string, string];
     await lojistaLogin(page, owner, SEED_PASSWORD);
     await page.goto('/lojista/trocas');
     await expect(page.getByTestId(`lojista.trocas.deadline-${exchangeId}`)).toContainText(/Responda em/, { timeout: 20_000 });
@@ -105,6 +107,7 @@ test.describe('Jornada pelas telas com a API real: aceitar, pronto, motoboy, ent
     await expect.poll(() => sql(`select status from exchange_requests where id='${exchangeId}'`), { timeout: 15_000 }).toMatch(/awaiting_fee|approved/);
     const status = sql(`select status from exchange_requests where id='${exchangeId}'`);
     expect(status).toBe(Number(feeCents) > 0 ? 'awaiting_fee' : 'approved');
-    expect(sql(`select count(*) from deliveries where exchange_id='${exchangeId}'`)).toBe(Number(feeCents) > 0 ? '0' : '1'); // com taxa pendente não há corrida
+    // com taxa pendente não há corrida; sem taxa só há corrida se a coleta for em casa (levar à loja não tem corrida)
+    expect(sql(`select count(*) from deliveries where exchange_id='${exchangeId}'`)).toBe(Number(feeCents) === 0 && method === 'pickup_at_home' ? '1' : '0');
   });
 });
