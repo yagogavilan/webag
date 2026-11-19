@@ -15,6 +15,11 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
     ctx = await createTestApp();
     const storage = ctx.app.get<MemoryObjectStorage>(OBJECT_STORAGE);
     const options = { merchantPassword: PASSWORD, storage };
+    // BUG-019 residual: o seed só cria os banners de demonstração quando a home não tem NENHUM (não pisa em banner curado no admin) e o banco é
+    // compartilhado com `banners.e2e`, que deixa banners. Sem isto o resultado dependia da ordem dos arquivos (o vitest põe o que falhou
+    // por último no início da fila; em clone novo, com cache frio, a ordem alfabética rodava `banners` antes e o teste lia 2). Parte de home vazia.
+    await ctx.db.delete(banners);
+    await ctx.db.delete(mediaAssets).where(eq(mediaAssets.purpose, 'banner'));
     await seedOnda1(ctx.db, {});
     await seedOnda2(ctx.db, options);
     await seedOnda3(ctx.db, options);
@@ -35,10 +40,9 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
 
   it('banners: 3 com imagem 2:1 em variantes WebP, lidos pela API pública', async () => {
     const rows = await ctx.db.select().from(banners);
-    // BUG-019b: o banco é compartilhado entre os arquivos de teste (banners.e2e cria outros); a conferência é só do que o seed criou.
-    expect(rows.length).toBeGreaterThanOrEqual(3);
+    expect(rows).toHaveLength(3); // a home começou vazia (beforeAll) e a segunda execução do seed não duplica
     const assets = await ctx.db.select().from(mediaAssets).where(eq(mediaAssets.purpose, 'banner'));
-    expect(assets.length).toBeGreaterThanOrEqual(3);
+    expect(assets).toHaveLength(3);
     for (const asset of assets) expect(asset.width! / asset.height!).toBe(2);
     const res = await ctx.http.get('/v1/banners').expect(200);
     expect(res.body.data.map((b: { destination: { type: string } }) => b.destination.type)).toEqual(expect.arrayContaining(['coupon', 'category', 'store']));

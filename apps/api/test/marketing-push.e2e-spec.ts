@@ -9,6 +9,13 @@ import { useParam } from './helpers/fees.js';
 import { createAdmin, createCustomer, ensureCity, fakeCepCityIs, ensureLegalDocs, registerUser, verifyEmailOf, type RegisteredUser, type TestAdmin } from './helpers/fixtures.js';
 
 const sp = (iso: string): Date => new Date(`${iso}-03:00`);
+/**
+ * SEC-165 (flakiness): o envio só sai dentro da janela de 9h às 20h (Brasília) e o teste anda o relógio em passos de 6 min (retry de 5 min, 3 tentativas).
+ * Com a campanha "para agora", rodar o teste entre 19:48 e 20:00 empurrava a 2ª/3ª varredura para fora da janela (adiada em vez de enviada).
+ * Agora toda campanha do teste é agendada para MEIO-DIA de amanhã (dentro da janela, sempre no futuro e a menos de 30 dias): o resultado não depende
+ * da hora em que o teste roda. As varreduras passam o instante explicitamente (`processDue(at)`), nunca o relógio real.
+ */
+const tomorrowNoon = (): Date => sp(`${new Date(Date.now() + 86_400_000 - 3 * 3_600_000).toISOString().slice(0, 10)}T12:00:00`);
 
 describe('Push segmentado do admin (WB-197, WB-196)', () => {
   let ctx: TestContext;
@@ -61,7 +68,7 @@ describe('Push segmentado do admin (WB-197, WB-196)', () => {
   const setFlag = (enabled: boolean) => ctx.http.put('/v1/admin/feature-flags/push_marketing').set(bearer(superAdmin.accessToken)).send({ enabled }).expect(200);
   const segment = { kind: 'city', cityId: '' };
   const seg = () => ({ ...segment, cityId });
-  const campaign = (over: Record<string, unknown> = {}) => ({ title: 'Oferta da semana', body: 'Frete grátis hoje nas lojas perto de você', destination: { type: 'home' }, segment: seg(), expectedRecipients: 22, ...over });
+  const campaign = (over: Record<string, unknown> = {}) => ({ title: 'Oferta da semana', body: 'Frete grátis hoje nas lojas perto de você', destination: { type: 'home' }, segment: seg(), expectedRecipients: 22, scheduleAt: tomorrowNoon().toISOString(), ...over });
   const resetCampaigns = async () => {
     await ctx.db.delete(pushCampaigns);
     transport.sent.length = 0;
