@@ -1,4 +1,4 @@
-import { and, eq, like } from 'drizzle-orm';
+import { and, eq, like, sql } from 'drizzle-orm';
 import { seedDemoOrders } from '../seed/orders-demo.js';
 import { seedOnda1 } from '../seed/onda1.js';
 import { seedOnda2 } from '../seed/onda2.js';
@@ -26,7 +26,7 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   afterAll(() => ctx.close());
 
   it('cria pedidos em vários estados sem duplicar, com a conta da RN-10 e o ledger fechado', async () => {
-    const rows = await ctx.db.select().from(orders).where(like(orders.number, 'WB-DM%'));
+    const rows = await ctx.db.select().from(orders).where(sql`${orders.number} ~ '^WB-DM[0-9]{3}$'`);
     expect(rows.length).toBeGreaterThanOrEqual(10);
     expect(new Set(rows.map((r) => r.number)).size).toBe(rows.length);
     expect(new Set(rows.map((r) => r.status))).toEqual(new Set(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'delivered', 'cancelled', 'refused']));
@@ -39,7 +39,7 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   });
 
   it('o painel da loja e o financeiro leem os pedidos de demonstração; em produção o seed se recusa', async () => {
-    const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), like(orders.number, 'WB-DM%')));
+    const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), sql`${orders.number} ~ '^WB-DM[0-9]{3}$'`));
     expect(sample).toBeDefined();
     const [owner] = await ctx.db.select({ email: users.email }).from(storeMembers).innerJoin(users, eq(users.id, storeMembers.userId)).where(eq(storeMembers.storeId, sample!.storeId));
     const login = await ctx.http.post('/v1/auth/login').send({ email: owner!.email, password: PASSWORD });

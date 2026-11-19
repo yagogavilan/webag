@@ -1,7 +1,7 @@
 # PRD: Logística da Webag (entrega, motoboys e coleta de trocas)
 
-Status: pronto para G3 (aguarda spec de tela do Designer e estimativa) | Dono: product-owner | Data: 2026-11-19 | Histórias: WB-229 a WB-242 (+ WB-057 e WB-069 reescritas)
-Decisões: DEC-036 (logística é da Webag; substitui DEC-007), DEC-035 (comissão), DEC-037 (coleta de troca na fila). Regras numéricas: `docs/produto/regras-de-negocio.md` (RN-02, RN-04, RN-10, RN-18). Fila do backend: `docs/gestao/fila-backend-dev.md` L.1 a L.5. Hipóteses: `docs/decisoes.md` (HIP-L01 a HIP-L14, HIP-C01).
+Status: pronto para G3 (aguarda spec de tela do Designer e estimativa); **atualizado em 2026-11-19 pela DEC-053 (entrega em até 2 h), histórias novas WB-249, 255, 256 e 258 abaixo, e WB-250 a 254 em `cliente.md`** | Dono: product-owner | Data: 2026-11-19 | Histórias: WB-229 a WB-242, WB-249 a WB-258 (+ WB-057 e WB-069 reescritas)
+Decisões: DEC-036 (logística é da Webag; substitui DEC-007), DEC-035 (comissão), DEC-037 (coleta de troca na fila), **DEC-053 (promessa de entrega em até 2 h por distância)**. Regras numéricas: `docs/produto/regras-de-negocio.md` (RN-02, RN-04, RN-10, RN-18, **RN-19**). Fila do backend: `docs/gestao/fila-backend-dev.md` L.1 a L.5 e E.1, E.2. Hipóteses: `docs/decisoes.md` (HIP-L01 a HIP-L14, HIP-C01, **HIP-E01 a E10**).
 
 ## Problema
 Quem sofre: o lojista do perfil do fundador (brief §9) não tem motoboy nem entrega; sem entrega ele só vende a quem passa na rua. Carla (cliente) só compra de loja que entrega e quer saber quando chega. Evidência: afirmação direta do fundador (brief §9); o contraponto é que a Shopee entrega no dia seguinte na Grande SP (`pesquisa-mercado.md` §4), então a vantagem local só existe se a entrega for **em horas**. Frequência: todo pedido de entrega. `[HIPÓTESE]` Proporção de pedidos de entrega vs. retirada: sem dado; medir no piloto.
@@ -11,8 +11,12 @@ Cada pedido pronto vira uma corrida despachada, acompanhada e fechada com custo 
 | Métrica | Meta `[HIPÓTESE; sem série histórica]` |
 |---|---|
 | Pronto para coleta até motoboy atribuído (p90) | <= 10 min |
-| Pronto para coleta até entregue (mediana) | <= 60 min |
-| Entregas no prazo prometido ao cliente | >= 85% |
+| Pedido pago até entregue (mediana; antes "pronto até entregue", DEC-053) | <= centro da faixa (estimativa), em média por loja |
+| **Entregas no prazo prometido** (entregue <= fim da faixa reancorada no pagamento; DEC-053) | >= 85% |
+| **Entregas dentro de 2 h do pagamento** (a promessa da copy) | >= 95% (HIP-E09) |
+| Precisão da estimativa: mediana de \|entregue - centro da faixa\| | <= 10 min |
+| Pedidos atrasados (passaram do fim da faixa + tolerância) | < 8% |
+| Corridas em lote (de entregas, quando há 2+ prontas na mesma cidade) | acompanhar; sem meta (HIP-E07) |
 | Entregas não realizadas | < 5% |
 | Margem de logística = taxa de entrega cobrada - custo do motoboy (média por entrega) | >= R$ 0,00 (alerta se negativa por 7 dias) |
 | Pedidos de entrega sem custo registrado após 48 h | 0 |
@@ -20,7 +24,7 @@ Cada pedido pronto vira uma corrida despachada, acompanhada e fechada com custo 
 **Eventos:** `delivery_ready`, `delivery_assigned {seconds}`, `delivery_whatsapp_sent`, `delivery_status_changed {to}`, `delivery_failed {reason}`, `delivery_completed {minutes}`, `delivery_cost_recorded {cents}`, `delivery_paused {city}`, `delivery_fee_table_changed`. Sem dado pessoal nos eventos.
 
 ## Fora do escopo (1.0)
-App ou página do motoboy (link com token) e rastreio em tempo real (fase 2, DEC-036e); despacho automático por proximidade; pagamento ao motoboy dentro do app (é fora, DEC-036c); roteirização de várias entregas por motoboy (a operação agrupa à mão); agendamento de entrega (HIP-014); entrega por transportadora/Correios; dinheiro ou maquininha na entrega (brief §4); seguro e gestão de frota; chat com o motoboy dentro do app (WhatsApp); cálculo de rota real (distância é linha reta, HIP-013).
+App ou página do motoboy (link com token) e rastreio em tempo real (fase 2, DEC-036e); despacho automático por proximidade; pagamento ao motoboy dentro do app (é fora, DEC-036c); roteirização automática de várias entregas por motoboy (a operação agrupa à mão, em lote por cidade, WB-256); agendamento de entrega e "entregar amanhã" (HIP-014; sem isso, a entrega só é oferecida dentro do horário, RN-19 item 2); ETA que reage à fila em tempo real, trânsito e rota real (RN-19 item 6); renegociar o horário com o cliente; entrega por transportadora/Correios; dinheiro ou maquininha na entrega (brief §4); seguro e gestão de frota; chat com o motoboy dentro do app (WhatsApp); cálculo de rota real (distância é linha reta, HIP-013).
 
 ## Usuários e cenários
 1. **Seu Marcos (lojista)** aceita o pedido, separa e toca "Pronto para coleta". Pronto: não liga para motoboy, não define frete.
@@ -46,6 +50,9 @@ App ou página do motoboy (link com token) e rastreio em tempo real (fase 2, DEC
 | RF-LOG-12 | Coleta e reentrega de troca na fila | 241 |
 | RF-LOG-13 | Lojista configura só "entrega pela Webag" e/ou "retirada" | 057 |
 | RF-LOG-14 | Comissão transparente para o lojista ("Você recebe R$ X") | 242 |
+| RF-LOG-15 | Promessa de entrega em até 2 h: faixa por loja e endereço, teto, fora do alcance (DEC-053) | 249 a 252, 257, 258 |
+| RF-LOG-16 | Atraso: alerta à operação, aviso e cancelamento sem custo ao cliente, compensação | 253, 254, 255 |
+| RF-LOG-17 | Lote de corridas por área | 256 |
 
 ## Regras de negócio
 Fonte única dos números e dos estados: **RN-18** (estados e parâmetros), **RN-04** (taxa, mínimo e grátis), **RN-10** (fórmulas de `application_fee`), **RN-07** (estado do pedido). Pontos-chave:
@@ -102,7 +109,7 @@ Como operadora, quero ver os pedidos a despachar e ser avisada na hora, para o c
 - **C6** Dado "Pausar entregas" (por cidade ou geral) com motivo e previsão, então o checkout deixa de oferecer entrega Webag naquela área até reabrir (as corridas já criadas seguem), e o admin vê o aviso "Entregas pausadas em [cidade]". Dado `logistica_horario` encerrado, a pausa é automática.
 - **C7** Dado fila vazia, então "Nenhuma entrega para despachar" e a hora da última atualização.
 - **C8** Dado queda de conexão, então reconecta e mostra "Sincronizado há X s".
-- **C9** Dado corrida ativa há mais de `logistica_alerta_entrega_min` (60) em SAIU_PARA_ENTREGA, então destaque "Atenção" (e WB-108 C3 é ajustado: pedido SAIU há mais de 4 h continua "Atenção").
+- **C9** **(substituído pela DEC-053; ver WB-255)** O destaque por tempo em SAIU deixa de ser fixo em 60 min: vale o fim da faixa do pedido ("Em risco" e "Atrasada"). `logistica_alerta_entrega_min` só vale para corrida sem ETA (WB-108 C3 continua: pedido SAIU há mais de 4 h é "Atenção").
 - **C10** Dado perfil sem permissão, então 403 no servidor.
 
 ### WB-231 Admin: cadastro de motoboys — Must — dep: WB-100
@@ -149,7 +156,7 @@ Como cliente, quero saber onde meu pedido está, para esperar em casa.
 - **C1** Dado pedido de entrega, então a linha do tempo mostra: Recebido, Aceito, Em separação, **Pronto, aguardando o motoboy**, **Motoboy a caminho da loja**, **Saiu para entrega**, Entregue; etapa atual destacada com a hora de cada uma.
 - **C2** Dado mudança de estado da entrega, então a tela atualiza em até 5 s e recebo push (PRONTO_PARA_COLETA: in-app sem push; MOTOBOY_A_CAMINHO: in-app; SAIU_PARA_ENTREGA e ENTREGUE: push; NAO_ENTREGUE: push e e-mail).
 - **C3** Dado o motoboy atribuído, então vejo só o **primeiro nome** (sem telefone nem foto na 1.0); para dúvidas, "Falar com a Webag" por WhatsApp (conteúdo editável WB-034).
-- **C4** Dado o tempo estimado, então mostro a faixa "preparo da loja + deslocamento" (RN-04) como estimativa, sem prometer horário exato.
+- **C4** **(DEC-053; detalhe em WB-252)** Dado o tempo estimado, então mostro a faixa de chegada (RN-19) em horário ("Chega entre 15:40 e 16:10"), atualizada conforme o status, sem horário único.
 - **C5** Dado `codigo_entrega` ligado, então vejo o código de 4 dígitos em destaque desde SAIU_PARA_ENTREGA com o texto "Informe ao motoboy só ao receber".
 - **C6** Dado NAO_ENTREGUE, então vejo o motivo e "Combinar nova tentativa".
 - **C7** Dado sem conexão, então vejo o último estado salvo com "Atualizado há X min" (WB-027 C3).
@@ -171,7 +178,7 @@ Como cliente, quero ver a taxa de entrega exata antes de pagar, para não ter su
 - **C1** Dado endereço completo, então a taxa é a da faixa e do escopo do destino (WB-236); com endereço aproximado a loja mostra "a partir de R$ X" (menor faixa da região).
 - **C2** Dado subtotal >= `frete_gratis_acima_cents`, então a taxa é R$ 0 ("Grátis") e o resumo diz "Entrega grátis"; cupom de frete grátis também zera a taxa (RN-09).
 - **C3** Dado subtotal < `pedido_minimo_cents`, então o checkout não avança e mostra "Faltam R$ X" (RN-04, RN-17).
-- **C4** Dado destino fora do `raio_max_km`, de região inativa ou logística fechada/pausada, então só retirada (se houver) com o motivo escrito ("Entrega Webag volta às 09:00"); a sacola é mantida.
+- **C4** Dado destino fora do `raio_max_km`, **fora do alcance da faixa de 2 h (WB-251)**, de região inativa ou logística fechada/pausada, então só retirada (se houver) com o motivo escrito ("Entrega Webag volta às 09:00"); a sacola é mantida.
 - **C5** Dado a taxa mudar entre o carrinho e o pagamento, então "Algo mudou" (RN-05).
 - **C6** Dado o pedido, então grava snapshot da taxa, da faixa e da distância (RN-05).
 - **C7** Dado loja que só tem retirada, então o checkout não cobra taxa e não mostra entrega.
@@ -219,9 +226,70 @@ Como lojista, quero ver quanto recebo por produto e entender a comissão, para p
 - **C6** Dado produto da categoria com comissão própria, então o "Você recebe" usa a da categoria; dado item com cupom da loja, a prévia explica que a comissão incide após o cupom da loja (RN-09).
 - **C7** Dado lojista com comissão promocional com data de fim (HIP-002), então o painel mostra "Comissão reduzida até DD/MM" e o "Você recebe" dos produtos não muda sozinho (só os pedidos novos usam a regra vigente).
 
+## Promessa de entrega em até 2 h (DEC-053): evidência, histórias de logística e copy
+Regra completa e fórmula: **RN-19**. Histórias do cliente (descoberta, loja, sacola, pedido, atraso, compensação): `cliente.md` WB-250 a WB-254. Copy: `cliente.md`, seção "Copy da promessa de entrega".
+
+**Evidência de mercado (pesquisa de 2026-11-19; sites oficiais e boa parte dos veículos não abriram no ambiente, então tudo abaixo é secundário e marcado `[confirmar]` no app ou na central de ajuda de cada empresa):**
+- **iFood:** mostra o prazo em faixa de minutos e acompanha o pedido; pedido atrasado permite pedir cancelamento com reembolso pelo app, em Ajuda, motivo "pedido atrasado". Guias de terceiros divergem no limite: **15 min** após o prazo para restaurante e **30 min** para mercado/farmácia (Saipos, guia de reembolso) e **10 min** (Tecnoblog, "Como pedir reembolso no iFood"); se o pedido já saiu para entrega, o estabelecimento pode negar. Em 2024 o iFood lançou ferramenta para o restaurante **propor novo horário** ao cliente atrasado, com **95%** dos clientes aceitando esperar (Mercado & Consumo, 2024-06-10). Não achei compensação oficial em cupom por atraso. `[confirmar]`
+- **Rappi:** a promessa é velocidade ("em minutos"); a compensação por atraso não é pública e as reclamações (reclamos.cl, 2025-2026) mostram o risco de uma política opaca: cancelamento só depois de 4 horas, compensação irrisória, estorno negado sem revisão. A lição para a Webag é a **regra clara e automática**, não o valor. `[confirmar]`
+- **Mercado Livre:** envio com data prevista ou faixa de datas ("chega entre..."); o ressarcimento por atraso no Full é **ao vendedor**, não ao comprador (GoSmarter, 2026-05); os cupons de "entrega Full" são promoção, não compensação. A lição: a regra de atraso ao **cliente** da Webag precisa ser própria. `[confirmar]`
+- **Entrega em lote:** DoorDash descreve em patentes o agrupamento de pedidos por **proximidade do primeiro cliente** e a atualização do ETA a cada novo evento (pedido aceito, coletado, entregue) (Justia Patents, `patents.justia.com/patent/11037055` e `10872305`); é intenção de desenho, não prova de produção. Serve de base para duas regras da Webag: lote por área e ETA que se atualiza por status. Entrega **agendada** (Rappi, iFood) existe, mas fica fora da 1.0.
+- **Leitura crítica do PO:** iFood e Rappi sustentam a promessa com milhares de entregadores e dados de trânsito; a Webag promete "até 2 h" com 1 a 2 operadores, poucos motoboys e linha reta. A promessa é **honesta só porque tem teto largo, faixa e válvula de saída (cancelar sem custo)**. Sem a válvula, a primeira falha vira reclamação pública (CDC art. 30, 35; ver J14 em `decisoes.md`).
+
+### WB-249 Motor de ETA: faixa por loja e endereço, teto e recálculo — Must — dep: WB-236, WB-119, WB-057 (E.1 do backend)
+Como cliente, quero ver quando meu pedido chega antes de pagar, para decidir se compro aqui.
+- **C1** Dado loja e endereço com posição, então a API devolve a faixa pela fórmula de RN-19 item 1 (exemplo: loja a 2,0 km, preparo 20: faixa 36 a 66 min; a 5,0 km: 59 a 89 min) e a conta é **a mesma** na descoberta, loja, produto, sacola e pedido (teste com o mesmo par em todas as rotas).
+- **C2** Dado que o fim da faixa passa de `entrega_max_min`, então a loja não está disponível para o endereço (`available=false`, motivo `OUT_OF_RANGE`, `eta=null`); no limite: fim da faixa em 120 entrega, em 121 não (teste de fronteira).
+- **C3** Dado endereço sem posição exata (só cidade), então não há faixa por distância: a API devolve só "Chega em até 2 h" e o mínimo (preparo + despacho), e a faixa real aparece quando o endereço for confirmado.
+- **C4** Dado `entrega_preparo_padrao_min`, quando a loja define o seu (WB-257), então vale o da loja; loja sem valor usa o padrão.
+- **C5** Dado criação do pedido, então o servidor **recalcula** (nunca usa a faixa enviada pelo app), grava a faixa e os termos (preparo, despacho, deslocamento, distância) e responde 409 (código a definir pelo back-end, ex.: `ETA_CHANGED`) se a faixa mudou mais de `entrega_faixa_min` desde a sacola, com o valor novo para o cliente confirmar (mesmo padrão "Algo mudou", RN-05).
+- **C6** Dado pagamento aprovado, então a faixa é reancorada: mesmos minutos a partir do pagamento (teste: PIX pago aos 14 min não perde 14 min).
+- **C7** Dado `logistica_horario` e o fim da faixa depois do fechamento, então a entrega não é oferecida e o texto diz "Entrega volta às HH:MM" (RN-19 item 2) `[HIPÓTESE; HIP-E08]`.
+- **C8** Dado parâmetro alterado no admin, então vale em até 60 s para novas consultas e **não altera** pedido já criado.
+- **C9** Dado distância exatamente na fronteira de arredondamento, então `ceil` com tolerância de 1e-9 (sem "salto" de 1 min por ponto flutuante).
+- **C10** Dado resposta lenta ou falha do PostGIS, então a loja segue visível com "Chega em até 2 h" e o checkout recalcula no servidor (nunca bloqueia a descoberta por erro de cálculo).
+- **Eventos:** `eta_shown`, `eta_out_of_range` (RN-19).
+
+### WB-255 Admin: atraso na fila, "Em risco" e causa do atraso — Must — dep: WB-249, WB-230, WB-233 (E.2) (substitui WB-230 C9)
+Como operadora, quero ser avisada antes e depois de o pedido passar do prazo prometido, para agir a tempo.
+- **C1** Dado corrida com ETA, então a fila mostra o **prazo restante** em minutos (negativo = atraso) e ordena pelo mais urgente (RN-18).
+- **C2** Dado restar <= `entrega_faixa_min` e a corrida ainda não SAIU, então a linha fica amarela "Em risco" (ícone e texto).
+- **C3** Dado passar do fim da faixa antes de ENTREGUE, então a linha fica vermelha "Atrasada", sobe ao topo e gera **um** alerta (painel, som, e-mail/Web Push da operação, como WB-230 C4); nova passagem pela mesma corrida não repete o alerta (idempotência por corrida, `late_alerted_at`).
+- **C4** Dado corrida sem ETA (pedido anterior à DEC-053), então vale `logistica_alerta_entrega_min` (60).
+- **C5** Dado fechar a corrida atrasada, então a operação marca a **causa** (loja demorou, sem motoboy, trajeto, cliente/endereço, outro com texto) e isso alimenta o relatório (WB-240) e o índice da loja (RN-19 item 4e).
+- **C6** Dado "Pedir cancelamento por atraso" do cliente em SAIU (WB-253), então aparece um alerta e a linha com contagem de `entrega_cancel_resposta_min`; a operação escolhe "Chego em até 10 min" (informa ao cliente) ou "Aceitar cancelamento" (corrida vira devolução); sem resposta, aceita sozinho e registra "aceito pelo sistema".
+- **C7** Dado perfil sem permissão de Logística, então 403.
+
+### WB-256 Admin: lote de corridas por área — Should — dep: WB-232, WB-249 (E.2)
+Como operadora, quero mandar várias entregas da mesma região no mesmo motoboy, para atender mais pedidos no prazo com poucos motoboys.
+- **C1** Dado 2 ou mais corridas de **entrega** PRONTA_PARA_COLETA da **mesma cidade de destino**, então posso selecioná-las e atribuir a um motoboy (limite `entrega_lote_max`, 4).
+- **C2** Dado corridas de cidades diferentes, de troca ou fora de PRONTA_PARA_COLETA, então erro "Só entregas prontas da mesma cidade entram no mesmo lote" e nada é atribuído.
+- **C3** Dado a seleção, então o painel mostra o prazo restante de cada corrida e avisa "Esta corrida pode atrasar" quando alguma tem prazo restante <= `entrega_faixa_min`; a operação decide, o sistema não bloqueia.
+- **C4** Dado confirmar o lote, então **cada corrida** vai a AGUARDANDO_MOTOBOY e todas saem numa **única** mensagem de WhatsApp com as coletas e entregas numeradas (mesmas regras de dado mínimo de WB-232 C5, sem código de entrega nem valores).
+- **C5** Dado uma corrida perder a disputa (outra operadora já atribuiu), então as demais são atribuídas e a que falhou aparece com o motivo (`failed` com código); nada duplica.
+- **C6** Dado uma corrida do lote cancelada, devolvida ou com falha, então as outras seguem normalmente e o custo é lançado por corrida (WB-239).
+- **C7** Dado o lote, então o ETA gravado nos pedidos **não muda** (RN-19 item 5) e `delivery_batch_created {n}` é registrado.
+- **C8** Dado motoboy já com corridas ativas, então vale o aviso de WB-232 C7 somado ao do lote ("Já tem N corridas ativas").
+
+### WB-258 Admin: parâmetros do ETA, prévia e relatório de prazo — Should — dep: WB-249, WB-119, WB-240
+Como fundador, quero ajustar a estimativa com o dado do piloto e ver se a promessa está sendo cumprida, para calibrar sem mexer em código.
+- **C1** Dado a tela de parâmetros (RN-02), então os parâmetros `entrega_*` de RN-02 ficam agrupados em "Entrega em até 2 h", com padrão, faixa válida e a frase "valor de partida, calibrar com o piloto".
+- **C2** Dado salvar valor que quebra a validação de RN-02 (teto menos folga menor que preparo + despacho + 5; folga acima de teto/4), então 422 com o motivo escrito; a edição exige motivo e vira histórico (WB-119).
+- **C3** Dado `raio_max_km` maior que o alcance dos parâmetros (RN-19: com os padrões, ~9,0 km), então aviso amarelo "Faixas de taxa acima de 9,0 km não serão usadas" (não bloqueia).
+- **C4** Dado "Prévia de ETA" (loja + CEP de destino), então vejo preparo, despacho, deslocamento, estimativa, faixa e se entra no alcance; o resultado é **idêntico** ao do checkout para o mesmo par (teste).
+- **C5** Dado o relatório "Prazo" (WB-240), então mostra por período, loja e cidade: % no prazo, % dentro de 2 h, precisão mediana, atrasos por causa (WB-255 C5), cancelamentos por atraso e compensações concedidas com custo.
+- **C6** Dado a loja com mais de 3 pedidos e mediana real de preparo (ACEITO até PRONTO) acima do preparo configurado em 10 min ou mais, então o painel sinaliza "Preparo real maior que o informado" (a loja ajusta em WB-257; a Webag não altera o preparo da loja sozinha).
+- **C7** Dado perfil sem permissão, então 403.
+
 ## Dependências e riscos
 | Item | Tipo | Mitigação |
 |---|---|---|
+| **DEC-053: prometer "em até 2 h" com operação de 1 a 2 pessoas, poucos motoboys e linha reta; o ETA não enxerga a fila nem o trânsito** | Risco de negócio e de reputação | Faixa e teto largos; válvula de saída (WB-253); alerta de atraso e "Em risco" (WB-255); parâmetros conservadores e calibrados (WB-258); piloto com 5 lojas e meta de 95% em 2 h (HIP-E09); pausa de entregas (WB-230 C6) |
+| **Teto na estimativa x teto no fim da faixa:** a DEC-053 e o código usam estimativa <= 120; com folga de 15 min a faixa chega a 135 min e "até 2 h" fica falso | **Decisão pedida ao CEO/fundador** | Recomendação PO: teto no fim da faixa (RN-19 item 2); custo: alcance de ~10,9 para ~9,0 km; backend ajusta E.1 |
+| Compensação por atraso: custo não previsto e abuso (cancelar por qualquer atraso, pedir toda vez) | Risco financeiro | Padrão "entrega grátis no próximo pedido" (custo = receita perdida da taxa, limitado); 1 por pedido atrasado; tolerância de 15 min; relatório de custo (WB-258 C5); `nenhuma` desliga |
+| Cancelar em SAIU: cliente cancela quando o motoboy já está na porta | Risco operacional e de fraude | Em SAIU o cancelamento é "pedido" com resposta da operação em 10 min; o pacote volta à loja antes do estorno final (fluxo de devolução) |
+| Entrega próxima do fechamento da logística | Risco operacional | Oferta só se o fim da faixa cabe no horário (RN-19 item 2; HIP-E08); fundador define o horário (pergunta abaixo) |
+| Preparo informado pela loja é otimista | Risco de dado | Padrão 20 min; sinal de "preparo real maior" (WB-258 C6); relatório de causa do atraso |
 | **Economia da entrega:** a taxa que cobre o custo do motoboy (R$ 8 a R$ 18 `[HIPÓTESE]`) é maior que os R$ 3 a R$ 8 que o time supôs aceitos (V2); conversão pode cair | Risco de negócio crítico | Revalidar V2 no piloto com a tabela real; começar com a tabela da RN-18 e subsídio só por campanha; relatório de margem (WB-240) |
 | **Operação de 1 pessoa não despacha 24 h** | Risco operacional | `logistica_horario`, pausar entregas (WB-230 C6), perfil de operação delegável; M1 com poucas lojas |
 | Motoboy autônomo: vínculo empregatício, Lei 12.009/2009 (21+ anos, CNH A há 2+ anos, curso, colete), seguro e acidente; responsabilidade solidária por ato de preposto (CDC art. 34) e do marketplace pela cadeia (art. 7º, parágrafo único, art. 25 §1º) | **Risco jurídico: revisão do fundador/advogado antes do G5** | Aceite interno de documentos; contrato de prestação; seguro [decisão do fundador, custo]; **não contratar nem pagar motoboys sem a análise** (DEC-003) |
@@ -236,7 +304,8 @@ Como lojista, quero ver quanto recebo por produto e entender a comissão, para p
 | Pergunta | Quem responde |
 |---|---|
 | Valores da tabela de taxa (HIP-L01) e do custo previsto (HIP-L02): cotar com 3 a 5 motoboys de Francisco Morato antes do piloto | fundador |
-| Horário da logística (padrão seg a sáb 09:00 às 20:00) e quem despacha fora dele | fundador |
+| Horário da logística (padrão seg a sáb 09:00 às 20:00) e quem despacha fora dele; **com a DEC-053 isso define quando a promessa de 2 h existe** (HIP-E08) | fundador |
+| DEC-053: teto no fim da faixa (recomendado) ou na estimativa? Compensação em atraso (entrega grátis no próximo pedido, cupom de R$ 10 ou nenhuma)? Quem paga? Cobrar mais por distância (a tabela de taxa já escala; subir a taxa das faixas longas)? | fundador/CEO |
 | Motoboys: autônomos pagos por corrida? Quem seleciona e contrata? Há seguro? | fundador/jurídico |
 | Falha de entrega por culpa do cliente: cobrar a taxa? | fundador/jurídico |
 | Tamanho máximo do pacote (baú de moto) e como a loja declara | fundador (decisão) e Designer (campo) |

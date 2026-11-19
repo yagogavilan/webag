@@ -1,6 +1,6 @@
 # PRD: Área do Lojista (painel web responsivo)
 
-Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-035, 036, 037: lojista sem taxa/raio próprios, "Pronto para coleta", "Você recebe R$ X", tabela de medidas) | Histórias: WB-050 a WB-079, WB-227 e WB-242 (comissão); logística em `prd/logistica.md`, trocas em `prd/trocas.md`
+Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-035, 036, 037: lojista sem taxa/raio próprios, "Pronto para coleta", "Você recebe R$ X", tabela de medidas) | DEC-053 (2026-11-19): preparo único da loja entra na faixa de chegada, WB-057 C3 e WB-257 | Histórias: WB-050 a WB-079, WB-227, WB-242 (comissão) e WB-257 (preparo); logística em `prd/logistica.md`, trocas em `prd/trocas.md`
 Regras: `docs/produto/regras-de-negocio.md`; hipóteses: `docs/decisoes.md`. Origem: brief §3.2. Nota: o lojista usa o **painel web** (celular e computador do balcão), não o app (DEC-005); o CLAUDE.md §2 cita app mobile para lojista e foi superado pelo brief.
 
 ## Problema
@@ -126,11 +126,21 @@ Como lojista, quero definir quando abro e pausar quando preciso, para não receb
 Como lojista, quero escolher se vendo com entrega pela Webag e quanto tempo levo para preparar, sem ter que cuidar de motoboy nem de frete.
 - **C1** Dado a tela "Entrega e retirada", então há o interruptor **"Entrega pela Webag"** (padrão ligado) com o texto "A Webag busca o pedido na sua loja e entrega ao cliente. Você só marca 'Pronto para coleta'." e o interruptor "Retirada na loja" (WB-058); ao menos um ligado.
 - **C2** Dado a tela, então **não existem** campos de raio, taxa de entrega, faixas, pedido mínimo nem "entrega grátis acima de": esses valores são da Webag (tabela e parâmetros do admin, WB-236) e a tela diz "A taxa de entrega é definida pela Webag e paga pelo cliente. Você não paga frete."
-- **C3** Dado **tempo de preparo**, então informo mínimo e máximo em minutos (min < máx; máx até 1.440); o cliente vê a estimativa total (preparo + deslocamento, RN-04).
-- **C4** Dado "Prévia", então escolho um endereço de teste e vejo "Seu cliente pagaria R$ X de entrega e receberia em A a B min" ou "Fora da área de entrega da Webag" (valor igual ao do checkout, R-17d); o lojista **vê** a taxa mas não a edita.
+- **C3** **(reescrito pela DEC-053; ver WB-257)** Dado **tempo de preparo da entrega**, então informo **um valor** em minutos (5 a 120; vazio usa o padrão da Webag, `entrega_preparo_padrao_min`, 20); ele entra na faixa de chegada do cliente (RN-19). A faixa mínimo-máximo de preparo só vale para a **retirada** (WB-058 C1).
+- **C4** Dado "Prévia", então escolho um endereço de teste e vejo "Seu cliente pagaria R$ X de entrega e receberia entre A e B min" (a faixa de RN-19) ou "Fora da área de entrega em até 2 h" (valor igual ao do checkout, R-17d); o lojista **vê** a taxa mas não a edita.
 - **C5** Dado desligar "Entrega pela Webag" (só retirada), então é permitido se a retirada estiver ativa; nenhuma opção ativa: erro "Ligue a entrega ou a retirada".
 - **C6** Dado loja que vende itens grandes ou frágeis que não cabem em baú de moto, então ela mantém só "Retirada" e o painel mostra a dica "Itens grandes? Ofereça retirada" `[regra de porte: pergunta em aberto em logistica.md]`.
 - **C7** Dado loja já existente com taxa e raio antigos, então a migração ignora esses valores (a loja entra com "Entrega pela Webag" ligada e a taxa da tabela); o lojista vê um aviso uma vez: "A entrega agora é feita pela Webag" (backend: L.1).
+
+### WB-257 Preparo da loja na estimativa de entrega — Must — dep: WB-249, WB-057 (DEC-053)
+Como lojista, quero informar quanto levo para preparar um pedido, para o cliente receber uma faixa de chegada que eu consigo cumprir.
+- **C1** Dado "Entrega e retirada", então vejo o campo "Tempo de preparo (minutos)" com padrão da Webag e a explicação "Entra no horário que o cliente vê. Informe o tempo real: se você demora mais, o pedido atrasa e o cliente pode cancelar sem custo."
+- **C2** Dado valor fora de 5 a 120, então erro no campo (RN-17); vazio volta ao padrão e mostra "Usando o padrão da Webag: 20 min".
+- **C3** Dado salvar, então vale para pedidos **novos**; pedidos já criados mantêm a faixa gravada (RN-19).
+- **C4** Dado a "Prévia" (WB-057 C4), então ela usa o preparo informado e mostra a faixa de um endereço de teste.
+- **C5** Dado o painel de pedidos, então o lojista vê em cada pedido de entrega o prazo de preparo esperado ("Marque 'pronto' até HH:MM para cumprir o prazo") **sem** ver o horário final nem o motoboy; é o início da faixa menos despacho e deslocamento `[HIPÓTESE; opcional, o designer avalia]`.
+- **C6** Dado a mediana real de preparo da loja (ACEITO até PRONTO, mín. 3 pedidos) acima do informado em 10 min ou mais, então aviso "Seu preparo real está em 35 min. Atualize para o cliente não esperar mais do que o previsto." (a Webag não altera o valor sozinha).
+- **C7** Dado funcionário sem a permissão de configuração da loja, então 403.
 
 ### WB-058 Retirada na loja — Must — dep: WB-055
 Como lojista, quero oferecer retirada, para vender sem entregar.

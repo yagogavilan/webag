@@ -1,7 +1,22 @@
 # Backlog Priorizado — Webag 1.0 e Fase 2
 
-Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19
-Fonte de escopo: `docs/00-visao/brief.md` §3, §4 e §9. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043, HIP-D, HIP-C01, HIP-L01 a L14, HIP-T01 a T12). Personas: `personas.md`. Pesquisa: `pesquisa-mercado.md`.
+Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-053)
+Fonte de escopo: `docs/00-visao/brief.md` §3, §4 e §9. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043, HIP-D, HIP-C01, HIP-L01 a L14, HIP-T01 a T12, HIP-E01 a E10).
+
+## Alterações 2026-11-19 (DEC-053: entrega em até 2 h por distância, estilo iFood)
+Origem: DEC-053; regra em RN-19; PRDs `logistica.md` (WB-249, 255, 256, 258), `cliente.md` (WB-250 a 254), `lojista.md` (WB-257).
+
+| Item | O que mudou | Onde |
+|---|---|---|
+| Promessa de entrega | Os "30 a 45 min" dos protótipos e da copy saem; entra a **faixa de chegada** por loja e endereço (preparo + despacho + deslocamento, folga de 15 min) com **teto de 2 h**; "Chega em até 2 h" é só a mensagem geral | RN-19, RN-02, RN-03, RN-04 |
+| Histórias novas (10) | **WB-249** motor de ETA; **WB-250** faixa na descoberta, loja, produto e sacola; **WB-251** loja fora do alcance; **WB-252** faixa do pedido atualizada por status; **WB-253** atraso: aviso e cancelamento sem custo; **WB-254** compensação por atraso (Should, `[HIPÓTESE]`); **WB-255** atraso e "Em risco" na fila; **WB-256** lote de corridas por área (Should); **WB-257** preparo da loja; **WB-258** parâmetros, prévia e relatório de prazo (Should) | `prd/logistica.md`, `cliente.md`, `lojista.md` |
+| Histórias alteradas | WB-004 (C5, vazio por falta de alcance), WB-012 C1, WB-016 C1 e C4, WB-017 C7, WB-020 C7, WB-023 C3, WB-027 C5, WB-028 C3 (exceção do atraso), WB-057 C3 e C4 (preparo único), WB-119 C7, WB-230 C9 (substituído por WB-255), WB-235 C4 (faixa de RN-19), WB-237 C4 | PRDs |
+| Substituído | HIP-L11 (tempo = preparo + deslocamento da tabela + 10 min) pelo ETA da RN-19; `logistica_alerta_entrega_min` fixo de 60 min só vale sem ETA; o "tempo de preparo mínimo-máximo" da loja só vale na retirada | `decisoes.md` |
+| Parâmetros | 11 chaves `entrega_*` em RN-02 (7 já existem no backend; novas: `entrega_atraso_tolerancia_min`, `entrega_compensacao_tipo`, `entrega_compensacao_cents`, `entrega_cancel_resposta_min`) | RN-02 |
+
+**Histórias novas: 10 (7 Must e 3 Should). Total da 1.0: 164 para 174.**
+**Ordem e dependências (E.1 e E.2 do backend):** (1) **WB-249** e **WB-257** primeiro (a conta e o campo de preparo; E.1, já em andamento no backend: ajustar o teto para o fim da faixa se o CEO/fundador aceitar RN-19 item 2); (2) em paralelo **WB-250, WB-251, WB-252** (telas do cliente; dependem de 249); (3) **WB-255** e **WB-253** (atraso; dependem de 252 e da logística 233); (4) depois **WB-256**, **WB-254** e **WB-258** (Should; entram se a operação do piloto pedir). Nada disto bloqueia M1 além de 249 a 253, 255 e 257 (as 7 Must), porque a copy "até 2 h" **não pode ir ao ar sem o teto e a válvula de saída** (HIP-E09).
+**Crítica ao escopo:** a DEC-053 não é só texto: promete um número por loja e por pedido, o que cria dois novos riscos (prazo que a operação não cumpre e compensação sem orçamento). O custo de oportunidade é adiar as histórias Should de trocas (245 a 248) e os relatórios (240) para o piloto. Se o prazo apertar, **corte a WB-254 e a WB-256, nunca a WB-253** (sem a saída sem custo, a promessa é uma oferta que a Webag não sabe honrar; CDC art. 30). Personas: `personas.md`. Pesquisa: `pesquisa-mercado.md`.
 
 ## Alterações 2026-11-19 (DEC-035 comissão, DEC-036 logística da Webag, DEC-037 trocas)
 Origem: brief §9 e `docs/decisoes.md`. **DEC-007 (entrega pelo lojista; frota da Webag fora da 1.0) está SUBSTITUÍDA pela DEC-036.** O que era "fase 2" (frota Webag, taxa de entrega Webag, coleta de trocas por entregador) entra na 1.0 **sem app do motoboy**: o admin despacha por WhatsApp. App do motoboy, rastreio e despacho automático continuam fase 2 (§6.1).
@@ -76,11 +91,11 @@ Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md`
 
 | Épico | PRD | IDs |
 |---|---|---|
-| Cliente | `prd/cliente.md` | WB-001 a 038 |
-| Lojista | `prd/lojista.md` | WB-050 a 079, 227 (+ WB-242 em `prd/logistica.md`) |
+| Cliente | `prd/cliente.md` | WB-001 a 038, 250 a 254 (DEC-053) |
+| Lojista | `prd/lojista.md` | WB-050 a 079, 227, 257 (+ WB-242 em `prd/logistica.md`) |
 | Admin | `prd/admin.md` | WB-100 a 125 |
 | Pagamentos | `prd/pagamentos.md` | WB-150 a 161 |
-| **Logística da Webag** (DEC-036) | `prd/logistica.md` | WB-229 a 242 |
+| **Logística da Webag** (DEC-036, DEC-053) | `prd/logistica.md` | WB-229 a 242, 249, 255, 256, 258 |
 | Trocas ("Retira Troca") | `prd/trocas.md` | WB-170 a 178, 243 a 248 |
 | Notificações | `prd/notificacoes.md` | WB-190 a 199 |
 | LGPD | `prd/lgpd.md` | WB-210 a 218 |
@@ -96,13 +111,13 @@ Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md`
 
 | MoSCoW | Qtde |
 |---|---|
-| Must | 132 (117 + 15 de DEC-036/037: WB-229 a 239 e 241 a 244) |
-| Should | 29 (24 + WB-240, 245, 246, 247, 248) |
+| Must | 139 (117 + 15 de DEC-036/037: WB-229 a 239 e 241 a 244; + 7 da DEC-053: WB-249 a 253, 255, 257) |
+| Should | 32 (24 + WB-240, 245, 246, 247, 248; + 3 da DEC-053: WB-254, 256, 258) |
 | Could | 2 (WB-010, 199) |
 | Won't (1.0) | 1 (WB-161) |
-| **Total 1.0** | **164** (144 + 20 novas da DEC-035/036/037; 144 = 142 + WB-227 e WB-228 da DEC-024) |
+| **Total 1.0** | **174** (144 + 20 novas da DEC-035/036/037 + 10 da DEC-053; 144 = 142 + WB-227 e WB-228 da DEC-024) |
 
-Crítica ao escopo: 132 Must é muito para uma "1.0 de piloto" (eram 116 antes da DEC-036/037). Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
+Crítica ao escopo: 139 Must é muito para uma "1.0 de piloto" (eram 116 antes da DEC-036/037). Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
 
 ## 3. Ordem sugerida de construção
 
@@ -203,6 +218,10 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 67 | WB-160 | Alternar simulado/real por .env + documentação | Must | 151-153 | S |
 | 68 | WB-023 | Checkout: entrega ou retirada | Must | 020, 003, 005 | S |
 | 68a | WB-237 | Checkout: taxa de entrega pela tabela (horário e pausa da logística) | Must | 023, 236 | |
+| 68b | WB-249 | **Motor de ETA: faixa por loja e endereço, teto de 2 h e recálculo no pedido (DEC-053; E.1)** | Must | 236, 119, 057 | |
+| 68c | WB-257 | Lojista informa o preparo (entra na faixa; DEC-053) | Must | 249, 057 | |
+| 68d | WB-250 | Cliente: faixa de chegada na descoberta, loja, produto e sacola | Must | 249, 012, 016, 017, 020 | |
+| 68e | WB-251 | Loja fora do alcance de 2 h (some da lista, aviso, bloqueio) | Must | 249, 004, 016 | |
 | 69 | WB-024 | Pagar com PIX | Must | 023, 151 | S |
 | 70 | WB-025 | Pagar com cartão de crédito | Must | 023, 152 | S |
 | 71 | WB-026 | Retirada: código e instruções | Must | 023, 058 | |
@@ -218,8 +237,12 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 76e | WB-233 | Admin: atualizar estados da entrega | Must | 232 | |
 | 76f | WB-234 | Entrega não realizada: reentrega ou devolução à loja | Must | 233 | |
 | 76g | WB-239 | Admin: custo por entrega e histórico | Must | 233 | |
+| 76h | WB-255 | Admin: atraso na fila, "Em risco" e causa do atraso (DEC-053; substitui WB-230 C9; E.2) | Must | 249, 230, 233 | |
+| 76i | WB-256 | Admin: lote de corridas por área (DEC-053; E.2) | Should | 232, 249 | |
 | 77 | WB-027 | Acompanhar o pedido | Must | 024, 025, 069 | |
 | 77a | WB-235 | Cliente: acompanhar a entrega e receber avisos | Must | 233, 027, 191 | |
+| 77b | WB-252 | Pedido: faixa gravada e atualizada conforme o status (DEC-053) | Must | 249, 027, 235 | |
+| 77c | WB-253 | Atraso: aviso ao cliente e cancelamento sem custo (a válvula de saída da promessa) | Must | 252, 255, 028, 154 | S (dinheiro: estorno) |
 | 78 | WB-191 | Notificações de pedido ao cliente | Must | 190, 027 | |
 | 79 | WB-192 | Alertas de pedido ao lojista | Must | 067 | |
 | 80 | WB-028 | Cancelar pedido | Must | 027, 154 | |
@@ -230,6 +253,8 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 85 | WB-072 | Histórico de pedidos (lojista) | Must | 067 | |
 | 85a | WB-226 | Código de entrega do cliente (flag; **recomendo subir para Must e ligar por padrão**, o risco agora é o motoboy, `prd/logistica.md`) | Should | 233, 027 | S |
 | 85b | WB-240 | Admin: relatórios de logística (margem, falhas, a pagar por motoboy) | Should | 239 | |
+| 85c | WB-254 | Compensação por atraso (padrão: entrega grátis no próximo pedido) `[HIPÓTESE]` | Should | 253, 116 | S (cupom e dinheiro) |
+| 85d | WB-258 | Admin: parâmetros do ETA, prévia e relatório de prazo | Should | 249, 119, 240 | |
 
 ### Onda 4: pós-venda, dinheiro e gestão
 | # | ID | História | P | Depende de | TM |
@@ -410,6 +435,11 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 | 19 | NFS-e e tributos sobre taxa de entrega, taxa de troca e comissão | Contador do fundador | `prd/pagamentos.md` |
 | 20 | Falha de entrega por culpa do cliente: cobrar a taxa? | Hoje estorno total; mudar só com parecer jurídico | WB-234 C3 |
 | 21 | `application_fee` com taxa de entrega e taxa de troca em conta da Webag viáveis no split do MP? | backend-dev (sandbox, ADR) | L.2, T.2 |
+| 22 | **DEC-053: o teto de 2 h vale para a estimativa (como está no texto e no código) ou para o fim da faixa?** Com folga de 15 min, a primeira deixa a faixa chegar a 135 min e "até 2 h" fica falso | **Fim da faixa**: alcance cai de ~10,9 para ~9,0 km com os padrões; backend ajusta E.1 | RN-19 item 2 |
+| 23 | **DEC-053: compensação em atraso:** tipo (entrega grátis no próximo pedido, cupom de R$ 10 ou nenhuma), valor, tolerância (15 min) e quem arca | Entrega grátis no próximo pedido, tolerância de 15 min, custo da Webag; ver limite do cupom em reais (WB-022 C7) | HIP-E04, HIP-E05, WB-254 |
+| 24 | **DEC-053: horário de operação da logística:** a promessa de 2 h só existe com a operação aberta; o que fazer com pedido perto do fechamento (bloquear ou agendar)? | Bloquear a entrega quando o fim da faixa passa do fechamento; agendar fica fora da 1.0 | HIP-E08, RN-19 item 2 |
+| 25 | **DEC-053: cobrar mais por distância?** A tabela de taxa já escala por faixa (R$ 8 a R$ 18); com a promessa de 2 h, entregas longas ficam mais caras e mais lentas | Manter a tabela; cotar motoboys por faixa antes do piloto (item 13); sem taxa por minuto de espera | HIP-L01, HIP-E03 |
+| 26 | **DEC-053: copy "Chega em até 2 h" em lojas de apps, landing e deck antes de medir** | Só usar depois de 95% das entregas do piloto em até 2 h; revisão jurídica (J14) | HIP-E09, `decisoes.md` J14 |
 
 ## 8. Aceite do PO (como vou validar)
 Uma história só é aceita se: (1) todos os critérios Dado/Quando/Então do PRD passam, incluindo erro, vazio e limites, verificados pelo QA; (2) DoD da skill `definicao-de-pronto` cumprida; (3) valores numéricos batem com `regras-de-negocio.md`; (4) eventos de analytics do PRD instrumentados. Recuso com motivo objetivo apontando o critério (ex.: "WB-068 C4: timeout de 10 min não cancelou o pedido").

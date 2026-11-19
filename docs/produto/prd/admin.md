@@ -242,6 +242,7 @@ Como super admin, quero editar os parâmetros do negócio, para ajustar sem depl
 - **C4** Dado "Restaurar padrão", então volta ao valor de seed com confirmação.
 - **C5** Dado os pisos legais (7 dias de arrependimento, 30 de defeito), então são **fixos e não editáveis por nenhum perfil, nem pelo super admin**: a validação recusa valor menor que o piso e a tela mostra a chave bloqueada; o super admin só pode **aumentar** a parte voluntária. Mudar o piso exige alteração de código e registro em `docs/decisoes.md` (DEC-011, DEC-023b; R-02).
 - **C6** Dado alteração de parâmetro, então vale com o mesmo cache de até 60 s das flags (C3 e WB-120 C4); a edição usa controle de versão: se outro admin salvou a mesma chave antes, a resposta é 409 "Este valor foi alterado por [nome]. Recarregue" (R-22).
+- **C7** **(DEC-053)** Dado os parâmetros `entrega_*` (RN-02), então ficam num grupo "Entrega em até 2 h" com validação cruzada (teto menos folga >= preparo + despacho + 5; folga <= teto/4), aviso de `raio_max_km` acima do alcance, prévia de ETA e relatório de prazo: tudo em **WB-258** (`logistica.md`).
 
 ### WB-120 Feature flags — Must — dep: WB-119
 Como super admin, quero ligar e desligar funções, para reagir a problemas.

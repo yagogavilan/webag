@@ -8,6 +8,13 @@ import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js'
 type Admin = Awaited<ReturnType<typeof createAdmin>>;
 
 /** WB-240: relatórios de logística com números conferidos à mão (margem, subsídio do frete grátis, a pagar por motoboy). */
+/** BUG-019a: "pronta há 30 min" sem atravessar a meia-noite de Brasília (o relatório filtra pelo dia civil de hoje). */
+function readyThirtyMinutesAgo(): Date {
+  const startOfDay = new Date(Date.now() - 3 * 3_600_000);
+  startOfDay.setUTCHours(3, 0, 0, 0); // meia-noite de Brasília (UTC-3)
+  return new Date(Math.min(Date.now(), Math.max(Date.now() - 30 * 60_000, startOfDay.getTime() + 1_000)));
+}
+
 describe('Relatórios de logística (WB-240)', () => {
   let ctx: TestContext;
   let svc: DeliveriesService;
@@ -35,7 +42,7 @@ describe('Relatórios de logística (WB-240)', () => {
         svc.createInTx(tx, { orderId: randomUUID(), storeId, cityId: over.cityId, feeCents: over.feeCents, expectedCostCents: 900, volumes: 1, contact: { number: 'WB-AAAAA', kind: 'delivery', storeName: 'Loja', storePhone: null, pickupAddress: 'Rua A, 1, Centro, Francisco Morato', dropoffAddress: 'Rua B, 2, Centro, Francisco Morato', customerFirstName: 'Ana', customerPhone: '11 97777-0000', volumes: 1, note: null } }, sys),
       );
       ids[name] = delivery.id;
-      await ctx.db.update(deliveries).set({ readyAt: new Date(Date.now() - 30 * 60_000) }).where(eq(deliveries.id, delivery.id)); // pronta há 30 min: os tempos médios ficam perto disso
+      await ctx.db.update(deliveries).set({ readyAt: readyThirtyMinutesAgo() }).where(eq(deliveries.id, delivery.id)); // pronta há 30 min: os tempos médios ficam perto disso
       await ctx.http.post(`${base}/deliveries/${delivery.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: over.courierId }).expect(200);
       if (over.end === 'cancelled') {
         await ctx.http.post(`${base}/deliveries/${delivery.id}/status`).set(bearer(ops.accessToken)).send({ action: 'cancel', reason: 'cancelada para o teste do relatório' }).expect(200);

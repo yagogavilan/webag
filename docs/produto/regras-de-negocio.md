@@ -1,6 +1,6 @@
 # Regras de Negócio — Webag 1.0
 
-Status: rascunho para G3 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-035 comissão, DEC-036 logística da Webag, DEC-037 trocas: RN-02, RN-04, RN-07, RN-09, RN-10, RN-11, RN-13, nova RN-18)
+Status: rascunho para G3 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-035 comissão, DEC-036 logística da Webag, DEC-037 trocas: RN-02, RN-04, RN-07, RN-09, RN-10, RN-11, RN-13, nova RN-18; DEC-053 entrega em até 2 h: RN-02, RN-03, RN-04, RN-18 e nova RN-19)
 Fonte única das regras numéricas. PRDs e histórias citam `RN-xx` e `HIP-0xx` (hipóteses em `docs/decisoes.md`). Mudou valor: muda aqui e em `decisoes.md`, nunca só no código.
 
 ## RN-01 Dinheiro e arredondamento
@@ -10,6 +10,8 @@ Fonte única das regras numéricas. PRDs e histórias citam `RN-xx` e `HIP-0xx` 
 
 ## RN-02 Parâmetros configuráveis no admin (WB-119)
 Todo valor abaixo vive em tabela de parâmetros editável (super admin), com histórico e auditoria. "Padrão" é o valor de seed. A alteração vale em até 60 s (mesmo cache das flags) e a edição usa controle de versão (409 se outro admin alterou a mesma chave antes; WB-119 C6, R-22). Os pisos legais de troca são exceção: não são editáveis por ninguém.
+
+> **Chaves da entrega em até 2 h (DEC-053): a regra completa está em RN-19.** Uma só chave por conceito: o "despacho padrão", o "fator de rota" e a "folga" dos pedidos do CEO são `entrega_despacho_min`, `entrega_rota_fator_pct` e `entrega_faixa_min` (nomes já usados no backend). Validação ao salvar (422): `entrega_max_min` - `entrega_faixa_min` >= preparo + despacho + 5 (senão nenhuma loja alcança ninguém) e `entrega_faixa_min` <= `entrega_max_min` / 4. `logistica_alerta_entrega_min` só vale para corrida sem ETA gravado (pedido anterior à DEC-053).
 
 | Chave | Padrão | Faixa | Hipótese |
 |---|---|---|---|
@@ -24,12 +26,16 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `pedido_minimo_cents` / `frete_gratis_acima_cents` (globais; opcional por cidade) | 2000 / 0 (desligado) | 0-20000 / 0 ou > mínimo | HIP-L12, DEC-036b |
 | `logistica_horario` (por cidade) | seg a sáb 09:00-20:00 | n/a | HIP-L10 |
 | `logistica_sla_atribuir_min` / `logistica_sla_atribuir_critico_min` / `logistica_alerta_entrega_min` | 10 / 20 / 60 | 1-120 | HIP-L06 |
-| `entrega_preparo_padrao_min` (a loja pode definir o seu, 5-120) / `entrega_despacho_min` | 20 / 15 | 5-120 / 0-60 | DEC-053 [HIPÓTESE] |
-| `entrega_rota_fator_pct` / `entrega_min_por_km` | 130 (1,30) / 6 | 100-250 / 1-30 | DEC-053 [HIPÓTESE] |
-| `entrega_faixa_min` (folga para cada lado) / `entrega_max_min` (teto) | 15 / 120 | 0-60 / 30-240 | DEC-053 |
-| `entrega_lote_max` (corridas da mesma cidade por lote) | 4 | 2-10 | DEC-053 |
-
-> **ETA (DEC-053):** estimativa = preparo da loja + `entrega_despacho_min` + ceil(distância em linha reta (PostGIS) em km x `entrega_rota_fator_pct`/100 x `entrega_min_por_km`); faixa = estimativa -/+ `entrega_faixa_min` (início nunca abaixo de 5 min). Estimativa acima de `entrega_max_min` (inclusive o 120 entrega, 121 não): a loja não entrega para o endereço (some da descoberta; na loja/produto aparece "fora da área"; sacola bloqueia com `OUT_OF_RANGE`). O ETA é recalculado na criação do pedido e gravado nele; a faixa em horário conta a partir do pagamento. `logistica_alerta_entrega_min` só vale para corrida sem ETA gravado; com ETA, o alerta de atraso dispara no fim da faixa. O raio `raio_max_km` e o teto valem juntos: com os padrões o teto alcança ~10,9 km, então raio acima disso só serve com loja de preparo curto ou parâmetros mais folgados [PO: ajustar].
+| `entrega_preparo_padrao_min` (a loja pode definir o seu, `prep_minutes`) | 20 | 5-120 | HIP-E01, DEC-053 |
+| `entrega_despacho_min` (espera até o motoboy sair; no PRD aparece como "despacho padrão") | 15 | 0-60 | HIP-E01, DEC-053 |
+| `entrega_rota_fator_pct` (fator de rota sobre a linha reta; 130 = 1,30) | 130 | 100-250 | HIP-E01, DEC-053 |
+| `entrega_min_por_km` (minutos por km de rota, aceita decimal) | 6 | 1-30 | HIP-E01, DEC-053 |
+| `entrega_faixa_min` (folga para cada lado da estimativa; no PRD "folga") | 15 | 0-60 | HIP-E02, DEC-053 |
+| `entrega_max_min` (teto da promessa, contado do pagamento) | 120 | 30-240 | DEC-053 |
+| `entrega_lote_max` (corridas da mesma cidade por lote) | 4 | 2-10 | HIP-E07, DEC-053 |
+| `entrega_atraso_tolerancia_min` (depois do fim da faixa, antes de compensar e de liberar o cancelamento sem custo) | 15 | 0-60 | HIP-E04 (novo) |
+| `entrega_compensacao_tipo` / `entrega_compensacao_cents` (usado só no tipo `cupom_valor`) | `frete_gratis_proximo` / 1000 | `frete_gratis_proximo`, `cupom_valor`, `nenhuma` / 0-5000 | HIP-E05 (novo) |
+| `entrega_cancel_resposta_min` (pedido já em SAIU: prazo da operação responder ao "cancelar por atraso"; sem resposta, aceita) | 10 | 3-30 | HIP-E06 (novo) |
 | `entrega_reentrega_max` | 1 | 0-3 | HIP-L07 |
 | `taxa_provedor_pix_pct` / `taxa_provedor_cartao_pct` (só para a **estimativa** "Você recebe cerca de R$ X" no cadastro de produto; o ledger usa a tarifa real do provedor) | 0,99 / 4,98 `[HIPÓTESE; conferir no contrato do MP]` | 0-10 | DEC-038a, HIP-C02 |
 | `codigo_entrega` (flag, WB-226): recomendado **ligado** para entrega Webag | ligado `[HIPÓTESE]` | flag | HIP-L05 |
@@ -75,7 +81,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 
 ## RN-03 Visibilidade
 - **Região:** cidade precisa estar ativa. Se o bairro do endereço estiver cadastrado, precisa estar ativo; bairro não cadastrado segue a regra da cidade.
-- **Loja** aparece ao cliente se: status APROVADA, não suspensa, conta de recebimento ativa, 1+ produto ativo, e (para entrega Webag) distância em linha reta do endereço <= `raio_max_km` (global, DEC-036b), endereço em região liberada e logística aberta e não pausada na cidade de destino (RN-18); a loja que só quer retirada some do modo Entrega. Loja só com retirada aparece no modo Retirada se distância <= `retirada_distancia_max_km`.
+- **Loja** aparece ao cliente se: status APROVADA, não suspensa, conta de recebimento ativa, 1+ produto ativo, e (para entrega Webag) distância em linha reta do endereço <= `raio_max_km` (global, DEC-036b), faixa de chegada dentro do teto (`entrega_max_min`, RN-19), endereço em região liberada e logística aberta e não pausada na cidade de destino (RN-18); a loja que só quer retirada some do modo Entrega. Loja só com retirada aparece no modo Retirada se distância <= `retirada_distancia_max_km`.
 - **Produto** aparece se: status ATIVO, loja visível, 1+ variação com estoque disponível > 0 (produto sem estoque aparece como "Indisponível" na página da loja, não nas ofertas nem na busca de produtos).
 - **Aberta agora:** dentro do horário do dia, sem pausa ativa, e fora de feriado marcado. Loja fechada pode ser vista, mas não recebe pedido (checkout bloqueado com aviso "Abre às HH:MM").
 - **Ordenação da home/lojas perto:** abertas primeiro, depois distância, depois avaliação (HIP-032). "Lojas novas": aprovadas há <= 30 dias. "Mais vendidos": unidades em pedidos ENTREGUE/em andamento nos últimos 30 dias na região, mínimo 5 pedidos. "Ofertas": produtos com promoção vigente, maior desconto percentual primeiro. Seção sem item é ocultada.
@@ -85,7 +91,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 - Distância = linha reta entre loja e endereço (HIP-013). Fora do `raio_max_km` ou em região inativa: a loja some do modo Entrega; se o cliente chegar por link, mostra "Não entrega no seu endereço". Logística fechada ou pausada (RN-18): só retirada, com "Entrega volta às HH:MM".
 - **Pedido mínimo** (global, `pedido_minimo_cents`) compara com o subtotal de produtos (preço vigente, antes de cupom e frete). Abaixo: o checkout não avança e o texto diz "Faltam R$ X" (o botão principal vira "Adicionar mais itens", sem botão desabilitado; RN-17).
 - **Entrega grátis acima de X** (global, `frete_gratis_acima_cents`): compara com o mesmo subtotal; taxa = R$ 0 se subtotal >= X; X precisa ser estritamente maior que o pedido mínimo e X = 0 desliga a opção (R-17c). É **subsídio da Webag**: o motoboy continua sendo pago (RN-18) e a `application_fee` perde só a parcela da taxa (nunca fica negativa).
-- **Tempo estimado ao cliente** = tempo de preparo informado pela loja (faixa em minutos) + deslocamento da faixa (tabela) + 10 min de despacho `[HIPÓTESE]`; exibido como estimativa.
+- **Tempo estimado ao cliente (DEC-053, substitui HIP-L11):** é a **faixa de chegada** de RN-19 (preparo da loja + despacho + deslocamento por distância, folga de +-15 min, teto de 2 h). O deslocamento em minutos da tabela de taxa deixou de entrar na conta (a coluna fica só como referência de custo).
 - A loja escolhe **"entrega pela Webag" e/ou "retirada na loja"** (ao menos uma ligada). Retirada: sem frete; loja informa endereço de retirada (padrão: o da loja), instruções e tempo de preparo (faixa em minutos).
 - O pedido guarda **snapshot** da taxa, da faixa, do escopo e da distância (RN-05).
 - Pagamento só online (PIX ou cartão). Dinheiro/maquininha na entrega **fora da 1.0** (brief §4).
@@ -134,6 +140,7 @@ Prazos: aceite `loja_aceite_timeout_min` (cancelamento automático + estorno tot
 | RECEBIDO | loja recusa (motivo obrigatório) ou timeout | Estorno total; conta no índice de cancelamento da loja |
 | ACEITO / EM_SEPARACAO | loja cancela (motivo obrigatório) | Estorno total; conta no índice da loja |
 | EM_SEPARACAO | cliente **solicita**; loja aprova ou nega em 10 min; sem resposta vai ao admin | Se aprovado, estorno total |
+| Entrega Webag atrasada (RN-19 item 4d): de RECEBIDO até SAIU, depois do fim da faixa + `entrega_atraso_tolerancia_min` | **cliente** ("Cancelar sem custo"; em SAIU vira "Pedir cancelamento" e a operação responde em `entrega_cancel_resposta_min`, senão aceita) | Estorno **total incluindo a taxa de entrega**; motivo `atraso`; sem compensação; não conta no índice de cancelamento da loja, salvo causa "loja demorou" |
 | PRONTO_PARA_COLETA / SAIU / PRONTO_PARA_RETIRADA | só admin (a falha de entrega é registrada pela logística, WB-234) | Estorno total ou parcial, com motivo; falha de entrega: estorno total com a taxa de entrega `[HIPÓTESE; jurídico]` |
 | ENTREGUE | via troca/arrependimento (RN-11) | Estorno conforme resolução |
 | Qualquer estado | admin | Cancelar e estornar total/parcial, motivo obrigatório, auditado; acima de `estorno_super_admin_cents` só super admin |
@@ -267,12 +274,54 @@ Qualquer outra transição (inclusive RECUSADA ou SUSPENSA direto para APROVADA,
 Para as corridas de troca, os mesmos estados valem com os rótulos "a caminho do cliente", "item coletado", "item entregue na loja"; o fim exige a confirmação da **loja** (ITEM_RECEBIDO).
 Atribuir, reatribuir e desfazer exigem motivo e auditoria; todo estado grava ator e hora e notifica o cliente (push só em SAIU e ENTREGUE e em falha).
 
-**Fila e SLA:** ordenada pelo "pronto" mais antigo; sem motoboy após `logistica_sla_atribuir_min` fica amarela e após `logistica_sla_atribuir_critico_min` vermelha (com texto); corrida em SAIU há mais de `logistica_alerta_entrega_min` recebe "Atenção"; 24 h sem fechamento: auto-conclusão do pedido (`auto_conclusao_entrega_h`, RN-07).
+**Fila e SLA (DEC-053):** ordenada pelo **prazo restante** (fim da faixa do pedido menos agora; a corrida mais urgente primeiro) e, em empate ou sem ETA, pelo "pronto" mais antigo; cada linha mostra o prazo restante em minutos. Sem motoboy após `logistica_sla_atribuir_min` fica amarela e após `logistica_sla_atribuir_critico_min` vermelha (com texto). **Em risco** (amarelo, texto "Em risco"): restam <= `entrega_faixa_min` até o fim da faixa e a corrida ainda não saiu. **Atrasada** (vermelho, texto "Atrasada"): passou do fim da faixa, em qualquer estado antes de ENTREGUE; dispara o alerta de RN-19. `logistica_alerta_entrega_min` só vale para corrida sem ETA (pedido anterior à DEC-053). 24 h sem fechamento: auto-conclusão do pedido (`auto_conclusao_entrega_h`, RN-07).
+**Lote de corridas por área (DEC-053):** a operação pode atribuir de 2 a `entrega_lote_max` corridas de **entrega** ao **mesmo motoboy** de uma vez, desde que estejam PRONTA_PARA_COLETA e sejam da **mesma cidade de destino** (área da 1.0 `[HIPÓTESE: refinar por bairro ou raio quando houver volume]`). O lote **não muda o ETA já prometido**: antes de confirmar, o painel mostra o prazo restante de cada corrida e avisa "Esta corrida pode atrasar" se alguma tem prazo restante <= `entrega_faixa_min`; a operação decide (pode tirar a corrida urgente do lote). Cada corrida do lote segue os estados, o custo e a auditoria próprios (o custo do motoboy do lote é lançado por corrida, rateado pela operação). Coleta e reentrega de troca não entram em lote na 1.0. Corrida que sai do lote (cancelada, devolvida) não afeta as demais.
 **Horário e pausa:** entrega Webag só é oferecida dentro de `logistica_horario` da cidade e sem pausa (RN-04); o admin pode pausar por cidade ou geral com motivo.
 **Custo:** o admin registra o custo pago ao motoboy por corrida (sugestão = custo previsto da faixa); sem registro em 48 h gera alerta; edição preserva o valor anterior e audita. **O pagamento ao motoboy é feito fora do app** (DEC-036c); o sistema só controla "pago em DD/MM" por lote.
 **Dinheiro na entrega:** nenhum; o motoboy não cobra nada na 1.0 (a mensagem diz "Pago no app. Não cobrar").
 **Falha de entrega (DEC-038d):** o custo da entrega frustrada por cliente ausente é da Webag na 1.0; 1 reentrega sem custo ao cliente; se repetir, o cliente pode pagar uma nova tentativa (taxa de entrega da tabela, cobrança separada) ou o pacote volta à loja com estorno total (inclui taxa de entrega) `[HIPÓTESE; reter a taxa só com parecer jurídico]`.
 **Dados:** mensagem de WhatsApp só com loja, endereços, 1º nome e telefone do cliente, volumes e observação (nunca CPF, e-mail, itens, valores nem o código de entrega); telefone do cliente visível ao operador só em corrida ativa.
+
+## RN-19 Promessa de entrega: ETA em faixa, teto de 2 h e atraso (DEC-053; `prd/logistica.md` WB-249, WB-253 a WB-258)
+Tudo abaixo é `[HIPÓTESE]` calibrável no admin (RN-02) e a calibrar no piloto (HIP-E01 a E10). Fonte do cálculo no backend: `apps/api/src/modules/logistics/domain/eta.ts`.
+
+**1. Fórmula (por loja e endereço de destino, só entrega Webag).**
+- `deslocamento = ceil(distância em linha reta (PostGIS, km) x entrega_rota_fator_pct/100 x entrega_min_por_km)`
+- `estimativa = preparo da loja + entrega_despacho_min + deslocamento` (preparo = o da loja, `prep_minutes`, ou `entrega_preparo_padrao_min`)
+- `faixa = [max(5, estimativa - entrega_faixa_min), estimativa + entrega_faixa_min]`; **sempre faixa, nunca número único**.
+- Padrões: preparo 20, despacho 15, fator 1,30, 6 min/km, folga 15. Exemplo: loja a 2,0 km: deslocamento = ceil(2 x 1,3 x 6) = 16; estimativa = 20 + 15 + 16 = 51; faixa 36 a 66 min. A 5,0 km: 39 min; estimativa 74; faixa 59 a 89 min.
+- Observação de calibragem `[HIPÓTESE]`: 1,3 x 6 = 7,8 min por km em linha reta (cerca de 7,7 km/h) é **conservador** (inclui espera, portaria e entrega na porta). Protege a promessa, mas encolhe a área; medir no piloto e baixar `entrega_min_por_km` com dado (HIP-E01).
+
+**2. Teto de 2 h e "fora do alcance".**
+- **Regra proposta pelo PO, que precisa do OK do CEO/fundador (diverge do texto da DEC-053 e do código atual):** a loja só entrega para o endereço se o **fim da faixa** (`estimativa + entrega_faixa_min`) for **<= `entrega_max_min` (120)**. Motivo: com o teto na estimativa, uma estimativa de 120 vira faixa até 135 min, e a mensagem "Chega em até 2 h" seria falsa (CDC art. 30 e 31, oferta e informação adequada; ver J14). Com os padrões e preparo de 20 min, o alcance cai de ~10,9 km para **~9,0 km** (alcance = (120 - folga - preparo - despacho) / (fator x min_por_km)). A alternativa (teto na estimativa) obriga a trocar a copy por "em cerca de 2 h".
+- Fora do alcance: a loja **some** da descoberta e da busca daquele endereço; na página da loja e do produto (chegada por link, favorito, histórico) aparece "fora da área"; sacola e checkout bloqueiam com `OUT_OF_RANGE`; a sacola é mantida. `raio_max_km` continua valendo junto (vale o menor dos dois); faixas da tabela de taxa acima do alcance real ficam sem uso (o admin vê o aviso em WB-258).
+- **Horário da logística:** a entrega só é oferecida se o **fim da faixa** cair antes do fechamento de `logistica_horario` da cidade; senão o checkout oferece só retirada com "Entrega volta às HH:MM" (RN-04) `[HIPÓTESE; HIP-E08; o fundador responde o horário]`. Sem isso, o pedido das 19:40 promete chegada às 21:00 com a operação fechada.
+
+**3. Quando a estimativa é calculada e o que a atualiza.**
+| Momento | O que acontece |
+|---|---|
+| Descoberta, loja, produto | Faixa em **minutos** ("45 a 75 min") para o endereço atual; sem endereço, só "Chega em até 2 h" |
+| Sacola e checkout | Faixa em **horário** ("Chega entre 15:40 e 16:10") relativa a agora |
+| Criação do pedido | Recalculada pelo servidor com os parâmetros do momento e **gravada no pedido** com seus termos (preparo, despacho, deslocamento, distância); nunca confia no valor do app (`expectedTotalCents` e ETA no contrato) |
+| Pagamento aprovado | A faixa é **reancorada**: os mesmos minutos passam a contar do pagamento. Esse é o **prazo prometido** (`etaToAt`), base de atraso, compensação e relatórios; PIX demorado não come o prazo do cliente |
+| ACEITO, EM_SEPARACAO, PRONTO_PARA_COLETA, motoboy a caminho | Não muda; demora da loja em aceitar ou preparar **não empurra** a promessa (a Webag assume o risco da faixa) |
+| SAIU_PARA_ENTREGA | Só falta o deslocamento: faixa = agora + deslocamento +- folga; **só pode ficar mais cedo** que a prometida (nunca piora; já implementado) |
+| Passou do fim da faixa | A faixa **não** é empurrada; o pedido entra em atraso (item 4) |
+Mudança de parâmetro no admin não altera pedidos já criados.
+
+**4. Atraso (passou do fim da faixa do pedido).**
+- **a) Alerta à operação (imediato):** a corrida vira "Atrasada" e vai ao topo da fila (RN-18); alerta no painel e push/e-mail da operação, uma vez por corrida. Antes, "Em risco" (RN-18).
+- **b) Mensagem ao cliente (imediato):** aviso no app e **1 push** ("Seu pedido está levando mais tempo que o previsto") com "Falar com a Webag"; sem novo horário inventado: o app mostra "Atrasado" e, se a operação informar, a previsão de chegada. Nenhum outro push repetido (máx. 1 por pedido).
+- **c) Compensação (`entrega_atraso_tolerancia_min` após o fim da faixa, `[HIPÓTESE]`):** pedido ENTREGUE depois de fim da faixa + tolerância (15 min) gera **automaticamente** a compensação `entrega_compensacao_tipo`: padrão **entrega grátis no próximo pedido** (cupom de frete, RN-09, validade 30 dias, 1 por pedido atrasado, intransferível, sem uso em pedido de retirada); alternativa `cupom_valor` (R$ 10,00 de desconto). Custo é da Webag na 1.0 (receita de `application_fee` perdida, nunca negativa). **Por que não cupom em reais por padrão:** o desconto da plataforma é limitado à comissão do pedido (WB-022 C7, WB-116 C6); R$ 10 num pedido de R$ 40 com comissão de 15% (R$ 6) não cumpriria o prometido. Dar a compensação não admite culpa jurídica: texto neutro.
+- **d) Cancelamento sem custo (mesmo instante da compensação: fim da faixa + tolerância):** o cliente vê "Cancelar sem custo" **ou** "Continuar esperando". Antes de SAIU: cancelamento imediato (CANCELADO, ator cliente, motivo `atraso`), estoque liberado, **estorno total incluindo a taxa de entrega** (RN-08); a corrida é cancelada. Já em SAIU: vira "Pedir cancelamento"; a operação responde em `entrega_cancel_resposta_min` (10), informando a chegada em até 10 min ou aceitando; sem resposta, **aceita** (padrão de silêncio da loja e da troca); aceito, o motoboy devolve o pacote à loja e o fluxo é o de DEVOLVIDA_A_LOJA (RN-18) com estorno total. Quem cancelou por atraso **não recebe** a compensação do item c. Garantia no pior caso: como o fim da faixa já é <= teto (item 2), o cliente nunca espera mais que `entrega_max_min` + tolerância (135 min) antes de poder sair sem custo.
+- **e) Motivo do atraso (para a gestão):** ao fechar a corrida atrasada a operação marca a causa principal (loja demorou, sem motoboy, trajeto, cliente/endereço, outro). Causa "loja demorou" entra no índice de loja (RN-08) e no relatório; a compensação continua sendo da Webag perante o cliente.
+- **f) Não atrasa para o cliente** (mas segue sendo corrida): coleta e reentrega de troca (têm prazos próprios, RN-11), retirada na loja.
+
+**5. Lote.** A operação reduz custo e atraso agrupando corridas da mesma cidade (RN-18). O ETA gravado não considera o lote; o aviso "Esta corrida pode atrasar" protege a promessa.
+
+**6. Limites desta versão (fora do escopo, para registro).** ETA que reage à fila e à disponibilidade de motoboys em tempo real; rota real e trânsito (linha reta x fator); entrega agendada ("entregar amanhã 10:00"); renegociação do horário com o cliente. `[HIPÓTESE]` Se o piloto mostrar < 85% de entregas no prazo, o primeiro ajuste é subir `entrega_despacho_min` e `entrega_preparo_padrao_min`, não a folga.
+
+**Eventos (sem dado pessoal):** `eta_shown {surface, minMin, maxMin}`, `eta_out_of_range {surface}`, `eta_updated {deltaMin}`, `late_notice_shown`, `late_cancel_requested {status}`, `late_cancel_done`, `late_compensation_granted {type}`, `delivery_batch_created {n}`.
 
 ## RN-17 Formulários: botão de envio sempre ativo (DEC-024d, WB-006 C2/C4, WB-020 C5)
 - O botão principal de um formulário (cadastro, login, contestação, avaliação, configuração etc.) **nunca fica desabilitado** por campo inválido ou faltando: ele fica ativo e, ao tocar, **não envia**, mostra o erro junto ao campo (texto + ícone, nunca só cor) e leva o foco ao primeiro campo com erro (acessibilidade: leitor de tela e quem não percebe o que falta).
