@@ -1312,7 +1312,7 @@ export type AdminOrderDetailItemsItem = {
 };
 
 /**
- * A conta do pedido (RN-10), congelada no pagamento
+ * A conta do pedido (RN-10), congelada no pagamento. SEC-184 / RN-13: `commission`, `applicationFee` e `merchantNetBeforeProviderFee` vêm `null` para quem não tem `commissions:read` (operação e suporte); financeiro e super admin recebem o valor.
  */
 export type AdminOrderDetailValues = {
   subtotal: Money;
@@ -1321,9 +1321,9 @@ export type AdminOrderDetailValues = {
   storeDiscount: Money;
   platformDiscount: Money;
   total: Money;
-  commission: Money;
-  applicationFee: Money;
-  merchantNetBeforeProviderFee: Money;
+  commission: Money | null;
+  applicationFee: Money | null;
+  merchantNetBeforeProviderFee: Money | null;
 };
 
 export type AdminOrderDetailPaymentMethod = typeof AdminOrderDetailPaymentMethod[keyof typeof AdminOrderDetailPaymentMethod];
@@ -1482,7 +1482,7 @@ export type AdminOrderDetail = AdminOrderRow & ({
      */
   delivery: AdminOrderDetailDelivery;
   items: AdminOrderDetailItemsItem[];
-  /** A conta do pedido (RN-10), congelada no pagamento */
+  /** A conta do pedido (RN-10), congelada no pagamento. SEC-184 / RN-13: `commission`, `applicationFee` e `merchantNetBeforeProviderFee` vêm `null` para quem não tem `commissions:read` (operação e suporte); financeiro e super admin recebem o valor. */
   values: AdminOrderDetailValues;
   /** @nullable */
   payment: AdminOrderDetailPayment;

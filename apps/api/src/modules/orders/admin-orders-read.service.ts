@@ -120,6 +120,7 @@ export class AdminOrdersReadService {
     const address = (order.address ?? null) as { neighborhood?: string; city?: string; state?: string } | null;
     const finance = order.finance as { merchantNetBeforeProviderFeeCents?: number };
     const latest = attempts.at(-1) ?? null;
+    const seesCommission = adminHasPermission(profile, 'commissions:read');
 
     return {
       ...presentRow({ order, storeName: row.storeName, storeCity: row.storeCity, customerName: row.customerName }),
@@ -142,9 +143,10 @@ export class AdminOrdersReadService {
         storeDiscount: money(order.storeCouponCents),
         platformDiscount: money(order.platformDiscountCents),
         total: money(order.totalCents),
-        commission: money(order.commissionCents),
-        applicationFee: money(order.applicationFeeCents),
-        merchantNetBeforeProviderFee: money(finance.merchantNetBeforeProviderFeeCents ?? 0),
+        // SEC-184 / RN-13: comissão, tarifa da plataforma e líquido da loja são dado comercial; só quem tem `commissions:read` (financeiro e super admin).
+        commission: seesCommission ? money(order.commissionCents) : null,
+        applicationFee: seesCommission ? money(order.applicationFeeCents) : null,
+        merchantNetBeforeProviderFee: seesCommission ? money(finance.merchantNetBeforeProviderFeeCents ?? 0) : null,
       },
       payment: latest
         ? { method: order.paymentMethod, status: latest.status, installments: latest.installments, declineReason: latest.declineReason, attempts: attempts.map((a) => ({ id: a.id, status: a.status, method: a.method, amount: money(a.amountCents), createdAt: a.createdAt.toISOString() })) }

@@ -9961,7 +9961,7 @@ components:
                   lineTotal: { $ref: '#/components/schemas/Money' }
             values:
               type: object
-              description: A conta do pedido (RN-10), congelada no pagamento
+              description: "A conta do pedido (RN-10), congelada no pagamento. SEC-184 / RN-13: `commission`, `applicationFee` e `merchantNetBeforeProviderFee` vêm `null` para quem não tem `commissions:read` (operação e suporte); financeiro e super admin recebem o valor."
               required: [subtotal, delivery, serviceFee, storeDiscount, platformDiscount, total, commission, applicationFee, merchantNetBeforeProviderFee]
               properties:
                 subtotal: { $ref: '#/components/schemas/Money' }
@@ -9970,9 +9970,9 @@ components:
                 storeDiscount: { $ref: '#/components/schemas/Money' }
                 platformDiscount: { $ref: '#/components/schemas/Money' }
                 total: { $ref: '#/components/schemas/Money' }
-                commission: { $ref: '#/components/schemas/Money' }
-                applicationFee: { $ref: '#/components/schemas/Money' }
-                merchantNetBeforeProviderFee: { $ref: '#/components/schemas/Money' }
+                commission: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+                applicationFee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+                merchantNetBeforeProviderFee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
             payment:
               type: [object, 'null']
               required: [method, status, installments, declineReason, attempts]

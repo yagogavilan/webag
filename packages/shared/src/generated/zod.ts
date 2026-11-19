@@ -3403,19 +3403,19 @@ export const GetAdminOrderResponse = zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
-  "commission": zod.object({
+  "commission": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),
-  "applicationFee": zod.object({
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "applicationFee": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),
-  "merchantNetBeforeProviderFee": zod.object({
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "merchantNetBeforeProviderFee": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.')
-}).describe('A conta do pedido (RN-10), congelada no pagamento'),
+}).describe('Valor monetário em centavos.'),zod.null()])
+}).describe('A conta do pedido (RN-10), congelada no pagamento. SEC-184 / RN-13: `commission`, `applicationFee` e `merchantNetBeforeProviderFee` vêm `null` para quem não tem `commissions:read` (operação e suporte); financeiro e super admin recebem o valor.'),
   "payment": zod.object({
   "method": zod.enum(['pix', 'card']),
   "status": zod.string().describe('Estado da última tentativa'),

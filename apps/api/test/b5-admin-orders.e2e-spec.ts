@@ -127,6 +127,14 @@ describe('B5: pedidos no admin', () => {
     expect(d.timeline.map((t: { status: string }) => t.status)).toEqual(['awaiting_payment', 'received']);
     expect(d.timeline.at(-1)).toMatchObject({ status: 'received', from: 'awaiting_payment', actor: 'system', actorName: null, reason: 'Pagamento aprovado' });
     expect(d.refundLimit).toEqual({ superAdminOnlyAboveCents: 50_000, profileCapCents: 50_000 });
+    expect(d.values.applicationFee.amount).toBeGreaterThan(0);
+    expect(d.values.merchantNetBeforeProviderFee.amount).toBeGreaterThan(0);
+    // SEC-184: comissão, tarifa da plataforma e líquido da loja só para o financeiro e o super admin; o resto da conta vai a todos.
+    expect((await detail(admins.super_admin, s.delivery.id).expect(200)).body.values).toMatchObject({ commission: { amount: 1_200 } });
+    for (const profile of ['operations', 'support'] as const) {
+      const values = (await detail(admins[profile], s.delivery.id).expect(200)).body.values;
+      expect(values).toMatchObject({ commission: null, applicationFee: null, merchantNetBeforeProviderFee: null, subtotal: { amount: 12_000 }, total: d.total, delivery: d.values.delivery, serviceFee: d.values.serviceFee });
+    }
 
     const pending = (await detail(admins.finance, s.pending.id).expect(200)).body;
     expect(pending).toMatchObject({ status: 'awaiting_payment', paidAt: null, refunds: { paid: { amount: 0 }, remaining: { amount: 0 } } });
