@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { reportNotReceived } from '../../../src/api/orders-api';
 import { Banner } from '../../../src/components/Banner';
 import { Badge } from '../../../src/components/Badge';
 import { Button } from '../../../src/components/Button';
@@ -46,6 +47,7 @@ export default function OrderScreen() {
   const cancel = useCancelOrder(orderId);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [details, setDetails] = useState(false);
+  const [notReceivedOpen, setNotReceivedOpen] = useState(false);
   const [push, setPush] = useState<PushStatus>('granted');
   const order = query.data;
 
@@ -87,6 +89,17 @@ export default function OrderScreen() {
 
   const st = presentStatus(order.status);
   const allowed = new Set<string>(order.allowedActions);
+  const onNotReceived = async () => {
+    setNotReceivedOpen(false);
+    try {
+      await reportNotReceived(orderId);
+      void haptic('success');
+      toast.show(t('order.notReceivedDone'));
+    } catch (e) {
+      void haptic('error');
+      toast.show(e instanceof ApiError && e.code === 'ORDER_NOT_REPORTABLE' ? t('order.notReceivedWindow') : t('order.notReceivedError'));
+    }
+  };
   const active = isActive(order.status);
   const phone = order.store.whatsapp;
   const message = t('order.whatsappMessage', { number: order.number });
@@ -177,6 +190,7 @@ export default function OrderScreen() {
         {allowed.has('rate') ? <Button icon={<Star color={theme.color.text.onBrand} size={theme.size.iconMd} weight="fill" />} label={t('order.rate')} onPress={() => router.push({ pathname: '/review/[orderId]', params: { orderId } } as never)} size="lg" testID="order.review" /> : null}
         {allowed.has('request_exchange') ? <Button icon={<ArrowsLeftRight color={theme.color.text.brand} size={theme.size.iconMd} />} label={t('order.requestExchange')} onPress={() => router.push({ pathname: '/exchange/new', params: { orderId } } as never)} testID="order.exchange" variant="secondary" /> : null}
         {order.status === 'delivered' || order.status === 'cancelled' || order.status === 'refused' || order.status === 'expired' ? <Button label={t('order.reorder')} onPress={() => void onReorder()} testID="order.reorder" variant="text" /> : null}
+        {allowed.has('report_not_received') ? <Button label={t('order.notReceived')} onPress={() => setNotReceivedOpen(true)} testID="order.not-received" variant="text" /> : null}
         {allowed.has('cancel') ? <Button label={t('order.cancel')} onPress={() => setCancelOpen(true)} testID="order.cancel" variant="text" /> : null}
         {allowed.has('request_cancel') ? <Button label={t('order.requestCancel')} onPress={() => void talk(t('order.requestCancelMessage', { number: order.number }))} testID="order.request-cancel" variant="text" /> : null}
         {order.status === 'cancelled' || order.status === 'refused' || order.status === 'expired' ? <Button label={t('order.seeStores')} onPress={() => router.replace('/')} size="lg" testID="order.see-stores" /> : null}
@@ -221,6 +235,16 @@ export default function OrderScreen() {
         </View>
       ) : null}
 
+      <Dialog
+        onClose={() => setNotReceivedOpen(false)}
+        testID="order.not-received-dialog"
+        text={t('order.notReceivedText')}
+        title={t('order.notReceivedTitle')}
+        visible={notReceivedOpen}
+      >
+        <Button label={t('order.notReceivedConfirm')} onPress={() => void onNotReceived()} testID="order.not-received-confirm" />
+        <Button label={t('common.cancel')} onPress={() => setNotReceivedOpen(false)} variant="text" />
+      </Dialog>
       <Dialog onClose={() => setCancelOpen(false)} testID="order.cancel-dialog" text={`${order.payment.status === 'approved' ? t('order.cancelPaid', { total: formatMoney(order.summary.total.amount) }) : t('order.cancelPix')}`} title={t('order.cancelTitle')} visible={cancelOpen}>
         <Button label={t('order.cancelKeep')} onPress={() => setCancelOpen(false)} />
         <Button label={t('order.cancel')} loading={cancel.isPending} onPress={() => void onCancel()} testID="order.cancel-confirm" variant="destructive" />

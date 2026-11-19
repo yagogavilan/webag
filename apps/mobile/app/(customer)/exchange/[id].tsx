@@ -2,7 +2,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
+import { ApiError } from '../../../src/api/problem';
+import { BottomSheet } from '../../../src/components/BottomSheet';
 import { payExchangeFee } from '../../../src/api/exchanges-api';
 import { Banner } from '../../../src/components/Banner';
 import { Button } from '../../../src/components/Button';
@@ -15,8 +17,8 @@ import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { useOrder } from '../../../src/features/checkout/hooks';
-import { exchangeKey, useCancelExchange, useExchange, useExchangePayment } from '../../../src/features/exchanges/hooks';
-import { exchangeSteps, formatDay, isExchangeFailed, isExchangeOpen, nextStepText } from '../../../src/features/exchanges/model';
+import { exchangeKey, useCancelExchange, useContestRefusal, useExchange, useExchangePayment, useSwitchToStore } from '../../../src/features/exchanges/hooks';
+import { exchangeSteps, formatDay, formatDayMonth, isExchangeFailed, isExchangeOpen, nextStepText } from '../../../src/features/exchanges/model';
 import { openWhatsapp } from '../../../src/features/orders/links';
 import { formatDateTime } from '../../../src/features/orders/model';
 import { useInvalidateOnEvent } from '../../../src/features/realtime/useRealtime';
@@ -47,6 +49,13 @@ export default function ExchangeScreen() {
   const [started, setStarted] = useState(false);
   const payment = useExchangePayment(exchangeId, started);
   const [copied, setCopied] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
+  const [contestOpen, setContestOpen] = useState(false);
+  const [contestText, setContestText] = useState('');
+  const [contestError, setContestError] = useState<string | null>(null);
+  const toStore = useSwitchToStore(exchangeId);
+  const contestMutation = useContestRefusal(exchangeId);
+  const [now] = useState(() => Date.now());
 
   const paidByServer = started && payment.data?.status === 'approved' && x?.status === 'awaiting_fee';
   // Pagamento aprovado pelo servidor: refaz a leitura da troca (o estado muda por webhook, nunca por aqui)
@@ -113,6 +122,45 @@ export default function ExchangeScreen() {
     }
   };
 
+  const canSwitch = x.method === 'pickup_at_home' && (x.status === 'awaiting_fee' || x.status === 'approved') && !x.feePaid;
+  const canContest = x.status === 'rejected' && !x.contested && x.contestableUntil != null && new Date(x.contestableUntil).getTime() > now;
+
+  const onSwitch = async () => {
+    setDropOpen(false);
+    try {
+      await toStore.mutateAsync();
+      void haptic('success');
+      toast.show(t('exchange.dropDone'));
+    } catch (e) {
+      void haptic('error');
+      const code = e instanceof ApiError ? e.code : '';
+      toast.show(code === 'EXCHANGE_FEE_ALREADY_PAID' ? t('exchange.dropFeePaid') : code === 'EXCHANGE_PICKUP_STARTED' ? t('exchange.dropPickupStarted') : code === 'EXCHANGE_NOT_SWITCHABLE' ? t('exchange.dropNotSwitchable') : t('exchange.contestError'));
+    }
+  };
+
+  const onContest = async () => {
+    const text = contestText.trim();
+    if (text.length < 10) {
+      void haptic('error');
+      setContestError(t('exchange.contestShort'));
+      return;
+    }
+    if (!online) {
+      setContestError(t('exchange.errOffline'));
+      return;
+    }
+    try {
+      await contestMutation.mutateAsync(text);
+      void haptic('success');
+      setContestOpen(false);
+      setContestText('');
+      toast.show(t('exchange.contestDone'));
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : '';
+      setContestError(code === 'EXCHANGE_CONTEST_EXPIRED' ? t('exchange.contestExpired') : code === 'EXCHANGE_NOT_CONTESTABLE' ? t('exchange.contestNotAllowed') : t('exchange.contestError'));
+    }
+  };
+
   return (
     <Screen header={header} testID="exchange.detail">
       {!online ? <Banner text={t('order.offline')} tone="warning" /> : null}
@@ -133,6 +181,12 @@ export default function ExchangeScreen() {
           </View>
           {x.decisionReason ? <Text testID="exchange.rejected-reason">{t('exchange.rejectedReason', { reason: x.decisionReason })}</Text> : null}
           <Text accessibilityRole="header" variant="bodyStrong">{t('exchange.rejectedDo')}</Text>
+          {canContest && x.contestableUntil ? (
+            <>
+              <Text color="secondary" variant="caption">{t('exchange.contestUntil', { date: formatDayMonth(x.contestableUntil) })}</Text>
+              <Button label={t('exchange.contest')} onPress={() => setContestOpen(true)} size="lg" testID="exchange.contest" />
+            </>
+          ) : null}
           {phone ? <Button icon={<WhatsappLogo color={theme.color.text.brand} size={theme.size.iconMd} />} label={t('exchange.talkStore')} onPress={talk} testID="exchange.contact-store" variant="secondary" /> : null}
         </View>
       ) : null}
@@ -156,7 +210,7 @@ export default function ExchangeScreen() {
         </View>
       ) : null}
 
-      {x.status === 'approved' && x.method === 'drop_at_store' && x.storeCode ? (
+      {(x.status === 'approved' || x.status === 'awaiting_fee') && x.method === 'drop_at_store' && x.storeCode ? (
         <View style={styles.card} testID="exchange.store-code">
           <Text color="secondary" variant="caption">{t('exchange.code')}</Text>
           <Text accessibilityLabel={`${t('exchange.code')}: ${x.storeCode.split('').join(' ')}`} variant="numeral">{x.storeCode}</Text>
@@ -181,15 +235,44 @@ export default function ExchangeScreen() {
         <Text color="secondary" variant="caption">{`${t('exchange.status.' + x.status as 'exchange.status.requested')} · ${formatDateTime(x.createdAt)}`}</Text>
         <Text color="secondary" variant="caption">{x.resolution === 'refund' ? t('exchange.resolutionRefund') : t('exchange.resolutionReplace')}</Text>
         {x.refund.amount > 0 ? <Text variant="bodyStrong">{t('exchange.refundAmount', { value: formatMoney(x.refund.amount) })}</Text> : null}
-        {isExchangeOpen(x.status) ? <Text color="secondary" variant="caption">{`${t('exchange.dueDate', { date: formatDay(x.windowEndsAt) })}`}</Text> : null}
+        {x.difference.amount !== 0 ? <Text color="secondary" variant="caption">{`${t('exchange.priceDifference')}: ${formatMoney(x.difference.amount)}`}</Text> : null}
+        {isExchangeOpen(x.status) && x.itemDueAt ? <Text testID="exchange.item-due" variant="captionStrong">{t('exchange.untilDate', { date: formatDayMonth(x.itemDueAt) })}</Text> : null}
+        {isExchangeOpen(x.status) && !x.itemDueAt ? <Text color="secondary" variant="caption">{`${t('exchange.dueDate', { date: formatDay(x.windowEndsAt) })}`}</Text> : null}
+        {x.status === 'requested' ? <Text color="secondary" variant="caption">{t('exchange.answerUntil', { date: formatDayMonth(x.answerDeadlineAt) })}</Text> : null}
       </View>
 
       <View style={styles.actions}>
         {phone && !failed ? <Button icon={<WhatsappLogo color={theme.color.text.brand} size={theme.size.iconMd} />} label={t('exchange.talkStore')} onPress={talk} testID="exchange.contact-store" variant="secondary" /> : null}
+        {canSwitch ? <Button label={t('exchange.dropAtStore')} onPress={() => setDropOpen(true)} testID="exchange.drop-at-store" variant="secondary" /> : null}
         {x.status === 'completed' ? <Button label={t('exchange.rate')} onPress={() => router.push({ pathname: '/review/[orderId]', params: { orderId: x.orderId } } as never)} testID="exchange.rate" variant="secondary" /> : null}
         {x.status === 'requested' || x.status === 'awaiting_fee' || x.status === 'approved' ? <Button label={t('exchange.cancel')} onPress={() => setCancelOpen(true)} testID="exchange.cancel" variant="text" /> : null}
       </View>
 
+      <Dialog onClose={() => setDropOpen(false)} testID="exchange.drop-dialog" text={t('exchange.dropText')} title={t('exchange.dropTitle')} visible={dropOpen}>
+        <Button label={t('exchange.dropKeep')} onPress={() => setDropOpen(false)} />
+        <Button label={t('exchange.dropConfirm')} loading={toStore.isPending} onPress={() => void onSwitch()} testID="exchange.drop-confirm" variant="secondary" />
+      </Dialog>
+      <BottomSheet onClose={() => setContestOpen(false)} testID="exchange.contest-sheet" title={t('exchange.contestTitle')} visible={contestOpen}>
+        <View style={styles.actions}>
+          <Text color="secondary">{t('exchange.contestText')}</Text>
+          <TextInput
+            accessibilityLabel={t('exchange.contestTitle')}
+            maxLength={500}
+            multiline
+            onChangeText={(v) => {
+              setContestText(v);
+              setContestError(null);
+            }}
+            placeholder={t('exchange.contestPlaceholder')}
+            placeholderTextColor={theme.color.text.secondary}
+            style={styles.input}
+            testID="exchange.contest-input"
+            value={contestText}
+          />
+          {contestError ? <Banner testID="exchange.contest-error" text={contestError} tone="danger" /> : null}
+          <Button label={t('exchange.contestSubmit')} loading={contestMutation.isPending} onPress={() => void onContest()} size="lg" testID="exchange.contest-submit" />
+        </View>
+      </BottomSheet>
       <Dialog onClose={() => setCancelOpen(false)} testID="exchange.cancel-dialog" text={t('exchange.cancelText')} title={t('exchange.cancelTitle')} visible={cancelOpen}>
         <Button label={t('exchange.cancelKeep')} onPress={() => setCancelOpen(false)} />
         <Button label={t('exchange.cancel')} loading={cancel.isPending} onPress={() => void onCancel()} testID="exchange.cancel-confirm" variant="destructive" />
@@ -221,4 +304,5 @@ const styles = StyleSheet.create({
   dotDone: { backgroundColor: theme.color.action.primary, borderColor: theme.color.action.primary },
   dotCurrent: { borderColor: theme.color.action.primary, borderWidth: 6 },
   actions: { gap: theme.space[2] },
+  input: { minHeight: 96, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.strong, borderRadius: theme.radius.control, padding: theme.space[3], textAlignVertical: 'top', color: theme.color.text.primary, backgroundColor: theme.color.surface.card, ...theme.text.body },
 });

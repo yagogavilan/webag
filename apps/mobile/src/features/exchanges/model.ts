@@ -17,6 +17,13 @@ export function formatDay(iso: string): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
+/** "25/11" para prazos curtos ("até 25/11"). */
+export function formatDayMonth(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export interface ReasonState {
   eligible: boolean;
   deadline: string | null;

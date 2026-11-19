@@ -5,6 +5,7 @@ import {
   getOrder,
   getOrderPayment,
   listOrders,
+  reportOrderNotReceived,
   type CardIntent,
   type CardIntentRequest,
   type CreateOrderRequest,
@@ -42,3 +43,6 @@ export const cancelMyOrder = (orderId: string, reason?: string): Promise<Order> 
  * SEC-147) e abre `url` no navegador do sistema. Sem `retry`: cada tentativa é uma intenção nova de uso único.
  */
 export const startCardIntent = (body: CardIntentRequest): Promise<CardIntent> => request((init) => createCardIntent(body, init));
+
+/** "Não recebi meu pedido": avisa a operação (não estorna nem muda o estado). Idempotente; vale com o pedido a caminho ou até 48 h depois de entregue. */
+export const reportNotReceived = (orderId: string) => request((init) => reportOrderNotReceived(orderId, init), { retry: true });

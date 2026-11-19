@@ -1,6 +1,7 @@
 import {
   cancelExchange,
   completeUpload,
+  contestExchange,
   createExchange,
   createOrderReview,
   createUpload,
@@ -9,6 +10,7 @@ import {
   getExchangePayment,
   listExchanges,
   payExchange,
+  switchExchangeToStore,
   type CreateExchangeRequest,
   type CreateReviewRequest,
   type Exchange,
@@ -68,3 +70,12 @@ export async function uploadExchangePhoto(photo: PickedPhoto): Promise<string> {
   await request((init) => completeUpload(created.id, init), { retry: true });
   return created.id;
 }
+
+/**
+ * Levar o item à loja em vez da coleta em casa (depois de aprovada e com a taxa AINDA não paga): zera a taxa e gera o código do
+ * balcão. Idempotente. Erros: `EXCHANGE_NOT_SWITCHABLE`, `EXCHANGE_FEE_ALREADY_PAID`, `EXCHANGE_PICKUP_STARTED`.
+ */
+export const switchMyExchangeToStore = (id: string): Promise<Exchange> => request((init) => switchExchangeToStore(id, init), { retry: true });
+
+/** Contestar a recusa da LOJA (uma vez, até `contestableUntil`): a troca vai à mediação. Texto de 10 a 500 caracteres. */
+export const contestRefusal = (id: string, text: string): Promise<Exchange> => request((init) => contestExchange(id, { text }, init), { retry: true });

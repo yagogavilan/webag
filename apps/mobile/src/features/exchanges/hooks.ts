@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { cancelMyExchange, fetchExchange, fetchExchangeOptions, fetchExchangePayment, fetchExchanges } from '../../api/exchanges-api';
+import { cancelMyExchange, contestRefusal, switchMyExchangeToStore, fetchExchange, fetchExchangeOptions, fetchExchangePayment, fetchExchanges } from '../../api/exchanges-api';
 import { useSession } from '../../api/session';
 import { isExchangeOpen } from './model';
 
@@ -56,3 +56,18 @@ export function useCancelExchange(id: string) {
     },
   });
 }
+
+/** Troca atualizada pelo servidor: grava no cache e refaz as listas. */
+function useExchangeAction<T>(id: string, fn: (arg: T) => Promise<import('@webag/shared').Exchange>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (x) => {
+      client.setQueryData(exchangeKey(id), x);
+      void client.invalidateQueries({ queryKey: ['exchanges', 'list'] });
+    },
+  });
+}
+
+export const useSwitchToStore = (id: string) => useExchangeAction<void>(id, () => switchMyExchangeToStore(id));
+export const useContestRefusal = (id: string) => useExchangeAction<string>(id, (text) => contestRefusal(id, text));
