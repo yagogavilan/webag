@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embute Fredoka e Figtree (base64, OFL) nos protótipos HTML, para abrirem sem internet.
+"""Embute Outfit (marca v3) e Figtree (base64, OFL) nos protótipos HTML, para abrirem sem internet.
 
 Uso: python3 inject_fonts.py
 Cada HTML deve ter, dentro do <head>, o par de marcadores:
@@ -13,9 +13,9 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parent
 FONTS = ROOT.parent / "design" / "fonts"
 FACES = [
-    ("Fredoka", 500, "fredoka-latin-500-normal.woff2"),
-    ("Fredoka", 600, "fredoka-latin-600-normal.woff2"),
-    ("Fredoka", 700, "fredoka-latin-700-normal.woff2"),
+    ("Outfit", 600, "candidatas/outfit-latin-600-normal.woff2"),
+    ("Outfit", 700, "candidatas/outfit-latin-700-normal.woff2"),
+    ("Outfit", 800, "candidatas/outfit-latin-800-normal.woff2"),
     ("Figtree", 400, "figtree-latin-400-normal.woff2"),
     ("Figtree", 600, "figtree-latin-600-normal.woff2"),
     ("Figtree", 700, "figtree-latin-700-normal.woff2"),
