@@ -31,3 +31,17 @@
 | C3 | Sem rota para ordenar produtos dentro de uma seção | Ordem fixa |
 | C4 | `GET /stores/mine` sem a lista de permissões do funcionário | Tela mostra "sem acesso" só após o 403 |
 | C5 | Moderação do admin (`/admin/products`, `/moderation`, `/moderation/terms`) não testada contra a API real | QA valida na Onda 2 |
+
+## Ondas 4C, 5 e identidade v4a (2026-11-19, mobile-dev, web)
+> Para o backend-dev e o security-engineer. O web ficou assim por falta de contrato; não foi contornado.
+
+| # | Lacuna | Efeito hoje |
+|---|---|---|
+| P1 | **Tempo real do lojista (Socket.IO `/rt`) não está ligado no web.** O gateway autentica por `auth.token` (access JWT), mas o web guarda o token em cookie HttpOnly (ADR-003: o JavaScript nunca o vê) e o BFF não faz proxy de WebSocket. Entregar o JWT ao navegador quebra a regra do ADR-003; decisão do `security-engineer`. Proposta: `POST /v1/realtime/tickets` (ticket de uso único, 60 s, preso à sessão) trocado no handshake no lugar do JWT | O painel de pedidos usa **polling**: pedidos novos a cada 4 s, em andamento a cada 10 s, logística a cada 15 s, mesmo com a aba em segundo plano. Alerta sonoro, título piscando e vibração funcionam igual. Quando o ticket existir, o evento só chama `refresh()` e o polling vira reserva |
+| P2 | `GET /stores/mine` e `GET /stores/:id` não devolvem a **comissão efetiva da loja (%)** (loja > categoria > padrão) nem a regra por categoria | "Você recebe" no cadastro de produto mostra "Não conseguimos calcular agora" e não bloqueia. O código lê `commissionPct` assim que a API o devolver (`MerchantStore.commissionPct`) |
+| P3 | Tabela de medidas é **texto livre** (`sizeChart`, 2.000 caracteres) e `noVoluntaryExchange` é só um booleano, sem **motivo** (sob medida, íntimo, outro) | O web mostra a seção como texto com exemplo; a spec 5c A2/A3 (grade por tamanho, motivo que o cliente lê) não foi feita |
+| P4 | Sem endpoint de **vendas por dia** nem "mais vendidos" para o lojista | Painel inicial e Financeiro mostram KPIs (hoje, 7 dias, ticket médio), sem gráfico "Vendas por dia" nem ranking |
+| P5 | Admin: sem rotas de **disputas de troca** (mediação, "Isentar a taxa", decisão do admin) nem lista de trocas; só `GET /admin/exchanges/report` | AT3 e M3 não foram feitas; o admin tem o relatório de trocas (AT1) |
+| P6 | `Delivery` não traz **telefone mascarado/endereço revelável** na lista nem foto de comprovante; `contact-reveal` (SEC-144) não tem tela | O detalhe da corrida mostra o contato só para quem despacha (`logistics:write`); suporte e financeiro não têm "Revelar com motivo" |
+| P7 | Comanda: o contrato do `ticket` não traz telefone do cliente nem endereço (só `destination`) | A comanda imprime "Coleta Webag" no lugar do endereço de entrega (a logística despacha pelo detalhe) |
+| P8 | Lista de pedidos só filtra por `number`; sem período, estado, tipo nem nome do cliente | O histórico filtra estado e tipo no navegador, sobre as páginas já carregadas |

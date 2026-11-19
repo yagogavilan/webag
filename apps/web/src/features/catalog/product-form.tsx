@@ -23,6 +23,7 @@ import type { CategoryTree } from '@webag/shared';
 import { CatalogGate } from './catalog-gate';
 import { PhotoGallery, type Photo } from './photo-gallery';
 import { VariantsEditor, type VariantsState } from './variants-editor';
+import { ExchangeSection, ReceiveLines, SizeChartSection } from './product-extras';
 import s from './catalog.module.css';
 
 const T = (id: string) => ltid('produto', id);
@@ -64,6 +65,8 @@ function valuesOf(product: Product | null): ProductFormValues {
     promoEnd: isoToLocal(promo.endsAt),
     mode: variable ? 'variants' : 'simple',
     stockText: variable ? '' : String(product.variants[0]?.stock ?? ''),
+    sizeChart: product.sizeChart ?? '',
+    noVoluntaryExchange: product.noVoluntaryExchange,
   };
 }
 
@@ -158,15 +161,17 @@ function ProductEditor({ storeId, product }: { storeId: string; product: Product
       sectionId: values.sectionId === '' ? null : values.sectionId,
       basePriceCents: values.priceCents && values.priceCents > 0 ? values.priceCents : null,
     };
+    const exchange = { sizeChart: values.sizeChart.trim() === '' ? null : values.sizeChart.trim(), noVoluntaryExchange: values.noVoluntaryExchange };
     const promo = values.promoOn
       ? { promoPriceCents: values.promoPriceCents, promoStartsAt: localToIso(values.promoStart), promoEndsAt: localToIso(values.promoEnd) }
       : { promoPriceCents: null, promoStartsAt: null, promoEndsAt: null };
 
     if (!server.current) {
       server.current = await catalogApi.create(storeId, base, idempotencyKey.current);
-      if (values.promoOn) server.current = await catalogApi.update(storeId, server.current.id, promo);
+      const exchangeSet = exchange.sizeChart !== null || exchange.noVoluntaryExchange;
+      if (values.promoOn || exchangeSet) server.current = await catalogApi.update(storeId, server.current.id, { ...(values.promoOn ? promo : {}), ...(exchangeSet ? exchange : {}) });
     } else {
-      server.current = await catalogApi.update(storeId, server.current.id, { ...base, ...promo });
+      server.current = await catalogApi.update(storeId, server.current.id, { ...base, ...promo, ...exchange });
     }
     const id = server.current.id;
 
@@ -385,6 +390,7 @@ function ProductEditor({ storeId, product }: { storeId: string; product: Product
             hint={product && !isDraft ? 'Clientes com esse produto na sacola veem o novo preço antes de pagar.' : undefined}
             data-testid={T('price-input')}
           />
+          <ReceiveLines priceCents={values.priceCents} promoCents={values.promoOn ? values.promoPriceCents : null} onUsePrice={(cents) => set('priceCents', cents)} />
           <div className={ui.stack}>
             <Switch checked={values.promoOn} onChange={(next) => set('promoOn', next)} label="Colocar em promoção" onText="Em promoção" offText="Sem promoção" testId={T('promo-switch')} />
             {values.promoOn ? (
@@ -447,6 +453,9 @@ function ProductEditor({ storeId, product }: { storeId: string; product: Product
               <option key={section.id} value={section.id}>{section.name}</option>
             ))}
           </SelectField>
+
+          <ExchangeSection values={values} set={set} />
+          <SizeChartSection values={values} set={set} hasSize={variants.attrs.some((attr) => /tamanho/i.test(attr.name))} />
         </div>
       </div>
 

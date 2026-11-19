@@ -51,6 +51,8 @@ export interface MerchantStore {
   status: StoreStatus;
   role: 'owner' | 'staff';
   permissions: string[];
+  /** Comissão efetiva da loja em %, ou `null` se a API ainda não informa (pendência de contrato). */
+  commissionPct?: number | null;
   /** Maior etapa concluída (0 a 4), calculada do que a API diz que falta (WB-051 C4). */
   step: number;
   legalType: LegalType | null;
@@ -151,6 +153,8 @@ interface ApiStore {
   role?: 'owner' | 'staff';
   /** Hoje só o dono recebe a lista; quando a API devolver a do funcionário, o painel passa a usá-la. */
   permissions?: string[];
+  /** Comissão efetiva da loja (%), quando a API a devolve. Pendência de contrato: sem ela o "Você recebe" fica indisponível. */
+  commissionPct?: number | null;
   settings?: { hours: { weekday: number; intervals: unknown[] }[] };
 }
 interface ApiOnboarding {
@@ -210,6 +214,7 @@ async function loadStore(): Promise<MerchantStore | null> {
     status: view.status,
     role: owner ? 'owner' : 'staff',
     permissions: store.permissions ?? [],
+    commissionPct: store.commissionPct ?? null,
     step: stepsDone(missing, payout.status === 'connected', true),
     legalType: view.documentType,
     document: view.document,

@@ -16,6 +16,10 @@ export interface ProductFormValues {
   mode: 'simple' | 'variants';
   /** Estoque do produto sem variação, em texto (o lojista pode digitar qualquer coisa). */
   stockText: string;
+  /** Tabela de medidas em texto livre (a API guarda até 2.000 caracteres). */
+  sizeChart: string;
+  /** Produto sem troca por tamanho ou cor (sob medida, íntimo, higiene). Desistência e defeito seguem por lei. */
+  noVoluntaryExchange: boolean;
 }
 
 export type FieldKey = 'name' | 'description' | 'category' | 'photos' | 'price' | 'promoPrice' | 'promoStart' | 'promoEnd' | 'stock' | 'variants';
@@ -34,6 +38,8 @@ export const EMPTY_VALUES: ProductFormValues = {
   promoEnd: '',
   mode: 'simple',
   stockText: '10',
+  sizeChart: '',
+  noVoluntaryExchange: false,
 };
 
 /** Estoque digitado: só inteiro de 0 a 99.999; `null` se não for. */
