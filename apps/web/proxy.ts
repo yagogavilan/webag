@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { realtimeOrigin } from '@/server/config';
+import { areaHost, publicHost, realtimeOrigin } from '@/server/config';
 import { clearedCookies, cookieNames, sessionCookies } from '@/server/cookies';
 import { refreshSession } from '@/server/refresh';
-import { areaAllowedOnHost, publicAllowedOnHost } from '@/server/hosts';
+import { isPublicSitePath } from '@/lib/public-paths';
+import { areaAllowedOnHost, publicAllowedOnHost, requestHost } from '@/server/hosts';
 import { clientHints } from '@/server/upstream';
 
 /**
@@ -77,13 +78,34 @@ function publicPayCsp(nonce: string): string {
   ].join('; ');
 }
 
-/** Páginas públicas: sem sessão de painel, só host público, sem cache e com a CSP acima. */
-function publicPage(request: NextRequest): NextResponse {
+/**
+ * CSP do site público (`/`, `/privacidade`, `/termos`, `/ajuda`, `/suporte`, `/excluir-conta`, `/licencas`): nenhuma origem de terceiros,
+ * nem fonte, nem imagem, nem script. O nonce é só para os scripts do próprio Next (hidratação do formulário de exclusão).
+ */
+function publicSiteCsp(nonce: string): string {
+  const dev = process.env.NODE_ENV !== 'production';
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(dev ? [] : ['upgrade-insecure-requests']),
+  ].join('; ');
+}
+
+/** Páginas públicas: sem sessão de painel, só host público, sem cache e com a CSP recebida. */
+function publicPage(request: NextRequest, policyFor: (nonce: string) => string = publicPayCsp): NextResponse {
   if (!publicAllowedOnHost(request.headers)) {
     return new NextResponse('Não encontrado', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
   }
   const nonce = btoa(crypto.randomUUID());
-  const policy = publicPayCsp(nonce);
+  const policy = policyFor(nonce);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('content-security-policy', policy);
@@ -96,6 +118,21 @@ function publicPage(request: NextRequest): NextResponse {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname === '/pagar' || pathname.startsWith('/pagar/')) return publicPage(request);
+  if (isPublicSitePath(pathname)) {
+    // A raiz nos hosts dos painéis leva direto ao painel; o site público só responde no host público.
+    if (pathname === '/' && requestHost(request.headers) !== publicHost()) {
+      for (const area of ['admin', 'lojista'] as const) {
+        const host = areaHost(area);
+        if (host && requestHost(request.headers) === host) {
+          const url = request.nextUrl.clone();
+          url.pathname = `/${area}`;
+          url.search = '';
+          return NextResponse.redirect(url);
+        }
+      }
+    }
+    return publicPage(request, publicSiteCsp);
+  }
   const area: Area = pathname === '/lojista' || pathname.startsWith('/lojista/') ? 'lojista' : 'admin';
   const { access: AT, refresh: RT } = cookieNames(area);
   const home = `/${area}`;
@@ -151,4 +188,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ['/admin/:path*', '/lojista/:path*', '/pagar/:path*'] };
+export const config = {
+  matcher: ['/admin/:path*', '/lojista/:path*', '/pagar/:path*', '/', '/excluir-conta/:path*', '/privacidade/:path*', '/termos/:path*', '/ajuda/:path*', '/suporte/:path*', '/licencas/:path*'],
+};

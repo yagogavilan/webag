@@ -462,6 +462,15 @@ route('GET', '/v1/legal/:type', { public: true }, (req, res, ctx) => {
   json(res, 200, current);
 });
 
+// pedido ao encarregado (público): sempre a mesma resposta, exista ou não conta com o e-mail (SEC-152)
+const privacyRequests = [];
+route('POST', '/v1/privacy/requests', { public: true }, (req, res, ctx) => {
+  if (String(ctx.body.email).startsWith('limite@')) return problem(res, 429, 'TOO_MANY_REQUESTS', 'Muitas tentativas');
+  privacyRequests.push({ type: ctx.body.type, exists: [...users.values()].some((u) => u.email === String(ctx.body.email).toLowerCase()) });
+  json(res, 202, { protocol: `PV-${String(privacyRequests.length).padStart(4, '0')}`, dueAt: '2026-12-04T12:00:00.000Z' });
+});
+route('GET', '/__test/privacy-requests', { public: true }, (req, res) => json(res, 200, { data: privacyRequests }));
+
 // auditoria
 route('GET', '/v1/admin/audit-log', { perm: 'audit:read' }, (req, res, ctx) => {
   const q = ctx.query;
@@ -1131,7 +1140,7 @@ route('DELETE', '/v1/stores/:id/reviews/:rid/reply', {}, (req, res, ctx) => {
   r.storeRepliedAt = null;
   empty(res);
 });
-route('GET', '/v1/help', { public: true }, (req, res) => json(res, 200, { audience: 'merchant', contacts: { whatsapp: '11999990000', email: 'ajuda@webag.local', hours: 'Seg a sex, 9h às 18h' }, privacy: { officerName: 'Encarregado de dados', officerEmail: 'dados@webag.local' }, groups: [{ id: 'orders', label: 'Pedidos', items: [{ id: randomUUID(), question: 'Como aceito um pedido?', answer: 'Toque em Aceitar no alerta. Você tem 10 minutos.' }] }] }));
+route('GET', '/v1/help', { public: true }, (req, res, ctx) => ctx.query.get('audience') === 'customer' ? json(res, 200, { audience: 'customer', contacts: { whatsapp: '11999990000', email: 'ajuda@webag.local', hours: 'Seg a sex, 9h às 18h' }, privacy: { officerName: 'Encarregado de dados', officerEmail: 'dados@webag.local' }, groups: [{ id: 'payment', label: 'Pagamento', items: [{ id: randomUUID(), question: 'Posso pagar com PIX?', answer: 'Sim. O código aparece na tela do pedido.\n\nO pagamento é confirmado pelo servidor.' }, { id: randomUUID(), question: 'Pergunta com HTML', answer: '<img src=x onerror=alert(1)> texto' }] }, { id: 'exchange', label: 'Trocas', items: [] }] }) : json(res, 200, { audience: 'merchant', contacts: { whatsapp: '11999990000', email: 'ajuda@webag.local', hours: 'Seg a sex, 9h às 18h' }, privacy: { officerName: 'Encarregado de dados', officerEmail: 'dados@webag.local' }, groups: [{ id: 'orders', label: 'Pedidos', items: [{ id: randomUUID(), question: 'Como aceito um pedido?', answer: 'Toque em Aceitar no alerta. Você tem 10 minutos.' }] }] }));
 const deletions = new Map();
 route('GET', '/v1/me/deletion', {}, (req, res) => json(res, 200, { canDelete: true, blockers: [], hasPassword: true, ownsStore: true, anonymizationDays: 30, fiscalRetentionYears: 5, regretHours: 72 }));
 route('POST', '/v1/me/deletion', {}, (req, res, ctx) => {

@@ -67,3 +67,32 @@ export function realtimeOrigin(): string | null {
     return null;
   }
 }
+
+/**
+ * Origem pública do site (`https://webag.com.br`), usada em sitemap, robots e URLs canônicas. `PUBLIC_URL` tem prioridade; senão
+ * `https://<PUBLIC_HOST>`; em dev, cai no localhost. Só `https:` em produção.
+ */
+export function publicOrigin(): string {
+  const prod = process.env.NODE_ENV === 'production';
+  const raw = process.env.PUBLIC_URL?.trim() || (publicHost() ? `https://${publicHost()}` : '');
+  try {
+    const url = new URL(raw);
+    if (url.protocol === 'https:' || (!prod && url.protocol === 'http:')) return url.origin;
+  } catch {
+    // cai no padrão abaixo
+  }
+  return 'http://localhost:3001';
+}
+
+/** Links das lojas de aplicativos. Sem valor definido, a página mostra o texto reservado (links ainda não existem antes da publicação). */
+export function storeLinks(): { play: string | null; apple: string | null } {
+  const clean = (value: string | undefined): string | null => {
+    try {
+      const url = new URL(value?.trim() ?? '');
+      return url.protocol === 'https:' ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  };
+  return { play: clean(process.env.PLAY_STORE_URL), apple: clean(process.env.APP_STORE_URL) };
+}
