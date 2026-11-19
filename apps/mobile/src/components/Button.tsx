@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View, type PressableProps, ty
 import { theme } from '../theme';
 import { Text } from './Text';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive';
+export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'onBrand' | 'onBrandText';
 export type ButtonSize = 'lg' | 'md';
 
 export interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> {
@@ -41,7 +41,7 @@ export function Button({
   const inert = Boolean(disabled) || loading;
   const textColor = onInverse
     ? theme.color.text.inverseAction
-    : variant === 'primary' || variant === 'destructive'
+    : variant === 'primary' || variant === 'destructive' || variant === 'onBrandText'
       ? theme.color.text.onBrand
       : theme.color.text.brand;
   const shownLabel = loading && loadingLabel ? loadingLabel : label;
@@ -96,6 +96,11 @@ function variantStyle(variant: ButtonVariant, pressed: boolean, disabled: boolea
       };
     case 'text':
       return { backgroundColor: pressed ? theme.color.action.primarySubtle : 'transparent' };
+    // Sobre a tela inundada de roxo (pedido confirmado): pílula branca com texto de marca, ou só texto branco.
+    case 'onBrand':
+      return { backgroundColor: pressed ? theme.color.brand[100] : theme.color.neutral[0] };
+    case 'onBrandText':
+      return { backgroundColor: pressed ? theme.color.action.primaryPressed : 'transparent' };
   }
 }
 

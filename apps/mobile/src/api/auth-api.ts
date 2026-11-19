@@ -18,6 +18,7 @@ import { request } from './http';
 import { ApiError } from './problem';
 import { sessionStore } from './session';
 import type { StoredSession } from './session-storage';
+import { revokePush } from '../features/notifications/push';
 
 /** Acesso ao contrato de identidade (`/v1/auth/*`). Login do cliente é de 1 passo; TOTP é só do admin (não existe no app). */
 
@@ -109,6 +110,7 @@ export async function signIn(input: SignInInput): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  await revokePush();
   // Revoga no servidor se der; independente do resultado o aparelho esquece a sessão (SEC-012).
   try {
     await request((init) => logout(init), { timeoutMs: 5_000 });

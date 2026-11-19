@@ -61,6 +61,7 @@ const config: ExpoConfig = {
       { image: './assets/splash-icon.png', imageWidth: 240, backgroundColor: BRAND },
     ],
     'expo-secure-store',
+    ['expo-notifications', { color: BRAND }],
     [
       'expo-location',
       {

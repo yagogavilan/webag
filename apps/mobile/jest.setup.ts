@@ -69,3 +69,15 @@ jest.mock('expo-router', () => {
     Link: () => null,
   };
 });
+
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: { HIGH: 4 },
+  getPermissionsAsync: jest.fn(async () => ({ granted: false, status: 'undetermined', canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: true, status: 'granted', canAskAgain: true })),
+  getExpoPushTokenAsync: jest.fn(async () => ({ data: 'ExponentPushToken[test]' })),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('socket.io-client', () => ({
+  io: jest.fn(() => ({ on: jest.fn(), emit: jest.fn(), connect: jest.fn(), disconnect: jest.fn(), removeAllListeners: jest.fn() })),
+}));

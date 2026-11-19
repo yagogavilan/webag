@@ -3,9 +3,11 @@ import type { Cart, Order } from '@webag/shared';
 import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { acceptCartChanges, fetchCart, type CartParams } from '../../api/cart-api';
-import { placeOrder } from '../../api/orders-api';
+import { fetchOrder, fetchOrderPayment, placeOrder } from '../../api/orders-api';
 import { useSession } from '../../api/session';
 import { useCurrentAddress } from '../address/store';
+import { isActive } from '../orders/model';
+import { pollingInterval } from '../realtime/useRealtime';
 import { cartKey } from '../cart/hooks';
 import { useLocalCart } from '../cart/store';
 import { toCheckoutFailure, type CheckoutFailure } from './errors';
@@ -108,4 +110,45 @@ export function useSubmitOrder() {
   );
 
   return { submit, submitting: mutation.isPending, slow };
+}
+
+/**
+ * Pedido (detalhe e acompanhamento). Lê o REST; o canal /rt só avisa para refazer a leitura. Sem canal, polling de 5 s enquanto o
+ * pedido está ativo (fallback); com canal, 30 s de segurança. Pedido encerrado não faz polling.
+ */
+export function useOrder(orderId: string, opts: { connected?: boolean; poll?: boolean } = {}) {
+  const session = useSession();
+  return useQuery({
+    queryKey: orderKey(orderId),
+    queryFn: ({ signal }) => fetchOrder(orderId, signal),
+    enabled: session.status === 'authenticated',
+    staleTime: 10_000,
+    refetchInterval: (query) => {
+      if (opts.poll === false) return false;
+      const status = query.state.data?.status;
+      if (status && !isActive(status)) return false;
+      return pollingInterval(Boolean(opts.connected));
+    },
+  });
+}
+
+/**
+ * Pagamento do pedido (PIX: copia e cola, QR e validade). Só leitura (SEC-035): polling com recuo (3 s, 5 s, 8 s) até sair de
+ * `pending`. O servidor decide; o app nunca marca como pago.
+ */
+export function useOrderPayment(orderId: string, opts: { connected?: boolean } = {}) {
+  const session = useSession();
+  return useQuery({
+    queryKey: paymentKey(orderId),
+    queryFn: ({ signal }) => fetchOrderPayment(orderId, signal),
+    enabled: session.status === 'authenticated',
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status && status !== 'pending' && status !== 'pending_3ds') return false;
+      if (opts.connected) return 20_000;
+      const n = query.state.dataUpdateCount;
+      return n < 5 ? 3_000 : n < 15 ? 5_000 : 8_000;
+    },
+  });
 }
