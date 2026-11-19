@@ -13,6 +13,7 @@ import { usePendingCounts } from '@/features/admin-home/pending';
 import { AdminRealtimeProvider, useWaitingForCourier } from '@/features/logistics/nav-count';
 import { IdleGuard } from './idle-guard';
 import { PanelFrame, type AccountEntry, type FrameTestIds, type NavGroup } from './frame';
+import { AdminMaintenanceBanner } from './maintenance-banner';
 import { ReauthProvider } from './reauth';
 import { SessionProvider } from './session-context';
 import f from './frame.module.css';
@@ -157,7 +158,12 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
       bottomKeys={bottomNav(profile).map((item) => item.section)}
       account={account}
       testIds={TEST_IDS}
-      banners={!online ? <Banner tone="warning" offline testId="offline-banner">Sem conexão. Mostrando o que já carregou.</Banner> : null}
+      banners={
+        <>
+          {!online ? <Banner tone="warning" offline testId="offline-banner">Sem conexão. Mostrando o que já carregou.</Banner> : null}
+          <AdminMaintenanceBanner canManage={profile === 'super_admin'} />
+        </>
+      }
       idle={<IdleGuard onTimeout={() => void logout('inatividade')} />}
     >
       {children}

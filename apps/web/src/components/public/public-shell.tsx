@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Logo } from '@/components/ui/logo';
 import { companyIdentity } from '@/lib/company';
+import { MAINTENANCE_TITLE, expectedBackText, maintenanceText, type MaintenanceStatus } from '@/lib/maintenance';
 import s from './public.module.css';
 
 /** Páginas que o rodapé lista (as mesmas que as lojas pedem como URL pública). */
@@ -18,11 +19,17 @@ export const FOOTER_LINKS = [
  * Casca das páginas públicas: sem login, sem JavaScript próprio (componente de servidor). Um link para pular ao conteúdo,
  * logo oficial no topo e o mesmo rodapé em todas as páginas.
  */
-export function PublicShell({ children }: { children: ReactNode }) {
+export function PublicShell({ children, maintenance = null }: { children: ReactNode; maintenance?: MaintenanceStatus | null }) {
   const company = companyIdentity();
   return (
     <div className={s.page}>
       <a href="#conteudo" className={s.skip}>Ir para o conteúdo</a>
+      {maintenance ? (
+        <div className={s.maintenance} role="status" data-testid="public.maintenance">
+          <p className={`wb-text-body-strong ${s.maintenanceTitle}`}>{MAINTENANCE_TITLE}: estamos em manutenção</p>
+          <p className="wb-text-body">{maintenanceText(maintenance)} {expectedBackText(maintenance.expectedBackAt) ?? ''}</p>
+        </div>
+      ) : null}
       <header className={s.header}>
         <Link href="/" aria-label="Webag, página inicial" className={s.brand}>
           <Logo size={28} />

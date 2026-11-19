@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { PublicShell } from '@/components/public/public-shell';
 import { publicOrigin } from '@/server/config';
 import { publicAllowedOnHost } from '@/server/hosts';
+import { loadMaintenance } from '@/server/public-content';
 
 /** Site público (sem login): só no `PUBLIC_HOST`, indexável, com CSP própria montada no proxy (nonce por requisição, por isso dinâmico). */
 export const dynamic = 'force-dynamic';
@@ -17,5 +18,6 @@ export const metadata: Metadata = {
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   if (!publicAllowedOnHost(await headers())) notFound();
-  return <PublicShell>{children}</PublicShell>;
+  const maintenance = await loadMaintenance();
+  return <PublicShell maintenance={maintenance}>{children}</PublicShell>;
 }

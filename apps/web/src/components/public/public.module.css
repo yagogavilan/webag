@@ -41,3 +41,8 @@
 .contactList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wb-space-3); }
 :where(.prose, .card, .faq, .notice) a:focus-visible, .linkButton:focus-visible, .linkButtonSecondary:focus-visible, .skip:focus-visible, .footer a:focus-visible, .brand:focus-visible, .faq summary:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
 .footer a:focus-visible { outline-color: var(--wb-color-text-on-ink); }
+
+/* Aviso de manutenção (WB-121): texto + ícone de contexto no título; nunca só cor. */
+.maintenance { padding: var(--wb-space-3) var(--wb-layout-screen-padding-x); background: var(--wb-color-feedback-warning-subtle); border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-feedback-warning-border); color: var(--wb-color-text-primary); display: flex; flex-direction: column; gap: var(--wb-space-1); }
+.maintenance p { margin: 0; }
+.maintenanceTitle { color: var(--wb-color-text-primary); }

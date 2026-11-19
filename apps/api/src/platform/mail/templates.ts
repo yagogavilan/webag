@@ -217,12 +217,12 @@ export function accountDeletedEmail(): Body {
   };
 }
 
-export function accountDeletionCancelledEmail(): Body {
-  return {
-    subject: 'A exclusão da sua conta Webag foi cancelada',
-    text: `A exclusão da sua conta Webag foi cancelada e a conta voltou a funcionar. Se não foi você, redefina a senha agora.\n\n${footer}`,
-    html: html('Exclusão cancelada', ['A exclusão da sua conta Webag foi cancelada e a conta voltou a funcionar.', 'Se não foi você, redefina a senha agora.']),
-  };
+/** SEC-182: `stillBlocked` = a conta estava bloqueada antes do pedido e continua (a desistência não reabre o acesso). */
+export function accountDeletionCancelledEmail(stillBlocked = false): Body {
+  const lines = stillBlocked
+    ? ['A exclusão da sua conta Webag foi cancelada.', 'A conta continua indisponível, como antes do pedido. Para saber o motivo ou pedir revisão, fale com o suporte.']
+    : ['A exclusão da sua conta Webag foi cancelada e a conta voltou a funcionar.', 'Se não foi você, redefina a senha agora.'];
+  return { subject: 'A exclusão da sua conta Webag foi cancelada', text: `${lines.join(' ')}\n\n${footer}`, html: html('Exclusão cancelada', lines) };
 }
 
 export function dataExportReadyEmail(validUntil: Date): Body {

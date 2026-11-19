@@ -28,6 +28,11 @@ export const ACTION_LABEL: Record<string, string> = {
   'feature_flag.set': 'Feature flag alterada',
   'legal.publish': 'Versão de termos publicada',
   'payment.refund': 'Estorno',
+  'maintenance.enable': 'Modo manutenção ligado',
+  'maintenance.disable': 'Modo manutenção desligado',
+  'user.block': 'Conta bloqueada',
+  'user.unblock': 'Conta desbloqueada',
+  'alert.resolve': 'Alerta resolvido',
   'payment.webhook_reprocess': 'Webhook reprocessado',
   mfa_bruteforce_suspected: 'Tentativas suspeitas no segundo fator',
 };
@@ -67,6 +72,8 @@ const TARGET_LABEL: Record<string, string> = {
   invitation: 'Convite',
   payment_attempt: 'Pagamento',
   webhook_event: 'Webhook',
+  platform: 'Plataforma',
+  alert: 'Alerta',
 };
 
 export function targetText(type: string | null, id: string | null): string {

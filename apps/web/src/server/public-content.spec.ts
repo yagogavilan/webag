@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadLegal, resetPublicContentCache } from './public-content';
+import { loadLegal, loadMaintenance, resetPublicContentCache } from './public-content';
 
 const fetchMock = vi.fn();
 const doc = { id: 'd1', type: 'privacy', version: 3, title: 'Política de privacidade', content: 'Texto', effectiveAt: '2026-11-01T03:00:00.000Z' };
@@ -43,5 +43,31 @@ describe('textos publicados (cache de 60 s)', () => {
     vi.advanceTimersByTime(2 * 60 * 60_000);
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
     expect(await loadLegal('privacy')).toEqual({ status: 'unavailable' });
+  });
+});
+
+describe('modo manutenção do site (cache de 15 s)', () => {
+  const body = (active: boolean) => new Response(JSON.stringify({ active, message: active ? 'Voltamos já.' : null, expectedBackAt: null }), { status: 200, headers: { 'content-type': 'application/json' } });
+
+  it('devolve o estado ligado, guarda por 15 s e relê depois', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValueOnce(body(true)).mockResolvedValueOnce(body(false));
+    expect(await loadMaintenance()).toMatchObject({ active: true, message: 'Voltamos já.' });
+    await loadMaintenance();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(16_000);
+    expect(await loadMaintenance()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('falha, 5xx ou resposta estranha = sem aviso (não inventa manutenção)', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 503 }));
+    expect(await loadMaintenance()).toBeNull();
+    resetPublicContentCache();
+    fetchMock.mockResolvedValueOnce(new Response('lixo', { status: 200 }));
+    expect(await loadMaintenance()).toBeNull();
+    resetPublicContentCache();
+    fetchMock.mockRejectedValueOnce(new Error('rede'));
+    expect(await loadMaintenance()).toBeNull();
   });
 });

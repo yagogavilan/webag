@@ -162,7 +162,9 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
 
     const result = await this.db.transaction(async (tx) => {
       const [user] = await tx.select().from(t.users).where(eq(t.users.id, userId)).for('update');
-      if (!user || user.status !== 'active') throw errors.notFound();
+      // SEC-182: conta bloqueada também pode (e deve poder) pedir a exclusão (LGPD art. 18, VI); o status anterior fica gravado para o arrependimento.
+      if (!user || (user.status !== 'active' && user.status !== 'blocked')) throw errors.notFound();
+      const previousUserStatus = user.status;
       const [admin] = await tx.select({ id: t.adminProfiles.userId }).from(t.adminProfiles).where(eq(t.adminProfiles.userId, userId));
       if (admin) throw errors.forbidden('ADMIN_ACCOUNT_NOT_DELETABLE', 'Contas de administração não são excluídas por aqui. Fale com o super admin.');
 
@@ -182,7 +184,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
 
       const [deletion] = await tx
         .insert(accountDeletions)
-        .values({ userId, via, effectiveAt, requestedAt: now, storeId: store?.id ?? null, storePreviousStatus: store && store.status !== 'closed' ? store.status : null })
+        .values({ userId, via, effectiveAt, requestedAt: now, storeId: store?.id ?? null, storePreviousStatus: store && store.status !== 'closed' ? store.status : null, previousUserStatus })
         .returning();
       if (!deletion) throw new Error('Falha ao registrar a exclusão');
 
@@ -266,7 +268,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     if (!restored) throw invalid();
     await this.limiter.reset(key);
     await this.limiter.reset(`deletion-cancel:email:${emailHash}`); // o dono provou quem é: o ruído de terceiros não pesa mais
-    this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail() });
+    this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail(row.deletion.previousUserStatus === 'blocked') });
   }
 
   /**
@@ -286,7 +288,8 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       .where(and(eq(accountDeletions.id, deletion.id), eq(accountDeletions.status, 'pending'), sql`${accountDeletions.effectiveAt} > now()`))
       .returning({ id: accountDeletions.id });
     if (!done) return false;
-    await tx.update(t.users).set({ status: 'active', updatedAt: new Date() }).where(eq(t.users.id, userId));
+    // SEC-182: volta ao status de ANTES (bloqueada continua bloqueada): "excluir e desistir" não fura o bloqueio.
+    await tx.update(t.users).set({ status: deletion.previousUserStatus, updatedAt: new Date() }).where(eq(t.users.id, userId));
     if (deletion.storeId && deletion.storePreviousStatus) {
       await tx.update(t.stores).set({ status: deletion.storePreviousStatus as 'approved', updatedAt: new Date() }).where(and(eq(t.stores.id, deletion.storeId), eq(t.stores.status, 'closed')));
       await tx.insert(t.storeStatusHistory).values({ storeId: deletion.storeId, fromStatus: 'closed', toStatus: deletion.storePreviousStatus as 'approved', actorId: audit.actorId, reason: 'Exclusão da conta cancelada' });
@@ -328,7 +331,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     if (!restored) throw new DeletionOpsError('DELETION_DUE', 'A exclusão mudou enquanto o comando rodava (cancelada ou anonimizada).');
     await this.limiter.reset(`lfa:${row.user.id}`);
     await this.limiter.reset(`deletion-cancel:email:${sha256Hex(email)}`);
-    this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail() });
+    this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail(row.deletion.previousUserStatus === 'blocked') });
     return { dryRun: false, email, userId: row.user.id, storeRestored };
   }
 

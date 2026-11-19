@@ -16,6 +16,7 @@ import { LOJISTA_NAV_GROUP_LABEL, STORE_STATUS_LABEL, bottomLojistaNav, visibleL
 import { createPanelQueryClient } from '@/lib/query-client';
 import type { Me } from '@/lib/session-types';
 import { useOnline } from '@/lib/use-online';
+import { LojistaMaintenanceBanner } from './maintenance-banner';
 import f from './frame.module.css';
 
 const ICONS = { inicio: 'home', pedidos: 'orders', trocas: 'exchange', produtos: 'box', financeiro: 'wallet', loja: 'store', equipe: 'team', avaliacoes: 'star' } as const satisfies Record<LojistaSection, string>;
@@ -163,6 +164,7 @@ function PanelShell({ user, flow, pendingCount, children }: { user: Me; flow?: b
       banners={
         <>
           <GlobalBanner online={online} />
+          {flow ? null : <LojistaMaintenanceBanner />}
           {flow ? null : <SoundBanner />}
         </>
       }

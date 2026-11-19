@@ -28,6 +28,8 @@ export const accountDeletions = pgTable(
     /** Loja do dono encerrada junto com a conta e o estado anterior (o arrependimento a reabre). */
     storeId: uuid(),
     storePreviousStatus: text(),
+    /** SEC-182: status da conta antes do fechamento; o arrependimento restaura ESTE status (conta bloqueada que desiste continua bloqueada). */
+    previousUserStatus: text({ enum: ['active', 'blocked'] }).notNull().default('active'),
     /** Última falha da anonimização (mensagem sem dado pessoal); o job tenta de novo. */
     lastError: text(),
     failures: integer().notNull().default(0),

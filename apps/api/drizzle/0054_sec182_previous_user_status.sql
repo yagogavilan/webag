@@ -1,0 +1,1 @@
+ALTER TABLE "account_deletions" ADD COLUMN "previous_user_status" text DEFAULT 'active' NOT NULL;

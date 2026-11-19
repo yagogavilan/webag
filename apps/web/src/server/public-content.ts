@@ -1,4 +1,5 @@
 import 'server-only';
+import type { MaintenanceStatus } from '@/lib/maintenance';
 import { callApi, parseJson } from './upstream';
 
 export type LegalType = 'customer_terms' | 'merchant_terms' | 'privacy';
@@ -62,5 +63,27 @@ export function loadHelp(audience: 'customer' | 'merchant' = 'customer'): Promis
 
 /** Só para os testes. */
 export function resetPublicContentCache(): void {
+  maintenanceCache = null;
   cache.clear();
+}
+
+const MAINTENANCE_TTL_MS = 15_000;
+let maintenanceCache: { at: number; value: MaintenanceStatus | null } | null = null;
+
+function isMaintenance(body: unknown): body is MaintenanceStatus {
+  return isObject(body) && typeof body.active === 'boolean';
+}
+
+/**
+ * Modo manutenção para o aviso do site (WB-121 C1). Cache curto como a API (15 s). Falha ou resposta estranha = sem aviso:
+ * a página pública nunca fica de fora por causa disso e nunca inventa uma manutenção.
+ */
+export async function loadMaintenance(): Promise<MaintenanceStatus | null> {
+  const now = Date.now();
+  if (maintenanceCache && now - maintenanceCache.at < MAINTENANCE_TTL_MS) return maintenanceCache.value;
+  const result = await callApi('/v1/config/maintenance');
+  const body = result.status === 200 ? parseJson<unknown>(result.text) : null;
+  const value = isMaintenance(body) && body.active ? body : null;
+  if (isMaintenance(body)) maintenanceCache = { at: now, value };
+  return value;
 }

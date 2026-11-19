@@ -13,6 +13,8 @@ import { AccountDeletionService, type DeletionOutcome } from './account-deletion
 export const DELETE_TICKET_TTL_SECONDS = 600;
 const TICKET_MAX_ATTEMPTS = 10;
 
+/** SEC-182: conta bloqueada pelo admin também exerce o direito de exclusão (LGPD art. 18, VI; Google Play). Nenhuma sessão é emitida por estas vias. */
+const DELETABLE: ReadonlySet<string> = new Set(['active', 'blocked']);
 const INVALID = () => new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', { detail: 'E-mail ou senha incorretos.' });
 const TICKET_GONE = () => errors.gone('DELETE_TICKET_INVALID', 'Pedido vencido ou já usado', 'Comece de novo pela página de exclusão de conta.');
 
@@ -61,7 +63,7 @@ export class WebAccountDeletionService {
     // conta confirmada e 200 para e-mail inexistente (enumeração de clientes e lojistas). SEC-180: orçamento anônimo, por IP + e-mail.
     await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx, 'anonymous');
     const found = await this.find(email);
-    if (!found || found.isAdmin || found.user.status !== 'active' || found.user.emailVerifiedAt === null) return; // SEC-096: nada é enviado
+    if (!found || found.isAdmin || !DELETABLE.has(found.user.status) || found.user.emailVerifiedAt === null) return; // SEC-096: nada é enviado
     await this.codes.issue(found.user.id, 'delete_web', email);
   }
 
@@ -69,7 +71,7 @@ export class WebAccountDeletionService {
   async verifyCode(email: string, code: string, ctx: RequestContext): Promise<{ deleteTicket: string; expiresIn: number }> {
     await this.limiter.enforce(`delweb:verify:${ctx.ip ?? 'unknown'}`, 20, 3600);
     const found = await this.find(email);
-    if (!found || found.isAdmin || found.user.status !== 'active' || found.user.emailVerifiedAt === null) {
+    if (!found || found.isAdmin || !DELETABLE.has(found.user.status) || found.user.emailVerifiedAt === null) {
       throw new AppError(400, 'CODE_INVALID', 'Código incorreto', { detail: 'Confira o código ou peça um novo.' });
     }
     await this.codes.verify(found.user.id, 'delete_web', code);
@@ -87,8 +89,8 @@ export class WebAccountDeletionService {
 
     const found = await this.find(email);
     const ok = await this.passwords.verify(found?.user.passwordHash ?? null, password);
-    // Admin, conta que não está ativa ou sem senha: a mesma resposta de senha errada (nunca revela o motivo).
-    if (!found || !ok || found.isAdmin || found.user.status !== 'active') {
+    // Admin, conta já excluída ou sem senha: a mesma resposta de senha errada (nunca revela o motivo). Conta bloqueada PODE excluir (SEC-182).
+    if (!found || !ok || found.isAdmin || !DELETABLE.has(found.user.status)) {
       if (attempt.count >= maxFails) await this.limiter.setWindow(key, waitSeconds);
       // SEC-153: a falha soma no contador POR CONTA (o mesmo do login), de qualquer origem, para o step-up proteger também a exclusão.
       if (found && !found.isAdmin) await this.limiter.hit(`lfa:${found.user.id}`, 3600);

@@ -14,7 +14,7 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
 const ALLOWED: Record<SessionArea, RegExp> = {
   admin: /^(admin\/.+|me(\/.*)?|realtime\/tickets|uploads(\/[0-9a-f-]{36}\/complete)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
-    /^(me(\/.*)?|realtime\/tickets|help|auth\/(reauth|logout-all|account-deletion\/cancel|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
+    /^(me(\/.*)?|realtime\/tickets|help|auth\/(reauth|logout-all|account-deletion\/cancel|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/(flags|maintenance)|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
 };
 /** Importação de produtos: o corpo é a planilha (`text/csv`, até 1 MB na API; aqui um pouco mais para a API dar o erro certo). */
 const CSV_IMPORT = /^stores\/[0-9a-f-]{36}\/products\/import$/;
