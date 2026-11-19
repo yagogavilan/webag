@@ -120,6 +120,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('codigo_retirada_digitos', 4, 4, 6, 'Dígitos do código de retirada', 'HIP-040'),
   int('carrinho_validade_dias', 7, 1, 30, 'Validade do carrinho (dias)', 'HIP-041'),
   int('item_qtd_max', 50, 1, 200, 'Quantidade máxima por item', 'HIP-041'),
+  int('endereco_pino_max_m', 2000, 0, 20000, 'Endereço: distância máxima entre o ponto enviado pelo app e o centro do CEP (m); acima disso o endereço é recusado e a cidade do CEP precisa bater com a informada; 0 desliga a conferência (SEC-169)', 'SEC-169'),
   int('enderecos_max', 8, 1, 20, 'Endereços salvos por cliente', 'HIP-041'),
   int('cancelamento_loja_alerta_pct', 10, 1, 50, 'Taxa de cancelamento da loja que gera alerta (%, 30 dias)', 'HIP-008'),
   int('denuncia_prazo_dias_uteis', 2, 1, 10, 'Prazo para tratar uma denúncia (dias úteis); depois vira Atrasado', 'WB-124'),

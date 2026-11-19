@@ -4785,7 +4785,7 @@ paths:
       tags: [addresses]
       operationId: createAddress
       summary: Salvar endereço
-      description: "A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim)."
+      description: "A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim)."
       requestBody:
         required: true
         content:
@@ -4832,7 +4832,7 @@ paths:
       tags: [addresses]
       operationId: updateAddress
       summary: Editar endereço
-      description: "Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu."
+      description: "Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito."
       requestBody:
         required: true
         content:

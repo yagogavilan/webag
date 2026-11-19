@@ -12,6 +12,7 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import type { Env } from '../../src/platform/config/env.js';
+import { ParametersService } from '../../src/modules/admin/index.js';
 import { PG_POOL } from '../../src/platform/database/database.module.js';
 import * as schema from '../../src/platform/database/schema.js';
 import { MailService, type MailMessage } from '../../src/platform/mail/mail.service.js';
@@ -70,6 +71,8 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   await redis.connect().catch(() => undefined);
   const db = drizzle(pool, { schema, casing: 'snake_case' });
   await seedDeliveryFees(db);
+  // SEC-169: os testes usam pontos isolados no mapa que não batem com o CEP do endereço; a conferência liga só no teste dela.
+  await app.get(ParametersService).update('endereco_pino_max_m', 0, 'testes usam pontos isolados', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
   return {
     app,
     http: withRandomIp(request(app.getHttpServer())),

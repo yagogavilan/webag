@@ -10,6 +10,15 @@ import { users } from '../identity/db/schema.js';
 
 export type Address = typeof userAddresses.$inferSelect;
 
+const normalizeName = (name: string): string => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+/** Distância em metros entre dois pontos (haversine); basta para conferir o pino contra o centro do CEP. */
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
 export const presentAddress = (a: Address) => ({
   id: a.id,
   label: a.label,
@@ -49,10 +58,25 @@ export class AddressesService {
     return row;
   }
 
-  /** Ponto: o do GPS do aparelho, ou o do CEP. Sem nenhum dos dois, 422 e o app pede a posição (WB-002 C3). */
-  private async point(cep: string, given: { lat?: number | undefined; lng?: number | undefined }): Promise<{ lat: number; lng: number }> {
-    if (given.lat !== undefined && given.lng !== undefined) return { lat: given.lat, lng: given.lng };
+  /**
+   * Ponto: o do GPS do aparelho, ou o do CEP. Sem nenhum dos dois, 422 e o app pede a posição (WB-002 C3).
+   * SEC-169: o ponto do app NÃO é confiável (raio, teto de ETA e faixa de frete saem dele): é conferido com o centro do CEP
+   * (`endereco_pino_max_m`) e a cidade do CEP precisa ser a informada. Sem geocodificação do CEP (provedor fora), aceita o do app.
+   */
+  private async point(cep: string, city: string, given: { lat?: number | undefined; lng?: number | undefined }): Promise<{ lat: number; lng: number }> {
     const found = await this.geocoding.lookup(cep).catch(() => null);
+    if (given.lat !== undefined && given.lng !== undefined) {
+      const maxM = await this.parameters.getNumber('endereco_pino_max_m');
+      if (maxM > 0 && found) {
+        if (normalizeName(found.city) !== normalizeName(city)) {
+          throw errors.unprocessable('ADDRESS_CEP_CITY_MISMATCH', 'O CEP é de outra cidade', { detail: `Esse CEP pertence a ${found.city}. Confira a cidade e o CEP.` });
+        }
+        if (haversineMeters({ lat: given.lat, lng: given.lng }, found) > maxM) {
+          throw errors.unprocessable('ADDRESS_PIN_FAR_FROM_CEP', 'A posição está longe do CEP', { detail: 'A posição marcada no mapa está longe do CEP informado. Confirme o endereço no mapa.' });
+        }
+      }
+      return { lat: given.lat, lng: given.lng };
+    }
     if (!found) throw errors.unprocessable('ADDRESS_GEOCODING_FAILED', 'Não conseguimos localizar o endereço', { detail: 'Confirme a posição para continuar.' });
     return { lat: found.lat, lng: found.lng };
   }
@@ -67,7 +91,7 @@ export class AddressesService {
     const region = await this.served(input.city, input.state, input.neighborhood);
     const existing = await this.findDuplicate(userId, input.cep, input.number, input.complement ?? null);
     if (existing) return { address: existing, created: false };
-    const point = await this.point(input.cep, input);
+    const point = await this.point(input.cep, input.city, input);
     const max = await this.parameters.getNumber('enderecos_max');
     const address = await this.db.transaction(async (tx) => {
       // Trava o usuário: duas criações simultâneas não passam do limite nem criam dois padrões.
@@ -130,7 +154,7 @@ export class AddressesService {
     const placeChanged = input.cep !== undefined || input.city !== undefined || input.state !== undefined || input.neighborhood !== undefined;
     const region = placeChanged ? await this.served(next.city, next.state, next.neighborhood) : { cityId: current.cityId, neighborhoodId: current.neighborhoodId };
     if (await this.findDuplicate(userId, next.cep, next.number, next.complement, id)) throw errors.conflict('ADDRESS_DUPLICATE', 'Endereço repetido', 'Você já tem esse endereço salvo.');
-    const point = input.lat !== undefined || input.cep !== undefined ? await this.point(next.cep, input) : { lat: current.lat, lng: current.lng };
+    const point = input.lat !== undefined || input.cep !== undefined ? await this.point(next.cep, next.city, input) : { lat: current.lat, lng: current.lng };
     return this.db.transaction(async (tx) => {
       await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
       if (input.isDefault) await tx.update(userAddresses).set({ isDefault: false }).where(and(eq(userAddresses.userId, userId), ne(userAddresses.id, id)));

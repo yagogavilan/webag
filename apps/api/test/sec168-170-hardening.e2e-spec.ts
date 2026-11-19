@@ -79,3 +79,64 @@ describe('SEC-168: arrependimento da exclusão sob força bruta distribuída', (
     void eq;
   });
 });
+
+/** F.2 SEC-169: o ponto lat/lng do app é conferido com o CEP e o município (ataque B6 da revisão). */
+describe('SEC-169: pino do endereço coerente com o CEP', () => {
+  let ctx: TestContext;
+  beforeAll(async () => {
+    ctx = await createTestApp();
+    await ensureLegalDocs(ctx);
+    await ensureCity(ctx, 'Francisco Morato');
+    await useParam(ctx, 'endereco_pino_max_m', 2000);
+  });
+  afterAll(async () => {
+    await useParam(ctx, 'endereco_pino_max_m', 0);
+    await ctx.close();
+  });
+
+  // O provedor fake põe o CEP 07900-100 perto de Francisco Morato (-23,28; -46,74).
+  const address = (user: { accessToken: string }, over: Record<string, unknown>) =>
+    ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send({ cep: '07900-100', street: 'Rua Pino', number: '10', neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', ...over });
+  const centerOf = async () => {
+    const { FakeGeocodingProvider } = await import('../src/modules/stores/geocoding.js');
+    return (await new FakeGeocodingProvider().lookup('07900100'))!;
+  };
+
+  it('ponto a 25 km do CEP é recusado (422); a 300 m é aceito; sem ponto usa o do CEP', async () => {
+    const user = await createCustomer(ctx);
+    const center = await centerOf();
+    const far = await address(user, { lat: center.lat + 0.25, lng: center.lng });
+    expect(far.status, JSON.stringify(far.body)).toBe(422);
+    expect(far.body.code).toBe('ADDRESS_PIN_FAR_FROM_CEP');
+    const onTheStore = await address(user, { lat: -5, lng: -20 }); // "em cima da loja", longe do CEP
+    expect(onTheStore.status).toBe(422);
+    const near = await address(user, { lat: center.lat + 0.0027, lng: center.lng }); // ~300 m
+    expect(near.status, JSON.stringify(near.body)).toBe(201);
+    const user2 = await createCustomer(ctx);
+    const noPin = await address(user2, {});
+    expect(noPin.status).toBe(201);
+    expect(noPin.body.lat).toBeCloseTo(center.lat, 4);
+  });
+
+  it('a edição também confere o ponto novo; CEP de outro município com cidade informada diferente é recusado', async () => {
+    const user = await createCustomer(ctx);
+    const center = await centerOf();
+    const created = await address(user, { lat: center.lat, lng: center.lng });
+    expect(created.status).toBe(201);
+    const moved = await ctx.http.patch(`/v1/me/addresses/${created.body.id}`).set(bearer(user.accessToken)).send({ lat: center.lat + 0.3, lng: center.lng });
+    expect(moved.status).toBe(422);
+    expect(moved.body.code).toBe('ADDRESS_PIN_FAR_FROM_CEP');
+    const otherCity = await address(user, { cep: '07800-100', number: '99', lat: center.lat, lng: center.lng }); // CEP de Franco da Rocha, cidade informada Francisco Morato
+    expect(otherCity.status).toBe(422);
+  });
+
+  it('com o parâmetro em 0 a conferência fica desligada', async () => {
+    await useParam(ctx, 'endereco_pino_max_m', 0);
+    try {
+      const user = await createCustomer(ctx);
+      expect((await address(user, { lat: -5, lng: -20 })).status).toBe(201);
+    } finally {
+      await useParam(ctx, 'endereco_pino_max_m', 2000);
+    }
+  });
+});
