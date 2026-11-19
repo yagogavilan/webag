@@ -3,6 +3,7 @@
 Dono: qa-engineer | Data: 2026-11-18 | Executa na Onda 7 (`plano-execucao.md`); gate: antes do G4 (ADR-006). Scripts em `tests/load/` (a criar). Relatório: `docs/qa/carga-<AAAA-MM-DD>.md`.
 Marcação `[HIPÓTESE]` = número sem dado real de uso; revisar com a telemetria do piloto (HIP-043).
 
+> **Atualização (Onda 7, 2026-11-19): existe um esboço k6 (S1) e uma carga curta INDICATIVA em sandbox, ver `docs/qa/carga/README.md`. A carga de verdade segue pendente (staging + k6 + S2 a S12).**
 > **Estado em 2026-11-19 (conferido na Onda 7): o teste de carga NÃO foi executado.** Não existe `tests/load/` (nenhum script k6, nenhum `seed-large`). O contrato já tem todas as rotas dos cenários (use `docs/arquitetura/api/openapi.yaml`, não a frase "hoje só há `/health`" abaixo). Para rodar este plano falta: (1) escrever os scripts e o `seed-large` (hoje o seed de demonstração tem 12 lojas e 60 pedidos, pequeno demais para medir índice e N+1); (2) um ambiente com a CPU e a RAM do servidor-alvo (`staging`, `APP_ENV=staging`, mesma imagem de produção); (3) autorização de gasto se o servidor de ensaio for novo. Os itens da dívida técnica que esperam este teste (DT-017 sessão sem cache, DT-055 índices de `payment_attempts` e `orders`, DT-056 relatórios agregados em JavaScript, DT-036 paginação da busca) **continuam sem medição**. Para o piloto (≈ 33 pedidos por dia, HIP-043) o risco é baixo; o que importa medir antes do G4 é a rajada de webhooks (S5) e a disputa da última unidade (S4-B).
 
 ## 1. Objetivo e honestidade sobre a escala

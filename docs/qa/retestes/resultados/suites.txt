@@ -1,0 +1,117 @@
+# Saídas resumidas das suítes (Onda 7, 2026-11-19). Código: 98764b2 (execuções 1 e 2 do e2e, unit, web, jest) e b550088 (HEAD: unit, e2e, jest, web, typecheck, lint, generate:check). Build em c0dc9ac.
+
+## out-unit-api
+ Test Files  37 passed (37)
+      Tests  288 passed (288)
+   Duration  4.57s (transform 1.90s, setup 0ms, import 6.28s, tests 1.54s, environment 3ms)
+
+## out-e2e-api
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  3 failed | 78 passed (81)
+      Tests  4 failed | 677 passed | 1 skipped (682)
+   Duration  537.05s (transform 4.94s, setup 0ms, import 138.39s, tests 385.85s, environment 7ms)
+       × cada linha traz o nome do ator e o aparelho; perfil não-super só enxerga as PRÓPRIAS ações (filtro forçado) 122ms
+     × I2: chargeback vira alerta payment_disputed, marca o pedido, lança no ledger e fecha as contas; repetir não duplica 732ms
+     × I2: pedido contestado não aceita estorno manual (o provedor já debitou) e o cancelamento do admin não agenda estorno 594ms
+     × banners: 3 com imagem 2:1 em variantes WebP, lidos pela API pública 4ms
+ FAIL  test/admin-contract-gaps.e2e-spec.ts > Admin web: reason, versão em parâmetros, códigos de recuperação, termos, convites pendentes e auditoria > auditoria: ator, aparelho, CSV e "só as pr
+ FAIL  test/fix-r3-dispute-fee.e2e-spec.ts > Chargeback e tarifa tardia do provedor (R.3, I2, I3) > I2: chargeback vira alerta payment_disputed, marca o pedido, lança no ledger e fecha as contas; rep
+ FAIL  test/fix-r3-dispute-fee.e2e-spec.ts > Chargeback e tarifa tardia do provedor (R.3, I2, I3) > I2: pedido contestado não aceita estorno manual (o provedor já debitou) e o cancelamento do admin 
+ FAIL  test/seed-onda3.e2e-spec.ts > Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners > banners: 3 com imagem 2:1 em variantes WebP, lidos pela API pública
+
+## out-e2e-api-2
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed | 80 passed (81)
+      Tests  1 failed | 680 passed | 1 skipped (682)
+   Duration  537.02s (transform 5.42s, setup 0ms, import 139.05s, tests 385.34s, environment 8ms)
+       × 6 clientes disputam as 3 últimas unidades: exatamente 3 pedidos e 3 recusas "acabou o estoque" 1037ms
+ FAIL  test/orders.e2e-spec.ts > Pedido: criação, reserva de estoque, pagamento, cancelamento e timeouts (WB-023 a WB-030, RN-05 a RN-08) > estoque concorrente > 6 clientes disputam as 3 últimas un
+ ❯ test/orders.e2e-spec.ts (27 tests | 1 failed) 15284ms
+
+## out-unit-api-head
+ Test Files  38 passed (38)
+      Tests  300 passed (300)
+   Duration  6.98s (transform 2.65s, setup 0ms, import 9.32s, tests 2.89s, environment 3ms)
+
+## out-e2e-api-head
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  3 failed | 80 passed (83)
+      Tests  1 failed | 688 passed | 15 skipped (704)
+   Duration  604.20s (transform 5.92s, setup 0ms, import 156.12s, tests 433.71s, environment 12ms)
+     × RN-07: corrida em saiu-para-entrega há > 24 h NÃO vira entregue se o cliente já avisou "não recebi" (abre disputa) 955ms
+ FAIL  test/marketing-push.e2e-spec.ts > Push segmentado do admin (WB-197, WB-196)
+ FAIL  test/qa-notreceived-autoconclude.e2e-spec.ts > QA Onda 7 repro: "não recebi" x auto-conclusão de 24 h (RN-07) > RN-07: corrida em saiu-para-entrega há > 24 h NÃO vira entregue se o cliente 
+ FAIL  test/reports.e2e-spec.ts > Relatórios operacionais do admin (WB-122, RN-15, O6.4)
+ ❯ test/qa-notreceived-autoconclude.e2e-spec.ts (1 test | 1 failed) 1901ms
+
+## out-web-vitest
+ Test Files  68 passed (68)
+      Tests  535 passed (535)
+   Duration  61.65s (transform 4.59s, setup 12.70s, import 75.42s, tests 47.99s, environment 34.65s)
+
+## out-web-vitest-head
+ Test Files  68 passed (68)
+      Tests  535 passed (535)
+   Duration  70.84s (transform 4.77s, setup 14.07s, import 90.27s, tests 54.26s, environment 40.05s)
+
+## out-mobile-jest
+Test Suites: 1 failed, 31 passed, 32 total
+Tests:       1 failed, 301 passed, 302 total
+Time:        52.603 s
+FAIL __tests__/home.test.tsx
+
+## out-mobile-jest-head
+Test Suites: 37 passed, 37 total
+Tests:       350 passed, 350 total
+Time:        16.614 s, estimated 52 s
+
+## out-shared
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Duration  388ms (transform 178ms, setup 0ms, import 226ms, tests 35ms, environment 0ms)
+
+## build (c0dc9ac)
+ Tasks:    5 successful, 5 total
+  Time:    1m19.507s 
+
+## typecheck/lint/generate:check (HEAD)
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-tc-head.txt: Tasks:    7 successful, 7 total
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-lint-head.txt: Tasks:    6 successful, 6 total
+
+## playwright (fake API, PW_CHANNEL=chrome)
+  38 passed (1.5m)
+
+## playwright real (execução 1: ambiente padrão; execução final: CORS com POST + REAL_DB_URL)
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    Error: expect(locator).toContainText(expected) failed
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    test-results/01-cadastrar-loja.e2e.ts-C-319f7--envia-e-acompanha-o-status/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    Error: expect(locator).toBeVisible() failed
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    test-results/02-aprovar-loja.e2e.ts-Apr-4b5d1-confere-os-6-itens-e-aprova/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    test-results/02-aprovar-loja.e2e.ts-Apr-f9e9a-dastre-1-produto-WB-054-C4-/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    test-results/03-moderar-produto.e2e.ts--2657c-tiva-e-a-auditoria-registra/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:    test-results/04-pedido-entrega-troca.e2-f8b0c-la-e-a-loja-não-marca-saiu-/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:  5 failed
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:  2 did not run
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real.txt:  1 passed (1.8m)
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real4.txt:    test-results/04-pedido-entrega-troca.e2-f8b0c-la-e-a-loja-não-marca-saiu-/test-failed-1.png
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real4.txt:  1 failed
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real4.txt:  2 did not run
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real4.txt:  5 passed (38.8s)
+/tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/out-pw-real5.txt:  3 passed (30.8s)
+
+## carga
+[carga] API http://localhost:3300 | 20 VUs | 60 s | pausa 0 ms | 12 lojas, 31 produtos
+| operação | requisições | erros | p50 ms | p95 ms | p99 ms | máx ms | códigos |
+|---|---|---|---|---|---|---|---|
+| home | 17545 | 15145 | 11 | 31 | 45 | 252 | 200x2400 429x15145 |
+| busca-lojas | 17545 | 15745 | 11 | 34 | 52 | 212 | 200x1800 429x15745 |
+| loja-produtos | 17545 | 15745 | 11 | 41 | 63 | 125 | 200x1800 429x15745 |
+| produto | 17545 | 15745 | 12 | 51 | 78 | 133 | 200x1800 429x15745 |
+[carga] total 70180 requisições em 60 s = 1169.4 req/s; erros 62380 (88.89%); RSS da API 302 MB -> 651 MB
+[carga] API http://localhost:3300 | 100 VUs | 60 s | pausa 1000 ms | 12 lojas, 31 produtos
+| operação | requisições | erros | p50 ms | p95 ms | p99 ms | máx ms | códigos |
+|---|---|---|---|---|---|---|---|
+| home | 4317 | 43 | 20 | 63 | 99 | 881 | 200x4274 429x43 |
+| busca-lojas | 4317 | 43 | 28 | 96 | 124 | 593 | 200x4274 429x43 |
+| loja-produtos | 4317 | 44 | 35 | 165 | 242 | 349 | 200x4273 429x44 |
+| produto | 4317 | 44 | 43 | 198 | 338 | 461 | 200x4273 429x44 |
+[carga] total 17268 requisições em 62 s = 280.2 req/s; erros 174 (1.01%); RSS da API 651 MB -> 653 MB
