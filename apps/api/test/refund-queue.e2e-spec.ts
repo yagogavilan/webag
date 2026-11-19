@@ -7,7 +7,7 @@ import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { FakePaymentProvider } from '../src/modules/payments/providers/fake.provider.js';
 import { auditLog, paymentAlerts, paymentAttempts, paymentRefundIntents, paymentRefunds } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
-import { connectFakeAccount, createAdmin, ensureCity, ensureLegalDocs, retirePreviousPaymentAttempts } from './helpers/fixtures.js';
+import { connectFakeAccount, createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, placeOrder, shopWith } from './helpers/orders.js';
 
 const DAY = 86_400_000;
@@ -22,7 +22,6 @@ describe('Estorno recusado pelo provedor (SEC-130)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     await ensureLegalDocs(ctx);
-    await retirePreviousPaymentAttempts(ctx); // a conciliação olha só os 200 mais antigos: não deixe a suíte inteira empurrar os deste arquivo para fora
     await ensureCity(ctx, 'Francisco Morato');
     payments = ctx.app.get(PaymentsService);
     fake = ctx.app.get(FakePaymentProvider);

@@ -1,4 +1,4 @@
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import { vi } from 'vitest';
 import { GEOCODING_PROVIDER, type GeocodingProvider } from '../../src/modules/stores/index.js';
@@ -315,13 +315,13 @@ export async function expireReauth(ctx: TestContext, userId: string): Promise<vo
 
 /** Cidade ativa por nome (cria se faltar). Os testes compartilham o banco: nunca assumem que está vazio. */
 /**
- * A conciliação de pagamentos olha só os 200 pagamentos mais antigos (por `updated_at`) com `provider_payment_id`. O banco de teste é
- * COMPARTILHADO entre os arquivos de uma execução: quanto mais testes rodam antes, mais pagamentos antigos empurram os do teste para fora dos
- * 200 e a conciliação devolve `synced: 0` (só na suíte inteira). Chame em `beforeAll` de quem chama `reconcile()`: retira da conciliação os
- * pagamentos de arquivos anteriores (as linhas seguem no banco; só perdem o id do provedor).
+ * A conciliação de pagamentos olha só os 200 pagamentos mais antigos (por `updated_at`) com id do provedor. O banco de teste é COMPARTILHADO
+ * entre os arquivos de uma execução: quanto mais testes rodam antes, mais pagamentos antigos empurram os do teste para fora dos 200 e a
+ * conciliação devolve `synced: 0` (só na suíte inteira). Chame antes de `reconcile()` com os pagamentos do teste: eles passam a ser os
+ * primeiros da fila (não altera nenhum outro dado).
  */
-export async function retirePreviousPaymentAttempts(ctx: TestContext): Promise<void> {
-  await ctx.db.update(paymentAttempts).set({ providerPaymentId: null }).where(isNotNull(paymentAttempts.providerPaymentId));
+export async function reconcileFirst(ctx: TestContext, ...attemptIds: string[]): Promise<void> {
+  await ctx.db.update(paymentAttempts).set({ updatedAt: new Date('2000-01-01T00:00:00Z') }).where(inArray(paymentAttempts.id, attemptIds));
 }
 
 /**
