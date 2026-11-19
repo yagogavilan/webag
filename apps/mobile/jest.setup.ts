@@ -81,3 +81,9 @@ jest.mock('expo-notifications', () => ({
 jest.mock('socket.io-client', () => ({
   io: jest.fn(() => ({ on: jest.fn(), emit: jest.fn(), connect: jest.fn(), disconnect: jest.fn(), removeAllListeners: jest.fn() })),
 }));
+
+jest.mock('expo-image-picker', () => ({
+  requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  launchCameraAsync: jest.fn(async () => ({ canceled: true, assets: [] })),
+  launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: [] })),
+}));

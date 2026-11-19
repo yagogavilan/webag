@@ -62,6 +62,8 @@ const config: ExpoConfig = {
     ],
     'expo-secure-store',
     ['expo-notifications', { color: BRAND }],
+    // Câmera só para a foto do defeito na troca; a galeria usa o seletor do sistema (sem permissão ampla).
+    ['expo-image-picker', { cameraPermission: 'O Webag usa a câmera só para você fotografar o defeito de um produto no pedido de troca.', photosPermission: false, microphonePermission: false }],
     [
       'expo-location',
       {
