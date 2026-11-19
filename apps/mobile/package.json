@@ -5,9 +5,9 @@
   "description": "App do cliente Webag (Expo + Expo Router). Lojista e admin são web (DEC-005)",
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "dev": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start",
+    "android": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start --android",
+    "ios": "node --env-file-if-exists=../../.env ./node_modules/expo/bin/cli start --ios",
     "build": "expo export --platform android --platform ios --output-dir dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
