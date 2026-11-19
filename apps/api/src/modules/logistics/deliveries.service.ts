@@ -115,11 +115,15 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
   async autoConcludeDue(now = new Date()): Promise<number> {
     const hours = await this.params.getNumber('auto_conclusao_entrega_h');
     const cutoff = new Date(now.getTime() - hours * 3_600_000);
-    const due = await this.db
-      .select({ id: deliveries.id })
-      .from(deliveries)
-      .where(and(eq(deliveries.status, 'out_for_delivery'), sql`(select max(e.created_at) from ${deliveryEvents} e where e.delivery_id = ${deliveries.id} and e.to_status = 'out_for_delivery') <= ${cutoff.toISOString()}::timestamptz`))
-      .limit(100);
+    // RN-07 (BUG-020): "não recebi" do cliente (entrega de pedido) impede a conclusão sozinha; a operação decide. Troca não tem esse aviso.
+    const notReceived = sql`${deliveries.exchangeId} is null and exists (select 1 from orders o where o.id = ${deliveries.orderId} and o.not_received_at is not null)`;
+    const overdue = and(eq(deliveries.status, 'out_for_delivery'), sql`(select max(e.created_at) from ${deliveryEvents} e where e.delivery_id = ${deliveries.id} and e.to_status = 'out_for_delivery') <= ${cutoff.toISOString()}::timestamptz`);
+    const due = await this.db.select({ id: deliveries.id }).from(deliveries).where(and(overdue, sql`not (${notReceived})`)).limit(100);
+    const held = await this.db.select({ id: deliveries.id, orderId: deliveries.orderId }).from(deliveries).where(and(overdue, notReceived)).limit(100);
+    for (const row of held) {
+      // Alerta idempotente (mesmo conteúdo aberto não duplica): a operação vê que a corrida passou do prazo e segue parada.
+      await this.payments.raiseAlert(null, 'delivery_auto_conclude_held', { deliveryId: row.id, orderId: row.orderId, reason: 'not_received' }).catch((e: unknown) => this.logger.warn(safeErrorMessage(e)));
+    }
     let concluded = 0;
     for (const row of due) {
       try {

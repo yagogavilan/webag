@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "not_received_at" timestamp with time zone;

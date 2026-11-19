@@ -1160,12 +1160,15 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
 
   /**
    * B.1 "Não recebi meu pedido": avisa a operação (alerta `order_not_received`) e grava na auditoria; vale com o pedido a caminho ou
-   * até 48 h depois de "entregue". Repetir é idempotente (um alerta por pedido). Não estorna nem muda o estado: a operação decide.
+   * até 48 h depois de "entregue". Repetir é idempotente (um alerta por pedido). Não estorna nem muda o estado: a operação decide. Grava `not_received_at`, que impede a
+   * auto-conclusão de 24 h da corrida (RN-07, BUG-020).
    */
   async reportNotReceived(principal: Principal, orderId: string, ctx: RequestContext): Promise<{ reported: true }> {
     const [order] = await this.db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, principal.userId)));
     if (!order) throw errors.notFound('Pedido não encontrado.');
     if (!this.actionsOf(order).includes('report_not_received')) throw errors.conflict('ORDER_NOT_REPORTABLE', 'Não dá para avisar agora', 'Só vale com o pedido a caminho ou até 48 h depois de entregue.');
+    // BUG-020 (RN-07): o aviso trava a auto-conclusão de 24 h da corrida; a operação decide (guarda o primeiro aviso, repetir não muda).
+    await this.db.update(orders).set({ notReceivedAt: sql`coalesce(${orders.notReceivedAt}, now())` }).where(eq(orders.id, order.id));
     await this.payments.raiseAlert(null, 'order_not_received', { orderId: order.id, orderNumber: order.number, storeId: order.storeId });
     await this.audit.recordStandalone(ctx, { action: 'order.not_received_reported', targetType: 'order', targetId: order.id, actorId: principal.userId, actorRole: 'customer' });
     return { reported: true };

@@ -7699,7 +7699,7 @@ paths:
       tags: [orders]
       operationId: reportOrderNotReceived
       summary: "Não recebi meu pedido (B.1)"
-      description: "Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado. Repetir é idempotente. Pedido de outra conta: 404."
+      description: "Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado, mas impede a auto-conclusão de 24 h da corrida (RN-07): a operação decide (alerta `delivery_auto_conclude_held`). Repetir é idempotente. Pedido de outra conta: 404."
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:

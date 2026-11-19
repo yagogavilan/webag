@@ -75,6 +75,8 @@ export const orders = pgTable(
     acceptRemindedAt: timestamp({ withTimezone: true }),
     /** BUG-014: aviso ao cliente 24 h antes de a retirada vencer; nulo = ainda não avisou. */
     pickupRemindedAt: timestamp({ withTimezone: true }),
+    /** BUG-020 (RN-07): primeiro "não recebi" do cliente. Enquanto preenchido, a auto-conclusão de 24 h não fecha a corrida: a operação decide. */
+    notReceivedAt: timestamp({ withTimezone: true }),
     /** SEC-170: HMAC do CPF do pagador (nunca o CPF), chave do cupom de primeira compra contra multiconta. */
     payerDocumentHash: varchar({ length: 64 }),
     cancelledBy: text({ enum: ['customer', 'store', 'system', 'admin'] }),
