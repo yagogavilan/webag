@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
@@ -69,9 +69,14 @@ export class AlertsService {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const status = query.status ?? 'open';
-    // area e gravidade viram uma lista de tipos do catálogo (um tipo desconhecido só entra sem esses filtros).
-    const byCatalog = (accept: (info: ReturnType<typeof alertKindInfo>) => boolean): SQL =>
-      inArray(paymentAlerts.kind, Object.entries(ALERT_KINDS).filter(([, info]) => accept(info)).map(([kind]) => kind).concat('__none__'));
+    // area e gravidade viram uma lista de tipos do catálogo; o tipo desconhecido (sem cadastro) entra quando o "Outro alerta" do catálogo bate com o filtro,
+    // como o item mostra (platform/info): antes ele sumia do filtro que o próprio item exibe.
+    const fallback = alertKindInfo('__sem_cadastro__');
+    const byCatalog = (accept: (info: ReturnType<typeof alertKindInfo>) => boolean): SQL | undefined => {
+      const known = Object.entries(ALERT_KINDS);
+      const match = inArray(paymentAlerts.kind, known.filter(([, info]) => accept(info)).map(([kind]) => kind).concat('__none__'));
+      return accept(fallback) ? or(match, notInArray(paymentAlerts.kind, known.map(([kind]) => kind))) : match;
+    };
     const rows = await this.db
       .select({ alert: paymentAlerts, resolvedByName: users.name, reference: paymentAttempts.externalReference })
       .from(paymentAlerts)

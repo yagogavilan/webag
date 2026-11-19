@@ -115,7 +115,7 @@ describe.runIf(process.env.E2E_DEPS === '1')('GET /health/ready com dependência
 
     expect(response.body).toMatchObject({
       status: 'ok',
-      info: { database: { status: 'up' }, redis: { status: 'up' } },
+      info: { database: { status: 'up' }, schema: { status: 'up' }, redis: { status: 'up' } },
     });
   });
 });
