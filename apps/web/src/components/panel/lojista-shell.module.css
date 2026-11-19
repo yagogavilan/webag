@@ -95,6 +95,9 @@
   text-decoration: none;
   transition: background var(--wb-motion-duration-fast) var(--wb-motion-easing-standard);
 }
+.navCount { margin-left: auto; min-width: 24px; padding: 2px 8px; border-radius: var(--wb-radius-pill); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base); font-size: 12px; line-height: 16px; font-weight: 700; text-align: center; }
+.bottomItem { position: relative; }
+.bottomItem .navCount { position: absolute; top: 2px; left: calc(50% + 8px); margin: 0; border: 1px solid var(--wb-color-brand-800); }
 .navItem:hover { background: rgba(255, 255, 255, 0.14); }
 .navItem:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px var(--wb-color-brand-500); }
 .navItemActive { background: var(--wb-color-brand-100); color: var(--wb-color-brand-800); }

@@ -154,6 +154,8 @@ const PERMS = {
   'stores:write': ['super_admin', 'operations'],
   'stores:decide': ['super_admin', 'operations'],
   'stores:documents': ['super_admin', 'operations'],
+  'logistics:read': ['super_admin', 'operations', 'finance', 'support'],
+  'logistics:write': ['super_admin', 'operations'],
 };
 function me(user) {
   return { id: user.id, email: user.email, emailVerified: user.emailVerified ?? true, name: user.name, phone: null, roles: user.roles ?? ['customer'], adminProfile: user.profile && user.active ? user.profile : null, pendingTerms: [] };
@@ -986,6 +988,160 @@ route('POST', '/__test/seed-store', { public: true }, (req, res, ctx) => {
   stores.set(s.id, s);
   json(res, 201, { id: s.id, name, documents: s.documents.map((d) => d.id) });
 });
+
+// ---------------------------------------------------------------- pedidos, logística e trocas (Ondas 4C, 4D e 5B)
+const orders = new Map();
+const deliveries = new Map();
+const couriers = new Map();
+const exchanges = new Map();
+let orderSeq = 4000;
+const money = (amount) => ({ amount, currency: 'BRL' });
+const storeActionsFor = (o) => {
+  const a = [];
+  if (o.status === 'received') a.push('accept', 'refuse');
+  if (o.status === 'accepted') a.push('prepare', 'ready', 'cancel');
+  if (o.status === 'in_preparation') a.push('ready', 'cancel');
+  return a;
+};
+const orderSummary = (o) => ({ id: o.id, number: o.number, status: o.status, mode: o.mode, createdAt: o.createdAt, paidAt: o.createdAt, acceptDeadlineAt: o.status === 'received' ? new Date(Date.parse(o.createdAt) + 10 * 60_000).toISOString() : null, customerFirstName: 'Carla', itemCount: 2, firstItemName: 'Camiseta Básica', total: money(8990), allowedActions: storeActionsFor(o) });
+const orderDetail = (o) => ({ ...orderSummary(o), acceptedAt: null, customer: { firstName: 'Carla', phone: null }, items: [{ name: 'Camiseta Básica', attributes: { Tam: 'M' }, image: {}, quantity: 2, unitPrice: money(4495), lineTotal: money(8990) }], delivery: null, pickup: null, values: { subtotal: money(8990), delivery: money(500), storeDiscount: money(0), total: money(9490), commission: money(1349), netBeforeProviderFee: money(7641) }, couponCode: null, timeline: [{ status: o.status, at: o.createdAt, actor: 'system', reason: null }], cancellation: null, logistics: o.deliveryId ? { status: deliveries.get(o.deliveryId)?.status, courierFirstName: deliveries.get(o.deliveryId)?.courier?.name ?? null, volumes: 1 } : undefined });
+const mineStore = (ctx) => [...stores.values()].find((s) => s.ownerId === ctx.user?.id);
+const deliveryView = (d) => {
+  const wait = Math.max(0, Math.floor((Date.now() - Date.parse(d.readyAt)) / 60_000));
+  return { id: d.id, kind: d.kind, orderId: d.orderId, orderNumber: d.orderNumber, storeId: d.storeId, storeName: d.storeName, status: d.status, readyAt: d.readyAt, waitingMinutes: d.status === 'ready_for_collection' ? wait : null, sla: d.status === 'ready_for_collection' ? (wait >= 20 ? 'late' : wait >= 10 ? 'long' : 'ok') : null, courier: d.courier, volumes: d.volumes, note: d.note ?? null, destination: 'Jardim Alvorada, Francisco Morato', fee: money(700), expectedCost: money(600), cost: d.cost ?? null, attempts: 0, failReason: null, whatsappSentAt: d.whatsappSentAt ?? null, codeRequired: false, allowedActions: d.status === 'ready_for_collection' ? ['assign', 'cancel'] : d.status === 'awaiting_courier' ? ['confirm', 'reassign', 'cancel'] : d.status === 'courier_en_route' ? ['picked_up', 'not_delivered', 'cancel'] : d.status === 'out_for_delivery' ? ['delivered', 'not_delivered'] : [], updatedAt: now() };
+};
+const courierView = (c) => ({ id: c.id, name: c.name, phone: c.phone, note: c.note ?? null, active: c.active, documentsCheckedAt: now(), deliveriesLast7Days: 3, busyNow: [...deliveries.values()].some((d) => d.courier?.id === c.id && !['delivered', 'cancelled', 'not_delivered', 'returned_to_store'].includes(d.status)), createdAt: now() });
+const lojistaStore = (res, ctx) => {
+  const s = mineStore(ctx);
+  if (!s || s.id !== ctx.params[0]) {
+    problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+    return null;
+  }
+  return s;
+};
+
+route('POST', '/__test/seed-order', { public: true }, (req, res, ctx) => {
+  const id = randomUUID();
+  const o = { id, storeId: ctx.body.storeId, number: `WB-${++orderSeq}`.slice(0, 8), status: 'received', mode: 'delivery', createdAt: now(), deliveryId: null };
+  orders.set(id, o);
+  json(res, 201, { id, number: o.number });
+});
+route('POST', '/__test/seed-exchange', { public: true }, (req, res, ctx) => {
+  const id = randomUUID();
+  exchanges.set(id, { id, storeId: ctx.body.storeId, number: 'TR-1042', status: 'requested', createdAt: now() });
+  json(res, 201, { id });
+});
+route('POST', '/__test/seed-delivery', { public: true }, (req, res, ctx) => {
+  const s = stores.get(ctx.body.storeId);
+  const d = { id: randomUUID(), kind: 'delivery', orderId: randomUUID(), orderNumber: `WB-${++orderSeq}`.slice(0, 8), storeId: s.id, storeName: s.name, status: 'ready_for_collection', readyAt: new Date(Date.now() - 12 * 60_000).toISOString(), courier: null, volumes: 2, note: null };
+  deliveries.set(d.id, d);
+  json(res, 201, { id: d.id, number: d.orderNumber });
+});
+route('POST', '/__test/seed-courier', { public: true }, (req, res, ctx) => {
+  const c = { id: randomUUID(), name: ctx.body.name ?? 'João', phone: '5511912345678', active: true, note: null };
+  couriers.set(c.id, c);
+  json(res, 201, { id: c.id });
+});
+route('GET', '/v1/stores/:id/orders', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  if (!s) return;
+  const scope = ctx.query.get('scope');
+  const groups = { new: ['received'], in_progress: ['accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'], history: ['delivered', 'cancelled', 'refused'] };
+  const list = [...orders.values()].filter((o) => o.storeId === s.id && (groups[scope] ?? groups.in_progress).includes(o.status));
+  json(res, 200, { data: list.map(orderSummary), nextCursor: null });
+});
+route('GET', '/v1/stores/:id/orders/:oid', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const o = s && orders.get(ctx.params[1]);
+  if (!o) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  json(res, 200, orderDetail(o));
+});
+route('POST', '/v1/stores/:id/orders/:oid/accept', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const o = s && orders.get(ctx.params[1]);
+  if (!o) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (o.status === 'received') o.status = 'accepted';
+  json(res, 200, orderDetail(o));
+});
+route('POST', '/v1/stores/:id/orders/:oid/status', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const o = s && orders.get(ctx.params[1]);
+  if (!o) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  const to = ctx.body.status;
+  if (to === 'in_preparation') o.status = 'in_preparation';
+  else if (to === 'ready_for_collection') {
+    o.status = 'ready_for_collection';
+    const d = { id: randomUUID(), kind: 'delivery', orderId: o.id, orderNumber: o.number, storeId: s.id, storeName: s.name, status: 'ready_for_collection', readyAt: now(), courier: null, volumes: ctx.body.volumes ?? 1, note: ctx.body.note ?? null };
+    deliveries.set(d.id, d);
+    o.deliveryId = d.id;
+  } else return problem(res, 409, 'INVALID_TRANSITION', 'Transição inválida');
+  json(res, 200, orderDetail(o));
+});
+route('GET', '/v1/stores/:id/exchanges', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  if (!s) return;
+  const scope = ctx.query.get('scope');
+  const list = [...exchanges.values()].filter((x) => x.storeId === s.id && (scope === 'pending' ? x.status === 'requested' : x.status !== 'requested'));
+  json(res, 200, { data: list.map((x) => ({ id: x.id, number: x.number, orderId: randomUUID(), orderNumber: 'WB-4001', status: x.status, type: 'size_color', reasonCode: 'size', description: 'Ficou pequena.', method: 'pickup_at_home', resolution: 'replace', quantity: 1, item: { orderItemId: randomUUID(), name: 'Camiseta Básica', attributes: { Tam: 'M' } }, newVariant: { variantId: randomUUID(), attributes: { Tam: 'G' } }, fee: money(500), difference: money(0), totalDue: money(500), refund: money(0), answerDeadlineAt: new Date(Date.parse(x.createdAt) + 24 * 3_600_000).toISOString(), windowEndsAt: new Date(Date.parse(x.createdAt) + 7 * 86_400_000).toISOString(), createdAt: x.createdAt, updatedAt: x.createdAt })), nextCursor: null });
+});
+route('POST', '/v1/stores/:id/exchanges/:xid/accept', {}, (req, res, ctx) => {
+  const s = lojistaStore(res, ctx);
+  const x = s && exchanges.get(ctx.params[1]);
+  if (!x) return s && problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  x.status = 'approved';
+  json(res, 200, { id: x.id, number: x.number, status: x.status });
+});
+route('GET', '/v1/admin/logistics/deliveries', { perm: 'logistics:read' }, (req, res, ctx) => {
+  const done = ctx.query.get('tab') === 'done';
+  const finished = ['delivered', 'cancelled', 'not_delivered', 'returned_to_store'];
+  const list = [...deliveries.values()].filter((d) => finished.includes(d.status) === done);
+  json(res, 200, { data: list.map(deliveryView), nextCursor: null });
+});
+route('GET', '/v1/admin/logistics/deliveries/:id', { perm: 'logistics:read' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (!d) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  json(res, 200, { ...deliveryView(d), contact: { pickupAddress: 'Rua das Flores, 10 - Centro', storePhone: '1140028922', dropoffAddress: 'Rua Azul, 55 - Jardim Alvorada', customerFirstName: 'Carla', customerPhone: '11987654321' }, timeline: [] });
+});
+route('GET', '/v1/admin/logistics/couriers', { perm: 'logistics:read' }, (req, res, ctx) => {
+  const onlyActive = ctx.query.get('active') === 'true';
+  json(res, 200, { data: [...couriers.values()].filter((c) => !onlyActive || c.active).map(courierView), nextCursor: null });
+});
+route('POST', '/v1/admin/logistics/couriers', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const c = { id: randomUUID(), name: ctx.body.name, phone: ctx.body.phone, note: ctx.body.note ?? null, active: true };
+  couriers.set(c.id, c);
+  json(res, 201, courierView(c));
+});
+route('POST', '/v1/admin/logistics/deliveries/:id/assign', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (!d) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (d.status !== 'ready_for_collection') return problem(res, 409, 'DELIVERY_ALREADY_ASSIGNED', 'Já atribuída');
+  const c = couriers.get(ctx.body.courierId);
+  if (!c) return problem(res, 404, 'NOT_FOUND', 'Motoboy não encontrado');
+  d.status = 'awaiting_courier';
+  d.courier = { id: c.id, name: c.name };
+  const o = orders.get(d.orderId);
+  json(res, 200, { ...deliveryView(d), contact: {}, timeline: [], _order: o?.number });
+});
+route('GET', '/v1/admin/logistics/deliveries/:id/whatsapp', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (!d || !d.courier) return problem(res, 409, 'INVALID_DELIVERY_TRANSITION', 'Sem motoboy');
+  const message = `*Webag · Entrega #${d.orderNumber}*\nBuscar na loja: ${d.storeName}\nVolumes: ${d.volumes}`;
+  json(res, 200, { courierPhone: '5511912345678', message, link: `https://wa.me/5511912345678?text=${encodeURIComponent(message)}`, courierActiveDeliveries: 1 });
+});
+route('POST', '/v1/admin/logistics/deliveries/:id/whatsapp-sent', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (d) d.whatsappSentAt = now();
+  empty(res);
+});
+route('POST', '/v1/admin/logistics/deliveries/:id/status', { perm: 'logistics:write' }, (req, res, ctx) => {
+  const d = deliveries.get(ctx.params[0]);
+  if (!d) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  const next = { confirm: 'courier_en_route', picked_up: 'out_for_delivery', delivered: 'delivered' }[ctx.body.action];
+  if (!next) return problem(res, 409, 'INVALID_DELIVERY_TRANSITION', 'Transição inválida');
+  d.status = next;
+  json(res, 200, { ...deliveryView(d), contact: {}, timeline: [] });
+});
+
 route('GET', '/__test/state', { public: true }, (req, res) => json(res, 200, { superSecret: SUPER_SECRET, audit: audit.length }));
 
 // ---------------------------------------------------------------- servidor

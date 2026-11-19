@@ -5,6 +5,9 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { OrderAlertHost } from '@/features/orders/order-alert';
+import { SoundBanner } from '@/features/orders/orders-chrome';
+import { OrdersRuntimeProvider, useOrdersRuntime } from '@/features/orders/orders-runtime';
 import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
 import { ReauthProvider } from './reauth';
 import { Badge, Banner, Logo, SpeedLines, ToastProvider, cx, useToast } from '@/components/ui';
@@ -104,6 +107,7 @@ function Nav({ variant }: { variant: 'side' | 'bottom' }) {
   const pathname = usePathname();
   const { store } = useMerchant();
   const items = visibleLojistaNav(store.data);
+  const { pending } = useOrdersRuntime();
   return (
     <nav className={variant === 'side' ? s.nav : undefined} style={variant === 'bottom' ? { display: 'flex', width: '100%' } : undefined} aria-label={variant === 'side' ? 'Menu do painel' : 'Menu principal'}>
       {items.map((item) => {
@@ -113,6 +117,11 @@ function Nav({ variant }: { variant: 'side' | 'bottom' }) {
           <Link key={item.href} href={item.href as never} className={cx(variant === 'side' ? s.navItem : s.bottomItem, variant === 'side' ? 'wb-text-body-strong' : 'wb-text-caption-strong', active && (variant === 'side' ? s.navItemActive : s.bottomItemActive))} aria-current={active ? 'page' : undefined} data-testid={`lojista.nav.${item.section}${variant === 'bottom' ? '-bottom' : ''}`}>
             <Icon size={24} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
             {item.label}
+            {item.section === 'pedidos' && pending.length > 0 ? (
+              <span className={s.navCount} aria-label={`${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'}`} data-testid="lojista.nav.pedidos-count">
+                {pending.length}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -123,7 +132,7 @@ function Nav({ variant }: { variant: 'side' | 'bottom' }) {
 function Header({ onLogout }: { onLogout: () => void }) {
   const { store } = useMerchant();
   return (
-    <header className={s.header}>
+    <header className={s.header} data-chrome>
       <SpeedLines className={s.headerLines} />
       <Link href="/lojista" className={s.brand} aria-label="Webag, início do painel da loja">
         <span className={s.logoFull}>
@@ -155,11 +164,13 @@ function PanelFrame({ children }: { children: ReactNode }) {
         Pular para o conteúdo
       </a>
       <Header onLogout={() => void logout()} />
-      <div className={s.banners}>
+      <div className={s.banners} data-chrome>
         <GlobalBanner online={online} />
+        <SoundBanner />
       </div>
+      <OrderAlertHost />
       <div className={s.body}>
-        <aside className={s.sidebar}>
+        <aside className={s.sidebar} data-chrome>
           <Nav variant="side" />
           <div className={s.sideLines}>
             <SpeedLines />
@@ -169,7 +180,7 @@ function PanelFrame({ children }: { children: ReactNode }) {
           <div className={s.content}>{children}</div>
         </main>
       </div>
-      <div className={s.bottomBar}>
+      <div className={s.bottomBar} data-chrome>
         <Nav variant="bottom" />
       </div>
     </div>
@@ -211,7 +222,9 @@ function Providers({ user, children }: { user: Me; children: ReactNode }) {
 export function LojistaShell({ user, children }: { user: Me; children: ReactNode }) {
   return (
     <Providers user={user}>
-      <PanelFrame>{children}</PanelFrame>
+      <OrdersRuntimeProvider>
+        <PanelFrame>{children}</PanelFrame>
+      </OrdersRuntimeProvider>
     </Providers>
   );
 }

@@ -10,6 +10,7 @@ import { arrivedAt, elapsedTone, formatElapsed, nextStep } from '@/lib/orders/st
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { CompleteDialog } from './complete-dialog';
+import { ReadyDialog } from './ready-dialog';
 import { ModeBadge, OrderStatusBadge } from './status-badge';
 import s from './orders.module.css';
 import { RejectDialog } from './reject-form';
@@ -41,6 +42,7 @@ export function OrderCard({ order, now, online }: Props) {
   const actions = useOrderActions();
   const [rejecting, setRejecting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [readying, setReadying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busy = actions.isBusy(order.id);
   const isNew = order.status === 'received';
@@ -59,6 +61,10 @@ export function OrderCard({ order, now, online }: Props) {
     if (!step) return;
     if (step.action === 'complete') {
       setCompleting(true);
+      return;
+    }
+    if (step.to === 'ready_for_collection') {
+      setReadying(true);
       return;
     }
     setError(null);
@@ -130,6 +136,7 @@ export function OrderCard({ order, now, online }: Props) {
         ) : null}
       </article>
       {rejecting ? <RejectDialog order={order} onClose={() => setRejecting(false)} /> : null}
+      {readying ? <ReadyDialog order={order} onClose={() => setReadying(false)} /> : null}
       {completing ? <CompleteDialog order={order} onClose={() => setCompleting(false)} /> : null}
     </li>
   );
