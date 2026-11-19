@@ -1007,6 +1007,50 @@ export const DeliveryAllowedActionsItem = {
   cancel: 'cancel',
 } as const;
 
+/**
+ * `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'.
+ */
+export type CancelRequestStatus = typeof CancelRequestStatus[keyof typeof CancelRequestStatus];
+
+
+export const CancelRequestStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  refused: 'refused',
+  superseded: 'superseded',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CancelRequestDecidedBy = typeof CancelRequestDecidedBy[keyof typeof CancelRequestDecidedBy] | null;
+
+
+export const CancelRequestDecidedBy = {
+  store: 'store',
+  admin: 'admin',
+  system: 'system',
+} as const;
+
+/**
+ * BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.
+ */
+export interface CancelRequest {
+  id: string;
+  /** `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'. */
+  status: CancelRequestStatus;
+  /** @nullable */
+  reason: string | null;
+  requestedAt: string;
+  respondBy: string;
+  /** @nullable */
+  decidedAt: string | null;
+  /** @nullable */
+  decidedBy: CancelRequestDecidedBy;
+  /** @nullable */
+  decisionNote: string | null;
+}
+
 export interface Delivery {
   id: string;
   kind: DeliveryKind;
@@ -1073,6 +1117,13 @@ export interface Delivery {
   failReason?: string | null;
   /** @nullable */
   whatsappSentAt?: string | null;
+  /**
+     * W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.
+     * @nullable
+     */
+  lateAlertedAt?: string | null;
+  /** W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional. */
+  lateCancelRequest?: CancelRequest | null;
   /**
      * WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.
      * @nullable
@@ -3037,50 +3088,6 @@ export interface LogisticsPause {
   cityId: string | null;
   reason: string;
   pausedAt: string;
-}
-
-/**
- * `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'.
- */
-export type CancelRequestStatus = typeof CancelRequestStatus[keyof typeof CancelRequestStatus];
-
-
-export const CancelRequestStatus = {
-  pending: 'pending',
-  approved: 'approved',
-  refused: 'refused',
-  superseded: 'superseded',
-} as const;
-
-/**
- * @nullable
- */
-export type CancelRequestDecidedBy = typeof CancelRequestDecidedBy[keyof typeof CancelRequestDecidedBy] | null;
-
-
-export const CancelRequestDecidedBy = {
-  store: 'store',
-  admin: 'admin',
-  system: 'system',
-} as const;
-
-/**
- * BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.
- */
-export interface CancelRequest {
-  id: string;
-  /** `superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de 'aceito'. */
-  status: CancelRequestStatus;
-  /** @nullable */
-  reason: string | null;
-  requestedAt: string;
-  respondBy: string;
-  /** @nullable */
-  decidedAt: string | null;
-  /** @nullable */
-  decidedBy: CancelRequestDecidedBy;
-  /** @nullable */
-  decisionNote: string | null;
 }
 
 /**
@@ -6864,6 +6871,66 @@ export type GetLogisticsReportPayable200One = {
   runs: number;
 };
 
+export type GetLogisticsStatsParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+  /** Cidade de destino da corrida / da loja */
+  cityId?: string;
+  storeId?: string;
+};
+
+export type GetLogisticsStats200Period = {
+  from?: string;
+  to?: string;
+};
+
+export type GetLogisticsStats200OnTime = {
+  count: number;
+  of: number;
+  /** @nullable */
+  pct: number | null;
+};
+
+export type GetLogisticsStats200WithinCeiling = {
+  count: number;
+  of: number;
+  /** @nullable */
+  pct: number | null;
+  ceilingMinutes: number;
+};
+
+export type GetLogisticsStats200Compensations = {
+  granted: number;
+  redeemed: number;
+  cost: Money;
+  abdicatedFee: Money;
+};
+
+export type GetLogisticsStats200PrepByStoreItem = {
+  storeId: string;
+  /** @nullable */
+  storeName: string | null;
+  orders: number;
+  realMedianMinutes: number;
+  informedMinutes: number;
+  differenceMinutes: number;
+  warn: boolean;
+};
+
+export type GetLogisticsStats200 = {
+  period: GetLogisticsStats200Period;
+  delivered: number;
+  onTime: GetLogisticsStats200OnTime;
+  withinCeiling: GetLogisticsStats200WithinCeiling;
+  /** @nullable */
+  precisionMedianMinutes: number | null;
+  lateCancellations: number;
+  compensations: GetLogisticsStats200Compensations;
+  prepByStore: GetLogisticsStats200PrepByStoreItem[];
+};
+
 export type MarkDeliveryPayoutsBody = {
   /**
      * @minItems 1
@@ -7883,6 +7950,70 @@ export type GetStoreTopProducts200 = {
   data: GetStoreTopProducts200DataItem[];
 };
 
+export type PreviewStoreDeliveryEtaBody = {
+  /**
+     * @minimum -90
+     * @maximum 90
+     */
+  lat?: number;
+  /**
+     * @minimum -180
+     * @maximum 180
+     */
+  lng?: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  distanceKm?: number;
+  /**
+     * @minimum 5
+     * @maximum 120
+     */
+  prepMin?: number;
+  cityId?: string;
+  neighborhoodId?: string;
+};
+
+/**
+ * @nullable
+ */
+export type PreviewStoreDeliveryEta200Reason = typeof PreviewStoreDeliveryEta200Reason[keyof typeof PreviewStoreDeliveryEta200Reason] | null;
+
+
+export const PreviewStoreDeliveryEta200Reason = {
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  NO_FEE_TABLE: 'NO_FEE_TABLE',
+} as const;
+
+export type PreviewStoreDeliveryEta200Eta = {
+  estimateMin: number;
+  fromMin: number;
+  toMin: number;
+  prepMin: number;
+  dispatchMin: number;
+  travelMin: number;
+  /** Folga de + e - minutos da faixa */
+  bandMin: number;
+  withinCeiling: boolean;
+} | null;
+
+export type PreviewStoreDeliveryEta200 = {
+  available: boolean;
+  /** @nullable */
+  reason: PreviewStoreDeliveryEta200Reason;
+  /** @nullable */
+  distanceM: number | null;
+  eta: PreviewStoreDeliveryEta200Eta;
+  etaRange: EtaRange | null;
+  /** Taxa de entrega da faixa de distância (sem frete grátis) */
+  fee: Money | null;
+  prepMin: number;
+  reachKm: number;
+  maxPrepMin: number;
+  radiusKm: number;
+};
+
 export type GetStoreReviewsSummary200Distribution = {
   '1': number;
   '2': number;
@@ -7897,6 +8028,30 @@ export type GetStoreReviewsSummary200 = {
   total: number;
   distribution: GetStoreReviewsSummary200Distribution;
   withoutReply: number;
+};
+
+export type GetAdminPendingCounts200Stores = {
+  inReview: number;
+} | null;
+
+export type GetAdminPendingCounts200Disputes = {
+  inMediation: number;
+} | null;
+
+export type GetAdminPendingCounts200Refunds = {
+  needingAction: number;
+} | null;
+
+export type GetAdminPendingCounts200DataRequests = {
+  open: number;
+  dueSoon: number;
+} | null;
+
+export type GetAdminPendingCounts200 = {
+  stores: GetAdminPendingCounts200Stores;
+  disputes: GetAdminPendingCounts200Disputes;
+  refunds: GetAdminPendingCounts200Refunds;
+  dataRequests: GetAdminPendingCounts200DataRequests;
 };
 
 export type ListAdminExchangesParams = {
@@ -13010,6 +13165,67 @@ export const getGetLogisticsReportPayableUrl = (params: GetLogisticsReportPayabl
 export const getLogisticsReportPayable = async (params: GetLogisticsReportPayableParams, options?: Parameters<typeof apiFetch>[1]): Promise<getLogisticsReportPayableResponse> => {
 
   return apiFetch<getLogisticsReportPayableResponse>(getGetLogisticsReportPayableUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getLogisticsStatsResponse200 = {
+  data: GetLogisticsStats200
+  status: 200
+}
+
+export type getLogisticsStatsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getLogisticsStatsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getLogisticsStatsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getLogisticsStatsResponseSuccess = (getLogisticsStatsResponse200) & {
+  headers: Headers;
+};
+export type getLogisticsStatsResponseError = (getLogisticsStatsResponse400 | getLogisticsStatsResponse401 | getLogisticsStatsResponse403) & {
+  headers: Headers;
+};
+
+export type getLogisticsStatsResponse = (getLogisticsStatsResponseSuccess | getLogisticsStatsResponseError)
+
+export const getGetLogisticsStatsUrl = (params: GetLogisticsStatsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/logistics/stats?${stringifiedParams}` : `/v1/admin/logistics/stats`
+}
+
+/**
+ * Permissão `logistics:report` (super admin, operação e financeiro). Alimenta o 4º número da Logística ("No prazo hoje": use `from` = `to` = hoje) e o bloco "Prazo no piloto". Período por dia civil de Brasília da hora REAL da entrega (`deliveredAt`, WB-262). `onTime`: entregue até o fim da faixa reancorada no pagamento (`of` = entregas com faixa; `pct` nulo sem entregas). `withinCeiling`: até `entrega_max_min` (120) depois do pagamento, a meta de 95% em 2 h. `precisionMedianMinutes`: mediana de |entrega real - meio da faixa| `[HIPÓTESE: o PO não definiu a conta]`. `lateCancellations`: pedidos cancelados pelo cliente com o motivo 'Atraso na entrega'. `compensations`: cupons concedidos por atraso (`granted`), os já resgatados e o custo real deles; `abdicatedFee`: o frete que os cupons de frete grátis de compensação já zeraram. `prepByStore`: preparo real (ACEITO até PRONTO) x informado por loja, mediana, só lojas com 3 ou mais pedidos; `warn` quando o real passa do informado em 10 min ou mais (WB-258 C6). **Não traz 'atrasos por causa'**: a causa é marcada pela operação (WB-255 C5) e esse registro ainda não existe na API.
+ * @summary Indicadores do piloto da logística (W.4, WB-258 C5)
+ */
+export const getLogisticsStats = async (params: GetLogisticsStatsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getLogisticsStatsResponse> => {
+
+  return apiFetch<getLogisticsStatsResponse>(getGetLogisticsStatsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -24096,6 +24312,71 @@ export const getStoreTopProducts = async (storeId: string,
 
 
 
+export type previewStoreDeliveryEtaResponse200 = {
+  data: PreviewStoreDeliveryEta200
+  status: 200
+}
+
+export type previewStoreDeliveryEtaResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type previewStoreDeliveryEtaResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type previewStoreDeliveryEtaResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type previewStoreDeliveryEtaResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type previewStoreDeliveryEtaResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type previewStoreDeliveryEtaResponseSuccess = (previewStoreDeliveryEtaResponse200) & {
+  headers: Headers;
+};
+export type previewStoreDeliveryEtaResponseError = (previewStoreDeliveryEtaResponse400 | previewStoreDeliveryEtaResponse401 | previewStoreDeliveryEtaResponse403 | previewStoreDeliveryEtaResponse404 | previewStoreDeliveryEtaResponse429) & {
+  headers: Headers;
+};
+
+export type previewStoreDeliveryEtaResponse = (previewStoreDeliveryEtaResponseSuccess | previewStoreDeliveryEtaResponseError)
+
+export const getPreviewStoreDeliveryEtaUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/delivery-preview`
+}
+
+/**
+ * Permissão da loja `settings` (só o dono; outra loja: 404). Para a 'Prévia para o cliente' e o aviso de alcance em Minha loja > Entrega e retirada: é a MESMA conta do `quote` do checkout (`computeEta` com os parâmetros `entrega_*`, o teto no FIM da faixa e `raio_max_km`), só com o preparo do formulário (`prepMin`, ainda não salvo; sem ele vale o salvo) e sem o que depende do carrinho. O web não calcula isto no navegador. Destino: ponto (`lat` e `lng`, distância medida a partir da loja) OU `distanceKm`, exatamente um dos dois (400). `cityId`/`neighborhoodId` escolhem a tabela de taxa (senão a padrão). `reachKm`: até onde a loja alcança com este preparo (menor entre o raio máximo e o limite do teto de entrega); `maxPrepMin`: o maior preparo que ainda deixa a loja entregar em algum lugar. Sem horário da logística, estoque ou frete grátis. Não grava nada. (`previewStoreDelivery`, em `/delivery/preview`, continua só com a taxa para um CEP.)
+ * @summary Prévia de entrega do lojista com a mesma conta do checkout (W.5, WB-257)
+ */
+export const previewStoreDeliveryEta = async (storeId: string,
+    previewStoreDeliveryEtaBody: PreviewStoreDeliveryEtaBody, options?: Parameters<typeof apiFetch>[1]): Promise<previewStoreDeliveryEtaResponse> => {
+
+  return apiFetch<previewStoreDeliveryEtaResponse>(getPreviewStoreDeliveryEtaUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(previewStoreDeliveryEtaBody)
+  }
+);}
+
+
+
 export type getStoreReviewsSummaryResponse200 = {
   data: GetStoreReviewsSummary200
   status: 200
@@ -24140,6 +24421,55 @@ export const getGetStoreReviewsSummaryUrl = (storeId: string,) => {
 export const getStoreReviewsSummary = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreReviewsSummaryResponse> => {
 
   return apiFetch<getStoreReviewsSummaryResponse>(getGetStoreReviewsSummaryUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminPendingCountsResponse200 = {
+  data: GetAdminPendingCounts200
+  status: 200
+}
+
+export type getAdminPendingCountsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminPendingCountsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminPendingCountsResponseSuccess = (getAdminPendingCountsResponse200) & {
+  headers: Headers;
+};
+export type getAdminPendingCountsResponseError = (getAdminPendingCountsResponse401 | getAdminPendingCountsResponse403) & {
+  headers: Headers;
+};
+
+export type getAdminPendingCountsResponse = (getAdminPendingCountsResponseSuccess | getAdminPendingCountsResponseError)
+
+export const getGetAdminPendingCountsUrl = () => {
+
+
+
+
+  return `/v1/admin/overview/pending`
+}
+
+/**
+ * Qualquer perfil de admin lê, mas cada área só vem para quem tem a permissão dela; as outras voltam `null` (o painel não mostra número que a pessoa não pode abrir). `stores.inReview`: lojas em análise (`stores:read`). `disputes.inMediation`: trocas em mediação (`exchanges:mediate`: operação e super admin). `refunds.needingAction`: estornos recusados pelo provedor que esperam a operação, os mesmos da fila de estornos sem os já cobertos (`payments:refunds:read`: financeiro e super admin). `dataRequests`: pedidos de titular (LGPD) abertos e quantos vencem em até 5 dias ou já venceram (`privacy:manage`: super admin). Só contagens, sem dado pessoal.
+ * @summary Pendências por área para o Início e a barra do admin (W.7)
+ */
+export const getAdminPendingCounts = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getAdminPendingCountsResponse> => {
+
+  return apiFetch<getAdminPendingCountsResponse>(getGetAdminPendingCountsUrl(),
   {
     ...options,
     method: 'GET'

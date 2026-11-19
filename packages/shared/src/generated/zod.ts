@@ -1894,6 +1894,17 @@ export const ListDeliveriesResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -1956,6 +1967,17 @@ export const GetDeliveryResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -2095,6 +2117,17 @@ export const AssignDeliveryBatchResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -2186,6 +2219,17 @@ export const AssignDeliveryResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -2315,6 +2359,17 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -2407,6 +2462,17 @@ export const SetDeliveryCostResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "lateAlertedAt": zod.iso.datetime({"offset":true}).nullish().describe('W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.'),
+  "lateCancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused', 'superseded']).describe('`superseded` (SEC-175, só no cancelamento por atraso): o pedido ou a corrida mudou de estado (entregue, não entregue, cancelado) antes da resposta; nada foi aceito nem avisado. O app deve tratar como encerrado, sem mensagem de \'aceito\'.'),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.'),
   "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
@@ -2519,6 +2585,60 @@ export const GetLogisticsReportPayableResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
   "runs": zod.int()
+})
+
+
+/**
+ * Permissão `logistics:report` (super admin, operação e financeiro). Alimenta o 4º número da Logística ("No prazo hoje": use `from` = `to` = hoje) e o bloco "Prazo no piloto". Período por dia civil de Brasília da hora REAL da entrega (`deliveredAt`, WB-262). `onTime`: entregue até o fim da faixa reancorada no pagamento (`of` = entregas com faixa; `pct` nulo sem entregas). `withinCeiling`: até `entrega_max_min` (120) depois do pagamento, a meta de 95% em 2 h. `precisionMedianMinutes`: mediana de |entrega real - meio da faixa| `[HIPÓTESE: o PO não definiu a conta]`. `lateCancellations`: pedidos cancelados pelo cliente com o motivo 'Atraso na entrega'. `compensations`: cupons concedidos por atraso (`granted`), os já resgatados e o custo real deles; `abdicatedFee`: o frete que os cupons de frete grátis de compensação já zeraram. `prepByStore`: preparo real (ACEITO até PRONTO) x informado por loja, mediana, só lojas com 3 ou mais pedidos; `warn` quando o real passa do informado em 10 min ou mais (WB-258 C6). **Não traz 'atrasos por causa'**: a causa é marcada pela operação (WB-255 C5) e esse registro ainda não existe na API.
+ * @summary Indicadores do piloto da logística (W.4, WB-258 C5)
+ */
+export const GetLogisticsStatsQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.'),
+  "cityId": zod.uuid().optional().describe('Cidade de destino da corrida / da loja'),
+  "storeId": zod.uuid().optional()
+})
+
+export const GetLogisticsStatsResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "delivered": zod.int(),
+  "onTime": zod.object({
+  "count": zod.int(),
+  "of": zod.int(),
+  "pct": zod.number().nullable()
+}),
+  "withinCeiling": zod.object({
+  "count": zod.int(),
+  "of": zod.int(),
+  "pct": zod.number().nullable(),
+  "ceilingMinutes": zod.int()
+}),
+  "precisionMedianMinutes": zod.number().nullable(),
+  "lateCancellations": zod.int(),
+  "compensations": zod.object({
+  "granted": zod.int(),
+  "redeemed": zod.int(),
+  "cost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "abdicatedFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}),
+  "prepByStore": zod.array(zod.object({
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullable(),
+  "orders": zod.int(),
+  "realMedianMinutes": zod.number(),
+  "informedMinutes": zod.number(),
+  "differenceMinutes": zod.number(),
+  "warn": zod.boolean()
+}))
 })
 
 
@@ -12641,6 +12761,68 @@ export const GetStoreTopProductsResponse = zod.object({
 
 
 /**
+ * Permissão da loja `settings` (só o dono; outra loja: 404). Para a 'Prévia para o cliente' e o aviso de alcance em Minha loja > Entrega e retirada: é a MESMA conta do `quote` do checkout (`computeEta` com os parâmetros `entrega_*`, o teto no FIM da faixa e `raio_max_km`), só com o preparo do formulário (`prepMin`, ainda não salvo; sem ele vale o salvo) e sem o que depende do carrinho. O web não calcula isto no navegador. Destino: ponto (`lat` e `lng`, distância medida a partir da loja) OU `distanceKm`, exatamente um dos dois (400). `cityId`/`neighborhoodId` escolhem a tabela de taxa (senão a padrão). `reachKm`: até onde a loja alcança com este preparo (menor entre o raio máximo e o limite do teto de entrega); `maxPrepMin`: o maior preparo que ainda deixa a loja entregar em algum lugar. Sem horário da logística, estoque ou frete grátis. Não grava nada. (`previewStoreDelivery`, em `/delivery/preview`, continua só com a taxa para um CEP.)
+ * @summary Prévia de entrega do lojista com a mesma conta do checkout (W.5, WB-257)
+ */
+export const PreviewStoreDeliveryEtaParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const previewStoreDeliveryEtaBodyLatMin = -90;
+export const previewStoreDeliveryEtaBodyLatMax = 90;
+
+export const previewStoreDeliveryEtaBodyLngMin = -180;
+export const previewStoreDeliveryEtaBodyLngMax = 180;
+
+export const previewStoreDeliveryEtaBodyDistanceKmMin = 0;
+export const previewStoreDeliveryEtaBodyDistanceKmMax = 100;
+
+export const previewStoreDeliveryEtaBodyPrepMinMin = 5;
+export const previewStoreDeliveryEtaBodyPrepMinMax = 120;
+
+
+
+export const PreviewStoreDeliveryEtaBody = zod.object({
+  "lat": zod.number().min(previewStoreDeliveryEtaBodyLatMin).max(previewStoreDeliveryEtaBodyLatMax).optional(),
+  "lng": zod.number().min(previewStoreDeliveryEtaBodyLngMin).max(previewStoreDeliveryEtaBodyLngMax).optional(),
+  "distanceKm": zod.number().min(previewStoreDeliveryEtaBodyDistanceKmMin).max(previewStoreDeliveryEtaBodyDistanceKmMax).optional(),
+  "prepMin": zod.int().min(previewStoreDeliveryEtaBodyPrepMinMin).max(previewStoreDeliveryEtaBodyPrepMinMax).optional(),
+  "cityId": zod.uuid().optional(),
+  "neighborhoodId": zod.uuid().optional()
+})
+
+export const PreviewStoreDeliveryEtaResponse = zod.object({
+  "available": zod.boolean(),
+  "reason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('NO_FEE_TABLE'),zod.literal(null)]).nullable(),
+  "distanceM": zod.int().nullable(),
+  "eta": zod.union([zod.null(),zod.object({
+  "estimateMin": zod.int(),
+  "fromMin": zod.int(),
+  "toMin": zod.int(),
+  "prepMin": zod.int(),
+  "dispatchMin": zod.int(),
+  "travelMin": zod.int(),
+  "bandMin": zod.int().describe('Folga de + e - minutos da faixa'),
+  "withinCeiling": zod.boolean()
+})]),
+  "etaRange": zod.union([zod.object({
+  "minMinutes": zod.int(),
+  "maxMinutes": zod.int(),
+  "fromAt": zod.iso.datetime({"offset":true}),
+  "toAt": zod.iso.datetime({"offset":true})
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]),
+  "fee": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Taxa de entrega da faixa de distância (sem frete grátis)'),
+  "prepMin": zod.int(),
+  "reachKm": zod.number(),
+  "maxPrepMin": zod.int(),
+  "radiusKm": zod.number()
+})
+
+
+/**
  * Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja.
  * @summary Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
  */
@@ -12659,6 +12841,27 @@ export const GetStoreReviewsSummaryResponse = zod.object({
   "5": zod.int()
 }),
   "withoutReply": zod.int()
+})
+
+
+/**
+ * Qualquer perfil de admin lê, mas cada área só vem para quem tem a permissão dela; as outras voltam `null` (o painel não mostra número que a pessoa não pode abrir). `stores.inReview`: lojas em análise (`stores:read`). `disputes.inMediation`: trocas em mediação (`exchanges:mediate`: operação e super admin). `refunds.needingAction`: estornos recusados pelo provedor que esperam a operação, os mesmos da fila de estornos sem os já cobertos (`payments:refunds:read`: financeiro e super admin). `dataRequests`: pedidos de titular (LGPD) abertos e quantos vencem em até 5 dias ou já venceram (`privacy:manage`: super admin). Só contagens, sem dado pessoal.
+ * @summary Pendências por área para o Início e a barra do admin (W.7)
+ */
+export const GetAdminPendingCountsResponse = zod.object({
+  "stores": zod.union([zod.null(),zod.object({
+  "inReview": zod.int()
+})]),
+  "disputes": zod.union([zod.null(),zod.object({
+  "inMediation": zod.int()
+})]),
+  "refunds": zod.union([zod.null(),zod.object({
+  "needingAction": zod.int()
+})]),
+  "dataRequests": zod.union([zod.null(),zod.object({
+  "open": zod.int(),
+  "dueSoon": zod.int()
+})])
 })
 
 

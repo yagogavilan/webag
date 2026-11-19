@@ -7264,9 +7264,9 @@ paths:
   /v1/stores/{storeId}/delivery-preview:
     post:
       tags: [stores]
-      operationId: previewStoreDelivery
+      operationId: previewStoreDeliveryEta
       summary: Prévia de entrega do lojista com a mesma conta do checkout (W.5, WB-257)
-      description: "Permissão da loja `settings` (só o dono; outra loja: 404). Para a 'Prévia para o cliente' e o aviso de alcance em Minha loja > Entrega e retirada: é a MESMA conta do `quote` do checkout (`computeEta` com os parâmetros `entrega_*`, o teto no FIM da faixa e `raio_max_km`), só com o preparo do formulário (`prepMin`, ainda não salvo; sem ele vale o salvo) e sem o que depende do carrinho. O web não calcula isto no navegador. Destino: ponto (`lat` e `lng`, distância medida a partir da loja) OU `distanceKm`, exatamente um dos dois (400). `cityId`/`neighborhoodId` escolhem a tabela de taxa (senão a padrão). `reachKm`: até onde a loja alcança com este preparo (menor entre o raio máximo e o limite do teto de entrega); `maxPrepMin`: o maior preparo que ainda deixa a loja entregar em algum lugar. Sem horário da logística, estoque ou frete grátis. Não grava nada."
+      description: "Permissão da loja `settings` (só o dono; outra loja: 404). Para a 'Prévia para o cliente' e o aviso de alcance em Minha loja > Entrega e retirada: é a MESMA conta do `quote` do checkout (`computeEta` com os parâmetros `entrega_*`, o teto no FIM da faixa e `raio_max_km`), só com o preparo do formulário (`prepMin`, ainda não salvo; sem ele vale o salvo) e sem o que depende do carrinho. O web não calcula isto no navegador. Destino: ponto (`lat` e `lng`, distância medida a partir da loja) OU `distanceKm`, exatamente um dos dois (400). `cityId`/`neighborhoodId` escolhem a tabela de taxa (senão a padrão). `reachKm`: até onde a loja alcança com este preparo (menor entre o raio máximo e o limite do teto de entrega); `maxPrepMin`: o maior preparo que ainda deixa a loja entregar em algum lugar. Sem horário da logística, estoque ou frete grátis. Não grava nada. (`previewStoreDelivery`, em `/delivery/preview`, continua só com a taxa para um CEP.)"
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
