@@ -616,18 +616,16 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!order) return;
     const who: OrderActor = actor.role === 'system' ? 'system' : 'admin';
     const events: OrderEvent[] = [];
-    let refund: PendingRefund | null = null;
+    const refund: PendingRefund | null = null;
     if (to === 'out_for_delivery' && order.status === 'ready_for_collection') {
       const event = await this.advance(tx, order, 'out_for_delivery', who, actor.id, 'Motoboy coletou o pedido');
       if (event) events.push(event);
     } else if (to === 'delivered' && order.status === 'out_for_delivery') {
       const event = await this.advance(tx, order, 'delivered', who, actor.id, 'Entrega concluída');
       if (event) events.push(event);
-    } else if (to === 'returned_to_store' && PAID_STATUSES.includes(order.status) && order.status !== 'delivered') {
-      const closed = await this.closeOrder(tx, order, 'cancelled', who, 'Entrega não realizada: pedido devolvido à loja', actor.id);
-      events.push(closed.event);
-      refund = closed.refund;
     }
+    // SEC-143: "devolvida à loja" é declarada pela operação; cancelar e estornar só depois que a loja confirma o recebimento
+    // (`confirmStoreReturnInTx`). Até lá o pedido segue ativo e o admin é alertado em `afterDeliveryChange`.
     this.pendingDeliveryEvents.set(delivery.id, { events, refund });
     void reason;
   }
@@ -639,9 +637,34 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (pending?.refund) await this.finishRefund(pending.refund);
     const [order] = await this.db.select().from(orders).where(eq(orders.id, delivery.orderId));
     if (!order) return;
+    if (to === 'returned_to_store') await this.payments.raiseAlert(null, 'return_awaiting_store', { orderId: order.id, orderNumber: order.number, storeId: order.storeId, deliveryId: delivery.id }).catch(() => undefined);
     for (const event of pending?.events ?? []) await this.bus.emit(event);
     // Aviso ao cliente a CADA mudança da corrida (L.3): o pedido pode manter o mesmo estado (ex.: motoboy a caminho).
     await this.bus.emit({ ...this.eventOf(order, order.status, actor.role === 'system' ? 'system' : 'admin', reason, new Date()), from: order.status, delivery: { id: delivery.id, status: to } });
+  }
+
+  /**
+   * SEC-143: a loja confirmou que recebeu a mercadoria devolvida (ou o admin registra por ela, com motivo): só agora o pedido é
+   * cancelado e estornado por inteiro, com a taxa de entrega (DEC-039e). Na transação de quem chama; o estorno sai depois do commit.
+   */
+  async confirmStoreReturnInTx(tx: Tx, order: OrderRow, via: 'store' | 'admin', ctx: RequestContext, reason: string | null): Promise<{ event: OrderEvent; refund: PendingRefund | null }> {
+    await this.deliveries.confirmStoreReturnInTx(tx, order.id, via, ctx, reason);
+    if (!PAID_STATUSES.includes(order.status) || order.status === 'delivered') throw errors.conflict('RETURN_NOT_PENDING', 'Não há devolução aguardando confirmação', 'O pedido já foi encerrado.');
+    return this.closeOrder(tx, order, 'cancelled', 'admin', 'Entrega não realizada: pedido devolvido à loja', ctx.principal?.userId ?? null);
+  }
+
+  /** O admin registra a confirmação da loja (com motivo e auditoria), quando a loja não confirma no painel. */
+  async adminConfirmStoreReturn(orderId: string, reason: string, ctx: RequestContext): Promise<void> {
+    let done: { event: OrderEvent; refund: PendingRefund | null } | null = null;
+    await this.db.transaction(async (tx) => {
+      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+      if (!order) throw errors.notFound('Pedido não encontrado.');
+      done = await this.confirmStoreReturnInTx(tx, order, 'admin', ctx, reason);
+    });
+    const result = done as { event: OrderEvent; refund: PendingRefund | null } | null;
+    if (!result) return;
+    await this.finishRefund(result.refund);
+    await this.bus.emit(result.event);
   }
 
   /** Alerta para o painel do admin/financeiro (ex.: tentativa de adivinhar o código de retirada). */

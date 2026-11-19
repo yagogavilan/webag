@@ -120,7 +120,7 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     expect(blocked.body.code).toBe('DELIVERY_ALREADY_ASSIGNED');
   });
 
-  it('não entregue e devolvida à loja: o pedido é cancelado com estorno total (inclui a taxa de entrega) e o cliente é avisado', async () => {
+  it('não entregue e devolvida à loja: o pedido só é cancelado, com estorno total (inclui a taxa de entrega), depois que a loja confirma o recebimento (SEC-143)', async () => {
     const r = await readyOrder();
     const m = await courier();
     await ctx.http.post(`${base}/deliveries/${r.delivery.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: m.id }).expect(200);
@@ -130,6 +130,9 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     const mid = await customerView(r);
     expect(mid).toMatchObject({ status: 'out_for_delivery', tracking: { status: 'not_delivered', failReason: 'customer_absent' } });
     await act(r.delivery.id, { action: 'return_confirmed' }).expect(200);
+    expect(await customerView(r)).toMatchObject({ status: 'out_for_delivery' }); // a loja ainda não confirmou
+    expect(await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, r.attempt.id))).toHaveLength(0);
+    await ctx.http.post(`${r.url}/return-received`).set(store(r.shop)).send({}).expect(200);
     const view = await customerView(r);
     expect(view).toMatchObject({ status: 'cancelled', cancellation: { reason: 'Entrega não realizada: pedido devolvido à loja' } });
     const refunds = await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, r.attempt.id));

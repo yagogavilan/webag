@@ -168,7 +168,8 @@ describe('Logística da Webag: motoboys e corridas (WB-230 a WB-239)', () => {
       const m = await courier();
       await assign(ops, d.id, m.id).expect(200);
       const code = (await dbRow(d.id)).deliveryCode!;
-      const wa = (await ctx.http.get(`${base}/deliveries/${d.id}/whatsapp`).set(H(finance)).expect(200)).body;
+      await ctx.http.get(`${base}/deliveries/${d.id}/whatsapp`).set(H(finance)).expect(403); // SEC-144: a mensagem leva o contato do cliente
+      const wa = (await ctx.http.get(`${base}/deliveries/${d.id}/whatsapp`).set(H(ops)).expect(200)).body;
       expect(wa.courierPhone).toBe(m.phone);
       expect(wa.message).toContain('COLETA: Loja do Zé, Rua A, 10, Centro, Francisco Morato');
       expect(wa.message).toContain('ENTREGA: Rua B, 20, apto 3, Jardim X, Francisco Morato. Cliente: Maria, 11 98888-7777');
@@ -287,10 +288,10 @@ describe('Logística da Webag: motoboys e corridas (WB-230 a WB-239)', () => {
       await ctx.http.put(`${base}/deliveries/${d2.id}/cost`).set(H(ops)).send({ costCents: 800 }).expect(200);
       await ctx.http.put(`${base}/deliveries/${d3.id}/cost`).set(H(ops)).send({ costCents: 700 }).expect(200);
 
-      expect((await ctx.http.post(`${base}/deliveries/payouts`).set(H(ops)).send({ deliveryIds: [d1.id, d3.id], paidOn: '2026-11-20' })).body.code).toBe('PAYOUT_MIXED_COURIERS');
-      const paid = await ctx.http.post(`${base}/deliveries/payouts`).set(H(ops)).send({ deliveryIds: [d1.id, d2.id], paidOn: '2026-11-20' }).expect(200);
+      expect((await ctx.http.post(`${base}/deliveries/payouts`).set(H(finance)).send({ deliveryIds: [d1.id, d3.id], paidOn: '2026-11-20' })).body.code).toBe('PAYOUT_MIXED_COURIERS');
+      const paid = await ctx.http.post(`${base}/deliveries/payouts`).set(H(finance)).send({ deliveryIds: [d1.id, d2.id], paidOn: '2026-11-20' }).expect(200);
       expect(paid.body).toEqual({ count: 2, total: { amount: 1_800, currency: 'BRL' } });
-      expect((await ctx.http.post(`${base}/deliveries/payouts`).set(H(ops)).send({ deliveryIds: [d1.id], paidOn: '2026-11-21' })).body.code).toBe('COST_ALREADY_PAID');
+      expect((await ctx.http.post(`${base}/deliveries/payouts`).set(H(finance)).send({ deliveryIds: [d1.id], paidOn: '2026-11-21' })).body.code).toBe('COST_ALREADY_PAID');
       expect((await ctx.http.put(`${base}/deliveries/${d1.id}/cost`).set(H(ops)).send({ costCents: 1, reason: 'depois de pago' })).body.code).toBe('COST_ALREADY_PAID');
     });
   });

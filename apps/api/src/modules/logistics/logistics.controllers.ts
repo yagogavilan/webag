@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminOnly, Ctx, type RequestContext } from '../../platform/auth/decorators.js';
+import { adminHasPermission } from '../../platform/auth/permissions.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -54,6 +55,8 @@ function presentDelivery(d: Delivery & { waitingMinutes?: number | null; sla?: s
     fee: money(d.feeCents),
     expectedCost: money(d.expectedCostCents),
     cost: d.costCents === null ? null : money(d.costCents),
+    /** SEC-145: quem lançou o custo (o relatório "a pagar" mostra, e quem lançou não o marca como pago). */
+    costRegisteredBy: d.costRegisteredBy ?? null,
     costPaidAt: d.costPaidAt?.toISOString() ?? null,
     attempts: d.attempts,
     failReason: d.failReason,
@@ -110,7 +113,8 @@ const actionBody = z.strictObject({
   overrideReason: z.string().trim().min(10).max(200).optional(),
 });
 const costBody = z.strictObject({ costCents: z.number().int().min(0).max(100_000), reason: z.string().trim().min(3).max(200).optional() });
-const payoutBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(1).max(100), paidOn: z.iso.date() });
+const payoutBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(1).max(100), paidOn: z.iso.date(), overrideReason: z.string().trim().min(10).max(200).optional() });
+const revealBody = z.strictObject({ reason: z.string().trim().min(10).max(200) });
 
 /** Motoboys (WB-231): operação e super admin cadastram; financeiro e suporte leem. */
 @Controller('v1/admin/logistics/couriers')
@@ -160,11 +164,25 @@ export class DeliveriesAdminController {
     return { data: page.data.map((d) => presentDelivery(d, false, d.courierId ? (names.get(d.courierId) ?? null) : null)), nextCursor: page.nextCursor };
   }
 
+  /** SEC-144: o contato do cliente só vem no detalhe para quem despacha (`logistics:write`); os demais perfis usam "Revelar" (com motivo e auditoria). */
   @AdminOnly('logistics:read')
   @Get(':deliveryId')
-  async get(@Param('deliveryId') deliveryId: string) {
+  async get(@Param('deliveryId') deliveryId: string, @Ctx() ctx: RequestContext) {
     const delivery = await this.deliveries.get(uuid(deliveryId));
-    return { ...presentDelivery(delivery, true, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
+    const profile = ctx.principal?.adminProfile;
+    const showContact = !!profile && adminHasPermission(profile, 'logistics:write');
+    return { ...presentDelivery(delivery, showContact, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
+  }
+
+  /** "Revelar" o contato do cliente: motivo obrigatório, leitura auditada, 409 depois da retenção (SEC-144). */
+  @AdminOnly('logistics:contact')
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-delivery-contact-reveal', limit: 60, windowSeconds: 3600 })
+  @Post(':deliveryId/contact-reveal')
+  async revealContact(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(revealBody)) body: z.infer<typeof revealBody>, @Ctx() ctx: RequestContext) {
+    const delivery = await this.deliveries.revealContact(uuid(deliveryId), body.reason, ctx);
+    const contact = (delivery.contact ?? {}) as Partial<DeliveryMessageData>;
+    return { contact: { pickupAddress: contact.pickupAddress ?? null, storePhone: contact.storePhone ?? null, dropoffAddress: contact.dropoffAddress ?? null, customerFirstName: contact.customerFirstName ?? null, customerPhone: contact.customerPhone ?? null } };
   }
 
   /** Atribuir: PRONTA -> AGUARDANDO. 409 `DELIVERY_ALREADY_ASSIGNED` se outra pessoa chegou primeiro. */
@@ -176,7 +194,8 @@ export class DeliveriesAdminController {
     return presentDelivery(delivery, true, await this.courierName(delivery.courierId));
   }
 
-  @AdminOnly('logistics:read')
+  /** SEC-144: a mensagem leva telefone e endereço do cliente; só quem despacha. */
+  @AdminOnly('logistics:write')
   @Get(':deliveryId/whatsapp')
   async whatsapp(@Param('deliveryId') deliveryId: string) {
     return this.deliveries.whatsapp(uuid(deliveryId));
@@ -207,11 +226,12 @@ export class DeliveriesAdminController {
     return presentDelivery(delivery, false, await this.courierName(delivery.courierId));
   }
 
-  @AdminOnly('logistics:write')
+  /** SEC-145: financeiro e super admin; quem lançou o custo não marca como pago (403 `SEGREGATION_OF_DUTIES`; super admin com `overrideReason`). */
+  @AdminOnly('logistics:payout')
   @HttpCode(200)
   @Post('payouts')
   async payouts(@Body(new ZodPipe(payoutBody)) body: z.infer<typeof payoutBody>, @Ctx() ctx: RequestContext) {
-    const result = await this.deliveries.markPaid(body.deliveryIds, new Date(`${body.paidOn}T12:00:00-03:00`), ctx);
+    const result = await this.deliveries.markPaid(body.deliveryIds, new Date(`${body.paidOn}T12:00:00-03:00`), ctx, body.overrideReason);
     return { count: result.count, total: money(result.totalCents) };
   }
 }

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { CurrentPrincipal, StorePermission, type Principal } from '../../platform/auth/decorators.js';
+import { CurrentPrincipal, Ctx, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { memberHasStorePermission } from '../../platform/auth/permissions.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
@@ -102,6 +102,17 @@ export class StoreOrdersController {
   async status(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Body(new ZodPipe(statusSchema)) body: z.infer<typeof statusSchema>) {
     const id = uuidParam(storeId);
     await this.orders.advance(id, orderIdParam(orderId), p.userId, body.status, body.pickupCode, { volumes: body.volumes, note: body.note });
+    return this.orders.get(id, orderId, await this.showValues(p.userId, id));
+  }
+
+  /** SEC-143: a loja confirma que recebeu de volta a mercadoria da entrega não realizada; só então o pedido é cancelado e estornado. */
+  @StorePermission('orders')
+  @HttpCode(200)
+  @RateLimit(WRITE)
+  @Post(':orderId/return-received')
+  async returnReceived(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Ctx() ctx: RequestContext) {
+    const id = uuidParam(storeId);
+    await this.orders.confirmReturnReceived(id, orderIdParam(orderId), p.userId, ctx);
     return this.orders.get(id, orderId, await this.showValues(p.userId, id));
   }
 

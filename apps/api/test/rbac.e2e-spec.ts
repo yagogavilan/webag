@@ -58,6 +58,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'delivery-fees:write': null,
   'logistics:read': { method: 'get', path: '/v1/admin/logistics/couriers' },
   'logistics:write': null,
+  'logistics:payout': null,
+  'logistics:contact': null,
   'payments:refunds:read': { method: 'get', path: '/v1/admin/payments/refund-queue' },
   'payments:refunds:retry': null,
   'payments:refunds:cover': null,

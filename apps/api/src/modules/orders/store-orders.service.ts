@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -238,6 +239,11 @@ export class StoreOrdersService {
   }
 
   /** Loja cancela depois do aceite ("entrega não realizada" inclusa): motivo obrigatório, estorno total, conta no índice da loja (RN-08). */
+  /** SEC-143: "recebi de volta" — a loja confirma a devolução da corrida; só então o pedido é cancelado e estornado. */
+  async confirmReturnReceived(storeId: string, orderId: string, userId: string, ctx: RequestContext): Promise<void> {
+    await this.act(storeId, orderId, userId, async (tx, order) => this.orders.confirmStoreReturnInTx(tx, order, 'store', ctx, null));
+  }
+
   async cancel(storeId: string, orderId: string, userId: string, reason: string): Promise<void> {
     await this.act(storeId, orderId, userId, async (tx, order) => {
       if (order.status === 'cancelled' && order.cancelledBy === 'store') return { event: null };

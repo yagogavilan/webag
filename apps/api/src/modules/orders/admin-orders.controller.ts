@@ -13,6 +13,8 @@ const refundSchema = z.strictObject({
   reason: z.string().trim().min(10).max(300),
 });
 
+const returnSchema = z.strictObject({ reason: z.string().trim().min(10).max(300) });
+
 /** Ações do admin sobre pedidos (SEC-039). A lista/detalhe de pedidos do admin entra com o painel (Onda 4D). */
 @Controller('v1/admin/orders')
 export class AdminOrdersController {
@@ -38,5 +40,17 @@ export class AdminOrdersController {
       refunded: { amount: result.refundedCents, currency: 'BRL' },
       remaining: { amount: result.remainingCents, currency: 'BRL' },
     };
+  }
+
+  /** SEC-143: o admin registra que a loja recebeu a devolução (a loja não confirmou no painel); motivo obrigatório, auditado, outra pessoa que a operação que declarou a devolução. */
+  @AdminOnly('logistics:write')
+  @RequireReauth()
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-store-return', limit: 60, windowSeconds: 3600 })
+  @Post(':orderId/store-return')
+  async storeReturn(@Param('orderId') orderId: string, @Body(new ZodPipe(returnSchema)) body: z.infer<typeof returnSchema>, @Ctx() ctx: RequestContext) {
+    if (!UUID.test(orderId)) throw errors.notFound();
+    await this.orders.adminConfirmStoreReturn(orderId, body.reason, ctx);
+    return { status: 'cancelled' as const };
   }
 }

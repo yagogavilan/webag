@@ -96,6 +96,10 @@ export const deliveries = pgTable(
     costPaidAt: timestamp({ withTimezone: true }),
     contact: jsonb().$type<Record<string, unknown>>(),
     piiClearedAt: timestamp({ withTimezone: true }),
+    /** SEC-143: a loja confirmou que recebeu a mercadoria devolvida (ou o admin registrou por ela, com motivo); só então o pedido é cancelado e estornado. */
+    storeReturnConfirmedAt: timestamp({ withTimezone: true }),
+    storeReturnConfirmedBy: uuid().references(() => users.id),
+    storeReturnConfirmedVia: text({ enum: ['store', 'admin'] }),
     /** Código de entrega de 4 dígitos (WB-226): o cliente informa ao motoboy; o admin digita para concluir. */
     deliveryCode: text(),
     codeFailures: integer().notNull().default(0),

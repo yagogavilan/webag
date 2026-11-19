@@ -7,6 +7,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { PaymentsService } from '../payments/index.js';
 import { couriers, deliveries, deliveryEvents } from './db/schema.js';
 import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES, type DeliveryKind, type DeliveryStatus, type NotDeliveredReason } from './domain/state.js';
 import { buildCourierMessage, whatsappLink, type DeliveryMessageData } from './domain/whatsapp.js';
@@ -68,12 +69,14 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     private readonly audit: AuditService,
     private readonly flags: FeatureFlagsService,
     private readonly params: ParametersService,
+    private readonly payments: PaymentsService,
   ) {}
 
   /** Auto-conclusão a cada 5 min. Desligada em teste e na CLI (os testes chamam `autoConcludeDue`). */
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test' || process.env.WEBAG_CLI === '1') return;
     this.timers.push(setInterval(() => void this.autoConcludeDue().catch((e: Error) => this.logger.error(e.message)), 5 * 60_000).unref());
+    this.timers.push(setInterval(() => void this.clearContactDue().catch((e: Error) => this.logger.error(e.message)), 60 * 60_000).unref());
   }
 
   onApplicationShutdown(): void {
@@ -387,24 +390,35 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
 
   // ------------------------------------------------------------------ custo (WB-239)
 
-  /** Custo pago ao motoboy: a correção exige motivo e preserva o valor anterior (evento + auditoria). */
+  /**
+   * Custo pago ao motoboy: a correção exige motivo e preserva o valor anterior (evento + auditoria). SEC-145: acima do teto
+   * (`entrega_custo_max_cents`) é 422; acima de 1,5x o previsto da faixa ou do limite de alerta (`entrega_custo_alerta_cents`)
+   * exige motivo e alerta o financeiro.
+   */
   async setCost(id: string, costCents: number, reason: string | undefined, ctx: RequestContext): Promise<Delivery> {
     const actor = this.actorOf(ctx);
-    return this.db.transaction(async (tx) => {
+    const [maxCents, alertCents] = [await this.params.getNumber('entrega_custo_max_cents'), await this.params.getNumber('entrega_custo_alerta_cents')];
+    if (costCents > maxCents) throw errors.unprocessable('COST_ABOVE_LIMIT', 'Custo acima do limite', { detail: `O custo por corrida não pode passar de ${maxCents} centavos; fale com o super admin.` });
+    let flagged = false;
+    const updated = await this.db.transaction(async (tx) => {
       const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
       if (!current) throw errors.notFound('Corrida não encontrada.');
       if (!['delivered', 'not_delivered', 'returned_to_store', 'cancelled'].includes(current.status)) throw errors.conflict('DELIVERY_NOT_FINISHED', 'Corrida ainda em andamento', 'O custo é lançado quando a corrida termina.');
       if (current.costCents !== null && !reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Informe o motivo da correção.' }]);
       if (current.costPaidAt) throw errors.conflict('COST_ALREADY_PAID', 'Custo já pago', 'Este custo já foi marcado como pago.');
-      const [updated] = await tx.update(deliveries).set({ costCents, costRegisteredBy: actor.id, costRegisteredAt: new Date(), updatedAt: new Date() }).where(eq(deliveries.id, id)).returning();
-      await tx.insert(deliveryEvents).values({ deliveryId: id, fromStatus: current.status, toStatus: current.status, action: current.costCents === null ? 'cost_set' : 'cost_corrected', actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta: { previousCostCents: current.costCents, costCents } });
+      flagged = costCents > alertCents || (current.expectedCostCents > 0 && costCents * 2 > current.expectedCostCents * 3);
+      if (flagged && !reason?.trim()) throw errors.unprocessable('COST_REASON_REQUIRED', 'Custo acima do esperado', { detail: 'Este custo passa do previsto da faixa ou do limite de alerta: informe o motivo.' });
+      const [row] = await tx.update(deliveries).set({ costCents, costRegisteredBy: actor.id, costRegisteredAt: new Date(), updatedAt: new Date() }).where(eq(deliveries.id, id)).returning();
+      await tx.insert(deliveryEvents).values({ deliveryId: id, fromStatus: current.status, toStatus: current.status, action: current.costCents === null ? 'cost_set' : 'cost_corrected', actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta: { previousCostCents: current.costCents, costCents, ...(flagged ? { flagged: true } : {}) } });
       await this.audit.record(tx, ctx, { action: 'delivery.cost', targetType: 'delivery', targetId: id, before: { costCents: current.costCents }, after: { costCents }, ...(reason ? { reason } : {}) });
-      return updated!;
+      return row!;
     });
+    if (flagged) await this.payments.raiseAlert(null, 'delivery_cost_high', { deliveryId: id, costCents, expectedCostCents: updated.expectedCostCents, registeredBy: actor.id }).catch((e: Error) => this.logger.warn(`alerta de custo da corrida ${id}: ${e.message}`));
+    return updated;
   }
 
   /** "Marcar como pago": controle do PIX feito fora do app para um lote de corridas de UM motoboy (WB-239 C4). */
-  async markPaid(deliveryIds: string[], paidOn: Date, ctx: RequestContext): Promise<{ count: number; totalCents: number }> {
+  async markPaid(deliveryIds: string[], paidOn: Date, ctx: RequestContext, overrideReason?: string): Promise<{ count: number; totalCents: number }> {
     const actor = this.actorOf(ctx);
     return this.db.transaction(async (tx) => {
       const rows = await tx.select().from(deliveries).where(inArray(deliveries.id, deliveryIds)).for('update');
@@ -412,12 +426,81 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       if (new Set(rows.map((r) => r.courierId)).size !== 1 || rows.some((r) => !r.courierId)) throw errors.unprocessable('PAYOUT_MIXED_COURIERS', 'Lote de motoboys diferentes', { detail: 'Marque como pago um lote de corridas de um único motoboy.' });
       if (rows.some((r) => r.costCents === null)) throw errors.unprocessable('PAYOUT_COST_MISSING', 'Corrida sem custo', { detail: 'Registre o custo de todas as corridas antes de marcar como pago.' });
       if (rows.some((r) => r.costPaidAt)) throw errors.conflict('COST_ALREADY_PAID', 'Custo já pago', 'Há corrida deste lote já marcada como paga.');
+      // SEC-145: separação de funções. Quem lançou (ou corrigiu) o custo não aprova o pagamento; só o super admin, com motivo, e fica auditado.
+      const ownCost = actor.id !== null && rows.some((r) => r.costRegisteredBy === actor.id);
+      if (ownCost && !(actor.role === 'super_admin' && overrideReason?.trim())) {
+        throw new AppError(403, 'SEGREGATION_OF_DUTIES', 'Quem lançou o custo não marca como pago', { detail: 'Peça a outra pessoa do financeiro ou ao super admin para marcar o lote como pago.' });
+      }
       await tx.update(deliveries).set({ costPaidAt: paidOn, updatedAt: new Date() }).where(inArray(deliveries.id, deliveryIds));
       const totalCents = rows.reduce((sum, r) => sum + (r.costCents ?? 0), 0);
       for (const row of rows) await tx.insert(deliveryEvents).values({ deliveryId: row.id, fromStatus: row.status, toStatus: row.status, action: 'cost_paid', actorId: actor.id, actorRole: actor.role, meta: { paidOn: paidOn.toISOString(), costCents: row.costCents } });
-      await this.audit.record(tx, ctx, { action: 'delivery.cost_paid', targetType: 'courier', targetId: rows[0]!.courierId!, after: { deliveryIds, paidOn: paidOn.toISOString(), totalCents } });
+      await this.audit.record(tx, ctx, { action: 'delivery.cost_paid', targetType: 'courier', targetId: rows[0]!.courierId!, after: { deliveryIds, paidOn: paidOn.toISOString(), totalCents, ...(ownCost ? { segregationOverride: true } : {}) }, ...(ownCost ? { reason: overrideReason! } : {}) });
       return { count: rows.length, totalCents };
     });
+  }
+
+  // ------------------------------------------------------------------ contato do cliente (SEC-144)
+
+  /**
+   * "Revelar" o contato (telefone e endereço) de uma corrida ativa: exige motivo e grava a leitura na auditoria (quem, quando,
+   * por quê; sem o dado). Depois da retenção o contato não existe mais (409).
+   */
+  async revealContact(id: string, reason: string, ctx: RequestContext): Promise<Delivery> {
+    const delivery = await this.get(id);
+    if (delivery.piiClearedAt || !delivery.contact || !ACTIVE_STATUSES.includes(delivery.status)) {
+      throw errors.conflict('CONTACT_NOT_AVAILABLE', 'Contato indisponível', 'A corrida já terminou e o contato do cliente foi apagado (LGPD).');
+    }
+    await this.audit.recordStandalone(ctx, { action: 'delivery.contact_revealed', targetType: 'delivery', targetId: id, reason });
+    return delivery;
+  }
+
+  /**
+   * Retenção (LGPD, SEC-144): `pii_corrida_retencao_dias` depois que a corrida termina, o contato guarda só o necessário para o
+   * histórico (loja, nº do pedido, volumes e BAIRRO/CIDADE). O endereço completo continua no pedido (fiscal e disputa).
+   */
+  async clearContactDue(now = new Date()): Promise<number> {
+    const days = await this.params.getNumber('pii_corrida_retencao_dias');
+    const cutoff = new Date(now.getTime() - days * 86_400_000);
+    const due = await this.db
+      .select()
+      .from(deliveries)
+      .where(and(inArray(deliveries.status, [...TERMINAL_STATUSES]), isNull(deliveries.piiClearedAt), sql`${deliveries.contact} is not null`, sql`(select max(e.created_at) from ${deliveryEvents} e where e.delivery_id = ${deliveries.id} and e.from_status <> e.to_status and e.to_status in ('delivered', 'returned_to_store', 'cancelled')) <= ${cutoff.toISOString()}::timestamptz`))
+      .limit(200);
+    for (const row of due) {
+      const contact = (row.contact ?? {}) as Partial<DeliveryMessageData>;
+      const area = (contact.dropoffAddress ?? '').split(',').map((p) => p.trim()).filter(Boolean).slice(-2).join(', ');
+      const kept: Record<string, unknown> = { number: contact.number ?? null, kind: contact.kind ?? row.kind, storeName: contact.storeName ?? null, volumes: contact.volumes ?? row.volumes, dropoffAddress: area || null };
+      await this.db.transaction(async (tx) => {
+        const [updated] = await tx.update(deliveries).set({ contact: kept, piiClearedAt: now }).where(and(eq(deliveries.id, row.id), isNull(deliveries.piiClearedAt))).returning({ id: deliveries.id });
+        if (updated) await this.audit.record(tx, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }, { action: 'delivery.contact_cleared', targetType: 'delivery', targetId: row.id, actorRole: 'system' });
+      });
+    }
+    return due.length;
+  }
+
+  // ------------------------------------------------------------------ devolução à loja (SEC-143)
+
+  /**
+   * A loja recebeu a mercadoria de volta (ou o admin registra por ela, com motivo). Na transação de quem chama: confirma na
+   * corrida `returned_to_store` e ainda não confirmada. Quem declarou a devolução (a operação) não confirma pela loja,
+   * exceto o super admin. Devolve a corrida atualizada.
+   */
+  async confirmStoreReturnInTx(tx: Tx, orderId: string, via: 'store' | 'admin', ctx: RequestContext, reason: string | null): Promise<Delivery> {
+    const actor = this.actorOf(ctx);
+    const [current] = await tx.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery'))).for('update');
+    if (!current || current.status !== 'returned_to_store' || current.storeReturnConfirmedAt) {
+      throw errors.conflict('RETURN_NOT_PENDING', 'Não há devolução aguardando confirmação', 'Este pedido não tem uma devolução à loja pendente.');
+    }
+    if (via === 'admin' && actor.role !== 'super_admin') {
+      const [declared] = await tx.select().from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, current.id), eq(deliveryEvents.action, 'return_confirmed'))).orderBy(desc(deliveryEvents.createdAt)).limit(1);
+      if (declared?.actorId && declared.actorId === actor.id) {
+        throw new AppError(403, 'SEGREGATION_OF_DUTIES', 'Quem declarou a devolução não confirma pela loja', { detail: 'Peça a outra pessoa da operação para registrar a confirmação da loja.' });
+      }
+    }
+    const [updated] = await tx.update(deliveries).set({ storeReturnConfirmedAt: new Date(), storeReturnConfirmedBy: actor.id, storeReturnConfirmedVia: via, updatedAt: new Date() }).where(eq(deliveries.id, current.id)).returning();
+    await tx.insert(deliveryEvents).values({ deliveryId: current.id, fromStatus: current.status, toStatus: current.status, action: 'store_return_confirmed', actorId: actor.id, actorRole: via === 'store' ? 'store' : actor.role, reason: reason?.slice(0, 300) ?? null, meta: { via } });
+    await this.audit.record(tx, ctx, { action: 'delivery.store_return_confirmed', targetType: 'delivery', targetId: current.id, after: { via }, ...(reason ? { reason } : {}) });
+    return updated!;
   }
 }
 
