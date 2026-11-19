@@ -235,7 +235,7 @@ const IMAGE_WIDTHS = [160, 400, 800] as const;
 export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise<void> {
   await seedStores(db, SEED_STORES, options);
   const log = options.log ?? (() => undefined);
-  log(`seed da Onda 2 concluído. Login dos lojistas de teste: lojista.<loja>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD})`);
+  log(`seed da Onda 2 concluído. Login dos lojistas de teste: lojista.<loja>@seed.webag.local e funcionario.<loja>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD})`);
 }
 
 /** Cria as lojas da lista que ainda não existem (idempotente pelo e-mail do dono). Usado pelas Ondas 2 e 3. */
@@ -302,6 +302,15 @@ export async function seedStores(db: Db, seeds: SeedStore[], options: SeedOnda2O
       .returning();
     if (!store) continue;
     await db.insert(storeMembers).values({ storeId: store.id, userId: owner.id, role: 'owner', permissions: [] });
+    // Funcionário de demonstração (RN-13): só pedidos e catálogo; não vê financeiro, equipe nem configurações.
+    const [staff] = await db
+      .insert(users)
+      .values({ email: `funcionario.${seed.slug}@seed.webag.local`, name: 'Atendente Teste', passwordHash, emailVerifiedAt: new Date(), phone: seed.phone, adultDeclaredAt: new Date(), passwordChangedAt: new Date() })
+      .returning();
+    if (staff) {
+      await db.insert(userRoles).values({ userId: staff.id, role: 'customer' });
+      await db.insert(storeMembers).values({ storeId: store.id, userId: staff.id, role: 'staff', permissions: ['orders', 'catalog'] });
+    }
     await db
       .insert(storeSettings)
       .values({ storeId: store.id, acceptsDelivery: true, radiusM: seed.radiusM, feeMode: 'by_distance', minOrderCents: seed.minOrderCents, freeAboveCents: seed.freeAboveCents, pickupEnabled: seed.pickup, voluntaryExchangeDays: seed.voluntaryExchangeDays ?? 0, pausedIndefinitely: seed.paused ?? false, etaMinMinutes: 30, etaMaxMinutes: 50 });

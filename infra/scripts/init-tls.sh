@@ -1,6 +1,6 @@
 #!/bin/sh
-# Emite o certificado HTTPS (Let's Encrypt) para api, admin, lojista e arquivos, e liga o nginx.
-# Rodar UMA vez no servidor, depois que o DNS dos 4 nomes já aponta para ele (guia de deploy, passo 8).
+# Emite o certificado HTTPS (Let's Encrypt) para api, admin, lojista, arquivos e o site público, e liga o nginx.
+# Rodar UMA vez no servidor, depois que o DNS dos 5 nomes já aponta para ele (guia de deploy, passo 8).
 #   sh infra/scripts/init-tls.sh                 # emissão real
 #   sh infra/scripts/init-tls.sh --staging       # ensaio no Let's Encrypt de teste (certificado não confiável; não gasta limite)
 #   sh infra/scripts/init-tls.sh --self-signed   # só sobe o nginx com certificado autoassinado (teste sem domínio)
@@ -11,8 +11,8 @@ ENV="$ROOT/.env"
 [ -f "$ENV" ] || { echo "Falta o .env na raiz (sh infra/scripts/gen-secrets.sh)." >&2; exit 1; }
 get() { grep -E "^$1=" "$ENV" | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 P="sh $ROOT/infra/scripts/prod.sh"
-API_HOST=$(get API_HOST); ADMIN_HOST=$(get ADMIN_HOST); LOJISTA_HOST=$(get LOJISTA_HOST); FILES_HOST=$(get FILES_HOST); EMAIL=$(get LETSENCRYPT_EMAIL)
-for v in API_HOST ADMIN_HOST LOJISTA_HOST FILES_HOST; do
+API_HOST=$(get API_HOST); ADMIN_HOST=$(get ADMIN_HOST); LOJISTA_HOST=$(get LOJISTA_HOST); FILES_HOST=$(get FILES_HOST); PUBLIC_HOST=$(get PUBLIC_HOST); EMAIL=$(get LETSENCRYPT_EMAIL)
+for v in API_HOST ADMIN_HOST LOJISTA_HOST FILES_HOST PUBLIC_HOST; do
   eval "val=\$$v"
   case "$val" in ''|*exemplo.com.br*) echo "Ajuste $v no .env (ainda está o valor de exemplo)." >&2; exit 1 ;; esac
 done
@@ -53,12 +53,12 @@ if [ "$mode" = self ]; then
   exit 0
 fi
 
-echo "[3/4] pedindo o certificado ao Let's Encrypt (os 4 nomes precisam apontar para este servidor, portas 80 e 443 abertas)..."
+echo "[3/4] pedindo o certificado ao Let's Encrypt (os 5 nomes precisam apontar para este servidor, portas 80 e 443 abertas)..."
 $P run --rm --no-deps --entrypoint sh certbot -c "rm -rf /etc/letsencrypt/live/webag /etc/letsencrypt/archive/webag /etc/letsencrypt/renewal/webag.conf"
 if ! $P run --rm --no-deps --entrypoint certbot certbot certonly --webroot -w /var/www/certbot --cert-name webag \
-     -d "$API_HOST" -d "$ADMIN_HOST" -d "$LOJISTA_HOST" -d "$FILES_HOST" \
+     -d "$API_HOST" -d "$ADMIN_HOST" -d "$LOJISTA_HOST" -d "$FILES_HOST" -d "$PUBLIC_HOST" \
      --email "$EMAIL" --agree-tos --no-eff-email --non-interactive $staging; then
-  echo "FALHOU. Recolocando o certificado provisório. Confira: DNS dos 4 nomes, portas 80/443 liberadas no firewall do provedor." >&2
+  echo "FALHOU. Recolocando o certificado provisório. Confira: DNS dos 5 nomes, portas 80/443 liberadas no firewall do provedor." >&2
   make_dummy
   exit 1
 fi

@@ -149,7 +149,8 @@ services:
       API_PUBLIC_URL: https://${API_HOST:?defina API_HOST no .env}
       ADMIN_WEB_URL: https://${ADMIN_HOST:?defina ADMIN_HOST no .env}
       # B.2: base da página segura de cartão (/pagar/cartao), servida pelo web do lojista/admin.
-      WEB_PUBLIC_URL: https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
+      # Base da página segura do cartão (/pagar/cartao): é o SITE PÚBLICO (PUBLIC_HOST), não um painel. O app confere esta URL (EXPO_PUBLIC_WEB_URL).
+      WEB_PUBLIC_URL: https://${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
       MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
       # Origens exatas (sem "*"): os painéis.
       CORS_ORIGINS: https://${ADMIN_HOST},https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
@@ -213,6 +214,14 @@ services:
       # SEC-116: cada painel só responde no seu host. Sem estes dois o web recusa tudo.
       ADMIN_HOST: ${ADMIN_HOST}
       LOJISTA_HOST: ${LOJISTA_HOST}
+      # Site público (landing, privacidade, exclusão de conta, página do cartão). Sem ele o web responde 404 nessas páginas.
+      PUBLIC_HOST: ${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
+      PUBLIC_URL: https://${PUBLIC_HOST}
+      # Botões de download da página inicial (vazios até o app ser publicado: a página mostra "em breve").
+      PLAY_STORE_URL: ${PLAY_STORE_URL:-}
+      APP_STORE_URL: ${APP_STORE_URL:-}
+      # Origem pública do tempo real (Socket.IO) que o navegador do painel alcança.
+      REALTIME_URL: https://${API_HOST}
       # SEC-114/SEC-129: IP do cliente vem do cabeçalho que o nginx SOBRESCREVE (proxy_set_header X-Real-IP $remote_addr).
       WEB_CLIENT_IP_HEADER: x-real-ip
       BFF_SHARED_SECRET: ${BFF_SHARED_SECRET}
@@ -237,8 +246,9 @@ services:
       ADMIN_HOST: ${ADMIN_HOST}
       LOJISTA_HOST: ${LOJISTA_HOST}
       FILES_HOST: ${FILES_HOST:?defina FILES_HOST no .env}
-      # Só estas 4 variáveis são trocadas nos modelos (o resto, como $host, fica intacto).
-      NGINX_ENVSUBST_FILTER: ^(API|ADMIN|LOJISTA|FILES)_HOST$$
+      PUBLIC_HOST: ${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
+      # Só estas 5 variáveis são trocadas nos modelos (o resto, como $host, fica intacto).
+      NGINX_ENVSUBST_FILTER: ^(API|ADMIN|LOJISTA|FILES|PUBLIC)_HOST$$
     ports:
       - '80:80'
       - '443:443'

@@ -1,5 +1,5 @@
-# Sites do Webag. Este arquivo é um MODELO: o contêiner do nginx troca ${API_HOST}, ${ADMIN_HOST}, ${LOJISTA_HOST} e
-# ${FILES_HOST} pelos valores do .env na hora de subir (NGINX_ENVSUBST_FILTER=^(API|ADMIN|LOJISTA|FILES)_HOST$).
+# Sites do Webag. Este arquivo é um MODELO: o contêiner do nginx troca ${API_HOST}, ${ADMIN_HOST}, ${LOJISTA_HOST},
+# ${FILES_HOST} e ${PUBLIC_HOST} pelos valores do .env na hora de subir (NGINX_ENVSUBST_FILTER=^(API|ADMIN|LOJISTA|FILES|PUBLIC)_HOST$).
 # Não edite o resultado dentro do contêiner: edite este arquivo e reinicie (docker compose ... up -d nginx).
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -132,6 +132,38 @@ server {
         return 404;
     }
     location ~ ^/api/(session|proxy)/admin {
+        return 404;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass http://web:3001;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Site PÚBLICO (host principal, ex.: webag.com.br): página inicial, /privacidade, /termos, /suporte, /ajuda, /licencas,
+# /excluir-conta (exigidas pelas lojas) e /pagar/cartao (página segura do cartão, aberta pelo app). Sem sessão de painel:
+# /admin, /lojista e as rotas de sessão/proxy dos painéis dão 404 aqui (SEC-106, SEC-116).
+# ---------------------------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${PUBLIC_HOST};
+
+    include /etc/nginx/snippets/ssl.conf;
+    include /etc/nginx/snippets/security-headers.conf;
+
+    client_max_body_size 2m;
+    limit_req zone=webag_panel burst=40 nodelay;
+    limit_conn webag_conn 50;
+
+    location ^~ /admin {
+        return 404;
+    }
+    location ^~ /lojista {
+        return 404;
+    }
+    location ~ ^/api/(session|proxy)/ {
         return 404;
     }
     location / {
