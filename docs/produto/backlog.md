@@ -1,7 +1,40 @@
 # Backlog Priorizado — Webag 1.0 e Fase 2
 
-Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-053)
+Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-053; DEC-060 a DEC-065: decisões do PO sobre a fila técnica, HIP-P01 a P10)
 Fonte de escopo: `docs/00-visao/brief.md` §3, §4 e §9. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043, HIP-D, HIP-C01, HIP-L01 a L14, HIP-T01 a T12, HIP-E01 a E10).
+
+## Alterações 2026-11-19 (DEC-060 a DEC-065: decisões do PO sobre DT-059 a DT-064, dúvidas do backend e F3 a F8 do app)
+Origem: `docs/arquitetura/divida-tecnica.md`, `docs/gestao/fila-backend-dev.md` (V.5, V.6, W.8, WB-241 C7), `docs/gestao/fila-mobile.md` (F3 a F8), `docs/qa/relatorios/onda-7-reverificacao.md`. Critério de corte: **o v1.0 é o que testa a hipótese** (lojista local vende pelo app, cliente recebe no prazo da faixa e recompra); o resto espera um gatilho medido.
+
+**Histórias novas (4, todas Must e pequenas) e o que cortei para pagar por elas:**
+
+| ID | História | PRD | Paga com o corte de |
+|---|---|---|---|
+| WB-259 | Estorno: valor, meio e prazo por meio na tela do pedido (F3) | `cliente.md` | Estorno parcial da taxa de troca com ledger (DT-062, fase 2) |
+| WB-260 | Motivo real da entrega indisponível (F4) | `cliente.md` | Lista de espera por região (F8, fase 2) |
+| WB-261 | "O horário mudou" antes de pagar: 409 `ETA_CHANGED` só se piorou (F6a) | `cliente.md` | Campo `earlier` e eventos em tempo real de atraso/decisão (F6b, F7, fase 2) |
+| WB-262 | Admin informa a hora real da entrega (`deliveredAt`) | `logistica.md` | Exportação assíncrona de relatório e 5 dos 7 CSV financeiros (DT-060) |
+
+**Decisões por item (detalhe em `decisoes.md`):**
+
+| Item | Decisão | Onde |
+|---|---|---|
+| DT-059 cupom da plataforma | 1.0: vale em todas as lojas, **teto de usos obrigatório**; alvo por cidade/categoria/loja e alerta de autoconsumo = **fase 2**; relatório do cupom ganha "usos por loja" | DEC-060, WB-116 C1/C5/C7, RN-09 |
+| DT-060 exportação e financeiro | 1.0: **2 CSV** (Receita por pedido; Estornos); acima de 10.000 linhas = 422 com mensagem; e-mail assíncrono e demais CSV = fase 2 | DEC-060, WB-114 |
+| DT-061 push e lista de espera | Rótulo "enviados (aceitos pelo provedor)", sem "entregues"; recibos Expo e **lista de espera = fase 2**; entra o evento `region_not_served_shown` | DEC-061, WB-197 C1/C4, WB-004 |
+| DT-062 taxa de troca paga | 1.0: 409 e o cliente cancela e pede de novo ("Levar à loja"); estorno parcial = fase 2 | DEC-062, RN-11 |
+| DT-063 IP em aceites/consentimentos | IP truncado, retenção 5 anos e expurgo `[HIPÓTESE]`; backups 30 dias na política; **jurídico em J15** | DEC-063, RN-14, WB-215 C9 |
+| DT-064 exclusão: login social e encerrar loja | Login social desligado = variante só ao ligar WB-010; encerrar loja = pedido ao suporte (SUSPENSA com motivo), botão = fase 2 | DEC-063, RN-16, WB-213 C8 |
+| Coleta atrasada, novo prazo (WB-241 C7) | Novo parâmetro `coleta_atrasada_dias_uteis` = 1; relógio de entrega do item pausa por culpa da Webag | DEC-062, RN-02, RN-11, WB-241 C7 a C9 |
+| RN-19 4c (SEC-177) e hora do entregue | Sem compensação em ausência/recusa do cliente e `address_not_found` sem correção; **cria-se `deliveredAt`** | DEC-064, RN-19, WB-262 |
+| Cupom pessoal, `push_campaign_recipients`, tokens MP (V.6) | Cupom não usado e linhas de destinatário apagados; tokens MP 120 dias, sem parâmetro novo | DEC-063, RN-14, WB-215 C6 a C8 |
+| W.8 `readyByAt`; evento `late_cancel_answered` | `pagamento aprovado + preparo da loja`; evento definido | DEC-064, WB-257 C5, WB-255 C8 |
+| BUG-020/021/022 | CEO já decidiu; PO precisa a regra: horário inclusivo e na criação do pedido; **alcance mínimo de 3 km** | DEC-064, RN-02, RN-19 §2 |
+| F3 a F8 do app | F3, F4, F6a = MVP (WB-259, 260, 261); F5, F6b, F7, F8 = fase 2 | DEC-065, WB-253 C10 |
+| Copy sem "2 h" no app | Confirmados D1, D3, D5, D7 e D8 do designer; mensagem geral vira "Entrega pelo Webag" | DEC-064, `cliente.md` Copy, RN-19 §2 |
+
+As perguntas 22 a 26 da seção 7 foram respondidas (DEC-054; HIP-E03, E04, E05, E08, E09): o teto vale para o **fim da faixa**, compensação = entrega grátis no próximo pedido, 15 min de tolerância, bloquear perto do fechamento, e nada de "2 h" externo até 95% medidos.
+**Crítica:** o piloto vai medir "95% em até 2 h" com a hora em que **uma pessoa** clica ENTREGUE por WhatsApp; sem WB-262 a medida seria ruído (e a compensação também). Se o prazo apertar, corte **WB-261 primeiro** (o pedido grava a faixa real e a tela mostra; o dano é de transparência, não de dinheiro), nunca WB-262.
 
 ## Alterações 2026-11-19 (DEC-053: entrega em até 2 h por distância, estilo iFood)
 Origem: DEC-053; regra em RN-19; PRDs `logistica.md` (WB-249, 255, 256, 258), `cliente.md` (WB-250 a 254), `lojista.md` (WB-257).
@@ -111,11 +144,11 @@ Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md`
 
 | MoSCoW | Qtde |
 |---|---|
-| Must | 139 (117 + 15 de DEC-036/037: WB-229 a 239 e 241 a 244; + 7 da DEC-053: WB-249 a 253, 255, 257) |
+| Must | 143 (117 + 15 de DEC-036/037: WB-229 a 239 e 241 a 244; + 7 da DEC-053: WB-249 a 253, 255, 257; + 4 de DEC-064/065: WB-259 a 262) |
 | Should | 32 (24 + WB-240, 245, 246, 247, 248; + 3 da DEC-053: WB-254, 256, 258) |
 | Could | 2 (WB-010, 199) |
 | Won't (1.0) | 1 (WB-161) |
-| **Total 1.0** | **174** (144 + 20 novas da DEC-035/036/037 + 10 da DEC-053; 144 = 142 + WB-227 e WB-228 da DEC-024) |
+| **Total 1.0** | **178** (144 + 20 novas da DEC-035/036/037 + 10 da DEC-053 + 4 de DEC-064/065; 144 = 142 + WB-227 e WB-228 da DEC-024) |
 
 Crítica ao escopo: 139 Must é muito para uma "1.0 de piloto" (eram 116 antes da DEC-036/037). Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
 
@@ -410,6 +443,14 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 | Indicação, avaliações com foto, lojas favoritas por bairro | Sem evidência | Dados de retenção |
 | Registro de incidentes de segurança no admin | Processo é do security | Após threat model |
 | Exigir CNPJ acima de um faturamento | Fiscal | Parecer do contador |
+| **Cortados em 2026-11-19 (DEC-060 a DEC-065), com gatilho de volta:** | | |
+| Lista de espera por região (WB-004 C2 a C4, segmento no WB-197; F8) | O piloto não depende dela; o evento `region_not_served_shown` mede a demanda sem dado pessoal | Mais de 50 aberturas por semana em região fora da área, ou decisão de abrir a região |
+| Cupom da plataforma com alvo por cidade, categoria ou loja; alerta de autoconsumo (DT-059) | Teto de usos limita o custo; o relatório mostra usos por loja | 2 ou mais cidades ativas com campanhas diferentes; loja pede campanha |
+| Exportação assíncrona por e-mail e 5 dos 7 CSV financeiros (DT-060) | 2 CSV cobrem o fechamento do piloto; 10 mil linhas é muito acima do piloto | Contador pede (J11) ou 1º 422 de volume em produção |
+| Recibos de entrega do push (Expo receipts; DT-061) | O rótulo honesto resolve a métrica otimista | 1ª campanha acima de 1.000 destinatários |
+| Estorno parcial da taxa de troca já paga (DT-062) | Caso raro; contorno = cancelar e pedir de novo | 3 casos por mês ou o suporte pedir |
+| Botão "Encerrar loja" do lojista; exclusão de conta só com login social (DT-064) | Contorno pelo suporte; login social desligado | 3 pedidos de encerramento em um trimestre; ligar WB-010 |
+| `Order.refund.expectedBy`, `CancelRequest.arrivesBy`, `cancelamento_resposta_min` no contrato, `earlier`, eventos em tempo real de atraso e de decisão (F3b, F5, F6b, F7) | Texto fixo por meio, nota da operação e polling (15 s / 60 s) bastam | Reclamação "cadê meu estorno" acima de 10% dos tickets de suporte; ou piloto mostrar atraso percebido tarde |
 
 ## 7. Decisões e pendências para CEO/fundador
 | # | Assunto | Recomendação do PO | Onde |
@@ -443,3 +484,21 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 
 ## 8. Aceite do PO (como vou validar)
 Uma história só é aceita se: (1) todos os critérios Dado/Quando/Então do PRD passam, incluindo erro, vazio e limites, verificados pelo QA; (2) DoD da skill `definicao-de-pronto` cumprida; (3) valores numéricos batem com `regras-de-negocio.md`; (4) eventos de analytics do PRD instrumentados. Recuso com motivo objetivo apontando o critério (ex.: "WB-068 C4: timeout de 10 min não cancelou o pedido").
+
+### 8.1 Aceite do PO, rodada 2026-11-19 (base: `docs/qa/relatorios/onda-7-reverificacao.md`)
+Aceite **funcional, pela API real**. Não cobre: aparelho real e Mercado Pago real (G4-5, G4-6, fundador), code review (tech-lead) nem parecer do Security, que seguem com os donos. "Aceita" = critérios testados passam; a pendência listada não bloqueia a história, mas bloqueia o G4 se for Must.
+
+| História | Veredito | Evidência e pendência |
+|---|---|---|
+| WB-028 Cancelar pedido (BUG-011, 012, 013) | **Aceita** | Estorno total, estoque, idempotência. Pendência: prazo do estorno por meio na tela = WB-259 |
+| WB-026 C3 Retirada não feita em 48 h (BUG-014) | **Aceita (C3)** | Aviso 24 h antes uma vez e cancelamento com estorno e estoque; C1, C2, C4 não foram reverificados nesta rodada |
+| WB-253 Atraso e cancelamento sem custo (C2, C3, C5) | **Aceita (API)** | Tolerância 14/16 min, antes e depois de SAIU, aceite automático, estorno com taxa. C4 foi reescrito (D5) e C10/C11 são novos: reaceitar no app |
+| WB-254 Compensação (C1, C3, C4, C5) | **Aceita com pendência** | Cupom único, não vale em retirada, não nasce em cancelamento ou dentro da tolerância. Pendências: C7 (apagar o cupom não usado) e C8 (sem compensação por falha do cliente, SEC-177 já implementado; falta o teste de aceite do QA) |
+| WB-249 e WB-251 (teto no fim da faixa 119/120/121; servidor recusa 422) | **Aceita com pendência** | C2 e C5 passam. WB-249 C7 (horário de fechamento): **recusada até o BUG-021**; validação de parâmetros: BUG-022 |
+| WB-037 "Não recebi" (BUG-015, rotas) | **Recusada em C3** | A conclusão automática de 24 h não foi suspensa (BUG-020, decisão do CEO: corrigir) |
+| WB-170 a 177 e WB-241 (troca: arrependimento, voluntária, aprovação automática, coleta, mediação) | **Aceita com pendência** | 11/11 na API. Pendências: WB-241 C7 a C9 (novo prazo e relógio pausado, DEC-062) e revisão jurídica J1 a J5 |
+| WB-116 C8 e SEC-170 (primeira compra) | **Aceita com pendência** | Complemento do endereço e simultâneos barrados; teto obrigatório. Pendência: BUG-023 (cupom BEMVINDO10 do seed sem teto) |
+| WB-230 C6 e pausa/horário da logística (BUG-016) | **Aceita com pendência** | Pausa, `LOGISTICS_CLOSED`, retirada segue. Domingo NÃO TESTADO; borda do fechamento = BUG-021 |
+| WB-119 Parâmetros (BUG-017) | **Aceita com pendência** | 4 chaves alteram o comportamento; 2 só por teste automatizado; validação cruzada = BUG-022 |
+| WB-213 e WB-214 Excluir conta (app/web) | **Aceita com pendência** | Fluxo A/B, arrependimento 72 h e SEC-168 testados. Pendências: app M.2 (código de 6 dígitos), Security repete B1/B2, SEC-166 para a Play, lacunas de DEC-063 (WB-215 C6 a C8) |
+| WB-012 Home: seção "Mais vendidos" (BUG-018; HIP-032) | **Aceita** | Seis produtos de seis lojas pelo seed; vazio fora da região |

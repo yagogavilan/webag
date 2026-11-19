@@ -1,6 +1,6 @@
 # PRD: Logística da Webag (entrega, motoboys e coleta de trocas)
 
-Status: pronto para G3 (aguarda spec de tela do Designer e estimativa); **atualizado em 2026-11-19 pela DEC-053 (entrega em até 2 h), histórias novas WB-249, 255, 256 e 258 abaixo, e WB-250 a 254 em `cliente.md`** | Dono: product-owner | Data: 2026-11-19 | Histórias: WB-229 a WB-242, WB-249 a WB-258 (+ WB-057 e WB-069 reescritas)
+Status: pronto para G3 (aguarda spec de tela do Designer e estimativa); **atualizado em 2026-11-19 pela DEC-053 (entrega em até 2 h), histórias novas WB-249, 255, 256 e 258 abaixo, e WB-250 a 254 em `cliente.md`** | Dono: product-owner | Data: 2026-11-19 | Histórias: WB-229 a WB-242, WB-249 a WB-258, WB-262 (DEC-064, hora real da entrega) (+ WB-057 e WB-069 reescritas); WB-241 C7 a C9 (DEC-062, coleta atrasada)
 Decisões: DEC-036 (logística é da Webag; substitui DEC-007), DEC-035 (comissão), DEC-037 (coleta de troca na fila), **DEC-053 (promessa de entrega em até 2 h por distância)**. Regras numéricas: `docs/produto/regras-de-negocio.md` (RN-02, RN-04, RN-10, RN-18, **RN-19**). Fila do backend: `docs/gestao/fila-backend-dev.md` L.1 a L.5 e E.1, E.2. Hipóteses: `docs/decisoes.md` (HIP-L01 a HIP-L14, HIP-C01, **HIP-E01 a E10**).
 
 ## Problema
@@ -214,7 +214,9 @@ Como operadora, quero tratar a coleta da troca na mesma fila, para uma só rotin
 - **C4** Dado cliente ausente na coleta, então NAO_ENTREGUE (motivo) e a troca segue WB-173 C3 (até 2 reagendamentos; na 3ª, EXPIRADA); a taxa **não** é devolvida se a falha for do cliente `[HIPÓTESE; jurídico]` e é devolvida se for da Webag/loja.
 - **C5** Dado troca com "Levar à loja", então **não** há corrida.
 - **C6** Dado o custo da corrida, então vira custo de logística ligado à troca (relatório de trocas, WB-248), com o tipo de motivo (arrependimento/defeito: custo da Webag; tamanho/cor: coberto pela taxa).
-- **C7** Dado prazo `coleta_agendamento_dias_uteis` (3) estourando sem atribuir, então "Atrasado" (alerta ao admin) e o cliente é avisado de novo prazo.
+- **C7** Dado prazo `coleta_agendamento_dias_uteis` (3) estourando sem atribuir, então "Atrasada" (alerta ao admin) e o cliente recebe **1 push** (`collection_late_notice`) com o **novo prazo = `coleta_atrasada_dias_uteis` (1, parâmetro novo, DEC-062, `[HIPÓTESE; HIP-P03]`) dias úteis a contar do aviso**: "A coleta da sua troca atrasou. Nova previsão: até [data]. Você não perde o prazo da sua troca." (reuso dos 3 dias foi descartado: o cliente já esperou 3 e ficaria 6 dias úteis sem item e sem resposta). Texto neutro, sem culpar ninguém.
+- **C8** Dado a coleta "Atrasada" por causa da Webag (sem motoboy atribuído), então o relógio `coleta_entrega_item_dias` fica **pausado** e a troca não expira (RN-11); volta a contar quando a corrida é atribuída. Dado falha por cliente ausente, o relógio não pausa.
+- **C9** Dado nova passagem do prazo atrasado (a coleta segue sem atribuição depois de `coleta_atrasada_dias_uteis`), então novo alerta **ao admin** (não novo push ao cliente: 1 por corrida) e a troca aparece no topo da fila.
 
 ### WB-242 Lojista: comissão transparente ("Você recebe R$ X") — Must — dep: WB-060, WB-105
 Como lojista, quero ver quanto recebo por produto e entender a comissão, para precificar sem surpresa.
@@ -242,7 +244,7 @@ Como cliente, quero ver quando meu pedido chega antes de pagar, para decidir se 
 - **C2** Dado que o fim da faixa passa de `entrega_max_min`, então a loja não está disponível para o endereço (`available=false`, motivo `OUT_OF_RANGE`, `eta=null`); no limite: fim da faixa em 120 entrega, em 121 não (teste de fronteira).
 - **C3** Dado endereço sem posição exata (só cidade), então não há faixa por distância: a API devolve só "Chega em até 2 h" e o mínimo (preparo + despacho), e a faixa real aparece quando o endereço for confirmado.
 - **C4** Dado `entrega_preparo_padrao_min`, quando a loja define o seu (WB-257), então vale o da loja; loja sem valor usa o padrão.
-- **C5** Dado criação do pedido, então o servidor **recalcula** (nunca usa a faixa enviada pelo app), grava a faixa e os termos (preparo, despacho, deslocamento, distância) e responde 409 (código a definir pelo back-end, ex.: `ETA_CHANGED`) se a faixa mudou mais de `entrega_faixa_min` desde a sacola, com o valor novo para o cliente confirmar (mesmo padrão "Algo mudou", RN-05).
+- **C5** Dado criação do pedido, então o servidor **recalcula** (nunca usa a faixa enviada pelo app), grava a faixa e os termos (preparo, despacho, deslocamento, distância) e responde 409 `ETA_CHANGED` **se o fim da faixa ficou mais tarde** do que o mostrado na sacola (qualquer diferença; faixa igual ou mais cedo cria o pedido sem aviso), com a faixa nova para o cliente confirmar (mesmo padrão "Algo mudou", RN-05; WB-261, DEC-065).
 - **C6** Dado pagamento aprovado, então a faixa é reancorada: mesmos minutos a partir do pagamento (teste: PIX pago aos 14 min não perde 14 min).
 - **C7** Dado `logistica_horario` e o fim da faixa depois do fechamento, então a entrega não é oferecida e o texto diz "Entrega volta às HH:MM" (RN-19 item 2) `[HIPÓTESE; HIP-E08]`.
 - **C8** Dado parâmetro alterado no admin, então vale em até 60 s para novas consultas e **não altera** pedido já criado.
@@ -259,6 +261,18 @@ Como operadora, quero ser avisada antes e depois de o pedido passar do prazo pro
 - **C5** Dado fechar a corrida atrasada, então a operação marca a **causa** (loja demorou, sem motoboy, trajeto, cliente/endereço, outro com texto) e isso alimenta o relatório (WB-240) e o índice da loja (RN-19 item 4e).
 - **C6** Dado "Pedir cancelamento por atraso" do cliente em SAIU (WB-253), então aparece um alerta e a linha com contagem de `entrega_cancel_resposta_min`; a operação escolhe "Chego em até 10 min" (informa ao cliente) ou "Aceitar cancelamento" (corrida vira devolução); sem resposta, aceita sozinho e registra "aceito pelo sistema".
 - **C7** Dado perfil sem permissão de Logística, então 403.
+- **C8** Dado a resposta da operação ao pedido de cancelamento por atraso, então grava `late_cancel_answered {answer: accepted|arrive_soon|auto_accepted}` e, na recusa ("Chego em até 10 min"), a **nota é obrigatória** e vem com a sugestão "Chegamos até HH:MM" (DEC-065, F5).
+
+### WB-262 Admin: informar a hora real da entrega — Must — `[HIPÓTESE; HIP-P07]` — dep: WB-233, WB-253, WB-254, WB-258
+Como operadora que atualiza o status por WhatsApp com alguns minutos de atraso, quero registrar a hora em que o pedido realmente chegou, para o cliente não ser compensado por atraso que não houve e para o piloto medir o prazo de verdade.
+- **C1** Dado marcar ENTREGUE na corrida (WB-233), então o painel mostra "Entregue às HH:MM" preenchido com a hora atual, editável **até 60 minutos para trás** (nunca no futuro nem antes da saída para entrega); a API grava `deliveredAt`.
+- **C2** Dado recuo de mais de 5 min, então o motivo curto é obrigatório (lista: "Motoboy avisou depois", "Estava sem sinal", "Outro" com texto); dado recuo de até 5 min, o motivo é opcional.
+- **C3** Dado `deliveredAt` e o valor anterior (hora do clique), então os dois ficam no histórico da corrida com ator e hora (auditoria; WB-123).
+- **C4** Dado `deliveredAt` posterior ao fim da faixa + `entrega_atraso_tolerancia_min`, então a compensação (WB-254) usa essa hora; dado anterior, nenhuma compensação nasce; a compensação já concedida **não** é revogada se a hora for corrigida depois (um só sentido, sem sumir cupom da mão do cliente).
+- **C5** Dado o relatório "Prazo" (WB-258 C5) e a meta de 95% (HIP-E09), então usam `deliveredAt`.
+- **C6** Dado valor fora da janela (futuro, antes de SAIU, mais de 60 min atrás), então 422 com o motivo escrito e nada muda.
+- **C7** Dado perfil sem permissão de Logística, então 403.
+- **Risco:** a operação recuar a hora sistematicamente para esconder atraso; mitigação: relatório mostra a distribuição dos recuos por operadora e o fundador confere no piloto.
 
 ### WB-256 Admin: lote de corridas por área — Should — dep: WB-232, WB-249 (E.2)
 Como operadora, quero mandar várias entregas da mesma região no mesmo motoboy, para atender mais pedidos no prazo com poucos motoboys.

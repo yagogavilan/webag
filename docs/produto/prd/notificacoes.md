@@ -150,10 +150,10 @@ Como cliente, quero escolher se recebo ofertas, para controlar o que chega.
 
 ### WB-197 Push segmentado pelo admin — Should — dep: WB-196, WB-118
 Como operação, quero enviar push para um segmento, para ativar clientes e lojas.
-- **C1** Dado nova campanha, então escolho segmento (cidade, bairro, "sem compra há N dias", "comprou categoria X", "novos clientes", "lista de espera de [bairro]"), título (<= 60), corpo (<= 120) e destino (tela do app).
+- **C1** Dado nova campanha, então escolho segmento (cidade, bairro, "sem compra há N dias", "comprou categoria X", "novos clientes"; **"lista de espera de [bairro]" é fase 2**, DEC-061), título (<= 60), corpo (<= 120) e destino (tela do app).
 - **C2** Dado o segmento, então vejo a **estimativa** de destinatários **só entre os que têm opt-in**; menos de `push_mkt_min_segmento` (20 `[HIPÓTESE]`, parâmetro no admin, RN-02) destinatários bloqueia (proteção contra reidentificação).
 - **C3** Dado enviar, então respeita janela 9h-20h (envio agendado para a próxima janela) e `push_mkt_max_semana` por usuário (quem já atingiu é excluído).
-- **C4** Dado campanha enviada, então vejo enviados, entregues, abertos e descadastros.
+- **C4** Dado campanha enviada, então vejo **enviados (aceitos pelo provedor de push)**, abertos e descadastros; o rótulo **não** diz "entregues" (DEC-061, DT-061: aceito pelo provedor não é recibo de entrega e a métrica seria otimista). Recibos de entrega do provedor (Expo receipts) e a taxa "entregues" são **fase 2** (gatilho: primeira campanha acima de 1.000 destinatários).
 - **C5** Dado confirmação, então a tela exige "Enviar para N pessoas?" antes; não há desfazer após o envio.
 - **C6** Dado perfil sem permissão (financeiro/suporte), então não vê a tela.
 - **C7** Dado a campanha, então é auditada (WB-123).

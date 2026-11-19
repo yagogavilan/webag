@@ -184,6 +184,7 @@ Como Webag, quero cobrar uma taxa pequena pela coleta e reentrega da troca volun
 - **C7** Dado falha no pagamento da taxa, então a troca segue "Aprovada, taxa pendente" e o cliente pode tentar de novo até o prazo de C6; pagamento confirmado por webhook cria a corrida (WB-241) e notifica a loja.
 - **C8** Dado troca por reposição aprovada, então o estoque da variação nova é reservado na aprovação mesmo com a taxa pendente; se C6 cancelar, a reserva é liberada.
 - **C9** Dado aprovação automática por SLA (WB-177), então o mesmo fluxo de taxa se aplica a partir do instante da aprovação automática.
+- **C10** **(DEC-062, DT-062)** Dado taxa **já paga**, quando a admin tenta isentá-la ou o cliente muda para "Levar à loja", então a API responde 409 e a tela explica "Para levar à loja, cancele esta troca (devolvemos a taxa) e peça de novo". O estorno parcial da taxa com ledger é **fase 2** (gatilho: 3 casos por mês); se o prazo voluntário vencer nesse intervalo, a admin reabre pela mediação.
 
 ### WB-176 Contestar recusa e mediação — Must — dep: WB-171, WB-110
 Como cliente, quero contestar uma recusa, para ter uma segunda análise.

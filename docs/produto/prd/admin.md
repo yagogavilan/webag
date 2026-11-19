@@ -194,9 +194,10 @@ Como financeiro, quero ver divergências entre o sistema e o provedor, para não
 
 ### WB-114 Relatórios financeiros exportáveis — Should — dep: WB-156
 Como financeiro, quero exportar relatórios, para fechar o mês.
-- **C1** Dado período e filtros (loja, cidade, categoria), então exporto CSV de: vendas, comissões, taxa de serviço, estornos, cupons da plataforma, repasses e receita Webag (RN-10/RN-15).
-- **C2** Dado totais, então batem com a soma das linhas (teste de reconciliação interna).
-- **C3** Dado período > 10 mil linhas, então a exportação é assíncrona com aviso por e-mail.
+> **Recorte da 1.0 (DEC-060, DT-060 `[HIPÓTESE; HIP-P02]`):** o piloto fecha o mês com **2 relatórios CSV**, não 7. **R1 "Receita por pedido"** (uma linha por pedido pago: bruto, cupom da loja, cupom da plataforma, comissão, taxa de entrega, taxa de serviço, `application_fee`, taxa do provedor, líquido do lojista, estornos, status; cobre vendas, comissões, taxa de serviço, cupons da plataforma e receita Webag, que são o mesmo dado visto de ângulos diferentes) e **R2 "Estornos"** (uma linha por estorno com motivo e ator). Fora da 1.0: relatório de repasses (em split a Webag não repassa, RN-10; o extrato do lojista já mostra o informativo), exportação assíncrona e relatórios por categoria; gatilho: o contador do fundador pedir (J11) ou o primeiro 422 de volume em produção. O custo da logística e a margem seguem no relatório de WB-240.
+- **C1** Dado período e filtros (loja, cidade), então exporto os CSV R1 e R2 (RN-10/RN-15). *(Os demais CSV desta lista original são fase 2.)*
+- **C2** Dado totais, então batem com a soma das linhas (teste de reconciliação interna) e a soma de R1 bate com o ledger do período.
+- **C3** Dado período com mais de 10.000 linhas, então a API responde 422 com "Período grande demais. Reduza o intervalo (máximo 10.000 linhas)" e a contagem de linhas encontradas; **não há envio por e-mail na 1.0** (fase 2). Aceitável: 30 lojas não passam de 10 mil pedidos em um mês `[HIPÓTESE; medir no piloto]`.
 - **C4** Dado exportação, então é auditada.
 
 ### WB-115 Banners e destaques — Must — dep: WB-118
@@ -209,13 +210,13 @@ Como operação, quero publicar banners e destaques, para promover sem deploy.
 
 ### WB-116 Cupons da plataforma — Must — dep: WB-022
 Como operação, quero criar cupons Webag, para campanhas e primeira compra.
-- **C1** Dado novo cupom, então defino código, tipo (percentual, valor ou frete grátis), valor, teto, mínimo, validade, limites total e por cliente, "só primeira compra", e alvo (todas as lojas, cidades, categorias ou lojas específicas) (RN-09).
+- **C1** Dado novo cupom, então defino código, tipo (percentual, valor ou frete grátis), valor, teto, mínimo, validade, limites total e por cliente, "só primeira compra", e alvo (RN-09). **Na 1.0 o alvo é sempre "todas as lojas e cidades ativas"** (DEC-060, DT-059 `[HIPÓTESE; HIP-P01]`); alvo por cidade, categoria ou loja é fase 2 (gatilho: 2 ou mais cidades ativas com campanhas diferentes, ou loja que pede campanha). **Todo** cupom da plataforma exige teto de usos (não só o de primeira compra; SEC-155) e a tela mostra o custo máximo (usos x desconto máximo).
 - **C2** Dado o custo do cupom, então ele é custo da Webag e aparece no financeiro (RN-10) e na conciliação.
 - **C3** Dado limite de usos atingido, então novos usos falham com "Cupom esgotado".
 - **C4** Dado pausar, então deixa de valer imediatamente.
-- **C5** Dado relatório do cupom, então vejo usos, desconto total e pedidos.
+- **C5** Dado relatório do cupom, então vejo usos, desconto total, pedidos e **usos por loja** (com a participação de cada loja no total; é como o admin detecta autoconsumo na 1.0, C7).
 - **C6** Dado modo split, então o desconto da plataforma (cupom de valor, percentual ou frete grátis subsidiado) em cada pedido é limitado à `application_fee` daquele pedido (comissão + taxa de entrega + taxa de serviço, RN-10; DEC-016, SEC-060, DEC-036); ao salvar o cupom, o painel mostra o aviso "Em pedidos com comissão menor, o desconto será cortado em R$ [comissão]". Um cupom que exigisse mais que isso fica desligado até haver mecanismo de pagamento ao lojista aprovado pelo fundador.
-- **C7** Dado cupom da plataforma, então é recusado quando telefone, e-mail ou dispositivo do cliente coincide com membro da loja do pedido (autoconsumo, SEC-061); a loja com > 30% dos usos de um cupom `[HIPÓTESE]` gera alerta ao admin.
+- **C7** Dado cupom da plataforma, então é recusado quando telefone, e-mail ou dispositivo do cliente coincide com membro da loja do pedido (autoconsumo, SEC-061); o **alerta automático** "loja com > 30% dos usos de um cupom" `[HIPÓTESE]` é **fase 2** (DEC-060); na 1.0 vale a coluna "usos por loja" de C5.
 - **C8** Dado "primeira compra", então exige e-mail confirmado e nenhum pedido pago anterior do mesmo dispositivo, telefone ou endereço normalizado (SEC-060; WB-224 C2).
 
 ### WB-117 Termos e privacidade editáveis — Must — dep: WB-210

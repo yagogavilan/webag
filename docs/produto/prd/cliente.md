@@ -1,6 +1,6 @@
 # PRD: App do Cliente (Android e iOS)
 
-Status: pronto para G3 (aguarda estimativa dos devs e specs do designer); atualizado em 2026-11-19 pela DEC-053 (entrega em até 2 h) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-001 a WB-038, WB-250 a WB-254
+Status: pronto para G3 (aguarda estimativa dos devs e specs do designer); atualizado em 2026-11-19 pela DEC-053 (entrega em até 2 h) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-001 a WB-038, WB-250 a WB-254, WB-259 a WB-261 (DEC-060 a DEC-065, 2026-11-19)
 Regras numéricas: `docs/produto/regras-de-negocio.md` (RN-xx; a promessa de entrega é a **RN-19**). Hipóteses: `docs/decisoes.md` (HIP-xxx). Escopo de origem: brief §3.1.
 
 ## Problema
@@ -84,10 +84,12 @@ Como cliente, quero guardar vários endereços, para pedir para casa, trabalho o
 ### WB-004 Região não atendida e lista de espera — Should — dep: WB-118
 Como visitante fora da área, quero saber que ainda não chegaram aí e ser avisado, para não achar que o app está quebrado.
 - **C1** Dado cidade/bairro inativo, então vejo "Ainda não chegamos em [bairro]" e a opção de ver lojas de uma cidade atendida.
-- **C2** Dado que toco "Avisar quando chegar" e dou consentimento explícito (e-mail), então guardo e-mail, cidade e bairro e confirmo "Anotado". Modelo `[HIPÓTESE]`: **1 inscrição por e-mail e por bairro** (repetir o mesmo par não duplica nem acusa erro); o consentimento é próprio e fica registrado por inscrição (WB-211); quem se inscreve em 2 bairros tem 2 inscrições, cada uma revogável.
-- **C3** Dado e-mail inválido, então vejo erro no campo e nada é salvo.
-- **C4** Dado que o admin ativa o bairro depois, então os inscritos ficam disponíveis para push/e-mail segmentado (WB-197), respeitando o consentimento.
-- **C5** **(DEC-053)** Dado região ativa em que **nenhuma loja alcança o endereço dentro de 2 h**, então o estado vazio é o mesmo desta história, com o texto da seção "Copy" ("Nenhuma loja entrega em até 2 h aí") e a inscrição "Avisar quando chegar" guarda o par e-mail + bairro (HIP-D19), sem pedir dado novo.
+> **DEC-061 (2026-11-19): a lista de espera (C2 a C4) é FASE 2.** Na 1.0 o estado vazio não captura e-mail: mostra o texto e "Ver lojas de outra cidade" (C1) e dispara o evento `region_not_served_shown {city}`, que mede a demanda por região sem dado pessoal. Gatilho para a fase 2: mais de 50 aberturas por semana em uma região fora da área, ou decisão de abrir a região (backlog §6.5). Corta: tabela, endpoint, consentimento `waitlist` no app e o segmento "lista de espera" do push (WB-197).
+- **C2** **(Fase 2)** Dado que toco "Avisar quando chegar" e dou consentimento explícito (e-mail), então guardo e-mail, cidade e bairro e confirmo "Anotado". Modelo `[HIPÓTESE]`: **1 inscrição por e-mail e por bairro** (repetir o mesmo par não duplica nem acusa erro); o consentimento é próprio e fica registrado por inscrição (WB-211); quem se inscreve em 2 bairros tem 2 inscrições, cada uma revogável.
+- **C3** **(Fase 2)** Dado e-mail inválido, então vejo erro no campo e nada é salvo.
+- **C4** **(Fase 2)** Dado que o admin ativa o bairro depois, então os inscritos ficam disponíveis para push/e-mail segmentado (WB-197), respeitando o consentimento.
+- **C5** **(DEC-053, ajustada por DEC-061 e D8)** Dado região ativa em que **nenhuma loja alcança o endereço** (longe demais para a entrega), então o estado vazio é **o mesmo** de "Ainda não chegamos em [bairro]" (um estado só, D8), com o texto da seção "Copy" e a ação "Ver lojas de outra cidade"; se alguma loja aceita retirada a <= `retirada_distancia_max_km`, aparece "Retirar na loja" `[HIPÓTESE; entra com WB-251 C2, sem trabalho novo]`. Sem captura de e-mail na 1.0.
+- **C6** Dado o estado vazio exibido, então o app registra `region_not_served_shown {city}` (sem dado pessoal; AARRR: aquisição, demanda por região).
 
 ### WB-005 Navegar sem login — Must — dep: WB-001
 Como visitante, quero explorar lojas, produtos e preços sem criar conta, para decidir antes de me cadastrar.
@@ -237,7 +239,7 @@ Como cliente, quero aplicar um cupom, para pagar menos.
 Como cliente, quero escolher entrega ou retirada e confirmar o endereço, para fechar o pedido em poucos toques.
 - **C1** Dado login (e-mail confirmado ou, no 1º pedido pago, ainda não confirmado, WB-224), então o checkout tem no máximo: (1) entrega/retirada + endereço, (2) pagamento, (3) revisar e pagar; nenhum campo extra além de CPF quando o provedor exigir.
 - **C2** Dado resumo, então vejo subtotal, desconto, frete (ou "Grátis"), taxa de serviço (se houver) e **total** antes de pagar, com o mesmo valor que será cobrado.
-- **C3** Dado loja que não aceita retirada, então a opção não aparece; dado endereço fora do `raio_max_km`, **fora do alcance de 2 h (WB-251)**, de região inativa, ou logística fechada/pausada, então só retirada (se houver) ou aviso para trocar de endereço, com o motivo escrito ("Entrega volta às 09:00"); a taxa de entrega vem da tabela da Webag (WB-237) e o resumo a mostra em linha própria "Entrega Webag".
+- **C3** Dado loja que não aceita retirada, então a opção não aparece; dado endereço fora do `raio_max_km`, **fora do alcance de 2 h (WB-251)**, de região inativa, ou logística fechada/pausada, então só retirada (se houver) ou aviso para trocar de endereço, com o motivo escrito ("Entregas voltam às 9h", hora falada, D3; WB-260); a taxa de entrega vem da tabela da Webag (WB-237) e o resumo a mostra em linha própria "Entrega Webag".
 - **C4** Dado loja fechada, pausada ou que fechou durante o checkout, então bloqueio com "Loja fechada" e o carrinho é mantido.
 - **C5** Dado alteração de preço, estoque ou frete desde o carrinho, então vejo "Algo mudou" com o que mudou e confirmo antes de pagar (RN-05).
 - **C6** Dado total acima de `pedido_max_cents` (R$ 2.000,00), então bloqueio com mensagem clara.
@@ -358,17 +360,17 @@ Como usuário, quero denunciar conteúdo impróprio, para manter o app seguro (e
 - **C4** Dado visitante, então a denúncia exige login para evitar abuso.
 
 ## Promessa de entrega em até 2 h (DEC-053)
-Regra, fórmula e atraso: RN-19. Motor de cálculo, lote, alerta à operação e parâmetros: `logistica.md` (WB-249, 255, 256, 258). Preparo da loja: `lojista.md` WB-057 e WB-257. Nenhuma tela mostra horário único; "Chega em até 2 h" é só mensagem geral.
+Regra, fórmula e atraso: RN-19. Motor de cálculo, lote, alerta à operação e parâmetros: `logistica.md` (WB-249, 255, 256, 258). Preparo da loja: `lojista.md` WB-057 e WB-257. Nenhuma tela mostra horário único. **O app não escreve "2 h" em lugar nenhum** (D1, DEC-054, HIP-E09); "Chega em até 2 h" só existiria como mensagem geral externa depois de medir 95% no piloto e revisar a copy (J14), e hoje fica fora do app e dos materiais.
 
 ### WB-250 Faixa de chegada na descoberta, loja, produto e sacola — Must — dep: WB-249, WB-012, WB-016, WB-017, WB-020
 Como cliente, quero ver quando o pedido chega antes de escolher e de pagar, para comprar na loja que atende meu prazo.
 - **C1** Dado endereço com posição, quando vejo a lista de lojas (home, busca, categoria), então cada cartão mostra a faixa **em minutos** ("45 a 75 min") e a taxa, e a ordenação "perto de mim" continua RN-03 (a faixa não reordena sozinha; `sort=eta` do contrato é opcional no filtro, WB-014).
 - **C2** Dado a página da loja, então vejo a faixa em minutos e, ao lado, o horário de chegada de relógio ("Chega entre 15:40 e 16:10"); dado a página do produto, vejo o horário de relógio junto à taxa; dado a sacola e o checkout, o horário de relógio com a frase "A contagem começa quando o pagamento for aprovado".
 - **C3** Dado que o endereço mudou (WB-003), então todas as faixas e a lista são recalculadas; a sacola recalcula ao abrir e a cada minuto com a tela parada; o horário nunca fica "velho" (mostra sempre a partir de agora).
-- **C4** Dado sem endereço (visitante com só cidade), então os cartões mostram "Chega em até 2 h" e a loja pede o endereço ("Informe seu endereço para ver o horário"); nenhuma faixa de distância é inventada.
+- **C4** Dado sem endereço (visitante com só cidade), então os cartões **não mostram prazo** e a loja pede o endereço ("Informe seu endereço para ver o horário"); nenhuma faixa de distância é inventada e **o app não escreve "2 h" em lugar nenhum** (D1, DEC-054: as capturas das lojas de apps são telas do app; HIP-E09).
 - **C5** Dado loja de retirada, então não há faixa de entrega; vale o preparo informado pela loja (WB-058 C1).
 - **C6** Dado loja fechada ou logística fechada (RN-04), então a faixa não aparece; aparece "Abre às HH:MM" ou "Entrega volta às HH:MM".
-- **C7** Dado a faixa mudar entre a sacola e a criação do pedido por mais que a folga, então "Algo mudou" com a faixa nova e o cliente confirma antes de pagar (WB-249 C5).
+- **C7** Dado o fim da faixa ficar **mais tarde** entre a sacola e a criação do pedido, então "O horário mudou" com a faixa nova e o cliente confirma antes de pagar (WB-261; WB-249 C5).
 - **C8** Dado leitor de tela, então o rótulo acessível lê a faixa por extenso ("Chega entre 15 horas e 40 minutos e 16 horas e 10 minutos"); a faixa nunca depende só de cor ou ícone.
 - **C9** Dado sem conexão, então vejo o último valor com "Atualizado há X min" e a sacola bloqueia o pagamento até recalcular (a faixa é do servidor).
 - **Eventos:** `eta_shown {surface: list|store|product|cart, minMin, maxMin}`; AARRR: ativação (carrinho > pedido pago) por faixa mostrada (HIP-E10).
@@ -377,7 +379,8 @@ Como cliente, quero ver quando o pedido chega antes de escolher e de pagar, para
 Como cliente, quero saber por que uma loja não entrega aqui, para escolher outra loja ou retirar.
 - **C1** Dado endereço e loja cujo fim da faixa passa de `entrega_max_min`, então a loja **não aparece** na lista nem na busca para esse endereço (RN-03, RN-19).
 - **C2** Dado que chego à loja ou ao produto por link, favorito, histórico ou "pedir de novo", então vejo o texto de "fora da área" (seção "Copy"), sem faixa, e o botão de entrega **ausente** (não desabilitado sem explicação, RN-17); se a loja aceita retirada e está a <= `retirada_distancia_max_km`, aparece "Retirar na loja".
-- **C3** Dado sacola com item de loja que passou a estar fora do alcance (troquei de endereço), então o checkout bloqueia com o texto de fora da área e a sacola é mantida com "Trocar endereço" e "Ver lojas que entregam aí".
+- **C3** Dado sacola com item de loja que passou a estar fora do alcance (troquei de endereço), então o checkout bloqueia com o texto de fora da área e a sacola é mantida com "Trocar endereço" e "Ver lojas que entregam aí"; **nenhuma opção de recebimento vem pré-selecionada** e o botão principal vira "Escolha como receber" (D7: trocar sozinho para retirada mudaria total e modo sem o cliente perceber).
+- **C3b** Dado o motivo da indisponibilidade, então o texto diz a causa real (WB-260): longe demais, entregas fechadas (com hora de volta) ou entregas pausadas.
 - **C4** Dado que **nenhuma** loja alcança o endereço, então vale o estado vazio e a lista de espera (WB-004 C5).
 - **C5** Dado servidor recebendo pedido fora do alcance, então 422 `OUT_OF_RANGE` e nenhum pedido é criado (a regra é do servidor).
 - **C6** Dado que o fim da faixa só passa do teto por mudança de parâmetro no admin, então pedidos já criados não são afetados (RN-19 item 3).
@@ -387,7 +390,7 @@ Como cliente, quero saber por que uma loja não entrega aqui, para escolher outr
 Como cliente, quero saber quando meu pedido chega e ver o horário acompanhar o andamento, para esperar em casa.
 - **C1** Dado pedido de entrega pago, então a tela e o push de "Pedido recebido" mostram "Chega entre HH:MM e HH:MM" (a faixa **reancorada** no pagamento, RN-19 item 3).
 - **C2** Dado ACEITO, EM_SEPARACAO, PRONTO_PARA_COLETA e motoboy a caminho, então o horário **não muda**; abaixo vejo o texto "Atualizamos o horário conforme o pedido avança".
-- **C3** Dado SAIU_PARA_ENTREGA, então o horário é recalculado só pelo deslocamento restante e **só pode ficar mais cedo**: se encurtou, a tela mostra "Chega mais cedo: agora entre HH:MM e HH:MM" uma vez; se calcularia mais tarde, mantém o horário prometido (RN-19).
+- **C3** Dado SAIU_PARA_ENTREGA, então o horário é recalculado só pelo deslocamento restante e **só pode ficar mais cedo**: se encurtou, a tela mostra a faixa nova; o aviso "Chega mais cedo: agora entre HH:MM e HH:MM" (uma vez) é **Could** e o app o decide **comparando com a faixa que já tinha**, sem campo novo na API (DEC-065, F6b); se calcularia mais tarde, mantém o horário prometido (RN-19).
 - **C4** Dado passar do fim da faixa, então o estado vira "Atrasado" (WB-253) e a faixa prometida não é empurrada nem substituída por horário novo inventado.
 - **C5** Dado ENTREGUE, então a faixa some e a linha do tempo mostra a hora real de entrega; dado CANCELADO ou RECUSADO, a faixa some.
 - **C6** Dado pedido em AGUARDANDO_PAGAMENTO, então não há faixa de pedido (só a da sacola); depois da aprovação do PIX a faixa aparece em até 5 s.
@@ -396,17 +399,19 @@ Como cliente, quero saber quando meu pedido chega e ver o horário acompanhar o 
 - **Eventos:** `eta_updated {deltaMin}`.
 
 ### WB-253 Atraso: aviso ao cliente e cancelamento sem custo — Must — dep: WB-252, WB-255, WB-028, WB-154
-Como cliente, quero ser avisado quando o pedido atrasa e poder sair sem perder dinheiro, para confiar na promessa de 2 h.
+Como cliente, quero ser avisado quando o pedido atrasa e poder sair sem perder dinheiro, para confiar na promessa de entrega.
 - **C1** Dado passar do fim da faixa (em qualquer estado até SAIU), então recebo **1 push** e um aviso na tela com o texto de atraso (seção "Copy") e o botão "Falar com a Webag"; nenhum push repetido para o mesmo pedido.
 - **C2** Dado passar do fim da faixa + `entrega_atraso_tolerancia_min` (15) e o pedido ainda **antes de SAIU**, então aparecem "Cancelar sem custo" e "Continuar esperando"; ao confirmar o cancelamento, o pedido vira CANCELADO (ator cliente, motivo `atraso`), o estoque é liberado e o estorno é **total, incluindo a taxa de entrega** (RN-08); vejo o prazo do estorno como em WB-028 C1.
 - **C3** Dado o pedido já em SAIU_PARA_ENTREGA, então o botão vira "Pedir cancelamento"; vejo "A Webag responde em até 10 min"; a operação aceita (o motoboy devolve o pacote à loja; estorno total ao concluir a devolução conforme RN-18) ou informa "Chego em até 10 min"; sem resposta em `entrega_cancel_resposta_min`, **aceita** automaticamente.
-- **C4** Dado "Continuar esperando", então o botão some, o aviso fica e o direito à compensação (WB-254) permanece.
+- **C4** Dado "Continuar esperando", então o botão de esperar some e o aviso fica, **"Cancelar sem custo" permanece como ação secundária** (em SAIU, "Pedir cancelamento") até ENTREGUE, e o direito à compensação (WB-254) permanece, se o contrato a trouxer (RN-19 4d; D5, DEC-064). A escolha é só estado da tela, não é gravada na API; evento `late_wait_chosen`.
 - **C5** Dado toque duplo em cancelar ou pedido ENTREGUE no meio, então um só cancelamento ou nenhum (idempotência; pedido ENTREGUE recusa com "Seu pedido já foi entregue").
 - **C6** Dado pedido de retirada, então nada disto se aplica (o prazo de retirada é o de WB-026).
 - **C7** Dado que a **loja** cancelou ou recusou, então prevalece o fluxo de cancelamento da loja (RN-08); atraso e cancelamento por atraso não se acumulam.
 - **C8** Dado a mensagem de atraso, então **não** culpa a loja nem o motoboy e **não** declara responsabilidade jurídica; é neutra (seção "Copy"; revisão do fundador/jurídico, J14).
 - **C9** Dado cliente sem conexão, então o estado de atraso é calculado no servidor e aparece ao reconectar; o cancelamento exige conexão.
-- **Eventos:** `late_notice_shown`, `late_cancel_requested {status}`, `late_cancel_done`.
+- **C10** **(F5 e F7, DEC-065)** Dado a tela do pedido aberta, então o aviso de atraso aparece em até **60 s** (push cobre o app fechado) e, com "Pedir cancelamento" pendente, a tela relê a cada **15 s** até a decisão. Antes de pedir, o texto é "A Webag responde em poucos minutos" (**o app nunca escreve um número de minutos que a API não mandou**); depois de pedir, mostra `respondBy`. Recusa da operação mostra a nota escrita pela operação (obrigatória na recusa, com sugestão "Chegamos até HH:MM"); `arrivesBy` e eventos em tempo real de atraso e de decisão são **fase 2**.
+- **C11** Dado o cancelamento por atraso concluído, então a tela mostra o valor e o meio do estorno e o texto de prazo por meio de pagamento (WB-259; RN-08), sem data prometida.
+- **Eventos:** `late_notice_shown`, `late_cancel_requested {status}`, `late_cancel_done`, `late_wait_chosen`.
 
 ### WB-254 Compensação por atraso — Should — `[HIPÓTESE; HIP-E05]` — dep: WB-253, WB-116 (cupom de frete)
 Como cliente, quero receber algo quando o pedido chega depois do prazo, para sentir que a Webag cumpre o que promete.
@@ -416,14 +421,40 @@ Como cliente, quero receber algo quando o pedido chega depois do prazo, para sen
 - **C4** Dado o pedido que o cliente **cancelou** por atraso, então não há compensação; dado pedido com atraso dentro da tolerância, também não.
 - **C5** Dado a mesma corrida fechada duas vezes ou reprocessada, então **um** cupom por pedido (idempotência pela chave do pedido).
 - **C6** Dado o custo, então o relatório de prazo mostra compensações concedidas e usadas, com o valor de receita de taxa abdicado (WB-258 C5); o custo é da Webag (não desconta do lojista).
-- **C7** Dado conta excluída (LGPD), então o cupom é apagado junto com a conta (sem dado em campanha).
-- **Pergunta ao fundador:** o tipo padrão, o valor e quem arca (HIP-E05).
+- **C7** Dado conta excluída (LGPD), então o cupom **não usado** é apagado junto com a conta e o já usado fica só como registro de resgate do pedido, sem dado pessoal (RN-14, DEC-063); a tela de exclusão avisa que cupons não usados se perdem.
+- **C8** Dado a corrida com `not_delivered` por `customer_absent` ou `customer_refused`, ou por `address_not_found` sem correção da causa pela operação, então **não** há compensação (RN-19 4c, SEC-177); o evento `compensation_skipped` guarda a causa.
+- **Decisão (DEC-064):** tipo padrão `frete_gratis_proximo`, custo da Webag, valor conforme HIP-E05; o fundador pode trocar no admin sem código.
+
+### WB-259 Estorno: valor, meio e prazo na tela do pedido — Must — dep: WB-028, WB-253, `Order.refund` (F3)
+Como cliente que cancelou ou foi estornado, quero ver quanto volta, para onde e em quanto tempo costuma levar, para não ligar para o suporte.
+- **C1** Dado pedido com estorno (cancelamento, recusa, atraso, troca), então a tela mostra o **valor** (`refund.amountCents`), o **meio** (PIX ou cartão) e o status (processando ou concluído), vindos da API.
+- **C2** Dado meio PIX, então o texto é "Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil." `[HIPÓTESE; HIP-P09; J16]`; dado cartão, "Aparece na fatura do cartão em até 2 faturas, conforme o seu banco."; o app **não** mostra data prometida.
+- **C3** Dado estorno parcial (item indisponível, troca), então o valor mostrado é o parcial e o texto diz "Estorno de R$ X" (nunca o total do pedido).
+- **C4** Dado API sem `refund` (pedido sem estorno), então a seção não aparece; dado falha ao carregar, então o resto da tela funciona e a seção mostra "Não conseguimos carregar o estorno. Tente de novo".
+- **C5** Dado leitor de tela, então valor, meio e status são lidos juntos em uma frase.
+- **Evento:** `refund_info_shown {method}`. **Fora (fase 2):** `expectedBy` e rastreio do estorno.
+
+### WB-260 Motivo real da entrega indisponível — Must — dep: WB-251, WB-235 (F4)
+Como cliente, quero saber por que a loja não entrega agora, para escolher entre esperar, retirar ou trocar de endereço.
+- **C1** Dado loja sem entrega para mim, então o cartão, a loja, a sacola e o checkout mostram a causa que a API manda em `unavailableReason`: `OUT_OF_RANGE` "Longe demais para entregar no seu endereço"; `LOGISTICS_CLOSED` "Entregas voltam às 9h" (hora falada, D3; "amanhã às 9h" se for o caso); `LOGISTICS_PAUSED` "Entregas pausadas agora" (com a hora de volta se houver `logisticsOpensAt`).
+- **C2** Dado pausa **sem** previsão de volta, então o texto **não** diz "fora da área" (hoje diz, e é falso) nem inventa hora.
+- **C3** Dado a loja aceitar retirada a <= `retirada_distancia_max_km`, então "Retirar na loja" aparece junto (RN-17: sem botão desabilitado sem explicação).
+- **C4** Dado API antiga sem o campo, então o app mostra "Entrega indisponível agora" (nunca "fora da área" por omissão).
+- **Evento:** `ops_closed_shown {surface}`.
+
+### WB-261 Horário mudou antes de pagar — Must — dep: WB-249 C5, WB-250 C7 (F6a)
+Como cliente, quero ser avisado se o horário de chegada piorou entre a sacola e o pagamento, para não pagar uma promessa diferente da que vi.
+- **C1** Dado o fim da faixa calculado na criação do pedido **mais tarde** que o mostrado na sacola (qualquer diferença, `[HIPÓTESE; evita folga de tolerância que vira promessa diferente]`), então a API responde 409 `ETA_CHANGED` com a faixa nova e **nenhum pedido é criado**; o app abre a folha "O horário mudou" com a faixa nova e "Continuar" ou "Voltar à sacola"; ao continuar, o pedido é criado com a faixa nova.
+- **C2** Dado a faixa nova **igual ou mais cedo**, então o pedido é criado sem aviso (o cliente vê a faixa real na confirmação; sem folha).
+- **C3** Dado a faixa nova que **tira a loja do alcance** (passou do teto ou do fechamento), então vale `OUT_OF_RANGE` (WB-251 C5) e não `ETA_CHANGED`.
+- **C4** Dado toque duplo em "Continuar", então um só pedido (idempotência).
+- **Fora (fase 2):** o campo `earlier` com a faixa anterior; o aviso "Agora chega mais cedo" é local (WB-252 C3).
 
 ### Copy da promessa de entrega (proposta do PO; o designer ajusta o tom e a posição, o fundador aprova; sem emoji; frases curtas)
 | Onde | Texto proposto | Observação |
 |---|---|---|
-| Mensagem geral (home, onboarding, loja de apps, landing) | **"Chega em até 2 h"** e subtítulo "Veja o horário de cada loja antes de pedir." | Única frase com "2 h" fora do pedido; só vale porque o teto bloqueia o resto (RN-19). Revisão do fundador/jurídico antes do G5 (J14). Substitui "30 a 45 min" |
-| Cartão da loja (lista) | "45 a 75 min · R$ 8,00" | Faixa em minutos; sem endereço: "Chega em até 2 h" |
+| Mensagem geral (home, onboarding, loja de apps, landing) | **"Entrega pelo Webag"** e subtítulo "Veja o horário de cada loja antes de pedir." | **DEC-054 e D1: sem "2 h" no app nem em material externo** até 95% no piloto (HIP-E09) e revisão J14. A frase "Chega em até 2 h" fica reservada para depois da prova. Substitui "30 a 45 min" |
+| Cartão da loja (lista) | "45 a 75 min · R$ 8,00" | Faixa em minutos; sem endereço: **sem prazo** (a loja pede o endereço) |
 | Página da loja | "Chega entre 15:40 e 16:10" e, abaixo, "45 a 75 min, conforme a distância até você" | |
 | Produto | "Receba hoje entre 15:40 e 16:10 · Entrega R$ 8,00" | "hoje" só dentro do horário da logística (HIP-E08) |
 | Sacola e checkout | "Chega entre 15:40 e 16:10" e "A contagem começa quando o pagamento for aprovado." | |
@@ -434,13 +465,15 @@ Como cliente, quero receber algo quando o pedido chega depois do prazo, para sen
 | Atraso, depois da tolerância | "Passamos do prazo. Você pode cancelar sem custo ou continuar esperando." Botões "Cancelar sem custo" e "Continuar esperando" | Em SAIU: botão "Pedir cancelamento" e "A Webag responde em até 10 minutos." |
 | Cancelado por atraso | "Pedido cancelado. Devolvemos o valor total, com a entrega, em até [prazo do meio de pagamento]." | Prazo como em WB-028 C1 |
 | Compensação | "Pedimos desculpas pelo atraso. Você ganhou entrega grátis no seu próximo pedido, válida por 30 dias." (cupom de valor: "Você ganhou R$ 10,00 de desconto no próximo pedido, válido por 30 dias.") | Texto muda com `entrega_compensacao_tipo` |
-| Loja fora do alcance (loja/produto/sacola) | "Esta loja não entrega no seu endereço em até 2 h." e "Veja outras lojas perto de você ou retire no balcão." | Botão "Retirar na loja" só se a loja aceita retirada |
-| Endereço sem lojas (estado vazio) | "Nenhuma loja entrega em até 2 h aí. Ainda." e "Avisar quando chegar" | Reaproveita WB-004 |
-| Região não atendida (WB-004) | "Ainda não chegamos em [bairro]." e "Avisar quando chegar" | |
-| Lista de espera: consentimento | "Podemos usar seu e-mail só para avisar quando a Webag chegar em [bairro]. Você cancela quando quiser." | LGPD: finalidade única, consentimento próprio (WB-211) |
-| Lista de espera: confirmação | "Anotado. Avisamos você por e-mail quando chegarmos em [bairro]." | |
-| Entrega perto do fechamento | "Entregas hoje até 20:00. Para este pedido o prazo passaria disso. Retire na loja ou peça a partir das 09:00." | HH:MM vêm de `logistica_horario` |
-| Sem endereço | "Informe seu endereço para ver o horário." | |
+| Loja fora do alcance (loja/produto/sacola) | "Esta loja fica longe demais para entregar no seu endereço." e "Veja outras lojas perto de você ou retire no balcão." | Sem número (D1). Botão "Retirar na loja" só se a loja aceita retirada |
+| Endereço sem lojas e região não atendida (**um estado só**, D8) | "Ainda não chegamos em [bairro]." e "Ver lojas de outra cidade" | WB-004 C1 e C5; sem captura de e-mail na 1.0 (DEC-061) |
+| Lista de espera: consentimento e confirmação | **Fase 2** (DEC-061): "Podemos usar seu e-mail só para avisar quando a Webag chegar em [bairro]. Você cancela quando quiser." / "Anotado. Avisamos você por e-mail quando chegarmos em [bairro]." | Guardado para a fase 2; LGPD: finalidade única, consentimento próprio (WB-211) |
+| Entrega perto do fechamento | "Entregas hoje até 20h. Para este pedido o prazo passaria disso. Retire na loja ou peça a partir das 9h." | Hora falada (D3); valores vêm de `logistica_horario` |
+| Entrega pausada sem hora | "Entregas pausadas agora." | WB-260 C2; nunca "fora da área" |
+| Estorno por PIX / por cartão | "Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil." / "Aparece na fatura do cartão em até 2 faturas, conforme o seu banco." | WB-259; sem data prometida; J16 |
+| Sem endereço | "Informe seu endereço para ver o horário." | Único texto de prazo sem endereço (D1) |
+| Atraso: horário em que nasce o direito (D4) | "Se passar de 19:35, você pode cancelar sem custo." | No 1º aviso de WB-253 C1; frase em revisão J14 |
+| "Continuar esperando" (sem `Order.compensation` no contrato) | "Combinado, seguimos com o seu pedido." | Não cita entrega grátis; com o campo, acrescenta a compensação real (RN-19 4d) |
 
 ## Dependências e riscos
 | Item | Tipo | Mitigação |
