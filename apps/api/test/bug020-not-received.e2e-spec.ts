@@ -54,13 +54,23 @@ describe('BUG-020: "não recebi" x auto-conclusão de 24 h (RN-07)', () => {
     return r;
   }
   const later = () => new Date(Date.now() + 25 * 3_600_000); // o histórico é append-only: avança o relógio, não recua o banco
+  /** A varredura lê no máximo 100 corridas por vez e o banco é compartilhado com outros arquivos: repete até esvaziar (sem depender da ordem dos arquivos). */
+  const sweepAll = async (svc: DeliveriesService): Promise<number> => {
+    let total = 0;
+    for (let i = 0; i < 20; i += 1) {
+      const n = await svc.autoConcludeDue(later());
+      total += n;
+      if (n < 100) break;
+    }
+    return total;
+  };
 
   it('RN-07: corrida em saiu-para-entrega há > 24 h NÃO vira entregue se o cliente já avisou "não recebi"; a operação é alertada', async () => {
     const r = await outForDelivery();
     await ctx.http.post(`/v1/orders/${r.orderId}/not-received`).set(bearer(r.buyer.user.accessToken)).send({}).expect(202);
     const svc = ctx.app.get(DeliveriesService);
-    await svc.autoConcludeDue(later());
-    await svc.autoConcludeDue(later()); // repetir não duplica o alerta
+    await sweepAll(svc);
+    await sweepAll(svc); // repetir não duplica o alerta
     const status = (await orderRow(ctx, r.orderId)).status;
     expect(status, `pedido ${status} depois da auto-conclusão com "não recebi" registrado`).not.toBe('delivered');
     const [delivery] = await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id));
@@ -73,7 +83,7 @@ describe('BUG-020: "não recebi" x auto-conclusão de 24 h (RN-07)', () => {
 
   it('controle: sem aviso do cliente a auto-conclusão de 24 h segue funcionando', async () => {
     const r = await outForDelivery();
-    const concluded = await ctx.app.get(DeliveriesService).autoConcludeDue(later());
+    const concluded = await sweepAll(ctx.app.get(DeliveriesService));
     expect(concluded).toBeGreaterThanOrEqual(1);
     expect((await orderRow(ctx, r.orderId)).status).toBe('delivered');
   });

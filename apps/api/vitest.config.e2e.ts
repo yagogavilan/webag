@@ -15,6 +15,8 @@ export default defineConfig({
     hookTimeout: 60_000,
     env: {
       NODE_ENV: 'test',
+      // O e2e tem PostgreSQL e Redis reais: liga o teste de /health/ready com dependências no ar (antes ficava pulado sem esta variável).
+      E2E_DEPS: '1',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'silent',
       DATABASE_URL: TEST_ENV.databaseUrl,
       REDIS_URL: TEST_ENV.redisUrl,

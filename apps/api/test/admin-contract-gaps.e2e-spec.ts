@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { adminRecoveryCodes, auditLog, sessions } from '../src/platform/database/schema.js';
-import { bearer, createTestApp, randomIp, totpAt, uniqueEmail, type TestContext } from './helpers/app.js';
+import { bearer, createTestApp, randomIp, totpAt, uniqueEmail, type TestContext, uniqueTag } from './helpers/app.js';
 import { createAdmin, ensureLegalDocs, loginWithMfa, registerUser, type TestAdmin } from './helpers/fixtures.js';
 
 /** Pendências de contrato do painel web admin (docs/arquitetura/pendencias-contrato-web-admin.md, itens 2 a 7). */
@@ -120,7 +120,7 @@ describe('Admin web: reason, versão em parâmetros, códigos de recuperação, 
   describe('auditoria: ator, aparelho, CSV e "só as próprias ações"', () => {
     it('cada linha traz o nome do ator e o aparelho; perfil não-super só enxerga as PRÓPRIAS ações (filtro forçado)', async () => {
       const ops = await createAdmin(ctx, 'operations');
-      await ctx.http.post('/v1/admin/regions/cities').set(bearer(ops.accessToken)).set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36').send({ name: `Cidade ${uniqueEmail().slice(0, 6)}` }).expect(201);
+      await ctx.http.post('/v1/admin/regions/cities').set(bearer(ops.accessToken)).set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36').send({ name: `Cidade ${uniqueTag(6)}` }).expect(201);
 
       const own = await ctx.http.get('/v1/admin/audit-log').set(bearer(ops.accessToken)).query({ actorId: superAdmin.userId }).expect(200);
       expect(own.body.data.length).toBeGreaterThan(0);

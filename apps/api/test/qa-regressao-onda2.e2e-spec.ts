@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { invitations, productVariants, products, storeActivity, storeDocuments, storeHours } from '../src/platform/database/schema.js';
-import { bearer, createTestApp, uniqueEmail, type TestContext } from './helpers/app.js';
+import { bearer, createTestApp, uniqueEmail, type TestContext, uniqueTag } from './helpers/app.js';
 import {
   CPF_DOCS,
   createAdmin,
@@ -29,7 +29,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
 
   /** Produto ativo, com categoria, 1 foto, 1 variação (estoque 10) e preço de R$ 50,00. */
   async function activeProduct(): Promise<{ id: string; variantId: string }> {
-    const created = await ctx.http.post(products_()).set(as(owner)).send({ name: `Produto ${uniqueEmail().slice(0, 6)}`, categoryId, basePriceCents: 5000 }).expect(201);
+    const created = await ctx.http.post(products_()).set(as(owner)).send({ name: `Produto ${uniqueTag(6)}`, categoryId, basePriceCents: 5000 }).expect(201);
     const id = created.body.id as string;
     const withVariant = await ctx.http.put(products_(`/${id}/variants`)).set(as(owner)).send({ attributes: [], variants: [{ attributes: {}, stock: 10 }] }).expect(200);
     const upload = await uploadFile(ctx, owner, { storeId, purpose: 'product_image', contentType: 'image/jpeg', body: await jpegBuffer(900, 700) });
@@ -153,7 +153,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
   describe('I4: operações relativas de catálogo são idempotentes com `Idempotency-Key`', () => {
     it('BUG-004: ajuste de estoque `delta` repetido com a mesma chave (retry de rede) soma uma vez só', async () => {
       const { id, variantId } = await activeProduct();
-      const key = `estoque-${uniqueEmail().slice(0, 8)}`;
+      const key = `estoque-${uniqueTag(8)}`;
       const url = products_(`/${id}/variants/${variantId}/stock`);
       await ctx.http.post(url).set(as(owner)).set('Idempotency-Key', key).send({ delta: 2 }).expect(200);
       await ctx.http.post(url).set(as(owner)).set('Idempotency-Key', key).send({ delta: 2 }).expect(200);
@@ -164,7 +164,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
 
     it('BUG-004: reajuste de preço em massa por percentual repetido com a mesma chave aplica uma vez só', async () => {
       const { id } = await activeProduct();
-      const key = `preco-${uniqueEmail().slice(0, 8)}`;
+      const key = `preco-${uniqueTag(8)}`;
       const body = { productIds: [id], action: { type: 'price_adjust', mode: 'percent', value: 10 } };
       await ctx.http.post(products_('/bulk')).set(as(owner)).set('Idempotency-Key', key).send(body).expect(200);
       await ctx.http.post(products_('/bulk')).set(as(owner)).set('Idempotency-Key', key).send(body).expect(200);
@@ -248,7 +248,7 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
       const importStore = (await insertStoreRow(ctx, own.userId, { status: 'approved', name: 'Loja Importação QA' })).id;
       const { categories } = await import('../src/platform/database/schema.js');
       await ctx.db.insert(categories).values({ name: 'Mercado', icon: 'storefront' }).onConflictDoNothing();
-      const tag = uniqueEmail().slice(0, 6);
+      const tag = uniqueTag(6);
       const key = `import-${tag}-0000`;
       const send = () =>
         ctx.http.post(`/v1/stores/${importStore}/products/import`).query({ mode: 'commit' }).set(as(own)).set('Content-Type', 'text/csv').set('Idempotency-Key', key).send(csv(tag));

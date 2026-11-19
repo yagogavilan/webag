@@ -100,6 +100,8 @@ function withRandomIp(agent: ReturnType<typeof request>): ReturnType<typeof requ
   });
 }
 
+/** Sufixo aleatório de `len` caracteres hexadecimais (BUG-019 d: `uniqueEmail().slice(0, 6)` valia só "user-" + 1 caractere = 16 valores e colidia). */
+export const uniqueTag = (len = 8): string => randomUUID().replace(/-/g, '').slice(0, len);
 export const uniqueEmail = (prefix = 'user'): string => `${prefix}-${randomUUID().slice(0, 8)}@teste.webag.local`;
 /** Senha forte que não está na lista de comuns. */
 export const STRONG_PASSWORD = 'cavalo-bateria-grampo-9';

@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { auditLog, categories, productModerationEvents, productVariants, products, storeActivity, storeMembers, stores, users } from '../src/platform/database/schema.js';
-import { bearer, createTestApp, uniqueEmail, type TestContext } from './helpers/app.js';
+import { bearer, createTestApp, type TestContext, uniqueTag } from './helpers/app.js';
 import { createAdmin, createMerchant, ensureCategory, ensureLegalDocs, insertStoreRow, jpegBuffer, registerUser, uploadFile, type TestAdmin, type TestMerchant } from './helpers/fixtures.js';
 
 /** Catálogo (WB-060 a 066) e moderação (WB-107): casos P0 do plano da Onda 2 (§2.8 e §2.9) e IDOR por loja. */
@@ -17,7 +17,7 @@ describe('Catálogo: produto, variações, estoque, preço, seções, planilha, 
   const as = (u: { accessToken: string }) => bearer(u.accessToken);
   const path = (suffix = '', id = storeId) => `/v1/stores/${id}/products${suffix}`;
   const create = (body: Record<string, unknown> = {}, user: { accessToken: string } = owner, id = storeId) =>
-    ctx.http.post(path('', id)).set(as(user)).send({ name: `Produto ${uniqueEmail().slice(0, 6)}`, ...body });
+    ctx.http.post(path('', id)).set(as(user)).send({ name: `Produto ${uniqueTag(6)}`, ...body });
   const vari = (productId: string, body: Record<string, unknown>, user: { accessToken: string } = owner) => ctx.http.put(path(`/${productId}/variants`)).set(as(user)).send(body);
 
   /** Produto pronto para publicar: categoria, preço, 1 variação (estoque 10) e 1 foto. */
@@ -78,7 +78,7 @@ describe('Catálogo: produto, variações, estoque, preço, seções, planilha, 
     });
 
     it('O2-PRD-10: `Idempotency-Key` repetido (duplo clique) cria 1 produto', async () => {
-      const key = `chave-${uniqueEmail().slice(0, 8)}`;
+      const key = `chave-${uniqueTag(8)}`;
       const first = await ctx.http.post(path()).set(as(owner)).set('Idempotency-Key', key).send({ name: 'Duplo clique' }).expect(201);
       const second = await ctx.http.post(path()).set(as(owner)).set('Idempotency-Key', key).send({ name: 'Duplo clique' }).expect(201);
       expect(second.body.id).toBe(first.body.id);
@@ -483,7 +483,7 @@ describe('Catálogo: produto, variações, estoque, preço, seções, planilha, 
       const m = await createMerchant(ctx);
       const sid = (await insertStoreRow(ctx, m.userId, { status: 'approved', name: 'Loja Reincidente' })).id;
       const make = async () => {
-        const res = await ctx.http.post(`/v1/stores/${sid}/products`).set(as(m)).send({ name: `Item ${uniqueEmail().slice(0, 6)}` }).expect(201);
+        const res = await ctx.http.post(`/v1/stores/${sid}/products`).set(as(m)).send({ name: `Item ${uniqueTag(6)}` }).expect(201);
         return res.body.id as string;
       };
       const flagged = async () => (await ctx.db.select().from(stores).where(eq(stores.id, sid)))[0]?.suspensionReviewFlaggedAt;

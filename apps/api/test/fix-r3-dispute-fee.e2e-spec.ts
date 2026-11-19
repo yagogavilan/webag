@@ -5,7 +5,7 @@ import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { FakePaymentProvider } from '../src/modules/payments/providers/fake.provider.js';
 import { auditLog, ledgerTransactions, paymentAlerts, paymentAttempts, paymentRefundIntents } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
+import { createAdmin, ensureCity, ensureLegalDocs, reconcileFirst } from './helpers/fixtures.js';
 import { addToCart, attemptOf, customerAt, orderRow, placeOrder, shopWith } from './helpers/orders.js';
 
 /** R.3: chargeback visível (I2) e tarifa do provedor recuperável na conciliação (I3). */
@@ -38,18 +38,26 @@ describe('Chargeback e tarifa tardia do provedor (R.3, I2, I3)', () => {
     const attempt = await attemptOf(ctx, orderId);
     await fake.simulate(attempt.providerPaymentId!, { outcome: 'approved', reportedProviderFeeCents: 0 });
     await ctx.db.update(paymentAttempts).set({ createdAt: new Date(Date.now() - 10 * 60_000) }).where(eq(paymentAttempts.id, attempt.id));
-    await payments.reconcile();
+    await reconcileNow(attempt.id);
     expect((await orderRow(ctx, orderId)).status).toBe('received');
     return { orderId, attempt, shop };
   }
+  /**
+   * BUG-019 (e): a conciliação lê no máximo 200 tentativas, das mais antigas para as mais novas, num banco que os outros arquivos já
+   * encheram; sem passar a tentativa deste teste para a frente da fila ela ficava de fora conforme a ordem e o volume (flakiness por dados compartilhados).
+   */
+  const reconcileNow = async (attemptId: string) => {
+    await reconcileFirst(ctx, attemptId);
+    await payments.reconcile();
+  };
   const feeTransactions = (orderId: string) => ctx.db.select().from(ledgerTransactions).where(and(eq(ledgerTransactions.orderId, orderId), eq(ledgerTransactions.kind, 'provider_fee')));
 
   it('I3: aprovado sem fee_details na 1ª leitura; a conciliação traz a tarifa e o ledger a lança UMA vez', async () => {
     const o = await paidWithoutFee();
     expect(await feeTransactions(o.orderId)).toHaveLength(0);
     await fake.simulate(o.attempt.providerPaymentId!, { outcome: 'approved', reportedProviderFeeCents: 104 });
-    await payments.reconcile();
-    await payments.reconcile(); // repetir não duplica
+    await reconcileNow(o.attempt.id);
+    await reconcileNow(o.attempt.id); // repetir não duplica
     expect(await feeTransactions(o.orderId)).toHaveLength(1);
     expect((await ledger.balances(o.orderId)).providerFeeCents).toBe(104);
     expect((await ledger.verifyOrder(o.orderId)).ok).toBe(true);
@@ -58,8 +66,8 @@ describe('Chargeback e tarifa tardia do provedor (R.3, I2, I3)', () => {
   it('I2: chargeback vira alerta payment_disputed, marca o pedido, lança no ledger e fecha as contas; repetir não duplica', async () => {
     const o = await paidWithoutFee();
     await fake.simulate(o.attempt.providerPaymentId!, { outcome: 'approved', reportedProviderFeeCents: 104, disputed: true });
-    await payments.reconcile();
-    await payments.reconcile();
+    await reconcileNow(o.attempt.id);
+    await reconcileNow(o.attempt.id);
     const order = await orderRow(ctx, o.orderId);
     expect(order.status).toBe('received'); // o ciclo de vida segue; a contestação é marca à parte
     expect(order.disputedAt).not.toBeNull();
@@ -78,7 +86,7 @@ describe('Chargeback e tarifa tardia do provedor (R.3, I2, I3)', () => {
   it('I2: pedido contestado não aceita estorno manual (o provedor já debitou) e o cancelamento do admin não agenda estorno', async () => {
     const o = await paidWithoutFee();
     await fake.simulate(o.attempt.providerPaymentId!, { outcome: 'approved', reportedProviderFeeCents: 104, disputed: true });
-    await payments.reconcile();
+    await reconcileNow(o.attempt.id);
     const refund = await ctx.http.post(`/v1/admin/orders/${o.orderId}/refunds`).set(bearer(superAdmin.accessToken)).set('Idempotency-Key', randomUUID()).send({ amountCents: 1_000, reason: 'estorno em pedido contestado' });
     expect(refund.status).toBe(409);
     expect(refund.body.code).toBe('ORDER_DISPUTED');

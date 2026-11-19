@@ -3,7 +3,7 @@ import { seedOnda1 } from '../seed/onda1.js';
 import { sanitizeForAudit } from '../src/modules/admin/audit.service.js';
 import { PARAMETER_DEFINITIONS } from '../src/modules/admin/parameters.definitions.js';
 import { auditLog, categories, cities, featureFlags, parameterHistory, parameters } from '../src/platform/database/schema.js';
-import { bearer, createTestApp, randomIp, uniqueEmail, type TestContext } from './helpers/app.js';
+import { bearer, createTestApp, randomIp, uniqueEmail, type TestContext, uniqueTag } from './helpers/app.js';
 import { createAdmin, ensureLegalDocs, registerUser, type TestAdmin } from './helpers/fixtures.js';
 
 describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (WB-106/117/118/119/120/123)', () => {
@@ -29,7 +29,7 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
 
   describe('regiões (WB-118)', () => {
     it('operação cria cidade e bairro com auditoria; suporte só lê; inativa some do app público', async () => {
-      const name = `Cidade ${uniqueEmail().slice(0, 6)}`;
+      const name = `Cidade ${uniqueTag(6)}`;
       await ctx.http.post('/v1/admin/regions/cities').set(bearer(support.accessToken)).send({ name }).expect(403);
       const city = await ctx.http.post('/v1/admin/regions/cities').set(bearer(operations.accessToken)).send({ name, active: true }).expect(201);
       await ctx.http.post('/v1/admin/regions/cities').set(bearer(operations.accessToken)).send({ name }).expect(409);

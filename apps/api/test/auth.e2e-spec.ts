@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { refreshTokens, sessions, users } from '../src/platform/database/schema.js';
 import { sha256Hex } from '../src/platform/crypto/crypto.js';
-import { bearer, createTestApp, randomIp, STRONG_PASSWORD, uniqueEmail, type TestContext } from './helpers/app.js';
+import { bearer, createTestApp, randomIp, STRONG_PASSWORD, uniqueEmail, type TestContext, uniqueTag } from './helpers/app.js';
 import { acceptedCustomer, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
 
 describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/010/011)', () => {
@@ -71,7 +71,7 @@ describe('Auth: cadastro, login e refresh (WB-006, WB-008, WB-220, SEC-001/004/0
     });
 
     it('SEC-063: 4ª conta no mesmo dispositivo é barrada (429)', async () => {
-      const device = `dev-${uniqueEmail().slice(0, 8)}-abcd`;
+      const device = `dev-${uniqueTag(8)}-abcd`;
       const accepted = await acceptedCustomer(ctx);
       const payload = () => ({ name: 'Teste', email: uniqueEmail(), phone: '11977776666', password: STRONG_PASSWORD, adultDeclaration: true, acceptedDocuments: accepted });
       for (let i = 0; i < 3; i++) {

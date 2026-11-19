@@ -131,7 +131,7 @@ describe('Privacidade e segurança da Onda 6 (SEC-152 a 160)', () => {
     await ctx.http.post(`/v1/orders/${created.id}/cancel`).set(bearer(user.accessToken)).send({ reason: payload }).expect(200);
 
     const finance = await createAdmin(ctx, 'finance');
-    const day = new Date().toISOString().slice(0, 10);
+    const day = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10); // dia civil de Brasília (BUG-019: o dia UTC vira às 21h de Brasília e o pedido de hoje saía do relatório)
     const params = { from: day, to: day };
     for (const path of ['/v1/admin/reports/orders.csv', '/v1/admin/reports/operations.csv']) {
       const res = await ctx.http.get(path).query(params).set(bearer(finance.accessToken));
