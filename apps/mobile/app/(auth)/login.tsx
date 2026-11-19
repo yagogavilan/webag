@@ -10,6 +10,7 @@ import { useSession } from '../../src/api/session';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
 import { Header } from '../../src/components/Header';
+import { Logo } from '../../src/components/Logo';
 import { PasswordField } from '../../src/components/PasswordField';
 import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
@@ -165,6 +166,9 @@ export default function LoginScreen() {
         />
       }
     >
+      <View style={styles.logo}>
+        <Logo height={32} />
+      </View>
       {sessionNotice ? (
         <Banner
           testID="auth.session-notice"
@@ -252,6 +256,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  logo: { alignItems: 'flex-start', paddingVertical: theme.space[2] },
   forgot: { alignSelf: 'flex-start' },
   wait: { gap: theme.space[3] },
   blocked: { gap: theme.space[3], paddingTop: theme.space[6] },
