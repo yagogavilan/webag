@@ -1,0 +1,2 @@
+Fontes candidatas para a palavra "webag" (todas OFL, via @fontsource, latin 600/700/800).
+Converta para contorno com docs/design/logo/tools/text2path.py. Se precisar de outra fonte: npm pack @fontsource/<nome>.
