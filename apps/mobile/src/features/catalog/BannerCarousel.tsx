@@ -51,7 +51,7 @@ export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
             style={{ width }}
             testID={`home.banner-${item.id}`}
           >
-            <RemoteImage aspectRatio={2} priority="high" radius={theme.radius.md} urls={item.image.urls} width={width} />
+            <RemoteImage aspectRatio={2} priority="high" radius={theme.radius.xl} urls={item.image.urls} width={width} />
           </Pressable>
         )}
         showsHorizontalScrollIndicator={false}

@@ -51,7 +51,7 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
       style={styles.row}
       testID={testID}
     >
-      <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.md} urls={store.logo.urls} width={theme.size.avatarMd} />
+      <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.lg} urls={store.logo.urls} width={theme.size.avatarMd} />
       <View style={styles.texts}>
         <Text numberOfLines={1} variant="bodyStrong">
           {store.name}

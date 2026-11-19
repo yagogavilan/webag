@@ -7,7 +7,7 @@ import { theme } from '../../theme';
 export function HomeSkeleton() {
   return (
     <View accessibilityLabel={t('common.loading')} style={styles.wrap} testID="home.skeleton">
-      <Skeleton height={140} radius={theme.radius.md} />
+      <Skeleton height={140} radius={theme.radius.lg} />
       <View style={styles.row}>
         {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton height={64} key={i} radius={theme.radius.full} width={64} />

@@ -10,9 +10,10 @@ export interface CategoryRowProps {
   onOpen: (category: Category) => void;
 }
 
-const TILE = 64;
+const TILE = 80;
+const SLOTS = [1, 2, 3, 4, 5, 6] as const;
 
-/** Categorias: tile sem caixa com círculo de 64 e o nome embaixo, na ordem do admin (onda-3 D5). */
+/** Categorias (direção v2): tile pastel de 80, raio 16, ícone duotone em tinta escura e rótulo sempre visível; cor por posição (6 tons). */
 export function CategoryRow({ categories, onOpen }: CategoryRowProps) {
   return (
     <FlatList
@@ -21,7 +22,8 @@ export function CategoryRow({ categories, onOpen }: CategoryRowProps) {
       horizontal
       ItemSeparatorComponent={Gap}
       keyExtractor={(c) => c.id}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
+        const slot = SLOTS[index % SLOTS.length] ?? 1;
         const Icon = categoryIcon(item.icon);
         return (
           <Pressable
@@ -31,8 +33,8 @@ export function CategoryRow({ categories, onOpen }: CategoryRowProps) {
             style={styles.tile}
             testID={`home.category-${item.id}`}
           >
-            <View style={styles.circle}>
-              <Icon color={theme.color.text.brand} size={theme.size.iconLg} weight="duotone" />
+            <View style={[styles.circle, { backgroundColor: theme.color.tile[slot] }]}>
+              <Icon color={theme.color.tileInk[slot]} size={theme.size.iconLg} weight="duotone" />
             </View>
             <Text numberOfLines={1} style={styles.name} variant="caption">
               {item.name}
@@ -49,7 +51,7 @@ const Gap = () => <View style={{ width: theme.space[3] }} />;
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: theme.layout.screenPaddingX },
-  tile: { width: TILE + theme.space[2], alignItems: 'center', gap: theme.space[1], minHeight: theme.size.touchMin },
-  circle: { width: TILE, height: TILE, borderRadius: theme.radius.full, backgroundColor: theme.color.surface.brandSubtle, alignItems: 'center', justifyContent: 'center' },
+  tile: { width: TILE, alignItems: 'center', gap: theme.space[1], minHeight: theme.size.touchMin },
+  circle: { width: TILE, height: TILE, borderRadius: theme.radius.lg, alignItems: 'center', justifyContent: 'center' },
   name: { textAlign: 'center' },
 });

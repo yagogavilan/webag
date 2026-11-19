@@ -1,10 +1,14 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import type { Banner, Category, StoreCard } from '@webag/shared';
-import { useNavigation, useRouter } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { setStatusBarStyle } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button } from '../../../src/components/Button';
 import { CaretDown, Storefront } from '../../../src/components/icons';
+import { Logo } from '../../../src/components/Logo';
+import { useSession } from '../../../src/api/session';
 import { Screen } from '../../../src/components/Screen';
 import { SearchBarButton } from '../../../src/components/SearchBarButton';
 import { SectionHeader } from '../../../src/components/SectionHeader';
@@ -57,6 +61,8 @@ export default function CustomerHome() {
   const address = useCurrentAddress();
   const point = useDeliveryPoint();
   const mode = modeStore.useValue();
+  const session = useSession();
+  const insets = useSafeAreaInsets();
   const home = useHomeQuery(point, mode);
   const categories = useCategoriesQuery();
   const banners = useBannersQuery();
@@ -65,6 +71,14 @@ export default function CustomerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const pickup = mode === 'pickup';
+
+  // Barra de status clara sobre a faixa roxa enquanto o Início está em foco
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle('light');
+      return () => setStatusBarStyle('dark');
+    }, []),
+  );
 
   // Toque na aba ativa volta ao topo (onda-3 D5 Interações)
   useEffect(() => {
@@ -141,8 +155,16 @@ export default function CustomerHome() {
   const seeAllStores = () => router.push({ pathname: '/results', params: { tab: 'stores', title: t('results.allStores') } });
   const modeA11y = pickup ? t('home.pickupAt') : t('home.deliverTo');
 
+  const first = session.status === 'authenticated' ? (session.user.name.split(' ')[0] ?? '') : '';
+  // Faixa de marca (direção visual v2): logo, sacola, endereço, saudação e busca sobre o roxo de ação (6:1 com texto branco),
+  // cantos inferiores 32. Só descoberta usa cor em área ampla; transação continua sóbria.
   const header = (
-    <View style={styles.header}>
+    <View style={[styles.hero, { paddingTop: insets.top }]} testID="home.hero">
+      <View style={styles.header}>
+        <Logo height={28} tone="onBrand" />
+        <View style={styles.flex} />
+        <CartButton onBrand />
+      </View>
       {address ? (
         <Pressable
           accessibilityHint={t('home.pickAddress')}
@@ -153,27 +175,27 @@ export default function CustomerHome() {
           testID="home.address"
         >
           <View style={styles.addressTexts}>
-            <Text color="secondary" variant="caption">
+            <Text style={styles.onBrandSoft} variant="caption">
               {modeA11y}
             </Text>
             <View style={styles.addressLine}>
-              <Text numberOfLines={1} style={styles.addressText} variant="bodyStrong">
+              <Text numberOfLines={1} style={[styles.addressText, styles.onBrand]} variant="bodyStrong">
                 {addressLine(address)}
               </Text>
-              <CaretDown color={theme.color.text.primary} size={theme.size.iconSm} />
+              <CaretDown color={theme.color.neutral[0]} size={theme.size.iconSm} />
             </View>
           </View>
         </Pressable>
-      ) : (
-        <View style={styles.addressTexts} />
-      )}
-      <CartButton />
+      ) : null}
+      <Text accessibilityRole="header" style={styles.onBrand} testID="home.greeting" variant="title1">
+        {first ? t('home.greeting', { name: first }) : t('home.heroTitle')}
+      </Text>
+      <SearchBarButton onPress={() => router.push('/search')} placeholder={t('home.searchPlaceholder')} testID="home.search-bar" />
     </View>
   );
 
   const top = (
     <View style={styles.top}>
-      <SearchBarButton onPress={() => router.push('/search')} placeholder={t('home.searchPlaceholder')} testID="home.search-bar" />
       <Segmented
         label={t('home.modeLabel')}
         onChange={(next) => void modeStore.set(next)}
@@ -364,7 +386,7 @@ export default function CustomerHome() {
   }
 
   return (
-    <Screen bottomInset={false} header={header} padded={false} scroll={false} testID="home.screen">
+    <Screen bottomInset={false} edgeToEdgeTop header={header} padded={false} scroll={false} testID="home.screen">
       <View style={styles.flex}>
         {top}
         <View style={styles.flex}>{body}</View>
@@ -377,12 +399,15 @@ const Gap = () => <View style={{ width: theme.space[3] }} />;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingLeft: theme.layout.screenPaddingX, paddingRight: theme.space[1], minHeight: theme.size.headerHeight },
+  hero: { backgroundColor: theme.color.action.primary, borderBottomLeftRadius: theme.radius.hero, borderBottomRightRadius: theme.radius.hero, paddingHorizontal: theme.layout.screenPaddingX, paddingBottom: theme.space[5], gap: theme.space[3] },
+  onBrand: { color: theme.color.text.onBrand },
+  onBrandSoft: { color: theme.color.brand[100] },
+  header: { flexDirection: 'row', alignItems: 'center', paddingRight: 0, minHeight: theme.size.headerHeight },
   address: { flex: 1, minHeight: theme.size.touchMin, justifyContent: 'center' },
   addressTexts: { flex: 1 },
   addressLine: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1] },
   addressText: { flexShrink: 1 },
-  top: { gap: theme.space[3], paddingHorizontal: theme.layout.screenPaddingX, paddingBottom: theme.space[3] },
+  top: { gap: theme.space[3], paddingHorizontal: theme.layout.screenPaddingX, paddingVertical: theme.space[3] },
   listContent: { paddingBottom: theme.space[8] },
   padX: { paddingHorizontal: theme.layout.screenPaddingX },
   block: { paddingHorizontal: theme.layout.screenPaddingX, paddingBottom: theme.space[6] },

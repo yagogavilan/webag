@@ -322,7 +322,7 @@ export default function ProductScreen() {
           ) : null}
 
           <Pressable accessibilityLabel={`${t('product.seeStore')}, ${product.store.name}`} accessibilityRole="button" onPress={() => router.push(`/store/${product.store.id}`)} style={styles.storeRow} testID="product.store">
-            {store.data ? <RemoteImage height={40} radius={theme.radius.md} urls={store.data.logo.urls} width={40} /> : <Storefront color={theme.color.text.secondary} size={theme.size.iconMd} />}
+            {store.data ? <RemoteImage height={40} radius={theme.radius.lg} urls={store.data.logo.urls} width={40} /> : <Storefront color={theme.color.text.secondary} size={theme.size.iconMd} />}
             <Text style={styles.flex} variant="bodyStrong">
               {product.store.name}
             </Text>

@@ -290,7 +290,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           </View>
         </View>
         <View style={styles.logo}>
-          <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.md} style={styles.logoBorder} urls={store.logo.urls} width={theme.size.avatarMd} />
+          <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.lg} style={styles.logoBorder} urls={store.logo.urls} width={theme.size.avatarMd} />
         </View>
       </View>
 

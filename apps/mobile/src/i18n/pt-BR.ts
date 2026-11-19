@@ -160,6 +160,7 @@ export const ptBR = {
     pickupAt: 'Retirar perto de',
     pickAddress: 'Escolher endereço',
     greeting: 'Olá, {name}',
+    heroTitle: 'O que você precisa hoje?',
     signOut: 'Sair',
     signedOut: 'Você saiu da conta.',
     visitorText: 'Entre ou crie uma conta para acompanhar pedidos e salvar favoritos.',

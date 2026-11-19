@@ -29,7 +29,7 @@ export function StoreCoverCard({ store, categoryName, width, onPress, testID }: 
       testID={testID}
     >
       <View style={[styles.cover, { aspectRatio: 16 / 9 }]}>
-        <RemoteImage height={theme.size.thumb} radius={theme.radius.md} urls={store.logo.urls} width={theme.size.thumb} />
+        <RemoteImage height={theme.size.thumb} radius={theme.radius.lg} urls={store.logo.urls} width={theme.size.thumb} />
       </View>
       <View style={styles.info}>
         <Text numberOfLines={1} variant="bodyStrong">
@@ -48,6 +48,6 @@ export function StoreCoverCard({ store, categoryName, width, onPress, testID }: 
 
 const styles = StyleSheet.create({
   card: { gap: theme.space[2] },
-  cover: { width: '100%', backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.md, alignItems: 'center', justifyContent: 'center' },
+  cover: { width: '100%', backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.lg, alignItems: 'center', justifyContent: 'center' },
   info: { gap: theme.space[1] },
 });

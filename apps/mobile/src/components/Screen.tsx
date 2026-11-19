@@ -18,6 +18,8 @@ export interface ScreenProps {
   padded?: boolean;
   /** `false` dentro das abas: a barra de abas já cuida da área segura de baixo. */
   bottomInset?: boolean;
+  /** Sem folga de área segura no topo: o `header` colorido a cuida (faixa de marca do Início). */
+  edgeToEdgeTop?: boolean;
   testID?: string;
 }
 
@@ -34,6 +36,7 @@ export function Screen({
   keyboardShouldPersistTaps = 'handled',
   padded = true,
   bottomInset = true,
+  edgeToEdgeTop = false,
   testID,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
@@ -41,7 +44,7 @@ export function Screen({
   const column = tablet ? styles.column : undefined;
 
   return (
-    <SafeAreaView edges={bottomInset ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={styles.safe} testID={testID}>
+    <SafeAreaView edges={[...(edgeToEdgeTop ? [] : (['top'] as const)), 'left', 'right', ...(bottomInset ? (['bottom'] as const) : [])]} style={styles.safe} testID={testID}>
       <KeyboardAvoidingView behavior="padding" style={styles.flex}>
         <View style={[styles.flex, column]}>
           {header}
