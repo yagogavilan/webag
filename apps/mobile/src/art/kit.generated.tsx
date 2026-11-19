@@ -1,6 +1,7 @@
 // GERADO por scripts/build-art.mjs a partir de docs/design/kit/*.svg. Nao edite a mao (edite o SVG e rode pnpm --filter @webag/mobile assets:art).
 import Svg, { Circle, G, Path, Polygon, Rect } from 'react-native-svg';
 import type { StyleProp, ViewStyle } from 'react-native';
+import { svgHidden } from '../lib/a11y';
 
 export interface ArtProps {
   /** Largura em dp; a altura segue a proporção do desenho. */
@@ -17,8 +18,7 @@ function svgProps(w: number, h: number, _label: string, props: ArtProps) {
     height: (width * h) / w,
     style: props.style,
     accessibilityLabel: props.accessibilityLabel,
-    accessibilityElementsHidden: !props.accessibilityLabel,
-    importantForAccessibility: (props.accessibilityLabel ? 'yes' : 'no-hide-descendants') as 'yes' | 'no-hide-descendants',
+    ...svgHidden(!props.accessibilityLabel),
   };
 }
 

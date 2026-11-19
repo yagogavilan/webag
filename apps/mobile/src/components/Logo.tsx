@@ -1,4 +1,5 @@
 import Svg, { Circle, Defs, G, Mask, Path, Polygon, Rect } from 'react-native-svg';
+import { svgImage } from '../lib/a11y';
 import { theme } from '../theme';
 import { LOGO_VIEWBOX, WORDMARK_PATHS } from './logo-paths';
 
@@ -22,9 +23,7 @@ export function Logo({ variant = 'full', tone = 'brand', height = 32, accessibil
   const ratio = symbolOnly ? 160 / 104 : LOGO_VIEWBOX.width / LOGO_VIEWBOX.height;
   return (
     <Svg
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="image"
-      accessible
+      {...svgImage(accessibilityLabel)}
       height={height}
       viewBox={viewBox}
       width={height * ratio}

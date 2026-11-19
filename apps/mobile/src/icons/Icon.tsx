@@ -1,6 +1,7 @@
 import { memo, type ReactElement } from 'react';
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, Line, Path, Polygon, Polyline, Rect } from 'react-native-svg';
 import { ICON_DATA, type IconName, type SvgNode } from './solar-data';
+import { svgHidden } from '../lib/a11y';
 
 export type IconWeight = 'regular' | 'bold' | 'fill' | 'duotone';
 
@@ -51,10 +52,9 @@ function SolarIcon({ name, size = 24, color = '#000', weight = 'regular', duo, a
   const duoColor = weight === 'regular' ? undefined : duo;
   return (
     <Svg
-      accessibilityElementsHidden={!accessibilityLabel}
       accessibilityLabel={accessibilityLabel}
       height={size}
-      importantForAccessibility={accessibilityLabel ? 'yes' : 'no-hide-descendants'}
+      {...svgHidden(!accessibilityLabel)}
       viewBox="0 0 24 24"
       width={size}
     >

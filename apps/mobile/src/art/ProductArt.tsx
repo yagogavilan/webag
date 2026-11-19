@@ -4,6 +4,7 @@ import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 import { theme } from '../theme';
 import { OBJECT_DATA, type ArtShape, type ObjectName } from './objects-data';
 import { tones } from './tones';
+import { svgHidden } from '../lib/a11y';
 
 export interface ProductArtProps {
   name: ObjectName;
@@ -46,10 +47,9 @@ export const ProductArt = memo(function ProductArt({ name, color, accent, ground
   const palette = { b: color, s: t.shade, h: t.light, x: accent ?? theme.color.accent.base, g: ground };
   return (
     <Svg
-      accessibilityElementsHidden={!accessibilityLabel}
       accessibilityLabel={accessibilityLabel}
       height={size}
-      importantForAccessibility={accessibilityLabel ? 'yes' : 'no-hide-descendants'}
+      {...svgHidden(!accessibilityLabel)}
       style={style}
       viewBox="0 0 200 200"
       width={size}

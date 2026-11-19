@@ -1,5 +1,5 @@
 import { randomUUID } from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../lib/secure-store';
 
 /**
  * Sessão SOMENTE em expo-secure-store (Keychain no iOS, Keystore no Android). SEC-012 / MASVS-STORAGE:

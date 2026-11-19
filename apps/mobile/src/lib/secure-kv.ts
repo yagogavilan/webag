@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secure-store';
 
 /** Chave-valor no SecureStore (Keychain/Keystore). Para o que não pode ficar em AsyncStorage. */
 export async function readSecure(key: string): Promise<string | null> {
