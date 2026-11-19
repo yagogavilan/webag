@@ -41,7 +41,7 @@
 | Painéis web | mobile-dev | Onda 6 entregue (ETA, lotes, contato, parâmetros, disputas, avaliações, ajuda, exportação e exclusão); página `/pagar/cartao` entregue |
 | Revisões | QA, Security, TL | Aguardando as correções para reverificar |
 
-Obs.: o ETA de 2 h só funciona na operação se alguém despachar motoboy manualmente (R-20).
+Obs.: o ETA de 2 h só funciona na operação se alguém despachar motoboy manualmente (R-18).
 
 ## Bugs e SEC abertos que bloqueiam o G4
 
