@@ -61,8 +61,14 @@ type Money = { amount: number; currency: 'BRL' };
 const money = (amount: number): Money => ({ amount, currency: 'BRL' });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Ações que já existem na API; o contrato lista as demais (troca, avaliação...) para ondas futuras. */
-const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'request_cancel', 'contact_store', 'report_not_received'];
+/**
+ * Ações do cliente que a API implementa (todas as do contrato). `rate` e `request_exchange` dependem do PRAZO contado da entrega (`deliveredAt`,
+ * DEC-062/WB-262), não só do estado: entram em `allowedActionsOf`, que olha o relógio. Antes ficavam de fora desta lista e o app nunca mostrava
+ * "Avaliar" nem "Pedir troca" num pedido entregue.
+ */
+const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'request_cancel', 'contact_store', 'report_not_received', 'rate', 'request_exchange'];
+/** Ações condicionadas a um prazo: o estado sozinho não basta. */
+const WINDOWED_ACTIONS: readonly CustomerAction[] = ['rate', 'request_exchange'];
 /** WB-259 C2 (RN-08): prazo do estorno por meio, texto fixo e sem data prometida. `[HIPÓTESE; HIP-P09]`: jurídico decide em J16. */
 export const REFUND_DEADLINE_TEXT = {
   pix: 'Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.',
@@ -1156,7 +1162,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       payment: { method: order.paymentMethod, status: publicPaymentStatus(attempt?.status) },
       exchangePolicy: { voluntaryDays: order.exchangeVoluntaryDays, collectionFeeCents: order.exchangeCollectionFeeCents, version: order.exchangePolicyVersion },
       timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor, reason: e.reason })),
-      allowedActions: this.actionsOf(order).filter((a) => a !== 'request_cancel' || cancelRequest?.status !== 'pending'),
+      allowedActions: (await this.allowedActionsOf(order)).filter((a) => a !== 'request_cancel' || cancelRequest?.status !== 'pending'),
       /** BUG-015: o pedido de cancelamento em separação e o que a loja respondeu; nulo se nunca houve. */
       cancelRequest,
       /** WB-253: atraso da entrega calculado no servidor (aviso, cancelamento sem custo e a resposta da operação); nulo fora da entrega ativa. */
@@ -1199,7 +1205,17 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return { late: state.late, canCancelWithoutCost: state.canCancelWithoutCost, cancelAvailableAt: state.cancelAvailableAt.toISOString(), cancelMode: state.cancelMode, respondWithinMin: await this.params.getNumber('entrega_cancel_resposta_min'), cancelRequest: await this.lateCancelRequestOf(order.id) };
   }
 
-  private actionsOf(order: OrderRow) {
+  /** Ações do cliente agora: estado + prazos que contam da entrega (avaliar: `avaliacao_janela_dias`; troca: qualquer um dos 3 tipos ainda no prazo). */
+  private async allowedActionsOf(order: OrderRow): Promise<CustomerAction[]> {
+    const actions = this.actionsOf(order).filter((a) => !WINDOWED_ACTIONS.includes(a));
+    if (order.status !== 'delivered' || !order.deliveredAt) return actions;
+    const ratingDays = await this.params.getNumber('avaliacao_janela_dias');
+    if (customerActions(order.status).includes('rate') && Date.now() <= order.deliveredAt.getTime() + ratingDays * DAY_MS) actions.push('rate');
+    if (customerActions(order.status).includes('request_exchange') && this.exchangeWindowOf(order).canRequest) actions.push('request_exchange');
+    return actions;
+  }
+
+  private actionsOf(order: OrderRow): CustomerAction[] {
     const actions = customerActions(order.status).filter((a) => IMPLEMENTED_ACTIONS.includes(a));
     const recentlyDelivered = order.status === 'delivered' && order.deliveredAt !== null && Date.now() - order.deliveredAt.getTime() <= NOT_RECEIVED_WINDOW_MS;
     return recentlyDelivered && !actions.includes('report_not_received') ? [...actions, 'report_not_received' as const] : actions;
