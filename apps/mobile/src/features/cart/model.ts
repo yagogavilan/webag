@@ -55,6 +55,8 @@ export interface CartView {
   etaMax: number | null;
   /** Faixa do servidor para o endereço da sacola (DEC-053); ausente em servidor antigo. */
   eta?: import('../catalog/eta').EtaLike | null;
+  /** Quando as entregas voltam (bloqueio `LOGISTICS_CLOSED` por horário, BUG-016); nulo em pausa da operação. */
+  logisticsOpensAt?: string | null;
   lines: CartLine[];
   coupon: { code: string; applied: boolean; rejection: string | null } | null;
   /** Só com a sacola do servidor; visitante vê o subtotal e o resto é calculado ao entrar. */
@@ -79,6 +81,7 @@ export function fromServer(cart: Cart): CartView | null {
     etaMin: cart.store.etaMinMinutes,
     etaMax: cart.store.etaMaxMinutes,
     eta: readEta(cart.delivery),
+    logisticsOpensAt: cart.delivery?.logisticsOpensAt ?? null,
     lines: cart.items.map((i) => ({
       key: i.variantId,
       variantId: i.variantId,

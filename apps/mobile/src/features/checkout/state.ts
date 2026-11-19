@@ -1,7 +1,7 @@
 import type { Cart, CheckoutChange, CreateOrderRequest } from '@webag/shared';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
-import { formatOpensAt } from '../catalog/format';
+import { formatDeliveryBack, formatOpensAt } from '../catalog/format';
 import type { Address } from '../address/types';
 import type { CartView } from '../cart/model';
 
@@ -41,6 +41,10 @@ export function deriveGate(view: CartView, mode: ReceiveMode, address: Address |
   if (mode === 'delivery') {
     if (!addressIsReady(address) || has('NEEDS_ADDRESS')) {
       return { kind: 'address', label: t('checkout.completeAddress'), banner: { tone: 'warning', text: t('checkout.needsFullAddress'), testID: 'checkout.address-banner' }, inert: false };
+    }
+    if (has('LOGISTICS_CLOSED')) {
+      const when = formatDeliveryBack(view.logisticsOpensAt);
+      return { kind: 'back', label: t('checkout.backToCart'), banner: { tone: 'warning', text: `${when ? t('ops.back', { when }) : t('ops.paused')}. ${when ? t('ops.backSub') : t('ops.pausedSub')}`, testID: 'checkout.logistics-banner' }, inert: false };
     }
     if (has('OUT_OF_RANGE')) {
       return { kind: 'range', label: t('checkout.changeAddress'), banner: { tone: 'danger', text: t('checkout.outOfRange'), testID: 'checkout.range-banner' }, inert: false };

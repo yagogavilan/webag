@@ -28,6 +28,7 @@ const BLOCKED: Record<string, MessageKey> = {
   ADDRESS_REQUIRED: 'cart.needsAddress',
   PICKUP_UNAVAILABLE: 'cart.pickupUnavailable',
   ABOVE_MAX_ORDER: 'cart.aboveMax',
+  LOGISTICS_CLOSED: 'ops.closedNow',
 };
 
 export function toCheckoutFailure(error: unknown): CheckoutFailure {

@@ -55,6 +55,22 @@ export function formatOpensAt(iso: string | null, now: Date = new Date()): strin
   return `abre ${weekday} às ${hourLabel(at)}`;
 }
 
+/**
+ * Quando as ENTREGAS voltam (BUG-016, onda-7-eta-atraso.md D3): hora falada, não faixa. "às 9h", "amanhã às 9h", "segunda às 9h".
+ * Sem horário (pausa da operação sem previsão): null.
+ */
+export function formatDeliveryBack(iso: string | null | undefined, now: Date = new Date()): string | null {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  if (sameDay(at, now)) return `às ${hourLabel(at)}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (sameDay(at, tomorrow)) return `amanhã às ${hourLabel(at)}`;
+  const weekday = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][at.getDay()] ?? '';
+  return `${weekday} às ${hourLabel(at)}`;
+}
+
 /** "Fechada · abre 9h" ou só "Fechada". */
 export function closedLabel(opensAt: string | null, now?: Date): string {
   const when = formatOpensAt(opensAt, now);

@@ -23,7 +23,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
-import { closedLabel, closesAtToday, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
+import { closedLabel, closesAtToday, formatDeliveryBack, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
 import { fromBrowseItem, ProductTile } from '../../../src/features/catalog/ProductTile';
 import { modeStore, useDeliveryPoint, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
 import { AboutStoreSheet, ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
@@ -284,6 +284,9 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
     distance: d.distanceM !== null ? formatDistance(d.distanceM) : 'distância indisponível',
   });
   const noDelivery = pointDefined && d.available === false;
+  // Logística fora do horário ou pausada (BUG-016/RN-18): só retirada; "Entregas voltam às 9h" quando há hora, "pausadas agora" quando não
+  const deliveryBack = d.logisticsClosed ? formatDeliveryBack(d.logisticsOpensAt) : null;
+  const deliveryPaused = Boolean(d.logisticsClosed) && deliveryBack === null;
   const pickupEta = store.pickup.enabled ? formatEta(store.pickup.prepMinMinutes, store.pickup.prepMaxMinutes) : null;
   const favoriteLabel = favorite.isFavorite ? t('store.unfavorite', { name: store.name }) : t('store.favorite', { name: store.name });
   const color = coverColor(store.id);
@@ -346,7 +349,22 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
         {!store.open ? (
           <Banner testID="store.closed-banner" text={store.opensAt ? t('store.closedBanner', { label: closedLabel(store.opensAt) }) : t('store.pausedBanner')} tone="info" />
         ) : null}
-        {noDelivery ? (
+        {d.logisticsClosed ? (
+          <Banner
+            actionLabel={store.pickup.offered ? t('ops.pickupHere') : undefined}
+            onAction={
+              store.pickup.offered
+                ? () => {
+                    void modeStore.set('pickup');
+                    toast.show(t('home.modePickup'));
+                  }
+                : undefined
+            }
+            testID="store.ops-banner"
+            text={`${deliveryPaused ? t('ops.paused') : t('ops.back', { when: deliveryBack ?? '' })}. ${deliveryPaused ? t('ops.pausedSub') : t('ops.backSub')}`}
+            tone="info"
+          />
+        ) : noDelivery ? (
           <Banner
             actionLabel={store.pickup.offered ? t('store.pickupHere') : t('store.changeAddress')}
             onAction={() => {
@@ -374,7 +392,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           <View style={[styles.stat, styles.statMid]} testID="store.eta">
             <Text variant="title1">{range ? `${range.start} – ${range.end}` : '—'}</Text>
             <Text color="secondary" variant="caption">
-              {range ? t('store.etaCaption') : t('catalog.outOfArea')}
+              {range ? t('store.etaCaption') : d.logisticsClosed ? (deliveryPaused ? t('ops.chipPaused') : t('ops.chipBack', { when: deliveryBack ?? '' })) : t('catalog.outOfArea')}
             </Text>
           </View>
           <View style={styles.stat}>

@@ -1,14 +1,14 @@
 import { ApiError } from '../../api/problem';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
-import { formatOpensAt } from '../catalog/format';
+import { formatDeliveryBack, formatOpensAt } from '../catalog/format';
 import type { CartLine, CartView } from './model';
 
 /**
  * Regras de decisão da tela da sacola, sem React (testáveis). A fonte da verdade é o servidor: `blockers` vem da API
  * (`checkout.blockers`); o app só escolhe o que mostrar e o que o botão do rodapé faz (onda-4 S1).
  */
-export type CartCtaKind = 'pay' | 'closed' | 'add-more' | 'change-address' | 'sold-out' | 'remove-items';
+export type CartCtaKind = 'pay' | 'closed' | 'logistics-closed' | 'add-more' | 'change-address' | 'sold-out' | 'remove-items';
 
 export interface CartCta {
   kind: CartCtaKind;
@@ -30,6 +30,16 @@ export function deriveCta(view: CartView): CartCta {
       label: when ? t('cart.closedCtaAt', { when }) : t('cart.closedCta'),
       banner: { tone: 'info', text: when ? t('cart.closedBannerAt', { when }) : t('cart.closedBanner'), testID: 'cart.closed-banner' },
       inert: true,
+    };
+  }
+  if (has(view, 'LOGISTICS_CLOSED')) {
+    // Entregas fechadas ou pausadas (BUG-016): nada vem pré-selecionado e o app NÃO troca sozinho para retirada (muda o total e o modo).
+    const when = formatDeliveryBack(view.logisticsOpensAt);
+    return {
+      kind: 'logistics-closed',
+      label: t('ops.cartChoose'),
+      banner: { tone: 'info', text: `${when ? t('ops.back', { when }) : t('ops.paused')}. ${when ? t('ops.backSub') : t('ops.pausedSub')}`, testID: 'cart.logistics-banner' },
+      inert: false,
     };
   }
   if (has(view, 'BELOW_MINIMUM')) {

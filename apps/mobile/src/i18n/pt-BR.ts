@@ -1042,6 +1042,17 @@ export const ptBR = {
     stepOf: 'Etapa {n} de {total} · {name}',
     arrivesBetween: 'Chega entre {start} e {end}',
   },
+  ops: {
+    chipBack: 'Entrega volta {when}',
+    chipPaused: 'Entrega pausada',
+    back: 'Entregas voltam {when}',
+    backSub: 'Você pode retirar na loja.',
+    paused: 'Entregas pausadas agora',
+    pausedSub: 'Retire na loja ou tente daqui a pouco.',
+    pickupHere: 'Retirar na loja',
+    cartChoose: 'Escolha como receber',
+    closedNow: 'As entregas estão fechadas agora. Retire na loja ou tente mais tarde.',
+  },
   late: {
     tag: 'Atrasado',
     title: 'Passou do horário previsto',

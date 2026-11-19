@@ -153,6 +153,9 @@ export default function CartScreen() {
     switch (cta.kind) {
       case 'closed':
         return;
+      case 'logistics-closed':
+        // quem escolhe é o cliente: leva à troca de endereço/modo (Início tem Entrega x Retirada), sem trocar nada sozinho
+        return router.push('/');
       case 'add-more':
         return router.push(`/store/${view.storeId}`);
       case 'change-address':
