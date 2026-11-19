@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { BarsLoader } from '../../src/art/Bars';
 import { Button } from '../../src/components/Button';
 import { Header } from '../../src/components/Header';
@@ -7,7 +7,7 @@ import { Lock } from '../../src/components/icons';
 import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
 import { cardIntentMemory, useCardIntentWatcher } from '../../src/features/checkout/card-intent';
-import { isSecureCardUrl } from '../../src/features/checkout/config';
+import { openExternal } from '../../src/features/legal/open-link';
 import { t } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
@@ -24,7 +24,7 @@ export default function CardWaitScreen() {
   });
 
   const reopen = () => {
-    if (intent && isSecureCardUrl(intent.url)) void Linking.openURL(intent.url);
+    if (intent) void openExternal(intent.url, 'card');
   };
 
   return (

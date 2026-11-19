@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { fetchHelp } from '../../src/api/privacy-api';
 import { useSession } from '../../src/api/session';
 import { Button } from '../../src/components/Button';
@@ -12,6 +12,7 @@ import { Screen } from '../../src/components/Screen';
 import { Skeleton } from '../../src/components/Skeleton';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
+import { openMailto } from '../../src/features/legal/open-link';
 import { t } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
@@ -47,7 +48,7 @@ export default function PrivacyScreen() {
                   testID="account.privacy-dpo-copy"
                   variant="secondary"
                 />
-                <Button label={t('privacy.dpoWrite')} onPress={() => void Linking.openURL(`mailto:${dpo.officerEmail ?? ''}`)} testID="account.privacy-dpo-mail" />
+                <Button label={t('privacy.dpoWrite')} onPress={() => void openMailto(dpo.officerEmail)} testID="account.privacy-dpo-mail" />
               </View>
             ) : null}
           </>

@@ -23,9 +23,12 @@ export const fetchDeletionOverview = (signal?: AbortSignal) => request((init) =>
 /** Sem `retry`: excluir é irreversível e a senha errada conta no limite; nunca repetimos sozinhos. */
 export const removeMyAccount = (password: string) => request((init) => deleteAccount({ password }, init));
 
-/** Arrependimento: rota pública (e-mail e senha), igual ao login. */
-export const cancelMyDeletion = (email: string, password: string) =>
-  request((init) => cancelAccountDeletion({ email: email.trim().toLowerCase(), password }, init), { auth: 'none' });
+/**
+ * Arrependimento: rota pública (e-mail e senha), igual ao login. Sob ataque o servidor responde 403 `LOGIN_CODE_REQUIRED` e envia um
+ * código ao e-mail: repetir com `code` conclui (SEC-176). Repetir SEM `code` é o reenvio.
+ */
+export const cancelMyDeletion = (email: string, password: string, code?: string) =>
+  request((init) => cancelAccountDeletion({ email: email.trim().toLowerCase(), password, ...(code ? { code } : {}) }, init), { auth: 'none' });
 
 export const fetchDataExport = (signal?: AbortSignal) => request((init) => getMyDataExport(init), { retry: true, ...(signal ? { signal } : {}) });
 export const askDataExport = (password: string) => request((init) => requestDataExport({ password }, init));

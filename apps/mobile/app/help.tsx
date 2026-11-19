@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Linking, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import { fetchHelp } from '../src/api/privacy-api';
 import { Button } from '../src/components/Button';
 import { Header } from '../src/components/Header';
@@ -10,6 +10,8 @@ import { Screen } from '../src/components/Screen';
 import { Skeleton } from '../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../src/components/StateViews';
 import { Text } from '../src/components/Text';
+import { openMailto } from '../src/features/legal/open-link';
+import { openWhatsapp } from '../src/features/orders/links';
 import { Pressy } from '../src/motion';
 import { t } from '../src/i18n';
 import { useOnline } from '../src/lib/useOnline';
@@ -17,16 +19,9 @@ import { theme } from '../src/theme';
 
 /** Abre o WhatsApp com a mensagem pronta; sem o app, cai no e-mail com o mesmo texto (AJ1 C2). */
 async function contact(whatsapp: string | null, email: string | null, message: string): Promise<void> {
-  if (whatsapp) {
-    const url = `https://wa.me/${whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    try {
-      await Linking.openURL(url);
-      return;
-    } catch {
-      // cai no e-mail
-    }
-  }
-  if (email) await Linking.openURL(`mailto:${email}?body=${encodeURIComponent(message)}`);
+  // Só abre o que passa pelo helper (wa.me com número válido; e-mail simples): o número e o e-mail vêm da API (SEC-172).
+  if (whatsapp && (await openWhatsapp(whatsapp, message))) return;
+  if (email) await openMailto(email, message);
 }
 
 /** AJ1. Ajuda do cliente (WB-034): contato em 2 toques, busca e perguntas por grupo (acordeão). Pública (visitante usa). */
@@ -86,7 +81,7 @@ export default function HelpScreen() {
                 testID="help.contact-whatsapp"
               />
             ) : null}
-            {email ? <Button label={t('help.mail')} onPress={() => void Linking.openURL(`mailto:${email}`)} testID="help.contact-mail" variant="secondary" /> : null}
+            {email ? <Button label={t('help.mail')} onPress={() => void openMailto(email)} testID="help.contact-mail" variant="secondary" /> : null}
             {data?.contacts.hours ? (
               <Text color="secondary" variant="caption">
                 {t('help.hours', { hours: data.contacts.hours })}

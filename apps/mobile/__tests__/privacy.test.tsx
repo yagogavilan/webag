@@ -3,6 +3,7 @@ import { Linking } from 'react-native';
 import DeleteAccountScreen from '../app/privacy/delete';
 import ExportDataScreen from '../app/privacy/export';
 import NotificationPrefsScreen from '../app/privacy/notifications';
+import { API_URL } from '../src/api/config';
 import { ApiError } from '../src/api/problem';
 import { sessionStore } from '../src/api/session';
 import { cartActions } from '../src/features/cart/store';
@@ -143,11 +144,21 @@ describe('Exportar meus dados (CC3, SEC-166)', () => {
   it('pronta: gera o link de uso único e abre no navegador', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
     mockExportStatus.mockResolvedValue({ latest: { id: 'e1', status: 'ready', requestedAt: '2026-11-18T10:15:00Z', readyAt: '2026-11-18T10:20:00Z', expiresAt: '2026-11-25T10:20:00Z', sizeBytes: 2048 }, nextRequestAt: '2026-11-19T10:15:00Z' });
-    mockExportLink.mockResolvedValue({ url: 'https://api.webag.com.br/v1/exports/abc', expiresAt: '2026-11-19T10:20:00Z' });
+    mockExportLink.mockResolvedValue({ url: `${API_URL}/v1/exports/abc`, expiresAt: '2026-11-19T10:20:00Z' });
     await renderScreen(<ExportDataScreen />);
     await fireEvent.press(await screen.findByTestId('account.export-download'));
-    await waitFor(() => expect(open).toHaveBeenCalledWith('https://api.webag.com.br/v1/exports/abc'));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(`${API_URL}/v1/exports/abc`));
     expect(mockExportLink).toHaveBeenCalledWith('e1');
+  });
+
+  it('pronta: link de outro domínio nunca abre (SEC-172)', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    mockExportStatus.mockResolvedValue({ latest: { id: 'e1', status: 'ready', requestedAt: '2026-11-18T10:15:00Z', readyAt: '2026-11-18T10:20:00Z', expiresAt: '2026-11-25T10:20:00Z', sizeBytes: 2048 }, nextRequestAt: '2026-11-19T10:15:00Z' });
+    mockExportLink.mockResolvedValue({ url: 'https://evil.example/v1/exports/abc', expiresAt: '2026-11-19T10:20:00Z' });
+    await renderScreen(<ExportDataScreen />);
+    await fireEvent.press(await screen.findByTestId('account.export-download'));
+    await waitFor(() => expect(mockExportLink).toHaveBeenCalled());
+    expect(open).not.toHaveBeenCalledWith('https://evil.example/v1/exports/abc');
   });
 });
 

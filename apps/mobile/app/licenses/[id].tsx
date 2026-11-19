@@ -33,7 +33,7 @@ export default function LicenseDetailScreen() {
       toast.show(t('about.offline'));
       return;
     }
-    if (!(await openExternal(credit.licenseUrl))) setFailedUrl(credit.licenseUrl);
+    if (!(await openExternal(credit.licenseUrl, 'license'))) setFailedUrl(credit.licenseUrl);
   };
 
   return (

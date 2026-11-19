@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { askDataExport, exportDownloadLink, fetchDataExport } from '../../src/api/privacy-api';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
@@ -13,6 +13,7 @@ import { Skeleton } from '../../src/components/Skeleton';
 import { ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
+import { openExternal } from '../../src/features/legal/open-link';
 import { toPasswordActionError } from '../../src/features/privacy/errors';
 import { t } from '../../src/i18n';
 import { formatWhen } from '../../src/lib/format';
@@ -101,7 +102,8 @@ export default function ExportDataScreen() {
     try {
       const link = await exportDownloadLink(latest.id);
       // Uso único e curta duração: abre no navegador do sistema, que baixa o JSON. O app não guarda o arquivo (dado pessoal).
-      await Linking.openURL(link.url);
+      // O link vem da API, mas só a origem da API (https em produção) é aberta (SEC-172).
+      if (!(await openExternal(link.url, 'api'))) toast.show(t('privacy.cantNow'));
     } catch (e) {
       const mapped = toPasswordActionError(e);
       toast.show('message' in mapped ? mapped.message : t('privacy.cantNow'));

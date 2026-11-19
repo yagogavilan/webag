@@ -8,7 +8,7 @@ import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
 import { LinkErrorDialog } from '../../src/features/legal/LinkErrorDialog';
-import { openExternal, webPageUrl } from '../../src/features/legal/open-link';
+import { openExternal, webPageUrl, type LinkKind } from '../../src/features/legal/open-link';
 import { t } from '../../src/i18n';
 import { CREDITS, type Credit } from '../../src/legal/credits';
 import { useOnline } from '../../src/lib/useOnline';
@@ -25,12 +25,12 @@ export default function LicensesScreen() {
   const online = useOnline();
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  const open = async (url: string) => {
+  const open = async (url: string, kind: LinkKind = 'license') => {
     if (!online) {
       toast.show(t('about.offline'));
       return;
     }
-    if (!(await openExternal(url))) setFailedUrl(url);
+    if (!(await openExternal(url, kind))) setFailedUrl(url);
   };
   const detail = (id: Credit['id']) => router.push({ pathname: '/licenses/[id]', params: { id } } as never);
 
@@ -85,7 +85,7 @@ export default function LicensesScreen() {
           {t('licenses.libs')}
         </Text>
         <Text color="secondary">{t('licenses.libsText')}</Text>
-        <Button label={t('licenses.libsOpen')} onPress={() => void open(webPageUrl('/licencas'))} testID="licenses.libs-open" variant="secondary" />
+        <Button label={t('licenses.libsOpen')} onPress={() => void open(webPageUrl('/licencas'), 'web')} testID="licenses.libs-open" variant="secondary" />
       </View>
       <LinkErrorDialog onClose={() => setFailedUrl(null)} url={failedUrl} />
     </Screen>

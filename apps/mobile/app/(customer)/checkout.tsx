@@ -1,7 +1,7 @@
 import type { CheckoutChange } from '@webag/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
 import { Header } from '../../src/components/Header';
@@ -19,6 +19,7 @@ import { formatOpensAt } from '../../src/features/catalog/format';
 import { modeStore } from '../../src/features/catalog/queries';
 import { ChangedSheet } from '../../src/features/checkout/ChangedSheet';
 import { isCheckoutEnabled, isSecureCardUrl } from '../../src/features/checkout/config';
+import { openExternal } from '../../src/features/legal/open-link';
 import { cardIntentMemory } from '../../src/features/checkout/card-intent';
 import { startCardIntent } from '../../src/api/orders-api';
 import { ApiError } from '../../src/api/problem';
@@ -207,8 +208,11 @@ export default function CheckoutScreen() {
         toast.show(t('cardWait.notOpened'));
         return;
       }
+      if (!(await openExternal(intent.url, 'card'))) {
+        toast.show(t('cardWait.notOpened'));
+        return;
+      }
       cardIntentMemory.set({ url: intent.url, startedAt: Date.now(), expiresAt: new Date(intent.expiresAt).getTime() });
-      await Linking.openURL(intent.url);
       void haptic('light');
       router.push('/card-wait' as never);
     } catch (e) {

@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { signIn } from '../../src/api/auth-api';
 import { ApiError } from '../../src/api/problem';
 import { useSession } from '../../src/api/session';
@@ -15,6 +15,8 @@ import { PasswordField } from '../../src/components/PasswordField';
 import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
 import { TextField } from '../../src/components/TextField';
+import { SUPPORT_WHATSAPP } from '../../src/features/checkout/config';
+import { openWhatsapp } from '../../src/features/orders/links';
 import { OtpEntry } from '../../src/features/auth/OtpEntry';
 import { safeReturnTo, setEmailPrefill, takeEmailPrefill } from '../../src/features/auth/return-to';
 import { loginSchema, type LoginForm } from '../../src/features/auth/schemas';
@@ -25,9 +27,6 @@ import { haptic } from '../../src/lib/haptics';
 import { withMinDuration } from '../../src/lib/minDuration';
 import { useOnline } from '../../src/lib/useOnline';
 import { theme } from '../../src/theme';
-
-/** Número do suporte por WhatsApp (só dígitos, com DDI). Público por natureza; vem do ambiente. Sem ele, o botão não aparece. */
-const SUPPORT_WHATSAPP = process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP ?? '';
 
 type View_ = { name: 'form' } | { name: 'stepup'; email: string; password: string } | { name: 'blocked' };
 
@@ -108,7 +107,7 @@ export default function LoginScreen() {
           <Text variant="title2">{t('login.blockedTitle')}</Text>
           <Text color="secondary">{t('login.blockedText')}</Text>
           {SUPPORT_WHATSAPP ? (
-            <Button label={t('login.support')} onPress={() => void Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP}`)} size="lg" testID="auth.blocked-support" />
+            <Button label={t('login.support')} onPress={() => void openWhatsapp(SUPPORT_WHATSAPP, t('login.supportMessage'))} size="lg" testID="auth.blocked-support" />
           ) : null}
         </View>
       </Screen>
