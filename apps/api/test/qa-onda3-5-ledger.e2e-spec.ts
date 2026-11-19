@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { CommissionService } from '../src/modules/finance/commission.service.js';
 import { LedgerService } from '../src/modules/finance/index.js';
-import { computeOrderFinance, type OrderFinance } from '../src/modules/finance/domain/commission.js';
+import { computeOrderFinance } from '../src/modules/finance/domain/commission.js';
 import { accountBalance, isBalanced, LEDGER_ACCOUNTS, refundLines, saleLines, providerFeeLines, type LedgerLine } from '../src/modules/finance/domain/ledger.js';
 import { orderItems, orders } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
@@ -242,7 +242,7 @@ describe('Parte B: pedidos reais pela API com valores aleatórios; o ledger de t
       if (storePct !== null) await commissions.setStoreRate(shop.store.id, { pctBp: storePct, reason: 'QA propriedade' }, null);
       const buyer = await customerAt(ctx, shop.origin);
       const qtys = specs.map(() => int(r, 1, 3));
-      for (const [i, v] of shop.variants.entries()) await addToCart(ctx, buyer.user, v, qtys[i]!).expect(200);
+      for (const [i, v] of shop.variants.entries()) await addToCart(ctx, buyer.user, v, qtys[i]).expect(200);
       const subtotal = specs.reduce((s, sp, i) => s + sp.priceCents * qtys[i]!, 0);
       if (subtotal < 100) continue; // total mínimo do cupom (HIP-037) tem teste próprio
       // cupom: nenhum, da loja (fixo) ou da plataforma (fixo ou percentual)
