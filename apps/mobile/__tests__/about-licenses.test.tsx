@@ -4,7 +4,7 @@ import AboutScreen, { versionLabel } from '../app/about';
 import AccountScreen from '../app/(customer)/(tabs)/account';
 import LicenseDetailScreen from '../app/licenses/[id]';
 import LicensesScreen from '../app/licenses/index';
-import { assertWebUrl } from '../app.config';
+import { assertPublicUrl } from '../app.config';
 import { sessionStore } from '../src/api/session';
 import { WEB_PUBLIC_URL } from '../src/features/checkout/config';
 import { CREDITS } from '../src/legal/credits';
@@ -109,17 +109,17 @@ describe('Licenças de código aberto (DEC-055)', () => {
   });
 });
 
-describe('EXPO_PUBLIC_WEB_URL nos builds de loja', () => {
+describe('EXPO_PUBLIC_WEB_URL e EXPO_PUBLIC_API_URL nos builds de loja', () => {
   it('perfis preview e production recusam URL ausente, de exemplo, localhost ou http', () => {
     for (const bad of [undefined, '', 'https://SEU-DOMINIO', 'http://webag.com.br', 'https://localhost:3001', 'https://10.0.2.2']) {
-      expect(() => assertWebUrl('production', bad)).toThrow(/EXPO_PUBLIC_WEB_URL/);
-      expect(() => assertWebUrl('preview', bad)).toThrow(/EXPO_PUBLIC_WEB_URL/);
+      expect(() => assertPublicUrl('EXPO_PUBLIC_WEB_URL', 'production', bad)).toThrow(/EXPO_PUBLIC_WEB_URL/);
+      expect(() => assertPublicUrl('EXPO_PUBLIC_API_URL', 'preview', bad)).toThrow(/EXPO_PUBLIC_API_URL/);
     }
   });
 
   it('aceita https real e não interfere no desenvolvimento nem no export local', () => {
-    expect(() => assertWebUrl('production', 'https://webag.example.org')).not.toThrow();
-    expect(() => assertWebUrl('development', 'http://localhost:3001')).not.toThrow();
-    expect(() => assertWebUrl(undefined, undefined)).not.toThrow();
+    expect(() => assertPublicUrl('EXPO_PUBLIC_WEB_URL', 'production', 'https://webag.example.org')).not.toThrow();
+    expect(() => assertPublicUrl('EXPO_PUBLIC_API_URL', 'development', 'http://localhost:3000')).not.toThrow();
+    expect(() => assertPublicUrl('EXPO_PUBLIC_API_URL', undefined, undefined)).not.toThrow();
   });
 });
