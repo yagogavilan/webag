@@ -1,14 +1,20 @@
 'use client';
 
-import { CheckCircle, Circle, Hourglass, XCircle } from '@phosphor-icons/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { ArrowsClockwise, CheckCircle, Circle, Clock, Hourglass, Receipt, Wallet, XCircle } from '@phosphor-icons/react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, ButtonLink, QueryBoundary, SkeletonRows, cx, ui, useToast } from '@/components/ui';
+import { Banner, Button, ButtonLink, Hero, QueryBoundary, SkeletonRows, cx, ui, useToast } from '@/components/ui';
+import { useOptionalOrdersRuntime } from '@/features/orders/orders-runtime';
+import { exchangesApi, exchangesKeys } from '@/lib/api/exchanges';
+import { financeApi, financeKeys, periodOf } from '@/lib/api/finance';
+import { formatCents } from '@/lib/format';
+import f from '@/features/finance/finance.module.css';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { formatClock, formatDateTime } from '@/lib/format';
-import { NEW_PRODUCT_PATH, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
+import { NEW_PRODUCT_PATH, canSeeSalesValues, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import s from './lojista.module.css';
 import { draftErrorMessage } from './onboarding/use-draft';
@@ -99,7 +105,7 @@ function StatusBody({ store }: { store: MerchantStore }) {
     case 'approved':
       return <Approved store={store} />;
     case 'live':
-      return <Live />;
+      return <Live store={store} />;
     default:
       return null;
   }
@@ -253,17 +259,93 @@ function Approved({ store }: { store: MerchantStore }) {
   );
 }
 
-function Live() {
-  const [open, setOpen] = useState(true);
+function Live({ store }: { store: MerchantStore }) {
+  const pending = useOptionalOrdersRuntime()?.pending ?? [];
+  const showValues = canSeeSalesValues(store);
+  const todos: { id: string; icon: ReactNode; label: string; href: string; urgent?: boolean }[] = [];
+  if (pending.length > 0) todos.push({ id: 'orders', icon: <Receipt size={24} aria-hidden="true" />, label: `${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'} · responda agora`, href: '/lojista/pedidos', urgent: true });
+  if (!store.hasHours) todos.push({ id: 'hours', icon: <Clock size={24} aria-hidden="true" />, label: 'Sem horário definido', href: '/lojista/loja/horarios' });
+  if (store.payout.status !== 'connected' && isOwner(store)) todos.push({ id: 'payout', icon: <Wallet size={24} aria-hidden="true" />, label: 'Falta conectar o Mercado Pago', href: '/lojista/onboarding/4' });
+  const exchanges = useExchangeTodo(store.id);
+  if (exchanges) todos.push(exchanges);
+
   return (
-    <div className={ui.stack} data-testid={T('status-card')}>
-      <PageHeader title="Início" />
-      {open ? (
-        <Banner tone="success" action={<Button variant="text" size="sm" onClick={() => setOpen(false)}>Dispensar</Button>}>
-          Sua loja está no ar.
-        </Banner>
-      ) : null}
+    <div className={cx(ui.stack, 'wb-enter')} data-testid={T('status-card')}>
+      <Hero title={store.name ? `Olá, ${store.name}` : 'Início'} chip={store.status === 'live' ? 'Loja aberta no app' : 'Loja no ar'} testId={T('hero')}>
+        <p className="wb-text-body" style={{ margin: 0, color: '#fff' }}>
+          {pending.length > 0 ? 'Tem pedido esperando você.' : 'Mantenha o painel aberto para ouvir os pedidos.'}
+        </p>
+      </Hero>
+      <section aria-labelledby="para-fazer">
+        <h2 id="para-fazer" className="wb-text-title2" style={{ margin: '0 0 12px' }}>
+          Para fazer agora
+        </h2>
+        {todos.length === 0 ? (
+          <Banner tone="success" testId={T('all-clear')}>
+            Tudo em dia.
+          </Banner>
+        ) : (
+          <ul className={f.todo} data-testid={T('todo-list')}>
+            {todos.map((todo) => (
+              <li key={todo.id}>
+                <Link href={todo.href as never} className={cx(f.todoItem, todo.urgent && f.todoUrgent, 'wb-text-body-strong')} data-testid={T(`todo-${todo.id}`)}>
+                  <span className={f.todoIcon}>{todo.icon}</span>
+                  {todo.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {showValues ? <SalesKpis storeId={store.id} /> : null}
     </div>
+  );
+}
+
+function useExchangeTodo(storeId: string): { id: string; icon: ReactNode; label: string; href: string; urgent?: boolean } | null {
+  const query = useQuery({ queryKey: exchangesKeys.pending(storeId), queryFn: () => exchangesApi.list(storeId, { scope: 'pending', limit: 50 }), staleTime: 30_000, refetchInterval: 60_000 });
+  const count = query.data?.data.length ?? 0;
+  if (count === 0) return null;
+  return { id: 'exchanges', icon: <ArrowsClockwise size={24} aria-hidden="true" />, label: `${count} ${count === 1 ? 'troca para responder' : 'trocas para responder'}`, href: '/lojista/trocas', urgent: true };
+}
+
+/** "Hoje" e "Últimos 7 dias": só com `vendas_valores` (o funcionário sem a permissão não vê dinheiro). Um bloco que falha não derruba o painel. */
+function SalesKpis({ storeId }: { storeId: string }) {
+  const today = periodOf('today');
+  const week = periodOf('7d');
+  const todayQ = useQuery({ queryKey: financeKeys.sales(storeId, today), queryFn: () => financeApi.sales(storeId, today), refetchInterval: 60_000 });
+  const weekQ = useQuery({ queryKey: financeKeys.sales(storeId, week), queryFn: () => financeApi.sales(storeId, week), refetchInterval: 5 * 60_000 });
+  if (todayQ.isPending || weekQ.isPending) return <SkeletonRows rows={1} height={110} label="Carregando as vendas" />;
+  if (!todayQ.data || !weekQ.data) {
+    return (
+      <Banner tone="warning" action={<Button size="sm" variant="secondary" onClick={() => { void todayQ.refetch(); void weekQ.refetch(); }}>Tentar de novo</Button>} testId={T('sales-error')}>
+        Não conseguimos carregar as vendas.
+      </Banner>
+    );
+  }
+  const money = (m: { amount?: number } | undefined) => formatCents(m?.amount ?? 0);
+  return (
+    <section aria-labelledby="vendas-hoje">
+      <h2 id="vendas-hoje" className="wb-text-title2" style={{ margin: '0 0 12px' }}>
+        Vendas
+      </h2>
+      <ul className={f.kpis}>
+        <li className={f.kpi} data-testid={T('kpi-today')}>
+          <p className={cx('wb-text-caption-strong', f.kpiLabel)}>Hoje</p>
+          <p className={f.kpiValue}>{money(todayQ.data.gross)}</p>
+          <p className={cx('wb-text-caption', f.kpiNote)}>{todayQ.data.orders} pedidos</p>
+        </li>
+        <li className={f.kpi} data-testid={T('kpi-week')}>
+          <p className={cx('wb-text-caption-strong', f.kpiLabel)}>Últimos 7 dias</p>
+          <p className={f.kpiValue}>{money(weekQ.data.gross)}</p>
+          <p className={cx('wb-text-caption', f.kpiNote)}>{weekQ.data.orders} pedidos</p>
+        </li>
+        <li className={f.kpi} data-testid={T('kpi-ticket')}>
+          <p className={cx('wb-text-caption-strong', f.kpiLabel)}>Ticket médio (7 dias)</p>
+          <p className={f.kpiValue}>{money(weekQ.data.averageTicket)}</p>
+        </li>
+      </ul>
+    </section>
   );
 }
 

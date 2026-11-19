@@ -11,7 +11,7 @@ export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   suspended: 'Suspensa',
 };
 
-export type LojistaSection = 'inicio' | 'pedidos' | 'produtos' | 'financeiro' | 'loja' | 'equipe';
+export type LojistaSection = 'inicio' | 'pedidos' | 'trocas' | 'produtos' | 'financeiro' | 'loja' | 'equipe';
 
 export interface LojistaNavItem {
   section: LojistaSection;
@@ -24,6 +24,7 @@ export interface LojistaNavItem {
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
   { section: 'inicio', label: 'Início', href: '/lojista' },
   { section: 'pedidos', label: 'Pedidos', href: '/lojista/pedidos' },
+  { section: 'trocas', label: 'Trocas', href: '/lojista/trocas' },
   { section: 'produtos', label: 'Produtos', href: '/lojista/produtos' },
   { section: 'financeiro', label: 'Financeiro', href: '/lojista/financeiro', ownerOnly: true },
   { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
@@ -96,3 +97,6 @@ export function maskedDocument(value: string | null): string {
   if (!value) return '';
   return `${'•'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
 }
+
+/** Valores de venda (RN-13, `vendas_valores`): o dono sempre; o funcionário só com a permissão. Sem ela, o painel não mostra dinheiro. */
+export const canSeeSalesValues = (store: MerchantStore | null | undefined): boolean => store?.role === 'owner' || Boolean(store?.permissions.includes('sales_values'));

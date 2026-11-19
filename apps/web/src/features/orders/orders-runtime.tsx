@@ -44,6 +44,11 @@ export function useOrdersRuntime(): OrdersRuntime {
   return value;
 }
 
+/** Para telas que podem estar fora do painel completo (testes, fluxo de cadastro): sem o provedor, devolve `null`. */
+export function useOptionalOrdersRuntime(): OrdersRuntime | null {
+  return useContext(Context);
+}
+
 const byArrival = (a: StoreOrderSummary, b: StoreOrderSummary) => Date.parse(arrivedAt(a)) - Date.parse(arrivedAt(b));
 
 /**

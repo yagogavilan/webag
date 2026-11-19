@@ -97,11 +97,11 @@ describe('L8: acompanhar a aprovação', () => {
     expect(T('no-product')).toHaveTextContent('Cadastre 1 produto para aparecer no app.');
   });
 
-  it('no ar: banner de sucesso dispensável', async () => {
-    setup(fakeStore({ status: 'live', step: 4 }));
-    expect(await screen.findByText('Sua loja está no ar.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Dispensar' }));
-    expect(screen.queryByText('Sua loja está no ar.')).toBeNull();
+  it('no ar: faixa de destaque com "Para fazer agora" e as vendas só para quem vê valores', async () => {
+    setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }));
+    expect(await screen.findByTestId('lojista.inicio.hero')).toHaveTextContent('Olá, Casa Bela');
+    expect(screen.getByRole('heading', { name: 'Para fazer agora' })).toBeInTheDocument();
+    expect(await screen.findByTestId('lojista.inicio.all-clear')).toHaveTextContent('Tudo em dia.');
   });
 
   it('suspensa: banner de erro com o motivo e suporte', async () => {
