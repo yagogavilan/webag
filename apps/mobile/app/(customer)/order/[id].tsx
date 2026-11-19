@@ -18,7 +18,12 @@ import { useCartParams } from '../../../src/features/cart/hooks';
 import { PriceSummary } from '../../../src/features/cart/PriceSummary';
 import { useOrder } from '../../../src/features/checkout/hooks';
 import { getPushStatus, openNotificationSettings, type PushStatus } from '../../../src/features/notifications/push';
-import { useCancelOrder } from '../../../src/features/orders/hooks';
+import { useCancelForDelay, useCancelOrder, useRequestCancel } from '../../../src/features/orders/hooks';
+import { deliveryNotice } from '../../../src/features/orders/delivery-state';
+import { OrderNotice } from '../../../src/features/orders/OrderNotice';
+import { SUPPORT_WHATSAPP } from '../../../src/features/checkout/config';
+import { TextField } from '../../../src/components/TextField';
+import { useNow } from '../../../src/lib/useNow';
 import { openDirections, openWhatsapp } from '../../../src/features/orders/links';
 import { isActive, formatDateTime, formatHour, itemCountLabel } from '../../../src/features/orders/model';
 import { reorderItems } from '../../../src/features/orders/reorder';
@@ -44,6 +49,13 @@ export default function OrderScreen() {
   const { connected } = useInvalidateOnEvent(orderId);
   const query = useOrder(orderId, { connected });
   const cancel = useCancelOrder(orderId);
+  const cancelLate = useCancelForDelay(orderId);
+  const requestCancel = useRequestCancel(orderId);
+  const now = useNow();
+  const [waiting, setWaiting] = useState(false);
+  const [lateConfirmOpen, setLateConfirmOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [reason, setReason] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [details, setDetails] = useState(false);
   const [notReceivedOpen, setNotReceivedOpen] = useState(false);
@@ -124,6 +136,57 @@ export default function OrderScreen() {
     }
   };
 
+  // Cancelar sem custo por atraso (WB-253): antes da saída cancela na hora; em saída abre o pedido à operação. Toque duplo = um efeito.
+  const onCancelLate = async () => {
+    if (!online) {
+      toast.show(t('late.offline'));
+      return;
+    }
+    const wasOut = order.status === 'out_for_delivery';
+    try {
+      const done = await cancelLate.mutateAsync();
+      void haptic('success');
+      setLateConfirmOpen(false);
+      if (done.status === 'cancelled') toast.show(t('order.cancelDone'));
+      else toast.show(wasOut ? t('cancelRequest.sent') : t('late.raceOut'));
+    } catch (error) {
+      void haptic('error');
+      setLateConfirmOpen(false);
+      const code = error instanceof ApiError ? error.code : null;
+      toast.show(code === 'ORDER_ALREADY_DELIVERED' ? t('late.raceDelivered') : code === 'LATE_CANCEL_NOT_AVAILABLE' ? t('late.notYet') : t('late.failed'));
+      void query.refetch();
+    }
+  };
+
+  // Pedir o cancelamento com o pedido em separação (BUG-015): a loja decide; o andamento volta em `order.cancelRequest`.
+  const onRequestCancel = async () => {
+    if (!online) {
+      toast.show(t('late.offline'));
+      return;
+    }
+    try {
+      await requestCancel.mutateAsync(reason.trim() || undefined);
+      void haptic('success');
+      setRequestOpen(false);
+      setReason('');
+      toast.show(t('cancelRequest.sent'));
+    } catch (error) {
+      void haptic('error');
+      setRequestOpen(false);
+      toast.show(error instanceof ApiError && error.code === 'ORDER_NOT_CANCELLABLE' ? t('cancelRequest.notAllowed') : t('cancelRequest.failed'));
+      void query.refetch();
+    }
+  };
+
+  const notice = deliveryNotice(order, now);
+  const pendingRequest = order.cancelRequest?.status === 'pending' || order.delay?.cancelRequest?.status === 'pending';
+
+  const talkToWebag = async () => {
+    void haptic('selection');
+    const ok = await openWhatsapp(SUPPORT_WHATSAPP, t('late.contactMessage', { number: order.number }));
+    if (!ok) toast.show(t('order.whatsappFailed', { phone: SUPPORT_WHATSAPP }));
+  };
+
   const onReorder = async () => {
     const result = await reorderItems(order, cartParams).catch(() => null);
     if (!result || result.added === 0) toast.show(t('order.reorderFailed'));
@@ -154,7 +217,19 @@ export default function OrderScreen() {
         <Banner actionLabel={t('confirmed.pushSettings')} onAction={() => void openNotificationSettings()} testID="order.banner-push" text={t('confirmed.pushBlocked')} tone="info" />
       ) : null}
 
-      <OrderHero hint={hint} order={order} />
+      <OrderHero hint={hint} order={order} refund={notice?.kind === 'cancelled-late' ? formatMoney(order.summary.total.amount) : null} />
+      {notice ? (
+        <OrderNotice
+          busy={cancelLate.isPending}
+          notice={notice}
+          onCancelLate={() => setLateConfirmOpen(true)}
+          onContact={() => void talkToWebag()}
+          onRequestCancelLate={() => void onCancelLate()}
+          onWait={() => setWaiting(true)}
+          order={order}
+          waiting={waiting}
+        />
+      ) : null}
 
       <StatusTimeline order={order} />
 
@@ -166,7 +241,7 @@ export default function OrderScreen() {
         {order.status === 'delivered' || order.status === 'cancelled' || order.status === 'refused' || order.status === 'expired' ? <Button label={t('order.reorder')} onPress={() => void onReorder()} testID="order.reorder" variant="text" /> : null}
         {allowed.has('report_not_received') ? <Button label={t('order.notReceived')} onPress={() => setNotReceivedOpen(true)} testID="order.not-received" variant="text" /> : null}
         {allowed.has('cancel') ? <Button label={t('order.cancel')} onPress={() => setCancelOpen(true)} testID="order.cancel" variant="text" /> : null}
-        {allowed.has('request_cancel') ? <Button label={t('order.requestCancel')} onPress={() => void talk(t('order.requestCancelMessage', { number: order.number }))} testID="order.request-cancel" variant="text" /> : null}
+        {allowed.has('request_cancel') && !pendingRequest ? <Button label={t('cancelRequest.open')} onPress={() => setRequestOpen(true)} testID="order.request-cancel" variant="text" /> : null}
         {order.status === 'cancelled' || order.status === 'refused' || order.status === 'expired' ? <Button label={t('order.seeStores')} onPress={() => router.replace('/')} size="lg" testID="order.see-stores" /> : null}
       </View>
 
@@ -218,6 +293,21 @@ export default function OrderScreen() {
       >
         <Button label={t('order.notReceivedConfirm')} onPress={() => void onNotReceived()} testID="order.not-received-confirm" />
         <Button label={t('common.cancel')} onPress={() => setNotReceivedOpen(false)} variant="text" />
+      </Dialog>
+      <Dialog
+        onClose={() => setLateConfirmOpen(false)}
+        testID="tracking.late-cancel-sheet"
+        text={t('late.confirmBody', { total: formatMoney(order.summary.total.amount) })}
+        title={t('late.confirmTitle', { number: order.number })}
+        visible={lateConfirmOpen}
+      >
+        <Button label={t('late.confirmCta')} loading={cancelLate.isPending} onPress={() => void onCancelLate()} testID="tracking.late-cancel-confirm" variant="destructive" />
+        <Button label={t('late.confirmBack')} onPress={() => setLateConfirmOpen(false)} variant="text" />
+      </Dialog>
+      <Dialog onClose={() => setRequestOpen(false)} testID="order.request-cancel-dialog" text={t('cancelRequest.body')} title={t('cancelRequest.title')} visible={requestOpen}>
+        <TextField help={t('cancelRequest.reasonHelp')} label={t('cancelRequest.reasonLabel')} maxLength={200} onChangeText={setReason} testID="order.request-cancel-reason" value={reason} />
+        <Button label={t('cancelRequest.confirm')} loading={requestCancel.isPending} onPress={() => void onRequestCancel()} testID="order.request-cancel-confirm" variant="destructive" />
+        <Button label={t('cancelRequest.keep')} onPress={() => setRequestOpen(false)} variant="text" />
       </Dialog>
       <Dialog onClose={() => setCancelOpen(false)} testID="order.cancel-dialog" text={`${order.payment.status === 'approved' ? t('order.cancelPaid', { total: formatMoney(order.summary.total.amount) }) : t('order.cancelPix')}`} title={t('order.cancelTitle')} visible={cancelOpen}>
         <Button label={t('order.cancelKeep')} onPress={() => setCancelOpen(false)} />

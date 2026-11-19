@@ -2,10 +2,13 @@ import type { Order, OrderStatus } from '@webag/shared';
 import { StyleSheet, View } from 'react-native';
 import { EtapaACaminho, EtapaEntregue, EtapaSeparando } from '../../art/kit.generated';
 import { BarsProgress } from '../../art/Bars';
+import { Warning } from '../../components/icons';
 import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { theme } from '../../theme';
 import { deliveryEta, readEta } from '../catalog/eta';
+import { useNow } from '../../lib/useNow';
+import { isLate, passedMinutes } from './delivery-state';
 import { presentStatus, spacedCode } from './model';
 
 const STEPS = ['received', 'accepted', 'in_preparation', 'out_for_delivery', 'delivered'] as const;
@@ -37,13 +40,16 @@ const STEP_NAMES = ['Pedido recebido', 'Confirmado', 'Em separação', 'A caminh
  * (DEC-053: faixa gravada no pedido, nunca número único), o progresso de 5 segmentos inclinados com "Etapa N de 5 · nome" e,
  * a caminho, o código de entrega em blocos. "Pedido aceito" aparece uma vez.
  */
-export function OrderHero({ order, hint }: { order: Order; hint: string | null }) {
+export function OrderHero({ order, hint, refund = null }: { order: Order; hint: string | null; refund?: string | null }) {
+  const now = useNow();
   const st = presentStatus(order.status);
   const step = stepOf(order.status);
   const active = step > 0 && order.status !== 'delivered';
   const window = order.delivery && active ? deliveryEta({ etaMinMinutes: order.delivery.etaMinMinutes, etaMaxMinutes: order.delivery.etaMaxMinutes, eta: readEta(order.delivery), available: true }, new Date(order.createdAt)) : null;
   const Art = order.status === 'out_for_delivery' ? EtapaACaminho : step >= 5 || order.status === 'ready_for_pickup' ? EtapaEntregue : EtapaSeparando;
   const code = order.tracking?.deliveryCode && order.status === 'out_for_delivery' ? order.tracking.deliveryCode : null;
+  const late = isLate(order) && window !== null;
+  const passed = late && order.delivery?.eta ? passedMinutes(order.delivery.eta.toAt, now) : 0;
   const stepLabel = step > 0 ? t('order.stepOf', { n: step, total: STEPS.length, name: STEP_NAMES[step - 1] ?? st.label }) : st.label;
 
   return (
@@ -54,18 +60,43 @@ export function OrderHero({ order, hint }: { order: Order; hint: string | null }
       <Text style={styles.step} variant="captionStrong">
         {stepLabel}
       </Text>
+      {late ? (
+        // Atraso não depende só de cor: ícone + palavra (onda-7-eta-atraso.md D9)
+        <View accessible accessibilityLabel={t('late.tag')} style={styles.lateTag} testID="order.late-tag">
+          <Warning color={theme.color.accent.base} size={theme.size.iconSm} weight="fill" />
+          <Text style={styles.lateTagText} variant="captionStrong">
+            {t('late.tag').toUpperCase()}
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.title} variant="display">
-        {st.label}
+        {late ? t('late.title') : st.label}
       </Text>
+      {refund ? (
+        <View accessible accessibilityLabel={`${t('late.refundLabel')} ${refund}`} testID="tracking.refund">
+          <Text allowFontScaling={false} style={styles.etaCaption} variant="caption">
+            {t('late.refundLabel')}
+          </Text>
+          <Text allowFontScaling={false} style={styles.eta} variant="priceXl">
+            {refund}
+          </Text>
+        </View>
+      ) : null}
       {window ? (
         <View accessible accessibilityLabel={t('order.arrivesBetween', { start: window.start, end: window.end })} testID="order.eta">
           <Text allowFontScaling={false} style={styles.etaCaption} variant="caption">
-            {t('confirmed.arrives')}
+            {late ? t('late.expected') : t('confirmed.arrives')}
           </Text>
-          <Text allowFontScaling={false} style={styles.eta} variant="priceXl">
+          <Text allowFontScaling={false} style={late ? styles.etaLate : styles.eta} variant={late ? 'title1' : 'priceXl'}>
             {`${window.start} – ${window.end}`}
           </Text>
         </View>
+      ) : null}
+      {late ? (
+        // O contador de minutos não é anunciado ao leitor de tela (a mudança para "atrasado" já é, uma vez, pela região viva do cartão)
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.lateText} testID="order.late-passed" variant="bodyStrong">
+          {passed > 0 ? t('late.passed', { n: passed }) : t('late.passedNow')}
+        </Text>
       ) : null}
       {hint ? (
         <Text style={styles.hint} testID="order.hint">
@@ -112,6 +143,10 @@ const styles = StyleSheet.create({
   title: { color: theme.color.neutral[0], maxWidth: '70%' },
   etaCaption: { color: theme.color.text.onInkMuted },
   eta: { color: theme.color.neutral[0] },
+  etaLate: { color: theme.color.neutral[300] },
+  lateText: { color: theme.color.neutral[0] },
+  lateTag: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1] },
+  lateTagText: { color: theme.color.neutral[0] },
   hint: { color: theme.color.text.onInkMuted },
   codeBox: { gap: theme.space[2], paddingTop: theme.space[2] },
   blocks: { flexDirection: 'row', gap: theme.space[2] },

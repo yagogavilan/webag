@@ -1,11 +1,14 @@
 import {
   cancelOrder,
+  cancelOrderLate,
   createCardIntent,
   createOrder,
   getOrder,
   getOrderPayment,
   listOrders,
   reportOrderNotReceived,
+  requestOrderCancel,
+  type CancelRequest,
   type CardIntent,
   type CardIntentRequest,
   type CreateOrderRequest,
@@ -46,3 +49,16 @@ export const startCardIntent = (body: CardIntentRequest): Promise<CardIntent> =>
 
 /** "Não recebi meu pedido": avisa a operação (não estorna nem muda o estado). Idempotente; vale com o pedido a caminho ou até 48 h depois de entregue. */
 export const reportNotReceived = (orderId: string) => request((init) => reportOrderNotReceived(orderId, init), { retry: true });
+
+/**
+ * Pedido de cancelamento com o pedido em separação (BUG-015): a loja decide e, sem resposta, o admin. Idempotente: pedir de novo devolve
+ * a mesma solicitação. O andamento vem em `Order.cancelRequest`.
+ */
+export const askOrderCancel = (orderId: string, reason?: string): Promise<CancelRequest> =>
+  request((init) => requestOrderCancel(orderId, reason ? { reason } : {}, init), { retry: true });
+
+/**
+ * Cancelar sem custo por atraso da entrega (WB-253, RN-19 4d). Antes de sair da loja cancela na hora; em saída abre o pedido à operação
+ * (`Order.delay.cancelRequest`). Idempotente (toque duplo: um só efeito). Devolve o pedido atualizado.
+ */
+export const cancelOrderForDelay = (orderId: string): Promise<Order> => request((init) => cancelOrderLate(orderId, {}, init), { retry: true });

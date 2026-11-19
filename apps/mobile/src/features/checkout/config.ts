@@ -36,6 +36,9 @@ export const SIMULATE_PAYMENT_ENABLED: boolean = canSimulatePayment(APP_ENV, PAY
 /** Chave PÚBLICA do Mercado Pago (a de teste no sandbox). Nunca o access token. */
 export const MP_PUBLIC_KEY: string = process.env.EXPO_PUBLIC_MP_PUBLIC_KEY ?? '';
 
+/** WhatsApp da Webag (só dígitos com DDI), opcional por ambiente: "Falar com a Webag" some se não houver. */
+export const SUPPORT_WHATSAPP: string = (process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP ?? '').replace(/\D+/g, '');
+
 /** PIX vale 15 min (RN, WB-024): só para a contagem de fallback; o valor oficial é `pix.expiresAt` do servidor. */
 export const PIX_ALERT_SECONDS = 120;
 
