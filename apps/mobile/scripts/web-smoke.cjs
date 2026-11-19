@@ -69,9 +69,10 @@ const id = (testId) => `[data-testid="${testId}"]`;
     }
     await click(id('product.add'), 60000);
     await click(id('product.add'));
-    // depois de adicionar, o mesmo botão vira "Ver sacola" (o recarregamento da página sairia da conta: a sessão no navegador fica só na memória)
-    await page.waitForFunction(() => /sacola/i.test(document.querySelector('[data-testid="product.add"]')?.textContent ?? ''), null, { timeout: 30000 });
-    await click(id('product.add'));
+    // "Adicionado" é transitório; volta à loja e abre a sacola pela barra da loja (recarregar a página sairia da conta: a sessão no navegador fica só na memória)
+    await page.waitForFunction(() => /adicionado/i.test(document.querySelector('[data-testid="product.add"]')?.textContent ?? ''), null, { timeout: 30000 });
+    await click(id('product.back'));
+    await page.locator(`${id('store.cart-bar')}:visible`).first().click({ timeout: 30000 });
     await page.waitForSelector(id('cart.total'), { timeout: 60000 });
     step(`sacola com total: ${(await page.innerText(id('cart.total'))).trim()}`);
 
@@ -79,6 +80,7 @@ const id = (testId) => `[data-testid="${testId}"]`;
     if (problems.length) throw new Error(`avisos do navegador:\n${problems.join('\n')}`);
     step('ok');
   } catch (err) {
+    console.error(`[web-smoke] url: ${page.url()}; visíveis: ${(await page.locator('[data-testid]:visible').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')))).join(' ').slice(0, 400)}`);
     if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-erro.png') }).catch(() => undefined);
     console.error(`[web-smoke] falhou: ${err.message.split('\n').slice(0, 3).join(' ')}`);
     if (problems.length) console.error(`[web-smoke] avisos do navegador:\n${problems.join('\n')}`);

@@ -7,7 +7,10 @@ App do cliente (Expo SDK 58, React Native 0.88, Expo Router, TypeScript strict).
 ```bash
 pnpm --filter @webag/mobile dev          # Metro; abra no Expo Go ou em dev build
 EXPO_PUBLIC_API_URL=http://10.0.2.2:3000 pnpm --filter @webag/mobile android   # emulador Android: localhost é o próprio emulador
+pnpm --filter @webag/mobile web          # navegador (ou `pnpm web` na raiz): http://localhost:8081, contra a API local
 ```
+
+**No navegador (DEC-058, `react-native-web`):** é um terceiro alvo para desenvolvimento e demonstração, não para produção. A sessão fica só na memória da aba (`src/lib/secure-store.web.ts`: sem localStorage; recarregar sai da conta), não há push nem localização do aparelho. SVG decorativo usa `src/lib/a11y.ts` (a web não aceita `accessibilityElementsHidden`/`importantForAccessibility` no `react-native-svg`; era o erro do DT-067 que cobria a tela). Fumaça com Chromium: `NODE_PATH=$(npm root -g) node scripts/web-smoke.cjs captura.png` (Playwright global; cidade, login, loja, produto e sacola). O CORS da API já libera `localhost:8081`. Builds nativos e `expo export` não mudam.
 
 Variáveis (todas públicas, embutidas no app): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_URL`, `EXPO_PUBLIC_APP_ENV`, `EXPO_PUBLIC_PAYMENT_MODE`, `EXPO_PUBLIC_MP_PUBLIC_KEY`, `EXPO_PUBLIC_SUPPORT_WHATSAPP` (opcional, só dígitos com DDI). Ver `infra/env.example`. Os scripts `dev`, `android` e `ios` leem o `.env` **da raiz do repositório** (o Expo, sozinho, só leria um `.env` dentro de `apps/mobile`); depois de mudar uma variável, reinicie o Metro com `--clear` se o valor antigo persistir. No celular físico use o IP da máquina em vez de `localhost` (API e site público). Para concluir um pedido PIX em desenvolvimento, rode `pnpm pagar` na raiz.
 

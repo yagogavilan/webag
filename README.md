@@ -76,7 +76,7 @@ Com `PAYMENT_PROVIDER=fake` (padrão em desenvolvimento) nada é cobrado. O flux
 
 - **Celular (Expo Go)**: instale o Expo Go, escaneie o QR (celular e computador na **mesma rede Wi-Fi**). O celular não enxerga o `localhost` do computador: no `.env` defina `EXPO_PUBLIC_API_URL=http://<IP-do-computador>:3000` e `EXPO_PUBLIC_WEB_URL=http://<IP-do-computador>:3001` (IP: `ipconfig` no Windows, `ipconfig getifaddr en0` no macOS, `hostname -I` no Linux) e reinicie o `pnpm dev`. Se o firewall bloquear, libere as portas 3000, 3001 e 8081 para a rede privada.
 - **Emulador Android / simulador iOS**: com o emulador aberto, `pnpm --filter @webag/mobile android` (ou `ios`, só macOS). O emulador Android alcança o computador em `10.0.2.2` (`EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`).
-- **Navegador**: veja a nota na seção "Limites conhecidos".
+- **Navegador** (DEC-058): com a API no ar (`pnpm dev` ou só a API), rode `pnpm web` e abra http://localhost:8081 (ou aperte `w` no terminal do Metro). É o mesmo app, via `react-native-web`; serve para ver e testar as telas sem celular. Limites: a sessão fica só na memória da aba (recarregar a página sai da conta; sem `expo-secure-store` na web), sem push e sem localização do aparelho (escolha a cidade ou digite o CEP). O app de verdade é o nativo. Roteiro automatizado: `node apps/mobile/scripts/web-smoke.cjs` (Playwright; cidade, login, loja, produto e sacola).
 
 ## Trocar do simulado para o Mercado Pago real
 
@@ -121,6 +121,7 @@ Passo a passo: https://www.mercadopago.com.br/developers > **Suas integrações*
 |---|---|
 | `pnpm run setup` | Prepara o ambiente do zero (`.env`, Docker, migrações, seed). Idempotente |
 | `pnpm dev` | API, painéis e Metro em modo desenvolvimento (lê o `.env` da raiz) |
+| `pnpm web` | Só o app no navegador (Metro com `--web`, http://localhost:8081; precisa da API no ar) |
 | `pnpm smoke` | Teste de fumaça ponta a ponta contra a API rodando (login de todos os perfis, pedido de retirada e de entrega com PIX simulado) |
 | `pnpm pagar [recusar\|expirar]` | Aprova (ou recusa, ou expira) o PIX simulado do pedido mais recente |
 | `pnpm totp <segredo>` | Código TOTP do admin sem celular (só desenvolvimento) |
@@ -137,7 +138,7 @@ Os testes E2E da API usam banco real: `E2E_DEPS=1` com Postgres e Redis no ar (o
 ## Limites conhecidos
 
 - **Mercado Pago real, push real e Sentry do app/painel não foram exercitados** (dependem de contas do fundador). Estão prontos para ligar só com chaves.
-- **App no navegador**: o app é nativo (Expo Router); o `react-native-web` não é uma dependência hoje. O que abre no navegador são os painéis e o site público. Ver `docs/qa/relatorios/setup-do-zero.md`.
+- **App no navegador**: abre com `pnpm web` (DEC-058), com os limites descritos em "Abrir o app". Captura do roteiro: `docs/qa/relatorios/app-web-sacola.png`.
 - Não existe botão "pagar de mentira" dentro do app: use `pnpm pagar`.
 
 ## Como o time trabalha
