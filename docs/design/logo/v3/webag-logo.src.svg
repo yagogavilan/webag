@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v3, conceito A "Sacola Veloz". Logo horizontal colorida, para fundo claro. Cor solida unica #C02EF0.
+     viewBox PROVISORIO 0 0 470 126: simbolo ocupa x 0..160, y 0..104 (mesma geometria de webag-simbolo.src.svg);
+     palavra "webag" comeca em x=182 (vao de 22 = ~1,5 t) com linha de base y=104 (= base do corpo da sacola).
+     Largura estimada da palavra: ~2,9 x size = ~280 (Outfit 700, size 96, 5 letras); fim ~ x=462.
+     Altura da ascendente do "b" ~0,74 x 96 = ~71, que deve encostar no topo do corpo (y=34); o "g" desce ate ~y=124.
+     CEO: converter o marcador em contorno, medir a caixa real da palavra e me devolver para ajustar x, size e viewBox. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 126" width="470" height="126" role="img" aria-labelledby="wb-logo-t">
+  <title id="wb-logo-t">Webag</title>
+  <g id="simbolo">
+    <g id="barras" fill="#C02EF0">
+      <rect x="34" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="31" height="14" rx="7"/>
+    </g>
+    <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#C02EF0">
+      <rect x="56" y="34" width="96" height="70" rx="18"/>
+      <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#C02EF0" stroke-width="14"/>
+    </g>
+  </g>
+  <!--TEXT2PATH font="outfit-latin-700-normal.woff2" text="webag" size="96" tracking="-2" x="182" y="104" fill="#C02EF0" id="wordmark"-->
+</svg>

@@ -329,4 +329,58 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     expect(view.photos[0].url).toEqual(expect.any(String));
     expect(view.storeCode).toBeNull();
   });
+
+  it('relatório de trocas (WB-248): por loja e categoria, taxa com alerta, custos só para financeiro/super, CSV auditado; suporte não acessa', async () => {
+    const d = await delivered();
+    const a = await request(d, sizeRequest(d, { method: 'drop_at_store' })).expect(201);
+    await store(d, a.body.id, 'accept').expect(200);
+    const b = await request(d, { orderItemId: d.itemB, type: 'withdrawal', method: 'pickup_at_home' }).expect(201);
+    expect(b.body.status).toBe('approved');
+    const finance = await createAdmin(ctx, 'finance');
+    const support = await createAdmin(ctx, 'support');
+    const day = new Date().toISOString().slice(0, 10);
+    const url = `/v1/admin/exchanges/report?from=${day}&to=${day}&storeId=${d.shop.store.id}`;
+    const fin = (await ctx.http.get(url).set(bearer(finance.accessToken)).expect(200)).body;
+    expect(fin.totals).toMatchObject({ deliveredOrders: 1, exchanges: 2, byType: { withdrawal: 1, defect: 0, size_color: 1 }, sizeColorWithoutSizeChart: 1, feeRevenue: { amount: 0 }, logisticsCost: { amount: 0 } });
+    expect(fin.byStore[0]).toMatchObject({ storeId: d.shop.store.id, exchanges: 2, ratePct: 200, alert: true });
+    const operations = (await ctx.http.get(url).set(bearer(ops.accessToken)).expect(200)).body;
+    expect(operations.totals.feeRevenue).toBeUndefined(); // custos só para financeiro e super admin
+    expect(operations.totals.logisticsCost).toBeUndefined();
+    expect((await ctx.http.get(url).set(bearer(support.accessToken))).status).toBe(403);
+    expect((await ctx.http.get(url.replace(`to=${day}`, 'to=2000-01-01')).set(bearer(finance.accessToken))).status).toBe(400);
+    const csv = await ctx.http.get(`${url}&format=csv`).set(bearer(finance.accessToken)).expect(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('loja_id;loja;pedidos_entregues');
+    const empty = (await ctx.http.get('/v1/admin/exchanges/report?from=2001-01-01&to=2001-01-31').set(bearer(finance.accessToken)).expect(200)).body;
+    expect(empty.totals).toMatchObject({ exchanges: 0, deliveredOrders: 0 });
+  });
+
+  it('avaliação com "como vestiu?": só de pedido entregue, no prazo, 1 por produto e 1 da loja; fit só em produto; dono apenas', async () => {
+    const d = await delivered();
+    const productA = (await ctx.db.select().from(productVariants).where(eq(productVariants.id, d.shop.variants[0]!)))[0]!.productId;
+    const url = `/v1/orders/${d.orderId}/reviews`;
+    const post = (body: Record<string, unknown>, user = d.buyer.user) => ctx.http.post(url).set(bearer(user.accessToken)).send(body);
+    const res = await post({ productId: productA, rating: 4, comment: 'Ficou justa', fit: 'small' });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({ productId: productA, rating: 4, fit: 'small', verifiedPurchase: true });
+    expect((await post({ productId: productA, rating: 5 })).body.code).toBe('REVIEW_ALREADY_EXISTS'); // sem edição
+    expect((await post({ rating: 5, fit: 'ok' })).status).toBe(400); // fit só em produto
+    expect((await post({ rating: 5, comment: 'Entrega rápida' })).status).toBe(201); // avaliação da loja
+    expect((await post({ rating: 3 })).body.code).toBe('REVIEW_ALREADY_EXISTS');
+    expect((await post({ productId: randomUUID(), rating: 5 })).status).toBe(404);
+    expect((await post({ productId: productA, rating: 6 })).status).toBe(400);
+    const stranger = await createCustomer(ctx);
+    expect((await post({ rating: 5 }, stranger)).status).toBe(404);
+    expect((await ctx.http.get(url).set(bearer(stranger.accessToken))).status).toBe(404);
+    expect((await ctx.http.get(url).set(bearer(d.buyer.user.accessToken)).expect(200)).body.data).toHaveLength(2);
+    // o "fit" aparece na leitura pública do produto
+    const pub = (await ctx.http.get(`/v1/browse/products/${productA}/reviews`).expect(200)).body;
+    expect(pub.data[0]).toMatchObject({ fit: 'small' });
+    // pedido ainda não entregue e prazo vencido
+    const late = await delivered({ deliveredAgoDays: 31 });
+    expect((await ctx.http.post(`/v1/orders/${late.orderId}/reviews`).set(bearer(late.buyer.user.accessToken)).send({ rating: 5 })).body.code).toBe('REVIEW_WINDOW_CLOSED');
+    const open = await delivered();
+    await ctx.db.update(orders).set({ status: 'received' }).where(eq(orders.id, open.orderId));
+    expect((await ctx.http.post(`/v1/orders/${open.orderId}/reviews`).set(bearer(open.buyer.user.accessToken)).send({ rating: 5 })).body.code).toBe('ORDER_NOT_DELIVERED');
+  });
 });

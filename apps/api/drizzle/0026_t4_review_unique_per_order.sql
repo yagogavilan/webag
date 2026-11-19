@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "reviews_order_target_uq" ON "reviews" USING btree ("order_id",coalesce("product_id", '00000000-0000-0000-0000-000000000000'::uuid)) WHERE "reviews"."order_id" is not null;

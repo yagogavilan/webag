@@ -5746,6 +5746,79 @@ paths:
           $ref: '#/components/responses/Unprocessable'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/orders/{orderId}/reviews:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [orders]
+      operationId: createOrderReview
+      summary: Avaliar um produto ou a loja de um pedido entregue (WB-031, WB-247)
+      description: "Só pedido ENTREGUE, até `avaliacao_janela_dias` (30) depois da entrega (422 `REVIEW_WINDOW_CLOSED`; 409 `ORDER_NOT_DELIVERED`). Com `productId` (produto que está no pedido) avalia o produto e aceita `fit` (\"Como vestiu?\"); sem `productId` avalia a loja e `fit` é recusado. Uma por produto e uma da loja por pedido; sem edição: repetir devolve 409 `REVIEW_ALREADY_EXISTS` (o app trata como já enviada). Pedido de outra conta: 404."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReviewRequest' }
+      responses:
+        '201':
+          description: Avaliação criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReview' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags: [orders]
+      operationId: listOrderReviews
+      summary: Avaliações que o cliente já fez neste pedido
+      description: "Para o app saber o que ainda falta avaliar. Pedido de outra conta: 404."
+      responses:
+        '200':
+          description: Avaliações
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/OrderReview' } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/exchanges/report:
+    get:
+      tags: [exchanges]
+      operationId: getExchangesReport
+      summary: Relatório de trocas por loja e categoria (WB-248)
+      description: "Permissão de admin `exchanges:report` (operação, financeiro e super admin). Período em dias de Brasília, no máximo 366 dias. Traz pedidos entregues, trocas por tipo, taxa de troca por loja (com `alert` acima de `troca_taxa_alerta_pct`), tamanho/cor com e sem tabela de medidas, resolvida como troca ou reembolso, aprovação automática, mediações e tempo até resolver. Receita da taxa e custo das corridas (`feeRevenue`, `logisticsCost`, `netLogisticsCost`) só para financeiro e super admin. `format=csv` exporta por loja e é auditado."
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ExchangeType' } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+      responses:
+        '200':
+          description: Relatório
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangesReport' }
+            text/csv:
+              schema: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
@@ -9418,3 +9491,69 @@ components:
                     attributes: { type: object, additionalProperties: { type: string } }
                     available: { type: boolean }
                     current: { type: boolean }
+    CreateReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [rating]
+      properties:
+        productId: { type: string, format: uuid, description: 'Produto do pedido; ausente = avaliação da loja.' }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 500 }
+        fit: { type: string, enum: [small, ok, large], description: 'Como vestiu? Só em avaliação de produto.' }
+    OrderReview:
+      allOf:
+        - { $ref: '#/components/schemas/Review' }
+        - type: object
+          properties:
+            productId: { type: [string, 'null'], format: uuid }
+    ExchangesReport:
+      type: object
+      required: [period, totals, byStore, byCategory]
+      properties:
+        period:
+          type: object
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        totals:
+          type: object
+          properties:
+            deliveredOrders: { type: integer }
+            exchanges: { type: integer }
+            ratePct: { type: number }
+            byType: { type: object, additionalProperties: { type: integer } }
+            sizeColorWithSizeChart: { type: integer }
+            sizeColorWithoutSizeChart: { type: integer }
+            resolvedAsExchange: { type: integer }
+            resolvedAsRefund: { type: integer }
+            autoApproved: { type: integer }
+            mediations: { type: integer }
+            avgResolutionHours: { type: [number, 'null'] }
+            alertThresholdPct: { type: integer }
+            feeRevenue: { $ref: '#/components/schemas/Money' }
+            logisticsCost: { $ref: '#/components/schemas/Money' }
+            netLogisticsCost: { $ref: '#/components/schemas/Money' }
+            runsWithoutCost: { type: integer }
+        byStore:
+          type: array
+          items:
+            type: object
+            properties:
+              storeId: { type: string, format: uuid }
+              storeName: { type: [string, 'null'] }
+              deliveredOrders: { type: integer }
+              exchanges: { type: integer }
+              ratePct: { type: number }
+              alert: { type: boolean }
+              byType: { type: object, additionalProperties: { type: integer } }
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              categoryId: { type: [string, 'null'], format: uuid }
+              categoryName: { type: [string, 'null'] }
+              exchanges: { type: integer }
+              byType: { type: object, additionalProperties: { type: integer } }
+              sizeColorWithSizeChart: { type: integer }
+              sizeColorWithoutSizeChart: { type: integer }

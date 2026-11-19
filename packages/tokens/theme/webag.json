@@ -8,11 +8,11 @@
       "200": "#EDC2F4",
       "300": "#E198EC",
       "400": "#D370E3",
-      "500": "#C44DD9",
-      "600": "#A02DB8",
-      "700": "#86249B",
-      "800": "#6B1C7D",
-      "900": "#4A1356"
+      "500": "#C02EF0",
+      "600": "#A21FBE",
+      "700": "#8618A3",
+      "800": "#6A1580",
+      "900": "#4A0F58"
     },
     "neutral": {
       "$description": "Neutros com um fio de ameixa (matiz ~290, saturacao baixa) para combinar com o magenta; sem o bege quente da v1. 500 so para elemento nao textual (borda de campo, icone inativo): 3,6:1 a 4,1:1. 400 so decorativo/desabilitado.",

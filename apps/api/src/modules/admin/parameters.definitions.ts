@@ -54,6 +54,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('troca_voluntaria_max_por_pedido', 1, 1, 3, 'Trocas voluntárias (tamanho/cor) por pedido; arrependimento e defeito não contam', 'HIP-T02'),
   int('troca_taxa_pagamento_h', 24, 1, 72, 'Prazo para o cliente pagar a taxa da coleta depois da aprovação (h); sem pagamento a troca é cancelada', 'HIP-T05'),
   int('taxa_coleta_max_cents', 3000, 0, 10000, 'Teto da taxa de coleta da troca voluntária (centavos)', 'HIP-018'),
+  int('troca_taxa_alerta_pct', 25, 5, 100, 'Taxa de troca (trocas / pedidos entregues, %) por loja acima da qual o relatório destaca e alerta (WB-248)', 'WB-248'),
   int('troca_resposta_h', 24, 4, 120, 'SLA da loja para responder à troca (h); sem resposta a troca é aprovada automaticamente (DEC-037)', 'HIP-T03'),
   int('coleta_agendamento_dias_uteis', 3, 1, 10, 'Agendamento da coleta (dias úteis)', 'HIP-019'),
   int('coleta_entrega_item_dias', 7, 1, 10, 'Prazo do cliente para entregar o item (dias)', 'HIP-019'),

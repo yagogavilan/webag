@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v3, conceito A. Logo horizontal MONO (uma cor), para impressao 1 cor, carimbo, documento fiscal, fundo claro sem cor de marca.
+     Cor padrao neutral.900 #1C1721. Para outra cor unica, trocar as 5 ocorrencias de #1C1721 (inclusive o marcador da palavra).
+     Mesma geometria de webag-logo.src.svg; viewBox provisorio 0 0 470 126. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 126" width="470" height="126" role="img" aria-labelledby="wb-logom-t">
+  <title id="wb-logom-t">Webag</title>
+  <g id="simbolo">
+    <g id="barras" fill="#1C1721">
+      <rect x="34" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="31" height="14" rx="7"/>
+    </g>
+    <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#1C1721">
+      <rect x="56" y="34" width="96" height="70" rx="18"/>
+      <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#1C1721" stroke-width="14"/>
+    </g>
+  </g>
+  <!--TEXT2PATH font="outfit-latin-700-normal.woff2" text="webag" size="96" tracking="-2" x="182" y="104" fill="#1C1721" id="wordmark"-->
+</svg>

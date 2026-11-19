@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ESBOCO de comparacao. Conceito C "Alvo": alca como ARGOLA (anel) com um ponto no centro, que lembra pin de localizacao e botao de clique;
+     corpo reto (sem inclinacao), 3 barras de velocidade. Cor #C02EF0 solida.
+     viewBox provisorio 0 0 460 126. Simbolo x 0..152, y 0..104. Anel: centro (104,24), raio 19, traco 10 (externo 24), ponto raio 6.
+     Corpo x56..152 y40..104 rx18; o anel toca o corpo (sobreposicao de 8 unidades em y40..48), o furo do anel (raio 14) fica livre.
+     Palavra: Fredoka 700 (continuidade com a logo original), size 96, x=176, y=104. Largura estimada ~2,9 x 96 = ~278.
+     Risco: lembra etiqueta de preco pendurada; o pin conversa com "cobertura por endereco", que a DEC-040 tirou da mensagem. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 126" width="460" height="126" role="img" aria-labelledby="wb-c-t">
+  <title id="wb-c-t">Webag, conceito C</title>
+  <g id="simbolo" fill="#C02EF0">
+    <rect x="26" y="40" width="22" height="12" rx="6"/>
+    <rect x="0" y="66" width="44" height="12" rx="6"/>
+    <rect x="18" y="92" width="30" height="12" rx="6"/>
+    <rect x="56" y="40" width="96" height="64" rx="18"/>
+    <circle cx="104" cy="24" r="19" fill="none" stroke="#C02EF0" stroke-width="10"/>
+    <circle cx="104" cy="24" r="6"/>
+  </g>
+  <!--TEXT2PATH font="fredoka-latin-700-normal.woff2" text="webag" size="96" tracking="-1" x="176" y="104" fill="#C02EF0" id="wordmark"-->
+</svg>

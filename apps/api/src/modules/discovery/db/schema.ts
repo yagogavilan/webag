@@ -69,6 +69,10 @@ export const reviews = pgTable(
     check('reviews_rating_range', sql`${t.rating} between 1 and 5`),
     index('reviews_store_idx').on(t.storeId, t.createdAt),
     index('reviews_product_idx').on(t.productId, t.createdAt),
+    // Uma avaliação por produto (e uma da loja) por pedido (RN-12): repetir o envio em rede ruim não duplica.
+    uniqueIndex('reviews_order_target_uq')
+      .on(t.orderId, sql`coalesce(${t.productId}, '00000000-0000-0000-0000-000000000000'::uuid)`)
+      .where(sql`${t.orderId} is not null`),
   ],
 );
 

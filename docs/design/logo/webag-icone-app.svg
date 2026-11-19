@@ -1,48 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Webag: icone do app, 1024 x 1024, quadrado de sangria total (sem cantos: Apple e Android aplicam a mascara).
-     Fundo = marca #C44DD9 (id="fundo"). Simbolo branco (id="simbolo") escala 2,6: todo o desenho cabe no circulo de
-     raio 313 px (zona segura do icone adaptativo do Android: 66 dp de 108 dp). Contraste branco sobre marca: 3,9:1 (grafico, passa 3:1).
-     Para o icone adaptativo do Android: exportar camada de frente = so id="simbolo" (fundo transparente) e camada de fundo = cor #C44DD9.
-     Camada monocromatica (Android 13): simbolo em uma cor, sem fundo.
-     Guias (id="guias", ocultas): para ver, troque display="none" por display="inline". -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="wi-t">
-  <title id="wi-t">Webag</title>
-  <defs>
-    <mask id="wi-m" maskUnits="userSpaceOnUse" x="206" y="51" width="196" height="148">
-      <path fill="#FFF" d="M 258 99.105 L 366 99.105 C 374.5 99.105 382 102.8 383.94 111.05 L 399.84 177.5 C 402.6 189.1 395.5 198.31 384 198.31 L 258 198.31 Z"/>
-      <g fill="#FFF">
-        <rect x="231.2" y="99.105" width="108.8" height="9.2" rx="4.6"/>
-        <rect x="209.7" y="99.105" width="17.2" height="9.2" rx="4.6"/>
-        <rect x="251.8" y="117.105" width="88.2" height="9.2" rx="4.6"/>
-        <rect x="226.9" y="117.105" width="21.5" height="9.2" rx="4.6"/>
-        <rect x="236.5" y="135.105" width="103.5" height="9.2" rx="4.6"/>
-        <rect x="220" y="135.105" width="12.2" height="9.2" rx="4.6"/>
-        <rect x="215.4" y="153.105" width="124.6" height="9.2" rx="4.6"/>
-        <rect x="238.2" y="171.105" width="101.8" height="9.2" rx="4.6"/>
-        <rect x="217" y="171.105" width="17.2" height="9.2" rx="4.6"/>
-        <rect x="254" y="189.105" width="86" height="9.2" rx="4.6"/>
-        <rect x="212.8" y="189.105" width="33.5" height="9.2" rx="4.6"/>
-      </g>
-      <g fill="#000">
-        <rect x="190" y="108.305" width="94.8" height="8.8" rx="4.4"/>
-        <rect x="190" y="126.305" width="89.2" height="8.8" rx="4.4"/>
-        <rect x="190" y="144.305" width="102" height="8.8" rx="4.4"/>
-        <rect x="190" y="162.305" width="110" height="8.8" rx="4.4"/>
-        <rect x="190" y="180.305" width="120.4" height="8.8" rx="4.4"/>
-        <ellipse cx="309.9" cy="111.07" rx="3.9" ry="4.1"/>
-        <ellipse cx="349.75" cy="111.07" rx="3.9" ry="4.1"/>
-      </g>
-    </mask>
-  </defs>
-  <rect id="fundo" x="0" y="0" width="1024" height="1024" fill="#C44DD9"/>
-  <g id="simbolo" transform="translate(-281.1 186.2) scale(2.6)" fill="#FFFFFF">
-    <rect x="206" y="51" width="196" height="148" mask="url(#wi-m)"/>
-    <path d="M 309.617188 111.539062 C 302.242188 95.246094 301.714844 75.808594 308.347656 64.386719 C 314.980469 52.960938 327.066406 52.476562 337.671875 63.207031 C 348.277344 73.941406 354.679688 93.140625 353.210938 109.789062 L 350.804688 108.324219 C 351.710938 92.808594 345.695312 75.09375 336.15625 65.1875 C 326.617188 55.285156 315.949219 55.679688 310.1875 66.148438 C 304.421875 76.621094 305.007812 94.535156 311.613281 109.773438 Z"/>
-    <path d="M 308.539062 112.621094 C 298.738281 96.542969 296.125 76.222656 302.320312 64.324219 C 308.515625 52.425781 321.753906 52.347656 333.78125 64.140625 C 345.8125 75.933594 353.199219 96.226562 351.335938 112.371094 L 348.527344 110.351562 C 349.511719 95.527344 342.535156 77.148438 331.863281 66.449219 C 321.191406 55.746094 309.792969 55.707031 304.636719 66.347656 C 299.484375 76.992188 302.007812 95.359375 310.664062 110.214844 Z"/>
+<!-- Webag v3, conceito A. Icone do app 1024x1024. Fundo SOLIDO #C02EF0 sem cantos (a Apple arredonda; nao exportar com transparencia).
+     Simbolo branco = webag-simbolo.src.svg (160x104) a escala 3,2 => 512 x 333 px (50% da largura).
+     Posicao: o ponto (88,52) do simbolo cai no centro (512,512) => translate(230.4 345.6). Deslocamento intencional de 25,6 px para a esquerda
+     do centro da caixa, porque a massa (corpo da sacola) fica a direita e as barras sao leves.
+     Area segura do Android adaptativo: circulo de 66dp em 108dp => raio 313 px a partir do centro. Ponto mais distante do simbolo: ~287 px (barra do meio). OK.
+     Camadas Android: fundo = <rect id="fundo">; frente = <g id="simbolo">. Monocromatico (Android 13) = id="simbolo" em uma cor.
+     Guias (id="guias") ficam ocultas: remover display="none" para conferir. Quadrado iOS: raio ~229 px (22,37%). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="wb-icone-t">
+  <title id="wb-icone-t">Webag</title>
+  <rect id="fundo" x="0" y="0" width="1024" height="1024" fill="#C02EF0"/>
+  <g id="simbolo" transform="translate(230.4 345.6) scale(3.2)">
+    <g id="barras" fill="#FFFFFF">
+      <rect x="34" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="31" height="14" rx="7"/>
+    </g>
+    <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#FFFFFF">
+      <rect x="56" y="34" width="96" height="70" rx="18"/>
+      <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    </g>
   </g>
-  <g id="guias" display="none" fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="8 8">
-    <rect x="0" y="0" width="1024" height="1024" rx="229"/>
+  <g id="guias" display="none" fill="none" stroke="#1C1721" stroke-width="2">
     <circle cx="512" cy="512" r="313"/>
-    <circle cx="512" cy="512" r="341"/>
+    <rect x="0" y="0" width="1024" height="1024" rx="229"/>
   </g>
 </svg>

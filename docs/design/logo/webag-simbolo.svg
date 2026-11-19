@@ -1,43 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Webag: simbolo (sacola com alca e linhas de velocidade, sem a palavra). Colorido, para fundo claro.
-     Derivado da logo do fundador: mesma alca, ilhoses e ritmo de linhas; 6 linhas de 9,2 unidades com fendas de 8,8.
-     Cor da marca #C44DD9 em um unico ponto (o <rect> mascarado). -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="206 51 196 148" width="196" height="148" role="img" aria-labelledby="ws-t">
-  <title id="ws-t">Webag</title>
-  <defs>
-    <mask id="ws-m" maskUnits="userSpaceOnUse" x="206" y="51" width="196" height="148">
-      <!-- corpo da sacola -->
-      <path fill="#FFF" d="M 258 99.105 L 366 99.105 C 374.5 99.105 382 102.8 383.94 111.05 L 399.84 177.5 C 402.6 189.1 395.5 198.31 384 198.31 L 258 198.31 Z"/>
-      <!-- linhas de velocidade (saem da sacola para a esquerda) -->
-      <g fill="#FFF">
-        <rect x="231.2" y="99.105" width="108.8" height="9.2" rx="4.6"/>
-        <rect x="209.7" y="99.105" width="17.2" height="9.2" rx="4.6"/>
-        <rect x="251.8" y="117.105" width="88.2" height="9.2" rx="4.6"/>
-        <rect x="226.9" y="117.105" width="21.5" height="9.2" rx="4.6"/>
-        <rect x="236.5" y="135.105" width="103.5" height="9.2" rx="4.6"/>
-        <rect x="220" y="135.105" width="12.2" height="9.2" rx="4.6"/>
-        <rect x="215.4" y="153.105" width="124.6" height="9.2" rx="4.6"/>
-        <rect x="238.2" y="171.105" width="101.8" height="9.2" rx="4.6"/>
-        <rect x="217" y="171.105" width="17.2" height="9.2" rx="4.6"/>
-        <rect x="254" y="189.105" width="86" height="9.2" rx="4.6"/>
-        <rect x="212.8" y="189.105" width="33.5" height="9.2" rx="4.6"/>
-      </g>
-      <!-- fendas entre as linhas (recortam a sacola com ponta arredondada) -->
-      <g fill="#000">
-        <rect x="190" y="108.305" width="94.8" height="8.8" rx="4.4"/>
-        <rect x="190" y="126.305" width="89.2" height="8.8" rx="4.4"/>
-        <rect x="190" y="144.305" width="102" height="8.8" rx="4.4"/>
-        <rect x="190" y="162.305" width="110" height="8.8" rx="4.4"/>
-        <rect x="190" y="180.305" width="120.4" height="8.8" rx="4.4"/>
-      </g>
-    </mask>
-  </defs>
-  <!-- Alca de tras -->
-  <path fill="#CCCCCC" d="M 309.617188 111.539062 C 302.242188 95.246094 301.714844 75.808594 308.347656 64.386719 C 314.980469 52.960938 327.066406 52.476562 337.671875 63.207031 C 348.277344 73.941406 354.679688 93.140625 353.210938 109.789062 L 350.804688 108.324219 C 351.710938 92.808594 345.695312 75.09375 336.15625 65.1875 C 326.617188 55.285156 315.949219 55.679688 310.1875 66.148438 C 304.421875 76.621094 305.007812 94.535156 311.613281 109.773438 Z"/>
-  <rect x="206" y="51" width="196" height="148" fill="#C44DD9" mask="url(#ws-m)"/>
-  <!-- Ilhoses -->
-  <ellipse cx="309.9" cy="111.07" rx="3.07" ry="3.28" fill="#EEEEEE" stroke="#FFFFFF" stroke-width="0.75"/>
-  <ellipse cx="349.75" cy="111.07" rx="3.07" ry="3.28" fill="#EEEEEE" stroke="#FFFFFF" stroke-width="0.75"/>
-  <!-- Alca da frente -->
-  <path fill="#CCCCCC" d="M 308.539062 112.621094 C 298.738281 96.542969 296.125 76.222656 302.320312 64.324219 C 308.515625 52.425781 321.753906 52.347656 333.78125 64.140625 C 345.8125 75.933594 353.199219 96.226562 351.335938 112.371094 L 348.527344 110.351562 C 349.511719 95.527344 342.535156 77.148438 331.863281 66.449219 C 321.191406 55.746094 309.792969 55.707031 304.636719 66.347656 C 299.484375 76.992188 302.007812 95.359375 310.664062 110.214844 Z"/>
+<!-- Webag v3, conceito A "Sacola Veloz". Simbolo isolado, cor solida #C02EF0, sem gradiente.
+     viewBox 0 0 160 104. Unidade de traco t = 14 (alca e barras tem a mesma espessura).
+     Sacola: corpo rect 56,34 96x70 rx18 + alca em semi-elipse (centro 104,44, rx34, ry37, traco 14),
+     tudo inclinado 8 graus (skewX -8, compensado por translate 14.6 para o canto inferior esquerdo ficar em x=56).
+     Barras de velocidade: 3 pilulas horizontais (nao inclinadas), alturas 14, vao 14, alinhadas ao topo e a base do corpo. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 104" width="160" height="104" role="img" aria-labelledby="wb-simbolo-t">
+  <title id="wb-simbolo-t">Webag</title>
+  <g id="barras" fill="#C02EF0">
+    <rect x="34" y="34" width="23" height="14" rx="7"/>
+    <rect x="0" y="62" width="49" height="14" rx="7"/>
+    <rect x="18" y="90" width="31" height="14" rx="7"/>
+  </g>
+  <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#C02EF0">
+    <rect x="56" y="34" width="96" height="70" rx="18"/>
+    <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#C02EF0" stroke-width="14"/>
+  </g>
 </svg>

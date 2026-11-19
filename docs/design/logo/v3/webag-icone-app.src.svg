@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v3, conceito A. Icone do app 1024x1024. Fundo SOLIDO #C02EF0 sem cantos (a Apple arredonda; nao exportar com transparencia).
+     Simbolo branco = webag-simbolo.src.svg (160x104) a escala 3,2 => 512 x 333 px (50% da largura).
+     Posicao: o ponto (88,52) do simbolo cai no centro (512,512) => translate(230.4 345.6). Deslocamento intencional de 25,6 px para a esquerda
+     do centro da caixa, porque a massa (corpo da sacola) fica a direita e as barras sao leves.
+     Area segura do Android adaptativo: circulo de 66dp em 108dp => raio 313 px a partir do centro. Ponto mais distante do simbolo: ~287 px (barra do meio). OK.
+     Camadas Android: fundo = <rect id="fundo">; frente = <g id="simbolo">. Monocromatico (Android 13) = id="simbolo" em uma cor.
+     Guias (id="guias") ficam ocultas: remover display="none" para conferir. Quadrado iOS: raio ~229 px (22,37%). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="wb-icone-t">
+  <title id="wb-icone-t">Webag</title>
+  <rect id="fundo" x="0" y="0" width="1024" height="1024" fill="#C02EF0"/>
+  <g id="simbolo" transform="translate(230.4 345.6) scale(3.2)">
+    <g id="barras" fill="#FFFFFF">
+      <rect x="34" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="31" height="14" rx="7"/>
+    </g>
+    <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#FFFFFF">
+      <rect x="56" y="34" width="96" height="70" rx="18"/>
+      <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    </g>
+  </g>
+  <g id="guias" display="none" fill="none" stroke="#1C1721" stroke-width="2">
+    <circle cx="512" cy="512" r="313"/>
+    <rect x="0" y="0" width="1024" height="1024" rx="229"/>
+  </g>
+</svg>

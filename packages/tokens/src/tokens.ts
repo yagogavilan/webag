@@ -8,11 +8,11 @@ export const tokens = {
       "200": "#EDC2F4",
       "300": "#E198EC",
       "400": "#D370E3",
-      "500": "#C44DD9",
-      "600": "#A02DB8",
-      "700": "#86249B",
-      "800": "#6B1C7D",
-      "900": "#4A1356"
+      "500": "#C02EF0",
+      "600": "#A21FBE",
+      "700": "#8618A3",
+      "800": "#6A1580",
+      "900": "#4A0F58"
     },
     "neutral": {
       "0": "#FFFFFF",
@@ -58,15 +58,15 @@ export const tokens = {
       "sunken": "#F3F0F5",
       "brandSubtle": "#FBF1FD",
       "inverse": "#1C1721",
-      "hero": "#C44DD9",
-      "heroDeep": "#6B1C7D"
+      "hero": "#C02EF0",
+      "heroDeep": "#6A1580"
     },
     "text": {
       "primary": "#1C1721",
       "secondary": "#5F566A",
       "onBrand": "#FFFFFF",
-      "brand": "#86249B",
-      "link": "#86249B",
+      "brand": "#8618A3",
+      "link": "#8618A3",
       "inverse": "#FFFFFF",
       "inverseAction": "#EDC2F4",
       "disabled": "#B3ABB9",
@@ -80,16 +80,16 @@ export const tokens = {
       "subtle": "#E8E3EB",
       "default": "#D6CFDB",
       "strong": "#837A8A",
-      "focus": "#A02DB8",
+      "focus": "#A21FBE",
       "danger": "#B3261E"
     },
     "action": {
-      "primary": "#A02DB8",
-      "primaryHover": "#86249B",
-      "primaryPressed": "#6B1C7D",
+      "primary": "#A21FBE",
+      "primaryHover": "#8618A3",
+      "primaryPressed": "#6A1580",
       "primarySubtle": "#FBF1FD",
       "primarySubtlePressed": "#F6E0FA",
-      "secondaryBorder": "#A02DB8",
+      "secondaryBorder": "#A21FBE",
       "destructive": "#B3261E",
       "destructivePressed": "#8C1D18",
       "disabledFill": "#E8E3EB",
@@ -116,7 +116,7 @@ export const tokens = {
       "6": "#FFDCE6"
     },
     "tileInk": {
-      "1": "#86249B",
+      "1": "#8618A3",
       "2": "#A8400A",
       "3": "#1B6E3C",
       "4": "#28569E",

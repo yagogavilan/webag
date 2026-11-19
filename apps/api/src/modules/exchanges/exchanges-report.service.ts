@@ -27,6 +27,7 @@ interface Row {
   hours_to_complete: number | null;
 }
 
+const BOM = String.fromCharCode(0xfeff);
 const pct = (part: number, whole: number): number => (whole === 0 ? 0 : Math.round((part / whole) * 1000) / 10);
 /** Dia civil de Brasília: `from` inclusivo, `to` inclusivo (vira o início do dia seguinte). */
 const dayStart = (day: string): Date => new Date(`${day}T00:00:00-03:00`);
@@ -130,6 +131,6 @@ export class ExchangesReportService {
   toCsv(report: Awaited<ReturnType<ExchangesReportService['report']>>): string {
     const header = ['loja_id', 'loja', 'pedidos_entregues', 'trocas', 'taxa_pct', 'alerta', 'arrependimento', 'defeito', 'tamanho_cor'];
     const lines = report.byStore.map((s) => [s.storeId, JSON.stringify(s.storeName ?? ''), s.deliveredOrders, s.exchanges, s.ratePct, s.alert ? 'sim' : 'nao', s.byType.withdrawal, s.byType.defect, s.byType.size_color].join(';'));
-    return `﻿${[header.join(';'), ...lines].join('\r\n')}\r\n`;
+    return `${BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`;
   }
 }
