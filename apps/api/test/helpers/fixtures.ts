@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
+import { vi } from 'vitest';
+import { GEOCODING_PROVIDER, type GeocodingProvider } from '../../src/modules/stores/index.js';
 import { OBJECT_STORAGE } from '../../src/platform/storage/object-storage.js';
 import { MemoryObjectStorage } from '../../src/platform/storage/memory.storage.js';
 import { sessions } from '../../src/platform/database/schema.js';
@@ -312,6 +314,19 @@ export async function expireReauth(ctx: TestContext, userId: string): Promise<vo
 // ------------------------------------------------------------------ Onda 3
 
 /** Cidade ativa por nome (cria se faltar). Os testes compartilham o banco: nunca assumem que está vazio. */
+/**
+ * SEC-169: o município do CEP agora é SEMPRE conferido com a cidade informada. Testes que isolam coortes em cidades próprias (nome
+ * aleatório) fazem o provedor de CEP simulado responder essa cidade, em vez de a do prefixo do CEP.
+ */
+export function fakeCepCityIs(ctx: TestContext, city: string): void {
+  const provider = ctx.app.get<GeocodingProvider>(GEOCODING_PROVIDER);
+  const real = provider.lookupCep.bind(provider);
+  vi.spyOn(provider, 'lookupCep').mockImplementation(async (cep) => {
+    const info = await real(cep);
+    return info ? { ...info, city } : info;
+  });
+}
+
 export async function ensureCity(ctx: TestContext, name: string, active = true): Promise<{ id: string; name: string }> {
   const slug = `${name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-')}-sp`;
   const [existing] = await ctx.db.select().from(cities).where(eq(cities.slug, slug));

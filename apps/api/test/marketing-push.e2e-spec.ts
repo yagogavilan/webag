@@ -6,7 +6,7 @@ import { PushCampaignsService } from '../src/modules/marketing/push-campaigns.se
 import { paymentAlerts, pushCampaignRecipients, pushCampaigns, pushDevices, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { useParam } from './helpers/fees.js';
-import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, registerUser, verifyEmailOf, type RegisteredUser, type TestAdmin } from './helpers/fixtures.js';
+import { createAdmin, createCustomer, ensureCity, fakeCepCityIs, ensureLegalDocs, registerUser, verifyEmailOf, type RegisteredUser, type TestAdmin } from './helpers/fixtures.js';
 
 const sp = (iso: string): Date => new Date(`${iso}-03:00`);
 
@@ -39,6 +39,7 @@ describe('Push segmentado do admin (WB-197, WB-196)', () => {
     await ensureLegalDocs(ctx);
     cityName = `Cidade Push ${randomUUID().slice(0, 6)}`;
     cityId = (await ensureCity(ctx, cityName)).id;
+    fakeCepCityIs(ctx, cityName);
     transport = ctx.app.get(PushTransport);
     service = ctx.app.get(PushCampaignsService);
     ops = await createAdmin(ctx, 'operations');

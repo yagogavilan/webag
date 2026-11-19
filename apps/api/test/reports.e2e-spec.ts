@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { orders } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureCity, ensureLegalDocs, registerUser, verifyEmailOf } from './helpers/fixtures.js';
+import { createAdmin, ensureCity, fakeCepCityIs, ensureLegalDocs, registerUser, verifyEmailOf } from './helpers/fixtures.js';
 import { isolatedPoint, makeStore, northOf } from './helpers/discovery.js';
 import { addToCart, approve, attemptOf, placeOrder } from './helpers/orders.js';
 import { variantOf } from './helpers/discovery.js';
@@ -30,6 +30,7 @@ describe('Relatórios operacionais do admin (WB-122, RN-15, O6.4)', () => {
     support = await createAdmin(ctx, 'support');
     const cityName = `Cidade Rel ${randomUUID().slice(0, 6)}`;
     cityId = (await ensureCity(ctx, cityName)).id;
+    fakeCepCityIs(ctx, cityName);
     const origin = isolatedPoint();
     const store = await makeStore(ctx, { name: 'Loja Relatórios', at: await northOf(ctx, origin, 800), cityName, feeFixedCents: 500, approvedDaysAgo: 5, products: [{ name: 'Item R', priceCents: 10_000, stock: 100 }] });
     storeId = store.id;
