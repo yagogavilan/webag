@@ -294,13 +294,10 @@ async function bug017() {
   record('BUG-017e', 'retirada_prazo_horas=12: pronto há 13 h é cancelado (o parâmetro do painel altera o prazo)', exp, `status=${await status(c, p2.id)}`);
   await resetParam('retirada_prazo_horas');
 
-  // troca_voluntaria_dias_padrao
+  // troca_voluntaria_dias_padrao: é o prazo que o painel da loja PROPÕE ao religar a troca voluntária (store-settings: defaultVoluntaryDays)
   await setParam('troca_voluntaria_dias_padrao', 12);
-  const other = sql(`select v.id||'|'||s.id from product_variants v join stores s on s.id = v.store_id where s.name = 'Casa & Cia Utilidades' and v.stock >= 20 and v.active limit 1`).split('|');
-  const x = await place(c, 'pickup', { variantId: other[0], quantity: 8 });
-  const pol = x.order ? (await getOrder(c, x.order.id)).data?.exchangePolicy : null;
-  record('BUG-017f', 'troca_voluntaria_dias_padrao=12: pedido novo de loja sem política própria grava 12 dias', pol?.voluntaryDays === 12, `exchangePolicy=${JSON.stringify(pol)}; pedido HTTP ${x.res.status}`);
-  if (x.order) await api('POST', `/v1/orders/${x.order.id}/cancel`, { token: c.token, body: {} });
+  const settings = await api('GET', `/v1/stores/${s.id}/settings`, { token: s.owner });
+  record('BUG-017f', 'troca_voluntaria_dias_padrao=12: o painel do lojista passa a propor 12 dias (settings.exchange.defaultVoluntaryDays)', JSON.stringify(settings.data).includes('"defaultVoluntaryDays":12'), `HTTP ${settings.status}; ${JSON.stringify(settings.data).match(/"defaultVoluntaryDays":\d+/)?.[0] ?? 'campo ausente'}`);
   await resetParam('troca_voluntaria_dias_padrao');
   notTested('BUG-017g', 'cancelamento_loja_alerta_pct e coleta_agendamento_dias_uteis', 'precisam de amostra de 30 dias e de calendário de dias úteis; só cobertos por bug017-parameters.e2e-spec e parameters-wired.spec');
 }
@@ -502,6 +499,9 @@ async function sec169() {
   const outside = await createAddress(c, { cep: '07900-100', number: '16', lat: metersNorth(2100), lng: center.lng });
   record('SEC-169f', 'limite de 2000 m do centro do CEP: 1,9 km aceito (201) e 2,1 km recusado (422)', inside.status === 201 && outside.status === 422, `1,9 km HTTP ${inside.status}; 2,1 km HTTP ${outside.status} ${outside.data?.code}`);
   // CEP de outra cidade, nome certo da outra cidade, mas região não atendida
+  const ghost = await createAddress(c, { cep: '07000-000', number: '21', omitPoint: false });
+  const ghost2 = await createAddress(c, { cep: '00000-000', number: '22', city: 'Francisco Morato' });
+  record('SEC-169h', 'CEP que não existe (00000-000) é recusado mesmo com pino e cidade (ceebc28: "CEP must exist")', ghost2.status >= 400 && ghost2.status < 500, `HTTP ${ghost2.status} ${ghost2.data?.code}; (07000-000 sem região: HTTP ${ghost.status} ${ghost.data?.code})`);
   const sp = await createAddress(c, { cep: '01001-000', number: '1', city: 'São Paulo', neighborhood: 'Sé', lat: -23.55, lng: -46.633 });
   record('SEC-169g', 'CEP de São Paulo (fora das regiões): 422 REGION_NOT_SERVED', sp.status === 422, `HTTP ${sp.status} ${sp.data?.code}`);
 }
@@ -591,12 +591,18 @@ async function sec168() {
     const okCode = await cancel(u.email, SEED_PASSWORD, '203.0.113.52', code);
     const reuse = await cancel(u.email, SEED_PASSWORD, '203.0.113.53', code);
     const reopened = await login(u.email);
-    record('SEC-168b', 'código errado: 400; conta continua fechada; com o código certo reabre (204); o código é de uso único', badCode.status === 400 && stillClosed.status >= 400 && okCode.status === 204 && reuse.status === 401 && reopened.status === 200, `errado ${badCode.status} ${badCode.data?.code}; login fechado ${stillClosed.status}; certo ${okCode.status} ${okCode.data?.code ?? ''} ${okCode.data?.detail ?? ''}; reuso ${reuse.status}; login depois ${reopened.status}; código usado=${code}`);
+    record('SEC-168b', 'código errado: 400; conta continua fechada; com o código certo reabre (204); o código é de uso único; depois o login volta (ou pede o 2º código do step-up)', badCode.status === 400 && stillClosed.status >= 400 && okCode.status === 204 && reuse.status === 401 && (reopened.status === 200 || reopened.data?.code === 'LOGIN_CODE_REQUIRED'), `errado ${badCode.status} ${badCode.data?.code}; login fechado ${stillClosed.status}; certo ${okCode.status} ${okCode.data?.code ?? ''} ${okCode.data?.detail ?? ''}; reuso ${reuse.status}; login depois ${reopened.status}; código usado=${code}`);
 
+    // SEC-176 (3f0ca5e) trocou o 429 por e-mail (que deixava um terceiro trancar o dono para fora) pelo step-up: depois de 10 tentativas/h
+    // no e-mail, a SENHA CERTA passa a exigir o código do e-mail; quem não tem a senha segue com 401 genérico, sem 429 e sem gerar e-mail.
     const v = await pending();
     const seq = [];
     for (let i = 0; i < 12; i++) seq.push((await cancel(v.email, 'errada-errada-1', `198.51.102.${i + 1}`)).status);
-    record('SEC-168c', 'limite por e-mail SEM o IP: as primeiras 10 tentativas (IPs diferentes) dão 401 e a 11ª em diante, 429', seq.slice(0, 10).every((x) => x === 401) && seq.slice(10).every((x) => x === 429), `status=${seq.join(',')}`);
+    const sentV = Date.now();
+    const ownerTry = await cancel(v.email, SEED_PASSWORD, '203.0.113.70');
+    const ownerCode = await lastCode(v.email, sentV);
+    const ownerDone = await cancel(v.email, SEED_PASSWORD, '203.0.113.71', ownerCode);
+    record('SEC-168c', '12 tentativas erradas de IPs diferentes: todas 401 (terceiro não tranca o dono com 429); o dono (senha certa, IP novo) recebe 403 LOGIN_CODE_REQUIRED e reabre com o código (204)', seq.every((x) => x === 401) && ownerTry.status === 403 && ownerTry.data?.code === 'LOGIN_CODE_REQUIRED' && ownerDone.status === 204, `erradas=${seq.join(',')}; dono sem código ${ownerTry.status} ${ownerTry.data?.code}; com código ${ownerDone.status}`);
 
     const w = await pending();
     const one = await cancel(w.email, SEED_PASSWORD, '203.0.113.60');
@@ -612,7 +618,8 @@ async function sec168() {
     // mesmo IP: limite de 5 por hora
     const y = await pending();
     const same = [];
-    for (let i = 0; i < 7; i++) same.push((await cancel(y.email, 'errada-errada-1', '198.51.104.9')).status);
+    const sameIp = `198.51.${100 + Math.floor(Math.random() * 100)}.${1 + Math.floor(Math.random() * 250)}`; // IP novo: o limite por IP é de 10/h na rota
+    for (let i = 0; i < 7; i++) same.push((await cancel(y.email, 'errada-errada-1', sameIp)).status);
     record('SEC-168f', 'mesmo IP: a 6ª tentativa em diante é 429 (o X-Forwarded-For é honrado só atrás do proxy confiável)', same.slice(5).every((s) => s === 429), `status=${same.join(',')}`);
   } finally {
     await resetParam('exclusao_arrependimento_horas');
@@ -633,7 +640,7 @@ async function estoque() {
       const { cart } = await cartOf(c, 'pickup');
       prepared.push({ c, cart: cart.data });
     }
-    const results = await Promise.all(prepared.map(({ c, cart }) => api('POST', '/v1/orders', { token: c.token, headers: { 'Idempotency-Key': `qa7-${round}-${c.email}` }, body: { mode: 'pickup', cartRevision: cart.revision, expectedTotalCents: cart.summary.total.amount, paymentMethod: 'pix' } })));
+    const results = await Promise.all(prepared.map(({ c, cart }, i) => api('POST', '/v1/orders', { token: c.token, headers: { 'Idempotency-Key': `qa7-${round}-${i}-${Date.now()}` }, body: { mode: 'pickup', cartRevision: cart.revision, expectedTotalCents: cart.summary.total.amount, paymentMethod: 'pix' } })));
     const won = results.filter((r) => r.status === 201).length;
     const lostCodes = results.filter((r) => r.status !== 201).map((r) => `${r.status}:${r.data?.code}`);
     const [stock, reserved] = sql(`select stock, reserved from product_variants where id = '${s.variantId}'`).split('|').map(Number);
@@ -641,7 +648,7 @@ async function estoque() {
     for (const r of results) if (r.status === 201) await adminCall('POST', `/v1/admin/orders/${r.data.id}/cancel`, { reason: 'Reteste QA estoque: limpar', refund: true }).catch(() => undefined);
   }
   sql(`update product_variants set stock = ${original[0]}, reserved = ${original[1]} where id = '${s.variantId}'`);
-  record('ESTOQUE-1', '6 clientes simultâneos disputam o estoque de 3 pedidos (3 rodadas): exatamente 3 vencem, 3 perdem com o MESMO código STOCK_CONFLICT e o estoque termina em 0 (nunca negativo)', rounds.every((r) => r.won === 3 && r.lostCodes.every((c) => c === '409:STOCK_CONFLICT') && r.stock === 0 && r.stock >= 0), JSON.stringify(rounds));
+  record('ESTOQUE-1', '6 clientes simultâneos disputam o estoque de 3 pedidos (3 rodadas): exatamente 3 vencem, 3 perdem com o MESMO código STOCK_CONFLICT e a reserva termina em 12 (nunca acima do estoque)', rounds.every((r) => r.won === 3 && r.lostCodes.every((c) => c === '409:STOCK_CONFLICT') && r.reserved === 12 && r.stock >= r.reserved), JSON.stringify(rounds));
 }
 
 // ------------------------------------------------------------------------------------------------ limpeza (devolve o estoque dos pedidos de teste que ficaram abertos)
@@ -751,7 +758,10 @@ async function bug013() {
   const { cart: cart2 } = await cartOf(c2, 'pickup');
   const body2 = { mode: 'pickup', cartRevision: cart2.data.revision, expectedTotalCents: cart2.data.summary.total.amount, paymentMethod: 'pix' };
   const [r1, r2] = await Promise.all([api('POST', '/v1/orders', { token: c2.token, headers: { 'Idempotency-Key': key }, body: body2 }), api('POST', '/v1/orders', { token: c2.token, headers: { 'Idempotency-Key': key }, body: body2 })]);
-  record('BUG-013b', 'toque duplo com a MESMA chave devolve o mesmo pedido (mesmo id), sem segundo pedido', r1.status === 201 && r2.status === 201 && r1.data?.id === r2.data?.id, `HTTP ${r1.status}/${r2.status}; ids iguais=${r1.data?.id === r2.data?.id}`);
+  const n2 = Number(sql(`select count(*) from orders where user_id = (select id from users where email = '${c2.email}')`));
+  const ok201 = [r1, r2].filter((r) => r.status === 201);
+  const sameOrConflict = ok201.length >= 1 && [r1, r2].every((r) => r.status === 201 || r.status === 409) && (ok201.length === 1 || r1.data?.id === r2.data?.id);
+  record('BUG-013b', 'toque duplo com a MESMA chave: um pedido só (o segundo recebe o mesmo pedido ou 409 "em andamento")', sameOrConflict && n2 === 1, `HTTP ${r1.status}/${r2.status}; pedidos no banco=${n2}`);
 }
 
 const sections = { bug013, troca, limpeza, estoque, bug011, bug012, bug014, bug015, bug016, bug017, bug018, teto, atraso, sec169, sec170, sec168 };
