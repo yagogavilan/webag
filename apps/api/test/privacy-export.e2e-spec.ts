@@ -81,7 +81,7 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
     expect(doc.profile).toMatchObject({ email: user.email, emailVerified: true });
     expect(doc.addresses[0]).toMatchObject({ street: 'Rua Teste', city: 'Francisco Morato' });
     expect(doc.orders[0]).toMatchObject({ number: orderNumber, status: 'delivered', store: shop.store.id ? 'Loja Pedidos' : '' });
-    expect(doc.orders[0].items[0]).toMatchObject({ name: 'Camiseta Azul', quantity: 1, unitPriceCents: 8_000 });
+    expect(doc.orders[0]!.items[0]).toMatchObject({ name: 'Camiseta Azul', quantity: 1, unitPriceCents: 8_000 });
     expect(doc.consents).toEqual([]);
     expect(doc.pushDevices[0]).toEqual(expect.objectContaining({ platform: 'ios' }));
     for (const forbidden of [pushToken, 'passwordHash', 'tokenHash', 'codeHash', 'totpSecret', 'refreshToken', 'Bearer ']) expect(file.text, forbidden).not.toContain(forbidden);
