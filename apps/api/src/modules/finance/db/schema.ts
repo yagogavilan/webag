@@ -60,7 +60,7 @@ export const ledgerTransactions = pgTable(
     orderId: uuid().notNull(),
     storeId: uuid().references(() => stores.id),
     attemptId: uuid().references(() => paymentAttempts.id),
-    kind: text({ enum: ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] }).notNull(),
+    kind: text({ enum: ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment', 'exchange_fee', 'exchange_fee_refund', 'logistics_cost', 'courier_payout'] }).notNull(),
     dedupeKey: text().notNull(),
     /** Percentuais e valores usados (snapshot): auditável sem refazer a conta. */
     meta: jsonb().$type<Record<string, unknown>>().notNull().default({}),
@@ -74,7 +74,7 @@ export const ledgerEntries = pgTable(
   {
     id: bigserial({ mode: 'number' }).primaryKey(),
     transactionId: uuid().notNull().references(() => ledgerTransactions.id),
-    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] }).notNull(),
+    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash', 'exchange_fee_revenue', 'logistics_cost_expense', 'courier_payable', 'courier_payout_cash'] }).notNull(),
     direction: text({ enum: ['debit', 'credit'] }).notNull(),
     amountCents: integer().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

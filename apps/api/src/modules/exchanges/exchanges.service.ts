@@ -10,6 +10,7 @@ import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { ParametersService } from '../admin/index.js';
 import { effectivePrice, InventoryService } from '../catalog/index.js';
 import { products, productVariants } from '../catalog/db/schema.js';
+import { LedgerService } from '../finance/index.js';
 import { IdempotencyService } from '../idempotency/index.js';
 import { users } from '../identity/db/schema.js';
 import { DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
@@ -102,6 +103,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     private readonly deliveries: DeliveriesService,
     private readonly media: MediaService,
     private readonly idempotency: IdempotencyService,
+    private readonly ledger: LedgerService,
     readonly bus: ExchangeEventBus,
   ) {}
 
@@ -533,8 +535,20 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     const now = new Date();
     const [paid] = await tx.update(exchangeRequests).set({ status: 'approved', feePaidAt: now, feeAttemptId: attempt.id, updatedAt: now }).where(eq(exchangeRequests.id, ex.id)).returning();
     await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'awaiting_fee', toStatus: 'approved', actor: 'system', reason: 'Taxa de troca paga' });
+    // DT-049: a taxa é receita da Webag no ledger (a diferença de preço, quando há, fica a favor da loja).
+    await this.ledger.recordExchangePayment(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0) });
     const active = await this.activate(tx, paid!, order);
     this.pendingEvents.set(attempt.id, [this.eventOf(active, 'awaiting_fee', 'approved', 'system', 'Taxa de troca paga', now)]);
+  }
+
+  /** Estorno do pagamento da troca confirmado pelo provedor (troca cancelada ou expirada): reverte a receita no ledger (DT-049). */
+  async onRefundConfirmed(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string }): Promise<void> {
+    if (!attempt.externalReference.startsWith('exchange:')) return;
+    const id = attempt.externalReference.slice('exchange:'.length);
+    if (!UUID_RE.test(id)) return;
+    const [ex] = await tx.select().from(exchangeRequests).where(eq(exchangeRequests.id, id));
+    if (!ex || ex.feeAttemptId !== attempt.id) return;
+    await this.ledger.recordExchangeFeeRefund(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0), refundCents: refund.amountCents, refundKey: refund.idempotencyKey });
   }
 
   async afterTransition(attempt: PaymentAttempt): Promise<void> {

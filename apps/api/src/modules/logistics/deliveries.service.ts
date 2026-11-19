@@ -7,6 +7,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { LedgerService } from '../finance/index.js';
 import { PaymentsService } from '../payments/index.js';
 import { couriers, deliveries, deliveryEvents } from './db/schema.js';
 import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES, type DeliveryKind, type DeliveryStatus, type NotDeliveredReason } from './domain/state.js';
@@ -70,6 +71,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     private readonly flags: FeatureFlagsService,
     private readonly params: ParametersService,
     private readonly payments: PaymentsService,
+    private readonly ledger: LedgerService,
   ) {}
 
   /** Auto-conclusão a cada 5 min. Desligada em teste e na CLI (os testes chamam `autoConcludeDue`). */
@@ -409,6 +411,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       flagged = costCents > alertCents || (current.expectedCostCents > 0 && costCents * 2 > current.expectedCostCents * 3);
       if (flagged && !reason?.trim()) throw errors.unprocessable('COST_REASON_REQUIRED', 'Custo acima do esperado', { detail: 'Este custo passa do previsto da faixa ou do limite de alerta: informe o motivo.' });
       const [row] = await tx.update(deliveries).set({ costCents, costRegisteredBy: actor.id, costRegisteredAt: new Date(), updatedAt: new Date() }).where(eq(deliveries.id, id)).returning();
+      await this.ledger.recordLogisticsCost(tx, { orderId: current.orderId, deliveryId: id, costCents, kind: current.kind }); // DT-049: despesa de logística no ledger
       await tx.insert(deliveryEvents).values({ deliveryId: id, fromStatus: current.status, toStatus: current.status, action: current.costCents === null ? 'cost_set' : 'cost_corrected', actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta: { previousCostCents: current.costCents, costCents, ...(flagged ? { flagged: true } : {}) } });
       await this.audit.record(tx, ctx, { action: 'delivery.cost', targetType: 'delivery', targetId: id, before: { costCents: current.costCents }, after: { costCents }, ...(reason ? { reason } : {}) });
       return row!;
@@ -433,7 +436,10 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       }
       await tx.update(deliveries).set({ costPaidAt: paidOn, updatedAt: new Date() }).where(inArray(deliveries.id, deliveryIds));
       const totalCents = rows.reduce((sum, r) => sum + (r.costCents ?? 0), 0);
-      for (const row of rows) await tx.insert(deliveryEvents).values({ deliveryId: row.id, fromStatus: row.status, toStatus: row.status, action: 'cost_paid', actorId: actor.id, actorRole: actor.role, meta: { paidOn: paidOn.toISOString(), costCents: row.costCents } });
+      for (const row of rows) {
+        await tx.insert(deliveryEvents).values({ deliveryId: row.id, fromStatus: row.status, toStatus: row.status, action: 'cost_paid', actorId: actor.id, actorRole: actor.role, meta: { paidOn: paidOn.toISOString(), costCents: row.costCents } });
+        await this.ledger.recordCourierPayout(tx, { orderId: row.orderId, deliveryId: row.id, costCents: row.costCents ?? 0, paidOn }); // DT-049: quita o a pagar ao motoboy
+      }
       await this.audit.record(tx, ctx, { action: 'delivery.cost_paid', targetType: 'courier', targetId: rows[0]!.courierId!, after: { deliveryIds, paidOn: paidOn.toISOString(), totalCents, ...(ownCost ? { segregationOverride: true } : {}) }, ...(ownCost ? { reason: overrideReason! } : {}) });
       return { count: rows.length, totalCents };
     });

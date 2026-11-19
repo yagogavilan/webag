@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminModule } from '../admin/index.js';
 import { CatalogModule } from '../catalog/index.js';
+import { FinanceModule } from '../finance/index.js';
 import { IdempotencyModule } from '../idempotency/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { LogisticsModule } from '../logistics/index.js';
@@ -13,7 +14,7 @@ import { ExchangesReportService } from './exchanges-report.service.js';
 import { ExchangesService } from './exchanges.service.js';
 
 @Module({
-  imports: [AdminModule, CatalogModule, IdempotencyModule, IdentityModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
+  imports: [AdminModule, CatalogModule, FinanceModule, IdempotencyModule, IdentityModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
   controllers: [ExchangesController, StoreExchangesController, ExchangesAdminController],
   providers: [ExchangesService, ExchangesReportService, ExchangeEventBus],
   exports: [ExchangesService, ExchangeEventBus],

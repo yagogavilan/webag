@@ -1,5 +1,5 @@
 import { computeOrderFinance, resolveCommission, type OrderFinanceInput } from './commission.js';
-import { accountBalance, isBalanced, providerFeeLines, refundLines, saleLines, type LedgerLine } from './ledger.js';
+import { accountBalance, courierPayoutLines, exchangeFeeLines, exchangeFeeRefundLines, isBalanced, logisticsCostLines, providerFeeLines, refundLines, saleLines, type LedgerLine } from './ledger.js';
 import { allocateProportional, applyBp, pctToBp } from './money.js';
 
 /** PRNG determinístico (mulberry32): o teste de propriedade reproduz a mesma semente sempre. */
@@ -176,5 +176,55 @@ describe('propriedades do ledger (SEC-041, WB-156 C4), 3000 pedidos aleatórios'
     const f = computeOrderFinance({ items: [{ subtotalCents: 1000, pctBp: 1000 }], storeCouponCents: 0, platformDiscountCents: 0, deliveryFeeCents: 0, serviceFeeCents: 0 });
     expect(() => refundLines(f, 600, 401)).toThrow();
     expect(() => refundLines(f, 0, 0)).toThrow();
+  });
+});
+
+describe('troca e logística no ledger (DT-049)', () => {
+  it('taxa de troca R$ 9,00 + diferença R$ 15,00: entra R$ 24,00; receita da Webag 9,00 e a favor da loja 15,00', () => {
+    const lines = exchangeFeeLines(900, 1500);
+    expect(isBalanced(lines)).toBe(true);
+    expect(accountBalance(lines, 'provider_clearing')).toBe(2400);
+    expect(-accountBalance(lines, 'exchange_fee_revenue')).toBe(900);
+    expect(-accountBalance(lines, 'merchant_payable')).toBe(1500);
+  });
+
+  it('sem diferença (só a taxa) e sem taxa (só a diferença): sem linha zerada', () => {
+    expect(exchangeFeeLines(900, 0)).toEqual([
+      { account: 'provider_clearing', direction: 'debit', amountCents: 900 },
+      { account: 'exchange_fee_revenue', direction: 'credit', amountCents: 900 },
+    ]);
+    expect(exchangeFeeLines(0, 1500).map((l) => l.account)).toEqual(['provider_clearing', 'merchant_payable']);
+  });
+
+  it('estorno total devolve tudo; parciais somam o total sem perder centavo e a taxa volta proporcional (half-up)', () => {
+    const total = exchangeFeeRefundLines(900, 1500, 0, 2400);
+    expect(accountBalance(total, 'provider_clearing')).toBe(-2400);
+    expect(accountBalance(total, 'exchange_fee_revenue')).toBe(900);
+    expect(accountBalance(total, 'merchant_payable')).toBe(1500);
+    let before = 0;
+    let fee = 0;
+    for (const part of [1000, 777, 623]) {
+      const lines = exchangeFeeRefundLines(900, 1500, before, part);
+      expect(isBalanced(lines)).toBe(true);
+      before += part;
+      fee += accountBalance(lines, 'exchange_fee_revenue');
+    }
+    expect(before).toBe(2400);
+    expect(fee).toBe(900);
+    expect(() => exchangeFeeRefundLines(900, 1500, 2000, 401)).toThrow();
+  });
+
+  it('custo do motoboy: despesa a pagar; correção para baixo é o lançamento inverso; pagar quita o a pagar', () => {
+    const cost = logisticsCostLines(700);
+    expect(accountBalance(cost, 'logistics_cost_expense')).toBe(700);
+    expect(-accountBalance(cost, 'courier_payable')).toBe(700);
+    const down = logisticsCostLines(-100);
+    expect(accountBalance(down, 'logistics_cost_expense')).toBe(-100);
+    expect(logisticsCostLines(0)).toEqual([]);
+    const all = [...cost, ...down, ...courierPayoutLines(600)];
+    expect(isBalanced(all)).toBe(true);
+    expect(accountBalance(all, 'courier_payable')).toBe(0);
+    expect(accountBalance(all, 'logistics_cost_expense')).toBe(600);
+    expect(accountBalance(all, 'courier_payout_cash')).toBe(-600);
   });
 });

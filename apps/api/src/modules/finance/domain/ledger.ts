@@ -8,12 +8,15 @@ import { roundHalfUp } from './money.js';
  *  - commission_revenue / service_fee_revenue / delivery_fee_revenue: receita da Webag (crédito; a taxa de entrega é da Webag, DEC-036a);
  *  - platform_promo_expense: desconto da plataforma absorvido pela Webag (débito);
  *  - webag_coverage_cash: dinheiro da própria Webag que devolveu ao cliente um estorno que o provedor não concluiu (DEC-020a);
- *    a parte da loja vira dívida dela em `merchant_payable` (saldo negativo).
+ *    a parte da loja vira dívida dela em `merchant_payable` (saldo negativo);
+ *  - exchange_fee_revenue: taxa de coleta/reentrega da troca, receita da Webag (DEC-037, DT-049);
+ *  - logistics_cost_expense / courier_payable / courier_payout_cash: custo pago ao motoboy (despesa de logística, a pagar ao motoboy
+ *    e o pagamento feito por PIX fora do app, DEC-036c). O custo nasce quando a operação o registra e quita quando o financeiro marca como pago.
  * Em split o provedor repassa direto à loja; o ledger registra a conta, quem move o dinheiro é o provedor (DEC-016).
  */
-export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] as const;
+export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash', 'exchange_fee_revenue', 'logistics_cost_expense', 'courier_payable', 'courier_payout_cash'] as const;
 export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
-export const LEDGER_KINDS = ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] as const;
+export const LEDGER_KINDS = ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment', 'exchange_fee', 'exchange_fee_refund', 'logistics_cost', 'courier_payout'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
 export interface LedgerLine {
@@ -73,6 +76,41 @@ export function refundLines(finance: OrderFinance, refundedBeforeCents: number, 
     ...signed('platform_promo_expense', -promo),
     ...signed('merchant_payable', merchant),
   ];
+  assertBalanced(lines);
+  return lines;
+}
+
+/**
+ * Pagamento da troca (conta da Webag, sem split): entra `fee + difference` no provedor; a taxa é receita da Webag e a diferença de
+ * preço da peça nova fica a favor da loja (`merchant_payable`, repasse por fora do split).
+ */
+export function exchangeFeeLines(feeCents: number, differenceCents: number): LedgerLine[] {
+  const lines = [...signed('provider_clearing', feeCents + differenceCents), ...signed('exchange_fee_revenue', -feeCents), ...signed('merchant_payable', -differenceCents)];
+  assertBalanced(lines);
+  return lines;
+}
+
+/** Estorno do pagamento da troca (troca cancelada/expirada): devolve taxa e diferença na mesma proporção, pela diferença dos acumulados arredondados. */
+export function exchangeFeeRefundLines(feeCents: number, differenceCents: number, refundedBeforeCents: number, refundCents: number): LedgerLine[] {
+  const total = feeCents + differenceCents;
+  const after = refundedBeforeCents + refundCents;
+  if (refundCents <= 0 || after > total) throw new Error('estorno fora do valor pago');
+  const fee = roundHalfUp(feeCents * after, total) - roundHalfUp(feeCents * refundedBeforeCents, total);
+  const lines = [...signed('provider_clearing', -refundCents), ...signed('exchange_fee_revenue', fee), ...signed('merchant_payable', refundCents - fee)];
+  assertBalanced(lines);
+  return lines;
+}
+
+/** Custo da corrida pago ao motoboy: despesa de logística a pagar ao motoboy. `deltaCents` negativo corrige para baixo (lançamento inverso). */
+export function logisticsCostLines(deltaCents: number): LedgerLine[] {
+  const lines = [...signed('logistics_cost_expense', deltaCents), ...signed('courier_payable', -deltaCents)];
+  assertBalanced(lines);
+  return lines;
+}
+
+/** Pagamento ao motoboy (PIX feito fora do app, marcado como pago): quita o a pagar. */
+export function courierPayoutLines(costCents: number): LedgerLine[] {
+  const lines = [...signed('courier_payable', costCents), ...signed('courier_payout_cash', -costCents)];
   assertBalanced(lines);
   return lines;
 }
