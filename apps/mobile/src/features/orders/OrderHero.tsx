@@ -43,23 +43,31 @@ const STEP_NAMES = ['Pedido recebido', 'Confirmado', 'Em separação', 'A caminh
 export function OrderHero({ order, hint, refund = null }: { order: Order; hint: string | null; refund?: string | null }) {
   const now = useNow();
   const st = presentStatus(order.status);
-  const step = stepOf(order.status);
+  // U8.6: cancelamento aceito (pela operação por atraso, ou pela loja em separação) com o pedido ainda não encerrado: o título é "Cancelamento
+  // aceito", sem faixa de horário, sem etapa e sem barra. Pendente e recusado seguem com a entrega em andamento (o aviso abaixo explica).
+  const delayAccepted = order.delay?.cancelRequest?.status === 'approved';
+  const accepted = order.status !== 'cancelled' && order.status !== 'delivered' && (delayAccepted || order.cancelRequest?.status === 'approved');
+  const step = accepted ? 0 : stepOf(order.status);
   const active = step > 0 && order.status !== 'delivered';
   const window = order.delivery && active ? deliveryEta({ etaMinMinutes: order.delivery.etaMinMinutes, etaMaxMinutes: order.delivery.etaMaxMinutes, eta: order.delivery.eta ?? null, available: true }, new Date(order.createdAt)) : null;
   const Art = order.status === 'out_for_delivery' ? EtapaACaminho : step >= 5 || order.status === 'ready_for_pickup' ? EtapaEntregue : EtapaSeparando;
-  const code = order.tracking?.deliveryCode && order.status === 'out_for_delivery' ? order.tracking.deliveryCode : null;
-  const late = isLate(order) && window !== null;
+  const code = !accepted && order.tracking?.deliveryCode && order.status === 'out_for_delivery' ? order.tracking.deliveryCode : null;
+  const late = !accepted && isLate(order) && window !== null;
   const passed = late && order.delivery?.eta ? passedMinutes(order.delivery.eta.toAt, now) : 0;
   const stepLabel = step > 0 ? t('order.stepOf', { n: step, total: STEPS.length, name: STEP_NAMES[step - 1] ?? st.label }) : st.label;
+  // O texto de apoio (motoboy devolvendo, estorno) vem do aviso abaixo no cancelamento por atraso; na loja, o texto curto do estorno
+  const heroHint = accepted ? (delayAccepted ? null : t('cancelRequest.approvedBody')) : hint;
 
   return (
     <View accessibilityLiveRegion="polite" style={styles.hero} testID="order.status">
       <View pointerEvents="none" style={styles.art}>
         <Art width={150} />
       </View>
-      <Text style={styles.step} variant="captionStrong">
-        {stepLabel}
-      </Text>
+      {accepted ? null : (
+        <Text style={styles.step} variant="captionStrong">
+          {stepLabel}
+        </Text>
+      )}
       {late ? (
         // Atraso não depende só de cor: ícone + palavra (onda-7-eta-atraso.md D9)
         <View accessible accessibilityLabel={t('late.tag')} style={styles.lateTag} testID="order.late-tag">
@@ -70,7 +78,7 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
         </View>
       ) : null}
       <Text style={styles.title} variant="display">
-        {late ? t('late.title') : st.label}
+        {accepted ? t('cancelRequest.approvedTitle') : late ? t('late.title') : st.label}
       </Text>
       {refund ? (
         <View accessible accessibilityLabel={`${t('late.refundLabel')} ${refund}`} testID="tracking.refund">
@@ -98,9 +106,9 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
           {passed > 0 ? t('late.passed', { n: passed }) : t('late.passedNow')}
         </Text>
       ) : null}
-      {hint ? (
+      {heroHint ? (
         <Text style={styles.hint} testID="order.hint">
-          {hint}
+          {heroHint}
         </Text>
       ) : null}
       {order.pickup?.code && order.status === 'ready_for_pickup' ? (

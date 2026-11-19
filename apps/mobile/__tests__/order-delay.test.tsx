@@ -289,3 +289,40 @@ describe('Prazo de resposta da operação (F5: Order.delay.respondWithinMin)', (
     expect(deliveryNotice(out({ respondWithinMin: 12 }), Date.now())).toEqual({ kind: 'late-out', respondWithinMin: 12 });
   });
 });
+
+describe('U8.6. Cabeçalho com cancelamento aceito (OrderHero)', () => {
+  const OrderHero = (jest.requireActual('../src/features/orders/OrderHero') as typeof import('../src/features/orders/OrderHero')).OrderHero;
+  const base = (cr: Partial<CancelRequest>, where: 'delay' | 'order' = 'delay') =>
+    order({
+      status: 'out_for_delivery',
+      delivery: delivery(eta(-60, -25)),
+      ...(where === 'delay' ? { delay: delay({ cancelRequest: cancelRequest(cr) }) } : { delay: delay({ late: false }), cancelRequest: cancelRequest(cr) }),
+    });
+
+  it('aceito (por atraso, com o motoboy): título "Cancelamento aceito", sem faixa, sem etapa, sem "passou do horário"', async () => {
+    await renderScreen(<OrderHero hint="O motoboy está a caminho." order={base({ status: 'approved' })} />);
+    expect(screen.getByText('Cancelamento aceito')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order.eta')).toBeNull();
+    expect(screen.queryByTestId('order.late-tag')).toBeNull();
+    expect(screen.queryByTestId('order.late-passed')).toBeNull();
+    expect(screen.queryByText(/Etapa \d de 5/)).toBeNull();
+    expect(screen.queryByText('O motoboy está a caminho.')).toBeNull();
+    expect(screen.queryByText('A caminho')).toBeNull();
+  });
+
+  it('aceito pela loja em separação: título e texto curto do estorno, sem faixa', async () => {
+    await renderScreen(<OrderHero hint="Separando." order={base({ status: 'approved' }, 'order')} />);
+    expect(screen.getByText('Cancelamento aceito')).toBeOnTheScreen();
+    expect(screen.getByText('O valor volta para você, na mesma forma de pagamento.')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order.eta')).toBeNull();
+  });
+
+  it('pendente e recusado: o herói continua mostrando a entrega com a faixa', async () => {
+    for (const status of ['pending', 'refused'] as const) {
+      const view = await renderScreen(<OrderHero hint={null} order={base({ status })} />);
+      expect(screen.getByTestId('order.eta')).toBeOnTheScreen();
+      expect(screen.queryByText('Cancelamento aceito')).toBeNull();
+      view.unmount();
+    }
+  });
+});
