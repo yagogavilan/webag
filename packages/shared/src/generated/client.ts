@@ -1053,6 +1053,11 @@ export interface Delivery {
   customerPhoneMasked?: string | null;
   /** Há contato a revelar (corrida ativa, antes da retenção) */
   contactRevealable?: boolean;
+  /**
+     * SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.
+     * @nullable
+     */
+  dropoffPinVerified?: boolean | null;
   fee: Money;
   expectedCost: Money;
   cost: Money | null;
@@ -2674,6 +2679,8 @@ export interface Address {
   cityId: string | null;
   lat: number;
   lng: number;
+  /** SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor). */
+  pinVerified?: boolean;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
@@ -3987,6 +3994,11 @@ export interface StoreOrderSummary {
      * @nullable
      */
   acceptDeadlineAt: string | null;
+  /**
+     * W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.
+     * @nullable
+     */
+  readyByAt?: string | null;
   customerFirstName: string;
   itemCount: number;
   firstItemName: string;
@@ -4123,6 +4135,11 @@ export interface StoreOrder {
   acceptedAt: string | null;
   /** @nullable */
   acceptDeadlineAt: string | null;
+  /**
+     * W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.
+     * @nullable
+     */
+  readyByAt?: string | null;
   customer: StoreOrderCustomer;
   items: StoreOrderItemsItem[];
   delivery: StoreOrderDelivery;
@@ -6085,11 +6102,22 @@ export type HelpContactsProperty = {
   hours: string | null;
 };
 
+/**
+ * Encarregado e, desde SEC-178/W.1, os prazos REAIS da exclusão de conta citados na página pública `/excluir-conta` (a página lê daqui; as variáveis `PUBLIC_DELETION_*` ficam só de reserva). Campos novos opcionais.
+ */
 export type HelpPrivacy = {
   /** @nullable */
   officerName: string | null;
   /** @nullable */
   officerEmail: string | null;
+  /** Horas para desistir antes de a exclusão ficar definitiva (`exclusao_arrependimento_horas`, limitado a `exclusao_anonimizacao_dias` x 24); 0 = imediata e sem volta. */
+  deletionRegretHours?: number;
+  /** Anos de guarda de pedidos e pagamentos sem identificação (`retencao_fiscal_anos`). */
+  fiscalRetentionYears?: number;
+  /** Meses de guarda do registro de acesso (`retencao_log_acesso_meses`; piso do Marco Civil). */
+  accessLogMonths?: number;
+  /** Dias para o encarregado responder um pedido de titular (LGPD art. 19; constante `DSR_DEADLINE_DAYS`). */
+  privacyAnswerDays?: number;
 };
 
 export type HelpGroupsItemItemsItem = {
@@ -6107,6 +6135,7 @@ export type HelpGroupsItem = {
 export interface Help {
   audience: HelpAudience;
   contacts: HelpContactsProperty;
+  /** Encarregado e, desde SEC-178/W.1, os prazos REAIS da exclusão de conta citados na página pública `/excluir-conta` (a página lê daqui; as variáveis `PUBLIC_DELETION_*` ficam só de reserva). Campos novos opcionais. */
   privacy: HelpPrivacy;
   groups: HelpGroupsItem[];
 }
@@ -7823,6 +7852,51 @@ export type GetStoreSalesDailyParams = {
   from: string;
   /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
   to: string;
+};
+
+export type GetStoreTopProductsParams = {
+  from: string;
+  /** No máximo 366 dias. */
+  to: string;
+  /**
+   * @minimum 1
+   * @maximum 20
+   */
+  limit?: number;
+};
+
+export type GetStoreTopProducts200Period = {
+  from?: string;
+  to?: string;
+};
+
+export type GetStoreTopProducts200DataItem = {
+  productId: string;
+  name: string;
+  image: ImageUrls;
+  units: number;
+  youReceive: Money;
+};
+
+export type GetStoreTopProducts200 = {
+  period: GetStoreTopProducts200Period;
+  data: GetStoreTopProducts200DataItem[];
+};
+
+export type GetStoreReviewsSummary200Distribution = {
+  '1': number;
+  '2': number;
+  '3': number;
+  '4': number;
+  '5': number;
+};
+
+export type GetStoreReviewsSummary200 = {
+  /** @nullable */
+  average: number | null;
+  total: number;
+  distribution: GetStoreReviewsSummary200Distribution;
+  withoutReply: number;
 };
 
 export type ListAdminExchangesParams = {
@@ -23944,6 +24018,128 @@ export const getStoreSalesDaily = async (storeId: string,
     params: GetStoreSalesDailyParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreSalesDailyResponse> => {
 
   return apiFetch<getStoreSalesDailyResponse>(getGetStoreSalesDailyUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreTopProductsResponse200 = {
+  data: GetStoreTopProducts200
+  status: 200
+}
+
+export type getStoreTopProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreTopProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreTopProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreTopProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreTopProductsResponseSuccess = (getStoreTopProductsResponse200) & {
+  headers: Headers;
+};
+export type getStoreTopProductsResponseError = (getStoreTopProductsResponse400 | getStoreTopProductsResponse401 | getStoreTopProductsResponse403 | getStoreTopProductsResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreTopProductsResponse = (getStoreTopProductsResponseSuccess | getStoreTopProductsResponseError)
+
+export const getGetStoreTopProductsUrl = (storeId: string,
+    params: GetStoreTopProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/sales/top-products?${stringifiedParams}` : `/v1/stores/${storeId}/finance/sales/top-products`
+}
+
+/**
+ * Permissão da loja `sales_values`. Por produto: unidades e `youReceive` (a parte do líquido do pedido antes da tarifa do provedor, proporcional à participação do item no subtotal: itens menos cupom da loja menos comissão, DEC-036a). Mesmos pedidos de `getStoreSales` (pagos e não cancelados, por data de pagamento, dia de Brasília). Ordem: unidades, depois `youReceive`, depois nome. Nome e imagem são os da venda mais recente. Ranking limitado por `limit` (1 a 20, padrão 5; sem cursor).
+ * @summary Mais vendidos do período (Início do lojista, W.6)
+ */
+export const getStoreTopProducts = async (storeId: string,
+    params: GetStoreTopProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreTopProductsResponse> => {
+
+  return apiFetch<getStoreTopProductsResponse>(getGetStoreTopProductsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreReviewsSummaryResponse200 = {
+  data: GetStoreReviewsSummary200
+  status: 200
+}
+
+export type getStoreReviewsSummaryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreReviewsSummaryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreReviewsSummaryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreReviewsSummaryResponseSuccess = (getStoreReviewsSummaryResponse200) & {
+  headers: Headers;
+};
+export type getStoreReviewsSummaryResponseError = (getStoreReviewsSummaryResponse401 | getStoreReviewsSummaryResponse403 | getStoreReviewsSummaryResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreReviewsSummaryResponse = (getStoreReviewsSummaryResponseSuccess | getStoreReviewsSummaryResponseError)
+
+export const getGetStoreReviewsSummaryUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/reviews/summary`
+}
+
+/**
+ * Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja.
+ * @summary Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
+ */
+export const getStoreReviewsSummary = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreReviewsSummaryResponse> => {
+
+  return apiFetch<getStoreReviewsSummaryResponse>(getGetStoreReviewsSummaryUrl(storeId),
   {
     ...options,
     method: 'GET'

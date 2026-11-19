@@ -58,6 +58,15 @@ export class StoreFinanceController {
     return this.finance.salesDaily(uuidParam(storeId), q.from, q.to);
   }
 
+  /** W.6: mais vendidos do período (Início do lojista): nome, imagem, unidades e "você recebe". `limit` de 1 a 20 (padrão 5). */
+  @StorePermission('sales_values')
+  @Get('sales/top-products')
+  topProducts(@Param('storeId') storeId: string, @Query(new ZodPipe(period)) q: z.infer<typeof period>) {
+    const limit = q.limit === undefined ? 5 : Number(q.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw errors.validation([{ field: 'limit', message: 'Use de 1 a 20.' }]);
+    return this.finance.topProducts(uuidParam(storeId), q.from, q.to, limit);
+  }
+
   @StorePermission('finance')
   @Get('summary')
   summary(@Param('storeId') storeId: string, @Query(new ZodPipe(period)) q: z.infer<typeof period>) {

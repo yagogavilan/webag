@@ -1,3 +1,4 @@
+import { ParametersService } from '../src/modules/admin/index.js';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { contentReports, reviews, storeMembers } from '../src/platform/database/schema.js';
@@ -61,7 +62,10 @@ describe('Ajuda, denúncia, moderação e resposta do lojista (O6.5)', () => {
       await put({ supportHours: 'x'.repeat(61) }).expect(400);
       await put({ supportWhatsapp: '(11) 99999-0000', supportEmail: 'Ajuda@Webag.com.br', supportHours: 'Seg a sex, 9h às 18h', privacyOfficerName: 'Yago', privacyOfficerEmail: 'privacidade@webag.com.br' }).expect(200);
       expect((await help()).contacts).toEqual({ whatsapp: '11999990000', email: 'ajuda@webag.com.br', hours: 'Seg a sex, 9h às 18h' });
-      expect((await help('merchant')).privacy).toEqual({ officerName: 'Yago', officerEmail: 'privacidade@webag.com.br' });
+      expect((await help('merchant')).privacy).toMatchObject({ officerName: 'Yago', officerEmail: 'privacidade@webag.com.br' });
+      // SEC-178 / W.1: os prazos reais da exclusão vêm do endpoint público (parâmetros e DSR_DEADLINE_DAYS)
+      const params = ctx.app.get(ParametersService);
+      expect((await help('customer')).privacy).toMatchObject({ deletionRegretHours: Math.min(await params.getNumber('exclusao_arrependimento_horas'), (await params.getNumber('exclusao_anonimizacao_dias')) * 24), fiscalRetentionYears: await params.getNumber('retencao_fiscal_anos'), accessLogMonths: await params.getNumber('retencao_log_acesso_meses'), privacyAnswerDays: 15 });
       await put({ supportHours: null }).expect(200);
       expect((await help()).contacts.hours).toBeNull();
       const audit = (await ctx.http.get('/v1/admin/audit-log?action=help.contacts_updated').set(bearer((await createAdmin(ctx, 'super_admin')).accessToken)).expect(200)).body.data;

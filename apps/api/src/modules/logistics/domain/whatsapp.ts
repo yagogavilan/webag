@@ -11,6 +11,8 @@ export interface DeliveryMessageData {
   pickupAddress: string;
   /** "rua, nº, complemento, bairro, cidade" */
   dropoffAddress: string;
+  /** SEC-169 / DEC-067: o pino do endereço de entrega foi conferido (`true`) ou não (`false`: sem geocodificador); nulo = pedido antigo ou corrida de troca. Só o painel lê; não vai à mensagem. */
+  dropoffPinVerified?: boolean | null;
   customerFirstName: string;
   customerPhone: string | null;
   volumes: number;

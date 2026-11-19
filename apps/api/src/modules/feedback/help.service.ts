@@ -4,7 +4,8 @@ import type { RequestContext } from '../../platform/auth/decorators.js';
 import { CacheService } from '../../platform/cache/cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
-import { AuditService } from '../admin/index.js';
+import { AuditService, ParametersService } from '../admin/index.js';
+import { DSR_DEADLINE_DAYS } from '../privacy/dsr-constants.js';
 import { contentSettings, helpFaqs, HELP_GROUPS, type HelpAudience } from './db/schema.js';
 
 type Faq = typeof helpFaqs.$inferSelect;
@@ -30,6 +31,7 @@ export class HelpService {
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly cache: CacheService,
     private readonly audit: AuditService,
+    private readonly params: ParametersService,
   ) {}
 
   async contacts(): Promise<Contacts> {
@@ -41,15 +43,28 @@ export class HelpService {
   /** Leitura pública: só perguntas publicadas, por grupo na ordem definida; grupo sem pergunta some. */
   async publicHelp(audience: HelpAudience) {
     return this.cache.wrap('help', audience, CACHE_TTL_SECONDS, async () => {
-      const [faqs, contacts] = await Promise.all([
+      const [faqs, contacts, regretHours, anonymizationDays, fiscalYears, accessLogMonths] = await Promise.all([
         this.db.select().from(helpFaqs).where(and(eq(helpFaqs.audience, audience), eq(helpFaqs.published, true))).orderBy(asc(helpFaqs.position), asc(helpFaqs.updatedAt)),
         this.contacts(),
+        this.params.getNumber('exclusao_arrependimento_horas'),
+        this.params.getNumber('exclusao_anonimizacao_dias'),
+        this.params.getNumber('retencao_fiscal_anos'),
+        this.params.getNumber('retencao_log_acesso_meses'),
       ]);
       const labels = HELP_GROUPS[audience] as Record<string, string>;
       return {
         audience,
         contacts: { whatsapp: contacts.supportWhatsapp, email: contacts.supportEmail, hours: contacts.supportHours },
-        privacy: { officerName: contacts.privacyOfficerName, officerEmail: contacts.privacyOfficerEmail },
+        // SEC-178 / W.1: os prazos reais da exclusão de conta (a página pública `/excluir-conta` lê daqui; o ambiente vira só reserva). O arrependimento é
+        // limitado pelo prazo de anonimização, como no passo de revisão da exclusão (`overview`).
+        privacy: {
+          officerName: contacts.privacyOfficerName,
+          officerEmail: contacts.privacyOfficerEmail,
+          deletionRegretHours: Math.min(regretHours, anonymizationDays * 24),
+          fiscalRetentionYears: fiscalYears,
+          accessLogMonths,
+          privacyAnswerDays: DSR_DEADLINE_DAYS,
+        },
         groups: Object.entries(labels)
           .map(([id, label]) => ({ id, label, items: faqs.filter((f) => f.groupKey === id).map((f) => ({ id: f.id, question: f.question, answer: f.answer })) }))
           .filter((g) => g.items.length > 0),

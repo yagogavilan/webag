@@ -55,6 +55,27 @@ export class StoreFinanceService {
   }
 
   /**
+   * W.6: ranking dos mais vendidos do período (Início do lojista): por produto, unidades e "você recebe" (a parte do líquido do pedido, antes da
+   * tarifa do provedor, proporcional à participação do item no subtotal: itens - cupom da loja - comissão, DEC-036a). Mesmos pedidos de `sales`
+   * (pagos e não cancelados, por data de pagamento). Nome e imagem são os da venda mais recente (o item é snapshot).
+   */
+  async topProducts(storeId: string, from: string, to: string, limit: number) {
+    const res = await this.db.execute<{ product_id: string; name: string; image: Record<string, string> | null; units: number; receive: number }>(sql`
+      select oi.product_id, (array_agg(oi.name order by o.paid_at desc))[1] as name, (array_agg(oi.image order by o.paid_at desc))[1] as image,
+             sum(oi.quantity)::int as units,
+             round(sum(oi.line_total_cents::numeric * coalesce((o.finance->>'merchantNetBeforeProviderFeeCents')::numeric, o.subtotal_cents - o.store_coupon_cents) / nullif(o.subtotal_cents, 0)))::int as receive
+      from order_items oi
+      join orders o on o.id = oi.order_id
+      where o.store_id = ${storeId}::uuid and o.paid_at is not null
+        and o.status in (${sql.join(PAID_STATUSES.map((st) => sql`${st}`), sql`, `)})
+        and o.paid_at >= ${dayStart(from).toISOString()}::timestamptz and o.paid_at < ${dayAfter(to).toISOString()}::timestamptz
+      group by oi.product_id
+      order by units desc, receive desc, name
+      limit ${limit}`);
+    return { period: { from, to }, data: res.rows.map((r) => ({ productId: r.product_id, name: r.name, image: { urls: r.image ?? {} }, units: r.units, youReceive: money(r.receive ?? 0) })) };
+  }
+
+  /**
    * Série de vendas por dia civil de Brasília para o gráfico do painel: um ponto por dia do período (dia sem venda = zero), com a
    * MESMA definição de "vendas" do resumo (itens menos cupom da loja, pedidos pagos por data de pagamento). A soma da série é igual
    * ao `sales` do mesmo período.

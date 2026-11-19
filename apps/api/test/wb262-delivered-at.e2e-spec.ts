@@ -67,6 +67,9 @@ describe('Hora real da entrega informada pela operação (WB-262)', () => {
 
   it('sem a hora informada vale a hora do clique, na corrida e no pedido', async () => {
     const r = await outForDelivery();
+    // SEC-169 / DEC-067 (Y.2): sem geocodificador o pino do endereço não é conferido e a Logística vê isso na corrida (sem dado pessoal)
+    const detail = (await ctx.http.get(`${base}/deliveries/${r.deliveryId}`).set(bearer(ops.accessToken)).expect(200)).body;
+    expect(detail.dropoffPinVerified).toBe(false);
     const before = Date.now();
     const res = await act(r.deliveryId, { action: 'delivered', code: r.code }).expect(200);
     expect(Math.abs(Date.parse(res.body.deliveredAt) - before)).toBeLessThan(10_000);

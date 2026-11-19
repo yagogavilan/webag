@@ -129,4 +129,27 @@ describe('Contrato do pedido: estorno (WB-259) e horário mudou (WB-261)', () =>
       expect(bad.status).toBe(400);
     });
   });
+
+  describe('W.8 readyByAt (DEC-064c): "Marque pronto até" = pagamento aprovado + preparo da loja', () => {
+    it('no painel da loja (lista e detalhe) vale paidAt + o preparo gravado no pedido; some depois do "pronto"; só a loja vê', async () => {
+      const { shop, orderId } = await paidOrder(5_000);
+      const row = await orderRow(ctx, orderId);
+      const prep = (row.deliverySnapshot as { eta: { prepMin: number } }).eta.prepMin;
+      expect(prep).toBeGreaterThan(0);
+      const expected = new Date(row.paidAt!.getTime() + prep * 60_000).toISOString();
+      const base = `/v1/stores/${shop.store.id}/orders`;
+      const owner = bearer(shop.store.owner.accessToken);
+      const listed = (await ctx.http.get(base).set(owner).expect(200)).body.data.find((o: { id: string }) => o.id === orderId);
+      expect(listed.readyByAt).toBe(expected);
+      await ctx.http.post(`${base}/${orderId}/accept`).set(owner).expect(200);
+      expect((await ctx.http.get(`${base}/${orderId}`).set(owner).expect(200)).body.readyByAt).toBe(expected); // aceito: segue valendo
+      await ctx.http.post(`${base}/${orderId}/status`).set(owner).send({ status: 'in_preparation' }).expect(200);
+      expect((await ctx.http.get(`${base}/${orderId}`).set(owner).expect(200)).body.readyByAt).toBe(expected);
+      await ctx.http.post(`${base}/${orderId}/status`).set(owner).send({ status: 'ready_for_collection' }).expect(200);
+      expect((await ctx.http.get(`${base}/${orderId}`).set(owner).expect(200)).body.readyByAt).toBeNull(); // já marcou pronto
+      // o cliente não recebe esse campo (é do painel da loja)
+      const customerView = (await ctx.http.get(`/v1/orders/${orderId}`).set(bearer((await customerAt(ctx, shop.origin)).user.accessToken))).status;
+      expect(customerView).toBe(404);
+    });
+  });
 });

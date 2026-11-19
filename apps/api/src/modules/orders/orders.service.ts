@@ -779,7 +779,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const event = await this.advance(tx, order, 'ready_for_collection', 'store', actorUserId);
     const [store] = await tx.select().from(stores).where(eq(stores.id, order.storeId));
     const [customer] = await tx.select({ name: users.name, phone: users.phone }).from(users).where(eq(users.id, order.userId));
-    const address = (order.address ?? {}) as { street?: string; number?: string; complement?: string | null; neighborhood?: string; city?: string; cityId?: string | null; neighborhoodId?: string | null };
+    const address = (order.address ?? {}) as { street?: string; number?: string; complement?: string | null; neighborhood?: string; city?: string; cityId?: string | null; neighborhoodId?: string | null; pinVerified?: boolean };
     const snapshot = (order.deliverySnapshot ?? {}) as { expectedCostCents?: number };
     await this.deliveries.createInTx(
       tx,
@@ -801,6 +801,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           storePhone: store?.whatsapp ?? store?.phone ?? null,
           pickupAddress: storeAddressLine(store ?? {}),
           dropoffAddress: [address.street, address.number, address.complement, address.neighborhood, address.city].filter(Boolean).join(', '),
+          dropoffPinVerified: typeof address.pinVerified === 'boolean' ? address.pinVerified : null,
           customerFirstName: (customer?.name ?? '').trim().split(/\s+/)[0] ?? '',
           customerPhone: customer?.phone ?? null,
           volumes: input.volumes ?? 1,

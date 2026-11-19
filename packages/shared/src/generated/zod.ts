@@ -1876,6 +1876,7 @@ export const ListDeliveriesResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -1937,6 +1938,7 @@ export const GetDeliveryResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2075,6 +2077,7 @@ export const AssignDeliveryBatchResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2165,6 +2168,7 @@ export const AssignDeliveryResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2293,6 +2297,7 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2384,6 +2389,7 @@ export const SetDeliveryCostResponse = zod.object({
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
   "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
   "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
+  "dropoffPinVerified": zod.boolean().nullish().describe('SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -6371,6 +6377,7 @@ export const ListAddressesResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -6433,6 +6440,7 @@ export const CreateAddressResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -6460,6 +6468,7 @@ export const GetAddressResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -6523,6 +6532,7 @@ export const UpdateAddressResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -8717,6 +8727,7 @@ export const ListStoreOrdersResponse = zod.object({
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable().describe('Só em `received`: a loja tem até aqui para aceitar'),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customerFirstName": zod.string(),
   "itemCount": zod.int(),
   "firstItemName": zod.string(),
@@ -8778,6 +8789,7 @@ export const GetStoreOrderResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -8913,6 +8925,7 @@ export const AcceptOrderResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -9034,6 +9047,7 @@ export const RefuseOrderResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -9160,6 +9174,7 @@ export const AdvanceOrderResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -9272,6 +9287,7 @@ export const ConfirmReturnReceivedByStoreResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -9393,6 +9409,7 @@ export const CancelOrderByStoreResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -9657,6 +9674,7 @@ export const CreateOrderResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -9892,6 +9910,7 @@ export const GetOrderResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -10114,6 +10133,7 @@ export const CancelOrderLateResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -10197,6 +10217,7 @@ export const AcceptStoreOrderCancelRequestResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -10318,6 +10339,7 @@ export const RejectStoreOrderCancelRequestResponse = zod.object({
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
   "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "readyByAt": zod.iso.datetime({"offset":true}).nullish().describe('W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.'),
   "customer": zod.object({
   "firstName": zod.string(),
   "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
@@ -10545,6 +10567,7 @@ export const CancelOrderResponse = zod.object({
   "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
   "lat": zod.number(),
   "lng": zod.number(),
+  "pinVerified": zod.boolean().optional().describe('SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).'),
   "isDefault": zod.boolean(),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -12579,6 +12602,67 @@ export const GetStoreSalesDailyResponse = zod.object({
 
 
 /**
+ * Permissão da loja `sales_values`. Por produto: unidades e `youReceive` (a parte do líquido do pedido antes da tarifa do provedor, proporcional à participação do item no subtotal: itens menos cupom da loja menos comissão, DEC-036a). Mesmos pedidos de `getStoreSales` (pagos e não cancelados, por data de pagamento, dia de Brasília). Ordem: unidades, depois `youReceive`, depois nome. Nome e imagem são os da venda mais recente. Ranking limitado por `limit` (1 a 20, padrão 5; sem cursor).
+ * @summary Mais vendidos do período (Início do lojista, W.6)
+ */
+export const GetStoreTopProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getStoreTopProductsQueryLimitDefault = 5;
+export const getStoreTopProductsQueryLimitMax = 20;
+
+
+
+export const GetStoreTopProductsQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date().describe('No máximo 366 dias.'),
+  "limit": zod.int().min(1).max(getStoreTopProductsQueryLimitMax).default(getStoreTopProductsQueryLimitDefault)
+})
+
+export const GetStoreTopProductsResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "data": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "units": zod.int(),
+  "youReceive": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}))
+})
+
+
+/**
+ * Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja.
+ * @summary Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
+ */
+export const GetStoreReviewsSummaryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreReviewsSummaryResponse = zod.object({
+  "average": zod.number().nullable(),
+  "total": zod.int(),
+  "distribution": zod.object({
+  "1": zod.int(),
+  "2": zod.int(),
+  "3": zod.int(),
+  "4": zod.int(),
+  "5": zod.int()
+}),
+  "withoutReply": zod.int()
+})
+
+
+/**
  * Super admin, operação, financeiro e suporte (`exchanges:read`). Mais recentes primeiro; sem dado pessoal do cliente. `q` busca pelo número (TR-XXXXX).
  * @summary Lista de trocas para o admin (AT3/M3)
  */
@@ -13917,8 +14001,12 @@ export const GetHelpResponse = zod.object({
 }),
   "privacy": zod.object({
   "officerName": zod.string().nullable(),
-  "officerEmail": zod.string().nullable()
-}),
+  "officerEmail": zod.string().nullable(),
+  "deletionRegretHours": zod.int().optional().describe('Horas para desistir antes de a exclusão ficar definitiva (`exclusao_arrependimento_horas`, limitado a `exclusao_anonimizacao_dias` x 24); 0 = imediata e sem volta.'),
+  "fiscalRetentionYears": zod.int().optional().describe('Anos de guarda de pedidos e pagamentos sem identificação (`retencao_fiscal_anos`).'),
+  "accessLogMonths": zod.int().optional().describe('Meses de guarda do registro de acesso (`retencao_log_acesso_meses`; piso do Marco Civil).'),
+  "privacyAnswerDays": zod.int().optional().describe('Dias para o encarregado responder um pedido de titular (LGPD art. 19; constante `DSR_DEADLINE_DAYS`).')
+}).describe('Encarregado e, desde SEC-178/W.1, os prazos REAIS da exclusão de conta citados na página pública `/excluir-conta` (a página lê daqui; as variáveis `PUBLIC_DELETION_*` ficam só de reserva). Campos novos opcionais.'),
   "groups": zod.array(zod.object({
   "id": zod.string(),
   "label": zod.string(),

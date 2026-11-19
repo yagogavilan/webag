@@ -11,8 +11,9 @@ import { privacyRequestAnsweredEmail, privacyRequestReceivedEmail } from '../../
 import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js';
 import { AuditService } from '../admin/index.js';
 import { privacyRequestEvents, privacyRequests, type DsrStatus, type DsrType } from './db/schema.js';
+import { DSR_DEADLINE_DAYS } from './dsr-constants.js';
 
-export const DSR_DEADLINE_DAYS = 15;
+export { DSR_DEADLINE_DAYS } from './dsr-constants.js';
 export const DSR_ALERT_DAYS = 10;
 const DAY = 86_400_000;
 const SYSTEM_CTX: RequestContext = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };

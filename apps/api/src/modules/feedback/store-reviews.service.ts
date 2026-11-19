@@ -34,6 +34,33 @@ export class StoreReviewsService {
     };
   }
 
+  /**
+   * W.6: resumo para o Início e a página de Avaliações do lojista: média (1 casa), total, distribuição de 1 a 5 e quantas ainda estão sem resposta.
+   * Mesmo universo da lista (avaliações publicadas da loja, de produto e da loja). Sem o mínimo de exibição: é o painel do dono, não a vitrine.
+   */
+  async summary(storeId: string) {
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        avg: sql<number | null>`avg(${t.reviews.rating})::float8`,
+        r1: sql<number>`count(*) filter (where ${t.reviews.rating} = 1)::int`,
+        r2: sql<number>`count(*) filter (where ${t.reviews.rating} = 2)::int`,
+        r3: sql<number>`count(*) filter (where ${t.reviews.rating} = 3)::int`,
+        r4: sql<number>`count(*) filter (where ${t.reviews.rating} = 4)::int`,
+        r5: sql<number>`count(*) filter (where ${t.reviews.rating} = 5)::int`,
+        unreplied: sql<number>`count(*) filter (where ${t.reviews.storeReply} is null)::int`,
+      })
+      .from(t.reviews)
+      .where(and(eq(t.reviews.storeId, storeId), eq(t.reviews.status, 'published')));
+    const total = row?.total ?? 0;
+    return {
+      average: total === 0 || row?.avg == null ? null : Math.round(row.avg * 10) / 10,
+      total,
+      distribution: { '1': row?.r1 ?? 0, '2': row?.r2 ?? 0, '3': row?.r3 ?? 0, '4': row?.r4 ?? 0, '5': row?.r5 ?? 0 },
+      withoutReply: row?.unreplied ?? 0,
+    };
+  }
+
   private async mine(storeId: string, reviewId: string) {
     const [review] = await this.db.select().from(t.reviews).where(and(eq(t.reviews.id, reviewId), eq(t.reviews.storeId, storeId), eq(t.reviews.status, 'published')));
     if (!review) throw errors.notFound('Avaliação não encontrada.');

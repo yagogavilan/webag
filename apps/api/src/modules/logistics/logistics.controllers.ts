@@ -68,6 +68,8 @@ function presentDelivery(d: Delivery & Partial<DeliveryListExtras>, detail: bool
     destination: place.slice(-2).join(', ') || null,
     /** SEC-144: telefone mascarado (ativa) para a lista; o número inteiro e o endereço só por `contact-reveal` (motivo + auditoria). */
     customerPhoneMasked: active ? maskPhone(contact.customerPhone) : null,
+    /** SEC-169 / DEC-067: `false` = o pino do endereço NÃO foi conferido (sem geocodificador): a Logística confirma o endereço com o cliente. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. */
+    dropoffPinVerified: active && typeof contact.dropoffPinVerified === 'boolean' ? contact.dropoffPinVerified : null,
     contactRevealable: active && d.contact !== null && d.piiClearedAt === null,
     fee: money(d.feeCents),
     expectedCost: money(d.expectedCostCents),

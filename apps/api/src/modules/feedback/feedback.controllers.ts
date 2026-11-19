@@ -182,6 +182,13 @@ export class StoreReviewsController {
     return this.reviews.list(idParam(storeId), query);
   }
 
+  /** W.6: resumo (média, total, distribuição 1 a 5, sem resposta) para o Início e a página de Avaliações. */
+  @StorePermission('reviews')
+  @Get('summary')
+  summary(@Param('storeId') storeId: string) {
+    return this.reviews.summary(idParam(storeId));
+  }
+
   @StorePermission('reviews')
   @Put(':reviewId/reply')
   @RateLimit({ name: 'review-reply', limit: 60, windowSeconds: 3600 })

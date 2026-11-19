@@ -8,7 +8,7 @@ import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestam
 import { REDIS } from '../../platform/redis/redis.module.js';
 import { users } from '../identity/db/schema.js';
 import { couriers, DeliveriesService } from '../logistics/index.js';
-import { etaOfOrder } from './domain/eta-view.js';
+import { etaOfOrder, readyByAtOf } from './domain/eta-view.js';
 import { orderCancelRequests, orderEvents, orderItems, orders } from './db/schema.js';
 import { nextStatuses, type OrderStatus } from './domain/state.js';
 import type { OrderEvent } from './order-events.bus.js';
@@ -124,6 +124,8 @@ export class StoreOrdersService {
         createdAt: order.createdAt.toISOString(),
         paidAt: order.paidAt?.toISOString() ?? null,
         acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
+        /** W.8: "Marque pronto até" = pagamento aprovado + preparo da loja; nulo depois do "pronto". */
+        readyByAt: readyByAtOf(order),
         customerFirstName: firstName(customerById.get(order.userId)?.name),
         itemCount: rows.reduce((n, i) => n + i.quantity, 0),
         firstItemName: rows[0]?.name ?? '',
@@ -162,6 +164,8 @@ export class StoreOrdersService {
       paidAt: order.paidAt?.toISOString() ?? null,
       acceptedAt: order.acceptedAt?.toISOString() ?? null,
       acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
+      /** W.8: "Marque pronto até" = pagamento aprovado + preparo da loja (DEC-064c); nulo depois do "pronto". */
+      readyByAt: readyByAtOf(order),
       /** BUG-015: pedido de cancelamento do cliente (em separação) e a decisão; nulo se nunca houve. */
       cancelRequest,
       customer: { firstName: firstName(customer?.name), phone: active && order.mode === 'delivery' ? (customer?.phone ?? null) : null },

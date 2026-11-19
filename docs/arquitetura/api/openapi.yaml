@@ -7168,6 +7168,73 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/finance/sales/top-products:
+    get:
+      tags: [finance]
+      operationId: getStoreTopProducts
+      summary: Mais vendidos do período (Início do lojista, W.6)
+      description: "Permissão da loja `sales_values`. Por produto: unidades e `youReceive` (a parte do líquido do pedido antes da tarifa do provedor, proporcional à participação do item no subtotal: itens menos cupom da loja menos comissão, DEC-036a). Mesmos pedidos de `getStoreSales` (pagos e não cancelados, por data de pagamento, dia de Brasília). Ordem: unidades, depois `youReceive`, depois nome. Nome e imagem são os da venda mais recente. Ranking limitado por `limit` (1 a 20, padrão 5; sem cursor)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 5 } }
+      responses:
+        '200':
+          description: Ranking
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, data]
+                properties:
+                  period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [productId, name, image, units, youReceive]
+                      properties:
+                        productId: { type: string, format: uuid }
+                        name: { type: string }
+                        image: { $ref: '#/components/schemas/ImageUrls' }
+                        units: { type: integer }
+                        youReceive: { $ref: '#/components/schemas/Money' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/reviews/summary:
+    get:
+      tags: [stores]
+      operationId: getStoreReviewsSummary
+      summary: Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
+      description: "Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Resumo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [average, total, distribution, withoutReply]
+                properties:
+                  average: { type: [number, 'null'] }
+                  total: { type: integer }
+                  distribution: { type: object, required: ['1', '2', '3', '4', '5'], properties: { '1': { type: integer }, '2': { type: integer }, '3': { type: integer }, '4': { type: integer }, '5': { type: integer } } }
+                  withoutReply: { type: integer }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/admin/exchange-requests:
     get:
       tags: [exchanges]
@@ -9186,6 +9253,7 @@ components:
         destination: { type: [string, 'null'], description: 'Bairro e cidade.' }
         customerPhoneMasked: { type: [string, 'null'], description: "Telefone do cliente mascarado '(11) 9****-7777' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`" }
         contactRevealable: { type: boolean, description: 'Há contato a revelar (corrida ativa, antes da retenção)' }
+        dropoffPinVerified: { type: [boolean, 'null'], description: 'SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido (sem geocodificador contratado): a Logística confirma o endereço com o cliente antes de despachar. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. Campo novo opcional.' }
         fee: { $ref: '#/components/schemas/Money' }
         expectedCost: { $ref: '#/components/schemas/Money' }
         cost: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
@@ -10882,6 +10950,7 @@ components:
         cityId: { type: [string, 'null'], format: uuid, description: Região atendida resolvida na gravação }
         lat: { type: number }
         lng: { type: number }
+        pinVerified: { type: boolean, description: 'SEC-169 / DEC-067: o pino (`lat`/`lng`) foi conferido contra o CEP/município pelo geocodificador (`true`); `false` quando não há geocodificador (`GEOCODER_URL` vazio) ou o município do CEP não tem ponto de referência: o servidor só garantiu CEP existente e município/UF atendidos. A cotação não usa o indicador; a Logística pode mostrar "pino não conferido". Campo opcional (sempre enviado pelo servidor).' }
         isDefault: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -11592,6 +11661,7 @@ components:
         createdAt: { type: string, format: date-time }
         paidAt: { type: [string, 'null'], format: date-time }
         acceptDeadlineAt: { type: [string, 'null'], format: date-time, description: 'Só em `received`: a loja tem até aqui para aceitar' }
+        readyByAt: { type: [string, 'null'], format: date-time, description: 'W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.' }
         customerFirstName: { type: string }
         itemCount: { type: integer }
         firstItemName: { type: string }
@@ -11632,6 +11702,7 @@ components:
         paidAt: { type: [string, 'null'], format: date-time }
         acceptedAt: { type: [string, 'null'], format: date-time }
         acceptDeadlineAt: { type: [string, 'null'], format: date-time }
+        readyByAt: { type: [string, 'null'], format: date-time, description: 'W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.' }
         customer:
           type: object
           required: [firstName, phone]
@@ -12911,9 +12982,14 @@ components:
         privacy:
           type: object
           required: [officerName, officerEmail]
+          description: 'Encarregado e, desde SEC-178/W.1, os prazos REAIS da exclusão de conta citados na página pública `/excluir-conta` (a página lê daqui; as variáveis `PUBLIC_DELETION_*` ficam só de reserva). Campos novos opcionais.'
           properties:
             officerName: { type: [string, 'null'] }
             officerEmail: { type: [string, 'null'] }
+            deletionRegretHours: { type: integer, description: 'Horas para desistir antes de a exclusão ficar definitiva (`exclusao_arrependimento_horas`, limitado a `exclusao_anonimizacao_dias` x 24); 0 = imediata e sem volta.' }
+            fiscalRetentionYears: { type: integer, description: 'Anos de guarda de pedidos e pagamentos sem identificação (`retencao_fiscal_anos`).' }
+            accessLogMonths: { type: integer, description: 'Meses de guarda do registro de acesso (`retencao_log_acesso_meses`; piso do Marco Civil).' }
+            privacyAnswerDays: { type: integer, description: 'Dias para o encarregado responder um pedido de titular (LGPD art. 19; constante `DSR_DEADLINE_DAYS`).' }
         groups:
           type: array
           items:
