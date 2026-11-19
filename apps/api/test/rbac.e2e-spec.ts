@@ -52,6 +52,7 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'commissions:write': null,
   'exchanges:report': { method: 'get', path: '/v1/admin/exchanges/report?from=2026-01-01&to=2026-01-31' },
   'exchanges:mediate': { method: 'get', path: '/v1/admin/exchanges/mediations' },
+  'privacy:manage': { method: 'get', path: '/v1/admin/privacy-requests' },
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
   'orders:refund': null,
@@ -123,6 +124,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'POST /v1/auth/password/reset/complete',
         'POST /v1/auth/refresh',
         'POST /v1/auth/register',
+        'POST /v1/privacy/requests',
         'POST /v1/webhooks/:provider',
       ].sort(),
     );

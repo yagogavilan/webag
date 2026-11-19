@@ -6454,6 +6454,177 @@ paths:
           $ref: '#/components/responses/Gone'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/privacy/requests:
+    post:
+      tags: [privacy]
+      operationId: submitPrivacyRequest
+      summary: Pedido ao encarregado (titular, formulário público)
+      description: "Sem login (app e web). Sempre responde igual, com protocolo e prazo de 15 dias, exista ou não conta com o e-mail (anti-enumeração); envia e-mail de confirmação. Limites: 5/h por IP e 3/dia por e-mail."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestSubmit'
+      responses:
+        '202':
+          description: Pedido registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestReceipt'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/privacy-requests:
+    get:
+      tags: [privacy]
+      operationId: listPrivacyRequests
+      summary: Fila de pedidos de titulares (super admin)
+      description: "Abertos primeiro, prazo mais curto no topo. O e-mail do solicitante vem mascarado (`m***@dominio`); revelar é `POST .../reveal`."
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, in_progress, answered] } }
+        - { name: overdue, in: query, schema: { type: boolean }, description: "Só os abertos com o prazo vencido" }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [privacy]
+      operationId: registerPrivacyRequest
+      summary: Registrar pedido recebido por e-mail (super admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestRegister'
+      responses:
+        '201':
+          description: Registrado (canal `email`, prazo a partir de `receivedAt`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/privacy-requests/{id}:
+    get:
+      tags: [privacy]
+      operationId: getPrivacyRequest
+      summary: Detalhe e histórico do pedido (super admin)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/privacy-requests/{id}/reveal:
+    post:
+      tags: [privacy]
+      operationId: revealPrivacyRequest
+      summary: Revelar e-mail e mensagem do solicitante (reautenticação + motivo, auditado)
+      description: "Exige reautenticação recente (403 `REAUTH_REQUIRED`) e motivo (>= 10 caracteres). Grava a auditoria `privacy.request_revealed` e o histórico do pedido."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestRevealRequest'
+      responses:
+        '200':
+          description: Dados completos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestRevealed'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/privacy-requests/{id}/in-progress:
+    post:
+      tags: [privacy]
+      operationId: startPrivacyRequest
+      summary: Marcar como em andamento
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/privacy-requests/{id}/answer:
+    post:
+      tags: [privacy]
+      operationId: answerPrivacyRequest
+      summary: Registrar a resposta e avisar o titular por e-mail
+      description: "Fecha o pedido; responder de novo é 409 `DSR_ALREADY_ANSWERED`."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestAnswerRequest'
+      responses:
+        '200':
+          description: Respondido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 components:
   securitySchemes:
     bearerAuth:
@@ -10332,3 +10503,88 @@ components:
       properties:
         url: { type: string, format: uri, description: "Abrir uma vez (GET); vale poucos minutos" }
         expiresAt: { type: string, format: date-time }
+    PrivacyRequestType:
+      type: string
+      enum: [access, correction, deletion, portability, objection, other]
+    PrivacyRequestSubmit:
+      type: object
+      additionalProperties: false
+      required: [type, email]
+      properties:
+        type: { $ref: '#/components/schemas/PrivacyRequestType' }
+        email: { type: string, format: email }
+        message: { type: string, maxLength: 1000 }
+    PrivacyRequestReceipt:
+      type: object
+      required: [protocol, dueAt]
+      properties:
+        protocol: { type: string, example: PV-0031 }
+        dueAt: { type: string, format: date-time }
+    PrivacyRequestRegister:
+      type: object
+      additionalProperties: false
+      required: [type, email]
+      properties:
+        type: { $ref: '#/components/schemas/PrivacyRequestType' }
+        email: { type: string, format: email }
+        message: { type: string, maxLength: 1000 }
+        receivedAt: { type: string, format: date-time, description: "Quando o e-mail chegou (não pode ser futuro); o prazo conta daqui" }
+    PrivacyRequestItem:
+      type: object
+      required: [id, protocol, type, channel, status, requester, receivedAt, dueAt, daysLeft, overdue, answeredAt]
+      properties:
+        id: { type: string, format: uuid }
+        protocol: { type: string }
+        type: { $ref: '#/components/schemas/PrivacyRequestType' }
+        channel: { type: string, enum: [form, email, app] }
+        status: { type: string, enum: [new, in_progress, answered] }
+        requester: { type: string, description: "E-mail mascarado" }
+        receivedAt: { type: string, format: date-time }
+        dueAt: { type: string, format: date-time }
+        daysLeft: { type: integer, description: "Negativo = atrasado" }
+        overdue: { type: boolean }
+        answeredAt: { type: [string, 'null'], format: date-time }
+    PrivacyRequestPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/PrivacyRequestItem' } }
+        nextCursor: { type: [string, 'null'] }
+    PrivacyRequestDetail:
+      allOf:
+        - $ref: '#/components/schemas/PrivacyRequestItem'
+        - type: object
+          required: [hasAccount, messagePreview, answer, history]
+          properties:
+            hasAccount: { type: boolean }
+            messagePreview: { type: [string, 'null'], description: "40 primeiros caracteres; a mensagem inteira só em `reveal`" }
+            answer: { type: [string, 'null'] }
+            history:
+              type: array
+              items:
+                type: object
+                required: [action, note, at, actorId]
+                properties:
+                  action: { type: string, enum: [opened, revealed, in_progress, answered] }
+                  note: { type: [string, 'null'] }
+                  at: { type: string, format: date-time }
+                  actorId: { type: [string, 'null'], format: uuid }
+    PrivacyRequestRevealRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 300 }
+    PrivacyRequestRevealed:
+      type: object
+      required: [email, message, userId]
+      properties:
+        email: { type: string, format: email }
+        message: { type: [string, 'null'] }
+        userId: { type: [string, 'null'], format: uuid }
+    PrivacyRequestAnswerRequest:
+      type: object
+      additionalProperties: false
+      required: [answer]
+      properties:
+        answer: { type: string, minLength: 5, maxLength: 1000 }

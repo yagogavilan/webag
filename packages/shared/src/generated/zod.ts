@@ -10847,3 +10847,198 @@ export const DownloadDataExportParams = zod.object({
 })
 
 export const DownloadDataExportResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * Sem login (app e web). Sempre responde igual, com protocolo e prazo de 15 dias, exista ou não conta com o e-mail (anti-enumeração); envia e-mail de confirmação. Limites: 5/h por IP e 3/dia por e-mail.
+ * @summary Pedido ao encarregado (titular, formulário público)
+ */
+export const submitPrivacyRequestBodyMessageMax = 1000;
+
+
+
+export const SubmitPrivacyRequestBody = zod.object({
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "email": zod.email(),
+  "message": zod.string().max(submitPrivacyRequestBodyMessageMax).optional()
+})
+
+export const SubmitPrivacyRequestResponse = zod.object({
+  "protocol": zod.string(),
+  "dueAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Abertos primeiro, prazo mais curto no topo. O e-mail do solicitante vem mascarado (`m***@dominio`); revelar é `POST .../reveal`.
+ * @summary Fila de pedidos de titulares (super admin)
+ */
+export const listPrivacyRequestsQueryCursorMax = 200;
+
+export const listPrivacyRequestsQueryLimitDefault = 20;
+export const listPrivacyRequestsQueryLimitMax = 50;
+
+
+
+export const ListPrivacyRequestsQueryParams = zod.object({
+  "status": zod.enum(['new', 'in_progress', 'answered']).optional(),
+  "overdue": zod.boolean().optional().describe('Só os abertos com o prazo vencido'),
+  "cursor": zod.string().max(listPrivacyRequestsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listPrivacyRequestsQueryLimitMax).default(listPrivacyRequestsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListPrivacyRequestsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "protocol": zod.string(),
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "channel": zod.enum(['form', 'email', 'app']),
+  "status": zod.enum(['new', 'in_progress', 'answered']),
+  "requester": zod.string().describe('E-mail mascarado'),
+  "receivedAt": zod.iso.datetime({"offset":true}),
+  "dueAt": zod.iso.datetime({"offset":true}),
+  "daysLeft": zod.int().describe('Negativo = atrasado'),
+  "overdue": zod.boolean(),
+  "answeredAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * @summary Registrar pedido recebido por e-mail (super admin)
+ */
+export const registerPrivacyRequestBodyMessageMax = 1000;
+
+
+
+export const RegisterPrivacyRequestBody = zod.object({
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "email": zod.email(),
+  "message": zod.string().max(registerPrivacyRequestBodyMessageMax).optional(),
+  "receivedAt": zod.iso.datetime({"offset":true}).optional().describe('Quando o e-mail chegou (não pode ser futuro); o prazo conta daqui')
+})
+
+export const RegisterPrivacyRequestResponse = zod.object({
+  "id": zod.uuid(),
+  "protocol": zod.string(),
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "channel": zod.enum(['form', 'email', 'app']),
+  "status": zod.enum(['new', 'in_progress', 'answered']),
+  "requester": zod.string().describe('E-mail mascarado'),
+  "receivedAt": zod.iso.datetime({"offset":true}),
+  "dueAt": zod.iso.datetime({"offset":true}),
+  "daysLeft": zod.int().describe('Negativo = atrasado'),
+  "overdue": zod.boolean(),
+  "answeredAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * @summary Detalhe e histórico do pedido (super admin)
+ */
+export const GetPrivacyRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetPrivacyRequestResponse = zod.object({
+  "id": zod.uuid(),
+  "protocol": zod.string(),
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "channel": zod.enum(['form', 'email', 'app']),
+  "status": zod.enum(['new', 'in_progress', 'answered']),
+  "requester": zod.string().describe('E-mail mascarado'),
+  "receivedAt": zod.iso.datetime({"offset":true}),
+  "dueAt": zod.iso.datetime({"offset":true}),
+  "daysLeft": zod.int().describe('Negativo = atrasado'),
+  "overdue": zod.boolean(),
+  "answeredAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "hasAccount": zod.boolean(),
+  "messagePreview": zod.string().nullable().describe('40 primeiros caracteres; a mensagem inteira só em `reveal`'),
+  "answer": zod.string().nullable(),
+  "history": zod.array(zod.object({
+  "action": zod.enum(['opened', 'revealed', 'in_progress', 'answered']),
+  "note": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true}),
+  "actorId": zod.uuid().nullable()
+}))
+}))
+
+
+/**
+ * Exige reautenticação recente (403 `REAUTH_REQUIRED`) e motivo (>= 10 caracteres). Grava a auditoria `privacy.request_revealed` e o histórico do pedido.
+ * @summary Revelar e-mail e mensagem do solicitante (reautenticação + motivo, auditado)
+ */
+export const RevealPrivacyRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const revealPrivacyRequestBodyReasonMin = 10;
+export const revealPrivacyRequestBodyReasonMax = 300;
+
+
+
+export const RevealPrivacyRequestBody = zod.object({
+  "reason": zod.string().min(revealPrivacyRequestBodyReasonMin).max(revealPrivacyRequestBodyReasonMax)
+})
+
+export const RevealPrivacyRequestResponse = zod.object({
+  "email": zod.email(),
+  "message": zod.string().nullable(),
+  "userId": zod.uuid().nullable()
+})
+
+
+/**
+ * @summary Marcar como em andamento
+ */
+export const StartPrivacyRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const StartPrivacyRequestResponse = zod.object({
+  "id": zod.uuid(),
+  "protocol": zod.string(),
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "channel": zod.enum(['form', 'email', 'app']),
+  "status": zod.enum(['new', 'in_progress', 'answered']),
+  "requester": zod.string().describe('E-mail mascarado'),
+  "receivedAt": zod.iso.datetime({"offset":true}),
+  "dueAt": zod.iso.datetime({"offset":true}),
+  "daysLeft": zod.int().describe('Negativo = atrasado'),
+  "overdue": zod.boolean(),
+  "answeredAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Fecha o pedido; responder de novo é 409 `DSR_ALREADY_ANSWERED`.
+ * @summary Registrar a resposta e avisar o titular por e-mail
+ */
+export const AnswerPrivacyRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const answerPrivacyRequestBodyAnswerMin = 5;
+export const answerPrivacyRequestBodyAnswerMax = 1000;
+
+
+
+export const AnswerPrivacyRequestBody = zod.object({
+  "answer": zod.string().min(answerPrivacyRequestBodyAnswerMin).max(answerPrivacyRequestBodyAnswerMax)
+})
+
+export const AnswerPrivacyRequestResponse = zod.object({
+  "id": zod.uuid(),
+  "protocol": zod.string(),
+  "type": zod.enum(['access', 'correction', 'deletion', 'portability', 'objection', 'other']),
+  "channel": zod.enum(['form', 'email', 'app']),
+  "status": zod.enum(['new', 'in_progress', 'answered']),
+  "requester": zod.string().describe('E-mail mascarado'),
+  "receivedAt": zod.iso.datetime({"offset":true}),
+  "dueAt": zod.iso.datetime({"offset":true}),
+  "daysLeft": zod.int().describe('Negativo = atrasado'),
+  "overdue": zod.boolean(),
+  "answeredAt": zod.iso.datetime({"offset":true}).nullable()
+})

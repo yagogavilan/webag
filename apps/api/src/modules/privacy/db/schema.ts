@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgSequence, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from '../../identity/db/schema.js';
 
 export const DELETION_STATUSES = ['pending', 'completed', 'cancelled'] as const;
@@ -84,6 +84,9 @@ export const dataExportLinks = pgTable(
   (t) => [uniqueIndex('data_export_links_token_uq').on(t.tokenHash), index('data_export_links_export_idx').on(t.exportId)],
 );
 
+/** Número do protocolo (PV-0001): sequência do banco, sem colisão entre instâncias. */
+export const privacyProtocolSeq = pgSequence('privacy_protocol_seq', { startWith: 1 });
+
 export const DSR_TYPES = ['access', 'correction', 'deletion', 'portability', 'objection', 'other'] as const;
 export type DsrType = (typeof DSR_TYPES)[number];
 export const DSR_STATUSES = ['new', 'in_progress', 'answered'] as const;
@@ -91,8 +94,8 @@ export type DsrStatus = (typeof DSR_STATUSES)[number];
 export const DSR_CHANNELS = ['form', 'email', 'app'] as const;
 
 /**
- * WB-217: pedido de titular (LGPD art. 18). O e-mail do solicitante é dado pessoal: fica cifrado em repouso no mesmo padrão
- * dos demais segredos e a lista do admin o mostra mascarado (revelar = auditoria).
+ * WB-217: pedido de titular (LGPD art. 18). O e-mail do solicitante é dado pessoal: a lista do admin o mostra mascarado e
+ * revelar exige reautenticação e grava auditoria. Sai da casca anonimizada quando a conta é excluída.
  */
 export const privacyRequests = pgTable(
   'privacy_requests',

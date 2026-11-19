@@ -4874,6 +4874,135 @@ export interface DataExportLink {
   expiresAt: string;
 }
 
+export type PrivacyRequestType = typeof PrivacyRequestType[keyof typeof PrivacyRequestType];
+
+
+export const PrivacyRequestType = {
+  access: 'access',
+  correction: 'correction',
+  deletion: 'deletion',
+  portability: 'portability',
+  objection: 'objection',
+  other: 'other',
+} as const;
+
+export interface PrivacyRequestSubmit {
+  type: PrivacyRequestType;
+  email: string;
+  /** @maxLength 1000 */
+  message?: string;
+}
+
+export interface PrivacyRequestReceipt {
+  protocol: string;
+  dueAt: string;
+}
+
+export interface PrivacyRequestRegister {
+  type: PrivacyRequestType;
+  email: string;
+  /** @maxLength 1000 */
+  message?: string;
+  /** Quando o e-mail chegou (não pode ser futuro); o prazo conta daqui */
+  receivedAt?: string;
+}
+
+export type PrivacyRequestItemChannel = typeof PrivacyRequestItemChannel[keyof typeof PrivacyRequestItemChannel];
+
+
+export const PrivacyRequestItemChannel = {
+  form: 'form',
+  email: 'email',
+  app: 'app',
+} as const;
+
+export type PrivacyRequestItemStatus = typeof PrivacyRequestItemStatus[keyof typeof PrivacyRequestItemStatus];
+
+
+export const PrivacyRequestItemStatus = {
+  new: 'new',
+  in_progress: 'in_progress',
+  answered: 'answered',
+} as const;
+
+export interface PrivacyRequestItem {
+  id: string;
+  protocol: string;
+  type: PrivacyRequestType;
+  channel: PrivacyRequestItemChannel;
+  status: PrivacyRequestItemStatus;
+  /** E-mail mascarado */
+  requester: string;
+  receivedAt: string;
+  dueAt: string;
+  /** Negativo = atrasado */
+  daysLeft: number;
+  overdue: boolean;
+  /** @nullable */
+  answeredAt: string | null;
+}
+
+export interface PrivacyRequestPage {
+  data: PrivacyRequestItem[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type PrivacyRequestDetailHistoryItemAction = typeof PrivacyRequestDetailHistoryItemAction[keyof typeof PrivacyRequestDetailHistoryItemAction];
+
+
+export const PrivacyRequestDetailHistoryItemAction = {
+  opened: 'opened',
+  revealed: 'revealed',
+  in_progress: 'in_progress',
+  answered: 'answered',
+} as const;
+
+export type PrivacyRequestDetailHistoryItem = {
+  action: PrivacyRequestDetailHistoryItemAction;
+  /** @nullable */
+  note: string | null;
+  at: string;
+  /** @nullable */
+  actorId: string | null;
+};
+
+export type PrivacyRequestDetail = PrivacyRequestItem & ({
+  hasAccount: boolean;
+  /**
+     * 40 primeiros caracteres; a mensagem inteira só em `reveal`
+     * @nullable
+     */
+  messagePreview: string | null;
+  /** @nullable */
+  answer: string | null;
+  history: PrivacyRequestDetailHistoryItem[];
+});
+
+export interface PrivacyRequestRevealRequest {
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
+}
+
+export interface PrivacyRequestRevealed {
+  email: string;
+  /** @nullable */
+  message: string | null;
+  /** @nullable */
+  userId: string | null;
+}
+
+export interface PrivacyRequestAnswerRequest {
+  /**
+     * @minLength 5
+     * @maxLength 1000
+     */
+  answer: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -6130,6 +6259,32 @@ export type GetStoreStatementCsvParams = {
 };
 
 export type DownloadDataExport200 = { [key: string]: unknown };
+
+export type ListPrivacyRequestsParams = {
+  status?: ListPrivacyRequestsStatus;
+  /** Só os abertos com o prazo vencido */
+  overdue?: boolean;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListPrivacyRequestsStatus = typeof ListPrivacyRequestsStatus[keyof typeof ListPrivacyRequestsStatus];
+
+
+export const ListPrivacyRequestsStatus = {
+  new: 'new',
+  in_progress: 'in_progress',
+  answered: 'answered',
+} as const;
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -20499,5 +20654,399 @@ export const downloadDataExport = async (token: string, options?: Parameters<typ
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type submitPrivacyRequestResponse202 = {
+  data: PrivacyRequestReceipt
+  status: 202
+}
+
+export type submitPrivacyRequestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type submitPrivacyRequestResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type submitPrivacyRequestResponseSuccess = (submitPrivacyRequestResponse202) & {
+  headers: Headers;
+};
+export type submitPrivacyRequestResponseError = (submitPrivacyRequestResponse400 | submitPrivacyRequestResponse429) & {
+  headers: Headers;
+};
+
+export type submitPrivacyRequestResponse = (submitPrivacyRequestResponseSuccess | submitPrivacyRequestResponseError)
+
+export const getSubmitPrivacyRequestUrl = () => {
+
+
+
+
+  return `/v1/privacy/requests`
+}
+
+/**
+ * Sem login (app e web). Sempre responde igual, com protocolo e prazo de 15 dias, exista ou não conta com o e-mail (anti-enumeração); envia e-mail de confirmação. Limites: 5/h por IP e 3/dia por e-mail.
+ * @summary Pedido ao encarregado (titular, formulário público)
+ */
+export const submitPrivacyRequest = async (privacyRequestSubmit: PrivacyRequestSubmit, options?: Parameters<typeof apiFetch>[1]): Promise<submitPrivacyRequestResponse> => {
+
+  return apiFetch<submitPrivacyRequestResponse>(getSubmitPrivacyRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(privacyRequestSubmit)
+  }
+);}
+
+
+
+export type listPrivacyRequestsResponse200 = {
+  data: PrivacyRequestPage
+  status: 200
+}
+
+export type listPrivacyRequestsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listPrivacyRequestsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listPrivacyRequestsResponseSuccess = (listPrivacyRequestsResponse200) & {
+  headers: Headers;
+};
+export type listPrivacyRequestsResponseError = (listPrivacyRequestsResponse401 | listPrivacyRequestsResponse403) & {
+  headers: Headers;
+};
+
+export type listPrivacyRequestsResponse = (listPrivacyRequestsResponseSuccess | listPrivacyRequestsResponseError)
+
+export const getListPrivacyRequestsUrl = (params?: ListPrivacyRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/privacy-requests?${stringifiedParams}` : `/v1/admin/privacy-requests`
+}
+
+/**
+ * Abertos primeiro, prazo mais curto no topo. O e-mail do solicitante vem mascarado (`m***@dominio`); revelar é `POST .../reveal`.
+ * @summary Fila de pedidos de titulares (super admin)
+ */
+export const listPrivacyRequests = async (params?: ListPrivacyRequestsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listPrivacyRequestsResponse> => {
+
+  return apiFetch<listPrivacyRequestsResponse>(getListPrivacyRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type registerPrivacyRequestResponse201 = {
+  data: PrivacyRequestItem
+  status: 201
+}
+
+export type registerPrivacyRequestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type registerPrivacyRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type registerPrivacyRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type registerPrivacyRequestResponseSuccess = (registerPrivacyRequestResponse201) & {
+  headers: Headers;
+};
+export type registerPrivacyRequestResponseError = (registerPrivacyRequestResponse400 | registerPrivacyRequestResponse401 | registerPrivacyRequestResponse403) & {
+  headers: Headers;
+};
+
+export type registerPrivacyRequestResponse = (registerPrivacyRequestResponseSuccess | registerPrivacyRequestResponseError)
+
+export const getRegisterPrivacyRequestUrl = () => {
+
+
+
+
+  return `/v1/admin/privacy-requests`
+}
+
+/**
+ * @summary Registrar pedido recebido por e-mail (super admin)
+ */
+export const registerPrivacyRequest = async (privacyRequestRegister: PrivacyRequestRegister, options?: Parameters<typeof apiFetch>[1]): Promise<registerPrivacyRequestResponse> => {
+
+  return apiFetch<registerPrivacyRequestResponse>(getRegisterPrivacyRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(privacyRequestRegister)
+  }
+);}
+
+
+
+export type getPrivacyRequestResponse200 = {
+  data: PrivacyRequestDetail
+  status: 200
+}
+
+export type getPrivacyRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getPrivacyRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getPrivacyRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getPrivacyRequestResponseSuccess = (getPrivacyRequestResponse200) & {
+  headers: Headers;
+};
+export type getPrivacyRequestResponseError = (getPrivacyRequestResponse401 | getPrivacyRequestResponse403 | getPrivacyRequestResponse404) & {
+  headers: Headers;
+};
+
+export type getPrivacyRequestResponse = (getPrivacyRequestResponseSuccess | getPrivacyRequestResponseError)
+
+export const getGetPrivacyRequestUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/privacy-requests/${id}`
+}
+
+/**
+ * @summary Detalhe e histórico do pedido (super admin)
+ */
+export const getPrivacyRequest = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getPrivacyRequestResponse> => {
+
+  return apiFetch<getPrivacyRequestResponse>(getGetPrivacyRequestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type revealPrivacyRequestResponse200 = {
+  data: PrivacyRequestRevealed
+  status: 200
+}
+
+export type revealPrivacyRequestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type revealPrivacyRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type revealPrivacyRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type revealPrivacyRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type revealPrivacyRequestResponseSuccess = (revealPrivacyRequestResponse200) & {
+  headers: Headers;
+};
+export type revealPrivacyRequestResponseError = (revealPrivacyRequestResponse400 | revealPrivacyRequestResponse401 | revealPrivacyRequestResponse403 | revealPrivacyRequestResponse404) & {
+  headers: Headers;
+};
+
+export type revealPrivacyRequestResponse = (revealPrivacyRequestResponseSuccess | revealPrivacyRequestResponseError)
+
+export const getRevealPrivacyRequestUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/privacy-requests/${id}/reveal`
+}
+
+/**
+ * Exige reautenticação recente (403 `REAUTH_REQUIRED`) e motivo (>= 10 caracteres). Grava a auditoria `privacy.request_revealed` e o histórico do pedido.
+ * @summary Revelar e-mail e mensagem do solicitante (reautenticação + motivo, auditado)
+ */
+export const revealPrivacyRequest = async (id: string,
+    privacyRequestRevealRequest: PrivacyRequestRevealRequest, options?: Parameters<typeof apiFetch>[1]): Promise<revealPrivacyRequestResponse> => {
+
+  return apiFetch<revealPrivacyRequestResponse>(getRevealPrivacyRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(privacyRequestRevealRequest)
+  }
+);}
+
+
+
+export type startPrivacyRequestResponse200 = {
+  data: PrivacyRequestItem
+  status: 200
+}
+
+export type startPrivacyRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type startPrivacyRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type startPrivacyRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type startPrivacyRequestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type startPrivacyRequestResponseSuccess = (startPrivacyRequestResponse200) & {
+  headers: Headers;
+};
+export type startPrivacyRequestResponseError = (startPrivacyRequestResponse401 | startPrivacyRequestResponse403 | startPrivacyRequestResponse404 | startPrivacyRequestResponse409) & {
+  headers: Headers;
+};
+
+export type startPrivacyRequestResponse = (startPrivacyRequestResponseSuccess | startPrivacyRequestResponseError)
+
+export const getStartPrivacyRequestUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/privacy-requests/${id}/in-progress`
+}
+
+/**
+ * @summary Marcar como em andamento
+ */
+export const startPrivacyRequest = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<startPrivacyRequestResponse> => {
+
+  return apiFetch<startPrivacyRequestResponse>(getStartPrivacyRequestUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type answerPrivacyRequestResponse200 = {
+  data: PrivacyRequestItem
+  status: 200
+}
+
+export type answerPrivacyRequestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type answerPrivacyRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type answerPrivacyRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type answerPrivacyRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type answerPrivacyRequestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type answerPrivacyRequestResponseSuccess = (answerPrivacyRequestResponse200) & {
+  headers: Headers;
+};
+export type answerPrivacyRequestResponseError = (answerPrivacyRequestResponse400 | answerPrivacyRequestResponse401 | answerPrivacyRequestResponse403 | answerPrivacyRequestResponse404 | answerPrivacyRequestResponse409) & {
+  headers: Headers;
+};
+
+export type answerPrivacyRequestResponse = (answerPrivacyRequestResponseSuccess | answerPrivacyRequestResponseError)
+
+export const getAnswerPrivacyRequestUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/privacy-requests/${id}/answer`
+}
+
+/**
+ * Fecha o pedido; responder de novo é 409 `DSR_ALREADY_ANSWERED`.
+ * @summary Registrar a resposta e avisar o titular por e-mail
+ */
+export const answerPrivacyRequest = async (id: string,
+    privacyRequestAnswerRequest: PrivacyRequestAnswerRequest, options?: Parameters<typeof apiFetch>[1]): Promise<answerPrivacyRequestResponse> => {
+
+  return apiFetch<answerPrivacyRequestResponse>(getAnswerPrivacyRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(privacyRequestAnswerRequest)
   }
 );}

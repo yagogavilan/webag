@@ -225,6 +225,13 @@
       "when": 1795056883665,
       "tag": "0031_o61_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795057804231,
+      "tag": "0032_o61_dsr_sequence",
+      "breakpoints": true
     }
   ]
 }
