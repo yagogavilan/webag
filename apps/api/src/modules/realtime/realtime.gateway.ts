@@ -1,4 +1,5 @@
-import { Inject } from '@nestjs/common';
+import { Inject, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import type { Subscription } from 'rxjs';
 import { ConnectedSocket, MessageBody, type OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { and, eq } from 'drizzle-orm';
 import type { Server, Socket } from 'socket.io';
@@ -23,6 +24,8 @@ export const userRoom = (userId: string): string => `user:${userId}`;
 export const storeRoom = (storeId: string): string => `store:${storeId}`;
 export const orderRoom = (orderId: string): string => `order:${orderId}`;
 export const ADMIN_OPS_ROOM = 'admin:ops';
+/** Teto de pedidos acompanhados por socket (o app acompanha 1 a 3; folga para o painel da loja). */
+export const MAX_ORDER_ROOMS = 20;
 
 /**
  * Tempo real (ADR-004): namespace `/rt`, só servidor para cliente (mutações seguem em REST) e o evento é AVISO, nunca a fonte da
@@ -31,8 +34,9 @@ export const ADMIN_OPS_ROOM = 'admin:ops';
  * `order:{id}` só por `subscribe`, e só se o pedido for do usuário ou da loja dele.
  */
 @WebSocketGateway({ namespace: '/rt', transports: ['websocket', 'polling'] })
-export class RealtimeGateway implements OnGatewayInit {
+export class RealtimeGateway implements OnGatewayInit, OnModuleInit, OnModuleDestroy {
   @WebSocketServer() server!: Server;
+  private revocations: Subscription | null = null;
 
   constructor(
     private readonly sessions: SessionService,
@@ -41,6 +45,21 @@ export class RealtimeGateway implements OnGatewayInit {
     private readonly config: ConfigService<Env, true>,
     @Inject(DRIZZLE) private readonly db: Db,
   ) {}
+
+  /** I10: logout, remoção de funcionário, rebaixamento de admin e troca de senha derrubam os sockets da sessão revogada. */
+  onModuleInit(): void {
+    this.revocations = this.sessions.revoked$.subscribe((event) => {
+      for (const sessionId of event.sessionIds) {
+        void this.disconnectSession(sessionId).catch(() => undefined);
+        // A revogação pode ter sido emitida dentro de uma transação ainda não confirmada: repete depois do commit.
+        setTimeout(() => void this.disconnectSession(sessionId).catch(() => undefined), 2_000).unref();
+      }
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.revocations?.unsubscribe();
+  }
 
   afterInit(namespace: Server): void {
     namespace.use((socket, next) => {
@@ -110,11 +129,16 @@ export class RealtimeGateway implements OnGatewayInit {
     socket.once('disconnect', () => clearTimeout(data.expTimer));
   }
 
-  /** O cliente pede para acompanhar UM pedido (tela de acompanhamento). Recusa em silêncio de pedido alheio: mesma resposta de "não existe". */
+  /**
+   * O cliente pede para acompanhar UM pedido (tela de acompanhamento). Recusa em silêncio de pedido alheio: mesma resposta de "não
+   * existe". Limites (I10): 30 mensagens por minuto por socket (guard global) e no máximo `MAX_ORDER_ROOMS` pedidos por socket.
+   */
   @SubscribeMessage('subscribe')
   async subscribe(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown): Promise<{ ok: boolean }> {
     const orderId = (body as { orderId?: unknown } | null)?.orderId;
     if (typeof orderId !== 'string' || !UUID.test(orderId)) return { ok: false };
+    const following = [...socket.rooms].filter((room) => room.startsWith('order:')).length;
+    if (following >= MAX_ORDER_ROOMS && !socket.rooms.has(orderRoom(orderId))) return { ok: false };
     const { userId } = socket.data as SocketData;
     const [order] = await this.db.select({ userId: orders.userId, storeId: orders.storeId }).from(orders).where(eq(orders.id, orderId));
     let allowed = order?.userId === userId;

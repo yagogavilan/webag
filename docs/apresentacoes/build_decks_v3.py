@@ -46,7 +46,7 @@ c.append(slide('purple', f'''
     <div class="txt">
       {kick('O app de compras com entrega')}
       <h1>Escolha no app. Receba em casa.</h1>
-      <p class="lead">Moda, beleza, casa e mais, de várias lojas. Pague com PIX ou cartão e acompanhe até a sua porta.</p>
+      <p class="lead">Moda, beleza, casa e mais, de várias lojas. Pague pelo app e acompanhe até a sua porta.</p>
     </div>
     <div class="devs" style="position:relative;width:520px;height:560px">
       <div style="position:absolute;left:0;top:70px;transform:rotate(-6deg)">{dev('loja', 430)}</div>
@@ -72,7 +72,7 @@ c.append(slide('night', f'''
   <h2>Compre sem cadastro. Crie a conta só na hora de pagar.</h2>
   <div class="cards">
     {card('1', 'Explore à vontade', 'Veja lojas, produtos, preços e avaliações sem criar conta.')}
-    {card('2', 'Pague do seu jeito', 'PIX com QR code e copia e cola, ou cartão. Seus dados de cartão não ficam com a gente.')}
+    {card('2', 'Pague do seu jeito', 'Escolha como pagar, com segurança e confirmação automática. Os dados do seu cartão não ficam com a gente.')}
     {card('3', 'Receba ou retire', 'Entrega pelo Webag até a sua porta, ou retire na loja sem custo.')}
   </div>''', ('Webag', '3')))
 
@@ -100,10 +100,10 @@ c.append(slide('lime', f'''
   <div class="row">
     <div class="txt">
       {kick('Pagamento')}
-      <h2>PIX em segundos, confirmação automática.</h2>
-      {pts(['QR code ou copia e cola', 'Aprovação na hora, sem enviar comprovante', 'Cartão de crédito também aceito'])}
+      <h2>Pague do seu jeito. Com segurança.</h2>
+      {pts(['Meios de pagamento no próprio app', 'Confirmação automática, sem enviar comprovante', 'Seus dados de cartão não ficam com o Webag'])}
     </div>
-    <div class="timer" style="color:#1C1721">14:59</div>
+    <div class="timer" style="color:#1C1721;font-size:150px">Seguro.</div>
   </div>''', ('Webag', '6')))
 
 c.append(slide('purple', f'''
@@ -261,7 +261,7 @@ l.append(slide('paper', f'''
     <div class="txt">
       {kick('Do outro lado da tela')}
       <h2>O cliente que vai comprar de você.</h2>
-      <p class="lead">Encontra a sua loja, escolhe com calma, paga com PIX e acompanha a entrega.</p>
+      <p class="lead">Encontra a sua loja, escolhe com calma, paga pelo app e acompanha a entrega.</p>
     </div>
     <div class="devs">{dev('inicio', 470)}{dev('sacola', 470, 'margin-top:36px')}{dev('confirmado', 470)}</div>
   </div>''', ('Webag', '10')))

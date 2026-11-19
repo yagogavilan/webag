@@ -948,7 +948,7 @@ function sacola(){return `<section class="scr s-sac" data-r="sacola">${sb(false)
   <div class="bdiv" aria-hidden="true" style="margin:10px 0"><i></i><i></i><i></i></div>
   <div class="tot"><b>Total</b>${price(total(),'xl2','sTot')}</div>
  </div>
- <p class="fine">${ic('shield',20,'icb')}Você escolhe PIX ou cartão no próximo passo.</p>
+ <p class="fine">${ic('shield',20,'icb')}Você escolhe como pagar no próximo passo.</p>
 </div>
 <div class="pbar"><button class="btn full" onclick="go('confirmado')"><span>Ir para o pagamento</span><span class="bp" id="ctaT" data-v="${total()}">${money(total())}</span></button></div>
 </section>`}
@@ -973,7 +973,7 @@ function confirmado(){return `<section class="scr s-ok" data-r="confirmado">${sb
 </div>
 <div class="ok-panel">
  <div class="op-card">
-  <div class="op-row"><span class="op-th" aria-hidden="true"><i>${art('tee','#26231F','crop')}</i><i>${art('purse','#A8693A','crop')}</i></span><span class="t"><b>Moda Prima · 2 itens</b><span>R$ 156,79 no PIX · pedido #4821</span></span></div>
+  <div class="op-row"><span class="op-th" aria-hidden="true"><i>${art('tee','#26231F','crop')}</i><i>${art('purse','#A8693A','crop')}</i></span><span class="t"><b>Moda Prima · 2 itens</b><span>R$ 156,79 pago no app · pedido #4821</span></span></div>
   <div class="op-row op-push" onclick="pushT()"><span class="op-ic">${ic('bell',24,'ic2')}</span><span class="t"><b id="pushB">Avisar a cada etapa</b><span id="pushS">Só sobre este pedido. Sem propaganda.</span></span><button class="swi" id="swi" role="switch" aria-checked="false" aria-labelledby="pushB" onclick="event.stopPropagation();pushT()"></button></div>
  </div>
  <button class="btn white" onclick="go('acompanha')">Acompanhar pedido</button>

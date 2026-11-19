@@ -109,6 +109,16 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     return concluded;
   }
 
+  /**
+   * I7: ordem GLOBAL de locks = PEDIDO -> TROCA -> CORRIDA (ADR-011 §14). Quem muda a corrida e dispara os ouvintes (que travam o pedido
+   * ou a troca) trava o pai ANTES da corrida; assim não cruza com `closeOrder`/`closeInTx`, que já travam o pai e depois a corrida.
+   * A corrida de entrega é filha do pedido; a de coleta/reentrega de troca, da troca.
+   */
+  private async lockParent(tx: Tx, delivery: Pick<Delivery, 'orderId' | 'exchangeId'>): Promise<void> {
+    if (delivery.exchangeId) await tx.execute(sql`select id from exchange_requests where id = ${delivery.exchangeId}::uuid for update`);
+    else await tx.execute(sql`select id from orders where id = ${delivery.orderId}::uuid for update`);
+  }
+
   registerListener(listener: DeliveryListener): void {
     this.listeners.push(listener);
   }
@@ -270,6 +280,9 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const result = await this.db.transaction(async (tx) => {
       const [courier] = await tx.select().from(couriers).where(eq(couriers.id, courierId));
       if (!courier || !courier.active) throw errors.unprocessable('COURIER_INACTIVE', 'Motoboy indisponível', { detail: 'Escolha um motoboy ativo.' });
+      const [peek] = await tx.select().from(deliveries).where(eq(deliveries.id, id));
+      if (!peek) throw errors.notFound('Corrida não encontrada.');
+      await this.lockParent(tx, peek);
       const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
       if (!current) throw errors.notFound('Corrida não encontrada.');
       if (current.status !== 'ready_for_collection') {
@@ -340,6 +353,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     }
 
     const result = await this.db.transaction(async (tx) => {
+      await this.lockParent(tx, before);
       const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
       if (!current || !canMove(current.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
       const set: Partial<typeof deliveries.$inferInsert> = { status: to, updatedAt: new Date() };

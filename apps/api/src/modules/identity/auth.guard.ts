@@ -42,8 +42,10 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Mensagens do Socket.IO: a autenticação foi feita no handshake (RealtimeGateway); o guard HTTP não se aplica.
-    if (context.getType() !== 'http') return true;
+    // Mensagens do Socket.IO (I10): a autenticação foi feita no handshake (RealtimeGateway), que grava `userId` no socket. NEGA POR PADRÃO:
+    // todo `@SubscribeMessage` novo exige socket autenticado; mensagem de socket sem identidade é recusada.
+    if (context.getType() === 'ws') return Boolean((context.switchToWs().getClient<{ data?: { userId?: unknown } }>().data ?? {}).userId);
+    if (context.getType() !== 'http') return false;
     const targets = [context.getHandler(), context.getClass()];
     if (this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC, targets)) return true;
 

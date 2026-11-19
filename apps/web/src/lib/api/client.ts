@@ -68,6 +68,36 @@ export async function apiRequest<T>(area: Area, path: string, options: RequestOp
   return (await response.json()) as T;
 }
 
+/** Baixa um arquivo (CSV) pelo BFF. Erros viram `ApiError` (ex.: `EXPORT_TOO_LARGE`). */
+export async function apiDownload(area: Area, path: string, query?: RequestOptions['query']): Promise<{ blob: Blob; fileName: string }> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/proxy/${area}/${path}${queryString(query)}`, { headers: { accept: 'text/csv', 'x-webag-client': 'web' }, credentials: 'same-origin' });
+  } catch {
+    throw networkError();
+  }
+  if (!response.ok) {
+    const error = await toApiError(response);
+    if (response.status === 401) listeners.forEach((listener) => listener(error.code === 'SESSION_IDLE' ? 'idle' : 'expired'));
+    throw error;
+  }
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const fileName = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? path.split('/').pop() ?? 'arquivo.csv';
+  return { blob: await response.blob(), fileName };
+}
+
+/** Entrega o arquivo ao navegador (o CSV já vem do servidor com as fórmulas neutralizadas). */
+export function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /** Chamada às rotas de sessão do BFF (login, logout, convite, cadastro do lojista). Não dispara "sessão perdida". */
 export async function sessionRequest<T>(area: Area, action: 'login' | 'mfa' | 'logout' | 'accept-invite' | 'register', body?: unknown): Promise<T> {
   let response: Response;

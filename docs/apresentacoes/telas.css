@@ -1,0 +1,25 @@
+@page { size: 810px 1440px; margin: 0 }
+@font-face{font-family:'Bricolage Grotesque';font-weight:700;src:url(../design/recursos/fontes/bricolage-grotesque-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Bricolage Grotesque';font-weight:800;src:url(../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:400;src:url(../design/fonts/figtree-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:600;src:url(../design/fonts/figtree-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:800;src:url(../design/fonts/figtree-latin-800-normal.woff2) format('woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:'Figtree',Arial,sans-serif;color:#1C1721}
+.pg{width:810px;height:1440px;position:relative;overflow:hidden;page-break-after:always;break-after:page;display:flex;flex-direction:column;align-items:center;padding:44px 40px 0}
+.paper{background:#FAF8FB}.night{background:#1C1721;color:#fff}.purple{background:#C02EF0;color:#fff}.lime{background:#D6FF4A}
+.top{width:100%;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;min-height:118px}
+.tag{display:inline-block;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;background:#D6FF4A;color:#1C1721;padding:6px 14px;border-radius:999px;margin-bottom:12px}
+.paper .tag,.lime .tag{background:#1C1721;color:#D6FF4A}
+h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:52px;line-height:1;letter-spacing:-0.03em;max-width:560px}
+.n{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:84px;line-height:1;opacity:.18}
+.shot{margin-top:18px;border-radius:50px;border:10px solid #1C1721;overflow:hidden;box-shadow:14px 14px 0 rgba(28,23,33,.85);background:#fff;flex:none}
+.shot img{display:block;width:488px;height:auto}
+.night .shot{border-color:#fff;box-shadow:14px 14px 0 #C02EF0}.purple .shot{box-shadow:14px 14px 0 #1C1721}
+.cap{width:100%;margin-top:26px;display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.cap span{font-weight:800;font-size:20px;padding:8px 16px;border-radius:999px;border:3px solid currentColor}
+.foot{position:absolute;bottom:18px;left:40px;right:40px;display:flex;justify-content:space-between;font-size:13px;font-weight:600;opacity:.7}
+.cover h1{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:100px;line-height:.95;letter-spacing:-0.04em;margin-top:70px;align-self:flex-start}
+.cover .logo img{height:54px;width:auto}
+.cover .row{display:flex;gap:26px;margin-top:70px}.cover .row .shot{margin:0;border-width:8px}.cover .row img{width:226px}
