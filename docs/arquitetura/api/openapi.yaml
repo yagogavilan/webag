@@ -5601,7 +5601,7 @@ paths:
       description: |
         Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
 
-        **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+        **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h para resultados definitivos (pedido criado, `PAYMENT_DECLINED`); erro que depende do estado (`STORE_CLOSED`, `STOCK_CONFLICT`, `TOO_MANY_*`, cupom, limites) NÃO fica guardado: repetir a mesma chave e o mesmo corpo reavalia (I1). Tocar duas vezes em "Pagar" nunca gera dois pedidos; duas criações simultâneas da mesma sacola, mesmo com chaves diferentes, geram um só pedido e a outra recebe 409 `CART_CHANGED` (a revisão da sacola é consumida na criação; SEC-148/I5).
 
         **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (obrigatório, SEC-147) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
 
@@ -5896,9 +5896,10 @@ paths:
       tags: [exchanges]
       operationId: payExchange
       summary: Pagar a taxa de coleta e a diferença de preço
-      description: "Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística."
+      description: "Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. Aceita `Idempotency-Key` (opcional; mesma chave e corpo devolvem o mesmo resultado, corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`). Pagamento simultâneo da mesma troca (toque duplo, 2 aparelhos) gera uma só cobrança: a outra chamada recebe 409 `EXCHANGE_PAYMENT_IN_PROGRESS` (tente de novo em 2 s) ou `EXCHANGE_NOT_AWAITING_FEE` (I8). A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística."
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string, minLength: 8, maxLength: 80 } }
       requestBody:
         required: true
         content:

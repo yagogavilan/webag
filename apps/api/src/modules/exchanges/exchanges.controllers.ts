@@ -121,8 +121,8 @@ export class ExchangesController {
   @HttpCode(200)
   @RateLimit({ name: 'exchange-pay', limit: 20, windowSeconds: 3600 })
   @Post('exchanges/:id/payment')
-  pay(@CurrentPrincipal() p: Principal, @Param('id') id: string, @Body(new ZodPipe(paySchema)) body: z.infer<typeof paySchema>) {
-    return this.exchanges.pay(p, idParam(id), body);
+  pay(@CurrentPrincipal() p: Principal, @Param('id') id: string, @Headers('idempotency-key') idempotencyKey: string | undefined, @Body(new ZodPipe(paySchema)) body: z.infer<typeof paySchema>) {
+    return this.exchanges.pay(p, idParam(id), body, parseIdempotencyKey(idempotencyKey));
   }
 }
 

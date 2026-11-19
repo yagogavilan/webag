@@ -138,7 +138,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
         created = true;
         return { orderId: await this.createOnce(principal, input) };
       },
-      { reusedStatus: 409 },
+      // I1: só `PAYMENT_DECLINED` (pedido já aberto e encerrado) é definitivo; loja fechada, estoque, 429 e cupom reavaliam na repetição.
+      { reusedStatus: 409, keepError: (e) => e.code === 'PAYMENT_DECLINED' },
     );
     return { created, orderId: result.orderId };
   }
@@ -282,6 +283,9 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           await this.assertAccountLimits(tx, principal, input.paymentMethod);
           const [cart] = await tx.select().from(carts).where(eq(carts.id, quote.cartId)).for('update');
           if (!cart || cart.revision !== input.cartRevision) throw errors.conflict('CART_CHANGED', 'Sua sacola mudou', 'Confira os valores antes de pagar.');
+          // I5 / SEC-148: a revisão é "consumida" na mesma transação do pedido; a criação concorrente (outra chave, outro aparelho)
+          // enxerga a revisão nova sob a trava e recebe CART_CHANGED, em vez de gerar 2 pedidos e 2 cobranças.
+          await tx.update(carts).set({ revision: sql`${carts.revision} + 1`, updatedAt: new Date() }).where(eq(carts.id, quote.cartId));
           if (quote.coupon) await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
           try {
             await this.inventory.reserve(tx, lines);

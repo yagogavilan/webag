@@ -209,7 +209,8 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
         created = true;
         return { id: await this.createOnce(principal.userId, orderId, input) };
       },
-      { reusedStatus: 409 },
+      // I1: erro de regra (janela, troca já aberta, estoque) depende do estado; a repetição com a mesma chave reavalia.
+      { reusedStatus: 409, keepError: () => false },
     );
     return { created, exchange: await this.getForCustomer(principal.userId, result.id) };
   }
@@ -531,25 +532,45 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     return ex.feeCents + Math.max(ex.differenceCents, 0);
   }
 
-  async pay(principal: Principal, exchangeId: string, input: { paymentMethod: 'pix' | 'card'; card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined; payerDocument?: string | undefined }) {
-    const [ex] = await this.db.select().from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, principal.userId)));
-    if (!ex) throw errors.notFound('Troca não encontrada.');
-    if (ex.status !== 'awaiting_fee') throw errors.conflict('EXCHANGE_NOT_AWAITING_FEE', 'Não há nada a pagar nesta troca');
-    if (ex.feeDueAt && ex.feeDueAt.getTime() <= Date.now()) throw errors.conflict('EXCHANGE_FEE_EXPIRED', 'O prazo para pagar a taxa acabou', 'Peça a troca de novo ou escolha levar à loja.');
-    const reference = `exchange:${ex.id}`;
-    const open = await this.payments.latestForReference(reference);
-    if (open && ['creating', 'pending', 'pending_3ds'].includes(open.status) && open.method === input.paymentMethod && open.amountCents === this.dueCents(ex)) return this.paymentView(ex, open);
-    const attempt = await this.payments.createPayment({
-      externalReference: reference,
-      method: input.paymentMethod,
-      amountCents: this.dueCents(ex),
-      storeId: null, // conta da Webag, sem split: a taxa é receita da Webag
-      applicationFeeCents: 0,
-      installments: input.card?.installments ?? 1,
-      ...(input.card ? { cardToken: input.card.token, card: { paymentMethodId: input.card.paymentMethodId, issuerId: input.card.issuerId } } : {}),
-      payer: { email: principal.email, ...(input.payerDocument ? { document: input.payerDocument } : {}) },
+  /**
+   * I8: a troca fica travada (`FOR UPDATE`) enquanto se relê a tentativa aberta e se cria a cobrança: toque duplo ou 2 aparelhos
+   * viram UMA cobrança. Aceita `Idempotency-Key` (escopo `exchange-pay:<usuário>`); repetir com a mesma chave devolve o mesmo resultado.
+   */
+  async pay(principal: Principal, exchangeId: string, input: { paymentMethod: 'pix' | 'card'; card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined; payerDocument?: string | undefined }, idempotencyKey: string | null = null) {
+    return this.idempotency.run(
+      `exchange-pay:${principal.userId}`,
+      idempotencyKey,
+      { exchangeId, method: input.paymentMethod, installments: input.card?.installments, token: input.card?.token, doc: input.payerDocument },
+      () => this.payOnce(principal, exchangeId, input),
+      { reusedStatus: 409, keepError: () => false },
+    );
+  }
+
+  private async payOnce(principal: Principal, exchangeId: string, input: { paymentMethod: 'pix' | 'card'; card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined; payerDocument?: string | undefined }) {
+    // Trava por troca que NÃO é a linha da troca: a aprovação do cartão roda dentro de `createPayment` e trava a troca em outra
+    // conexão (`onAttemptTransition`); segurar a linha aqui seria deadlock. Quem chega durante a cobrança recebe 409 e tenta de novo.
+    return this.db.transaction(async (lock) => {
+      const [got] = (await lock.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`exchange-pay:${exchangeId}`})) as ok`)).rows as { ok: boolean }[];
+      if (!got?.ok) throw new AppError(409, 'EXCHANGE_PAYMENT_IN_PROGRESS', 'Pagamento em andamento', { detail: 'Já estamos processando o pagamento desta troca. Aguarde um instante.', retryAfterSeconds: 2 });
+      const [ex] = await this.db.select().from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, principal.userId)));
+      if (!ex) throw errors.notFound('Troca não encontrada.');
+      if (ex.status !== 'awaiting_fee') throw errors.conflict('EXCHANGE_NOT_AWAITING_FEE', 'Não há nada a pagar nesta troca');
+      if (ex.feeDueAt && ex.feeDueAt.getTime() <= Date.now()) throw errors.conflict('EXCHANGE_FEE_EXPIRED', 'O prazo para pagar a taxa acabou', 'Peça a troca de novo ou escolha levar à loja.');
+      const reference = `exchange:${ex.id}`;
+      const open = await this.payments.latestForReference(reference);
+      if (open && ['creating', 'pending', 'pending_3ds'].includes(open.status) && open.method === input.paymentMethod && open.amountCents === this.dueCents(ex)) return this.paymentView(ex, open);
+      const attempt = await this.payments.createPayment({
+        externalReference: reference,
+        method: input.paymentMethod,
+        amountCents: this.dueCents(ex),
+        storeId: null, // conta da Webag, sem split: a taxa é receita da Webag
+        applicationFeeCents: 0,
+        installments: input.card?.installments ?? 1,
+        ...(input.card ? { cardToken: input.card.token, card: { paymentMethodId: input.card.paymentMethodId, issuerId: input.card.issuerId } } : {}),
+        payer: { email: principal.email, ...(input.payerDocument ? { document: input.payerDocument } : {}) },
+      });
+      return this.paymentView(ex, attempt);
     });
-    return this.paymentView(ex, attempt);
   }
 
   async paymentForCustomer(userId: string, exchangeId: string) {

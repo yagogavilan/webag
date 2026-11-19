@@ -63,7 +63,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect((await orderRow(ctx, o.orderId)).status).not.toBe('ready_for_collection'); // obtido: 'ready_for_collection', sem corrida e sem estorno
   });
 
-  it.fails('BUG-013 (SEC-148): a mesma revisão da sacola criada ao MESMO TEMPO com chaves de idempotência diferentes gera um único pedido', async () => {
+  it('BUG-013 (SEC-148): a mesma revisão da sacola criada ao MESMO TEMPO com chaves de idempotência diferentes gera um único pedido', async () => {
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 10 }]);
     const buyer = await customerAt(ctx, shop.origin);
     await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);

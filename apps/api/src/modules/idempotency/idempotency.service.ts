@@ -30,6 +30,12 @@ function stableStringify(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
+export interface IdempotencyOptions {
+  reusedStatus?: number;
+  /** Decide se um erro de negócio (4xx) é definitivo e deve ser repetido igual. Padrão: todo 4xx (compatível com o uso antigo). */
+  keepError?: (error: AppError) => boolean;
+}
+
 @Injectable()
 export class IdempotencyService {
   constructor(@Inject(DRIZZLE) private readonly db: Db) {}
@@ -39,7 +45,7 @@ export class IdempotencyService {
    * repetição durante a execução é 409 (o app tenta de novo). Falha de `fn` libera a chave (a tentativa pode se repetir).
    * Sem chave (`key = null`), só executa.
    */
-  async run<T>(scope: string, key: string | null, payload: unknown, fn: () => Promise<T>, options: { reusedStatus?: number } = {}): Promise<T> {
+  async run<T>(scope: string, key: string | null, payload: unknown, fn: () => Promise<T>, options: IdempotencyOptions = {}): Promise<T> {
     if (!key) return fn();
     const requestHash = hashRequest(payload);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -48,7 +54,7 @@ export class IdempotencyService {
         .values({ scope, key, requestHash, expiresAt: new Date(Date.now() + TTL_MS) })
         .onConflictDoNothing()
         .returning({ id: idempotencyKeys.id });
-      if (claimed) return this.execute(claimed.id, fn);
+      if (claimed) return this.execute(claimed.id, fn, options.keepError);
 
       const [row] = await this.db.select().from(idempotencyKeys).where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
       if (!row) continue; // apagada entre as duas consultas
@@ -74,14 +80,15 @@ export class IdempotencyService {
     throw errors.conflict('IDEMPOTENCY_IN_PROGRESS', 'Requisição em andamento');
   }
 
-  private async execute<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  private async execute<T>(id: string, fn: () => Promise<T>, keepError: (error: AppError) => boolean = () => true): Promise<T> {
     try {
       const result = await fn();
       await this.db.update(idempotencyKeys).set({ responseStatus: 200, responseBody: (result ?? null) }).where(eq(idempotencyKeys.id, id));
       return result;
     } catch (error) {
-      // Erro de negócio (4xx) é determinístico: guarda e repete igual. Erro inesperado libera a chave.
-      if (error instanceof AppError && error.getStatus() < 500) {
+      // I1: só o erro que `keepError` reconhece como DEFINITIVO (teve efeito ou não muda) fica guardado e se repete igual por 24 h.
+      // Erro que depende do estado do mundo (loja fechada, 429, estoque) e erro inesperado liberam a chave: a repetição reavalia.
+      if (error instanceof AppError && error.getStatus() < 500 && keepError(error)) {
         await this.db
           .update(idempotencyKeys)
           .set({ responseStatus: error.getStatus(), responseBody: { code: error.code, title: error.title, problem: error.problem } })
