@@ -1,9 +1,11 @@
+import { and, eq, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from '../src/platform/database/schema.js';
 import { S3ObjectStorage } from '../src/platform/storage/s3.storage.js';
 import { seedOnda1 } from './onda1.js';
 import { seedOnda2 } from './onda2.js';
+import { seedLogistics } from './logistics.js';
 import { seedOnda3 } from './onda3.js';
 
 /**
@@ -21,6 +23,8 @@ async function main(): Promise<void> {
       adminPassword: process.env.SEED_ADMIN_PASSWORD,
       log: (message) => console.log(`[seed] ${message}`),
     });
+    // HIP-C01 (DEC-039f): comissão padrão de 15% no seed do CLI (fora dos testes). Só troca o 10% de fábrica que ninguém editou.
+    await db.update(schema.parameters).set({ value: 15 }).where(and(eq(schema.parameters.key, 'comissao_padrao_pct'), eq(schema.parameters.value, 10), isNull(schema.parameters.updatedBy)));
     // Ondas 2 e seguintes: dados fictícios (lojas, clientes, pedidos). NUNCA em produção (DEC-030d, I10): não há flag que libere.
     const production = process.env.NODE_ENV === 'production';
     if (production) {
@@ -36,6 +40,7 @@ async function main(): Promise<void> {
         publicUrl: process.env.S3_PUBLIC_URL ?? 'http://localhost:9000/webag-public',
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       });
+      await seedLogistics(db, (message) => console.log(`[seed] ${message}`)); // hipótese de tabela de frete: só dev/staging (DEC-036)
       await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
       // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners.
       await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });

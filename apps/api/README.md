@@ -32,12 +32,15 @@ O mesmo código roda nos dois modos (`PaymentProvider`). Trocar não exige deplo
 | `MP_ACCESS_TOKEN` | mesma tela, "Access Token" (`APP_USR-...` em produção; `TEST-...` só fora de produção). A API recusa `TEST-` em produção |
 | `MP_WEBHOOK_SECRET` | **Suas integrações** > aplicação > **Webhooks** > configurar notificações > "Revelar" a assinatura secreta. Um segredo por ambiente |
 | `MP_OAUTH_REDIRECT_URI` | a página (HTTPS) que recebe `code` e `state` do retorno do OAuth e os envia a `POST /v1/stores/{storeId}/payment-account/callback`. Cadastrar a **mesma** URL em "URLs de redirecionamento" da aplicação |
+| `MP_OAUTH_PKCE` | `true` (padrão): o OAuth do lojista usa PKCE (S256, SEC-140). Deixe ligado; só use `false` se o painel do Mercado Pago recusar os parâmetros `code_challenge` `[confirmar no painel]` |
 | `MP_PAYER_DOCUMENT_REQUIRED` | `true` se o sandbox exigir CPF no PIX `[confirmar no sandbox]` |
 | `PAYMENT_TOKEN_ENC_KEY` | chave AES-256 em base64 que a Webag gera (`openssl rand -base64 32`); cifra os tokens dos lojistas. Guardar fora do servidor |
 
 **URL do webhook** (cadastrar em Webhooks, evento "Pagamentos"): `https://<API_PUBLIC_URL>/v1/webhooks/mercadopago`. A API valida `x-signature` (HMAC-SHA256 do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`), responde 200 rápido e processa em fila durável; o estado vem sempre de uma re-consulta `GET /v1/payments/{id}` com o token do lojista. A conciliação (a cada 5 min, mais varredura de 48 h) cobre notificação perdida; o PIX vencido é expirado a cada ~20 s.
 
-**Split:** cada lojista conecta a conta por OAuth; a cobrança sai com o token DELE e leva `application_fee` (comissão + taxa de serviço − desconto da plataforma). O token é cifrado, renovado sozinho quando faltam menos de 30 dias e nunca vai a log. Loja sem conta ativa não cobra.
+**Split (DEC-036):** cada lojista conecta a conta por OAuth; a cobrança sai com o token DELE e leva `application_fee` = comissão + **taxa de entrega** + taxa de serviço − desconto da plataforma. O lojista recebe só os itens menos a comissão; a entrega é receita da Webag (a logística é da Webag). `[confirmar no sandbox]` que o MP aceita esse valor e devolve a parte proporcional no estorno parcial.
+
+**Estorno que o provedor recusa (SEC-130):** a tentativa guarda a conta que recebeu (`receiver_account_id`) e o estorno usa os tokens DELA, mesmo se a loja desconectou ou trocou de conta. Recusa (401/403/409/4xx) gera nova tentativa com espera de 5 min, 30 min, 2 h, 6 h e 24 h, alerta `refund_failed` ao financeiro e, na 6ª falha, `refund_exhausted` na fila `GET /v1/admin/payments/refund-queue`: o financeiro manda tentar de novo (`/retry`) ou o super admin aciona a cobertura da Webag (`/cover`, até `estorno_cobertura_teto_cents` por pedido, vira dívida do lojista no ledger). O pagamento ao cliente na cobertura é feito pelo financeiro fora do provedor (alerta `refund_covered_payout_pending`). O token é cifrado, renovado sozinho quando faltam menos de 30 dias e nunca vai a log. Loja sem conta ativa não cobra.
 
 **Não validado em produção.** O adaptador foi escrito contra o SDK oficial (`mercadopago@3.6.2`) e a documentação, com testes de HTTP simulado. Pontos marcados `[confirmar no sandbox]` no código: onde o MP devolve a `application_fee` (fee_details), `capture:false` com split (captura no aceite, HIP-010), devolução da comissão no estorno parcial, CPF no PIX, comportamento de saldo insuficiente do lojista no estorno, campo `identification` do titular.
 
@@ -46,7 +49,7 @@ O mesmo código roda nos dois modos (`PaymentProvider`). Trocar não exige deplo
 - PIX: o pedido nasce `awaiting_payment`; `POST /v1/dev/payments/{attemptId}/approve|decline|expire` (id em `GET /v1/orders/{id}/payment` não aparece: consulte `payment_attempts.external_reference = <orderId>`) dispara o MESMO caminho do webhook real. Tarifa simulada: PIX 0,99% e cartão 4,98%.
 
 ## Módulos (ADR-007)
-`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, Mercado Pago, webhook, conciliação) · `finance` (comissão, ledger) · `orders` (pedido, estados, estoque). Um módulo só importa o `index.ts` do outro.
+`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, Mercado Pago, webhook, conciliação) · `finance` (comissão, ledger) · `orders` (pedido, estados, estoque) · `logistics` (tabela de taxa de entrega do admin, motoboys, corridas, WhatsApp, custo; DEC-036) · `exchanges` (regras puras de prazo e elegibilidade da troca; DEC-037). Um módulo só importa o `index.ts` do outro.
 
 ## Proxy e IP do cliente (SEC-114)
 
