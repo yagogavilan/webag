@@ -1,0 +1,283 @@
+import type { CheckoutChange } from '@webag/shared';
+import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Banner } from '../../src/components/Banner';
+import { Button } from '../../src/components/Button';
+import { Header } from '../../src/components/Header';
+import { Handbag } from '../../src/components/icons';
+import { Screen } from '../../src/components/Screen';
+import { Skeleton } from '../../src/components/Skeleton';
+import { EmptyState, ErrorState } from '../../src/components/StateViews';
+import { Text } from '../../src/components/Text';
+import { TextField } from '../../src/components/TextField';
+import { useToast } from '../../src/components/Toast';
+import { useCurrentAddress } from '../../src/features/address/store';
+import { fromServer } from '../../src/features/cart/model';
+import { PriceSummary } from '../../src/features/cart/PriceSummary';
+import { formatOpensAt } from '../../src/features/catalog/format';
+import { modeStore } from '../../src/features/catalog/queries';
+import { ChangedSheet } from '../../src/features/checkout/ChangedSheet';
+import { isCheckoutEnabled } from '../../src/features/checkout/config';
+import type { CheckoutFailure } from '../../src/features/checkout/errors';
+import { useCheckoutCart, useGuestMergePending, useSubmitOrder } from '../../src/features/checkout/hooks';
+import { PaymentBlock } from '../../src/features/checkout/PaymentBlock';
+import { ReceiveBlock } from '../../src/features/checkout/ReceiveBlock';
+import { addressIsReady, deriveGate, payLabel, pendingChanges, type PayMethod, type ReceiveMode } from '../../src/features/checkout/state';
+import { t } from '../../src/i18n';
+import { formatMoney } from '../../src/lib/format';
+import { haptic } from '../../src/lib/haptics';
+import { isValidCpf, maskCpf, onlyDigits } from '../../src/lib/masks';
+import { useOnline } from '../../src/lib/useOnline';
+import { theme } from '../../src/theme';
+
+/**
+ * S3. Checkout em 1 tela (WB-023, 026): como receber, como pagar, resumo sem surpresa e um botão. O total é o do servidor
+ * (`summary`); o pedido só sai com `cartRevision` e `Idempotency-Key`. DEC-033: só roda fora de produção.
+ */
+export default function CheckoutScreen() {
+  const router = useRouter();
+  const toast = useToast();
+  const online = useOnline();
+  const address = useCurrentAddress();
+  const [mode, setMode] = useState<ReceiveMode>(() => modeStore.get());
+  const [method, setMethod] = useState<PayMethod>('pix');
+  const [cpf, setCpf] = useState('');
+  const [cpfError, setCpfError] = useState<string | null>(null);
+  const [needsCpf, setNeedsCpf] = useState(false);
+  const [failure, setFailure] = useState<CheckoutFailure | null>(null);
+  const [changedOpen, setChangedOpen] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [serverChanges, setServerChanges] = useState<CheckoutChange[]>([]);
+  const cart = useCheckoutCart(mode);
+  const mergePending = useGuestMergePending();
+  const { submit, submitting, slow } = useSubmitOrder();
+  const openedChanges = useRef(false);
+
+  const view = cart.cart ? fromServer(cart.cart) : null;
+  const changes = cart.cart ? pendingChanges(cart.cart) : [];
+
+  // Conferência ao abrir (RN-05): se a sacola já chegou com preço ou estoque mudados, o cliente vê antes de pagar.
+  useEffect(() => {
+    if (!openedChanges.current && changes.length > 0 && !cart.isFetching) {
+      openedChanges.current = true;
+      setChangedOpen(true);
+    }
+  }, [changes.length, cart.isFetching]);
+
+  const header = <Header title={t('checkout.title')} {...(view ? { subtitle: view.storeName } : {})} />;
+
+  if (!isCheckoutEnabled()) {
+    return (
+      <Screen header={header}>
+        <EmptyState actionLabel={t('checkout.backToCart')} icon={Handbag} onAction={() => router.back()} testID="checkout.disabled" text={t('checkout.disabledText')} title={t('checkout.disabledTitle')} />
+      </Screen>
+    );
+  }
+  if (!cart.authed) {
+    return (
+      <Screen header={header}>
+        <EmptyState actionLabel={t('login.submit')} icon={Handbag} onAction={() => router.replace({ pathname: '/signup', params: { returnTo: '/checkout', context: 'checkout' } })} testID="checkout.guest" text={t('checkout.guestNeedsLogin')} title={t('checkout.title')} />
+      </Screen>
+    );
+  }
+  if (mergePending || (cart.isLoading && !cart.cart)) {
+    return (
+      <Screen header={header} testID="checkout.skeleton">
+        {mergePending ? <Text color="secondary">{t('checkout.mergePending')}</Text> : null}
+        <Skeleton height={48} />
+        <Skeleton height={72} />
+        <Skeleton height={72} />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton height={20} key={i} />
+        ))}
+      </Screen>
+    );
+  }
+  if (cart.isError) {
+    return (
+      <Screen header={header}>
+        <ErrorState offline={!online} onRetry={cart.refetch} retryLabel={t('common.tryAgain')} testID="checkout.error" text={online ? t('checkout.checkFailed') : t('states.offlineText')} title={online ? t('states.errorTitle') : t('states.offlineTitle')} />
+      </Screen>
+    );
+  }
+  if (!cart.cart || !view) {
+    // não existe checkout vazio: volta para a sacola vazia (spec S3, Vazio)
+    return (
+      <Screen header={header}>
+        <EmptyState actionLabel={t('cart.emptyAction')} icon={Handbag} onAction={() => router.replace('/')} testID="checkout.empty" text={t('checkout.emptyCartText')} title={t('checkout.emptyCartTitle')} />
+      </Screen>
+    );
+  }
+
+  const gate = deriveGate(view, mode, address);
+  const summary = view.summary;
+  const total = cart.cart.summary.total.amount;
+  const label = gate.kind !== 'ready' ? (gate.label ?? t('checkout.backToCart')) : submitting ? (method === 'pix' ? t('checkout.generatingPix') : t('checkout.paying')) : payLabel(method, total);
+
+  const onFailure = (f: CheckoutFailure) => {
+    void haptic('error');
+    switch (f.kind) {
+      case 'offline':
+        toast.show(t('checkout.offlinePay'));
+        return;
+      case 'cart-changed':
+        if (f.cart) cart.apply(f.cart);
+        setServerChanges(f.changes);
+        setChangedOpen(true);
+        return;
+      case 'payer-document':
+        setNeedsCpf(true);
+        setCpfError(null);
+        return;
+      default:
+        setFailure(f);
+    }
+  };
+
+  const onPay = async () => {
+    if (gate.kind === 'address' || gate.kind === 'range') {
+      router.push(address ? { pathname: '/address/form', params: { id: address.id, from: 'addresses' } } : '/addresses');
+      return;
+    }
+    if (gate.kind === 'back') return router.replace('/cart');
+    if (gate.kind === 'closed') return;
+    if (!online) {
+      toast.show(t('checkout.offlinePay'));
+      return;
+    }
+    if (changes.length > 0) {
+      setChangedOpen(true);
+      return;
+    }
+    if (needsCpf && !isValidCpf(cpf)) {
+      setCpfError(t('checkout.cpfInvalid'));
+      return;
+    }
+    setFailure(null);
+    const result = await submit(cart.cart as NonNullable<typeof cart.cart>, {
+      mode,
+      addressId: address && addressIsReady(address) ? address.id : null,
+      method,
+      ...(needsCpf ? { payerDocument: onlyDigits(cpf) } : {}),
+    });
+    if ('ignored' in result) return;
+    if (!result.ok) return onFailure(result.failure);
+    void haptic('success');
+    router.replace({ pathname: '/pay/[orderId]', params: { orderId: result.order.id } } as never);
+  };
+
+  const onAccept = async () => {
+    setAccepting(true);
+    try {
+      await cart.accept();
+      void haptic('success');
+      setChangedOpen(false);
+    } catch {
+      toast.show(t('cart.editError'));
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const failureBanner = failure ? <FailureBanner failure={failure} onBackToCart={() => router.replace('/cart')} onVerify={() => router.push('/verify-email')} /> : null;
+
+  const footer = (
+    <View style={styles.footer}>
+      {gate.banner ? <Banner testID={gate.banner.testID} text={gate.banner.text} tone={gate.banner.tone} /> : null}
+      {failureBanner}
+      {submitting && slow ? (
+        <Text accessibilityLiveRegion="polite" color="secondary" testID="checkout.slow" variant="caption">
+          {t('checkout.stillGenerating')}
+        </Text>
+      ) : null}
+      <Button disabled={gate.inert} label={label} loading={submitting} onPress={() => void onPay()} size="lg" testID="checkout.submit" />
+    </View>
+  );
+
+  return (
+    <Screen footer={footer} header={header} testID="checkout.screen">
+      <ReceiveBlock
+        address={address}
+        etaMax={view.etaMax}
+        etaMin={view.etaMin}
+        mode={mode}
+        onChangeAddress={() => router.push('/addresses')}
+        onModeChange={(next) => {
+          setMode(next);
+          setFailure(null);
+        }}
+        ready={addressIsReady(address)}
+      />
+      <PaymentBlock
+        cardAvailable={false}
+        cpfField={
+          needsCpf ? (
+            <TextField
+              autoComplete="off"
+              error={cpfError ?? undefined}
+              help={t('checkout.cpfHelp')}
+              inputMode="numeric"
+              label={t('checkout.cpfLabel')}
+              mask={maskCpf}
+              onChangeText={(value) => {
+                setCpf(value);
+                setCpfError(null);
+              }}
+              testID="checkout.cpf-input"
+              value={cpf}
+            />
+          ) : null
+        }
+        method={method}
+        onMethodChange={setMethod}
+      />
+      <View style={styles.summary} testID="checkout.summary">
+        <Text accessibilityRole="header" variant="title2">
+          {t('checkout.summary')}
+        </Text>
+        {cart.checkFailed ? <Banner testID="checkout.check-error" text={t('checkout.checkFailed')} tone="warning" actionLabel={t('common.tryAgain')} onAction={cart.refetch} /> : null}
+        {summary ? <PriceSummary couponCode={view.coupon?.applied ? view.coupon.code : undefined} pickup={mode === 'pickup'} summary={summary} /> : null}
+      </View>
+      <ChangedSheet
+        accepting={accepting}
+        changes={changes.length > 0 ? changes : serverChanges}
+        onAccept={() => void onAccept()}
+        onBack={() => {
+          setChangedOpen(false);
+          router.replace('/cart');
+        }}
+        totalCents={total}
+        visible={changedOpen}
+      />
+    </Screen>
+  );
+}
+
+function FailureBanner({ failure, onBackToCart, onVerify }: { failure: CheckoutFailure; onBackToCart: () => void; onVerify: () => void }) {
+  switch (failure.kind) {
+    case 'store-closed': {
+      const when = formatOpensAt(failure.opensAt);
+      return <Banner actionLabel={t('checkout.backToCart')} onAction={onBackToCart} testID="checkout.closed-banner" text={when ? t('checkout.closedBannerAt', { when }) : t('checkout.closedBanner')} tone="danger" />;
+    }
+    case 'stock':
+      return <Banner actionLabel={t('checkout.backToCart')} onAction={onBackToCart} testID="checkout.stock-banner" text={failure.name ? t('checkout.stockOut', { name: failure.name }) : t('checkout.stockOutGeneric')} tone="danger" />;
+    case 'email-unverified':
+      return <Banner actionLabel={t('checkout.emailUnverifiedAction')} onAction={onVerify} testID="checkout.email-banner" text={t('checkout.emailUnverified')} tone="warning" />;
+    case 'blocked':
+      return <Banner actionLabel={t('checkout.backToCart')} onAction={onBackToCart} testID="checkout.blocked-banner" text={failure.message} tone="warning" />;
+    case 'provider-down':
+      return <Banner testID="checkout.error-banner" text={t('checkout.providerDown')} tone="danger" />;
+    case 'key-reused':
+      return <Banner testID="checkout.error-banner" text={t('checkout.keyReused')} tone="warning" />;
+    case 'too-many':
+      return <Banner testID="checkout.error-banner" text={t('checkout.tooMany')} tone="warning" />;
+    default:
+      return <Banner testID="checkout.error-banner" text={t('checkout.unknown')} tone="danger" />;
+  }
+}
+
+const styles = StyleSheet.create({
+  footer: { gap: theme.space[2] },
+  summary: { gap: theme.space[2] },
+});

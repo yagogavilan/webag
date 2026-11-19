@@ -17,7 +17,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 export type OrderTone = 'info' | 'success' | 'danger' | 'warning' | 'neutral';
 export const ORDER_STATUS_TONE: Record<OrderStatus, OrderTone> = {
   awaiting_payment: 'warning',
-  received: 'warning',
+  received: 'info',
   accepted: 'info',
   in_preparation: 'info',
   out_for_delivery: 'info',

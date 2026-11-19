@@ -11,7 +11,7 @@ export const STORE_STATUS_LABEL: Record<StoreStatus, string> = {
   suspended: 'Suspensa',
 };
 
-export type LojistaSection = 'inicio' | 'produtos' | 'loja' | 'equipe';
+export type LojistaSection = 'inicio' | 'pedidos' | 'produtos' | 'financeiro' | 'loja' | 'equipe';
 
 export interface LojistaNavItem {
   section: LojistaSection;
@@ -23,7 +23,9 @@ export interface LojistaNavItem {
 
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
   { section: 'inicio', label: 'Início', href: '/lojista' },
+  { section: 'pedidos', label: 'Pedidos', href: '/lojista/pedidos' },
   { section: 'produtos', label: 'Produtos', href: '/lojista/produtos' },
+  { section: 'financeiro', label: 'Financeiro', href: '/lojista/financeiro', ownerOnly: true },
   { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
   { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', ownerOnly: true },
 ];
@@ -31,6 +33,23 @@ export const LOJISTA_NAV: readonly LojistaNavItem[] = [
 export function isOwner(store: MerchantStore | null | undefined): boolean {
   return store?.role === 'owner';
 }
+
+/**
+ * Dono, ou funcionário com a permissão "Pedidos" (`orders`). `GET /stores/mine` ainda não devolve as permissões do funcionário
+ * (pendência de contrato, C4): lista vazia = desconhecido, a tela abre e a API decide (403/404).
+ */
+export function canManageOrders(store: MerchantStore | null | undefined): boolean {
+  if (!store) return false;
+  return store.role === 'owner' || store.permissions.length === 0 || store.permissions.includes('orders');
+}
+
+/** O painel de pedidos (e o alerta sonoro) só funciona com a loja aprovada; suspensa ainda acompanha o que está em andamento. */
+export function ordersAvailable(store: MerchantStore | null | undefined): boolean {
+  return Boolean(store) && (store?.status === 'approved' || store?.status === 'live' || store?.status === 'suspended') && canManageOrders(store);
+}
+
+/** Financeiro só do dono (RN-13). */
+export const canSeeFinance = (store: MerchantStore | null | undefined): boolean => store?.role === 'owner';
 
 export function visibleLojistaNav(store: MerchantStore | null | undefined): LojistaNavItem[] {
   return LOJISTA_NAV.filter((item) => !item.ownerOnly || isOwner(store));

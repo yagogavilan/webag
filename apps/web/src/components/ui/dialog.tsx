@@ -19,13 +19,15 @@ interface Props {
   /** Impede fechar por Esc e clique fora (ex.: envio em andamento). */
   locked?: boolean;
   describedBy?: string;
+  /** Celular: ocupa a tela inteira (alerta de pedido novo). */
+  fullOnMobile?: boolean;
 }
 
 /**
  * Dialog acessível: foco preso, vai ao título ao abrir e volta ao gatilho ao fechar, Esc fecha,
  * fundo inerte para o leitor de tela. `alert` usa `role="alertdialog"` (aviso de inatividade).
  */
-export function Dialog({ title, children, actions, onClose, wide, alert, testId, locked, describedBy }: Props) {
+export function Dialog({ title, children, actions, onClose, wide, alert, testId, locked, describedBy, fullOnMobile }: Props) {
   const titleId = useId();
   const bodyId = useId();
   const panel = useRef<HTMLDivElement>(null);
@@ -65,8 +67,8 @@ export function Dialog({ title, children, actions, onClose, wide, alert, testId,
   }
 
   return createPortal(
-    <div data-dialog-root className={s.backdrop} onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()} onKeyDown={onKeyDown}>
-      <div ref={panel} role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} aria-describedby={describedBy ?? bodyId} className={cx(s.dialog, wide && s.dialogWide)} data-testid={testId}>
+    <div data-dialog-root className={cx(s.backdrop, fullOnMobile && s.backdropFull)} onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()} onKeyDown={onKeyDown}>
+      <div ref={panel} role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} aria-describedby={describedBy ?? bodyId} className={cx(s.dialog, wide && s.dialogWide, fullOnMobile && s.dialogFull)} data-testid={testId}>
         <h2 ref={heading} id={titleId} tabIndex={-1} className={cx('wb-text-title2', s.dialogTitle)}>
           {title}
         </h2>
