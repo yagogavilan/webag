@@ -67,6 +67,8 @@ export interface StoreSettings {
   pickup: PickupSettings;
   exchangePolicy: ExchangeSettings;
   lowStockThreshold: number;
+  /** B2 / WB-192: campo opcional (API antiga não manda). Ausente vale "ligado", o padrão. */
+  notifications?: { newOrderEmail: boolean };
 }
 
 export type PauseKind = '30m' | '1h' | '2h' | 'end_of_day' | 'until_resume';
@@ -112,6 +114,8 @@ export const settingsApi = {
   setDelivery: (storeId: string, body: DeliveryInput) => apiRequest<void>(L, `stores/${storeId}/delivery`, { method: 'PUT', body }),
   deliveryPreview: (storeId: string, body: EtaPreviewBody, signal?: AbortSignal) => apiRequest<EtaPreview>(L, `stores/${storeId}/delivery-preview`, { method: 'POST', body, signal }),
   setPickup: (storeId: string, body: { enabled: boolean; useStoreAddress: boolean; address?: string; instructions?: string; prepMinMinutes: number; prepMaxMinutes: number }) => apiRequest<void>(L, `stores/${storeId}/pickup`, { method: 'PUT', body }),
+  /** Só o dono. Desliga só o E-MAIL de pedido novo; o alerta no painel e o som nunca desligam (DEC-074a). */
+  setNotifications: (storeId: string, body: { newOrderEmail: boolean }) => apiRequest<unknown>(L, `stores/${storeId}/notifications`, { method: 'PUT', body }),
   setExchange: (storeId: string, body: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }) => apiRequest<void>(L, `stores/${storeId}/exchange-policy`, { method: 'PUT', body }),
 };
 

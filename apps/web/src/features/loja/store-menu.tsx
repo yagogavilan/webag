@@ -51,6 +51,7 @@ function Menu({ store, settings, refresh }: { store: MerchantStore; settings: St
     { id: 'delivery', href: '/lojista/loja/entrega', title: 'Entrega e retirada', summary: delivery || 'Nada ligado' },
     { id: 'exchange', href: '/lojista/loja/trocas', title: 'Política de trocas', summary: exchange },
     { id: 'payout', href: '/lojista/onboarding/4', title: 'Recebimento', summary: connected ? (store.payout.maskedAccount ?? 'Conta conectada') : 'Conta não conectada', ...(connected ? {} : { alert: 'Falta conectar o Mercado Pago' }) },
+    { id: 'notifications', href: '/lojista/loja/avisos', title: 'Avisos de pedido novo', summary: settings.notifications?.newOrderEmail === false ? 'E-mail desligado. Alerta e som no painel sempre ligados' : 'E-mail ligado. Alerta e som no painel sempre ligados' },
     { id: 'team', href: '/lojista/equipe', title: 'Equipe', summary: 'Quem acessa o painel' },
   ];
   return (
