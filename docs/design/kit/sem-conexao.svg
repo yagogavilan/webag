@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200" role="img" aria-label="Sem conexão">
+  <!-- Sem conexão: as barras de velocidade partidas (vãos) e a sacola em cinza neutro. Sem humor: é um estado difícil.
+       Copy: "Sem internet agora" / "O que você já viu continua aqui. Tentamos de novo quando a conexão voltar." + botão "Tentar de novo". -->
+  <g fill="#B3ABB9">
+    <rect x="14" y="96" width="14" height="12" rx="6"/><rect x="34" y="96" width="10" height="12" rx="6"/>
+    <rect x="2" y="122" width="22" height="12" rx="6"/><rect x="32" y="122" width="22" height="12" rx="6"/>
+    <rect x="16" y="148" width="12" height="12" rx="6"/><rect x="36" y="148" width="14" height="12" rx="6"/>
+  </g>
+  <g transform="translate(-6 34) scale(1.4)">
+    <polygon points="67,43 145,43 133,95 72,95" fill="#D6CFDB" stroke="#D6CFDB" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke="#D6CFDB" stroke-width="14"/>
+    <circle cx="80" cy="52" r="4.5" fill="#FFFFFF"/>
+    <circle cx="132" cy="52" r="4.5" fill="#FFFFFF"/>
+  </g>
+  <g transform="translate(176 46)">
+    <circle r="24" fill="#1C1721"/>
+    <path d="M-9-9 9 9M9-9-9 9" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

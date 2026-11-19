@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 12" width="350" height="12" role="img" aria-label="Etapa 2 de 5">
+  <!-- Progresso do pedido: 5 segmentos inclinados (-8 graus). Feito = roxo marca; atual = acento com faixa de tinta deslizando; futuro = neutral.700 (sobre fundo noite).
+       Nunca é a única pista: sempre acompanhado do texto "Etapa N de 5 · nome". -->
+  <rect width="350" height="12" fill="#1C1721"/>
+  <g transform="skewX(-8) translate(2 0)">
+    <rect x="0" y="0" width="64" height="12" rx="4" fill="#C02EF0"/>
+    <rect x="71" y="0" width="64" height="12" rx="4" fill="#D6FF4A"/>
+    <rect x="96" y="0" width="7" height="12" fill="#1C1721"/>
+    <rect x="142" y="0" width="64" height="12" rx="4" fill="#443C4C"/>
+    <rect x="213" y="0" width="64" height="12" rx="4" fill="#443C4C"/>
+    <rect x="284" y="0" width="64" height="12" rx="4" fill="#443C4C"/>
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 260" width="390" height="260" role="img" aria-label="Pedido confirmado">
+  <!-- Celebração (pedido confirmado, entrega concluída, troca aprovada). Fundo roxo marca em tela cheia; sacola branca; barras longas saindo da borda esquerda;
+       selo de check no acento com anel na cor do fundo; confete de formas da marca (pílula, olhal, trapézio, quadrado) em branco, acento, noite e roxo.300.
+       No app: estado final estático deste SVG + 30 partículas animadas uma vez (ver kit-marca-v3.md §5). -->
+  <rect width="390" height="260" fill="#C02EF0"/>
+  <g fill="#FFFFFF">
+    <rect x="44" y="96" width="128" height="17" rx="8.5"/>
+    <rect x="-14" y="127" width="206" height="17" rx="8.5"/>
+    <rect x="16" y="158" width="150" height="17" rx="8.5"/>
+  </g>
+  <g transform="translate(150 30) scale(1.68)">
+    <polygon points="67,43 145,43 133,95 72,95" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    <circle cx="80" cy="52" r="4.5" fill="#C02EF0"/>
+    <circle cx="132" cy="52" r="4.5" fill="#C02EF0"/>
+  </g>
+  <circle cx="349" cy="180" r="37" fill="#C02EF0"/>
+  <circle cx="349" cy="180" r="31" fill="#D6FF4A"/>
+  <path d="M336 181l9 9 17-18" fill="none" stroke="#1C1721" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="120" y="40" width="26" height="9" rx="4.5" fill="#D6FF4A" transform="rotate(-24 133 44)"/>
+  <circle cx="362" cy="56" r="7" fill="#1C1721"/>
+  <rect x="176" y="214" width="12" height="12" rx="3" fill="#FFFFFF" transform="rotate(20 182 220)"/>
+  <circle cx="64" cy="48" r="5" fill="#E198EC"/>
+  <polygon points="300,228 318,228 315,240 302,240" fill="#1C1721" transform="rotate(14 309 234)"/>
+  <rect x="250" y="12" width="22" height="7" rx="3.5" fill="#FFFFFF" transform="rotate(30 261 15)"/>
+</svg>

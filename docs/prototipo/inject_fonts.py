@@ -20,6 +20,9 @@ FACES = [
     ("Figtree", 600, "figtree-latin-600-normal.woff2"),
     ("Figtree", 700, "figtree-latin-700-normal.woff2"),
     ("Figtree", 800, "figtree-latin-800-normal.woff2"),
+    ("Bricolage Grotesque", 600, "../recursos/fontes/bricolage-grotesque-latin-600-normal.woff2"),
+    ("Bricolage Grotesque", 700, "../recursos/fontes/bricolage-grotesque-latin-700-normal.woff2"),
+    ("Bricolage Grotesque", 800, "../recursos/fontes/bricolage-grotesque-latin-800-normal.woff2"),
 ]
 
 
@@ -37,7 +40,7 @@ def css() -> str:
 def main() -> None:
     block = css()
     pat = re.compile(r"<!--WEBAG-FONTS-->.*?<!--/WEBAG-FONTS-->", re.S)
-    for name in ("app-cliente.html", "paineis.html"):
+    for name in ("app-cliente.html", "paineis.html", "app-cliente-v3.html"):
         f = ROOT / name
         s = f.read_text(encoding="utf-8")
         if not pat.search(s):

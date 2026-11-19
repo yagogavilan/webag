@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="56 4 100 101" width="300" height="303" role="img" aria-label="Forma palco: corpo e alça da sacola Webag">
+  <!-- "Palco" do produto: a sacola do símbolo v4a sem as barras, em escala grande, girada -7 graus atrás da foto/arte do produto.
+       Os olhais ficam na cor do fundo (aqui papel #FAF8FB). Uso: galeria do produto, banner, celebração. Nunca atrás de texto. -->
+  <polygon points="67,43 145,43 133,95 72,95" fill="#C02EF0" stroke="#C02EF0" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke="#C02EF0" stroke-width="14"/>
+  <circle cx="80" cy="52" r="4.5" fill="#FAF8FB"/>
+  <circle cx="132" cy="52" r="4.5" fill="#FAF8FB"/>
+</svg>

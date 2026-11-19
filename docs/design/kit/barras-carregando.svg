@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="64" height="40" role="img" aria-label="Carregando">
+  <!-- Indicador de carregamento: as 3 barras do símbolo entram e saem em sequência (só transform e opacity).
+       No app: Reanimated, scaleX 0->1 com origem à direita, atraso 90 ms entre barras, ciclo 900 ms. Com "reduzir movimento": barras paradas + texto. -->
+  <style>
+    .b{transform-box:fill-box;transform-origin:right center;animation:k .9s cubic-bezier(.2,.8,.2,1) infinite}
+    .b2{animation-delay:.09s}.b3{animation-delay:.18s}
+    @keyframes k{0%{transform:scaleX(.2);opacity:.3}45%{transform:scaleX(1);opacity:1}100%{transform:scaleX(.2);opacity:.3}}
+    @media (prefers-reduced-motion:reduce){.b{animation:none}}
+  </style>
+  <rect class="b" x="18" y="2" width="20" height="8" rx="4" fill="#C02EF0"/>
+  <rect class="b b2" x="2" y="16" width="36" height="8" rx="4" fill="#C02EF0"/>
+  <rect class="b b3" x="14" y="30" width="26" height="8" rx="4" fill="#C02EF0"/>
+  <rect x="44" y="12" width="18" height="16" rx="5" fill="#1C1721"/>
+</svg>
