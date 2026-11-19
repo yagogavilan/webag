@@ -179,6 +179,12 @@ export const envSchema = z
     if (env.CORS_ORIGINS.length === 0 || env.CORS_ORIGINS.includes('*'))
       fail('CORS_ORIGINS', 'em produção precisa listar origens exatas (sem vazio nem "*")');
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');
+    // SEC-172: link de exportação, página de cartão e e-mails levam token na URL; em produção, só https e nunca localhost (a variável
+    // esquecida derruba o boot em vez de gerar link sem TLS).
+    for (const [name, value] of [['API_PUBLIC_URL', env.API_PUBLIC_URL], ['WEB_PUBLIC_URL', env.WEB_PUBLIC_URL], ['ADMIN_WEB_URL', env.ADMIN_WEB_URL]] as const) {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) fail(name, 'em produção precisa ser uma URL https pública (não localhost)');
+    }
     const staging = env.APP_ENV === 'staging';
     if (env.PAYMENT_PROVIDER === 'fake' && !staging)
       fail('PAYMENT_PROVIDER', 'o provedor fake não sobe em produção (só com APP_ENV=staging)');
