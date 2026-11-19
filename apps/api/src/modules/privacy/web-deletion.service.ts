@@ -51,9 +51,11 @@ export class WebAccountDeletionService {
   /** Passo 1 da via A: pede o código. Resposta sempre igual. */
   async requestCode(email: string, ctx: RequestContext): Promise<void> {
     await this.limits(email, ctx);
+    // SEC-152: os limites de envio rodam ANTES de achar a conta, para TODO e-mail. Senão o 2º pedido em 60 s daria 429 só para
+    // conta confirmada e 200 para e-mail inexistente (enumeração de clientes e lojistas).
+    await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx);
     const found = await this.find(email);
     if (!found || found.isAdmin || found.user.status !== 'active' || found.user.emailVerifiedAt === null) return; // SEC-096: nada é enviado
-    await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx);
     await this.codes.issue(found.user.id, 'delete_web', email);
   }
 
@@ -82,7 +84,16 @@ export class WebAccountDeletionService {
     // Admin, conta que não está ativa ou sem senha: a mesma resposta de senha errada (nunca revela o motivo).
     if (!found || !ok || found.isAdmin || found.user.status !== 'active') {
       if (attempt.count >= maxFails) await this.limiter.setWindow(key, waitSeconds);
+      // SEC-153: a falha soma no contador POR CONTA (o mesmo do login), de qualquer origem, para o step-up proteger também a exclusão.
+      if (found && !found.isAdmin) await this.limiter.hit(`lfa:${found.user.id}`, 3600);
       throw INVALID();
+    }
+    // SEC-153: conta sob ataque (step-up ativo) não é excluída só com a senha. Com e-mail confirmado, vale a via A (código); sem
+    // e-mail confirmado, a mesma resposta genérica de senha errada.
+    const accountFails = await this.limiter.peek(`lfa:${found.user.id}`);
+    if (accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
+      if (found.user.emailVerifiedAt === null) throw INVALID();
+      throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Para sua segurança, confirme a exclusão pelo código enviado ao seu e-mail.');
     }
     await this.limiter.release(key);
     return { deleteTicket: await this.tickets.issue('account_delete', found.user.id, DELETE_TICKET_TTL_SECONDS), expiresIn: DELETE_TICKET_TTL_SECONDS };

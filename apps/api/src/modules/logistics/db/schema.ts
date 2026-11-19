@@ -82,6 +82,10 @@ export const deliveries = pgTable(
     status: text({ enum: DELIVERY_STATUSES }).notNull().default('ready_for_collection'),
     /** Horário em que ficou pronta: base da fila e do SLA, e continua o mesmo ao reatribuir. */
     readyAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** DEC-053: fim da faixa de entrega prometida ao cliente; passou disso a corrida está atrasada. Nulo = sem ETA gravado. */
+    etaToAt: timestamp({ withTimezone: true }),
+    /** Alerta de atraso já emitido (um por corrida). */
+    lateAlertedAt: timestamp({ withTimezone: true }),
     courierId: uuid().references(() => couriers.id),
     volumes: integer().notNull().default(1),
     note: text(),

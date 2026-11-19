@@ -7,6 +7,7 @@ import { categories } from '../admin/db/schema.js';
 import { likeEscape, ProductFeedService, type ProductCard, type ProductSort } from './product-feed.service.js';
 import { StoreFeedService, type DiscoveryMode, type FeedStore } from './store-feed.service.js';
 import { type GeoPoint, pointKey } from './geo.js';
+import { presentEta } from '../logistics/index.js';
 import { pgArray } from './sql-array.js';
 
 const SECTION_SIZE = 10;
@@ -23,8 +24,8 @@ export const presentStoreCard = (store: FeedStore) => ({
   distanceM: store.distanceM,
   rating: { average: store.ratingAverage, count: store.ratingCount, isNew: store.isNew },
   delivery: store.deliversHere
-    ? { available: true, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes }
-    : { available: false, feeCents: null, freeShipping: false, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes },
+    ? { available: true, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: presentEta({ minMinutes: store.etaMinMinutes, maxMinutes: store.etaMaxMinutes }, new Date()) }
+    : { available: false, feeCents: null, freeShipping: false, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: null },
   pickupEnabled: store.pickupEnabled,
   acceptsExchange: store.acceptsExchange,
 });
@@ -37,7 +38,7 @@ export const presentProductCard = (product: ProductCard) => ({
   originalPrice: product.originalPriceCents === null ? null : { amount: product.originalPriceCents, currency: 'BRL' },
   discountPercent: product.discountPercent,
   categoryId: product.categoryId,
-  store: product.store,
+  store: { ...product.store, eta: presentEta({ minMinutes: product.store.etaMinMinutes, maxMinutes: product.store.etaMaxMinutes }, new Date()) },
 });
 
 export interface StoreSearchFilters {
@@ -47,7 +48,7 @@ export interface StoreSearchFilters {
   freeShipping?: boolean | undefined;
   minRating?: number | undefined;
   acceptsExchange?: boolean | undefined;
-  sort: 'relevance' | 'distance' | 'rating' | 'fee';
+  sort: 'relevance' | 'distance' | 'rating' | 'fee' | 'eta';
   cursor?: string | undefined;
   limit?: unknown;
 }
@@ -169,6 +170,7 @@ export class DiscoveryService {
       distance: (a, b) => a.distanceM - b.distanceM || a.name.localeCompare(b.name),
       rating: (a, b) => (b.ratingAverage ?? 0) - (a.ratingAverage ?? 0) || a.distanceM - b.distanceM,
       fee: (a, b) => (a.feeCents ?? 0) - (b.feeCents ?? 0) || a.distanceM - b.distanceM,
+      eta: (a, b) => a.etaMinMinutes + a.etaMaxMinutes - (b.etaMinMinutes + b.etaMaxMinutes) || a.distanceM - b.distanceM || a.name.localeCompare(b.name),
     };
     const sorted = feed.sort(order[filters.sort]);
     const page = sorted.slice(offset, offset + limit);

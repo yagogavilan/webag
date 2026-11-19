@@ -153,4 +153,6 @@ async function seedDeliveryFees(db: ReturnType<typeof drizzle<typeof schema>>): 
     .returning({ id: schema.deliveryFeeTables.id });
   if (table) await db.insert(schema.deliveryFeeTiers).values({ tableId: table.id, position: 0, fromM: 0, toM: 15_000, feeCents: 500, exchangeFeeCents: 250, expectedCostCents: 0, etaMinutes: 10 });
   await db.insert(schema.parameters).values({ key: 'pedido_minimo_cents', value: 0 }).onConflictDoNothing();
+  // SEC-154: o padrão de produção é 72 h de arrependimento; os testes de exclusão existentes assumem a anonimização na hora e os que tratam do prazo ajustam o parâmetro.
+  await db.insert(schema.parameters).values({ key: 'exclusao_arrependimento_horas', value: 0 }).onConflictDoNothing();
 }

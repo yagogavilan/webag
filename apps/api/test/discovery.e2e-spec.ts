@@ -100,7 +100,11 @@ describe('Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012)', () => 
     const pickup = await home(origin, '&mode=pickup');
     expect(names(pickup.nearbyStores)).toEqual(['Retira Perto']); // entrega não é exigida (só retirada)
     expect(pickup.offers).toEqual([]);
-    expect(names((await home(origin)).nearbyStores)).toEqual(['So Entrega', 'Retira Longe']); // o raio de entrega é global (15 km)
+    // O raio de entrega é global (15 km); com o teto do ETA (DEC-053) em 120 min a loja a 12 km sairia, então o teto sobe só neste teste.
+    await useParam(ctx, 'entrega_max_min', 240);
+    await ctx.redis.flushdb();
+    expect(names((await home(origin)).nearbyStores)).toEqual(['So Entrega', 'Retira Longe']);
+    await restoreFees(ctx);
   });
 
   it('ofertas: só promoção vigente de produto com estoque, maior desconto primeiro; novas: aprovadas há <= 30 dias', async () => {

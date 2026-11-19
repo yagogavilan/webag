@@ -1809,6 +1809,41 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/assign-batch:
+    post:
+      tags: [logistics]
+      operationId: assignDeliveryBatch
+      summary: Atribuir um lote de corridas da mesma cidade ao mesmo motoboy (DEC-053)
+      description: "De 2 a `entrega_lote_max` corridas de entrega prontas e sem motoboy, todas da mesma cidade. 422 `INVALID_BATCH` (quantidade, tipo ou estado) e `BATCH_DIFFERENT_AREA`. Cada corrida segue a regra de `assignDelivery`; as que perderam a disputa vêm em `failed` com o `code`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deliveryIds, courierId]
+              properties:
+                deliveryIds: { type: array, minItems: 2, maxItems: 10, items: { type: string, format: uuid } }
+                courierId: { type: string, format: uuid }
+                addressConfirmed: { type: boolean }
+      responses:
+        '200':
+          description: Lote processado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assigned, failed]
+                properties:
+                  assigned: { type: array, items: { $ref: '#/components/schemas/DeliveryDetail' } }
+                  failed: { type: array, items: { type: object, required: [deliveryId, code], properties: { deliveryId: { type: string, format: uuid }, code: { type: string } } } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /v1/admin/logistics/deliveries/{deliveryId}/assign:
     post:
       tags: [logistics]
@@ -4860,7 +4895,7 @@ paths:
         - { name: freeShipping, in: query, schema: { type: string, enum: ['true'] } }
         - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
         - { name: acceptsExchange, in: query, schema: { type: string, enum: ['true'] } }
-        - { name: sort, in: query, schema: { type: string, enum: [relevance, distance, rating, fee], default: relevance } }
+        - { name: sort, in: query, schema: { type: string, enum: [relevance, distance, rating, fee, eta], default: relevance } }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -5004,6 +5039,8 @@ paths:
       security: []
       parameters:
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: lat, in: query, required: false, schema: { type: number, minimum: -90, maximum: 90 }, description: 'DEC-053: com lat e lng a página traz `store.delivery` (disponível e faixa de chegada) para a posição.' }
+        - { name: lng, in: query, required: false, schema: { type: number, minimum: -180, maximum: 180 } }
       responses:
         '200':
           description: Produto
@@ -8788,6 +8825,10 @@ components:
         readyAt: { type: string, format: date-time }
         waitingMinutes: { type: [integer, 'null'] }
         sla: { type: [string, 'null'], enum: [ok, long, late, null] }
+        etaToAt: { type: [string, 'null'], format: date-time, description: 'DEC-053: fim da faixa prometida ao cliente (herdado do pedido).' }
+        overdue: { type: boolean, description: 'DEC-053: passou do fim da faixa (sem ETA gravado, do limite antigo `logistica_alerta_entrega_min`). Gera 1 alerta `delivery_late`.' }
+        overdueMinutes: { type: [integer, 'null'] }
+        area: { type: [object, 'null'], description: 'Lote por área (DEC-053): bairro, senão cidade, e quantas corridas prontas sem motoboy há nela (candidatas ao mesmo lote).', properties: { key: { type: [string, 'null'] }, readyCount: { type: integer } } }
         courier: { type: [object, 'null'], properties: { id: { type: string, format: uuid }, name: { type: [string, 'null'] } } }
         volumes: { type: integer }
         note: { type: [string, 'null'] }
@@ -8876,7 +8917,7 @@ components:
         freeShipping: { type: boolean }
         belowMinimum: { type: boolean }
         minOrder: { $ref: '#/components/schemas/Money' }
-        etaMinutes: { type: [integer, 'null'] }
+        etaMinutes: { type: [integer, 'null'], description: 'DEC-053: estimativa central calculada (preparo + despacho + deslocamento); não vem mais da faixa da tabela.' }
         expectedCost: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
         exchangeFee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
         expectedMargin: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
@@ -9486,17 +9527,23 @@ components:
       description: "DEC-036: o lojista escolhe só entrega pela Webag (`acceptsDelivery`) e o tempo de preparo. Taxa de entrega, faixas, raio, pedido mínimo e entrega grátis são do ADMIN (`/v1/admin/delivery-fees` e parâmetros globais). Os campos legados (`radiusKm`, `feeMode`, `feeFixedCents`, `tiers`, `minOrderCents`, `freeAboveCents`) são aceitos e IGNORADOS, para apps já publicados não quebrarem; saem numa versão futura."
       required:
       - acceptsDelivery
-      - etaMinMinutes
-      - etaMaxMinutes
       properties:
         acceptsDelivery:
           type: boolean
+        prepMinutes:
+          type: [integer, 'null']
+          minimum: 5
+          maximum: 120
+          description: 'DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho passa do teto `entrega_max_min`.'
         etaMinMinutes:
           type: integer
           minimum: 1
+          deprecated: true
+          description: Ignorado desde a DEC-053 (o ETA é calculado).
         etaMaxMinutes:
           type: integer
           maximum: 1440
+          deprecated: true
         radiusKm: { type: number, deprecated: true }
         feeMode: { type: string, enum: [fixed, by_distance], deprecated: true }
         feeFixedCents: { type: integer, deprecated: true }
@@ -9665,6 +9712,8 @@ components:
           - etaMaxMinutes
           description: "Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag."
           properties:
+            prepMinutes: { type: integer, description: 'DEC-053: preparo em uso (o da loja ou o padrão do admin)' }
+            prepMinutesIsDefault: { type: boolean }
             acceptsDelivery:
               type: boolean
             feeManagedBy:
@@ -10594,10 +10643,20 @@ components:
         average: { type: [number, 'null'], description: 'Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações' }
         count: { type: integer }
         isNew: { type: boolean, description: 'Mostrar "Novo" no lugar da nota' }
+    EtaRange:
+      type: object
+      required: [minMinutes, maxMinutes, fromAt, toAt]
+      description: "DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área')."
+      properties:
+        minMinutes: { type: integer }
+        maxMinutes: { type: integer }
+        fromAt: { type: string, format: date-time }
+        toAt: { type: string, format: date-time }
     StoreDelivery:
       type: object
       required: [available, feeCents, freeShipping, freeAboveCents, minOrderCents, etaMinMinutes, etaMaxMinutes]
       properties:
+        eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.' }
         available: { type: boolean, description: 'Entrega na posição consultada (dentro do raio e de uma faixa)' }
         feeCents: { type: [integer, 'null'], description: Taxa para a posição, antes de "grátis acima de X" }
         freeShipping: { type: boolean, description: Taxa R$ 0 nessa posição }
@@ -10648,6 +10707,9 @@ components:
             open: { type: boolean }
             opensAt: { type: [string, 'null'], format: date-time }
             distanceM: { type: integer }
+            etaMinMinutes: { type: integer, description: 'DEC-053' }
+            etaMaxMinutes: { type: integer }
+            eta: { $ref: '#/components/schemas/EtaRange' }
     Home:
       type: object
       required: [mode, empty, nearbyStores, newStores, offers, bestSellers, availableCategoryIds]
@@ -10722,8 +10784,9 @@ components:
             freeShipping: { type: boolean }
             freeAboveCents: { type: integer }
             minOrderCents: { type: integer }
-            etaMinMinutes: { type: integer }
+            etaMinMinutes: { type: integer, description: 'DEC-053: início da faixa calculada (sem posição, só preparo + despacho).' }
             etaMaxMinutes: { type: integer }
+            eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: com posição e dentro do teto; senão nulo.' }
             acceptsDelivery: { type: boolean }
         pickup:
           type: object
@@ -10799,6 +10862,15 @@ components:
       type: object
       required: [id, name, open, opensAt, hoursToday]
       properties:
+        delivery:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [available, eta]
+              description: 'DEC-053: só com `lat`/`lng` na consulta do produto.'
+              properties:
+                available: { type: boolean }
+                eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }] }
         id: { type: string, format: uuid }
         name: { type: string }
         open: { type: boolean }
@@ -11017,7 +11089,7 @@ components:
                 logo: { $ref: '#/components/schemas/ImageUrls' }
                 open: { type: boolean }
                 opensAt: { type: [string, 'null'], format: date-time }
-                etaMinMinutes: { type: integer }
+                etaMinMinutes: { type: integer, description: 'DEC-053: calculado pelo endereço escolhido (sem endereço, só preparo + despacho).' }
                 etaMaxMinutes: { type: integer }
                 minOrder: { $ref: '#/components/schemas/Money' }
         items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
@@ -11026,6 +11098,7 @@ components:
           type: object
           required: [mode, addressId, available, distanceM, feeFromCents, estimated]
           properties:
+            eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.' }
             mode: { type: string, enum: [delivery, pickup] }
             addressId: { type: [string, 'null'], format: uuid }
             available: { type: [boolean, 'null'], description: Entrega no endereço; nulo sem endereço ou na retirada }
@@ -11170,6 +11243,7 @@ components:
                 address: { type: object, additionalProperties: true }
                 etaMinMinutes: { type: integer }
                 etaMaxMinutes: { type: integer }
+                eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.' }
         pickup:
           oneOf:
             - type: 'null'
@@ -11364,6 +11438,7 @@ components:
                 address: { $ref: '#/components/schemas/Address' }
                 etaMinMinutes: { type: integer }
                 etaMaxMinutes: { type: integer }
+                eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.' }
         pickup:
           oneOf:
             - type: 'null'

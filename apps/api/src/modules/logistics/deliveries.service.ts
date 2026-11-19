@@ -14,6 +14,17 @@ import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES
 import { buildCourierMessage, whatsappLink, type DeliveryMessageData } from './domain/whatsapp.js';
 
 export type Delivery = typeof deliveries.$inferSelect;
+
+/** Campos calculados da fila: espera sem motoboy, atraso sobre a faixa prometida (DEC-053) e sugestão de lote por área. */
+export interface DeliveryListExtras {
+  waitingMinutes: number | null;
+  sla: 'ok' | 'long' | 'late' | null;
+  /** Passou do fim da faixa de entrega prometida ao cliente. */
+  overdue: boolean;
+  overdueMinutes: number | null;
+  /** Área (bairro, senão cidade) e quantas corridas prontas, sem motoboy, há nela agora: candidatas a sair no mesmo lote. */
+  area: { key: string | null; readyCount: number };
+}
 export type DeliveryEvent = typeof deliveryEvents.$inferSelect;
 export type DeliveryActor = { id: string | null; role: string };
 
@@ -36,6 +47,8 @@ export interface CreateDeliveryInput {
   neighborhoodId?: string | null;
   feeCents: number;
   expectedCostCents: number;
+  /** DEC-053: fim da faixa de entrega prometida (do pedido); base do alerta de atraso. */
+  etaToAt?: Date | null;
   /** Foto mínima para o despacho (ver `DeliveryMessageData`). */
   contact: DeliveryMessageData;
   /** Quem criou (a loja, por exemplo); por padrão vem do contexto da requisição. */
@@ -78,6 +91,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test' || process.env.WEBAG_CLI === '1') return;
     this.timers.push(setInterval(() => void this.autoConcludeDue().catch((e: Error) => this.logger.error(e.message)), 5 * 60_000).unref());
+    this.timers.push(setInterval(() => void this.alertLateDue().catch((e: Error) => this.logger.error(e.message)), 60_000).unref());
     this.timers.push(setInterval(() => void this.clearContactDue().catch((e: Error) => this.logger.error(e.message)), 60 * 60_000).unref());
   }
 
@@ -157,6 +171,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
         note: input.note?.slice(0, 100) ?? null,
         cityId: input.cityId ?? null,
         neighborhoodId: input.neighborhoodId ?? null,
+        etaToAt: input.etaToAt ?? null,
         feeCents: input.feeCents,
         expectedCostCents: input.expectedCostCents,
         contact: input.contact as unknown as Record<string, unknown>,
@@ -237,7 +252,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
    * Fila (WB-230): `active` = mais antiga primeiro (do horário de "pronto", que NÃO muda ao reatribuir); `done` = concluídas
    * hoje, mais novas primeiro. Filtros no servidor; paginada por cursor.
    */
-  async list(query: { tab?: 'active' | 'done'; status?: DeliveryStatus; kind?: DeliveryKind; courierId?: string; storeId?: string; cityId?: string; cursor?: string; limit?: unknown }): Promise<Page<Delivery & { waitingMinutes: number | null; sla: 'ok' | 'long' | 'late' | null }>> {
+  async list(query: { tab?: 'active' | 'done'; status?: DeliveryStatus; kind?: DeliveryKind; courierId?: string; storeId?: string; cityId?: string; cursor?: string; limit?: unknown }): Promise<Page<Delivery & DeliveryListExtras>> {
     const limit = parseLimit(query.limit);
     const tab = query.tab ?? 'active';
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
@@ -263,16 +278,86 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     const now = Date.now();
+    const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
+    const areaCounts = tab === 'active' ? await this.readyByArea() : new Map<string, number>();
     return {
       data: page.map((d) => {
         const waiting = d.status === 'ready_for_collection' ? Math.floor((now - d.readyAt.getTime()) / 60_000) : null;
-        return { ...d, waitingMinutes: waiting, sla: waiting === null ? null : waiting >= slaCritical ? 'late' : waiting >= slaWarn ? 'long' : 'ok' };
+        const areaKey = d.neighborhoodId ?? d.cityId;
+        const { overdue, overdueMinutes } = overdueOf(d, now, legacyAlertMin);
+        return {
+          ...d,
+          waitingMinutes: waiting,
+          sla: waiting === null ? null : waiting >= slaCritical ? 'late' : waiting >= slaWarn ? 'long' : 'ok',
+          overdue,
+          overdueMinutes,
+          area: { key: areaKey, readyCount: areaKey ? (areaCounts.get(areaKey) ?? 0) : 0 },
+        };
       }),
       nextCursor: rows.length > limit && last ? encodeCursor({ at: (tab === 'active' ? last.readyAt : last.updatedAt).toISOString(), id: last.id }) : null,
     };
   }
 
+  /** Corridas prontas e sem motoboy por área (bairro, senão cidade): base da sugestão de lote (DEC-053). */
+  private async readyByArea(): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ key: sql<string>`coalesce(${deliveries.neighborhoodId}, ${deliveries.cityId})::text`, n: sql<number>`count(*)::int` })
+      .from(deliveries)
+      .where(and(eq(deliveries.status, 'ready_for_collection'), eq(deliveries.kind, 'delivery')))
+      .groupBy(sql`coalesce(${deliveries.neighborhoodId}, ${deliveries.cityId})`);
+    return new Map(rows.filter((r) => r.key).map((r) => [r.key, r.n]));
+  }
+
+  /**
+   * DEC-053: alerta de atraso. Corrida de entrega ainda ativa cujo prazo (fim da faixa prometida, ou o limite antigo para as
+   * sem ETA) passou gera UM alerta ao admin e ao financeiro. Idempotente: `lateAlertedAt` marca a corrida.
+   */
+  async alertLateDue(now = new Date()): Promise<number> {
+    const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
+    const candidates = await this.db
+      .select()
+      .from(deliveries)
+      .where(and(eq(deliveries.kind, 'delivery'), inArray(deliveries.status, [...ACTIVE_STATUSES]), isNull(deliveries.lateAlertedAt)));
+    let alerted = 0;
+    for (const d of candidates) {
+      const { overdue, overdueMinutes } = overdueOf(d, now.getTime(), legacyAlertMin);
+      if (!overdue) continue;
+      const [claimed] = await this.db.update(deliveries).set({ lateAlertedAt: now }).where(and(eq(deliveries.id, d.id), isNull(deliveries.lateAlertedAt))).returning({ id: deliveries.id });
+      if (!claimed) continue;
+      await this.payments.raiseAlert(null, 'delivery_late', { deliveryId: d.id, orderId: d.orderId, status: d.status, overdueMinutes }).catch((e: Error) => this.logger.error(e.message));
+      alerted += 1;
+    }
+    return alerted;
+  }
+
   // ------------------------------------------------------------------ atribuição
+
+  /**
+   * DEC-053: lote por área. Atribui ao MESMO motoboy várias corridas prontas da mesma cidade (até `entrega_lote_max`); o
+   * operador com poucos motoboys leva os pedidos de uma região numa saída só. Cada corrida segue a regra de `assign`
+   * (primeiro que chega vence, endereço conferido); a resposta diz o que foi e o que não foi atribuído.
+   */
+  async assignBatch(deliveryIds: string[], courierId: string, input: { addressConfirmed?: boolean }, ctx: RequestContext): Promise<{ assigned: Delivery[]; failed: { deliveryId: string; code: string }[] }> {
+    const unique = [...new Set(deliveryIds)];
+    const max = await this.params.getNumber('entrega_lote_max');
+    if (unique.length < 2 || unique.length > max) throw errors.unprocessable('INVALID_BATCH', 'Lote inválido', { detail: `Escolha de 2 a ${max} corridas.` });
+    const rows = await this.db.select().from(deliveries).where(inArray(deliveries.id, unique));
+    if (rows.length !== unique.length) throw errors.notFound('Corrida não encontrada.');
+    if (rows.some((d) => d.kind !== 'delivery' || d.status !== 'ready_for_collection')) throw errors.unprocessable('INVALID_BATCH', 'Lote inválido', { detail: 'Só corridas de entrega prontas e sem motoboy entram no lote.' });
+    if (new Set(rows.map((d) => d.cityId)).size !== 1 || rows[0]!.cityId === null) throw errors.unprocessable('BATCH_DIFFERENT_AREA', 'Áreas diferentes', { detail: 'O lote precisa ser de corridas da mesma cidade.' });
+    const assigned: Delivery[] = [];
+    const failed: { deliveryId: string; code: string }[] = [];
+    // Ordem estável (mais antigas primeiro): o lote nunca deixa uma corrida velha para trás.
+    for (const d of [...rows].sort((a, b) => a.readyAt.getTime() - b.readyAt.getTime() || a.id.localeCompare(b.id))) {
+      try {
+        assigned.push(await this.assign(d.id, courierId, input, ctx));
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        failed.push({ deliveryId: d.id, code: error.code });
+      }
+    }
+    return { assigned, failed };
+  }
 
   /** Atribui o motoboy: PRONTA -> AGUARDANDO. Dois operadores: vale o primeiro, o outro recebe 409 com quem atribuiu (WB-232 C8). */
   async assign(id: string, courierId: string, input: { addressConfirmed?: boolean }, ctx: RequestContext): Promise<Delivery> {
@@ -530,4 +615,12 @@ const WITH_COURIER_STATUSES: ReadonlySet<DeliveryStatus> = new Set(['awaiting_co
 export function addressLooksComplete(address: string): boolean {
   const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
   return parts.length >= 4 && parts.some((p) => /\d/.test(p));
+}
+
+/** Atraso sobre a faixa prometida (DEC-053); sem ETA gravado, usa o limite antigo a partir do "pronto" (`logistica_alerta_entrega_min`). */
+function overdueOf(d: Pick<Delivery, 'kind' | 'status' | 'etaToAt' | 'readyAt'>, nowMs: number, legacyAlertMin: number): { overdue: boolean; overdueMinutes: number | null } {
+  if (d.kind !== 'delivery' || !ACTIVE_STATUSES.includes(d.status)) return { overdue: false, overdueMinutes: null };
+  const limit = d.etaToAt ? d.etaToAt.getTime() : d.readyAt.getTime() + legacyAlertMin * 60_000;
+  if (nowMs <= limit) return { overdue: false, overdueMinutes: null };
+  return { overdue: true, overdueMinutes: Math.floor((nowMs - limit) / 60_000) };
 }

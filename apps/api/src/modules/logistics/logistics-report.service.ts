@@ -1,3 +1,4 @@
+import { csvCell } from '../../platform/http/csv.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
@@ -140,7 +141,7 @@ export class LogisticsReportService {
   /** CSV do "a pagar" (valores em centavos; começa com BOM para o Excel). */
   payableCsv(report: Awaited<ReturnType<LogisticsReportService['payable']>>): string {
     const header = ['motoboy_id', 'motoboy', 'telefone', 'corridas', 'total_centavos', 'corrida_mais_antiga', 'lancado_por'];
-    const lines = report.data.map((r) => [r.courierId, JSON.stringify(r.courierName), JSON.stringify(r.courierPhone), r.runs, r.total.amount, r.oldestRunAt, r.registeredBy.join('|')].join(';'));
+    const lines = report.data.map((r) => [csvCell(r.courierId), csvCell(r.courierName), csvCell(r.courierPhone), r.runs, r.total.amount, r.oldestRunAt, csvCell(r.registeredBy.join('|'))].join(';'));
     return `${BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`;
   }
 }

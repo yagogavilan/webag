@@ -56,16 +56,20 @@ export class AuditService {
   constructor(@Inject(DRIZZLE) private readonly db: Db) {}
 
   async record(executor: DbOrTx, ctx: RequestContext, entry: AuditEntry): Promise<void> {
+    const actorRole = entry.actorRole !== undefined ? entry.actorRole : (ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null);
+    // SEC-159: ação do PRÓPRIO cliente não grava IP nem aparelho aqui (o `access_log` já guarda por 6 meses, Marco Civil art. 15); a trilha
+    // de admin, lojista e equipe mantém (SEC-074, prova de quem opera).
+    const ownCustomerAction = actorRole === 'customer';
     await executor.insert(auditLog).values({
       actorId: entry.actorId !== undefined ? entry.actorId : (ctx.principal?.userId ?? null),
-      actorRole: entry.actorRole !== undefined ? entry.actorRole : (ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null),
+      actorRole,
       action: entry.action,
       targetType: entry.targetType ?? null,
       targetId: entry.targetId ?? null,
       before: sanitizeForAudit(entry.before),
       after: sanitizeForAudit(entry.after),
-      ip: ctx.ip,
-      userAgent: ctx.userAgent,
+      ip: ownCustomerAction ? null : ctx.ip,
+      userAgent: ownCustomerAction ? null : ctx.userAgent,
       requestId: ctx.requestId,
       reason: entry.reason ?? null,
     });

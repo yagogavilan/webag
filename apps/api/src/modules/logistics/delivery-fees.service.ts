@@ -7,6 +7,7 @@ import { AuditService, ParametersService } from '../admin/index.js';
 import { cities, neighborhoods } from '../admin/db/schema.js';
 import { DeliveryQuoteRegistry, StoresService } from '../stores/index.js';
 import { deliveryFeeTables, deliveryFeeTiers } from './db/schema.js';
+import { computeEta, type EtaConfig, type EtaEstimate } from './domain/eta.js';
 import { applyFreeShipping, pickTier, startingFee, validateFeeTiers, type FeeScopeType, type FeeTier } from './domain/fees.js';
 
 export type FeeTable = typeof deliveryFeeTables.$inferSelect & { tiers: FeeTier[] };
@@ -40,7 +41,10 @@ export interface DeliveryQuote {
   freeShipping: boolean;
   minOrderCents: number;
   belowMinimum: boolean;
+  /** Estimativa central (min) do ETA calculado (DEC-053); `null` se não há distância. */
   etaMinutes: number | null;
+  /** ETA completo (faixa e partes), inclusive quando a loja ficou fora do alcance por passar do teto. */
+  eta: EtaEstimate | null;
   snapshot: DeliveryFeeSnapshot | null;
 }
 
@@ -114,12 +118,16 @@ export class DeliveryFeesService implements OnModuleInit {
     const belowMinimum = subtotalCents < minOrderCents;
     const base = { minOrderCents, belowMinimum };
     const distance = await this.stores.distanceMeters(storeId, destination);
-    if (distance === null) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM: null, feeCents: null, freeShipping: false, etaMinutes: null, snapshot: null };
+    if (distance === null) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM: null, feeCents: null, freeShipping: false, etaMinutes: null, eta: null, snapshot: null };
     const distanceM = Math.round(distance);
-    if (distanceM > radiusKm * 1000) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: null, snapshot: null };
+    if (distanceM > radiusKm * 1000) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: null, eta: null, snapshot: null };
+    // DEC-053: estimativa acima do teto (`entrega_max_min`) = a loja não entrega para o endereço ("fora da área").
+    const [etaConfig, settings] = await Promise.all([this.etaConfig(), this.stores.getSettings(storeId)]);
+    const eta = computeEta(etaConfig, { distanceM, prepMin: settings.prepMinutes });
+    if (!eta.withinCeiling) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
     const table = await this.resolve(destination, now);
     const picked = table ? pickTier(table.tiers, distanceM) : null;
-    if (!table || !picked) return { ...base, available: false, reason: table ? 'OUT_OF_RANGE' : 'NO_FEE_TABLE', distanceM, feeCents: null, freeShipping: false, etaMinutes: null, snapshot: null };
+    if (!table || !picked) return { ...base, available: false, reason: table ? 'OUT_OF_RANGE' : 'NO_FEE_TABLE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
     const fee = applyFreeShipping(picked.tier.feeCents, subtotalCents, freeAbove);
     return {
       ...base,
@@ -128,9 +136,18 @@ export class DeliveryFeesService implements OnModuleInit {
       distanceM,
       feeCents: fee,
       freeShipping: fee === 0 && picked.tier.feeCents > 0,
-      etaMinutes: picked.tier.etaMinutes,
-      snapshot: { tableId: table.id, scopeType: table.scopeType, scopeKey: table.scopeKey, version: table.version, tierPosition: picked.position, distanceM, baseFeeCents: picked.tier.feeCents, exchangeFeeCents: picked.tier.exchangeFeeCents, expectedCostCents: picked.tier.expectedCostCents, etaMinutes: picked.tier.etaMinutes },
+      etaMinutes: eta.estimateMin,
+      eta,
+      snapshot: { tableId: table.id, scopeType: table.scopeType, scopeKey: table.scopeKey, version: table.version, tierPosition: picked.position, distanceM, baseFeeCents: picked.tier.feeCents, exchangeFeeCents: picked.tier.exchangeFeeCents, expectedCostCents: picked.tier.expectedCostCents, etaMinutes: eta.estimateMin },
     };
+  }
+
+  /** Parâmetros do ETA (DEC-053), lidos juntos; a mesma conta serve todas as telas. */
+  async etaConfig(): Promise<EtaConfig> {
+    const [defaultPrepMin, dispatchMin, routeFactorPct, minPerKm, bandMin, maxMin] = await Promise.all(
+      ['entrega_preparo_padrao_min', 'entrega_despacho_min', 'entrega_rota_fator_pct', 'entrega_min_por_km', 'entrega_faixa_min', 'entrega_max_min'].map((k) => this.params.getNumber(k)),
+    );
+    return { defaultPrepMin: defaultPrepMin!, dispatchMin: dispatchMin!, routeFactorPct: routeFactorPct!, minPerKm: minPerKm!, bandMin: bandMin!, maxMin: maxMin! };
   }
 
   /** "A partir de R$ X" enquanto o endereço é aproximado (WB-237 C1): menor faixa da tabela da cidade (ou do padrão). */

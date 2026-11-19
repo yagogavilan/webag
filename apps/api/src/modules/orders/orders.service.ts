@@ -24,6 +24,7 @@ import { users } from '../identity/db/schema.js';
 import { paymentAttempts } from '../payments/db/schema.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 import { DAY_MS, windowDays } from '../exchanges/domain/eligibility.js';
+import { etaOfOrder } from './domain/eta-view.js';
 import { canTransition, customerActions, PAID_STATUSES, refundDueOnCancel, type CustomerAction, type OrderActor, type OrderStatus } from './domain/state.js';
 import { OrderEventBus, type OrderEvent } from './order-events.bus.js';
 import { generateOrderNumber, generatePickupCode } from './order-number.js';
@@ -308,8 +309,12 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               mode: input.mode,
               cartRevision: input.cartRevision,
               address: input.mode === 'delivery' && address ? { ...presentAddress(address) } : null,
-              etaMinMinutes: settings.etaMinMinutes,
-              etaMaxMinutes: settings.etaMaxMinutes,
+              // DEC-053: o ETA do endereço (recalculado agora, na criação) fica gravado; a faixa em relógio nasce da criação e
+              // é reancorada no pagamento (`markPaid`). Retirada não tem ETA de entrega.
+              etaMinMinutes: quote.eta ? quote.eta.fromMin : settings.etaMinMinutes,
+              etaMaxMinutes: quote.eta ? quote.eta.toMin : settings.etaMaxMinutes,
+              etaFromAt: input.mode === 'delivery' && quote.eta ? new Date(Date.now() + quote.eta.fromMin * 60_000) : null,
+              etaToAt: input.mode === 'delivery' && quote.eta ? new Date(Date.now() + quote.eta.toMin * 60_000) : null,
               pickup: input.mode === 'pickup' ? { address: settings.pickupUseStoreAddress ? storeAddressLine(store) : (settings.pickupAddress ?? storeAddressLine(store)), instructions: settings.pickupInstructions, prepMinMinutes: settings.pickupPrepMinMinutes, prepMaxMinutes: settings.pickupPrepMaxMinutes } : null,
               pickupCode: input.mode === 'pickup' ? generatePickupCode() : null,
               couponId: quote.coupon?.id ?? null,
@@ -323,7 +328,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               totalCents: finance.totalCents,
               commissionCents: finance.commissionCents,
               applicationFeeCents: finance.applicationFeeCents,
-              deliverySnapshot: input.mode === 'delivery' ? (quote.deliverySnapshot as unknown as Record<string, unknown> | null) : null,
+              deliverySnapshot: input.mode === 'delivery' && quote.deliverySnapshot ? ({ ...quote.deliverySnapshot, eta: quote.eta }) : null,
               // I4: o desconto de frete grátis não reduz o item (e o frete devolvido numa troca é só o que o cliente pagou).
               finance: {
                 ...finance,
@@ -525,7 +530,18 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     await tx.update(orderItems).set({ stockState: 'sold' }).where(and(eq(orderItems.orderId, order.id), eq(orderItems.stockState, 'reserved')));
     const timeout = await this.params.getNumber('loja_aceite_timeout_min');
     const now = new Date();
-    await tx.update(orders).set({ status: 'received', stockState: 'sold', paidAt: now, acceptDeadlineAt: new Date(now.getTime() + timeout * 60_000), updatedAt: now }).where(eq(orders.id, order.id));
+    await tx
+      .update(orders)
+      .set({
+        status: 'received',
+        stockState: 'sold',
+        paidAt: now,
+        acceptDeadlineAt: new Date(now.getTime() + timeout * 60_000),
+        // DEC-053: a espera do PIX não é culpa da loja nem da logística; a faixa de chegada conta a partir do pagamento.
+        ...(order.etaToAt ? { etaFromAt: new Date(now.getTime() + order.etaMinMinutes * 60_000), etaToAt: new Date(now.getTime() + order.etaMaxMinutes * 60_000) } : {}),
+        updatedAt: now,
+      })
+      .where(eq(orders.id, order.id));
     // Comissão congelada no pagamento (RN-10): o `finance` do pedido é a base do lançamento.
     await this.ledger.recordSale(tx, { orderId: order.id, storeId: order.storeId, attemptId: attempt.id, finance: order.finance as unknown as OrderFinance });
     if (remote?.providerFeeCents !== undefined && remote.providerFeeCents > 0) await this.ledger.recordProviderFee(tx, { orderId: order.id, storeId: order.storeId, attemptId: attempt.id, feeCents: remote.providerFeeCents });
@@ -687,6 +703,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
         neighborhoodId: address.neighborhoodId ?? null,
         feeCents: order.deliveryFeeCents,
         expectedCostCents: snapshot.expectedCostCents ?? 0,
+        etaToAt: order.etaToAt,
         actor: { id: actorUserId, role: 'store' },
         contact: {
           number: order.number,
@@ -714,6 +731,21 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   private readonly pendingDeliveryEvents = new Map<string, { events: OrderEvent[]; refund: PendingRefund | null }>();
 
   /**
+   * DEC-053: com o motoboy a caminho, só falta o deslocamento. A faixa é atualizada SÓ se ficar mais cedo que a prometida: nunca
+   * empurra a promessa para depois (o atraso continua visível e a corrida mantém o prazo original).
+   */
+  private async refreshEtaOnDispatch(tx: Tx, order: OrderRow): Promise<void> {
+    const snapshotEta = (order.deliverySnapshot as { eta?: { travelMin?: number } | null } | null)?.eta;
+    if (!order.etaToAt || typeof snapshotEta?.travelMin !== 'number') return;
+    const band = await this.params.getNumber('entrega_faixa_min');
+    const now = Date.now();
+    const toAt = new Date(now + (snapshotEta.travelMin + band) * 60_000);
+    if (toAt.getTime() >= order.etaToAt.getTime()) return;
+    const fromAt = new Date(now + Math.max(5, snapshotEta.travelMin - band) * 60_000);
+    await tx.update(orders).set({ etaFromAt: fromAt, etaToAt: toAt }).where(eq(orders.id, order.id));
+  }
+
+  /**
    * A logística mudou a corrida (mesma transação): a entrega Webag leva o pedido junto. Coletou -> SAIU; entregou -> ENTREGUE;
    * devolvida à loja -> CANCELADO com estorno total. As demais mudanças (atribuir, confirmar, não entregue) não mudam o
    * estado do pedido; o cliente é avisado em `afterDeliveryChange`.
@@ -728,6 +760,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (to === 'out_for_delivery' && order.status === 'ready_for_collection') {
       const event = await this.advance(tx, order, 'out_for_delivery', who, actor.id, 'Motoboy coletou o pedido');
       if (event) events.push(event);
+      await this.refreshEtaOnDispatch(tx, order);
     } else if (to === 'delivered' && order.status === 'out_for_delivery') {
       const event = await this.advance(tx, order, 'delivered', who, actor.id, 'Entrega concluída');
       if (event) events.push(event);
@@ -886,7 +919,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
         missingForMinimum: null,
       },
       couponCode: order.couponCode,
-      delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes } : null,
+      delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
       pickup: order.mode === 'pickup' && order.pickup ? { ...order.pickup, code: paid ? order.pickupCode : null } : null,
       payment: { method: order.paymentMethod, status: publicPaymentStatus(attempt?.status) },
       exchangePolicy: { voluntaryDays: order.exchangeVoluntaryDays, collectionFeeCents: order.exchangeCollectionFeeCents, version: order.exchangePolicyVersion },

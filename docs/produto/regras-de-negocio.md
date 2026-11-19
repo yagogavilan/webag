@@ -24,6 +24,12 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `pedido_minimo_cents` / `frete_gratis_acima_cents` (globais; opcional por cidade) | 2000 / 0 (desligado) | 0-20000 / 0 ou > mínimo | HIP-L12, DEC-036b |
 | `logistica_horario` (por cidade) | seg a sáb 09:00-20:00 | n/a | HIP-L10 |
 | `logistica_sla_atribuir_min` / `logistica_sla_atribuir_critico_min` / `logistica_alerta_entrega_min` | 10 / 20 / 60 | 1-120 | HIP-L06 |
+| `entrega_preparo_padrao_min` (a loja pode definir o seu, 5-120) / `entrega_despacho_min` | 20 / 15 | 5-120 / 0-60 | DEC-053 [HIPÓTESE] |
+| `entrega_rota_fator_pct` / `entrega_min_por_km` | 130 (1,30) / 6 | 100-250 / 1-30 | DEC-053 [HIPÓTESE] |
+| `entrega_faixa_min` (folga para cada lado) / `entrega_max_min` (teto) | 15 / 120 | 0-60 / 30-240 | DEC-053 |
+| `entrega_lote_max` (corridas da mesma cidade por lote) | 4 | 2-10 | DEC-053 |
+
+> **ETA (DEC-053):** estimativa = preparo da loja + `entrega_despacho_min` + ceil(distância em linha reta (PostGIS) em km x `entrega_rota_fator_pct`/100 x `entrega_min_por_km`); faixa = estimativa -/+ `entrega_faixa_min` (início nunca abaixo de 5 min). Estimativa acima de `entrega_max_min` (inclusive o 120 entrega, 121 não): a loja não entrega para o endereço (some da descoberta; na loja/produto aparece "fora da área"; sacola bloqueia com `OUT_OF_RANGE`). O ETA é recalculado na criação do pedido e gravado nele; a faixa em horário conta a partir do pagamento. `logistica_alerta_entrega_min` só vale para corrida sem ETA gravado; com ETA, o alerta de atraso dispara no fim da faixa. O raio `raio_max_km` e o teto valem juntos: com os padrões o teto alcança ~10,9 km, então raio acima disso só serve com loja de preparo curto ou parâmetros mais folgados [PO: ajustar].
 | `entrega_reentrega_max` | 1 | 0-3 | HIP-L07 |
 | `taxa_provedor_pix_pct` / `taxa_provedor_cartao_pct` (só para a **estimativa** "Você recebe cerca de R$ X" no cadastro de produto; o ledger usa a tarifa real do provedor) | 0,99 / 4,98 `[HIPÓTESE; conferir no contrato do MP]` | 0-10 | DEC-038a, HIP-C02 |
 | `codigo_entrega` (flag, WB-226): recomendado **ligado** para entrega Webag | ligado `[HIPÓTESE]` | flag | HIP-L05 |

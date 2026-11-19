@@ -1,3 +1,4 @@
+import { csvCell } from '../../platform/http/csv.js';
 import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -23,7 +24,7 @@ const period = z
 /** Reais com vírgula decimal (planilha em pt-BR); valores em centavos continuam no JSON. */
 const reais = (cents: number): string => (cents / 100).toFixed(2).replace('.', ',');
 /** Neutraliza fórmulas de planilha (`=`, `+`, `-`, `@`) como na exportação da auditoria. */
-const cell = (value: string): string => (/^[=+\-@]/.test(value) ? `'${value}` : value);
+const cell = (value: string): string => csvCell(value);
 const BOM = String.fromCharCode(0xfeff);
 const PAYOUT_LABEL = { pending: 'a receber', in_grace: 'em carencia', released: 'liberado' } as const;
 

@@ -1,3 +1,4 @@
+import { csvCell as sharedCsvCell } from '../../platform/http/csv.js';
 import { Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -305,13 +306,7 @@ export class LegalController {
 
 const CSV_COLUMNS = ['id', 'at', 'actorName', 'actorId', 'actorRole', 'action', 'targetType', 'targetId', 'reason', 'ip', 'device', 'requestId', 'before', 'after'] as const;
 
-/** Escapa para CSV e neutraliza fórmulas de planilha (`=`, `+`, `-`, `@`) para o texto não executar no Excel. */
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  let text = value instanceof Date ? value.toISOString() : typeof value === 'string' ? value : JSON.stringify(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
+const csvCell = (value: unknown): string => sharedCsvCell(value, ',');
 
 function auditCsv(rows: AuditRow[]): string {
   const lines = rows.map((row) => CSV_COLUMNS.map((column) => csvCell(row[column])).join(','));

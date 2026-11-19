@@ -974,6 +974,16 @@ export const DeliverySla = {
 } as const;
 
 /**
+ * Lote por área (DEC-053): bairro, senão cidade, e quantas corridas prontas sem motoboy há nela (candidatas ao mesmo lote).
+ * @nullable
+ */
+export type DeliveryArea = {
+  /** @nullable */
+  key?: string | null;
+  readyCount?: number;
+} | null;
+
+/**
  * @nullable
  */
 export type DeliveryCourier = {
@@ -1012,6 +1022,20 @@ export interface Delivery {
   waitingMinutes?: number | null;
   /** @nullable */
   sla?: DeliverySla;
+  /**
+     * DEC-053: fim da faixa prometida ao cliente (herdado do pedido).
+     * @nullable
+     */
+  etaToAt?: string | null;
+  /** DEC-053: passou do fim da faixa (sem ETA gravado, do limite antigo `logistica_alerta_entrega_min`). Gera 1 alerta `delivery_late`. */
+  overdue?: boolean;
+  /** @nullable */
+  overdueMinutes?: number | null;
+  /**
+     * Lote por área (DEC-053): bairro, senão cidade, e quantas corridas prontas sem motoboy há nela (candidatas ao mesmo lote).
+     * @nullable
+     */
+  area?: DeliveryArea;
   /** @nullable */
   courier: DeliveryCourier;
   volumes: number;
@@ -1179,7 +1203,10 @@ export interface DeliveryFeePreview {
   freeShipping: boolean;
   belowMinimum: boolean;
   minOrder: Money;
-  /** @nullable */
+  /**
+     * DEC-053: estimativa central calculada (preparo + despacho + deslocamento); não vem mais da faixa da tabela.
+     * @nullable
+     */
   etaMinutes: number | null;
   expectedCost: Money | null;
   exchangeFee: Money | null;
@@ -1542,6 +1569,9 @@ export type StoreSettingsDeliveryTiersItem = {
  * Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.
  */
 export type StoreSettingsDelivery = {
+  /** DEC-053: preparo em uso (o da loja ou o padrão do admin) */
+  prepMinutes?: number;
+  prepMinutesIsDefault?: boolean;
   acceptsDelivery: boolean;
   feeManagedBy?: StoreSettingsDeliveryFeeManagedBy;
   radiusKm: number;
@@ -1760,10 +1790,24 @@ export type DeliveryRequestTiersItem = { [key: string]: unknown };
  */
 export interface DeliveryRequest {
   acceptsDelivery: boolean;
-  /** @minimum 1 */
-  etaMinMinutes: number;
-  /** @maximum 1440 */
-  etaMaxMinutes: number;
+  /**
+     * DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho passa do teto `entrega_max_min`.
+     * @minimum 5
+     * @maximum 120
+     * @nullable
+     */
+  prepMinutes?: number | null;
+  /**
+     * Ignorado desde a DEC-053 (o ETA é calculado).
+     * @deprecated
+     * @minimum 1
+     */
+  etaMinMinutes?: number;
+  /**
+     * @deprecated
+     * @maximum 1440
+     */
+  etaMaxMinutes?: number;
   /** @deprecated */
   radiusKm?: number;
   /** @deprecated */
@@ -2883,7 +2927,19 @@ export interface Rating {
   isNew: boolean;
 }
 
+/**
+ * DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área').
+ */
+export interface EtaRange {
+  minMinutes: number;
+  maxMinutes: number;
+  fromAt: string;
+  toAt: string;
+}
+
 export interface StoreDelivery {
+  /** DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí. */
+  eta?: EtaRange | null;
   /** Entrega na posição consultada (dentro do raio e de uma faixa) */
   available: boolean;
   /**
@@ -2940,6 +2996,10 @@ export type ProductCardStore = {
   /** @nullable */
   opensAt: string | null;
   distanceM: number;
+  /** DEC-053 */
+  etaMinMinutes?: number;
+  etaMaxMinutes?: number;
+  eta?: EtaRange;
 };
 
 export interface ProductCard {
@@ -3033,8 +3093,11 @@ export type BrowseStoreDelivery = {
   freeShipping: boolean;
   freeAboveCents: number;
   minOrderCents: number;
+  /** DEC-053: início da faixa calculada (sem posição, só preparo + despacho). */
   etaMinMinutes: number;
   etaMaxMinutes: number;
+  /** DEC-053: com posição e dentro do teto; senão nulo. */
+  eta?: EtaRange | null;
   acceptsDelivery: boolean;
 };
 
@@ -3148,12 +3211,18 @@ export interface BrowseVariant {
   lastUnits: number | null;
 }
 
+export type BrowseStoreSummaryDelivery = {
+  available: boolean;
+  eta: EtaRange | null;
+} | null;
+
 export type BrowseStoreSummaryHoursTodayItem = {
   start?: string;
   end?: string;
 };
 
 export interface BrowseStoreSummary {
+  delivery?: BrowseStoreSummaryDelivery;
   id: string;
   name: string;
   open: boolean;
@@ -3509,6 +3578,7 @@ export type CartStore = {
   open: boolean;
   /** @nullable */
   opensAt: string | null;
+  /** DEC-053: calculado pelo endereço escolhido (sem endereço, só preparo + despacho). */
   etaMinMinutes: number;
   etaMaxMinutes: number;
   minOrder: Money;
@@ -3523,6 +3593,8 @@ export const CartDeliveryMode = {
 } as const;
 
 export type CartDelivery = {
+  /** DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido. */
+  eta?: EtaRange | null;
   mode: CartDeliveryMode;
   /** @nullable */
   addressId: string | null;
@@ -3779,6 +3851,8 @@ export type StoreOrderDelivery = {
   address: StoreOrderDeliveryAddress;
   etaMinMinutes: number;
   etaMaxMinutes: number;
+  /** DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra. */
+  eta?: EtaRange | null;
 } | null;
 
 export type StoreOrderPickup = {
@@ -4110,6 +4184,8 @@ export type OrderDelivery = {
   address: Address;
   etaMinMinutes: number;
   etaMaxMinutes: number;
+  /** DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra. */
+  eta?: EtaRange | null;
 } | null;
 
 export type OrderPickup = {
@@ -6173,6 +6249,26 @@ export type ListDeliveries200 = {
   nextCursor: string | null;
 };
 
+export type AssignDeliveryBatchBody = {
+  /**
+     * @minItems 2
+     * @maxItems 10
+     */
+  deliveryIds: string[];
+  courierId: string;
+  addressConfirmed?: boolean;
+};
+
+export type AssignDeliveryBatch200FailedItem = {
+  deliveryId: string;
+  code: string;
+};
+
+export type AssignDeliveryBatch200 = {
+  assigned: DeliveryDetail[];
+  failed: AssignDeliveryBatch200FailedItem[];
+};
+
 export type AssignDeliveryBody = {
   courierId: string;
   addressConfirmed?: boolean;
@@ -6433,6 +6529,28 @@ export const AdminRefundOrder200Status = {
 
 export type AdminRefundOrder200 = {
   status: AdminRefundOrder200Status;
+  refunded: Money;
+  remaining: Money;
+};
+
+export type AdminCancelOrderBody = {
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
+  refund?: boolean;
+};
+
+export type AdminCancelOrder200Status = typeof AdminCancelOrder200Status[keyof typeof AdminCancelOrder200Status];
+
+
+export const AdminCancelOrder200Status = {
+  cancelled: 'cancelled',
+} as const;
+
+export type AdminCancelOrder200 = {
+  status: AdminCancelOrder200Status;
   refunded: Money;
   remaining: Money;
 };
@@ -6747,6 +6865,7 @@ export const SearchStoresSort = {
   distance: 'distance',
   rating: 'rating',
   fee: 'fee',
+  eta: 'eta',
 } as const;
 
 export type SearchProductsParams = {
@@ -6882,6 +7001,20 @@ export type ListBrowseStoreReviewsParams = {
    * @maximum 50
    */
   limit?: number;
+};
+
+export type GetBrowseProductParams = {
+  /**
+   * DEC-053: com lat e lng a página traz `store.delivery` (disponível e faixa de chegada) para a posição.
+   * @minimum -90
+   * @maximum 90
+   */
+  lat?: number;
+  /**
+   * @minimum -180
+   * @maximum 180
+   */
+  lng?: number;
 };
 
 export type ListBrowseProductReviewsParams = {
@@ -11687,6 +11820,60 @@ export const getDelivery = async (deliveryId: string, options?: Parameters<typeo
 
 
 
+export type assignDeliveryBatchResponse200 = {
+  data: AssignDeliveryBatch200
+  status: 200
+}
+
+export type assignDeliveryBatchResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type assignDeliveryBatchResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type assignDeliveryBatchResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type assignDeliveryBatchResponseSuccess = (assignDeliveryBatchResponse200) & {
+  headers: Headers;
+};
+export type assignDeliveryBatchResponseError = (assignDeliveryBatchResponse401 | assignDeliveryBatchResponse403 | assignDeliveryBatchResponse422) & {
+  headers: Headers;
+};
+
+export type assignDeliveryBatchResponse = (assignDeliveryBatchResponseSuccess | assignDeliveryBatchResponseError)
+
+export const getAssignDeliveryBatchUrl = () => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/assign-batch`
+}
+
+/**
+ * De 2 a `entrega_lote_max` corridas de entrega prontas e sem motoboy, todas da mesma cidade. 422 `INVALID_BATCH` (quantidade, tipo ou estado) e `BATCH_DIFFERENT_AREA`. Cada corrida segue a regra de `assignDelivery`; as que perderam a disputa vêm em `failed` com o `code`.
+ * @summary Atribuir um lote de corridas da mesma cidade ao mesmo motoboy (DEC-053)
+ */
+export const assignDeliveryBatch = async (assignDeliveryBatchBody: AssignDeliveryBatchBody, options?: Parameters<typeof apiFetch>[1]): Promise<assignDeliveryBatchResponse> => {
+
+  return apiFetch<assignDeliveryBatchResponse>(getAssignDeliveryBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(assignDeliveryBatchBody)
+  }
+);}
+
+
+
 export type assignDeliveryResponse200 = {
   data: DeliveryDetail
   status: 200
@@ -12389,7 +12576,7 @@ export const getAdminRefundOrderUrl = (orderId: string,) => {
 }
 
 /**
- * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
+ * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Estorno que zera o pedido o leva a `cancelled` (ator admin; estoque devolvido, corrida cancelada); pedido já entregue ou encerrado fica como está (BUG-011). Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
 export const adminRefundOrder = async (orderId: string,
@@ -12401,6 +12588,71 @@ export const adminRefundOrder = async (orderId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(adminRefundOrderBody)
+  }
+);}
+
+
+
+export type adminCancelOrderResponse200 = {
+  data: AdminCancelOrder200
+  status: 200
+}
+
+export type adminCancelOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adminCancelOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adminCancelOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adminCancelOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adminCancelOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type adminCancelOrderResponseSuccess = (adminCancelOrderResponse200) & {
+  headers: Headers;
+};
+export type adminCancelOrderResponseError = (adminCancelOrderResponse400 | adminCancelOrderResponse401 | adminCancelOrderResponse403 | adminCancelOrderResponse404 | adminCancelOrderResponse409) & {
+  headers: Headers;
+};
+
+export type adminCancelOrderResponse = (adminCancelOrderResponseSuccess | adminCancelOrderResponseError)
+
+export const getAdminCancelOrderUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/admin/orders/${orderId}/cancel`
+}
+
+/**
+ * Permissão de admin: `orders:refund`. Reautenticação recente e motivo obrigatório; auditado. Cancela o pedido em qualquer estado ativo, devolve o estoque, cancela a corrida em aberto e, por padrão (`refund` = true), estorna o que falta devolver; sem super admin, o estorno conta no limite acumulado (403 `SUPER_ADMIN_REQUIRED`, SEC-142). Pedido entregue ou já encerrado: 409 `ORDER_NOT_CANCELLABLE`. Repetir é idempotente.
+ * @summary Cancelamento do pedido pelo admin (RN-08, BUG-011)
+ */
+export const adminCancelOrder = async (orderId: string,
+    adminCancelOrderBody: AdminCancelOrderBody, options?: Parameters<typeof apiFetch>[1]): Promise<adminCancelOrderResponse> => {
+
+  return apiFetch<adminCancelOrderResponse>(getAdminCancelOrderUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminCancelOrderBody)
   }
 );}
 
@@ -18172,21 +18424,30 @@ export type getBrowseProductResponseError = (getBrowseProductResponse404 | getBr
 
 export type getBrowseProductResponse = (getBrowseProductResponseSuccess | getBrowseProductResponseError)
 
-export const getGetBrowseProductUrl = (productId: string,) => {
+export const getGetBrowseProductUrl = (productId: string,
+    params?: GetBrowseProductParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/v1/browse/products/${productId}`
+  return stringifiedParams.length > 0 ? `/v1/browse/products/${productId}?${stringifiedParams}` : `/v1/browse/products/${productId}`
 }
 
 /**
  * Variações com estoque próprio: `available=false` não é selecionável; `lastUnits` (1 a 3) mostra 'Últimas X unidades'; `maxQuantity` é o teto da quantidade (disponível limitado por `item_qtd_max`). O estoque exato nunca sai. Preço vigente por variação (promoção do produto herdada por percentual). Produto pausado ou removido pela moderação responde 200 com `available=false`, `unavailableReason` (`PAUSED`, `MODERATED`) e só `store` (atalho para a loja); rascunho, arquivado, inexistente ou de loja invisível responde 404.
  * @summary Página pública do produto (WB-017)
  */
-export const getBrowseProduct = async (productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getBrowseProductResponse> => {
+export const getBrowseProduct = async (productId: string,
+    params?: GetBrowseProductParams, options?: Parameters<typeof apiFetch>[1]): Promise<getBrowseProductResponse> => {
 
-  return apiFetch<getBrowseProductResponse>(getGetBrowseProductUrl(productId),
+  return apiFetch<getBrowseProductResponse>(getGetBrowseProductUrl(productId,params),
   {
     ...options,
     method: 'GET'
@@ -19849,7 +20110,7 @@ export const getCreateOrderUrl = () => {
 /**
  * Cria o pedido da sacola da conta, reserva o estoque (RN-06) e cria o pagamento no provedor (ADR-002). O app NUNCA envia valores: o servidor recalcula tudo e o pedido grava o snapshot de preço, nome, variação, taxas e política de trocas (RN-05).
  *
- * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
+ * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h para resultados definitivos (pedido criado, `PAYMENT_DECLINED`); erro que depende do estado (`STORE_CLOSED`, `STOCK_CONFLICT`, `TOO_MANY_*`, cupom, limites) NÃO fica guardado: repetir a mesma chave e o mesmo corpo reavalia (I1). Tocar duas vezes em "Pagar" nunca gera dois pedidos; duas criações simultâneas da mesma sacola, mesmo com chaves diferentes, geram um só pedido e a outra recebe 409 `CART_CHANGED` (a revisão da sacola é consumida na criação; SEC-148/I5).
  *
  * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (obrigatório, SEC-147) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
  *
@@ -20526,7 +20787,7 @@ export const getPayExchangeUrl = (id: string,) => {
 }
 
 /**
- * Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística.
+ * Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. Aceita `Idempotency-Key` (opcional; mesma chave e corpo devolvem o mesmo resultado, corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`). Pagamento simultâneo da mesma troca (toque duplo, 2 aparelhos) gera uma só cobrança: a outra chamada recebe 409 `EXCHANGE_PAYMENT_IN_PROGRESS` (tente de novo em 2 s) ou `EXCHANGE_NOT_AWAITING_FEE` (I8). A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística.
  * @summary Pagar a taxa de coleta e a diferença de preço
  */
 export const payExchange = async (id: string,

@@ -97,13 +97,14 @@ describe('Loja: horários, feriados, pausa, entrega, retirada e política de tro
 
     it('regras de validação: tempo máx > mín e sempre sobra entrega ou retirada; os campos antigos de taxa e raio são aceitos e IGNORADOS', async () => {
       const put = (over: Record<string, unknown>) => ctx.http.put(url('delivery')).set(as(owner)).send(delivery(over));
-      await put({ etaMinMinutes: 50, etaMaxMinutes: 50 }).expect(422);
+      await put({ etaMinMinutes: 50, etaMaxMinutes: 50 }).expect(204); // DEC-053: o ETA é calculado; o par antigo é aceito e ignorado
+      await put({ prepMinutes: 200 }).expect(400); // preparo: 5 a 120 min
       await put({ acceptsDelivery: false }).expect(422); // retirada desligada: sobraria nada
       await put({ acceptsDelivery: 'sim' }).expect(400);
       await put({ radiusKm: 99, feeMode: 'fixed', feeFixedCents: 99_999, tiers: [{ x: 1 }], minOrderCents: 1, freeAboveCents: 1 }).expect(204); // legado ignorado
       const saved = (await settings()).delivery;
       // continuam valendo os valores GLOBAIS do admin (raio máximo, mínimo, grátis), não os enviados
-      expect(saved).toMatchObject({ acceptsDelivery: true, etaMinMinutes: 30, etaMaxMinutes: 50, feeManagedBy: 'webag', radiusKm: 15, feeMode: 'by_distance', tiers: [] });
+      expect(saved).toMatchObject({ acceptsDelivery: true, etaMinMinutes: 30, etaMaxMinutes: 60, feeManagedBy: 'webag', radiusKm: 15, feeMode: 'by_distance', tiers: [] });
       expect(saved.minOrderCents).not.toBe(1);
       expect(saved.freeAboveCents).not.toBe(1);
     });

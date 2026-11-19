@@ -42,7 +42,7 @@ export interface ProductCard {
   originalPriceCents: number | null;
   discountPercent: number | null;
   categoryId: string | null;
-  store: { id: string; name: string; open: boolean; opensAt: string | null; distanceM: number };
+  store: { id: string; name: string; open: boolean; opensAt: string | null; distanceM: number; etaMinMinutes: number; etaMaxMinutes: number };
 }
 
 /** Texto do usuário vira padrão LIKE seguro (`%`, `_` e `\` literais) e sem acento/caixa (mesma `f_norm` dos índices). */
@@ -117,7 +117,7 @@ export class ProductFeedService {
         originalPriceCents: price.originalCents,
         discountPercent: price.discountPct,
         categoryId: row.category_id,
-        store: { id: store.id, name: store.name, open: store.open, opensAt: store.opensAt, distanceM: store.distanceM },
+        store: { id: store.id, name: store.name, open: store.open, opensAt: store.opensAt, distanceM: store.distanceM, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes },
       };
     });
   }

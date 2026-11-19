@@ -19,9 +19,9 @@ export async function shopWith(ctx: TestContext, specs: { name: string; priceCen
   return { store, variants, origin };
 }
 
-export async function customerAt(ctx: TestContext, origin: TestPoint): Promise<{ user: RegisteredUser; addressId: string }> {
+export async function customerAt(ctx: TestContext, origin: TestPoint, over: { cep?: string; number?: string } = {}): Promise<{ user: RegisteredUser; addressId: string }> {
   const user = await createCustomer(ctx);
-  const res = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send({ cep: '07900-100', street: 'Rua Teste', number: '10', neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: origin.lat, lng: origin.lng }).expect(201);
+  const res = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send({ cep: over.cep ?? '07900-100', street: 'Rua Teste', number: over.number ?? '10', neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: origin.lat, lng: origin.lng }).expect(201);
   return { user, addressId: res.body.id as string };
 }
 

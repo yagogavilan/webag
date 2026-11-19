@@ -85,8 +85,12 @@ export const pauseSchema = z.strictObject({ kind: z.enum(['30m', '1h', '2h', 'en
  */
 export const deliverySchema = z.object({
   acceptsDelivery: z.boolean(),
-  etaMinMinutes: z.number().int().min(1).max(1440),
-  etaMaxMinutes: z.number().int().min(1).max(1440),
+  /** @deprecated ignorado desde a DEC-053: o ETA é calculado (preparo + despacho + deslocamento). Apps publicados ainda enviam. */
+  etaMinMinutes: z.number().int().min(1).max(1440).optional(),
+  /** @deprecated ignorado desde a DEC-053. */
+  etaMaxMinutes: z.number().int().min(1).max(1440).optional(),
+  /** DEC-053: preparo da loja (min) no ETA; `null` volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. */
+  prepMinutes: z.number().int().min(5).max(120).nullable().optional(),
   /** @deprecated ignorado (DEC-036). */
   radiusKm: z.number().optional(),
   /** @deprecated ignorado (DEC-036). */

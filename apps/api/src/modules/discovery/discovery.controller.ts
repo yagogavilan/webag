@@ -21,7 +21,7 @@ const common = {
   limit: z.string().max(4).optional(),
 };
 const homeQuery = z.strictObject({ ...geoQuery, mode: z.enum(['delivery', 'pickup']).default('delivery') });
-const storesQuery = z.strictObject({ ...common, sort: z.enum(['relevance', 'distance', 'rating', 'fee']).default('relevance') });
+const storesQuery = z.strictObject({ ...common, sort: z.enum(['relevance', 'distance', 'rating', 'fee', 'eta']).default('relevance') });
 const productsQuery = z
   .strictObject({ ...common, minPriceCents: money.optional(), maxPriceCents: money.optional(), sort: z.enum(['relevance', 'price_asc', 'distance', 'rating', 'discount']).default('relevance') })
   .refine((v) => v.minPriceCents === undefined || v.maxPriceCents === undefined || v.minPriceCents <= v.maxPriceCents, { message: 'O preço mínimo não pode passar do máximo.', path: ['minPriceCents'] });

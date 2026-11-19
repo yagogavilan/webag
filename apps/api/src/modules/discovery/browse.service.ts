@@ -6,7 +6,7 @@ import { decodeCursor, encodeCursor, parseLimit } from '../../platform/http/pagi
 import { ParametersService } from '../admin/index.js';
 import { productImages, products, productVariants, storeSections } from '../catalog/db/schema.js';
 import { effectivePrice } from '../catalog/domain/price.js';
-import { DeliveryFeesService } from '../logistics/index.js';
+import { computeEta, DeliveryFeesService, presentEta, type EtaConfig, type EtaEstimate } from '../logistics/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { users } from '../identity/db/schema.js';
@@ -24,6 +24,16 @@ type Money = { amount: number; currency: 'BRL' };
 const money = (amount: number): Money => ({ amount, currency: 'BRL' });
 
 /** Páginas públicas da loja e do produto (WB-016, WB-017, WB-018). Loja fechada é visível e navegável (DEC-022). */
+/** Campos de ETA da página da loja (DEC-053): `eta` só com posição e dentro do teto; os campos antigos seguem preenchidos (apps publicados). */
+function etaFields(eta: EtaEstimate | null, prepMinutes: number | null, config: EtaConfig, now: Date) {
+  const base = eta ?? computeEta(config, { distanceM: 0, prepMin: prepMinutes });
+  return {
+    etaMinMinutes: base.fromMin,
+    etaMaxMinutes: base.toMin,
+    eta: eta?.withinCeiling ? presentEta({ minMinutes: eta.fromMin, maxMinutes: eta.toMin }, now) : null,
+  };
+}
+
 @Injectable()
 export class BrowseService {
   constructor(
@@ -84,7 +94,7 @@ export class BrowseService {
       point ? this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null,
     ]);
     const byId = new Map(assets.map((a) => [a.id, a]));
-    const pickupMax = await this.params.getNumber('retirada_distancia_max_km');
+    const [pickupMax, etaConfig] = await Promise.all([this.params.getNumber('retirada_distancia_max_km'), this.fees.etaConfig()]);
     const pickupNear = quote?.distanceM != null && quote.distanceM <= pickupMax * 1000;
     return {
       id: store.id,
@@ -104,8 +114,8 @@ export class BrowseService {
         // Mínimo e entrega grátis são globais do admin (DEC-036b).
         freeAboveCents: await this.params.getNumber('frete_gratis_acima_cents'),
         minOrderCents: await this.params.getNumber('pedido_minimo_cents'),
-        etaMinMinutes: settings.etaMinMinutes,
-        etaMaxMinutes: settings.etaMaxMinutes,
+        // DEC-053: ETA calculado para a posição (preparo da loja + despacho + deslocamento); sem posição, só preparo + despacho.
+        ...etaFields(quote?.eta ?? null, settings.prepMinutes, etaConfig, now),
         acceptsDelivery: settings.acceptsDelivery,
       },
       pickup: {
@@ -181,13 +191,20 @@ export class BrowseService {
    * Página do produto. Pausado ou removido pela moderação responde 200 com `available: false` e o atalho da loja
    * (WB-017 C6); rascunho, arquivado ou de loja invisível é 404. Estoque exato não sai: só "últimas X unidades".
    */
-  async product(productId: string) {
+  async product(productId: string, point: GeoPoint | null = null) {
     const [product] = await this.db.select().from(products).where(eq(products.id, productId));
     if (!product || !['active', 'paused'].includes(product.status) || product.basePriceCents === null) throw errors.notFound('Produto não encontrado.');
     const { store, settings } = await this.visibleStore(product.storeId);
     const now = new Date();
     const unavailableReason = product.status === 'paused' ? 'PAUSED' : product.moderationStatus === 'paused' || product.moderationStatus === 'removed' ? 'MODERATED' : null;
-    const storeSummary = { id: store.id, name: store.name, ...(await this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now)) };
+    const quote = point ? await this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null;
+    const storeSummary = {
+      id: store.id,
+      name: store.name,
+      ...(await this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now)),
+      // DEC-053: com posição, "chega entre X e Y" ou "fora da área" na página do produto.
+      delivery: quote ? { available: quote.available, eta: quote.available && quote.eta ? presentEta({ minMinutes: quote.eta.fromMin, maxMinutes: quote.eta.toMin }, now) : null } : null,
+    };
     if (unavailableReason) return { id: product.id, name: product.name, available: false, unavailableReason, store: storeSummary };
 
     const [variants, images, rating, maxQty] = await Promise.all([

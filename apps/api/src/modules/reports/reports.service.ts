@@ -1,3 +1,4 @@
+import { CSV_BOM, csvCell, csvLine } from '../../platform/http/csv.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
@@ -252,9 +253,8 @@ export class ReportsService {
     const rows = (await this.orderRows(f, f.status, null, CSV_MAX_ROWS + 1)).rows;
     if (rows.length > CSV_MAX_ROWS) throw errors.unprocessable('EXPORT_TOO_LARGE', 'A exportação é grande demais', { detail: `Mais de ${CSV_MAX_ROWS} pedidos neste filtro. Reduza o período ou filtre por loja.` });
     const reais = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
-    const cell = (value: string) => (/^[=+\-@]/.test(value) ? `'${value}` : value).replace(/;/g, ',');
     const header = ['pedido', 'loja', 'status', 'modo', 'pago_em', 'entregue_em', 'subtotal', 'taxa_entrega', 'taxa_servico', 'desconto', 'total', 'comissao', 'cancelado_por', 'motivo'];
-    const lines = rows.map((r) => [cell(r.number), cell(r.store_name ?? ''), r.status, r.mode, new Date(r.paid_at).toISOString(), r.delivered_at ? new Date(r.delivered_at).toISOString() : '', reais(r.subtotal), reais(r.delivery_fee), reais(r.service_fee), reais(r.discount), reais(r.total), reais(r.commission), r.cancelled_by ?? '', cell(r.cancel_reason ?? '')].join(';'));
+    const lines = rows.map((r) => [csvCell(r.number), csvCell(r.store_name ?? ''), csvCell(r.status), csvCell(r.mode), new Date(r.paid_at).toISOString(), r.delivered_at ? new Date(r.delivered_at).toISOString() : '', reais(r.subtotal), reais(r.delivery_fee), reais(r.service_fee), reais(r.discount), reais(r.total), reais(r.commission), csvCell(r.cancelled_by ?? ''), csvCell(r.cancel_reason ?? '')].join(';'));
     return { csv: `${String.fromCharCode(0xfeff)}${[header.join(';'), ...lines].join('\r\n')}\r\n`, rows: rows.length };
   }
 
@@ -277,8 +277,9 @@ export class ReportsService {
       ['cancelamentos', String(k.cancelledOrders)],
       ['taxa_cancelamento_pct', String(k.cancellationRatePct).replace('.', ',')],
       ...r.series.map((p) => [`dia_${p.date}_pedidos`, String(p.orders)]),
-      ...r.cancellations.map((c) => [`cancelamento_${c.actor}_${c.reason.replace(/;/g, ',')}`, String(c.orders)]),
+      ...r.cancellations.map((c) => [`cancelamento_${c.actor}_${c.reason}`, String(c.orders)]),
     ];
-    return `${String.fromCharCode(0xfeff)}${lines.map((l) => l.join(';')).join('\r\n')}\r\n`;
+    // SEC-156: o motivo de cancelamento é texto livre do cliente; toda célula passa pelo `csvCell`.
+    return `${CSV_BOM}${lines.map((l) => csvLine(l)).join('\r\n')}\r\n`;
   }
 }

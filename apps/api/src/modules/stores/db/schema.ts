@@ -106,6 +106,8 @@ export const storeSettings = pgTable('store_settings', {
   freeAboveCents: integer().notNull().default(0),
   etaMinMinutes: integer().notNull().default(30),
   etaMaxMinutes: integer().notNull().default(60),
+  /** DEC-053: preparo da loja (min) no ETA calculado; nulo usa o parâmetro `entrega_preparo_padrao_min`. Os `eta*Minutes` acima ficam só por compatibilidade com apps antigos. */
+  prepMinutes: integer(),
   pickupEnabled: boolean().notNull().default(false),
   pickupUseStoreAddress: boolean().notNull().default(true),
   pickupAddress: varchar({ length: 200 }),

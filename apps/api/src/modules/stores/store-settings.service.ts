@@ -95,8 +95,12 @@ export class StoreSettingsService {
         tiers: [] as { fromKm: number; toKm: number; feeCents: number }[],
         minOrderCents: await this.params.getNumber('pedido_minimo_cents'),
         freeAboveCents: await this.params.getNumber('frete_gratis_acima_cents'),
+        /** @deprecated DEC-053: valores antigos, sem efeito; o ETA é calculado por endereço. */
         etaMinMinutes: settings.etaMinMinutes,
         etaMaxMinutes: settings.etaMaxMinutes,
+        /** DEC-053: preparo da loja em uso (o próprio ou o padrão do admin) e se é o padrão. */
+        prepMinutes: settings.prepMinutes ?? (await this.params.getNumber('entrega_preparo_padrao_min')),
+        prepMinutesIsDefault: settings.prepMinutes === null,
       },
       pickup: {
         enabled: settings.pickupEnabled,
@@ -183,7 +187,11 @@ export class StoreSettingsService {
     this.assertEditable(store, actor);
     const settings = await this.stores.getSettings(store.id);
     const fieldErrors: { field: string; message: string }[] = [];
-    if (input.etaMinMinutes >= input.etaMaxMinutes) fieldErrors.push({ field: 'etaMaxMinutes', message: 'O tempo máximo precisa ser maior que o mínimo.' });
+    if (input.prepMinutes != null) {
+      // Preparo que sozinho estoura o teto de entrega deixaria a loja sem nenhum endereço alcançável (DEC-053).
+      const [maxMin, dispatchMin] = await Promise.all([this.params.getNumber('entrega_max_min'), this.params.getNumber('entrega_despacho_min')]);
+      if (input.prepMinutes + dispatchMin >= maxMin) fieldErrors.push({ field: 'prepMinutes', message: `O preparo precisa ser menor que ${maxMin - dispatchMin} min para a loja entregar em até ${maxMin} min.` });
+    }
     // Sempre sobra uma forma de receber pedido: entrega ou retirada (WB-057 C6).
     if (!input.acceptsDelivery && !settings.pickupEnabled) fieldErrors.push({ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_DELIVERY', 'Configuração de entrega inválida', { errors: fieldErrors });
@@ -192,8 +200,8 @@ export class StoreSettingsService {
       // Trava a linha: duas abas desligando entrega e retirada ao mesmo tempo deixam pelo menos uma ativa.
       const [locked] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!input.acceptsDelivery && !locked?.pickupEnabled) throw errors.unprocessable('INVALID_DELIVERY', 'Configuração de entrega inválida', { errors: [{ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' }] });
-      await tx.update(storeSettings).set({ acceptsDelivery: input.acceptsDelivery, etaMinMinutes: input.etaMinMinutes, etaMaxMinutes: input.etaMaxMinutes, updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'delivery', { acceptsDelivery: settings.acceptsDelivery }, { acceptsDelivery: input.acceptsDelivery });
+      await tx.update(storeSettings).set({ acceptsDelivery: input.acceptsDelivery, ...(input.prepMinutes !== undefined ? { prepMinutes: input.prepMinutes } : {}), updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
+      await this.record(tx, store, actor, ctx, 'delivery', { acceptsDelivery: settings.acceptsDelivery, prepMinutes: settings.prepMinutes }, { acceptsDelivery: input.acceptsDelivery, prepMinutes: input.prepMinutes === undefined ? settings.prepMinutes : input.prepMinutes });
     });
   }
 

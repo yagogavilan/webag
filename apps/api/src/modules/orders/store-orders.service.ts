@@ -8,6 +8,7 @@ import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestam
 import { REDIS } from '../../platform/redis/redis.module.js';
 import { users } from '../identity/db/schema.js';
 import { couriers, DeliveriesService } from '../logistics/index.js';
+import { etaOfOrder } from './domain/eta-view.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 import { nextStatuses, type OrderStatus } from './domain/state.js';
 import type { OrderEvent } from './order-events.bus.js';
@@ -162,7 +163,7 @@ export class StoreOrdersService {
       acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
       customer: { firstName: firstName(customer?.name), phone: active && order.mode === 'delivery' ? (customer?.phone ?? null) : null },
       items: items.map((i) => ({ name: i.name, attributes: i.attributes, image: { urls: i.image }, quantity: i.quantity, unitPrice: showValues ? money(i.unitPriceCents) : null, lineTotal: showValues ? money(i.lineTotalCents) : null })),
-      delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes } : null,
+      delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
       // O código de retirada NUNCA é mostrado à loja: é o cliente quem o informa no balcão.
       pickup: order.mode === 'pickup' && order.pickup ? order.pickup : null,
       values: showValues

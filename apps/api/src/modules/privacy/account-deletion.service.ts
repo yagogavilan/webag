@@ -14,7 +14,7 @@ import * as t from '../../platform/database/schema.js';
 import { AuthService, PasswordService, SessionService } from '../identity/index.js';
 import { ACTIVE_STATUSES } from '../orders/domain/state.js';
 import { OPEN_EXCHANGE_STATUSES } from '../exchanges/db/schema.js';
-import { accountDeletions, dataExportLinks, dataExports, privacyRequests } from './db/schema.js';
+import { accountDeletions, dataExportLinks, dataExports, privacyRequestEvents, privacyRequests } from './db/schema.js';
 
 export interface DeletionBlocker {
   kind: 'order' | 'exchange' | 'store_order' | 'store_exchange' | 'store_refund';
@@ -33,6 +33,8 @@ export interface DeletionOutcome {
 }
 
 const MAX_BLOCKERS = 20;
+const FAILURES_BEFORE_ALERT = 3;
+const OVERDUE_WARNING_DAYS = 2;
 const SYSTEM_CTX: RequestContext = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 
 /**
@@ -250,10 +252,38 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
         totals.failed += 1;
         const message = safeErrorMessage(error).slice(0, 300);
         this.logger.error(`anonimização falhou (${id}): ${message}`);
-        await this.db.update(accountDeletions).set({ lastError: message, failures: sql`${accountDeletions.failures} + 1` }).where(eq(accountDeletions.id, id));
+        const [updated] = await this.db.update(accountDeletions).set({ lastError: message, failures: sql`${accountDeletions.failures} + 1` }).where(eq(accountDeletions.id, id)).returning({ failures: accountDeletions.failures });
+        // SEC-160: falha repetida não fica em silêncio; o prazo da LGPD (`exclusao_anonimizacao_dias`) pode estourar sem ninguém saber.
+        if ((updated?.failures ?? 0) >= FAILURES_BEFORE_ALERT) await this.alertOnce('account_deletion_failed', id, { failures: updated?.failures ?? 0 });
       }
     }
+    await this.alertOverdue(now);
     return totals;
+  }
+
+  /**
+   * SEC-160: exclusão ainda `pending` a 2 dias do teto de `exclusao_anonimizacao_dias` (bloqueada, adiada ou com falha) alerta o admin,
+   * uma vez por exclusão. Sem dado pessoal no alerta: só o id da exclusão e os prazos.
+   */
+  async alertOverdue(now = new Date()): Promise<number> {
+    const days = await this.params.getNumber('exclusao_anonimizacao_dias');
+    const limitMs = Math.max(0, days - OVERDUE_WARNING_DAYS) * 86_400_000;
+    const late = await this.db
+      .select({ id: accountDeletions.id, requestedAt: accountDeletions.requestedAt })
+      .from(accountDeletions)
+      .where(and(eq(accountDeletions.status, 'pending'), lte(accountDeletions.requestedAt, new Date(now.getTime() - limitMs))))
+      .limit(50);
+    let raised = 0;
+    for (const row of late) if (await this.alertOnce('account_deletion_overdue', row.id, { requestedAt: row.requestedAt.toISOString(), anonymizationDays: days })) raised += 1;
+    return raised;
+  }
+
+  private async alertOnce(kind: string, deletionId: string, details: Record<string, unknown>): Promise<boolean> {
+    const [open] = await this.db.select({ id: t.paymentAlerts.id }).from(t.paymentAlerts).where(and(eq(t.paymentAlerts.kind, kind), sql`${t.paymentAlerts.details}->>'deletionId' = ${deletionId}`));
+    if (open) return false;
+    await this.db.insert(t.paymentAlerts).values({ kind, details: { deletionId, ...details } });
+    this.logger.warn(`alerta de privacidade: ${kind}`);
+    return true;
   }
 
   /**
@@ -332,6 +362,24 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       if (photos.length > 0) await tx.delete(t.mediaAssets).where(inArray(t.mediaAssets.id, photos.map((p) => p.id)));
       summary.photos = photos.length;
       await count('reviewsCleared', tx.update(t.reviews).set({ comment: null }).where(eq(t.reviews.userId, userId)).returning({ id: t.reviews.id }));
+
+      // SEC-158: texto livre do titular (e o que cita o titular) não fica ligado à casca. Motivos de cancelamento do cliente, texto da
+      // denúncia, resposta da loja à avaliação dele, motivo de cancelamento da troca e as respostas dos pedidos de titular.
+      const ownOrders = tx.select({ id: t.orders.id }).from(t.orders).where(eq(t.orders.userId, userId));
+      await count('orderReasonsCleared', tx.update(t.orders).set({ cancelReason: null }).where(and(eq(t.orders.userId, userId), eq(t.orders.cancelledBy, 'customer'))).returning({ id: t.orders.id }));
+      await count('orderEventReasonsCleared', tx.update(t.orderEvents).set({ reason: null }).where(and(inArray(t.orderEvents.orderId, ownOrders), sql`(${t.orderEvents.actor} = 'customer' or ${t.orderEvents.actorUserId} = ${userId}::uuid)`, sql`${t.orderEvents.reason} is not null`)).returning({ id: t.orderEvents.id }));
+      await count('exchangeEventReasonsCleared', tx.update(t.exchangeEvents).set({ reason: null }).where(and(inArray(t.exchangeEvents.exchangeId, tx.select({ id: t.exchangeRequests.id }).from(t.exchangeRequests).where(eq(t.exchangeRequests.userId, userId))), sql`(${t.exchangeEvents.actor} = 'customer' or ${t.exchangeEvents.actorUserId} = ${userId}::uuid)`, sql`${t.exchangeEvents.reason} is not null`)).returning({ id: t.exchangeEvents.id }));
+      await count('reportsCleared', tx.update(t.contentReports).set({ text: null }).where(and(eq(t.contentReports.reporterId, userId), sql`${t.contentReports.text} is not null`)).returning({ id: t.contentReports.id }));
+      await count('storeRepliesCleared', tx.update(t.reviews).set({ storeReply: null }).where(and(eq(t.reviews.userId, userId), sql`${t.reviews.storeReply} is not null`)).returning({ id: t.reviews.id }));
+      await tx.update(privacyRequests).set({ answer: sql`case when ${privacyRequests.answer} is null then null else '[anonimizado]' end` }).where(eq(privacyRequests.userId, userId));
+      await tx.update(privacyRequestEvents).set({ note: sql`case when ${privacyRequestEvents.note} is null then null else '[anonimizado]' end` }).where(inArray(privacyRequestEvents.requestId, tx.select({ id: privacyRequests.id }).from(privacyRequests).where(eq(privacyRequests.userId, userId))));
+
+      // SEC-159 / DEC-050(b): o IP do aceite e do consentimento é truncado (IPv4 /24, IPv6 /48), não apagado: a prova do consentimento
+      // fica (versão, data, plataforma) sem identificar a pessoa. As tabelas são append-only; o trigger só admite este truncamento.
+      for (const table of ['terms_acceptances', 'consents'] as const) {
+        const done = await tx.execute(sql`update ${sql.identifier(table)} set ip = webag_truncate_ip(ip) where user_id = ${userId}::uuid and ip is not null and ip is distinct from webag_truncate_ip(ip) returning 1`);
+        summary[`${table}IpsTruncated`] = done.rows.length;
+      }
 
       // Exportações e pedidos de titular da conta: o arquivo e os links somem; o protocolo fica sem o e-mail e a mensagem.
       await tx.delete(dataExportLinks).where(inArray(dataExportLinks.exportId, tx.select({ id: dataExports.id }).from(dataExports).where(eq(dataExports.userId, userId))));

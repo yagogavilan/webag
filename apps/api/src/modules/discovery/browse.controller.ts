@@ -46,9 +46,10 @@ export class BrowseController {
   @Public()
   @RateLimit({ name: 'browse', limit: 180, windowSeconds: 60 })
   @Get('products/:productId')
-  @Header('Cache-Control', SHORT)
-  product(@Param('productId') productId: string) {
-    return this.browse.product(uuidParam(productId));
+  @Header('Cache-Control', 'private, max-age=30')
+  product(@Param('productId') productId: string, @Query(new ZodPipe(storeQuery)) q: z.infer<typeof storeQuery>) {
+    // Com `lat`/`lng` a página traz a entrega e o ETA (DEC-053) para aquela posição; sem elas, só o produto.
+    return this.browse.product(uuidParam(productId), q.lat !== undefined && q.lng !== undefined ? { lat: q.lat, lng: q.lng } : null);
   }
 
   @Public()

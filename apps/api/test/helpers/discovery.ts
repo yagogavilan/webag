@@ -75,6 +75,8 @@ export interface TestStoreOptions {
   products?: TestProduct[];
   /** Notas (1 a 5) de avaliações publicadas da loja. */
   ratings?: number[];
+  /** Preparo da loja no ETA (DEC-053); sem isso vale o padrão do admin. */
+  prepMinutes?: number;
 }
 
 export interface TestStore {
@@ -112,6 +114,7 @@ export async function makeStore(ctx: TestContext, options: TestStoreOptions): Pr
       pickupEnabled: options.pickupEnabled ?? false,
       acceptsDelivery: options.acceptsDelivery ?? true,
       pausedIndefinitely: options.pausedIndefinitely ?? false,
+      prepMinutes: options.prepMinutes ?? null,
     })
     .where(eq(storeSettings.storeId, row.id));
   if (options.tiers) await ctx.db.insert(storeDeliveryTiers).values(options.tiers.map((t, position) => ({ storeId: row.id, position, ...t })));

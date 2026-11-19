@@ -66,6 +66,8 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
   });
 
   it('roteiro ponta a ponta: a cliente vê a home no endereço dela, abre uma loja, põe na sacola e aplica o cupom da plataforma', async () => {
+    // SEC-155: o cupom de primeira compra confere o telefone contra outras contas com pedido pago; os cadastros dos outros testes dividem o mesmo telefone.
+    await ctx.db.update(users).set({ phone: `5511${String(700000000 + Math.floor(Math.random() * 1e8))}` }).where(eq(users.email, 'cliente.ana@seed.webag.local'));
     const login = await ctx.http.post('/v1/auth/login').send({ email: 'cliente.ana@seed.webag.local', password: PASSWORD }).expect(200);
     const auth = bearer(login.body.tokens.accessToken as string);
     const addresses = (await ctx.http.get('/v1/me/addresses').set(auth).expect(200)).body.data as { lat: number; lng: number }[];

@@ -6,7 +6,7 @@ import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
-import { DeliveryFeesService, pickTier } from '../logistics/index.js';
+import { computeEta, DeliveryFeesService, pickTier } from '../logistics/index.js';
 import { type WeeklyHours } from '../stores/index.js';
 import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
 import { type GeoPoint, pointKey, pointSql } from './geo.js';
@@ -48,8 +48,7 @@ interface StoreRow extends Record<string, unknown> {
   approved_at: Date;
   accepts_delivery: boolean;
   address_city_id: string | null;
-  eta_min_minutes: number;
-  eta_max_minutes: number;
+  prep_minutes: number | null;
   pickup_enabled: boolean;
   voluntary_exchange_days: number;
   paused_until: Date | null;
@@ -88,7 +87,7 @@ export class StoreFeedService {
     const result = await this.db.execute<StoreRow>(sql`
       select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at,
              s.address_city_id, ss.accepts_delivery,
-             ss.eta_min_minutes, ss.eta_max_minutes, ss.pickup_enabled, ss.voluntary_exchange_days,
+             ss.prep_minutes, ss.pickup_enabled, ss.voluntary_exchange_days,
              ss.paused_until, ss.paused_indefinitely,
              round(ST_Distance(s.location, ${pointSql(point)}))::int as distance_m,
              r.avg_rating, coalesce(r.rating_count, 0)::int as rating_count
@@ -119,7 +118,7 @@ export class StoreFeedService {
     ]);
     const logos = new Map(logoRows.map((asset) => [asset.id, this.media.publicVariants(asset)]));
 
-    const [freeAbove, minOrder, radiusKm] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km')]);
+    const [freeAbove, minOrder, radiusKm, etaConfig] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km'), this.fees.etaConfig()]);
     const tableCache = new Map<string | null, Promise<Awaited<ReturnType<DeliveryFeesService['resolve']>>>>();
     const feeTables = { get: (cityId: string | null) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId)! };
     const feed: FeedStore[] = [];
@@ -127,7 +126,9 @@ export class StoreFeedService {
       const distanceM = Number(row.distance_m);
       // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
       const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
-      const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && table ? pickTier(table.tiers, distanceM) : null;
+      // DEC-053: o ETA (preparo da loja + despacho + deslocamento) acima do teto tira a loja da descoberta ("fora da área").
+      const eta = computeEta(etaConfig, { distanceM, prepMin: row.prep_minutes });
+      const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && eta.withinCeiling && table ? pickTier(table.tiers, distanceM) : null;
       const fee = picked ? picked.tier.feeCents : null;
       const deliversHere = fee !== null;
       if (mode === 'delivery' && !deliversHere) continue; // fora do raio da loja: some da lista (RN-04)
@@ -155,8 +156,8 @@ export class StoreFeedService {
         feeCents: fee,
         freeAboveCents: freeAbove,
         minOrderCents: minOrder,
-        etaMinMinutes: row.eta_min_minutes,
-        etaMaxMinutes: row.eta_max_minutes,
+        etaMinMinutes: eta.fromMin,
+        etaMaxMinutes: eta.toMin,
         pickupEnabled: row.pickup_enabled,
         acceptsExchange: row.voluntary_exchange_days > 0,
         open,
@@ -171,9 +172,10 @@ export class StoreFeedService {
     return feed;
   }
 
-  /** Ordem da home e da relevância (RN-03, HIP-032): abertas primeiro, depois distância, depois avaliação. */
+  /** Ordem da home e da relevância (RN-03, HIP-032): abertas primeiro, depois ETA (DEC-053), depois distância e avaliação. */
   static byRelevance(a: FeedStore, b: FeedStore): number {
     if (a.open !== b.open) return a.open ? -1 : 1;
+    if (a.etaMinMinutes + a.etaMaxMinutes !== b.etaMinMinutes + b.etaMaxMinutes) return a.etaMinMinutes + a.etaMaxMinutes - (b.etaMinMinutes + b.etaMaxMinutes); // DEC-053: a mais rápida primeiro
     if (a.distanceM !== b.distanceM) return a.distanceM - b.distanceM;
     return (b.ratingAverage ?? 0) - (a.ratingAverage ?? 0) || a.name.localeCompare(b.name);
   }

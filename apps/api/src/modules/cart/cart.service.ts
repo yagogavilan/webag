@@ -16,11 +16,21 @@ import { ExposureLimitService, hoursToday, isOpen, nextOpening, StoreSettingsSer
 import { cartItems, carts, couponRedemptions, coupons } from './db/schema.js';
 import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
 import { serviceFeeCents, summarize } from './domain/pricing.js';
-import { DeliveryFeesService, type DeliveryFeeSnapshot } from '../logistics/index.js';
+import { computeEta, DeliveryFeesService, presentEta, type DeliveryFeeSnapshot, type EtaEstimate, type EtaView } from '../logistics/index.js';
+
+/** Endereço do pedido normalizado para comparar entre contas (SEC-060): CEP, número e complemento. */
+export interface PurchaseAddressHint {
+  cep: string | null;
+  number: string | null;
+  complement: string | null;
+}
 
 export abstract class PurchaseHistoryPort {
-  /** O cliente já tem pedido pago? (cupom de primeira compra). Sem pedidos (Onda 4), ninguém tem. */
-  abstract hasPaidOrder(userId: string): Promise<boolean>;
+  /**
+   * "Primeira compra" (SEC-155/SEC-060): a conta, OU outra conta com o mesmo telefone, aparelho ou endereço (CEP + número +
+   * complemento), já tem pedido pago e não encerrado sem entrega? Pedido cancelado, recusado ou expirado não conta (foi estornado).
+   */
+  abstract hasPaidOrder(userId: string, hints?: { address?: PurchaseAddressHint | null }): Promise<boolean>;
 }
 
 export type CartMode = 'delivery' | 'pickup';
@@ -90,7 +100,7 @@ export class CartService {
       store: null,
       items: [],
       coupon: null,
-      delivery: { mode: 'delivery' as CartMode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false },
+      delivery: { mode: 'delivery' as CartMode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null },
       summary: this.presentSummary(zero, { deliveryEstimated: false, missingForMinimumCents: null }),
       checkout: { canCheckout: false, blockers: ['EMPTY' as Blocker], opensAt: null },
       notices,
@@ -198,7 +208,8 @@ export class CartService {
     let deliveryEstimated = false;
     let deliveryAddress: Awaited<ReturnType<CartService['addressFor']>> = null;
     let deliverySnapshot: DeliveryFeeSnapshot | null = null;
-    const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false };
+    let etaEstimate: EtaEstimate | null = null; // DEC-053: ETA do endereço escolhido (gravado no pedido)
+    const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean; eta: EtaView | null } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null };
     if (ctx.mode === 'pickup') {
       if (!settings.pickupEnabled) blockers.push('PICKUP_UNAVAILABLE');
     } else {
@@ -221,6 +232,8 @@ export class CartService {
         if (!quote.available) blockers.push('OUT_OF_RANGE'); // sem tabela para o destino também some a entrega: o admin vê o alerta na prévia
         deliveryFee = quote.feeCents ?? 0;
         deliverySnapshot = quote.snapshot;
+        if (quote.available) etaEstimate = quote.eta;
+        delivery.eta = quote.available && quote.eta ? presentEta({ minMinutes: quote.eta.fromMin, maxMinutes: quote.eta.toMin }, now) : null;
       }
     }
 
@@ -230,7 +243,7 @@ export class CartService {
     let appliedCoupon: typeof coupons.$inferSelect | null = null;
     if (couponId) {
       const [coupon] = await this.db.select().from(coupons).where(eq(coupons.id, couponId));
-      const rejection = coupon ? await this.rejectionFor(principal, coupon, store.id, subtotal, now) : 'COUPON_NOT_FOUND';
+      const rejection = coupon ? await this.rejectionFor(principal, coupon, store.id, subtotal, now, deliveryAddress ? { cep: deliveryAddress.cep, number: deliveryAddress.number, complement: deliveryAddress.complement } : null) : 'COUPON_NOT_FOUND';
       if (coupon) {
         couponView = { code: coupon.code, kind: coupon.kind, scope: coupon.scope, applied: rejection === null, rejection };
         if (rejection === null) appliedCoupon = coupon;
@@ -266,6 +279,11 @@ export class CartService {
     if (exposure.active && exposure.maxOrderCents !== null && result.totalCents > exposure.maxOrderCents) blockers.push('NEW_STORE_LIMIT');
     if (subtotal === 0) blockers.unshift('EMPTY');
 
+    const etaConfig = await this.fees.etaConfig();
+    const legacyEta = ((): { etaMinMinutes: number; etaMaxMinutes: number } => {
+      const base = etaEstimate ?? computeEta(etaConfig, { distanceM: 0, prepMin: settings.prepMinutes });
+      return { etaMinMinutes: base.fromMin, etaMaxMinutes: base.toMin };
+    })();
     const [logo] = store.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
     const view = {
       id: cart.id,
@@ -276,8 +294,8 @@ export class CartService {
         logo: { urls: (logo ? this.media.publicVariants(logo) : null) ?? {} },
         open: opening.open,
         opensAt: opening.opensAt,
-        etaMinMinutes: settings.etaMinMinutes,
-        etaMaxMinutes: settings.etaMaxMinutes,
+        // DEC-053: sem endereço ainda, o intervalo é só preparo + despacho (a partir de); com endereço, o ETA completo.
+        ...legacyEta,
         minOrder: money(minOrderCents),
       },
       items,
@@ -296,6 +314,7 @@ export class CartService {
       opening,
       address: deliveryAddress,
       deliverySnapshot,
+      eta: etaEstimate,
       coupon: appliedCoupon,
       result,
       blockers,
@@ -331,7 +350,7 @@ export class CartService {
     return map;
   }
 
-  private async rejectionFor(principal: Principal, coupon: typeof coupons.$inferSelect, storeId: string, subtotalCents: number, now: Date): Promise<CouponRejection | null> {
+  private async rejectionFor(principal: Principal, coupon: typeof coupons.$inferSelect, storeId: string, subtotalCents: number, now: Date, address: PurchaseAddressHint | null = null): Promise<CouponRejection | null> {
     const [uses] = await this.db
       .select({
         total: sql<number>`count(*) filter (where ${couponRedemptions.releasedAt} is null)::int`,
@@ -347,7 +366,8 @@ export class CartService {
       emailVerified: principal.emailVerified,
       totalUses: uses?.total ?? 0,
       customerUses: uses?.mine ?? 0,
-      hasPaidOrder: await this.purchases.hasPaidOrder(principal.userId),
+      // Só consulta o histórico quando o cupom é de primeira compra (evita a consulta nos demais).
+      hasPaidOrder: coupon.firstPurchaseOnly ? await this.purchases.hasPaidOrder(principal.userId, { address }) : false,
       isStoreMember: member !== undefined,
     });
   }

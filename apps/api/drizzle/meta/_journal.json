@@ -267,6 +267,20 @@
       "when": 1795061445954,
       "tag": "0037_r4_exchange_difference_commission",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795095325259,
+      "tag": "0038_e1_eta_entrega",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795096153627,
+      "tag": "0039_s62_ip_truncation",
+      "breakpoints": true
     }
   ]
 }

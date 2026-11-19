@@ -10,7 +10,7 @@ import { AuditService } from '../admin/index.js';
 import { LogisticsReportService } from './logistics-report.service.js';
 import { couriers } from './db/schema.js';
 import { CouriersService } from './couriers.service.js';
-import { DeliveriesService, type Delivery, type DeliveryEvent } from './deliveries.service.js';
+import { DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras } from './deliveries.service.js';
 import { ACTIVE_STATUSES, DELIVERY_KINDS, DELIVERY_STATUSES, NOT_DELIVERED_REASONS } from './domain/state.js';
 import type { DeliveryMessageData } from './domain/whatsapp.js';
 
@@ -42,7 +42,7 @@ export const maskPhone = (digits: string | null | undefined): string | null => {
   return d.length === 11 ? `(${d.slice(0, 2)}) ${d[2]}****-${d.slice(7)}` : null;
 };
 
-function presentDelivery(d: Delivery & { waitingMinutes?: number | null; sla?: string | null }, detail: boolean, courierName: string | null = null) {
+function presentDelivery(d: Delivery & Partial<DeliveryListExtras>, detail: boolean, courierName: string | null = null) {
   const contact = (d.contact ?? {}) as Partial<DeliveryMessageData>;
   const active = ACTIVE_STATUSES.includes(d.status);
   const place = (contact.dropoffAddress ?? '').split(',').map((p) => p.trim()).filter(Boolean);
@@ -57,6 +57,11 @@ function presentDelivery(d: Delivery & { waitingMinutes?: number | null; sla?: s
     readyAt: d.readyAt.toISOString(),
     waitingMinutes: d.waitingMinutes ?? null,
     sla: d.sla ?? null,
+    /** DEC-053: fim da faixa prometida ao cliente e atraso sobre ela. */
+    etaToAt: d.etaToAt?.toISOString() ?? null,
+    overdue: d.overdue ?? false,
+    overdueMinutes: d.overdueMinutes ?? null,
+    area: d.area ?? null,
     courier: d.courierId ? { id: d.courierId, name: courierName } : null,
     volumes: d.volumes,
     note: d.note,
@@ -117,6 +122,7 @@ const listQuery = z.strictObject({
   limit: z.string().max(4).optional(),
 });
 const assignBody = z.strictObject({ courierId: z.uuid(), addressConfirmed: z.boolean().optional() });
+const assignBatchBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(2).max(10), courierId: z.uuid(), addressConfirmed: z.boolean().optional() });
 const actionBody = z.strictObject({
   action: z.enum(['confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel']),
   reason: z.string().trim().max(200).optional(),
@@ -195,6 +201,16 @@ export class DeliveriesAdminController {
     const delivery = await this.deliveries.revealContact(uuid(deliveryId), body.reason, ctx);
     const contact = (delivery.contact ?? {}) as Partial<DeliveryMessageData>;
     return { contact: { pickupAddress: contact.pickupAddress ?? null, storePhone: contact.storePhone ?? null, dropoffAddress: contact.dropoffAddress ?? null, customerFirstName: contact.customerFirstName ?? null, customerPhone: contact.customerPhone ?? null } };
+  }
+
+  /** Lote por área (DEC-053): o mesmo motoboy leva de 2 a `entrega_lote_max` corridas prontas da mesma cidade. */
+  @AdminOnly('logistics:write')
+  @HttpCode(200)
+  @Post('assign-batch')
+  async assignBatch(@Body(new ZodPipe(assignBatchBody)) body: z.infer<typeof assignBatchBody>, @Ctx() ctx: RequestContext) {
+    const result = await this.deliveries.assignBatch(body.deliveryIds, body.courierId, { addressConfirmed: body.addressConfirmed === true }, ctx);
+    const name = await this.courierName(body.courierId);
+    return { assigned: result.assigned.map((d) => presentDelivery(d, true, name)), failed: result.failed };
   }
 
   /** Atribuir: PRONTA -> AGUARDANDO. 409 `DELIVERY_ALREADY_ASSIGNED` se outra pessoa chegou primeiro. */

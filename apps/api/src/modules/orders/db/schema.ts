@@ -30,6 +30,9 @@ export const orders = pgTable(
     address: jsonb().$type<Record<string, unknown> | null>(),
     etaMinMinutes: integer().notNull(),
     etaMaxMinutes: integer().notNull(),
+    /** DEC-053: faixa de chegada em horário de relógio, gravada na criação (nulo em pedido anterior à regra ou de retirada). */
+    etaFromAt: timestamp({ withTimezone: true }),
+    etaToAt: timestamp({ withTimezone: true }),
     pickup: jsonb().$type<{ address: string; instructions: string | null; prepMinMinutes: number; prepMaxMinutes: number } | null>(),
     /** Código de retirada (4 dígitos), só mostrado depois de pago. */
     pickupCode: varchar({ length: 4 }),

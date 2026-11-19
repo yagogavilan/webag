@@ -97,7 +97,8 @@ describe('Excluir conta pela web (WB-214, SEC-096, DEC-025c)', () => {
     for (let i = 0; i < 5; i += 1) await post('start', { email: `x${i}-${randomUUID().slice(0, 6)}@teste.webag.local` }, ip).expect(200);
     await post('start', { email: `y-${randomUUID().slice(0, 6)}@teste.webag.local` }, ip).expect(429);
     const target = `alvo-${randomUUID().slice(0, 6)}@teste.webag.local`;
-    for (let i = 0; i < 5; i += 1) await post('start', { email: target }).expect(200);
+    // SEC-152: o intervalo de reenvio (60 s) vale para QUALQUER e-mail, existente ou não; o 2º pedido seguido já é 429 igual para todos.
+    await post('start', { email: target }).expect(200);
     await post('start', { email: target }).expect(429);
     await post('start', { email: 'nao-email' }).expect(400);
     await post('start', { email: user.email, extra: 1 }).expect(400);
