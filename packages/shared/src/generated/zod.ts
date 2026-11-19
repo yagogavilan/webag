@@ -11042,3 +11042,81 @@ export const AnswerPrivacyRequestResponse = zod.object({
   "overdue": zod.boolean(),
   "answeredAt": zod.iso.datetime({"offset":true}).nullable()
 })
+
+
+/**
+ * WB-214 / SEC-096. Sem `password` (via A): envia o código `delete_web` SÓ se a conta existe, tem e-mail confirmado e não é de admin; resposta sempre `{ sent: true }`. Com `password` (via B, única via com e-mail não confirmado): devolve o `deleteTicket`; senha errada, e-mail inexistente e conta de admin dão a mesma 401 `INVALID_CREDENTIALS`. Nenhuma sessão nem cookie é emitido. 5 por hora por IP e por e-mail.
+ * @summary Exclusão pela web - passo 1 (código ou senha)
+ */
+export const StartWebAccountDeletionBody = zod.object({
+  "email": zod.email(),
+  "password": zod.string().optional().describe('Via B. Sem este campo, é a via A (código por e-mail)')
+})
+
+export const StartWebAccountDeletionResponse = zod.union([zod.object({
+  "sent": zod.literal(true)
+}),zod.object({
+  "deleteTicket": zod.string().describe('256 bits, 10 min, uso único; só abre revisão e confirmação'),
+  "expiresIn": zod.int()
+})])
+
+
+/**
+ * O código de 6 dígitos vira o `deleteTicket` (10 min, uso único). Qualquer falha: 400 `CODE_INVALID` (igual para conta inexistente).
+ * @summary Exclusão pela web - via A, passo 2 (código)
+ */
+export const verifyWebAccountDeletionCodeBodyCodeRegExp = new RegExp('^[0-9]{6}$');
+
+
+export const VerifyWebAccountDeletionCodeBody = zod.object({
+  "email": zod.email(),
+  "code": zod.string().regex(verifyWebAccountDeletionCodeBodyCodeRegExp)
+})
+
+export const VerifyWebAccountDeletionCodeResponse = zod.object({
+  "deleteTicket": zod.string().describe('256 bits, 10 min, uso único; só abre revisão e confirmação'),
+  "expiresIn": zod.int()
+})
+
+
+/**
+ * Com o `deleteTicket`. 410 `DELETE_TICKET_INVALID` se venceu, foi usado ou é inválido.
+ * @summary Exclusão pela web - passo 3 (o que será apagado e bloqueios)
+ */
+export const ReviewWebAccountDeletionBody = zod.object({
+  "deleteTicket": zod.string()
+})
+
+export const reviewWebAccountDeletionResponseBlockersMax = 20;
+
+
+
+export const ReviewWebAccountDeletionResponse = zod.object({
+  "canDelete": zod.boolean(),
+  "blockers": zod.array(zod.object({
+  "kind": zod.enum(['order', 'exchange', 'store_order', 'store_exchange', 'store_refund']),
+  "id": zod.uuid(),
+  "number": zod.string().nullable().describe('Número legível do pedido ou da troca (a tela monta \'Pedido #4821 · saiu para entrega\')'),
+  "status": zod.string()
+})).max(reviewWebAccountDeletionResponseBlockersMax),
+  "hasPassword": zod.boolean().describe('Falso = conta só com login social (confirma com o provedor)'),
+  "ownsStore": zod.boolean().describe('Dono de loja: a loja será encerrada junto'),
+  "anonymizationDays": zod.int().describe('Parâmetro exclusao_anonimizacao_dias'),
+  "fiscalRetentionYears": zod.int().describe('Parâmetro retencao_fiscal_anos'),
+  "regretHours": zod.int().describe('Período de arrependimento (0 = exclui na hora)')
+})
+
+
+/**
+ * Consome o `deleteTicket` e fecha a conta (mesmas regras do app; nenhuma sessão é emitida). 409 `DELETION_BLOCKED` (o ticket continua valendo); 410 `DELETE_TICKET_INVALID`.
+ * @summary Exclusão pela web - confirmar
+ */
+export const FinishWebAccountDeletionBody = zod.object({
+  "deleteTicket": zod.string()
+})
+
+export const FinishWebAccountDeletionResponse = zod.object({
+  "status": zod.enum(['completed', 'pending']),
+  "effectiveAt": zod.iso.datetime({"offset":true}),
+  "cancelableUntil": zod.iso.datetime({"offset":true}).nullable()
+})

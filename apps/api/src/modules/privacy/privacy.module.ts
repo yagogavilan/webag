@@ -6,6 +6,7 @@ import { DataExportService } from './data-export.service.js';
 import { AdminPrivacyRequestsController, PrivacyRequestPublicController } from './dsr.controller.js';
 import { DsrService } from './dsr.service.js';
 import { RetentionService } from './retention.service.js';
+import { WebAccountDeletionService } from './web-deletion.service.js';
 import { AccountDeletionController, AccountDeletionPublicController, DataExportController, DataExportDownloadController } from './privacy.controller.js';
 
 /**
@@ -16,7 +17,7 @@ import { AccountDeletionController, AccountDeletionPublicController, DataExportC
 @Module({
   imports: [AdminModule, IdentityModule],
   controllers: [AccountDeletionController, AccountDeletionPublicController, DataExportController, DataExportDownloadController, PrivacyRequestPublicController, AdminPrivacyRequestsController],
-  providers: [AccountDeletionService, DataExportService, DsrService, RetentionService],
+  providers: [AccountDeletionService, DataExportService, DsrService, RetentionService, WebAccountDeletionService],
   exports: [AccountDeletionService, DataExportService],
 })
 export class PrivacyModule {}

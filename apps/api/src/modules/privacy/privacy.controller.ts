@@ -5,12 +5,16 @@ import { Ctx, CurrentPrincipal, Public, type Principal, type RequestContext } fr
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
-import { emailSchema, passwordSchema } from '../identity/index.js';
+import { codeSchema, emailSchema, passwordSchema } from '../identity/index.js';
 import type { Env } from '../../platform/config/env.js';
 import { AccountDeletionService } from './account-deletion.service.js';
+import { WebAccountDeletionService } from './web-deletion.service.js';
 import { DataExportService } from './data-export.service.js';
 
 const deleteAccountSchema = z.strictObject({ password: passwordSchema });
+const webStartSchema = z.strictObject({ email: emailSchema, password: passwordSchema.optional() });
+const webVerifySchema = z.strictObject({ email: emailSchema, code: codeSchema });
+const webTicketSchema = z.strictObject({ deleteTicket: z.string().min(20).max(200) });
 const cancelDeletionSchema = z.strictObject({ email: emailSchema, password: passwordSchema });
 
 /** WB-213: excluir minha conta (cliente, lojista dono ou funcionário). Admin tem outro caminho (WB-101). */
@@ -34,7 +38,54 @@ export class AccountDeletionController {
 
 @Controller('v1/auth/account-deletion')
 export class AccountDeletionPublicController {
-  constructor(private readonly deletion: AccountDeletionService) {}
+  constructor(
+    private readonly deletion: AccountDeletionService,
+    private readonly web: WebAccountDeletionService,
+  ) {}
+
+  /**
+   * WB-214 / SEC-096, passo 1. Sem `password` (via A): envia o código `delete_web` SÓ se a conta existe, está confirmada e não é de admin;
+   * a resposta é sempre `{ sent: true }`. Com `password` (via B, única com e-mail não confirmado): devolve o `deleteTicket`
+   * (401 `INVALID_CREDENTIALS` igual para senha errada, e-mail inexistente e admin). Nenhuma sessão é criada.
+   */
+  @Public()
+  @Post('start')
+  @HttpCode(200)
+  @RateLimit({ name: 'account-deletion-web', limit: 30, windowSeconds: 3600 })
+  async start(@Ctx() ctx: RequestContext, @Body(new ZodPipe(webStartSchema)) body: z.infer<typeof webStartSchema>) {
+    if (body.password === undefined) {
+      await this.web.requestCode(body.email, ctx);
+      return { sent: true };
+    }
+    return this.web.withPassword(body.email, body.password, ctx);
+  }
+
+  /** Via A, passo 2: o código vira `deleteTicket`. */
+  @Public()
+  @Post('verify-code')
+  @HttpCode(200)
+  @RateLimit({ name: 'account-deletion-verify', limit: 30, windowSeconds: 3600 })
+  verifyCode(@Ctx() ctx: RequestContext, @Body(new ZodPipe(webVerifySchema)) body: z.infer<typeof webVerifySchema>) {
+    return this.web.verifyCode(body.email, body.code, ctx);
+  }
+
+  /** Passo 3: o que será apagado e os bloqueios. 410 `DELETE_TICKET_INVALID` se o ticket venceu ou já foi usado. */
+  @Public()
+  @Post('review')
+  @HttpCode(200)
+  @RateLimit({ name: 'account-deletion-review', limit: 60, windowSeconds: 3600 })
+  review(@Body(new ZodPipe(webTicketSchema)) body: z.infer<typeof webTicketSchema>) {
+    return this.web.review(body.deleteTicket);
+  }
+
+  /** Passo final: consome o ticket e fecha a conta (mesmas regras do app). */
+  @Public()
+  @Post('finish')
+  @HttpCode(200)
+  @RateLimit({ name: 'account-deletion-confirm', limit: 20, windowSeconds: 3600 })
+  finish(@Ctx() ctx: RequestContext, @Body(new ZodPipe(webTicketSchema)) body: z.infer<typeof webTicketSchema>) {
+    return this.web.confirm(body.deleteTicket, ctx);
+  }
 
   /** Arrependimento: e-mail e senha da conta em período de exclusão. Falha sempre responde igual ao login (401). */
   @Public()

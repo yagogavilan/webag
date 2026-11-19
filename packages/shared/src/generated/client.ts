@@ -5003,6 +5003,32 @@ export interface PrivacyRequestAnswerRequest {
   answer: string;
 }
 
+export interface WebDeletionStartRequest {
+  email: string;
+  /** Via B. Sem este campo, é a via A (código por e-mail) */
+  password?: string;
+}
+
+export interface WebDeletionCodeSent {
+  sent: true;
+}
+
+export interface WebDeletionTicket {
+  /** 256 bits, 10 min, uso único; só abre revisão e confirmação */
+  deleteTicket: string;
+  expiresIn: number;
+}
+
+export interface WebDeletionVerifyRequest {
+  email: string;
+  /** @pattern ^[0-9]{6}$ */
+  code: string;
+}
+
+export interface WebDeletionTicketRequest {
+  deleteTicket: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -21048,5 +21074,221 @@ export const answerPrivacyRequest = async (id: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(privacyRequestAnswerRequest)
+  }
+);}
+
+
+
+export type startWebAccountDeletionResponse200 = {
+  data: WebDeletionCodeSent | WebDeletionTicket
+  status: 200
+}
+
+export type startWebAccountDeletionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type startWebAccountDeletionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type startWebAccountDeletionResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type startWebAccountDeletionResponseSuccess = (startWebAccountDeletionResponse200) & {
+  headers: Headers;
+};
+export type startWebAccountDeletionResponseError = (startWebAccountDeletionResponse400 | startWebAccountDeletionResponse401 | startWebAccountDeletionResponse429) & {
+  headers: Headers;
+};
+
+export type startWebAccountDeletionResponse = (startWebAccountDeletionResponseSuccess | startWebAccountDeletionResponseError)
+
+export const getStartWebAccountDeletionUrl = () => {
+
+
+
+
+  return `/v1/auth/account-deletion/start`
+}
+
+/**
+ * WB-214 / SEC-096. Sem `password` (via A): envia o código `delete_web` SÓ se a conta existe, tem e-mail confirmado e não é de admin; resposta sempre `{ sent: true }`. Com `password` (via B, única via com e-mail não confirmado): devolve o `deleteTicket`; senha errada, e-mail inexistente e conta de admin dão a mesma 401 `INVALID_CREDENTIALS`. Nenhuma sessão nem cookie é emitido. 5 por hora por IP e por e-mail.
+ * @summary Exclusão pela web - passo 1 (código ou senha)
+ */
+export const startWebAccountDeletion = async (webDeletionStartRequest: WebDeletionStartRequest, options?: Parameters<typeof apiFetch>[1]): Promise<startWebAccountDeletionResponse> => {
+
+  return apiFetch<startWebAccountDeletionResponse>(getStartWebAccountDeletionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(webDeletionStartRequest)
+  }
+);}
+
+
+
+export type verifyWebAccountDeletionCodeResponse200 = {
+  data: WebDeletionTicket
+  status: 200
+}
+
+export type verifyWebAccountDeletionCodeResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type verifyWebAccountDeletionCodeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type verifyWebAccountDeletionCodeResponseSuccess = (verifyWebAccountDeletionCodeResponse200) & {
+  headers: Headers;
+};
+export type verifyWebAccountDeletionCodeResponseError = (verifyWebAccountDeletionCodeResponse400 | verifyWebAccountDeletionCodeResponse429) & {
+  headers: Headers;
+};
+
+export type verifyWebAccountDeletionCodeResponse = (verifyWebAccountDeletionCodeResponseSuccess | verifyWebAccountDeletionCodeResponseError)
+
+export const getVerifyWebAccountDeletionCodeUrl = () => {
+
+
+
+
+  return `/v1/auth/account-deletion/verify-code`
+}
+
+/**
+ * O código de 6 dígitos vira o `deleteTicket` (10 min, uso único). Qualquer falha: 400 `CODE_INVALID` (igual para conta inexistente).
+ * @summary Exclusão pela web - via A, passo 2 (código)
+ */
+export const verifyWebAccountDeletionCode = async (webDeletionVerifyRequest: WebDeletionVerifyRequest, options?: Parameters<typeof apiFetch>[1]): Promise<verifyWebAccountDeletionCodeResponse> => {
+
+  return apiFetch<verifyWebAccountDeletionCodeResponse>(getVerifyWebAccountDeletionCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(webDeletionVerifyRequest)
+  }
+);}
+
+
+
+export type reviewWebAccountDeletionResponse200 = {
+  data: AccountDeletionOverview
+  status: 200
+}
+
+export type reviewWebAccountDeletionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type reviewWebAccountDeletionResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type reviewWebAccountDeletionResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type reviewWebAccountDeletionResponseSuccess = (reviewWebAccountDeletionResponse200) & {
+  headers: Headers;
+};
+export type reviewWebAccountDeletionResponseError = (reviewWebAccountDeletionResponse400 | reviewWebAccountDeletionResponse410 | reviewWebAccountDeletionResponse429) & {
+  headers: Headers;
+};
+
+export type reviewWebAccountDeletionResponse = (reviewWebAccountDeletionResponseSuccess | reviewWebAccountDeletionResponseError)
+
+export const getReviewWebAccountDeletionUrl = () => {
+
+
+
+
+  return `/v1/auth/account-deletion/review`
+}
+
+/**
+ * Com o `deleteTicket`. 410 `DELETE_TICKET_INVALID` se venceu, foi usado ou é inválido.
+ * @summary Exclusão pela web - passo 3 (o que será apagado e bloqueios)
+ */
+export const reviewWebAccountDeletion = async (webDeletionTicketRequest: WebDeletionTicketRequest, options?: Parameters<typeof apiFetch>[1]): Promise<reviewWebAccountDeletionResponse> => {
+
+  return apiFetch<reviewWebAccountDeletionResponse>(getReviewWebAccountDeletionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(webDeletionTicketRequest)
+  }
+);}
+
+
+
+export type finishWebAccountDeletionResponse200 = {
+  data: DeleteAccountResponse
+  status: 200
+}
+
+export type finishWebAccountDeletionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type finishWebAccountDeletionResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type finishWebAccountDeletionResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type finishWebAccountDeletionResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type finishWebAccountDeletionResponseSuccess = (finishWebAccountDeletionResponse200) & {
+  headers: Headers;
+};
+export type finishWebAccountDeletionResponseError = (finishWebAccountDeletionResponse400 | finishWebAccountDeletionResponse409 | finishWebAccountDeletionResponse410 | finishWebAccountDeletionResponse429) & {
+  headers: Headers;
+};
+
+export type finishWebAccountDeletionResponse = (finishWebAccountDeletionResponseSuccess | finishWebAccountDeletionResponseError)
+
+export const getFinishWebAccountDeletionUrl = () => {
+
+
+
+
+  return `/v1/auth/account-deletion/finish`
+}
+
+/**
+ * Consome o `deleteTicket` e fecha a conta (mesmas regras do app; nenhuma sessão é emitida). 409 `DELETION_BLOCKED` (o ticket continua valendo); 410 `DELETE_TICKET_INVALID`.
+ * @summary Exclusão pela web - confirmar
+ */
+export const finishWebAccountDeletion = async (webDeletionTicketRequest: WebDeletionTicketRequest, options?: Parameters<typeof apiFetch>[1]): Promise<finishWebAccountDeletionResponse> => {
+
+  return apiFetch<finishWebAccountDeletionResponse>(getFinishWebAccountDeletionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(webDeletionTicketRequest)
   }
 );}

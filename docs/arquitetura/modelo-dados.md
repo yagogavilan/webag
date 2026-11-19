@@ -67,3 +67,14 @@ Onda 2 adiciona `stores` (+ FK de `store_members`), documentos e catálogo; Onda
 
 ### Ledger: contas e tipos acrescentados (DT-049)
 `ledger_transactions.kind` ganha `exchange_fee`, `exchange_fee_refund`, `logistics_cost` e `courier_payout`; `ledger_entries.account`, `exchange_fee_revenue` (receita da taxa de troca), `logistics_cost_expense` (despesa), `courier_payable` (a pagar ao motoboy) e `courier_payout_cash` (PIX pago por fora). São colunas `text` (sem migração); o `order_id` é o do pedido original e a loja é nula nos lançamentos de logística. O custo não é "por loja": o extrato do lojista (`store-finance`) continua lendo só `sale`, `provider_fee`, `refund`, `coverage` e `adjustment`.
+
+## privacy (O6.1, ADR-012)
+| Tabela | Conteúdo |
+|---|---|
+| `account_deletions` | Pedido de exclusão: `via` (app/web), `requested_at`, `effective_at` (anonimização; = pedido quando `exclusao_arrependimento_horas` = 0), `status` (`pending`/`completed`/`cancelled`), `summary` (só contagens), loja do dono encerrada (`store_id`, `store_previous_status`), falhas. Índice único parcial: um pendente por conta |
+| `data_exports` / `data_export_links` | Exportação do titular (fila `queued` → `ready` → `expired`; arquivo `exports/<user>/<id>.json` no bucket privado; uma em andamento por conta) e link de download (256 bits só como hash, uso único, `exportacao_link_min`) |
+| `privacy_requests` / `privacy_request_events` | Pedido de titular (LGPD art. 18): protocolo `PV-0001` (sequência `privacy_protocol_seq`), tipo, canal, prazo de 15 dias, alerta aos 10, resposta; histórico append-only por convenção. O e-mail do solicitante é mascarado na lista; revelar exige reautenticação e auditoria |
+| `retention_runs` | Cada execução do expurgo diário (DT-021): só contagens e mensagens de falha |
+| `stores.status = 'closed'` | Estado terminal que só nasce da exclusão da conta do dono (sem transição de usuário) |
+
+Na anonimização a linha de `users` fica como casca (`deleted-<uuid>@anon.webag.invalid`, "Conta excluída") para manter FKs de pedidos e ledger; o endereço do pedido vira `{city, state, cityId}`. `consents` e `terms_acceptances` (append-only por trigger) permanecem como prova.
