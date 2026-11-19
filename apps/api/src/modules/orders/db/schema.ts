@@ -61,6 +61,8 @@ export const orders = pgTable(
     /** Pago em `received`; a loja tem até aqui para aceitar (`loja_aceite_timeout_min`). */
     acceptDeadlineAt: timestamp({ withTimezone: true }),
     paidAt: timestamp({ withTimezone: true }),
+    /** I2: o provedor contestou o pagamento (chargeback/mediação). Não muda o estado do pedido; o ledger e o alerta acompanham. */
+    disputedAt: timestamp({ withTimezone: true }),
     acceptedAt: timestamp({ withTimezone: true }),
     deliveredAt: timestamp({ withTimezone: true }),
     cancelledAt: timestamp({ withTimezone: true }),

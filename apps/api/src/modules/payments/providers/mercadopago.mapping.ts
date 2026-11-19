@@ -25,7 +25,7 @@ export interface MpPayment {
 /**
  * Estados do MP para os do domínio (ADR-002). `authorized`/`in_process` ainda não são dinheiro: seguem `pending`.
  * PIX vencido chega como `cancelled` com `status_detail = expired`. `charged_back` e `in_mediation` mantêm `approved`
- * (chargeback é WB-159, Should; hoje NADA detecta nem alerta: ver review-ondas-3-5 I5).
+ * (o estado contestado vai em `ProviderPayment.disputed` e o pagamento o trata em `sync`: ver review-ondas-3-5 I2).
  */
 export function mapStatus(payment: MpPayment): PaymentStatus {
   switch (payment.status) {
@@ -77,6 +77,7 @@ export function toProviderPayment(payment: MpPayment): ProviderPayment {
     ...(payment.point_of_interaction?.transaction_data?.qr_code_base64 ? { pixQrBase64: payment.point_of_interaction.transaction_data.qr_code_base64 } : {}),
     ...(status === 'pending_3ds' && payment.three_ds_info?.external_resource_url ? { threeDsUrl: payment.three_ds_info.external_resource_url } : {}),
     ...(status === 'declined' ? { declineReason: mapDecline(payment.status_detail) } : {}),
+    ...(payment.status === 'charged_back' || payment.status === 'in_mediation' ? { disputed: true } : {}),
   };
 }
 

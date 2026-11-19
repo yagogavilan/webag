@@ -20,6 +20,8 @@ export interface OrderBalances {
   refundedCents: number;
   /** Devolvido ao cliente com dinheiro da Webag (cobertura, DEC-020a). */
   coveredCents: number;
+  /** I2: debitado pelo provedor por chargeback (conta no provedor, sem estorno nosso). */
+  chargebackCents: number;
   providerFeeCents: number;
   /** Troca (DT-049): taxa de coleta/reentrega, receita da Webag; entrou e voltou no provedor (taxa + diferença). */
   exchangeFeeRevenue: number;
@@ -81,6 +83,23 @@ export class LedgerService {
     const refundedBefore = await this.refundedCents(tx, input.orderId);
     const lines = refundLines(finance, refundedBefore, input.refundCents);
     return this.post(tx, { orderId: input.orderId, storeId: sale.storeId, attemptId: sale.attemptId, kind: 'refund', dedupeKey, meta: { refundCents: input.refundCents, refundedBeforeCents: refundedBefore, reason: input.reason ?? null } }, lines);
+  }
+
+  /**
+   * I2: chargeback. O provedor debitou o valor ainda não devolvido; para o ledger é um estorno forçado (a comissão e as taxas voltam
+   * e a loja fica devendo a parte dela), lançado como `adjustment` com chave única por pedido. A tarifa do provedor não volta.
+   */
+  async recordChargeback(tx: DbOrTx, input: { orderId: string; reason?: string }): Promise<boolean> {
+    const [sale] = await tx.select().from(ledgerTransactions).where(and(eq(ledgerTransactions.orderId, input.orderId), eq(ledgerTransactions.kind, 'sale'))).for('update');
+    if (!sale) return false;
+    const dedupeKey = `chargeback:${input.orderId}`;
+    const [existing] = await tx.select({ id: ledgerTransactions.id }).from(ledgerTransactions).where(eq(ledgerTransactions.dedupeKey, dedupeKey));
+    if (existing) return false;
+    const finance = (sale.meta as { finance: OrderFinance }).finance;
+    const before = await this.refundedCents(tx, input.orderId);
+    const remaining = finance.totalCents - before;
+    if (remaining <= 0) return false;
+    return this.post(tx, { orderId: input.orderId, storeId: sale.storeId, attemptId: sale.attemptId, kind: 'adjustment', dedupeKey, meta: { chargebackCents: remaining, refundedBeforeCents: before, reason: input.reason ?? 'chargeback' } }, refundLines(finance, before, remaining));
   }
 
   /**
@@ -147,13 +166,13 @@ export class LedgerService {
     return this.post(tx, { orderId: input.orderId, storeId: null, attemptId: null, kind: 'courier_payout', dedupeKey: `courier-payout:${input.deliveryId}`, meta: { deliveryId: input.deliveryId, costCents: input.costCents, paidOn: input.paidOn.toISOString() } }, courierPayoutLines(input.costCents));
   }
 
-  /** Devolvido ao cliente, por estorno do provedor OU por cobertura da Webag (base das partes proporcionais). */
+  /** Devolvido ao cliente, por estorno do provedor, cobertura da Webag OU chargeback (base das partes proporcionais). */
   private async refundedCents(tx: DbOrTx, orderId: string): Promise<number> {
     const [row] = await tx
       .select({ total: sql<string>`coalesce(sum(case when ${ledgerEntries.account} in ('provider_clearing', 'webag_coverage_cash') and ${ledgerEntries.direction} = 'credit' then ${ledgerEntries.amountCents} else 0 end), 0)` })
       .from(ledgerEntries)
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
-      .where(and(eq(ledgerTransactions.orderId, orderId), inArray(ledgerTransactions.kind, ['refund', 'coverage'])));
+      .where(and(eq(ledgerTransactions.orderId, orderId), inArray(ledgerTransactions.kind, ['refund', 'coverage', 'adjustment'])));
     return Number(row?.total ?? 0);
   }
 
@@ -182,6 +201,7 @@ export class LedgerService {
       paidCents: sum('sale', 'provider_clearing', 'debit'),
       refundedCents: sum('refund', 'provider_clearing', 'credit'),
       coveredCents: sum('coverage', 'webag_coverage_cash', 'credit'),
+      chargebackCents: sum('adjustment', 'provider_clearing', 'credit'),
       providerFeeCents: sum('provider_fee', 'provider_clearing', 'credit'),
       exchangeFeeRevenue: credit('exchange_fee_revenue'),
       exchangeReceivedCents: sum('exchange_fee', 'provider_clearing', 'debit'),
@@ -202,8 +222,8 @@ export class LedgerService {
         having sum(case e.direction when 'debit' then e.amount_cents else -e.amount_cents end) <> 0`),
     ]);
     const problems: string[] = [];
-    if (b.providerClearing !== b.paidCents + b.exchangeReceivedCents - b.refundedCents - b.exchangeRefundedCents - b.providerFeeCents) problems.push('provider_clearing diferente de pago - estornado - tarifa (e taxa de troca recebida - devolvida)');
-    if (b.refundedCents > b.paidCents) problems.push('estornado maior que o pago');
+    if (b.providerClearing !== b.paidCents + b.exchangeReceivedCents - b.refundedCents - b.chargebackCents - b.exchangeRefundedCents - b.providerFeeCents) problems.push('provider_clearing diferente de pago - estornado - tarifa (e taxa de troca recebida - devolvida)');
+    if (b.refundedCents + b.chargebackCents > b.paidCents) problems.push('estornado maior que o pago');
     if (unbalanced.rows.length > 0) problems.push('lançamento que não fecha');
     return { ok: problems.length === 0, problems };
   }

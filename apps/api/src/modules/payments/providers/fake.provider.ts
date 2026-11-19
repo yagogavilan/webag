@@ -25,6 +25,8 @@ export interface SimulateOptions {
   reportedFeeCents?: number;
   /** Tarifa do provedor (`fee_details`) informada na aprovação; por padrão, a estimativa do PRD. */
   reportedProviderFeeCents?: number;
+  /** I2: marca o pagamento como contestado (chargeback/mediação); mantém o resto (continua `approved`, como no MP). */
+  disputed?: boolean;
 }
 
 /** Tokens de texto documentados no README (WB-150 C3): resultado do cartão sem decorar sufixos. */
@@ -148,6 +150,7 @@ export class FakePaymentProvider implements PaymentProvider {
     payment.status = options.outcome === 'approved' ? 'approved' : options.outcome === 'declined' ? 'declined' : 'expired';
     if (options.outcome === 'declined') payment.declineReason = 'rejected_by_issuer';
     if (options.outcome === 'approved') payment.providerFeeCents = options.reportedProviderFeeCents ?? feeOf(payment, payment.pixCopyPaste ? 'pix' : 'card');
+    if (options.disputed !== undefined) payment.disputed = options.disputed;
     if (options.reportedAmountCents !== undefined) payment.amountCents = options.reportedAmountCents;
     if (options.reportedReference !== undefined) payment.externalReference = options.reportedReference;
     if (options.reportedReceiverId !== undefined) payment.receiverId = options.reportedReceiverId;

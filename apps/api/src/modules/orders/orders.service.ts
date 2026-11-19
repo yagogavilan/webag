@@ -413,7 +413,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     await tx.update(couponRedemptions).set({ releasedAt: new Date() }).where(and(eq(couponRedemptions.orderId, order.id), isNull(couponRedemptions.releasedAt)));
 
     let refund: PendingRefund | null = null;
-    if (opts.refund !== false && refundDueOnCancel(order.status) && order.paymentAttemptId) {
+    if (opts.refund !== false && !order.disputedAt && refundDueOnCancel(order.status) && order.paymentAttemptId) {
       const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, order.paymentAttemptId));
       if (attempt) {
         const remaining = attempt.amountCents - (await this.payments.refundedOrPendingCents(tx, attempt.id));
@@ -544,6 +544,29 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     }
   }
 
+  /**
+   * I2: o provedor contestou o pagamento aprovado. Na transação do pagamento: marca o pedido (`disputedAt`), lança o chargeback no
+   * ledger (a loja passa a dever a parte dela) e audita. O alerta `payment_disputed` é do pagamento. Idempotente.
+   */
+  async onDisputed(tx: Tx, attempt: PaymentAttempt): Promise<void> {
+    if (!UUID_RE.test(attempt.externalReference)) return;
+    const [order] = await tx.select().from(orders).where(eq(orders.id, attempt.externalReference)).for('update');
+    if (!order || order.paymentAttemptId !== attempt.id) return;
+    if (order.disputedAt === null) {
+      await tx.update(orders).set({ disputedAt: new Date(), updatedAt: new Date() }).where(eq(orders.id, order.id));
+      await this.audit.record(tx, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }, { action: 'order.disputed', targetType: 'order', targetId: order.id, actorId: null, actorRole: 'system', after: { attemptId: attempt.id, amountCents: attempt.amountCents } });
+    }
+    await this.ledger.recordChargeback(tx, { orderId: order.id, reason: 'chargeback' });
+  }
+
+  /** I3: a tarifa do provedor só apareceu depois da aprovação: lança uma vez (`fee:<pedido>`). */
+  async onFeeKnown(tx: Tx, attempt: PaymentAttempt, remote: ProviderPayment): Promise<void> {
+    if (!UUID_RE.test(attempt.externalReference) || (remote.providerFeeCents ?? 0) <= 0) return;
+    const [order] = await tx.select({ id: orders.id, storeId: orders.storeId, paymentAttemptId: orders.paymentAttemptId }).from(orders).where(eq(orders.id, attempt.externalReference));
+    if (!order || order.paymentAttemptId !== attempt.id || !(await this.ledger.hasSale(order.id, tx))) return;
+    await this.ledger.recordProviderFee(tx, { orderId: order.id, storeId: order.storeId, attemptId: attempt.id, feeCents: remote.providerFeeCents! });
+  }
+
   /** Estorno confirmado pelo provedor: lança no ledger com a mesma chave (idempotente). */
   async onRefundConfirmed(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string; reason: string }): Promise<void> {
     if (!UUID_RE.test(attempt.externalReference)) return;
@@ -561,6 +584,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const [order] = await this.db.select().from(orders).where(eq(orders.id, orderId));
     if (!order) throw errors.notFound('Pedido não encontrado.');
     if (!order.paymentAttemptId || !order.paidAt) throw errors.conflict('ORDER_NOT_PAID', 'Pedido sem pagamento a estornar');
+    if (order.disputedAt) throw errors.conflict('ORDER_DISPUTED', 'Pedido com pagamento contestado', 'O provedor já debitou o valor (chargeback); não há o que estornar.');
     const limit = await this.params.getNumber('estorno_super_admin_cents');
     const isSuper = ctx.principal?.adminProfile === 'super_admin';
     if (input.amountCents > limit && !isSuper) {

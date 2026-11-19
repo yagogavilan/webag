@@ -40,6 +40,8 @@ export interface ProviderPayment {
   pixQrBase64?: string;
   threeDsUrl?: string;
   declineReason?: string;
+  /** I2: pagamento contestado (chargeback) ou em mediação no provedor; o dinheiro pode já ter sido debitado da conta. */
+  disputed?: boolean;
 }
 
 /** Notificação já autenticada (assinatura conferida), sem confiar no corpo além do `type`. */

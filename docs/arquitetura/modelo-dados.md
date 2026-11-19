@@ -90,3 +90,6 @@ Na anonimização a linha de `users` fica como casca (`deleted-<uuid>@anon.webag
 | Redis | `rt:ticket:<hash>` (ticket de tempo real, 60 s, `GETDEL`) e `card-intent:<hash>` (intenção de cartão, 15 min, `GETDEL`); nenhum dado de cartão |
 
 Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`, `order_items`, `stores`, `users` e o ledger; a série de vendas por dia é uma consulta sobre `orders`.
+
+## R.3 (I2/I3): contestação do pagamento (migração 0036)
+`orders.disputed_at timestamptz` (nulo): o provedor contestou o pagamento (`charged_back`/`in_mediation`). Não muda `status`; acompanha o alerta `payment_disputed`, o lançamento `adjustment` `chargeback:<pedido>` no ledger (equivale a um estorno forçado: comissão e taxas voltam, a loja fica devendo a parte dela; a tarifa do provedor não volta) e a auditoria `order.disputed`. Pedido contestado não aceita estorno manual (409 `ORDER_DISPUTED`) e o cancelamento não agenda estorno. A tarifa do provedor que só aparece depois da aprovação é lançada pela conciliação (`fee:<pedido>`, idempotente).

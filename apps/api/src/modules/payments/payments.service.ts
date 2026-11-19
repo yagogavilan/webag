@@ -29,6 +29,10 @@ export interface PaymentListener {
   onAttemptTransition?(tx: Tx, attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void>;
   /** Depois do commit (chamadas ao provedor, push): falha aqui não desfaz a transição. */
   afterTransition?(attempt: PaymentAttempt, from: PaymentStatus, remote: ProviderPayment | null): Promise<void>;
+  /** I2: o provedor contestou o pagamento aprovado (chargeback/mediação). Idempotente: pode vir a cada webhook e conciliação. */
+  onDisputed?(tx: Tx, attempt: PaymentAttempt, remote: ProviderPayment): Promise<void>;
+  /** I3: a tarifa do provedor ficou conhecida depois da aprovação (o MP nem sempre traz `fee_details` na 1ª leitura). Idempotente. */
+  onFeeKnown?(tx: Tx, attempt: PaymentAttempt, remote: ProviderPayment): Promise<void>;
   onRefundConfirmed?(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string; reason: string; refundedTotalCents: number }): Promise<void>;
   /** A Webag assumiu o estorno que o provedor não concluiu (DEC-020a): vira dívida do lojista no ledger, na mesma transação. */
   onRefundCovered?(tx: Tx, attempt: PaymentAttempt, coverage: { amountCents: number; idempotencyKey: string; reason: string }): Promise<void>;
@@ -435,6 +439,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   /** Aplica o estado do provedor à tentativa, com a máquina de estados e as conferências de SEC-034/SEC-040. */
   private async sync(attempt: PaymentAttempt, remote: ProviderPayment): Promise<void> {
+    if (attempt.status === 'approved' && remote.status === 'approved') await this.syncApprovedExtras(attempt, remote);
     if (remote.status === 'approved') {
       const mismatches = await this.mismatches(attempt, remote);
       if (mismatches.length > 0) {
@@ -464,6 +469,25 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       return updated;
     });
     if (changed) await this.notifyAfter(changed, attempt.status, remote);
+  }
+
+  /**
+   * Pagamento já aprovado localmente: (I2) contestação vira alerta `payment_disputed`, marca no pedido e lançamento no ledger;
+   * (I3) a tarifa do provedor que só apareceu agora é lançada. Os dois ganchos são idempotentes (rodam em todo webhook e conciliação).
+   */
+  private async syncApprovedExtras(attempt: PaymentAttempt, remote: ProviderPayment): Promise<void> {
+    const mismatch = (await this.mismatches(attempt, remote)).length > 0;
+    if (mismatch) return; // divergência já é tratada (e alertada) por `sync`/`reconcile`
+    const disputed = remote.disputed === true;
+    const feeKnown = (remote.providerFeeCents ?? 0) > 0;
+    if (!disputed && !feeKnown) return;
+    await this.db.transaction(async (tx) => {
+      for (const listener of this.listeners) {
+        if (feeKnown) await listener.onFeeKnown?.(tx, attempt, remote);
+        if (disputed) await listener.onDisputed?.(tx, attempt, remote);
+      }
+    });
+    if (disputed) await this.alert(attempt.id, 'payment_disputed', { providerPaymentId: attempt.providerPaymentId, orderReference: attempt.externalReference, amountCents: attempt.amountCents });
   }
 
   private async mismatches(attempt: PaymentAttempt, remote: ProviderPayment): Promise<string[]> {

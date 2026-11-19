@@ -47,6 +47,9 @@ describe('mapeamento do Mercado Pago', () => {
     expect(mapStatus({ status: 'pending', status_detail: 'pending_challenge', three_ds_info: { external_resource_url: 'https://mp/3ds' } })).toBe('pending_3ds');
     expect(mapStatus({ status: 'pending', status_detail: 'pending_challenge' })).toBe('pending');
     expect(mapStatus({ status: 'charged_back' })).toBe('approved');
+    expect(toProviderPayment({ id: 1, status: 'charged_back' }).disputed).toBe(true); // I2: contestado fica visível
+    expect(toProviderPayment({ id: 1, status: 'in_mediation' }).disputed).toBe(true);
+    expect(toProviderPayment({ id: 1, status: 'approved' }).disputed).toBeUndefined();
     expect(mapStatus({ status: 'algo_novo' })).toBe('pending');
   });
 
