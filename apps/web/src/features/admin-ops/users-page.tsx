@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
-import { Badge, Button, EmptyState, ErrorState, NoAccessState, SelectField, SkeletonRows, TextField, cx } from '@/components/ui';
+import { Badge, Banner, Button, EmptyState, ErrorState, NoAccessState, SelectField, SkeletonRows, TextField, cx } from '@/components/ui';
+import { ApiError } from '@/lib/api/errors';
 import { adminOpsApi, adminOpsKeys, type AdminUserPage, type UserFilters } from '@/lib/api/admin-ops';
 import { formatDay } from '@/lib/format';
 import { asRoute } from '@/lib/routes';
@@ -21,10 +22,13 @@ export const ROLE_LABEL = { customer: 'Cliente', merchant: 'Lojista' } as const;
 export const USER_STATUS_LABEL = { active: 'Ativa', blocked: 'Bloqueada', deleted: 'Excluída' } as const;
 const STATUS_TONE = { active: 'success', blocked: 'danger', deleted: 'neutral' } as const;
 
-/** Texto de erro da busca: a API pede 2+ caracteres; celular só a partir de 4 dígitos (a API decide, aqui só orientamos). */
+/**
+ * SEC-181: a busca não desfaz o mascaramento. Nome por trecho (3 letras ou mais); e-mail só inteiro; celular só completo (DDD + número); ou o ID.
+ * Trecho de e-mail ou de celular volta lista vazia, de propósito (sem pista do motivo).
+ */
 export function searchError(term: string): string | undefined {
   const text = term.trim();
-  return text !== '' && text.length < 2 ? 'Digite ao menos 2 caracteres.' : undefined;
+  return text !== '' && text.length < 3 ? 'Digite ao menos 3 letras do nome, o e-mail inteiro, o celular completo ou o ID.' : undefined;
 }
 
 /** B4, WB-102 C1: busca de usuários (nome, e-mail, celular com 4+ dígitos ou ID). Dado pessoal sempre mascarado. Só super admin, operação e suporte. */
@@ -60,7 +64,7 @@ export function UsersPage() {
           if (!error) setQ(term.trim());
         }}
       >
-        <TextField label="Buscar usuário" value={term} onChange={(e) => { setTerm(e.target.value.slice(0, 100)); if (e.target.value.trim() === '') setQ(''); }} error={error} hint="Nome, e-mail, celular (4 dígitos ou mais) ou ID. Pressione Enter." autoComplete="off" data-testid={T('search')} />
+        <TextField label="Buscar usuário" value={term} onChange={(e) => { setTerm(e.target.value.slice(0, 100)); if (e.target.value.trim() === '') setQ(''); }} error={error} hint="Nome (3 letras ou mais), e-mail inteiro, celular completo com DDD ou ID. Pressione Enter." autoComplete="off" data-testid={T('search')} />
         <Button type="submit" variant="secondary" data-testid={T('search-submit')}>Buscar</Button>
       </form>
       <div className={s.filters}>
@@ -79,10 +83,12 @@ export function UsersPage() {
 
       {list.isPending ? (
         <SkeletonRows rows={4} height={96} label="Carregando os usuários" />
+      ) : list.isError && !list.data && list.error instanceof ApiError && list.error.status === 429 ? (
+        <Banner tone="warning" testId={T('rate-limit')} action={<Button variant="secondary" onClick={() => void list.refetch()}>Tentar de novo</Button>}>Muitas buscas em pouco tempo. Espere um minuto e tente de novo.</Banner>
       ) : list.isError && !list.data ? (
         <ErrorState offline={offline} onRetry={() => void list.refetch()} testId={T('error')} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={UsersThree} title={filtered ? 'Nenhum usuário encontrado' : 'Nenhum usuário ainda'} text={filtered ? 'Confira o que foi digitado ou tire os filtros.' : 'As contas criadas no app aparecem aqui.'} testId={T('empty')} />
+        <EmptyState icon={UsersThree} title={filtered ? 'Nenhum usuário encontrado' : 'Nenhum usuário ainda'} text={filtered ? 'Confira o que foi digitado: e-mail e celular só são achados por inteiro. Ou tire os filtros.' : 'As contas criadas no app aparecem aqui.'} testId={T('empty')} />
       ) : (
         <>
           <ul className={s.list} aria-label="Usuários" data-testid={T('list')}>

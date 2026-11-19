@@ -158,7 +158,7 @@ export function UserDetailPage({ id }: { id: string }) {
                 <li>A pessoa sai de todos os aparelhos agora e passa a ver “Conta indisponível” ao tentar entrar.</li>
                 {suspending.length > 0 ? <li>{suspending.length === 1 ? `A loja ${suspending[0]?.name ?? ''} é suspensa junto` : `As lojas ${suspending.map((store) => store.name ?? 'sem nome').join(', ')} são suspensas junto`}: deixa de vender na hora.</li> : null}
                 <li>Pedidos em andamento não são cancelados. Eles seguem para a sua decisão em Pedidos.</li>
-                <li>O motivo fica na auditoria e no histórico da conta.</li>
+                <li>O motivo é interno: fica na auditoria e no histórico da conta e o dono da loja não o vê. Não escreva dado pessoal do cliente nele.</li>
               </ul>
             </>
           }
@@ -189,7 +189,7 @@ export function UserDetailPage({ id }: { id: string }) {
               <ul className={s.effects} data-testid={T('unblock-effects')}>
                 <li>A pessoa volta a poder entrar e usar o app.</li>
                 <li>Lojas suspensas pelo bloqueio não são reativadas sozinhas. Reative em Lojas, se for o caso.</li>
-                <li>O motivo fica na auditoria e no histórico da conta.</li>
+                <li>O motivo é interno: fica na auditoria e no histórico da conta. Não escreva dado pessoal nele.</li>
               </ul>
             </>
           }

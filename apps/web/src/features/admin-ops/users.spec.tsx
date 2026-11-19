@@ -25,13 +25,21 @@ describe('busca de usuários (B4, WB-102 C1)', () => {
     expect(screen.getByTestId('admin.usuarios.status-u2')).toHaveTextContent('Bloqueada');
     await userEvent.type(screen.getByTestId('admin.usuarios.search'), 'm');
     await userEvent.click(screen.getByTestId('admin.usuarios.search-submit'));
-    expect(await screen.findByText('Digite ao menos 2 caracteres.')).toBeInTheDocument();
+    expect(await screen.findByText(/Digite ao menos 3 letras do nome/)).toBeInTheDocument();
     await userEvent.type(screen.getByTestId('admin.usuarios.search'), 'aria{Enter}');
     await waitFor(() => expect(queries.some((q) => q.includes('q=maria'))).toBe(true));
+    expect(screen.getByText(/e-mail inteiro, celular completo/)).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByTestId('admin.usuarios.status'), 'blocked');
     await waitFor(() => expect(queries.some((q) => q.includes('status=blocked') && q.includes('q=maria'))).toBe(true));
-    expect(searchError('a')).toBeTruthy();
+    expect(searchError('ma')).toBeTruthy();
+    expect(searchError('mar')).toBeUndefined();
     expect(searchError('')).toBeUndefined();
+  });
+
+  it('429 da busca (limite por admin) tem texto próprio', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (path(url) === 'admin/users' ? json({ code: 'RATE_LIMITED', title: 'x', status: 429 }, 429) : undefined)).impl);
+    renderPanel(<UsersPage />, 'support');
+    expect(await screen.findByTestId('admin.usuarios.rate-limit')).toHaveTextContent('Muitas buscas');
   });
 
   it('vazio, erro e permissão: financeiro não vê a área', async () => {
@@ -77,6 +85,7 @@ describe('detalhe e bloqueio (B4, WB-102 C3/C5)', () => {
     expect(effects).toHaveTextContent('sai de todos os aparelhos');
     expect(effects).toHaveTextContent('Mercadinho Boa Compra');
     expect(effects).toHaveTextContent('Pedidos em andamento não são cancelados');
+    expect(effects).toHaveTextContent('O motivo é interno');
     await userEvent.click(screen.getByTestId('admin.usuarios.block-confirm'));
     expect(await screen.findByText(/Escreva o motivo/)).toBeInTheDocument();
     expect(state.blocked).toBeUndefined();

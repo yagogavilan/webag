@@ -77,6 +77,10 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
   const canCancel = order.allowedActions.includes('cancel');
   const canRefund = order.allowedActions.includes('refund');
   const terminal = ORDER_TERMINAL.includes(order.status);
+  // SEC-184 / RN-13: comissão e líquido são dado comercial do financeiro e do super admin. A API também os zera; aqui não desenhamos nem se vierem.
+  const values = order.values as Partial<AdminOrderDetail['values']>;
+  const showSplit = canView('comissoes') && values.commission != null && values.applicationFee != null && values.merchantNetBeforeProviderFee != null;
+  const split = { commission: values.commission?.amount ?? 0, applicationFee: values.applicationFee?.amount ?? 0, net: values.merchantNetBeforeProviderFee?.amount ?? 0 };
   const refresh = () => Promise.all([client.invalidateQueries({ queryKey: adminOpsKeys.orders }), client.invalidateQueries({ queryKey: ['admin', 'refund-queue'] })]);
 
   return (
@@ -147,10 +151,15 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
             {order.values.storeDiscount.amount > 0 ? <><dt>Desconto da loja</dt><dd>-<Money cents={order.values.storeDiscount.amount} /></dd></> : null}
             {order.values.platformDiscount.amount > 0 ? <><dt>Desconto da Webag</dt><dd>-<Money cents={order.values.platformDiscount.amount} /></dd></> : null}
             <dt><strong>Total pago pelo cliente</strong></dt><dd data-testid={T('total')}><strong><Money cents={order.values.total.amount} /></strong></dd>
-            <dt>Comissão da Webag</dt><dd><Money cents={order.values.commission.amount} /></dd>
-            <dt>Taxa de aplicação</dt><dd><Money cents={order.values.applicationFee.amount} /></dd>
-            <dt>Líquido da loja antes da taxa do provedor</dt><dd><Money cents={order.values.merchantNetBeforeProviderFee.amount} /></dd>
+            {showSplit ? (
+              <>
+                <dt>Comissão da Webag</dt><dd data-testid={T('commission')}><Money cents={split.commission} /></dd>
+                <dt>Taxa de aplicação</dt><dd><Money cents={split.applicationFee} /></dd>
+                <dt>Líquido da loja antes da taxa do provedor</dt><dd><Money cents={split.net} /></dd>
+              </>
+            ) : null}
           </dl>
+          {!showSplit ? <p className={cx('wb-text-caption', s.muted)} data-testid={T('split-hidden')}>Comissão e líquido da loja são do financeiro e do super admin.</p> : null}
         </section>
 
         <section className={s.block} aria-labelledby="od-pay" data-testid={T('payment')}>

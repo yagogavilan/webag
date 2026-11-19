@@ -81,8 +81,22 @@ describe('detalhe do pedido e intervenção (B5, WB-108 C2, WB-109)', () => {
     expect(screen.getByTestId('admin.pedidos.delivery')).toHaveTextContent('Centro, Francisco Morato, SP');
     expect(screen.getByTestId('admin.pedidos.delivery')).toHaveTextContent('endereço completo não aparece');
     expect(screen.getByTestId('admin.pedidos.total')).toHaveTextContent('R$ 59,90');
-    expect(screen.getByTestId('admin.pedidos.values')).toHaveTextContent('Comissão da Webag');
+    expect(screen.getByTestId('admin.pedidos.values')).not.toHaveTextContent('Comissão da Webag');
+    expect(screen.getByTestId('admin.pedidos.split-hidden')).toHaveTextContent('do financeiro e do super admin');
     expect(screen.getByTestId('admin.pedidos.timeline')).toHaveTextContent('Sistema');
+  });
+
+  it('SEC-184: comissão e líquido só aparecem ao financeiro e ao super admin, e somem se a API mandar nulo', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (path(url) === 'admin/orders/o1' ? json(detail()) : undefined)).impl);
+    const first = renderPanel(<AdminOrderDetailPage id="o1" />, 'finance');
+    expect(await screen.findByTestId('admin.pedidos.commission')).toHaveTextContent('R$ 7,50');
+    first.unmount();
+    const nulled = detail();
+    nulled.values = { ...nulled.values, commission: null, applicationFee: null, merchantNetBeforeProviderFee: null } as never;
+    vi.stubGlobal('fetch', mockFetch((url) => (path(url) === 'admin/orders/o1' ? json(nulled) : undefined)).impl);
+    renderPanel(<AdminOrderDetailPage id="o1" />, 'super_admin');
+    expect(await screen.findByTestId('admin.pedidos.split-hidden')).toBeInTheDocument();
+    expect(screen.queryByTestId('admin.pedidos.commission')).not.toBeInTheDocument();
   });
 
   it('operação e suporte não cancelam nem estornam (DEC-074c): sem botões e com o porquê em texto', async () => {
