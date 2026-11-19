@@ -1,9 +1,7 @@
 import type { Banner } from '@webag/shared';
 import { useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { CaretLeft, CaretRight } from '../../components/icons';
 import { RemoteImage } from '../../components/RemoteImage';
-import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { theme } from '../../theme';
 
@@ -15,8 +13,9 @@ export interface BannerCarouselProps {
 const BANNER_MAX_HEIGHT = 280;
 
 /**
- * Banners 2:1 do admin (DEC-024 a). Sem rotação automática (acessibilidade e dado móvel); pontos "Banner 2 de 4" e botões
- * Anterior e Próximo para quem não usa gesto. Altura máxima de 280 no tablet. Banner sem destino não é tocável.
+ * Banners 2:1 do admin (DEC-024 a). Sem rotação automática (acessibilidade e dado móvel). Três pontos mostram qual banner está
+ * em tela (U8.3: no lugar das setas "‹ 1 / 3 ›", que gastavam 54 px); quem não usa gesto navega pelas ações "Próximo banner" e
+ * "Banner anterior" do leitor de tela. Altura máxima de 280 no tablet. Banner sem destino não é tocável.
  */
 export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
   const { width: screen } = useWindowDimensions();
@@ -33,7 +32,18 @@ export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
   };
 
   return (
-    <View accessibilityLabel={t('home.banners')} accessibilityRole="adjustable" style={styles.wrap}>
+    <View
+      accessibilityActions={[
+        { name: 'increment', label: t('home.bannerNext') },
+        { name: 'decrement', label: t('home.bannerPrev') },
+      ]}
+      accessibilityLabel={t('home.banners')}
+      accessibilityRole="adjustable"
+      accessibilityValue={{ text: t('home.bannerOf', { n: index + 1, total: banners.length }) }}
+      onAccessibilityAction={(e) => go(index + (e.nativeEvent.actionName === 'increment' ? 1 : -1))}
+      style={styles.wrap}
+      testID="home.banners"
+    >
       <FlatList
         data={banners}
         decelerationRate="fast"
@@ -58,16 +68,11 @@ export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
         snapToInterval={step}
       />
       {banners.length > 1 ? (
-        <View style={styles.controls}>
-          <Pressable accessibilityLabel={t('home.bannerPrev')} accessibilityRole="button" disabled={index === 0} hitSlop={theme.hitSlopFor(theme.size.iconMd)} onPress={() => go(index - 1)} style={styles.arrow} testID="home.banner-prev">
-            <CaretLeft color={index === 0 ? theme.color.text.disabled : theme.color.text.primary} size={theme.size.iconSm} />
-          </Pressable>
-          <Text accessibilityLabel={t('home.bannerOf', { n: index + 1, total: banners.length })} color="secondary" variant="caption">
-            {index + 1} / {banners.length}
-          </Text>
-          <Pressable accessibilityLabel={t('home.bannerNext')} accessibilityRole="button" disabled={index === banners.length - 1} hitSlop={theme.hitSlopFor(theme.size.iconMd)} onPress={() => go(index + 1)} style={styles.arrow} testID="home.banner-next">
-            <CaretRight color={index === banners.length - 1 ? theme.color.text.disabled : theme.color.text.primary} size={theme.size.iconSm} />
-          </Pressable>
+        // só indicador: o toque fica no próprio banner (≥ 44 pt) e a navegação sem gesto está nas ações do leitor de tela
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={styles.dots} testID="home.banner-dots">
+          {banners.map((b, i) => (
+            <View key={b.id} style={[styles.dot, i === index && styles.dotOn]} testID={i === index ? 'home.banner-dot-active' : undefined} />
+          ))}
         </View>
       ) : null}
     </View>
@@ -78,6 +83,7 @@ const Gap = () => <View style={{ width: theme.space[2] }} />;
 
 const styles = StyleSheet.create({
   wrap: { gap: theme.space[2] },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space[2] },
-  arrow: { width: theme.size.touchMin, height: theme.size.touchMin, alignItems: 'center', justifyContent: 'center' },
+  dots: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space[1], height: theme.space[2] },
+  dot: { width: theme.space[2], height: theme.space[2], borderRadius: theme.radius.pill, backgroundColor: theme.color.border.default },
+  dotOn: { width: theme.space[5], backgroundColor: theme.color.action.primary },
 });

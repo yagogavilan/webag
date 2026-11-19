@@ -45,6 +45,18 @@ describe('Início (D5)', () => {
     expect(screen.queryByTestId('home.skeleton')).toBeNull();
   });
 
+  it('U8.3: com endereço o cabeçalho é compacto (título só para o leitor de tela) e o banner não tem setas', async () => {
+    mockBanners.mockResolvedValue({ data: [banner(), banner({ id: 'b2' }), banner({ id: 'b3' })], nextCursor: null });
+    await renderScreen(<CustomerHome />);
+    expect(await screen.findByTestId('home.banner-b1')).toBeOnTheScreen();
+    expect(screen.getByTestId('home.address')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'O que vai pra sacola hoje?' })).toBeOnTheScreen();
+    expect(screen.queryByText('O que vai')).toBeNull();
+    expect(screen.queryByTestId('home.banner-prev')).toBeNull();
+    expect(screen.queryByTestId('home.banner-next')).toBeNull();
+    expect(screen.getByTestId('home.banner-dot-active', { includeHiddenElements: true })).toBeOnTheScreen();
+  });
+
   it('banners, categorias, lojas perto e ofertas; seção sem itens não aparece', async () => {
     await renderScreen(<CustomerHome />);
     expect(await screen.findByTestId('home.banner-b1')).toBeOnTheScreen();
