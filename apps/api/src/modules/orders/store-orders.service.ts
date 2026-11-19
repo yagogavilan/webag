@@ -1,13 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { Redis } from 'ioredis';
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
-import { errors } from '../../platform/http/app-error.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
+import { REDIS } from '../../platform/redis/redis.module.js';
 import { users } from '../identity/db/schema.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 import { nextStatuses, type OrderStatus } from './domain/state.js';
 import type { OrderEvent } from './order-events.bus.js';
 import { OrdersService, type OrderRow } from './orders.service.js';
+
+const PICKUP_CODE_MAX_FAILS = 5;
+const PICKUP_CODE_LOCK_SECONDS = 1800;
 
 export type StoreScope = 'new' | 'in_progress' | 'history';
 const SCOPES: Record<StoreScope, OrderStatus[]> = {
@@ -44,7 +49,28 @@ export class StoreOrdersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly orders: OrdersService,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
+
+  /**
+   * SEC-138: o código de retirada tem 10.000 combinações; 5 erros por pedido bloqueiam a conferência por 30 min e avisam o
+   * admin. O contador está no Redis (fora da transação, para não desfazer com o erro) e zera quando o código acerta.
+   */
+  private async assertPickupCode(orderId: string, expected: string | null, given: string | undefined): Promise<void> {
+    const key = `pickup-code-fails:${orderId}`;
+    const fails = Number((await this.redis.get(key).catch(() => null)) ?? 0);
+    if (fails >= PICKUP_CODE_MAX_FAILS) {
+      throw new AppError(429, 'PICKUP_CODE_LOCKED', 'Conferência bloqueada', { detail: 'Muitos códigos errados. Tente de novo em 30 minutos ou fale com o suporte.', retryAfterSeconds: 1800 });
+    }
+    if (given && expected && given === expected) {
+      await this.redis.del(key).catch(() => undefined);
+      return;
+    }
+    const count = await this.redis.incr(key).catch(() => 0);
+    if (count === 1) await this.redis.expire(key, PICKUP_CODE_LOCK_SECONDS).catch(() => undefined);
+    if (count >= PICKUP_CODE_MAX_FAILS) await this.orders.raiseAlert('pickup_code_locked', { orderId });
+    throw errors.unprocessable('PICKUP_CODE_INVALID', 'Código de retirada inválido', { detail: 'Confira o código de 4 dígitos com o cliente.' });
+  }
 
   // =================================================================== leitura
 
@@ -183,7 +209,7 @@ export class StoreOrdersService {
     await this.act(storeId, orderId, userId, async (tx, order) => {
       if (to === 'delivered' && order.mode === 'pickup' && order.status !== 'delivered') {
         // Retirada se conclui com o código que o CLIENTE informa no balcão (RN-07, SEC-067).
-        if (!pickupCode || pickupCode !== order.pickupCode) throw errors.unprocessable('PICKUP_CODE_INVALID', 'Código de retirada inválido', { detail: 'Confira o código de 4 dígitos com o cliente.' });
+        await this.assertPickupCode(order.id, order.pickupCode, pickupCode);
       }
       return { event: await this.orders.advance(tx, order, to, 'store', userId) };
     });

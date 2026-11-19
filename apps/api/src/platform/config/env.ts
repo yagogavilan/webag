@@ -108,6 +108,8 @@ export const envSchema = z
     MP_OAUTH_REDIRECT_URI: z.url().optional(),
     /** `true` se o provedor exigir o CPF do pagador no PIX [confirmar no sandbox]. */
     MP_PAYER_DOCUMENT_REQUIRED: optionalBool,
+    /** PKCE (S256) no OAuth do Mercado Pago (SEC-140). Ligado por padrão; `false` só se o painel do MP recusar os parâmetros. */
+    MP_OAUTH_PKCE: optionalBool,
     PAYMENT_TOKEN_ENC_KEY: z.string().default(DEV_PAYMENT_TOKEN_ENC_KEY),
 
     // --- Armazenamento S3 (ADR-005): RustFS no dev, R2/S3 em produção. `memory` só para testes. ---

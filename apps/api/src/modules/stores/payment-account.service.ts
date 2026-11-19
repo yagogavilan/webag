@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
 import { and, desc, eq, isNull, ne, gt, sql } from 'drizzle-orm';
 import { MercadoPagoConfig, OAuth, User } from 'mercadopago';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
@@ -34,8 +35,8 @@ export interface ConnectedAccount {
 export interface PaymentOAuthProvider {
   readonly name: 'fake' | 'mercadopago';
   /** URL de autorização. `redirect_uri` vem de configuração, nunca da requisição (SEC-045). */
-  authorizationUrl(state: string): string;
-  exchange(code: string, context: { storeId: string; storeDocument: string }): Promise<ConnectedAccount>;
+  authorizationUrl(state: string, codeChallenge?: string): string;
+  exchange(code: string, context: { storeId: string; storeDocument: string }, codeVerifier?: string): Promise<ConnectedAccount>;
   /** Renova os tokens antes do vencimento (DT-034). O `refresh_token` antigo deixa de valer: gravar o novo na MESMA transação. */
   refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }>;
 }
@@ -53,8 +54,8 @@ export class FakePaymentOAuthProvider implements PaymentOAuthProvider {
   readonly name = 'fake' as const;
   constructor(private readonly config: ConfigService<Env, true>) {}
 
-  authorizationUrl(state: string): string {
-    return `${this.config.get('API_PUBLIC_URL', { infer: true })}/fake-oauth/authorize?state=${encodeURIComponent(state)}`;
+  authorizationUrl(state: string, codeChallenge?: string): string {
+    return `${this.config.get('API_PUBLIC_URL', { infer: true })}/fake-oauth/authorize?state=${encodeURIComponent(state)}${codeChallenge ? `&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256` : ''}`;
   }
 
   exchange(code: string, context: { storeId: string; storeDocument: string }): Promise<ConnectedAccount> {
@@ -93,15 +94,17 @@ export class MercadoPagoOAuthProvider implements PaymentOAuthProvider {
     return { clientId, clientSecret, redirectUri, platformToken };
   }
 
-  authorizationUrl(state: string): string {
+  authorizationUrl(state: string, codeChallenge?: string): string {
     const { clientId, redirectUri, platformToken } = this.creds();
-    return new OAuth(new MercadoPagoConfig({ accessToken: platformToken })).getAuthorizationURL({ options: { client_id: clientId, redirect_uri: redirectUri, state } });
+    const url = new OAuth(new MercadoPagoConfig({ accessToken: platformToken })).getAuthorizationURL({ options: { client_id: clientId, redirect_uri: redirectUri, state } });
+    // SEC-140: o SDK 3.6 não expõe PKCE; o desafio S256 entra na URL montada por ele.
+    return codeChallenge ? `${url}${url.includes('?') ? '&' : '?'}code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256` : url;
   }
 
-  async exchange(code: string): Promise<ConnectedAccount> {
+  async exchange(code: string, _context?: unknown, codeVerifier?: string): Promise<ConnectedAccount> {
     const { clientId, clientSecret, redirectUri, platformToken } = this.creds();
     try {
-      const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).create({ body: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri } });
+      const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).create({ body: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri, ...(codeVerifier ? { code_verifier: codeVerifier } : {}) } as never });
       if (!tokens.access_token || !tokens.refresh_token || tokens.user_id === undefined) throw new Error('resposta de OAuth incompleta');
       const me = await new User(new MercadoPagoConfig({ accessToken: tokens.access_token, options: { timeout: 8_000, maxRetries: 1 } })).get();
       const holder = (me as { identification?: { number?: string } }).identification?.number ?? '';
@@ -196,20 +199,26 @@ export class PaymentAccountService implements OnModuleInit {
   /** Só 1 `state` ativo por loja: gerar um novo invalida o anterior (duplo toque, R-37b). */
   async startConnect(store: Store, principal: Principal): Promise<{ authorizationUrl: string; state: string; expiresInSeconds: number }> {
     const state = randomToken(32);
+    const stateHash = sha256Hex(state);
+    // SEC-140: PKCE (S256). O verifier fica cifrado no banco até o callback; sem ele um `code` injetado não troca por token.
+    const pkce = this.config.get('MP_OAUTH_PKCE', { infer: true }) !== false;
+    const verifier = pkce ? randomToken(32) : null;
+    const challenge = verifier ? createHash('sha256').update(verifier).digest('base64url') : undefined;
     await this.db.transaction(async (tx) => {
       await tx
         .update(paymentOauthStates)
         .set({ usedAt: new Date() })
         .where(and(eq(paymentOauthStates.storeId, store.id), isNull(paymentOauthStates.usedAt)));
       await tx.insert(paymentOauthStates).values({
-        stateHash: sha256Hex(state),
+        stateHash,
         storeId: store.id,
         userId: principal.userId,
         sessionId: principal.sessionId,
+        codeVerifierEnc: verifier ? encryptSecret(verifier, this.encKey, 'payment-oauth-pkce', `state:${stateHash}`) : null,
         expiresAt: new Date(Date.now() + OAUTH_STATE_TTL_MS),
       });
     });
-    return { authorizationUrl: this.provider.authorizationUrl(state), state, expiresInSeconds: OAUTH_STATE_TTL_MS / 1000 };
+    return { authorizationUrl: this.provider.authorizationUrl(state, challenge), state, expiresInSeconds: OAUTH_STATE_TTL_MS / 1000 };
   }
 
   /** O `state` precisa ser desta sessão E desta loja, de uso único e dentro de 10 min; senão nada é vinculado (SEC-045). */
@@ -228,10 +237,11 @@ export class PaymentAccountService implements OnModuleInit {
           gt(paymentOauthStates.expiresAt, new Date()),
         ),
       )
-      .returning({ id: paymentOauthStates.id });
+      .returning({ id: paymentOauthStates.id, codeVerifierEnc: paymentOauthStates.codeVerifierEnc });
     if (consumed.length === 0) throw invalid();
+    const verifier = consumed[0]?.codeVerifierEnc ? decryptSecret(consumed[0].codeVerifierEnc, this.encKey, 'payment-oauth-pkce', `state:${sha256Hex(input.state)}`) : undefined;
 
-    const account = await this.provider.exchange(input.code, { storeId: store.id, storeDocument: store.documentNumber });
+    const account = await this.provider.exchange(input.code, { storeId: store.id, storeDocument: store.documentNumber }, verifier);
     const matches = normalizeDocument(account.holderDocument) === store.documentNumber;
     try {
       await this.db.transaction(async (tx) => {

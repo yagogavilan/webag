@@ -1,6 +1,7 @@
 # PRD: Pagamentos
 
 Status: pronto para G3 (decisão técnica de split vai a ADR do backend) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-150 a WB-161
+Atualizado: 2026-11-19 (DEC-035/036/037): `application_fee` = comissão + taxa de entrega + taxa de serviço; taxa de entrega é receita da Webag; taxa de troca em cobrança separada (WB-238 em `prd/logistica.md`, WB-175 e WB-245 em `prd/trocas.md`).
 Regras: RN-07, RN-08, RN-10 em `docs/produto/regras-de-negocio.md`. Origem: brief §4. Pesquisa: `pesquisa-mercado.md` §6. Regra inviolável: nunca armazenar dado de cartão (CLAUDE.md §7).
 
 ## Problema
@@ -47,8 +48,10 @@ Cliente (PIX e cartão), lojista (recebe e vê extrato), financeiro/admin (estor
 - Cartão: captura conforme HIP-010; PIX: validade `pix_expiracao_min`. Parcelas: HIP-011. Máx. por pedido: HIP-012.
 - **Segurança de segredo:** chaves e tokens só em `.env`/cofre; token OAuth do lojista criptografado em repouso.
 - **Provedor simulado:** o valor de configuração é `PAYMENT_PROVIDER=fake` (nome do ADR-002; "simulated" foi abandonado, SEC-112 c). Proibido em produção: a aplicação recusa subir com `fake` em `NODE_ENV=production`.
-- **Split não retém dinheiro (DEC-016, SEC-105):** no modo split o valor cai direto na conta do lojista e a Webag recebe só a comissão (`application_fee`). Não existe "repasse retido, ajustado ou descontado" pela Webag; o repasse do split é **informativo**. Recursos contra lojista que recebe e não entrega: estorno pelo admin a partir da conta do lojista, suspensão da loja, limite de exposição de loja nova (WB-225) e cobrança pelos Termos do Lojista (jurídico, fora do sistema).
-- **Cupom/frete grátis da plataforma no split:** desconto da plataforma por pedido <= comissão (`application_fee`) do pedido (WB-116 C6); acima disso o desconto é cortado no teto. Subsídio maior só com mecanismo de pagamento ao lojista aprovado pelo fundador.
+- **`application_fee` no split (DEC-035, DEC-036):** `application_fee = comissão + taxa de entrega + taxa de serviço − cupom da plataforma` (RN-10), calculada no servidor e gravada no pedido (snapshot); o lojista recebe só os itens menos o cupom da loja, menos a comissão e menos a taxa do provedor. A taxa de entrega é **receita da Webag**; o custo do motoboy é pago **fora do app** e entra no ledger como custo de logística (WB-238, WB-239). Estorno total devolve a taxa de entrega; estorno parcial, proporcional (exceto entrega não realizada e arrependimento, onde a taxa volta inteira).
+- **Split não retém dinheiro (DEC-016, SEC-105):** no modo split o valor cai direto na conta do lojista e a Webag recebe só a `application_fee` (comissão, taxa de entrega e taxa de serviço). Não existe "repasse retido, ajustado ou descontado" pela Webag; o repasse do split é **informativo**. Recursos contra lojista que recebe e não entrega: estorno pelo admin a partir da conta do lojista, suspensão da loja, limite de exposição de loja nova (WB-225) e cobrança pelos Termos do Lojista (jurídico, fora do sistema).
+- **Cupom/frete grátis da plataforma no split:** desconto da plataforma por pedido <= `application_fee` do pedido (comissão + taxa de entrega + taxa de serviço; WB-116 C6); acima disso o desconto é cortado no teto. Frete grátis por limite de valor (RN-04) zera a taxa de entrega e não deixa a `application_fee` negativa.
+- **Taxa de troca e diferença de preço (DEC-037):** cobrança **separada** do pedido, depois da aprovação da loja, por PIX ou cartão (WB-175, WB-245); a taxa é receita da Webag, não da loja. O backend decide no ADR se a cobrança sai na conta MP da Webag (sem split) ou como pedido de troca com `application_fee` integral; sem comissão sobre a taxa. Subsídio maior só com mecanismo de pagamento ao lojista aprovado pelo fundador.
 - **Regulatório:** modelo centralizado só após parecer jurídico (`pesquisa-mercado.md` §6); split é o preferido.
 
 ## Requisitos não funcionais

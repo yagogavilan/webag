@@ -23,3 +23,13 @@ describe('maskCoordinates (LGPD)', () => {
     expect(maskCoordinates(undefined)).toBeUndefined();
   });
 });
+
+describe('maskPii: CPF e CNPJ (SEC-140)', () => {
+  it('mascara CPF e CNPJ com ou sem pontuação, sem tocar em número menor', () => {
+    expect(maskPii('pagador 12345678901 recusado')).toBe('pagador [documento] recusado');
+    expect(maskPii('cpf 123.456.789-01 inválido')).toBe('cpf [documento] inválido');
+    expect(maskPii('cnpj 12.345.678/0001-95 inválido')).toBe('cnpj [documento] inválido');
+    expect(maskPii('12345678000195')).toBe('[documento]');
+    expect(maskPii('pedido 4821 e 99 itens')).toBe('pedido 4821 e 99 itens');
+  });
+});

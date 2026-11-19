@@ -2,6 +2,10 @@ const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 /** Telefone brasileiro com ou sem máscara/DDI (10 a 13 dígitos seguidos, com separadores comuns). */
 const PHONE = /(?<!\d)(?:\+?55[\s-]?)?\(?\d{2}\)?[\s-]?9?\d{4}[\s-]?\d{4}(?!\d)/g;
 
+/** CNPJ (14) e CPF (11) com ou sem pontuação, sem dígito colado (SEC-140). Roda ANTES do telefone, que também casa 10 a 11 dígitos. */
+const CNPJ = /(?<!\d)\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}(?!\d)/g;
+const CPF = /(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)/g;
+
 /** SEC-072/SEC-128: mensagens de erro de terceiros (SMTP, Redis, provedor) podem trazer e-mail ou telefone do usuário. */
 export function maskPii(text: string): string {
   return text
@@ -9,6 +13,8 @@ export function maskPii(text: string): string {
       const [local = '', domain = ''] = match.split('@');
       return `${local.slice(0, 1)}***@${domain}`;
     })
+    .replace(CNPJ, '[documento]')
+    .replace(CPF, '[documento]')
     .replace(PHONE, '[telefone]');
 }
 

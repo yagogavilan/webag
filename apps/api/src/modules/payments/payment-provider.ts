@@ -77,6 +77,11 @@ export interface PaymentProvider {
     idempotencyKey: string,
     context: ProviderContext,
   ): Promise<{ providerRefundId: string; amountCents: number }>;
+  /**
+   * Pagamentos que o provedor tem para a referência (SEC-136): recupera a cobrança de cartão cuja resposta se perdeu. Máximo
+   * de 10, mais recentes primeiro. Ausente = provedor sem busca.
+   */
+  findByReference?(externalReference: string, context: ProviderContext): Promise<ProviderPayment[]>;
   /** O provedor exige o CPF do pagador neste método? (`PAYER_DOCUMENT_REQUIRED`). Ausente = não exige. */
   requiresPayerDocument?(method: PaymentMethod): boolean;
   /** Conta de recebimento esperada para a loja (conferida na re-consulta, SEC-034). */

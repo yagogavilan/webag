@@ -43,6 +43,8 @@ export const ADMIN_PERMISSIONS = {
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */
+  /** SEC-039: estorno manual de pedido (acima de `estorno_super_admin_cents`, só o super admin). */
+  'orders:refund': [SUPER, FIN],
   'payments:refunds:read': [SUPER, FIN],
   'payments:refunds:retry': [SUPER, FIN],
   'payments:refunds:cover': [SUPER],

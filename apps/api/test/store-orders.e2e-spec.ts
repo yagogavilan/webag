@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { OrdersService } from '../src/modules/orders/orders.service.js';
 import { LedgerService } from '../src/modules/finance/ledger.service.js';
-import { orders, paymentRefunds, productVariants, storeMembers } from '../src/platform/database/schema.js';
+import { orders, paymentAlerts, paymentRefunds, productVariants, storeMembers } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureCity, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
@@ -107,6 +107,28 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     const customerView = (await ctx.http.get(`/v1/orders/${id}`).set(bearer(buyer.user.accessToken)).expect(200)).body;
     expect(customerView.pickup.code).toMatch(/^\d{4}$/);
     expect((await status('delivered', { pickupCode: customerView.pickup.code })).body.status).toBe('delivered');
+  });
+
+  it('SEC-138: 5 códigos de retirada errados bloqueiam a conferência por 30 min, avisam o admin, e nem o código certo passa enquanto bloqueado', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 30 }], { pickupEnabled: true });
+    const buyer = await customerAt(ctx, shop.origin);
+    await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
+    const revision = (await ctx.http.get('/v1/cart?mode=pickup').set(bearer(buyer.user.accessToken)).expect(200)).body.revision;
+    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' }).expect(201)).body;
+    await approve(ctx, buyer.user, (await attemptOf(ctx, created.id)).id);
+    const id = created.id as string;
+    const status = (to: string, body: Record<string, unknown> = {}) => ctx.http.post(`${base(shop)}/${id}/status`).set(owner(shop)).send({ status: to, ...body });
+    await ctx.http.post(`${base(shop)}/${id}/accept`).set(owner(shop)).expect(200);
+    await status('ready_for_pickup');
+    const real = (await orderRow(ctx, id)).pickupCode!;
+    const wrong = real === '0000' ? '1111' : '0000';
+    for (let n = 1; n <= 5; n++) expect((await status('delivered', { pickupCode: wrong })).body.code).toBe('PICKUP_CODE_INVALID');
+    const locked = await status('delivered', { pickupCode: real });
+    expect(locked.status).toBe(429);
+    expect(locked.body.code).toBe('PICKUP_CODE_LOCKED');
+    expect((await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'pickup_code_locked'))).some((a) => (a.details as { orderId?: string }).orderId === id)).toBe(true);
+    await ctx.redis.del(`pickup-code-fails:${id}`); // passa o tempo do bloqueio
+    expect((await status('delivered', { pickupCode: real })).body.status).toBe('delivered');
   });
 
   it('recusar: motivo obrigatório, estorno total automático, estoque devolvido, ledger zerado e o cliente vê o motivo', async () => {

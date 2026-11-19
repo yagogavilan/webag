@@ -39,8 +39,11 @@ export function encryptSecret(plaintext: string, secret: string, info: string, a
 export function decryptSecret(payload: string, secret: string, info: string, aad: string): string {
   const [version, iv, tag, ct] = payload.split('.');
   if (version !== 'v1' || !iv || !tag || !ct) throw new Error('Formato de segredo cifrado inválido');
-  const decipher = createDecipheriv('aes-256-gcm', deriveKey(secret, info), Buffer.from(iv, 'base64url'));
+  // SEC-139: a tag GCM tem SEMPRE 16 bytes; tag curta (que o Node aceitaria) reduz a segurança da autenticação.
+  const tagBytes = Buffer.from(tag, 'base64url');
+  if (tagBytes.length !== 16) throw new Error('Formato de segredo cifrado inválido');
+  const decipher = createDecipheriv('aes-256-gcm', deriveKey(secret, info), Buffer.from(iv, 'base64url'), { authTagLength: 16 });
   decipher.setAAD(Buffer.from(aad));
-  decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+  decipher.setAuthTag(tagBytes);
   return Buffer.concat([decipher.update(Buffer.from(ct, 'base64url')), decipher.final()]).toString('utf8');
 }

@@ -65,6 +65,8 @@ export interface CreatePaymentInput {
 const MAX_WEBHOOK_ATTEMPTS = 8;
 const backoffSeconds = (attempts: number): number => Math.min(5 * 2 ** (attempts - 1), 3600);
 const REPLAY_TTL_SECONDS = 86_400;
+/** Webhook de pagamento que ainda não conhecemos espera este tempo antes de virar `unknown_payment` (SEC-136). */
+const UNKNOWN_PAYMENT_GRACE_MS = 10 * 60_000;
 /** Estorno recusado pelo provedor (SEC-130): 5 min, 30 min, 2 h, 6 h, 24 h; na 6ª falha vai para a fila de pendências do admin. */
 const REFUND_BACKOFF_MINUTES = [5, 30, 120, 360, 1440] as const;
 export const MAX_REFUND_FAILURES = REFUND_BACKOFF_MINUTES.length + 1;
@@ -373,6 +375,10 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
   async processEvent(event: WebhookEvent): Promise<void> {
     try {
       const outcome = await this.applyEvent(event);
+      if (outcome === 'deferred') {
+        await this.db.update(webhookEvents).set({ nextAttemptAt: new Date(Date.now() + 60_000) }).where(eq(webhookEvents.id, event.id));
+        return;
+      }
       await this.db
         .update(webhookEvents)
         .set({ status: outcome === 'discarded' ? 'discarded' : 'processed', processedAt: new Date(), attempts: event.attempts + 1, lastError: null })
@@ -398,12 +404,14 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
    * Núcleo (SEC-034): a notificação só diz "olhe o pagamento X". O estado vem da RE-CONSULTA ao provedor, e só
    * aprova se valor, moeda, referência, recebedor e comissão baterem com o que gravamos na criação.
    */
-  private async applyEvent(event: WebhookEvent): Promise<'applied' | 'discarded'> {
+  private async applyEvent(event: WebhookEvent): Promise<'applied' | 'discarded' | 'deferred'> {
     const [attempt] = await this.db
       .select()
       .from(paymentAttempts)
       .where(and(eq(paymentAttempts.provider, event.provider), eq(paymentAttempts.providerPaymentId, event.providerPaymentId)));
     if (!attempt) {
+      // SEC-136: o webhook pode chegar ANTES de a recuperação do cartão gravar o ID do pagamento; espera alguns minutos.
+      if (Date.now() - event.receivedAt.getTime() < UNKNOWN_PAYMENT_GRACE_MS) return 'deferred';
       await this.alert(null, 'unknown_payment', { providerPaymentId: event.providerPaymentId });
       return 'discarded';
     }
@@ -746,7 +754,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     for (const attempt of stuck) {
       try {
         if (attempt.method !== 'pix') {
-          await this.alert(attempt.id, 'creation_unresolved', { method: attempt.method });
+          await this.recoverCardCreation(attempt);
           continue;
         }
         const remote = await this.provider.createPayment({
@@ -763,6 +771,31 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       } catch (error) {
         this.logger.warn(`recuperação da criação ${attempt.id} falhou: ${safeErrorMessage(error)}`);
       }
+    }
+  }
+
+  /**
+   * SEC-136: cartão que ficou `creating` (timeout ou queda): o provedor PODE ter cobrado. Busca por `external_reference` com o
+   * token da conta que recebe, adota a cobrança que ainda não está ligada a nenhuma tentativa nossa e segue o fluxo normal
+   * (`completeCreation` confere valor/comissão/recebedor; pedido já encerrado leva ao estorno automático da SEC-040). Sem
+   * cobrança achada por 30 min, a tentativa é cancelada (nada foi cobrado). Nunca cobra de novo (não temos o token do cartão).
+   */
+  private async recoverCardCreation(attempt: PaymentAttempt): Promise<void> {
+    if (!this.provider.findByReference) {
+      await this.alert(attempt.id, 'creation_unresolved', { method: attempt.method });
+      return;
+    }
+    const candidates = await this.provider.findByReference(attempt.externalReference, { storeId: attempt.storeId, receiverAccountId: attempt.receiverAccountId });
+    const ids = candidates.map((c) => c.providerPaymentId);
+    const taken = ids.length > 0 ? new Set((await this.db.select({ id: paymentAttempts.providerPaymentId }).from(paymentAttempts).where(and(eq(paymentAttempts.provider, this.provider.name), inArray(paymentAttempts.providerPaymentId, ids)))).map((r) => r.id)) : new Set<string | null>();
+    const match = candidates.find((c) => !taken.has(c.providerPaymentId) && c.amountCents === attempt.amountCents && c.status !== 'cancelled');
+    if (match) {
+      await this.completeCreation(attempt.id, match);
+      this.logger.warn(`cobrança de cartão recuperada pela referência (tentativa ${attempt.id})`);
+      return;
+    }
+    if (Date.now() - attempt.createdAt.getTime() > 30 * 60_000) {
+      await this.db.update(paymentAttempts).set({ status: 'cancelled', declineReason: 'creation_not_found', updatedAt: new Date() }).where(and(eq(paymentAttempts.id, attempt.id), eq(paymentAttempts.status, 'creating')));
     }
   }
 
@@ -799,6 +832,12 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
   }
 
   // ------------------------------------------------- fila de estornos pendentes (SEC-130)
+
+  /** A intenção desta chave existe e ainda vai ser tentada de novo (a recusa/timeout virou fila, não perda). */
+  async hasQueuedRefund(attemptId: string, idempotencyKey: string): Promise<boolean> {
+    const [intent] = await this.db.select({ status: paymentRefundIntents.status }).from(paymentRefundIntents).where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
+    return intent?.status === 'pending' || intent?.status === 'exhausted';
+  }
 
   /** Estornos que o provedor recusou (em retentativa ou esgotados) e os cobertos pela Webag a pagar por fora. */
   async listRefundQueue(query: { cursor?: string; limit?: unknown; status?: 'pending' | 'exhausted' | 'covered' }): Promise<Page<RefundQueueItem>> {

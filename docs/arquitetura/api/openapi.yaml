@@ -1546,6 +1546,50 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/ValidationError'
+  /v1/admin/orders/{orderId}/refunds:
+    post:
+      tags: [orders]
+      operationId: adminRefundOrder
+      summary: Estorno manual do admin, total ou parcial (SEC-039)
+      description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amountCents, reason]
+              properties:
+                amountCents: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 10, maxLength: 300 }
+      responses:
+        '200':
+          description: Estorno concluído ou em fila
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, refunded, remaining]
+                properties:
+                  status: { type: string, enum: [done, queued] }
+                  refunded: { $ref: '#/components/schemas/Money' }
+                  remaining: { $ref: '#/components/schemas/Money' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /v1/admin/payments/alerts:
     get:
       tags: [payments]

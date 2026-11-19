@@ -120,18 +120,22 @@ describe('Pagamentos: endurecimento (review I2-I6)', () => {
       expect((await fake.getPayment(pid))?.refundedCents).toBe(3000);
     });
 
-    it('falha definitiva do provedor não grava estorno e libera o valor reservado; a auditoria nasce junto do estorno', async () => {
+    it('recusa do provedor não grava estorno nem audita; a intenção segue `pending` com backoff e alerta (SEC-130), mantendo o valor reservado até concluir', async () => {
       const pix = await create({ amountCents: 10_000 });
       await approve(pix.id);
       vi.spyOn(fake, 'refund').mockRejectedValueOnce(new Error('provedor recusou o estorno'));
       await expect(payments.refund(pix.id, 6000, 'a', 'f-1', ctxless)).rejects.toThrow('provedor recusou');
       expect(await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, pix.id))).toHaveLength(0);
       const [intent] = await ctx.db.select().from(paymentRefundIntents).where(eq(paymentRefundIntents.attemptId, pix.id));
-      expect(intent?.status).toBe('failed');
+      expect(intent).toMatchObject({ status: 'pending', failures: 1, lastErrorCode: 'PROVIDER_ERROR' });
+      expect((await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.attemptId, pix.id))).map((a) => a.kind)).toEqual(['refund_failed']);
       expect(await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, pix.id))).toHaveLength(0);
-      // o valor foi liberado: um estorno de 6000 agora passa e é auditado
-      await payments.refund(pix.id, 6000, 'b', 'f-2', ctxless);
+      // o valor segue reservado (será refeito): outro estorno que estoure o total é recusado
+      await expect(payments.refund(pix.id, 6000, 'b', 'f-2', ctxless)).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_PAID' });
+      // repetir a MESMA chave conclui e audita, e o alerta fecha
+      await payments.refund(pix.id, 6000, 'a', 'f-1', ctxless);
       expect(await ctx.db.select().from(auditLog).where(eq(auditLog.targetId, pix.id))).toHaveLength(1);
+      expect((await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.attemptId, pix.id))).every((a) => a.resolvedAt !== null)).toBe(true);
     });
 
     it('timeout do provedor mantém a intenção `pending` (reserva o valor) e a conciliação repete com a mesma chave', async () => {

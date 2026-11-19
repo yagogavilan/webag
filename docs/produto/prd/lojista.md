@@ -1,6 +1,6 @@
 # PRD: Área do Lojista (painel web responsivo)
 
-Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-050 a WB-079 e WB-227
+Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-035, 036, 037: lojista sem taxa/raio próprios, "Pronto para coleta", "Você recebe R$ X", tabela de medidas) | Histórias: WB-050 a WB-079, WB-227 e WB-242 (comissão); logística em `prd/logistica.md`, trocas em `prd/trocas.md`
 Regras: `docs/produto/regras-de-negocio.md`; hipóteses: `docs/decisoes.md`. Origem: brief §3.2. Nota: o lojista usa o **painel web** (celular e computador do balcão), não o app (DEC-005); o CLAUDE.md §2 cita app mobile para lojista e foi superado pelo brief.
 
 ## Problema
@@ -21,12 +21,12 @@ Lojista cadastra a loja, sobe o catálogo, recebe pedidos, entrega e recebe, sem
 **Eventos:** `merchant_signup_started/completed`, `onboarding_step_completed {step}`, `store_submitted`, `store_approved/rejected`, `product_created`, `catalog_import {rows, errors}`, `order_alert_shown`, `order_accepted {seconds}`, `order_rejected {reason}`, `order_timeout`, `store_paused {reason}`, `coupon_created`, `payout_viewed`.
 
 ## Fora do escopo (1.0)
-App nativo do lojista; integração com ERP/PDV; emissão de nota fiscal; impressão térmica direta por USB/Bluetooth (usa impressão do navegador); mais de uma loja por conta (HIP-031); entregador Webag (fase 2); anúncios pagos/destaque pago; campanhas de WhatsApp em massa; relatórios avançados; multi-filial; pagamento na entrega.
+App nativo do lojista; integração com ERP/PDV; emissão de nota fiscal; impressão térmica direta por USB/Bluetooth (usa impressão do navegador); mais de uma loja por conta (HIP-031); entrega pelo próprio lojista, taxa e raio de entrega por loja (a entrega é da Webag, DEC-036, `prd/logistica.md`); app do entregador (fase 2); anúncios pagos/destaque pago; campanhas de WhatsApp em massa; relatórios avançados; multi-filial; pagamento na entrega.
 
 ## Usuários e cenários
 1. Seu Marcos cadastra a loja, envia documentos e aguarda aprovação.
 2. Marcos sobe 20 produtos com variações pela planilha e ajusta estoque.
-3. Pedido chega: som, aceita em 1 toque, imprime comanda, marca "saiu para entrega".
+3. Pedido chega: som, aceita em 1 toque, imprime comanda, separa e marca "Pronto para coleta"; a Webag manda o motoboy (WB-229).
 4. Joana (funcionária) só vê pedidos e trocas.
 5. Fim da semana: Marcos vê quanto vendeu, comissão e repasse.
 
@@ -34,7 +34,8 @@ App nativo do lojista; integração com ERP/PDV; emissão de nota fiscal; impres
 | ID | Requisito | Histórias |
 |---|---|---|
 | RF-LOJ-01 | Cadastro e onboarding guiado (CPF/CNPJ, loja, documentos, conta de recebimento); só visível após aprovação | 050-054 |
-| RF-LOJ-02 | Configuração da loja (perfil, horários, entrega, retirada, trocas) | 055-059 |
+| RF-LOJ-02 | Configuração da loja (perfil, horários, "entrega pela Webag" e/ou retirada, política de trocas voluntárias) | 055-059 |
+| RF-LOJ-10 | Comissão transparente: "Você recebe R$ X", aviso de preço, explicação no onboarding | 242 (`prd/logistica.md`), 060 C8 |
 | RF-LOJ-03 | Catálogo (fotos, variações, estoque, promoção, seções, planilha, ação em massa) | 060-066 |
 | RF-LOJ-04 | Pedidos em tempo real com alerta, aceitar/recusar, status, comanda, histórico | 067-072 |
 | RF-LOJ-05 | Trocas | PRD trocas (WB-172, 173, 174) |
@@ -44,7 +45,7 @@ App nativo do lojista; integração com ERP/PDV; emissão de nota fiscal; impres
 | RF-LOJ-09 | Ajuda e diagnóstico dos alertas | 227 |
 
 ## Regras de negócio
-RN-03, RN-04, RN-05, RN-06, RN-07, RN-08, RN-09, RN-10, RN-11, RN-12, RN-13; HIP-030 (visibilidade), HIP-031 (CPF/CNPJ), HIP-034 (limites de catálogo).
+RN-03, RN-04, RN-05, RN-06, RN-07, RN-08, RN-09, RN-10, RN-11, RN-12, RN-13, RN-18; HIP-030 (visibilidade), HIP-031 (CPF/CNPJ), HIP-034 (limites de catálogo).
 
 ## Requisitos não funcionais
 - **Responsivo:** usável de 360 px de largura (celular) a monitor do balcão; áreas de toque >= 44 px; fonte legível a 1 m no painel de pedidos.
@@ -71,6 +72,7 @@ Como lojista, quero informar os dados da loja em etapas curtas, para enviá-la �
 - **C6** Dado documento (CPF/CNPJ) de loja reprovada e sem pedidos, então o documento fica livre para novo cadastro; documento de loja suspensa continua ocupado (R-15).
 - **C4** Dado abandono no meio, então o rascunho é salvo e retomo da etapa em que parei, com barra de progresso "Etapa X de 4".
 - **C5** Dado CNPJ, então peço razão social e confirmo que a loja é responsável fiscal pelas vendas (aceite registrado, HIP-031).
+- **C7** Dado o final do onboarding (e o primeiro acesso ao painel), então uma tela de **uma frase** explica o modelo: "O Webag fica com [pct]% de cada venda (a comissão da sua loja) e cuida da entrega. Você cadastra o preço final e vê quanto recebe." com o link "Como é calculado" (exemplo de RN-10); o percentual mostrado é o da loja hoje, não um fixo (WB-242 C5, DEC-035).
 
 ### WB-052 Onboarding: documentos — Must — dep: WB-051, WB-218
 Como lojista, quero enviar meus documentos pelo celular, para provar quem sou.
@@ -120,14 +122,15 @@ Como lojista, quero definir quando abro e pausar quando preciso, para não receb
 - **C5** Dado fechamento do horário, então pedidos já aceitos seguem; novos não entram.
 - **C6** Dado "Esqueci aberta": loja aberta sem nenhuma interação no painel (conta como interação: login, aceitar, recusar ou avançar pedido, pausar ou reabrir; R-16c) por 3 h e sem pedido aceito: o sistema avisa por e-mail "Sua loja está aberta e ninguém respondeu" e sugere pausar `[HIPÓTESE]`.
 
-### WB-057 Entrega: raio, taxa, mínimo, grátis e tempo — Must — dep: WB-055
-Como lojista, quero configurar entrega do meu jeito, para não ter prejuízo com frete.
-- **C1** Dado raio, então valor em km de 1 até `raio_max_km` (15; padrão 5); acima: erro com o limite.
-- **C2** Dado taxa **fixa** (R$ 0 a R$ 50) ou **por distância** com até 5 faixas contíguas até o raio; faixa com lacuna ou sobreposição: erro "As faixas precisam ser seguidas". Faixa é `[de, até)`: o limite superior pertence à próxima faixa (2,00 km é da faixa 2-5, não da 0-2); a última faixa inclui o raio (R-17a). Reduzir o raio com faixas já cadastradas além dele: recusa e pede o ajuste das faixas (R-17b).
-- **C3** Dado pedido mínimo e "entrega grátis acima de R$ X", então X deve ser **estritamente maior** que o mínimo (inclusive quando o mínimo é 0); X = 0 desliga a opção; valores aplicados conforme RN-04 (R-17c).
-- **C4** Dado tempo estimado, então informo mínimo e máximo em minutos (min < máx; máx até 1.440).
-- **C5** Dado "Prévia", então escolho um endereço de teste e vejo a taxa que o cliente veria. O provedor de geocodificação do CEP é o definido no ADR-008 (tech-lead); o critério de aceite é a taxa igual à do checkout para o mesmo endereço (R-17d).
-- **C6** Dado desativar entrega (só retirada), então é permitido se a retirada estiver ativa; nenhuma opção ativa: erro.
+### WB-057 Entrega pela Webag e tempo de preparo — Must — dep: WB-055 (**reescrita pela DEC-036**; antes: raio, taxa, mínimo e grátis da loja)
+Como lojista, quero escolher se vendo com entrega pela Webag e quanto tempo levo para preparar, sem ter que cuidar de motoboy nem de frete.
+- **C1** Dado a tela "Entrega e retirada", então há o interruptor **"Entrega pela Webag"** (padrão ligado) com o texto "A Webag busca o pedido na sua loja e entrega ao cliente. Você só marca 'Pronto para coleta'." e o interruptor "Retirada na loja" (WB-058); ao menos um ligado.
+- **C2** Dado a tela, então **não existem** campos de raio, taxa de entrega, faixas, pedido mínimo nem "entrega grátis acima de": esses valores são da Webag (tabela e parâmetros do admin, WB-236) e a tela diz "A taxa de entrega é definida pela Webag e paga pelo cliente. Você não paga frete."
+- **C3** Dado **tempo de preparo**, então informo mínimo e máximo em minutos (min < máx; máx até 1.440); o cliente vê a estimativa total (preparo + deslocamento, RN-04).
+- **C4** Dado "Prévia", então escolho um endereço de teste e vejo "Seu cliente pagaria R$ X de entrega e receberia em A a B min" ou "Fora da área de entrega da Webag" (valor igual ao do checkout, R-17d); o lojista **vê** a taxa mas não a edita.
+- **C5** Dado desligar "Entrega pela Webag" (só retirada), então é permitido se a retirada estiver ativa; nenhuma opção ativa: erro "Ligue a entrega ou a retirada".
+- **C6** Dado loja que vende itens grandes ou frágeis que não cabem em baú de moto, então ela mantém só "Retirada" e o painel mostra a dica "Itens grandes? Ofereça retirada" `[regra de porte: pergunta em aberto em logistica.md]`.
+- **C7** Dado loja já existente com taxa e raio antigos, então a migração ignora esses valores (a loja entra com "Entrega pela Webag" ligada e a taxa da tabela); o lojista vê um aviso uma vez: "A entrega agora é feita pela Webag" (backend: L.1).
 
 ### WB-058 Retirada na loja — Must — dep: WB-055
 Como lojista, quero oferecer retirada, para vender sem entregar.
@@ -137,7 +140,7 @@ Como lojista, quero oferecer retirada, para vender sem entregar.
 
 ### WB-059 Política de trocas — Must — dep: WB-055
 Como lojista, quero definir minhas regras de troca, para evitar conflito.
-- **C1** Dado "Aceito troca por tamanho ou cor", então defino prazo em dias (1 a 30; padrão 7) e taxa de coleta de R$ 0 a `taxa_coleta_max_cents` (R$ 30).
+- **C1** Dado "Aceito troca por tamanho ou cor", então defino **só o prazo** em dias, **dentro do mínimo e do máximo do admin** (`troca_voluntaria_dias_min` 3 e `_max` 30; padrão 7). **A loja não define taxa de coleta**: ela vem da tabela do admin e é receita da Webag (DEC-037); o painel mostra "O cliente paga a coleta só se você aprovar; levando à loja não paga nada". A loja vê também "Se você não responder em 24 h, a troca é aprovada automaticamente" (WB-177).
 - **C2** Dado desligar a troca voluntária, então vejo aviso "Arrependimento (7 dias) e defeito continuam valendo por lei" e o prazo voluntário vira 0. O **piso legal (7 dias de arrependimento e defeito) é fixo e não editável por nenhum perfil** (DEC-011, DEC-023b). Ao religar, o prazo volta ao padrão `troca_voluntaria_dias_padrao` e a loja confirma antes de salvar (R-26).
 - **C3** Dado a política salva, então vale para novos pedidos; pedidos já feitos mantêm a política vigente no momento da compra (snapshot).
 - **C4** Dado a página da loja, então a política aparece resumida (WB-016).
@@ -151,6 +154,8 @@ Como lojista, quero cadastrar produto com foto, preço e descrição, para vende
 - **C5** Dado excluir produto com pedido em andamento, então é bloqueado ("Há pedidos em andamento"); sem pedidos, vai para arquivado (histórico preservado).
 - **C6** Dado produto cuja categoria está na lista de **categorias proibidas** (do admin), então o cadastro é recusado com "Esse tipo de produto não é permitido no Webag". É a lista que **bloqueia**; a lista de **palavras suspeitas** apenas sinaliza o produto para a fila "Revisar" (WB-107 C3, HIP-029). São duas listas distintas (R-12a, R-12b).
 - **C7** Dado produto pausado ou removido pelo admin (moderação), então o lojista **não** consegue reativá-lo: o status de moderação é separado do status do lojista e só o admin o altera (R-12d).
+- **C8** Dado o campo de preço (e o promocional e o de cada variação), então abaixo dele vejo "Comissão Webag ([pct]%): -R$ X" e **"Você recebe R$ Y"**, com a comissão efetiva da loja hoje, atualizando ao digitar, e o aviso fixo "Cadastre o preço final que o cliente paga, já com a comissão. A taxa do Mercado Pago é descontada à parte." (DEC-035, WB-242 C1 a C3).
+- **C9** Dado o produto, então posso marcar "Não aceita troca por tamanho ou cor" com o motivo (WB-244); e, em categorias de moda e calçado, preencher a "Tabela de medidas" (WB-246); a publicação não depende dela, mas o painel lembra "X produtos sem tabela de medidas".
 
 ### WB-061 Variações e estoque por variação — Must — dep: WB-060
 Como lojista, quero cadastrar tamanhos, cores e outras variações com estoque próprio, para não vender o que não tenho.
@@ -200,7 +205,7 @@ Como lojista, quero pausar ou mudar preço de vários produtos, para ganhar temp
 Como lojista ou funcionário, quero ser avisado de novo pedido, para não perder venda.
 - **C1** Dado pedido RECEBIDO, então aparece no topo em até 3 s, com alerta sonoro repetido a cada 15 s até eu agir, e faixa visual piscante.
 - **C2** Dado o painel aberto, então primeira vez pede "Ativar som" (política do navegador); sem som permitido ou conexão perdida, a faixa avisa em vermelho.
-- **C3** Dado a lista, então os pedidos ficam em colunas/abas por estado (Novos, Em separação, Saiu/Pronto) e mostram número, hora, itens, tipo (entrega/retirada) e valor, com contador de tempo desde que chegou.
+- **C3** Dado a lista, então os pedidos ficam em colunas/abas por estado (Novos, Em separação, Pronto/A caminho) e mostram número, hora, itens, tipo (entrega/retirada) e valor, com contador de tempo desde que chegou.
 - **C4** Dado queda de conexão, então reconecta sozinho e atualiza o que perdeu; o painel mostra "Sincronizado há X s".
 - **C5** Dado funcionário sem a permissão "pedidos", então não vê a tela (403 no servidor).
 - **C6** Dado nenhum pedido, então "Nenhum pedido agora" e dica "Mantenha esta tela aberta".
@@ -215,13 +220,13 @@ Como lojista, quero aceitar ou recusar com motivo, para controlar o que consigo 
 - **C6** Dado pedido já cancelado pelo cliente, então o botão Aceitar falha com "Pedido cancelado" e some da lista.
 
 ### WB-069 Atualizar status do pedido — Must — dep: WB-068
-Como lojista, quero avançar o pedido, para o cliente acompanhar.
-- **C1** Dado ACEITO, então posso "Iniciar separação" ou ir direto para "Saiu para entrega"/"Pronto para retirada" (RN-07).
-- **C2** Dado EM_SEPARACAO, então avanço para SAIU_PARA_ENTREGA (entrega) ou PRONTO_PARA_RETIRADA (retirada).
+Como lojista, quero avançar o pedido até ficar pronto, para o cliente acompanhar e a Webag buscar.
+- **C1** Dado ACEITO, então posso "Iniciar separação" ou ir direto para **"Pronto para coleta"** (pedido de entrega, WB-229) ou "Pronto para retirada" (retirada) (RN-07).
+- **C2** Dado EM_SEPARACAO, então avanço para PRONTO_PARA_COLETA (entrega Webag) ou PRONTO_PARA_RETIRADA (retirada).
 - **C3** Dado PRONTO_PARA_RETIRADA, então para "Entregue" informo o código de 4 dígitos do cliente; código errado: "Código incorreto" (5 tentativas, depois exige o admin).
-- **C4** Dado SAIU_PARA_ENTREGA, então "Marcar entregue" conclui o pedido (com o código de entrega do cliente, se `codigo_entrega` ligado: WB-226) e inicia a contagem do repasse (no modo centralizado; no split o repasse é informativo).
-- **C5** Dado voltar um status, então é bloqueado (só admin com auditoria).
-- **C6** Dado SAIU_PARA_ENTREGA e "entrega não realizada", então exijo motivo; o pedido é cancelado e estornado (admin é notificado).
+- **C4** Dado entrega Webag, então **a loja não marca "Saiu para entrega" nem "Entregue"**: esses estados são da logística (RN-18, WB-233); a loja vê o estado da corrida e o primeiro nome do motoboy, e é notificada em "Coletado" e "Entregue". O repasse (informativo no split) conta a partir de ENTREGUE.
+- **C5** Dado voltar um status, então é bloqueado (só admin com auditoria); a única volta da loja é "Voltar para separação" em PRONTO_PARA_COLETA **sem motoboy atribuído** (WB-229 C6).
+- **C6** Dado a falha de entrega, então ela é registrada pela logística (WB-234); a loja é notificada e, se o pacote voltar, confirma "Recebi de volta" (WB-234 C4).
 - **C7** Dado cada transição, então grava ator, hora e motivo e notifica o cliente (WB-191).
 
 ### WB-070 Item indisponível: estorno parcial — Should — dep: WB-068, WB-154
@@ -273,7 +278,7 @@ Como dono, quero convidar funcionários com permissões, para dividir o trabalho
 
 ### WB-076 Financeiro: resumo, a receber e repasses — Must — dep: WB-156
 Como dono, quero ver quanto vendi, quanto é comissão e quando recebo, para confiar nos números.
-- **C1** Dado o período, então vejo vendas brutas, comissão Webag, taxa do provedor, estornos, líquido, "em carência", "a receber" e "já repassado".
+- **C1** Dado o período, então vejo vendas brutas **de produtos** (sem a taxa de entrega, que é da Webag), comissão Webag, taxa do provedor, estornos, líquido, "em carência", "a receber" e "já repassado"; a taxa de entrega aparece só como informação por pedido ("Entrega pela Webag: R$ 8,00, paga pelo cliente"), nunca como receita da loja (WB-238 C5).
 - **C2** Dado um pedido, então vejo a composição (RN-10) e o status do repasse (no split, o status vem do provedor e é informativo).
 - **C3** Dado funcionário, então não vê (só dono).
 - **C4** Dado nenhum repasse, então "Ainda sem repasses. O primeiro sai em [data]" (modo centralizado) ou "Você recebe direto na sua conta Mercado Pago" (split).
@@ -318,6 +323,10 @@ Como lojista ou funcionário, quero conferir se os alertas de pedido vão tocar 
 | Loja CPF sem regularização fiscal | Risco jurídico/fiscal | Aceite em WB-051; encaminhado ao fundador/contador |
 | Estoque obrigatório pode irritar quem não controla | Risco de UX | Padrão "estoque alto" sugerido no cadastro; ajuste rápido (WB-064) |
 | Moderação pós-publicação deixa produto proibido no ar | Risco de loja/reputação | Lista de proibidos, denúncia, varredura (WB-107) |
+| **Comissão de 15% + taxa do MP (1% a 5%) pode parecer alta** frente ao WhatsApp (0%), ao iFood (12% + 3,2%) e ao ML (10 a 19% + taxa fixa) (`pesquisa-mercado.md` §4) | Risco de adoção `[HIPÓTESE]` | Mostrar "Você recebe R$ X" (WB-242); comissão reduzida com vigência para as primeiras lojas (HIP-002); validar em V1/V4 ("quanto pagaria por venda") antes de fixar o padrão |
+| Lojista cadastra preço **sem** incluir a comissão e perde margem | Risco de ativação | Aviso fixo no campo de preço, "Você recebe" ao digitar e explicação no onboarding (WB-242) |
+| Lojista perde o controle da entrega (atraso do motoboy vira reclamação da loja) | Risco de reputação | A avaliação da entrega não pesa na nota da loja `[HIPÓTESE]`; separar "Entrega" na avaliação (decisão do Designer/PO na WB-031) |
+| Aprovação automática de troca em 24 h (DEC-037) irrita a loja | Risco de adoção | Lembretes e contestação antes da coleta (`prd/trocas.md` WB-177) |
 
 ## Perguntas em aberto
 | Pergunta | Quem responde |

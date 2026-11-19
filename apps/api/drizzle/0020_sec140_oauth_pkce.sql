@@ -1,0 +1,1 @@
+ALTER TABLE "payment_oauth_states" ADD COLUMN "code_verifier_enc" text;

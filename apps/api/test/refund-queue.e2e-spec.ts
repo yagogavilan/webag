@@ -147,6 +147,41 @@ describe('Estorno recusado pelo provedor (SEC-130)', () => {
     expect(await registry.resolve(other.store.id, accountA)).toBeNull();
   });
 
+  it('SEC-136: cartão cobrado cuja resposta se perdeu (timeout) é recuperado pela referência e estornado, sem alerta aberto', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 6_000, stock: 5 }]);
+    const { user, addressId } = await customerAt(ctx, shop.origin);
+    await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
+    const res = await placeOrder(ctx, user, addressId, { paymentMethod: 'card', card: { token: 'fake_tok_charged_timeout', installments: 1 } });
+    expect(res.status, JSON.stringify(res.body)).toBeGreaterThanOrEqual(400); // o cliente vê o timeout e a cobrança ficou do lado do provedor
+    const stuck = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.amountCents, 6_500))).at(-1)!;
+    expect(stuck).toMatchObject({ status: 'creating', providerPaymentId: null });
+    const orphan = (await fake.findByReference(stuck.externalReference))[0]!;
+    expect(orphan).toMatchObject({ status: 'approved', amountCents: 6_500 });
+
+    await payments.reconcile(new Date(Date.now() + 10 * 60_000));
+    await payments.reconcile(new Date(Date.now() + 10 * 60_000));
+    const after = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.id, stuck.id)))[0]!;
+    expect(after.providerPaymentId).toBe(orphan.providerPaymentId);
+    expect((await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, stuck.id))).map((r) => r.amountCents)).toEqual([6_500]);
+    expect((await fake.getPayment(orphan.providerPaymentId))?.refundedCents).toBe(6_500);
+    expect(await alertKinds(stuck.id, true)).toEqual([]);
+  });
+
+  it('SEC-136: webhook de pagamento ainda desconhecido espera alguns minutos (não é descartado) e só depois vira `unknown_payment`', async () => {
+    const { webhookEvents } = await import('../src/platform/database/schema.js');
+    const pid = `fkdesconhecido${Date.now()}`;
+    const n = fake.signedNotification(pid, 'payment.updated');
+    await ctx.http.post(`/v1/webhooks/fake?data.id=${pid}&type=payment`).set(n.headers).send({}).expect(200);
+    await payments.processDue();
+    await payments.drain();
+    const [event] = await ctx.db.select().from(webhookEvents).where(eq(webhookEvents.providerPaymentId, pid));
+    expect(event).toMatchObject({ status: 'pending', attempts: 0 }); // adiado, não descartado
+    await ctx.db.update(webhookEvents).set({ receivedAt: new Date(Date.now() - 11 * 60_000), nextAttemptAt: new Date() }).where(eq(webhookEvents.id, event!.id));
+    await payments.processDue();
+    expect((await ctx.db.select().from(webhookEvents).where(eq(webhookEvents.id, event!.id)))[0]!.status).toBe('discarded');
+    expect((await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'unknown_payment'))).some((a) => (a.details as { providerPaymentId?: string }).providerPaymentId === pid)).toBe(true);
+  });
+
   it('a tentativa guarda o recebedor no momento da cobrança', async () => {
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 5 }]);
     const { user, addressId } = await customerAt(ctx, shop.origin);

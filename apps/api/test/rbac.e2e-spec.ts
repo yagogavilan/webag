@@ -52,6 +52,7 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'commissions:write': null,
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
+  'orders:refund': null,
   'payments:refunds:read': { method: 'get', path: '/v1/admin/payments/refund-queue' },
   'payments:refunds:retry': null,
   'payments:refunds:cover': null,

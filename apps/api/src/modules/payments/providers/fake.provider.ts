@@ -28,13 +28,14 @@ export interface SimulateOptions {
 }
 
 /** Tokens de texto documentados no README (WB-150 C3): resultado do cartão sem decorar sufixos. */
-const FAKE_TOKENS: Record<string, string> = { fake_tok_approved: '0000', fake_tok_insufficient: '0001', fake_tok_3ds: '0002', fake_tok_timeout: '0003', fake_tok_wrong_fee: '0004' };
+const FAKE_TOKENS: Record<string, string> = { fake_tok_approved: '0000', fake_tok_insufficient: '0001', fake_tok_3ds: '0002', fake_tok_timeout: '0003', fake_tok_wrong_fee: '0004', fake_tok_charged_timeout: '0005' };
 /** Tarifa simulada (`fee_details`): PIX 0,99% e cartão 4,98%, as estimativas do PRD (HIP-016). */
 const feeOf = (payment: ProviderPayment, method: 'pix' | 'card'): number => Math.round((payment.amountCents * (method === 'pix' ? 99 : 498)) / 10_000);
 
 const KEY = (id: string): string => `fake-provider:payment:${id}`;
 const IDEM_CREATE = (attemptId: string): string => `fake-provider:idem:create:${attemptId}`;
 const IDEM_REFUND = (id: string, key: string): string => `fake-provider:idem:refund:${id}:${key}`;
+const REF = (reference: string): string => `fake-provider:ref:${reference}`;
 const TTL_SECONDS = 7 * 86_400;
 
 /**
@@ -42,7 +43,7 @@ const TTL_SECONDS = 7 * 86_400;
  * (`getPayment`) é uma ida ao "provedor" de verdade, como no Mercado Pago.
  *
  * Cartão de teste (últimos 4 dígitos do `cardToken`, ex.: `tok_0001`): 0000 aprova, 0001 recusa por saldo,
- * 0002 exige 3DS (fica pendente até simular), 0003 dá timeout, 0004 aprova com comissão e recebedor errados (SEC-133); qualquer outro recusa por cartão inválido.
+ * 0002 exige 3DS (fica pendente até simular), 0003 dá timeout, 0004 aprova com comissão e recebedor errados (SEC-133), 0005 cobra e perde a resposta (timeout, SEC-136); qualquer outro recusa por cartão inválido.
  */
 @Injectable()
 export class FakePaymentProvider implements PaymentProvider {
@@ -87,6 +88,15 @@ export class FakePaymentProvider implements PaymentProvider {
     } else {
       const last4 = FAKE_TOKENS[input.cardToken ?? ''] ?? (input.cardToken ?? '').slice(-4);
       if (last4 === '0003') throw new ProviderTimeoutError();
+      if (last4 === '0005') {
+        // Cobrou do lado do provedor, mas a resposta se perdeu: o cliente fica cobrado sem pedido (SEC-136).
+        Object.assign(base, { status: 'approved', providerFeeCents: feeOf(base, 'card') });
+        await this.save(base);
+        await this.redis.set(IDEM_CREATE(input.attemptId), id, 'EX', TTL_SECONDS);
+        await this.redis.lpush(REF(input.externalReference), id);
+        await this.redis.expire(REF(input.externalReference), TTL_SECONDS);
+        throw new ProviderTimeoutError();
+      }
       if (last4 === '0000') Object.assign(base, { status: 'approved', providerFeeCents: feeOf(base, 'card') });
       else if (last4 === '0004') Object.assign(base, { status: 'approved', applicationFeeCents: 0, receiverId: 'fake-seller-outro', providerFeeCents: feeOf(base, 'card') }); // aprovado, mas com comissão e recebedor errados (SEC-133)
       else if (last4 === '0001') Object.assign(base, { status: 'declined', declineReason: 'insufficient_funds' });
@@ -95,7 +105,15 @@ export class FakePaymentProvider implements PaymentProvider {
     }
     await this.save(base);
     await this.redis.set(IDEM_CREATE(input.attemptId), id, 'EX', TTL_SECONDS);
+    await this.redis.lpush(REF(input.externalReference), id);
+    await this.redis.expire(REF(input.externalReference), TTL_SECONDS);
     return base;
+  }
+
+  async findByReference(externalReference: string): Promise<ProviderPayment[]> {
+    const ids = await this.redis.lrange(REF(externalReference), 0, 9);
+    const found = await Promise.all(ids.map((id) => this.getPayment(id)));
+    return found.filter((p): p is ProviderPayment => p !== null);
   }
 
   async getPayment(id: string): Promise<ProviderPayment | null> {

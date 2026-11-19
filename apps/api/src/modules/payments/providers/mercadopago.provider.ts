@@ -103,6 +103,20 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     }
   }
 
+  async findByReference(externalReference: string, context: ProviderContext): Promise<ProviderPayment[]> {
+    const client = await this.clientFor(context.storeId, 1, context.receiverAccountId);
+    try {
+      const found = await new Payment(client).search({ options: { external_reference: externalReference, sort: 'date_created', criteria: 'desc', limit: 10 } });
+      const ids = (found.results ?? []).map((r) => r.id).filter((id): id is string => typeof id === 'string' || typeof id === 'number');
+      const payments: ProviderPayment[] = [];
+      // A busca devolve um resumo; o detalhe completo (taxas, recebedor) vem do `get`, o mesmo que o webhook usa.
+      for (const id of ids) payments.push(toProviderPayment(await new Payment(client).get({ id: String(id) })));
+      return payments;
+    } catch (error) {
+      throw this.mapError(error, 'buscar pagamento por referência', false);
+    }
+  }
+
   async refund(providerPaymentId: string, amountCents: number, idempotencyKey: string, context: ProviderContext): Promise<{ providerRefundId: string; amountCents: number }> {
     const client = await this.clientFor(context.storeId, 0, context.receiverAccountId);
     try {

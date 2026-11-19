@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { and, asc, count, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
-import type { Principal } from '../../platform/auth/decorators.js';
+import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -512,6 +512,39 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!UUID_RE.test(attempt.externalReference)) return;
     if (!(await this.ledger.hasSale(attempt.externalReference, tx))) return; // estorno de PIX tardio: nunca houve venda lançada
     await this.ledger.recordRefund(tx, { orderId: attempt.externalReference, refundCents: refund.amountCents, refundKey: refund.idempotencyKey, reason: refund.reason });
+  }
+
+  /**
+   * SEC-039: estorno manual do admin, total ou parcial, sobre o pagamento do pedido. Acima de `estorno_super_admin_cents` só
+   * o super admin; motivo obrigatório; chave de idempotência do cliente HTTP (repetir não estorna de novo). A auditoria nasce
+   * na transação que confirma o estorno (SEC-074). Se o provedor recusar, o estorno fica na fila de pendências (SEC-130)
+   * e a resposta é `queued`.
+   */
+  async adminRefund(orderId: string, input: { amountCents: number; reason: string; idempotencyKey: string }, ctx: RequestContext): Promise<{ status: 'done' | 'queued'; refundedCents: number; remainingCents: number }> {
+    const [order] = await this.db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) throw errors.notFound('Pedido não encontrado.');
+    if (!order.paymentAttemptId || !order.paidAt) throw errors.conflict('ORDER_NOT_PAID', 'Pedido sem pagamento a estornar');
+    const limit = await this.params.getNumber('estorno_super_admin_cents');
+    if (input.amountCents > limit && ctx.principal?.adminProfile !== 'super_admin') {
+      throw new AppError(403, 'SUPER_ADMIN_REQUIRED', 'Estorno acima do limite do seu perfil', { detail: 'Valores acima do limite exigem o super admin.' });
+    }
+    const key = `admin-refund:${input.idempotencyKey}`;
+    let status: 'done' | 'queued' = 'done';
+    try {
+      await this.payments.refund(order.paymentAttemptId, input.amountCents, input.reason, key, ctx);
+    } catch (error) {
+      const queued = await this.payments.hasQueuedRefund(order.paymentAttemptId, key);
+      if (!queued) throw error;
+      status = 'queued';
+    }
+    const attempt = await this.payments.getAttempt(order.paymentAttemptId);
+    const pending = await this.payments.refundedOrPendingCents(this.db, attempt.id);
+    return { status, refundedCents: pending, remainingCents: attempt.amountCents - pending };
+  }
+
+  /** Alerta para o painel do admin/financeiro (ex.: tentativa de adivinhar o código de retirada). */
+  async raiseAlert(kind: string, details: Record<string, unknown>): Promise<void> {
+    await this.payments.raiseAlert(null, kind, details);
   }
 
   /** A Webag cobriu um estorno que o provedor não concluiu (DEC-020a): lança a cobertura e a dívida da loja no ledger. */

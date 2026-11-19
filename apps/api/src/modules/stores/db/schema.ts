@@ -308,6 +308,8 @@ export const paymentOauthStates = pgTable(
       .notNull()
       .references(() => users.id),
     sessionId: uuid().notNull(),
+    /** PKCE (SEC-140): `code_verifier` cifrado (AAD = hash do state); só o desafio S256 sai na URL. Nulo = PKCE desligado. */
+    codeVerifierEnc: text(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     usedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

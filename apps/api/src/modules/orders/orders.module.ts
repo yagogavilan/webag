@@ -8,6 +8,7 @@ import { MediaModule } from '../media/index.js';
 import { PaymentsModule } from '../payments/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { StoresModule } from '../stores/index.js';
+import { AdminOrdersController } from './admin-orders.controller.js';
 import { OrderEventBus } from './order-events.bus.js';
 import { OrdersController } from './orders.controller.js';
 import { StoreOrdersController } from './store-orders.controller.js';
@@ -16,7 +17,7 @@ import { OrdersService } from './orders.service.js';
 
 @Module({
   imports: [AdminModule, IdentityModule, CartModule, CatalogModule, FinanceModule, IdempotencyModule, MediaModule, PaymentsModule, StoresModule],
-  controllers: [OrdersController, StoreOrdersController],
+  controllers: [OrdersController, StoreOrdersController, AdminOrdersController],
   providers: [OrdersService, StoreOrdersService, OrderEventBus],
   exports: [OrdersService, StoreOrdersService, OrderEventBus],
 })
