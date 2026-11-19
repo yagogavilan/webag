@@ -14,7 +14,7 @@ export interface SectionHeaderProps {
 export function SectionHeader({ title, actionLabel, onAction, testID, actionTestID }: SectionHeaderProps) {
   return (
     <View style={styles.row} testID={testID}>
-      <Text accessibilityRole="header" style={styles.title} variant="title2">
+      <Text accessibilityRole="header" style={styles.title} variant="display">
         {title}
       </Text>
       {actionLabel && onAction ? (

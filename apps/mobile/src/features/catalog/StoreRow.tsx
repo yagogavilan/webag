@@ -1,12 +1,14 @@
 import type { StoreCard } from '@webag/shared';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Badge } from '../../components/Badge';
-import { ArrowsClockwise, Clock, Star, Truck } from '../../components/icons';
+import { StyleSheet, View } from 'react-native';
+import { ProductArt, objectFor } from '../../art/ProductArt';
+import { Clock, Star } from '../../components/icons';
 import { RemoteImage } from '../../components/RemoteImage';
 import { Text } from '../../components/Text';
 import { t } from '../../i18n';
+import { Pressy } from '../../motion';
 import { theme } from '../../theme';
-import { closedLabel, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from './format';
+import { closedLabel, formatDistance, formatFee, formatRating, ratingA11y } from './format';
+import { etaWindow, formatEtaBand, isBeyondReach } from './eta';
 
 export interface StoreRowProps {
   store: StoreCard;
@@ -20,21 +22,42 @@ export interface StoreRowProps {
   testID?: string;
 }
 
+/** Cor da capa por loja (estável pelo id): só tons sólidos e escuros da paleta, texto branco por cima passa AA. */
+const COVERS = ['#2F4A6B', '#8A3B22', '#26231F', '#4A6630', '#6A1580'] as const;
+export function coverColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length] as string;
+}
+
+export function initials(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase();
+}
+
 function metaLine(store: StoreCard, approximate: boolean, pickup: boolean): string {
   const distance = formatDistance(store.distanceM);
   if (pickup) return `${distance} · ${t('catalog.pickupOnly')}`;
   const fee = formatFee(store.delivery.feeCents, { approximate });
-  return [formatEta(store.delivery.etaMinMinutes, store.delivery.etaMaxMinutes), fee, distance].filter(Boolean).join(' · ');
+  return [fee ? `${t('catalog.delivery')} ${fee}` : null, distance].filter(Boolean).join(' · ');
 }
 
-/** Card de loja em Linha (§4): logo 56 + 2 linhas, selos. Loja fechada continua tocável e navegável (DEC-022). */
+/**
+ * Cartão de loja v3 (direção v3): capa na cor da loja com a arte da categoria saindo por cima, faixa de entrega no chip
+ * (DEC-053: faixa real da loja para o endereço, nunca número único), logo-adesivo inclinado e meta em uma linha.
+ * Loja fechada continua tocável (DEC-022); loja fora do alcance de 120 min mostra "Fora da área".
+ */
 export function StoreRow({ store, categoryName, approximate = false, pickup = false, onPress, testID }: StoreRowProps) {
   const meta = metaLine(store, approximate, pickup);
+  const outOfArea = !pickup && isBeyondReach(store.delivery);
+  const eta = pickup ? null : formatEtaBand(store.delivery.etaMinMinutes, store.delivery.etaMaxMinutes);
+  const range = pickup ? null : etaWindow(store.delivery.etaMinMinutes, store.delivery.etaMaxMinutes);
   const status = store.open ? t('catalog.open') : closedLabel(store.opensAt);
   const label = [
     store.name,
     categoryName,
     ratingA11y(store.rating),
+    outOfArea ? t('catalog.outOfArea') : eta,
     meta,
     status,
     store.delivery.freeShipping && !pickup ? t('catalog.freeShipping') : null,
@@ -42,52 +65,76 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
   ]
     .filter(Boolean)
     .join(', ');
+  const color = coverColor(store.id);
+  const art = objectFor(`${categoryName ?? ''} ${store.name}`);
   return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      android_ripple={{ color: theme.color.action.primarySubtlePressed }}
-      onPress={onPress}
-      style={styles.row}
-      testID={testID}
-    >
-      <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.lg} urls={store.logo.urls} width={theme.size.avatarMd} />
-      <View style={styles.texts}>
-        <Text numberOfLines={1} variant="bodyStrong">
+    <Pressy accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={styles.card} testID={testID}>
+      <View style={[styles.cover, { backgroundColor: color }]}>
+        <View pointerEvents="none" style={styles.art}>
+          <ProductArt color="#F2EFE9" ground="rgba(0,0,0,0.35)" name={art} size={150} />
+        </View>
+        <View style={styles.chip}>
+          {outOfArea ? (
+            <Text allowFontScaling={false} style={styles.chipText} variant="captionStrong">
+              {t('catalog.outOfArea')}
+            </Text>
+          ) : range ? (
+            <>
+              <Clock color={theme.color.action.primary} size={16} weight="duotone" />
+              <Text allowFontScaling={false} style={styles.chipText} variant="captionStrong">
+                {`${range.start} – ${range.end}`}
+              </Text>
+            </>
+          ) : (
+            <Text allowFontScaling={false} style={styles.chipText} variant="captionStrong">
+              {t('catalog.pickupOnly')}
+            </Text>
+          )}
+        </View>
+        <View style={styles.logoShadow} />
+        <View style={styles.logo}>
+          {store.logo.urls && Object.keys(store.logo.urls).length > 0 ? (
+            <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={52} radius={theme.radius.lg - 2} urls={store.logo.urls} width={52} />
+          ) : (
+            <Text allowFontScaling={false} style={[styles.initials, { color }]} variant="title2">
+              {initials(store.name)}
+            </Text>
+          )}
+        </View>
+      </View>
+      <View style={styles.info}>
+        <Text numberOfLines={1} variant="title2">
           {store.name}
         </Text>
-        {categoryName ? (
-          <Text color="secondary" numberOfLines={1} variant="caption">
-            {categoryName}
-          </Text>
-        ) : null}
         <View style={styles.ratingRow}>
           <Star color={theme.color.rating.star} size={16} weight="fill" />
-          <Text variant="caption">{formatRating(store.rating)}</Text>
+          <Text color="secondary" variant="caption">
+            {formatRating(store.rating)}
+            {categoryName ? ` · ${categoryName}` : ''}
+          </Text>
         </View>
         <Text color="secondary" variant="caption">
           {meta}
         </Text>
-        <View style={styles.badges}>
-          {store.open ? <Badge icon={Clock} label={t('catalog.open')} tone="success" /> : <Badge icon={Clock} label={closedLabel(store.opensAt)} />}
-          {store.delivery.freeShipping && !pickup ? <Badge icon={Truck} label={t('catalog.freeShipping')} tone="success" /> : null}
-          {store.acceptsExchange ? <Badge icon={ArrowsClockwise} label={t('catalog.acceptsExchange')} tone="brand" /> : null}
-        </View>
+        {!store.open ? (
+          <Text color="warning" variant="captionStrong">
+            {closedLabel(store.opensAt)}
+          </Text>
+        ) : null}
       </View>
-    </Pressable>
+    </Pressy>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: theme.space[3],
-    paddingVertical: theme.space[3],
-    borderBottomWidth: theme.borderWidth.hairline,
-    borderBottomColor: theme.color.border.subtle,
-    minHeight: theme.size.touchMin,
-  },
-  texts: { flex: 1, gap: 2 },
+  card: { gap: theme.space[3], paddingBottom: theme.space[5], minHeight: theme.size.touchMin },
+  cover: { height: 148, borderRadius: theme.radius.card, overflow: 'visible' },
+  art: { position: 'absolute', right: 8, top: -22, width: 150, height: 150 },
+  chip: { position: 'absolute', left: 12, top: 12, minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.color.neutral[0], borderRadius: theme.radius.md, paddingHorizontal: 10 },
+  chipText: { color: theme.color.neutral[900] },
+  logoShadow: { position: 'absolute', left: 16 + theme.hardShadow.offset, bottom: -22 + theme.hardShadow.offset, width: 56, height: 56, borderRadius: 16, backgroundColor: theme.color.surface.ink, transform: [{ rotate: '-6deg' }] },
+  logo: { position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, borderRadius: 16, backgroundColor: theme.color.neutral[0], alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transform: [{ rotate: '-6deg' }] },
+  initials: { letterSpacing: -0.5 },
+  info: { paddingTop: 22, gap: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1] },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[1], paddingTop: theme.space[1] },
 });

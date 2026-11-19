@@ -50,7 +50,7 @@ describe('Início (D5)', () => {
     expect(await screen.findByTestId('home.banner-b1')).toBeOnTheScreen();
     expect(screen.getByTestId('home.category-cat-casa')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Lojas perto de você' })).toBeOnTheScreen();
-    expect(screen.getByRole('header', { name: 'Ofertas' })).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Baixou o preço' })).toBeOnTheScreen();
     expect(screen.getByTestId('home.offer-p1')).toBeOnTheScreen();
     expect(screen.queryByRole('header', { name: 'Mais vendidos' })).toBeNull();
     expect(screen.queryByRole('header', { name: 'Lojas novas' })).toBeNull();
@@ -59,7 +59,9 @@ describe('Início (D5)', () => {
   it('loja com frete, tempo, distância e selos; endereço completo mostra a taxa exata', async () => {
     await renderScreen(<CustomerHome />);
     const row = await screen.findByTestId('home.store-s1');
-    expect(row.props.accessibilityLabel).toContain('30 a 45 min · R$ 5,00 · 1,2 km');
+    // DEC-053: faixa de horário (nunca número único), taxa e distância
+    expect(row.props.accessibilityLabel).toMatch(/Chega entre \d{2}:\d{2} e \d{2}:\d{2}/);
+    expect(row.props.accessibilityLabel).toContain('Entrega R$ 5,00 · 1,2 km');
     expect(row.props.accessibilityLabel).toContain('Aceita troca');
     expect(row.props.accessibilityLabel).toContain('4,8 de 5, 120 avaliações');
   });
@@ -154,7 +156,7 @@ describe('Início (D5)', () => {
     await waitFor(() => expect(screen.queryByTestId('home.banner-b1')).toBeNull());
     expect(screen.queryByTestId('home.category-cat-casa')).toBeNull();
     expect((await screen.findByTestId('home.store-s1')).props.accessibilityLabel).toContain('1,2 km · Retirada');
-    expect(screen.getByText('Retirar perto de')).toBeOnTheScreen();
+    expect(screen.getByTestId('home.address').props.accessibilityLabel).toContain('Retirar perto de');
   });
 
   it('retirada sem loja: explica e volta para entrega', async () => {
@@ -169,7 +171,9 @@ describe('Início (D5)', () => {
   it('a sacola mostra o contador de itens e descreve no rótulo', async () => {
     await cartActions.add('s1', 'Casa Bela', { productId: 'p1', variantId: 'v-local', name: 'Tênis', variantLabel: null, urls: {}, unitPriceCents: 8990, originalPriceCents: null, quantity: 2, maxQuantity: 5 });
     await renderScreen(<CustomerHome />);
+    await screen.findByTestId('home.list');
     expect(await screen.findByLabelText('Abrir sacola, 2 itens')).toBeOnTheScreen();
+    expect(await screen.findByTestId('minibag')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('home.cart'));
     expect(router.push).toHaveBeenCalledWith('/cart');
   });
@@ -177,6 +181,7 @@ describe('Início (D5)', () => {
   it('numerados em "Mais vendidos" e "Lojas novas" aparecem quando a API manda', async () => {
     mockHome.mockResolvedValue(homeData({ bestSellers: [productCard({ id: 'p7', name: 'Camiseta Lisa' })], newStores: [storeCard({ id: 's8', name: 'Loja Nova' })] }));
     await renderScreen(<CustomerHome />);
+    await screen.findByTestId('home.list');
     expect(await screen.findByTestId('home.bestseller-p7')).toBeOnTheScreen();
     expect(screen.getByTestId('home.new-store-s8')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Mais vendidos' })).toBeOnTheScreen();

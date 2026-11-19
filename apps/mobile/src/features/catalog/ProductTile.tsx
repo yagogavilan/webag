@@ -1,8 +1,10 @@
 import type { BrowseProductItem, ProductCard } from '@webag/shared';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Badge } from '../../components/Badge';
 import { RemoteImage } from '../../components/RemoteImage';
+import { OfferSeal } from '../../components/Sticker';
 import { Text } from '../../components/Text';
+import { Pressy } from '../../motion';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { theme } from '../../theme';
@@ -64,29 +66,31 @@ export interface ProductTileProps {
   /** Largura em dp (grade: a coluna; carrossel: fixa). */
   width: number;
   onPress: () => void;
+  /** `ink`: sobre a faixa noite (ofertas). */
+  tone?: 'light' | 'ink';
   testID?: string;
 }
 
-/** Card de produto em grade: imagem 1:1, preço, nome em até 2 linhas, loja em `caption` quando há (busca e ofertas). */
-export function ProductTile({ product, width, onPress, testID }: ProductTileProps) {
+/** Card de produto v3: foto 4:5 em estúdio (raio 22, sem sombra), selo lima sobre a foto, preço de cartaz colado ao nome, loja em `caption`. */
+export function ProductTile({ product, width, onPress, tone = 'light', testID }: ProductTileProps) {
   const muted = product.state === 'soldOut' || product.state === 'unavailable';
+  const ink = tone === 'ink';
+  const hasPromo = product.originalCents != null && product.priceCents !== null && product.originalCents > product.priceCents;
   return (
-    <Pressable
-      accessibilityLabel={a11yLabel(product)}
-      accessibilityRole="button"
-      android_ripple={{ color: theme.color.action.primarySubtlePressed }}
-      onPress={onPress}
-      style={[styles.tile, { width }]}
-      testID={testID}
-    >
-      <RemoteImage aspectRatio={1} urls={product.urls} width={width} />
+    <Pressy accessibilityLabel={a11yLabel(product)} accessibilityRole="button" onPress={onPress} style={[styles.tile, { width }]} testID={testID}>
+      <View style={styles.photoBox}>
+        <RemoteImage aspectRatio={4 / 5} radius={theme.radius.card - 2} style={ink ? styles.photoInk : undefined} urls={product.urls} width={width} />
+        {hasPromo && product.discountPercent ? <OfferSeal label={t('catalog.off', { pct: product.discountPercent })} style={styles.seal} /> : null}
+      </View>
       <View style={styles.info}>
         {product.priceCents !== null ? (
-          <Price cents={product.priceCents} discountPercent={product.discountPercent ?? null} muted={muted} originalCents={product.originalCents ?? null} />
+          <Price cents={product.priceCents} discountPercent={product.discountPercent ?? null} muted={muted} onInk={ink} originalCents={product.originalCents ?? null} />
         ) : null}
-        <Text numberOfLines={2}>{product.name}</Text>
+        <Text color={ink ? 'inverse' : 'primary'} numberOfLines={2} variant="captionStrong">
+          {product.name}
+        </Text>
         {product.storeName ? (
-          <Text color="secondary" numberOfLines={1} variant="caption">
+          <Text color={ink ? 'inverse' : 'secondary'} numberOfLines={1} variant="caption">
             {product.storeName}
           </Text>
         ) : null}
@@ -94,11 +98,14 @@ export function ProductTile({ product, width, onPress, testID }: ProductTileProp
         {product.state === 'unavailable' ? <Badge label={t('catalog.unavailable')} /> : null}
         {product.state === 'closed' ? <Badge label={t('results.closedBadge')} /> : null}
       </View>
-    </Pressable>
+    </Pressy>
   );
 }
 
 const styles = StyleSheet.create({
-  tile: { gap: theme.space[2] },
+  tile: { gap: theme.space[2], minHeight: theme.size.touchMin },
+  photoBox: { borderRadius: theme.radius.card - 2, overflow: 'hidden' },
+  photoInk: { backgroundColor: theme.color.neutral[800] },
+  seal: { position: 'absolute', left: 8, top: 8 },
   info: { gap: theme.space[1] },
 });
