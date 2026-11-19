@@ -183,6 +183,9 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       expect(coupon!.code).toMatch(/^ATRASO[A-Z0-9]{8}$/);
       expect(Math.round((coupon!.endsAt.getTime() - coupon!.startsAt.getTime()) / 86_400_000)).toBe(30);
       expect(events.some((e) => e.orderId === r.orderId && e.notice === 'late_compensation')).toBe(true);
+      // o cliente vê o cupom em "Meus cupons"; o outro cliente não
+      const listed = await ctx.http.get('/v1/me/coupons').set(bearer(r.buyer.user.accessToken)).expect(200);
+      expect(listed.body.data).toEqual([expect.objectContaining({ code: coupon!.code, kind: 'free_shipping', status: 'available', origin: 'late_delivery' })]);
       // intransferível: outro cliente não aplica nem descobre o código
       const other = await shopWith(ctx, [{ name: 'Item', priceCents: 8_000, stock: 5 }]);
       const stranger = await customerAt(ctx, other.origin);
@@ -190,6 +193,7 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       const applied = await ctx.http.put('/v1/cart/coupon').set(bearer(stranger.user.accessToken)).send({ code: coupon!.code });
       expect(applied.status).toBe(422);
       expect(applied.body.code).toBe('COUPON_NOT_FOUND');
+      expect((await ctx.http.get('/v1/me/coupons').set(bearer(stranger.user.accessToken)).expect(200)).body.data).toHaveLength(0);
       // o dono usa no próximo pedido: frete zerado
       const shop2 = other;
       await addToCart(ctx, r.buyer.user, shop2.variants[0]!, 1).expect(200);

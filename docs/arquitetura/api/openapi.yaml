@@ -4767,6 +4767,30 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/me/coupons:
+    get:
+      tags: [cart]
+      operationId: listMyCoupons
+      summary: Meus cupons pessoais (compensação por atraso, WB-254)
+      description: "Só os cupons PESSOAIS e intransferíveis da conta do token (hoje, a entrega grátis ou o desconto concedidos por atraso, RN-19 4c); cupons públicos e de loja não aparecem e o cupom de outra conta nunca é revelado. Mínimo de dados: sem pedido de origem e sem contagem de usos. Do mais novo ao mais antigo, paginado por cursor. `status`: `available` (padrão: vigente e ainda não usado), `used`, `expired` ou `all`. O cupom devolvido por pedido cancelado volta a `available`. Para usar, o app envia `code` em `PUT /v1/cart/coupon` (as regras de validade e de e-mail confirmado são as de lá). 429 se passar de 120 chamadas em 10 min."
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [available, used, expired, all], default: available } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de cupons pessoais
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyCouponPage' }
+              examples:
+                compensacao: { value: { data: [{ id: 3f0c5f6e-8a3c-4d0e-9a53-6a4f9b2c1d10, code: ATRASOK7M2QXW9, kind: free_shipping, valueCents: null, percent: null, minOrderCents: 0, startsAt: '2026-11-19T18:00:00Z', expiresAt: '2026-12-19T18:00:00Z', status: available, origin: late_delivery }], nextCursor: null } }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /v1/me/addresses:
     get:
       tags: [addresses]
@@ -10798,6 +10822,28 @@ components:
         isDefault: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    MyCoupon:
+      type: object
+      additionalProperties: false
+      required: [id, code, kind, valueCents, percent, minOrderCents, startsAt, expiresAt, status, origin]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, description: "4 a 20 caracteres A-Z0-9; enviar em `PUT /v1/cart/coupon`" }
+        kind: { type: string, enum: [free_shipping, fixed, percent] }
+        valueCents: { type: [integer, 'null'], description: "Só `fixed` (centavos)" }
+        percent: { type: [integer, 'null'], description: "Só `percent` (1 a 100)" }
+        minOrderCents: { type: integer }
+        startsAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [available, used, expired] }
+        origin: { type: string, enum: [late_delivery, other], description: "`late_delivery`: compensação por atraso na entrega" }
+    MyCouponPage:
+      type: object
+      additionalProperties: false
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/MyCoupon' } }
+        nextCursor: { type: [string, 'null'] }
     AddressList:
       type: object
       required: [data, nextCursor]

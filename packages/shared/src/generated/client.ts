@@ -2645,6 +2645,64 @@ export interface Address {
   updatedAt: string;
 }
 
+export type MyCouponKind = typeof MyCouponKind[keyof typeof MyCouponKind];
+
+
+export const MyCouponKind = {
+  free_shipping: 'free_shipping',
+  fixed: 'fixed',
+  percent: 'percent',
+} as const;
+
+export type MyCouponStatus = typeof MyCouponStatus[keyof typeof MyCouponStatus];
+
+
+export const MyCouponStatus = {
+  available: 'available',
+  used: 'used',
+  expired: 'expired',
+} as const;
+
+/**
+ * `late_delivery`: compensação por atraso na entrega
+ */
+export type MyCouponOrigin = typeof MyCouponOrigin[keyof typeof MyCouponOrigin];
+
+
+export const MyCouponOrigin = {
+  late_delivery: 'late_delivery',
+  other: 'other',
+} as const;
+
+export interface MyCoupon {
+  id: string;
+  /** 4 a 20 caracteres A-Z0-9; enviar em `PUT /v1/cart/coupon` */
+  code: string;
+  kind: MyCouponKind;
+  /**
+     * Só `fixed` (centavos)
+     * @nullable
+     */
+  valueCents: number | null;
+  /**
+     * Só `percent` (1 a 100)
+     * @nullable
+     */
+  percent: number | null;
+  minOrderCents: number;
+  startsAt: string;
+  expiresAt: string;
+  status: MyCouponStatus;
+  /** `late_delivery`: compensação por atraso na entrega */
+  origin: MyCouponOrigin;
+}
+
+export interface MyCouponPage {
+  data: MyCoupon[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 export interface AddressList {
   data: Address[];
   /** @nullable */
@@ -6929,6 +6987,31 @@ export const AdminListProductsStatus = {
   active: 'active',
   paused: 'paused',
   archived: 'archived',
+} as const;
+
+export type ListMyCouponsParams = {
+  status?: ListMyCouponsStatus;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListMyCouponsStatus = typeof ListMyCouponsStatus[keyof typeof ListMyCouponsStatus];
+
+
+export const ListMyCouponsStatus = {
+  available: 'available',
+  used: 'used',
+  expired: 'expired',
+  all: 'all',
 } as const;
 
 export type ListBannersParams = {
@@ -17816,6 +17899,67 @@ export const removeModerationTerm = async (termId: string, options?: Parameters<
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listMyCouponsResponse200 = {
+  data: MyCouponPage
+  status: 200
+}
+
+export type listMyCouponsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listMyCouponsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listMyCouponsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listMyCouponsResponseSuccess = (listMyCouponsResponse200) & {
+  headers: Headers;
+};
+export type listMyCouponsResponseError = (listMyCouponsResponse400 | listMyCouponsResponse401 | listMyCouponsResponse429) & {
+  headers: Headers;
+};
+
+export type listMyCouponsResponse = (listMyCouponsResponseSuccess | listMyCouponsResponseError)
+
+export const getListMyCouponsUrl = (params?: ListMyCouponsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/me/coupons?${stringifiedParams}` : `/v1/me/coupons`
+}
+
+/**
+ * Só os cupons PESSOAIS e intransferíveis da conta do token (hoje, a entrega grátis ou o desconto concedidos por atraso, RN-19 4c); cupons públicos e de loja não aparecem e o cupom de outra conta nunca é revelado. Mínimo de dados: sem pedido de origem e sem contagem de usos. Do mais novo ao mais antigo, paginado por cursor. `status`: `available` (padrão: vigente e ainda não usado), `used`, `expired` ou `all`. O cupom devolvido por pedido cancelado volta a `available`. Para usar, o app envia `code` em `PUT /v1/cart/coupon` (as regras de validade e de e-mail confirmado são as de lá). 429 se passar de 120 chamadas em 10 min.
+ * @summary Meus cupons pessoais (compensação por atraso, WB-254)
+ */
+export const listMyCoupons = async (params?: ListMyCouponsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listMyCouponsResponse> => {
+
+  return apiFetch<listMyCouponsResponse>(getListMyCouponsUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

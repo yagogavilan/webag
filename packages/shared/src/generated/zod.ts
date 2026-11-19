@@ -6292,6 +6292,41 @@ export const RemoveModerationTermResponse = zod.void()
 
 
 /**
+ * Só os cupons PESSOAIS e intransferíveis da conta do token (hoje, a entrega grátis ou o desconto concedidos por atraso, RN-19 4c); cupons públicos e de loja não aparecem e o cupom de outra conta nunca é revelado. Mínimo de dados: sem pedido de origem e sem contagem de usos. Do mais novo ao mais antigo, paginado por cursor. `status`: `available` (padrão: vigente e ainda não usado), `used`, `expired` ou `all`. O cupom devolvido por pedido cancelado volta a `available`. Para usar, o app envia `code` em `PUT /v1/cart/coupon` (as regras de validade e de e-mail confirmado são as de lá). 429 se passar de 120 chamadas em 10 min.
+ * @summary Meus cupons pessoais (compensação por atraso, WB-254)
+ */
+export const listMyCouponsQueryStatusDefault = `available`;
+export const listMyCouponsQueryCursorMax = 200;
+
+export const listMyCouponsQueryLimitDefault = 20;
+export const listMyCouponsQueryLimitMax = 50;
+
+
+
+export const ListMyCouponsQueryParams = zod.object({
+  "status": zod.enum(['available', 'used', 'expired', 'all']).default(listMyCouponsQueryStatusDefault),
+  "cursor": zod.string().max(listMyCouponsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listMyCouponsQueryLimitMax).default(listMyCouponsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListMyCouponsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "code": zod.string().describe('4 a 20 caracteres A-Z0-9; enviar em `PUT /v1/cart/coupon`'),
+  "kind": zod.enum(['free_shipping', 'fixed', 'percent']),
+  "valueCents": zod.int().nullable().describe('Só `fixed` (centavos)'),
+  "percent": zod.int().nullable().describe('Só `percent` (1 a 100)'),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "expiresAt": zod.iso.datetime({"offset":true}),
+  "status": zod.enum(['available', 'used', 'expired']),
+  "origin": zod.enum(['late_delivery', 'other']).describe('`late_delivery`: compensação por atraso na entrega')
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
  * Padrão primeiro, depois do mais antigo ao mais novo. No máximo `enderecos_max` (8) por conta; a lista cabe numa página. Dado pessoal (LGPD): só o dono lê.
  * @summary Meus endereços salvos
  */

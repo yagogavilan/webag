@@ -7,12 +7,14 @@ import { MediaModule } from '../media/index.js';
 import { StoresModule } from '../stores/index.js';
 import { CartController } from './cart.controller.js';
 import { CartService, PurchaseHistoryPort } from './cart.service.js';
+import { MyCouponsController } from './my-coupons.controller.js';
+import { MyCouponsService } from './my-coupons.service.js';
 import { PaidPurchaseHistory } from './purchase-history.service.js';
 
 @Module({
   imports: [AdminModule, AddressesModule, FinanceModule, LogisticsModule, MediaModule, StoresModule],
-  controllers: [CartController],
-  providers: [CartService, { provide: PurchaseHistoryPort, useClass: PaidPurchaseHistory }],
+  controllers: [CartController, MyCouponsController],
+  providers: [CartService, MyCouponsService, { provide: PurchaseHistoryPort, useClass: PaidPurchaseHistory }],
   exports: [CartService, PurchaseHistoryPort],
 })
 export class CartModule {}
