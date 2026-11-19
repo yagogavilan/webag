@@ -161,7 +161,7 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
       banners={
         <>
           {!online ? <Banner tone="warning" offline testId="offline-banner">Sem conexão. Mostrando o que já carregou.</Banner> : null}
-          <AdminMaintenanceBanner canManage={profile === 'super_admin'} />
+          {pathname === '/admin/manutencao' ? null : <AdminMaintenanceBanner canManage={profile === 'super_admin'} />}
         </>
       }
       idle={<IdleGuard onTimeout={() => void logout('inatividade')} />}

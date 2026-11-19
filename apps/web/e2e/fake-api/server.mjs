@@ -1341,6 +1341,8 @@ route('GET', '/v1/card-intents/:token', { public: true }, (req, res, ctx) => {
   json(res, 200, { amount: { amount: intent.amount, currency: 'BRL' }, provider: 'fake', publicKey: null, installmentsMax: 3, expiresAt: new Date(Date.now() + 900_000).toISOString() });
 });
 route('POST', '/v1/card-intents/:token/pay', { public: true }, (req, res, ctx) => {
+  // WB-121: antes de consumir a intenção (o link continua valendo)
+  if (maintenanceState.enabled) return problem(res, 503, 'MAINTENANCE', 'Voltamos já', maintenanceState.message ?? 'Estamos em manutenção rápida. Voltamos já; seus pedidos em andamento continuam normalmente.', { headers: { 'retry-after': '120' } });
   const intent = cardIntents.get(ctx.params[0]);
   if (!intent || intent.used) return problem(res, 410, 'CARD_INTENT_INVALID', 'Link inválido ou já usado');
   intent.used = true;
@@ -1352,6 +1354,264 @@ route('POST', '/v1/card-intents/:token/pay', { public: true }, (req, res, ctx) =
 route('GET', '/__test/state', { public: true }, (req, res) => json(res, 200, { superSecret: SUPER_SECRET, audit: audit.length }));
 
 // ---------------------------------------------------------------- servidor
+// ---------------------------------------------------------------- DEC-073: alertas (B3), usuários (B4), pedidos (B5), manutenção (WB-121) e e-mail do lojista (B2)
+// Reproduz o contrato de `getAdmin*`/`listAdmin*` do openapi.yaml: RBAC por tipo de alerta, dado mascarado, `allowedActions` por perfil.
+Object.assign(PERMS, {
+  'alerts:read': ['super_admin', 'operations', 'finance', 'support'],
+  'alerts:resolve': ['super_admin', 'operations', 'finance'],
+  'users:read': ['super_admin', 'operations', 'support'],
+  'users:block': ['super_admin', 'operations'],
+  'orders:read': ['super_admin', 'operations', 'finance', 'support'],
+  'orders:refund': ['super_admin', 'finance'],
+  'maintenance:read': ['super_admin', 'operations', 'finance', 'support'],
+  'maintenance:write': ['super_admin'],
+});
+const ALERT_KINDS = [
+  { kind: 'refund_exhausted', label: 'Estorno recusado pelo provedor', area: 'payments', severity: 'critical', hint: 'Tente o estorno de novo ou cubra o valor pela Webag.', audience: ['super_admin', 'finance'] },
+  { kind: 'delivery_late', label: 'Entrega atrasada', area: 'logistics', severity: 'warning', hint: 'Atribua um motoboy ou fale com a loja.', audience: ['super_admin', 'operations', 'finance', 'support'] },
+  { kind: 'order_stuck', label: 'Pedido parado sem aceite', area: 'orders', severity: 'warning', hint: 'Ligue para a loja ou cancele o pedido.', audience: ['super_admin', 'operations', 'support'] },
+  { kind: 'dsr_due', label: 'Pedido de titular perto do prazo', area: 'privacy', severity: 'critical', hint: 'Responda antes do prazo legal.', audience: ['super_admin'] },
+];
+const opsAlertsFor = (profile) => (profile ? opsAlerts.filter((a) => ALERT_KINDS.find((k) => k.kind === a.kind)?.audience.includes(profile)) : []);
+const opsApiAlert = (a) => {
+  const k = ALERT_KINDS.find((x) => x.kind === a.kind);
+  return { id: a.id, kind: a.kind, label: k.label, area: k.area, severity: k.severity, hint: k.hint, status: a.status, attemptId: null, details: a.details, links: a.links, createdAt: a.createdAt, resolvedAt: a.resolvedAt ?? null, resolvedByName: a.resolvedByName ?? null, resolutionNote: a.resolutionNote ?? null };
+};
+let opsAlerts = [];
+let opsUsers = new Map();
+let adminOrders = new Map();
+let maintenanceState = { enabled: false, message: null, expectedBackAt: null, updatedAt: null, updatedByName: null };
+const storeNotifications = new Map();
+const OPS_STORE = '11111111-1111-4111-8111-111111111111';
+const opsHoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+function seedOps() {
+  opsAlerts = [
+    { id: 'a0000000-0000-4000-8000-000000000001', kind: 'refund_exhausted', status: 'open', details: { amountCents: 4590, failures: 5 }, links: { orderId: 'b0000000-0000-4000-8000-000000000001', storeId: null, deliveryId: null, exchangeId: null }, createdAt: opsHoursAgo(50) },
+    { id: 'a0000000-0000-4000-8000-000000000002', kind: 'order_stuck', status: 'open', details: { minutesWaiting: 22 }, links: { orderId: 'b0000000-0000-4000-8000-000000000002', storeId: OPS_STORE, deliveryId: null, exchangeId: null }, createdAt: opsHoursAgo(3) },
+    { id: 'a0000000-0000-4000-8000-000000000003', kind: 'delivery_late', status: 'open', details: { lateMinutes: 18 }, links: { orderId: null, storeId: null, deliveryId: 'd0000000-0000-4000-8000-000000000001', exchangeId: null }, createdAt: opsHoursAgo(1) },
+    { id: 'a0000000-0000-4000-8000-000000000004', kind: 'dsr_due', status: 'open', details: { requestId: 'r1', dueInDays: 3 }, links: { orderId: null, storeId: null, deliveryId: null, exchangeId: null }, createdAt: opsHoursAgo(10) },
+    { id: 'a0000000-0000-4000-8000-000000000005', kind: 'order_stuck', status: 'resolved', details: { minutesWaiting: 40 }, links: { orderId: null, storeId: null, deliveryId: null, exchangeId: null }, createdAt: opsHoursAgo(80), resolvedAt: opsHoursAgo(70), resolvedByName: 'Caio Lima', resolutionNote: 'Loja aceitou depois do contato.' },
+  ];
+  opsUsers = new Map([
+    ['c0000000-0000-4000-8000-000000000001', { id: 'c0000000-0000-4000-8000-000000000001', name: 'Maria L.', emailMasked: 'm***@gmail.com', phoneMasked: '(11) *****-1234', roles: ['customer', 'merchant'], status: 'active', createdAt: '2026-10-01T12:00:00Z', lastLoginAt: opsHoursAgo(5), emailVerified: true, stores: [{ id: OPS_STORE, name: 'Mercadinho Boa Compra', status: 'approved', role: 'owner' }], history: [] }],
+    ['c0000000-0000-4000-8000-000000000002', { id: 'c0000000-0000-4000-8000-000000000002', name: 'João P.', emailMasked: 'j***@outlook.com', phoneMasked: null, roles: ['customer'], status: 'blocked', createdAt: '2026-09-12T12:00:00Z', lastLoginAt: null, emailVerified: true, stores: [], history: [{ action: 'blocked', reason: 'Três pedidos com chargeback.', at: opsHoursAgo(120), byName: 'Caio Lima', suspendedStoreIds: [] }] }],
+    ['c0000000-0000-4000-8000-000000000003', { id: 'c0000000-0000-4000-8000-000000000003', name: 'Ana C.', emailMasked: 'a***@gmail.com', phoneMasked: '(11) *****-9876', roles: ['customer'], status: 'active', createdAt: '2026-11-02T12:00:00Z', lastLoginAt: opsHoursAgo(30), emailVerified: false, stores: [], history: [] }],
+  ]);
+  const base = (id, number, status, over = {}) => ({ id, number, status, mode: 'delivery', paymentMethod: 'pix', createdAt: opsHoursAgo(4), paidAt: opsHoursAgo(4), store: { id: OPS_STORE, name: 'Mercadinho Boa Compra', city: 'Francisco Morato' }, customer: { id: 'c0000000-0000-4000-8000-000000000001', name: 'Maria L.', emailMasked: 'm***@gmail.com', phoneMasked: '(11) *****-1234' }, totalCents: 5990, refundedCents: 0, disputedAt: null, timeline: [{ status: 'received', from: null, at: opsHoursAgo(4), actor: 'system', actorName: null, reason: null }], ...over });
+  adminOrders = new Map([
+    ['b0000000-0000-4000-8000-000000000001', base('b0000000-0000-4000-8000-000000000001', 'WB-1A01', 'delivered', { totalCents: 4590, createdAt: opsHoursAgo(60), paidAt: opsHoursAgo(60) })],
+    ['b0000000-0000-4000-8000-000000000002', base('b0000000-0000-4000-8000-000000000002', 'WB-1A02', 'received', { createdAt: opsHoursAgo(1), paidAt: opsHoursAgo(1) })],
+    ['b0000000-0000-4000-8000-000000000003', base('b0000000-0000-4000-8000-000000000003', 'WB-1A03', 'awaiting_payment', { paymentMethod: 'card', totalCents: 12000, paidAt: null, createdAt: opsHoursAgo(2) })],
+    ['b0000000-0000-4000-8000-000000000004', base('b0000000-0000-4000-8000-000000000004', 'WB-1A04', 'received', { totalCents: 60000, mode: 'pickup' })],
+  ]);
+  maintenanceState = { enabled: false, message: null, expectedBackAt: null, updatedAt: null, updatedByName: null };
+  storeNotifications.clear();
+}
+seedOps();
+addAdmin({ email: 'financeiro@webag.local', name: 'Fabi Rocha', password: 'Webag-Admin-Dev-2026', profile: 'finance', secret: SUPER_SECRET });
+route('POST', '/__test/reset-ops', { public: true }, (req, res) => {
+  seedOps();
+  json(res, 200, { ok: true });
+});
+
+const opsPageOf = (rows, q, limit) => {
+  const start = Number(q.get('cursor') ?? 0);
+  const data = rows.slice(start, start + limit);
+  return { data, nextCursor: start + limit < rows.length ? String(start + limit) : null };
+};
+
+route('GET', '/v1/admin/overview/pending', { perm: 'alerts:read' }, (req, res, ctx) => {
+  const open = opsAlertsFor(ctx.user.profile).filter((a) => a.status === 'open');
+  json(res, 200, { alerts: { open: open.length, critical: open.filter((a) => ALERT_KINDS.find((k) => k.kind === a.kind).severity === 'critical').length }, stores: null, disputes: null, refunds: null, dataRequests: null });
+});
+route('GET', '/v1/admin/alerts', { perm: 'alerts:read' }, (req, res, ctx) => {
+  const q = ctx.query;
+  const status = q.get('status') ?? 'open';
+  let rows = opsAlertsFor(ctx.user.profile).filter((a) => status === 'all' || a.status === status);
+  const kind = ALERT_KINDS.find((k) => k.kind === q.get('kind'));
+  if (q.get('kind')) rows = rows.filter((a) => a.kind === q.get('kind'));
+  if (q.get('severity')) rows = rows.filter((a) => ALERT_KINDS.find((k) => k.kind === a.kind).severity === q.get('severity'));
+  if (q.get('area')) rows = rows.filter((a) => ALERT_KINDS.find((k) => k.kind === a.kind).area === q.get('area'));
+  void kind;
+  rows = rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  json(res, 200, opsPageOf(rows.map(opsApiAlert), q, Number(q.get('limit') ?? 20)));
+});
+route('GET', '/v1/admin/alerts/summary', { perm: 'alerts:read' }, (req, res, ctx) => {
+  const open = opsAlertsFor(ctx.user.profile).filter((a) => a.status === 'open');
+  const sev = (s) => open.filter((a) => ALERT_KINDS.find((k) => k.kind === a.kind).severity === s).length;
+  const oldest = open.map((a) => a.createdAt).sort()[0] ?? null;
+  json(res, 200, { open: open.length, bySeverity: { critical: sev('critical'), warning: sev('warning'), info: sev('info') }, byArea: {}, byKind: [], oldestOpenAt: oldest });
+});
+route('GET', '/v1/admin/alerts/kinds', { perm: 'alerts:read' }, (req, res, ctx) => json(res, 200, { data: ALERT_KINDS.filter((k) => k.audience.includes(ctx.user.profile)).map((k) => ({ kind: k.kind, label: k.label, area: k.area, severity: k.severity, hint: k.hint })), nextCursor: null }));
+route('GET', '/v1/admin/alerts/:id', { perm: 'alerts:read' }, (req, res, ctx) => {
+  const a = opsAlertsFor(ctx.user.profile).find((x) => x.id === ctx.params[0]);
+  if (!a) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  json(res, 200, opsApiAlert(a));
+});
+route('POST', '/v1/admin/alerts/:id/resolve', { perm: 'alerts:resolve' }, (req, res, ctx) => {
+  const a = opsAlertsFor(ctx.user.profile).find((x) => x.id === ctx.params[0]);
+  if (!a) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (a.status === 'resolved') return problem(res, 409, 'ALERT_ALREADY_RESOLVED', 'Alerta já encerrado');
+  const note = String(ctx.body.note ?? '').trim();
+  if (note.length < 5 || note.length > 300) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  Object.assign(a, { status: 'resolved', resolvedAt: now(), resolvedByName: ctx.user.name, resolutionNote: note });
+  record(req, ctx, { action: 'alert.resolve', targetType: 'alert', targetId: a.id, reason: note });
+  json(res, 200, opsApiAlert(a));
+});
+
+// usuários
+const opsUserRow = (u) => ({ id: u.id, name: u.name, emailMasked: u.emailMasked, phoneMasked: u.phoneMasked, roles: u.roles, status: u.status, storeCount: u.stores.length, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt });
+const opsUserDetail = (u, profile) => ({ ...opsUserRow(u), emailVerified: u.emailVerified, stores: u.stores, recentOrders: [...adminOrders.values()].filter((o) => o.customer.id === u.id).slice(0, 10).map((o) => ({ id: o.id, number: o.number, status: o.status, mode: o.mode, createdAt: o.createdAt, total: money(o.totalCents), storeName: o.store.name })), blockHistory: u.history, allowedActions: PERMS['users:block'].includes(profile) ? (u.status === 'active' ? ['block'] : u.status === 'blocked' ? ['unblock'] : []) : [] });
+route('GET', '/v1/admin/users', { perm: 'users:read' }, (req, res, ctx) => {
+  const q = ctx.query;
+  const term = (q.get('q') ?? '').trim().toLowerCase();
+  let rows = [...opsUsers.values()];
+  // SEC-181: nome por trecho (3+); e-mail e celular só inteiros (aqui: sem casar com o mascarado); ID exato.
+  if (term) rows = rows.filter((u) => u.id === term || (term.length >= 3 && u.name.toLowerCase().includes(term)));
+  if (q.get('role')) rows = rows.filter((u) => u.roles.includes(q.get('role')));
+  if (q.get('status')) rows = rows.filter((u) => u.status === q.get('status'));
+  json(res, 200, opsPageOf(rows.map(opsUserRow), q, Number(q.get('limit') ?? 20)));
+});
+route('GET', '/v1/admin/users/:id', { perm: 'users:read' }, (req, res, ctx) => {
+  const u = opsUsers.get(ctx.params[0]);
+  if (!u) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  json(res, 200, opsUserDetail(u, ctx.user.profile));
+});
+route('POST', '/v1/admin/users/:id/block', { perm: 'users:block' }, (req, res, ctx) => {
+  const u = opsUsers.get(ctx.params[0]);
+  if (!u) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (u.status === 'blocked') return problem(res, 409, 'USER_ALREADY_BLOCKED', 'Usuário já está bloqueado');
+  if (String(ctx.body.reason ?? '').trim().length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  u.status = 'blocked';
+  const suspended = u.stores.filter((s) => s.role === 'owner' && s.status === 'approved');
+  for (const s of suspended) s.status = 'suspended';
+  u.history.unshift({ action: 'blocked', reason: ctx.body.reason, at: now(), byName: ctx.user.name, suspendedStoreIds: suspended.map((s) => s.id) });
+  record(req, ctx, { action: 'user.block', targetType: 'user', targetId: u.id, reason: ctx.body.reason });
+  json(res, 200, { ...opsUserDetail(u, ctx.user.profile), suspendedStoreIds: suspended.map((s) => s.id), failedStoreIds: [] });
+});
+route('POST', '/v1/admin/users/:id/unblock', { perm: 'users:block' }, (req, res, ctx) => {
+  const u = opsUsers.get(ctx.params[0]);
+  if (!u) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (u.status !== 'blocked') return problem(res, 409, 'USER_NOT_BLOCKED', 'Usuário não está bloqueado');
+  if (String(ctx.body.reason ?? '').trim().length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  u.status = 'active';
+  u.history.unshift({ action: 'unblocked', reason: ctx.body.reason, at: now(), byName: ctx.user.name, suspendedStoreIds: [] });
+  record(req, ctx, { action: 'user.unblock', targetType: 'user', targetId: u.id, reason: ctx.body.reason });
+  json(res, 200, opsUserDetail(u, ctx.user.profile));
+});
+
+// pedidos
+const OPS_TERMINAL = ['delivered', 'cancelled', 'refused', 'expired'];
+const opsOrderRow = (o) => ({ id: o.id, number: o.number, status: o.status, mode: o.mode, paymentMethod: o.paymentMethod, createdAt: o.createdAt, paidAt: o.paidAt, store: o.store, customer: { id: o.customer.id, name: o.customer.name }, total: money(o.totalCents) });
+const opsOrderDetail = (o, profile) => {
+  const paid = o.paidAt ? o.totalCents : 0;
+  const remaining = Math.max(0, paid - o.refundedCents);
+  const canAct = PERMS['orders:refund'].includes(profile);
+  const showSplit = profile === 'super_admin' || profile === 'finance';
+  return {
+    ...opsOrderRow(o), acceptedAt: null, deliveredAt: o.status === 'delivered' ? o.createdAt : null, cancelledAt: o.cancelledAt ?? null, cancelledBy: o.cancelledBy ?? null, cancelReason: o.cancelReason ?? null, disputedAt: o.disputedAt, notReceivedAt: null, couponCode: null,
+    customer: o.customer, delivery: o.mode === 'delivery' ? { neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', logistics: null } : null,
+    items: [{ name: 'Arroz 5 kg', attributes: {}, quantity: 2, unitPrice: money(2500), lineTotal: money(5000) }],
+    values: { subtotal: money(5000), delivery: money(600), serviceFee: money(390), storeDiscount: money(0), platformDiscount: money(0), total: money(o.totalCents), commission: showSplit ? money(750) : null, applicationFee: showSplit ? money(1140) : null, merchantNetBeforeProviderFee: showSplit ? money(4250) : null },
+    payment: o.paidAt ? { method: o.paymentMethod, status: 'approved', installments: 1, declineReason: null, attempts: [{ id: 'p1', status: 'approved', method: o.paymentMethod, amount: money(o.totalCents), createdAt: o.paidAt }] } : null,
+    refunds: { paid: money(paid), refunded: money(o.refundedCents), remaining: money(remaining), items: o.refundItems ?? [] },
+    timeline: o.timeline, exchanges: [], review: null,
+    allowedActions: [...(canAct && !OPS_TERMINAL.includes(o.status) ? ['cancel'] : []), ...(canAct && paid > 0 && !o.disputedAt && remaining > 0 ? ['refund'] : [])],
+    refundLimit: { superAdminOnlyAboveCents: 50000, profileCapCents: profile === 'super_admin' ? null : 50000 },
+  };
+};
+route('GET', '/v1/admin/orders', { perm: 'orders:read' }, (req, res, ctx) => {
+  const q = ctx.query;
+  let rows = [...adminOrders.values()];
+  const term = (q.get('q') ?? '').trim().toLowerCase();
+  if (term) rows = rows.filter((o) => o.number.toLowerCase() === term || o.id === term);
+  if (q.get('status')) rows = rows.filter((o) => q.get('status').split(',').includes(o.status));
+  if (q.get('mode')) rows = rows.filter((o) => o.mode === q.get('mode'));
+  if (q.get('paymentMethod')) rows = rows.filter((o) => o.paymentMethod === q.get('paymentMethod'));
+  if (q.get('userId')) rows = rows.filter((o) => o.customer.id === q.get('userId'));
+  if (q.get('city')) rows = rows.filter((o) => (o.store.city ?? '').toLowerCase().includes(q.get('city').toLowerCase()));
+  rows = rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  json(res, 200, opsPageOf(rows.map(opsOrderRow), q, Number(q.get('limit') ?? 50)));
+});
+route('GET', '/v1/admin/orders/:id', { perm: 'orders:read' }, (req, res, ctx) => {
+  const o = adminOrders.get(ctx.params[0]);
+  if (!o) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  json(res, 200, opsOrderDetail(o, ctx.user.profile));
+});
+route('POST', '/v1/admin/orders/:id/cancel', { perm: 'orders:refund', reauth: true }, (req, res, ctx) => {
+  const o = adminOrders.get(ctx.params[0]);
+  if (!o) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (OPS_TERMINAL.includes(o.status)) return problem(res, 409, 'ORDER_NOT_CANCELLABLE', 'Pedido não pode ser cancelado');
+  const reason = String(ctx.body.reason ?? '').trim();
+  if (reason.length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  const paid = o.paidAt ? o.totalCents : 0;
+  const remaining = paid - o.refundedCents;
+  const refund = ctx.body.refund !== false;
+  if (refund && remaining > 50000 && ctx.user.profile !== 'super_admin') return problem(res, 403, 'SUPER_ADMIN_REQUIRED', 'Só o super admin');
+  if (refund) o.refundedCents += remaining;
+  Object.assign(o, { status: 'cancelled', cancelledAt: now(), cancelledBy: 'admin', cancelReason: reason });
+  o.timeline.push({ status: 'cancelled', from: 'received', at: now(), actor: 'admin', actorName: ctx.user.name, reason });
+  record(req, ctx, { action: 'order.cancel', targetType: 'order', targetId: o.id, reason });
+  json(res, 200, { status: 'cancelled', refunded: money(refund ? remaining : 0), remaining: money(paid - o.refundedCents) });
+});
+route('POST', '/v1/admin/orders/:id/refunds', { perm: 'orders:refund', reauth: true }, (req, res, ctx) => {
+  const o = adminOrders.get(ctx.params[0]);
+  if (!o) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(String(req.headers['idempotency-key'] ?? ''))) return problem(res, 400, 'IDEMPOTENCY_KEY_REQUIRED', 'Chave obrigatória');
+  const amount = Number(ctx.body.amountCents);
+  if (!Number.isInteger(amount) || amount < 1 || String(ctx.body.reason ?? '').trim().length < 10) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  const remaining = (o.paidAt ? o.totalCents : 0) - o.refundedCents;
+  if (amount > remaining) return problem(res, 422, 'REFUND_EXCEEDS_PAID', 'Valor acima do pago');
+  if (amount > 50000 && ctx.user.profile !== 'super_admin') return problem(res, 403, 'SUPER_ADMIN_REQUIRED', 'Só o super admin');
+  o.refundedCents += amount;
+  o.refundItems = [...(o.refundItems ?? []), { id: randomUUID(), amount: money(amount), status: 'done', reason: ctx.body.reason, at: now() }];
+  record(req, ctx, { action: 'payment.refund', targetType: 'order', targetId: o.id, reason: ctx.body.reason, after: { amountCents: amount } });
+  json(res, 200, { status: 'done', refunded: money(o.refundedCents), remaining: money(remaining - amount) });
+});
+
+// manutenção
+const DEFAULT_MAINTENANCE = 'Estamos em manutenção rápida. Voltamos já; seus pedidos em andamento continuam normalmente.';
+const publicMaintenance = () => ({ active: maintenanceState.enabled, message: maintenanceState.enabled ? (maintenanceState.message ?? DEFAULT_MAINTENANCE) : null, expectedBackAt: maintenanceState.enabled ? maintenanceState.expectedBackAt : null });
+route('GET', '/v1/config/maintenance', { public: true }, (req, res) => json(res, 200, publicMaintenance()));
+route('GET', '/v1/admin/maintenance', { perm: 'maintenance:read' }, (req, res) => json(res, 200, { ...publicMaintenance(), updatedAt: maintenanceState.updatedAt, updatedByName: maintenanceState.updatedByName }));
+route('PUT', '/v1/admin/maintenance', { perm: 'maintenance:write' }, (req, res, ctx) => {
+  const b = ctx.body;
+  const reason = String(b.reason ?? '').trim();
+  if (typeof b.enabled !== 'boolean' || reason.length < 5) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  if (b.enabled && b.expectedBackAt && new Date(b.expectedBackAt).getTime() <= Date.now()) return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos', undefined, { errors: [{ field: 'expectedBackAt', message: 'A previsão precisa estar no futuro.' }] });
+  maintenanceState = b.enabled ? { enabled: true, message: b.message ?? null, expectedBackAt: b.expectedBackAt ?? null, updatedAt: now(), updatedByName: ctx.user.name } : { enabled: false, message: null, expectedBackAt: null, updatedAt: now(), updatedByName: ctx.user.name };
+  record(req, ctx, { action: b.enabled ? 'maintenance.enable' : 'maintenance.disable', targetType: 'platform', targetId: 'maintenance', reason });
+  json(res, 200, { ...publicMaintenance(), updatedAt: maintenanceState.updatedAt, updatedByName: maintenanceState.updatedByName });
+});
+route('POST', '/__test/maintenance', { public: true }, (req, res, ctx) => {
+  maintenanceState = ctx.body.enabled ? { enabled: true, message: ctx.body.message ?? null, expectedBackAt: ctx.body.expectedBackAt ?? null, updatedAt: now(), updatedByName: 'Ana Souza' } : { enabled: false, message: null, expectedBackAt: null, updatedAt: now(), updatedByName: 'Ana Souza' };
+  json(res, 200, { ok: true });
+});
+
+// lojista: configurações da loja (só o que o menu "Minha loja" e "Avisos de pedido novo" leem) e o e-mail de pedido novo
+route('GET', '/v1/stores/:id/settings', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  json(res, 200, {
+    isOpenNow: true,
+    hours: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, intervals: [{ start: '09:00', end: '18:00' }] })),
+    holidays: [], pause: { active: false, until: null, indefinitely: false },
+    delivery: { acceptsDelivery: true, radiusKm: 5, feeMode: 'fixed', feeFixedCents: 500, tiers: [], minOrderCents: 3000, freeAboveCents: 0, etaMinMinutes: 30, etaMaxMinutes: 45, prepMinutes: 25, prepMinutesIsDefault: false },
+    pickup: { enabled: false, useStoreAddress: true, address: null, instructions: null, prepMinMinutes: 15, prepMaxMinutes: 30 },
+    exchangePolicy: { voluntaryDays: 7, collectionFeeCents: 0, version: 1, legalFloor: { withdrawalDays: 7, defectDays: 90 } },
+    lowStockThreshold: 5,
+    notifications: { newOrderEmail: storeNotifications.get(s.id) ?? true },
+  });
+});
+route('PUT', '/v1/stores/:id/notifications', {}, (req, res, ctx) => {
+  const s = mustOwn(res, ctx);
+  if (!s) return;
+  if (typeof ctx.body.newOrderEmail !== 'boolean') return problem(res, 400, 'VALIDATION_FAILED', 'Dados inválidos');
+  storeNotifications.set(s.id, ctx.body.newOrderEmail);
+  json(res, 200, { newOrderEmail: ctx.body.newOrderEmail });
+});
+
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   // Armazenamento de objetos falso (ADR-005): recebe o POST pré-assinado e serve o documento por URL assinada.

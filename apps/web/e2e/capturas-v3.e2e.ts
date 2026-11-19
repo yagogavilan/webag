@@ -97,4 +97,73 @@ test.describe('capturas v3', () => {
     await page.waitForTimeout(600);
     await page.screenshot({ path: `${OUT}/mob-admin-mais.png` });
   });
+  /** DEC-073/074: Alertas, Usuários, Pedidos, Modo manutenção, aviso no site e Avisos de pedido novo do lojista (API falsa). */
+  test('dec-073', async ({ page }) => {
+    await post('/__test/reset-ops', {});
+    await post('/__test/maintenance', { enabled: false });
+    const merchant = (await post('/__test/seed-merchant', { name: 'Moda Morato', status: 'live' })) as unknown as { email: string; password: string; storeId: string };
+    await login(page, 'admin@webag.local');
+    for (const viewport of ['desk', 'mob'] as const) {
+      await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
+      await page.goto('/admin');
+      await page.getByTestId('admin.home.pending-alertas').waitFor();
+      await shot(page, 'admin-inicio-alertas', viewport);
+      await page.goto('/admin/alertas');
+      await page.getByTestId('admin.alertas.list').waitFor();
+      await shot(page, 'admin-alertas', viewport);
+      await page.goto('/admin/alertas/a0000000-0000-4000-8000-000000000001');
+      await page.getByTestId('admin.alertas.hint').waitFor();
+      await shot(page, 'admin-alerta-detalhe', viewport);
+      await page.getByTestId('admin.alertas.resolve').click();
+      await page.getByTestId('admin.alertas.resolve-confirm').click();
+      await shot(page, 'admin-alerta-resolver', viewport, false);
+      await page.keyboard.press('Escape');
+      await page.goto('/admin/usuarios');
+      await page.getByTestId('admin.usuarios.list').waitFor();
+      await shot(page, 'admin-usuarios', viewport);
+      await page.goto('/admin/usuarios/c0000000-0000-4000-8000-000000000001');
+      await page.getByTestId('admin.usuarios.block').waitFor();
+      await shot(page, 'admin-usuario-detalhe', viewport);
+      await page.getByTestId('admin.usuarios.block').click();
+      await page.getByTestId('admin.usuarios.block-effects').waitFor();
+      await shot(page, 'admin-usuario-bloquear', viewport, false);
+      await page.keyboard.press('Escape');
+      await page.goto('/admin/pedidos');
+      await page.getByTestId('admin.pedidos.table').waitFor();
+      await shot(page, 'admin-pedidos', viewport);
+      await page.goto('/admin/pedidos/b0000000-0000-4000-8000-000000000002');
+      await page.getByTestId('admin.pedidos.cancel').waitFor();
+      await shot(page, 'admin-pedido-detalhe', viewport);
+      await page.getByTestId('admin.pedidos.cancel').click();
+      await page.getByTestId('admin.pedidos.cancel-effects').waitFor();
+      await shot(page, 'admin-pedido-cancelar', viewport, false);
+      await page.keyboard.press('Escape');
+    }
+    await post('/__test/maintenance', { enabled: true, message: 'Atualizando o sistema de pagamentos.', expectedBackAt: new Date(Date.now() + 3 * 3_600_000).toISOString() });
+    for (const viewport of ['desk', 'mob'] as const) {
+      await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
+      await page.goto('/admin/manutencao');
+      await page.getByTestId('admin.manutencao.on-block').waitFor();
+      await shot(page, 'admin-manutencao', viewport);
+    }
+    for (const viewport of ['desk', 'mob'] as const) {
+      await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
+      for (let attempt = 0; attempt < 20; attempt++) {
+        await page.goto('/');
+        if (await page.getByTestId('public.maintenance').isVisible()) break;
+        await page.waitForTimeout(2000);
+      }
+      await shot(page, 'site-manutencao', viewport, false);
+    }
+    await post('/__test/maintenance', { enabled: false });
+    await loginLojista(page, merchant.email, merchant.password);
+    for (const viewport of ['desk', 'mob'] as const) {
+      await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
+      await page.goto('/lojista/loja/avisos');
+      await page.getByTestId('lojista.avisos.always-on').waitFor();
+      await shot(page, 'lojista-avisos', viewport);
+      await page.getByTestId('lojista.avisos.email-switch').click();
+      await shot(page, 'lojista-avisos-desligado', viewport);
+    }
+  });
 });
