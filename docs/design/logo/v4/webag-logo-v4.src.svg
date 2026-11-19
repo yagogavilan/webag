@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v4a "Sacola Trapezio". Logo horizontal colorida, para fundo claro. Simbolo #C02EF0, palavra #A21FBE (acao profunda, 6,04:1 sobre branco). Sem gradiente.
+     viewBox 0 0 470 126, mesmo layout da v3: simbolo em x 0..154, y 1..104 (geometria de webag-simbolo-v4a.svg); palavra "webag" em x=182, linha de base y=104.
+     O simbolo v4a termina em x=154 (a v3 ia a ~167): o vao ate a palavra ficou 28 em vez de ~15. CEO: apos converter, avaliar se x deve subir de 182 para ~170.
+     CEO: converter o marcador TEXT2PATH e devolver a imagem com a caixa real da palavra. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 458 126" width="458" height="126" role="img" aria-labelledby="wb-logo-t">
+  <title id="wb-logo-t">Webag</title>
+  <defs>
+    <mask id="wb-olhais" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#FFFFFF"/>
+      <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+      <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+    </mask>
+  </defs>
+  <g id="simbolo">
+    <g id="barras" fill="#C02EF0">
+      <rect x="24" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="34" height="14" rx="7"/>
+    </g>
+    <g id="sacola" fill="#C02EF0" mask="url(#wb-olhais)">
+      <polygon points="67,43 145,43 133,95 72,95" stroke="#C02EF0" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#C02EF0" stroke-width="14"/>
+    </g>
+  </g>
+  <!--TEXT2PATH font="outfit-latin-700-normal.woff2" text="webag" size="96" tracking="-2" x="170" y="104" fill="#A21FBE" id="wordmark"-->
+</svg>

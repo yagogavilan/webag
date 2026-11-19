@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Webag v3, conceito A. Favicon / simbolo simplificado para 16 px (tambem base do icone de notificacao Android, em silhueta branca).
-     viewBox 0 0 32 32 (1 px a 16 px = 2 unidades). Ladrilho solido #C02EF0 raio 7 + simbolo branco.
-     Simplificacoes vs. simbolo cheio: SEM inclinacao, 2 barras (nao 3), traco de 3 unidades (1,5 px a 16 px), vaos de 2 unidades.
-     Simbolo (antes do translate): barras y14..17 e y23..26, corpo x11,5..28 y14..26, alca centro 19,75 apice 11,5 traco 3.
-     Caixa do simbolo x 2,5..28, y 10..26 => centro (15,25 ; 18) levado ao centro (16 ; 16) por translate(0,75 -2). -->
+<!-- Webag v4a, favicon / simbolo simplificado para 16 px. viewBox 0 0 32 32 (1 px a 16 px = 2 unidades). Ladrilho solido #C02EF0 raio 7 + simbolo branco.
+     Simplificacoes vs. simbolo cheio: SEM olhais, 2 barras (nao 3), traco de 3 unidades (1,5 px a 16 px), vaos de 3.
+     Corpo trapezio: poligono interno (14,15)(26,15)(24,23)(15.5,23) com traco 6 e juncao redonda => raio externo 3; externo topo y12, base y26, x 11..29 no topo.
+     Alca larga e baixa: arco M15.5 14 A4.5 5.5 (traco 3), apice externo y7, 12 de largura = 67% do topo do corpo.
+     Caixa do simbolo x 3..29, y 7..26 => centro (16 ; 16,5) levado a (16 ; 16) por translate(0 -0,5). -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-labelledby="wb-fav-t">
   <title id="wb-fav-t">Webag</title>
   <rect x="0" y="0" width="32" height="32" rx="7" fill="#C02EF0"/>
-  <g id="simbolo" transform="translate(0.75 -2)" fill="#FFFFFF">
-    <rect x="5.5" y="14" width="4" height="3" rx="1.5"/>
-    <rect x="2.5" y="23" width="7" height="3" rx="1.5"/>
-    <rect x="11.5" y="14" width="16.5" height="12" rx="3.5"/>
-    <path d="M15.25 18 A4.5 6.5 0 0 1 24.25 18" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <g id="simbolo" transform="translate(0 -0.5)" fill="#FFFFFF">
+    <rect x="5" y="16" width="4.5" height="3" rx="1.5"/>
+    <rect x="3" y="22" width="7" height="3" rx="1.5"/>
+    <polygon points="14,15 26,15 24,23 15.5,23" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M15.5 14 A4.5 5.5 0 0 1 24.5 14" fill="none" stroke="#FFFFFF" stroke-width="3"/>
   </g>
 </svg>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v4a "Sacola Trapezio". Logo horizontal BRANCA, para fundo roxo (#C02EF0 ou mais escuro) ou foto com scrim. Mesma geometria de webag-logo-v4.src.svg.
+     Os olhais sao recortes reais (mascara): mostram o fundo do uso. Sem fundo desenhado. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 458 126" width="458" height="126" role="img" aria-labelledby="wb-logob-t">
+  <title id="wb-logob-t">Webag</title>
+  <defs>
+    <mask id="wb-olhais" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#FFFFFF"/>
+      <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+      <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+    </mask>
+  </defs>
+  <g id="simbolo">
+    <g id="barras" fill="#FFFFFF">
+      <rect x="24" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="34" height="14" rx="7"/>
+    </g>
+    <g id="sacola" fill="#FFFFFF" mask="url(#wb-olhais)">
+      <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    </g>
+  </g>
+  <!--TEXT2PATH font="outfit-latin-700-normal.woff2" text="webag" size="96" tracking="-2" x="170" y="104" fill="#FFFFFF" id="wordmark"-->
+</svg>
