@@ -47,11 +47,13 @@ describe('Ordem de locks pedido -> corrida sem deadlock (I7)', () => {
 
   it('admin cancela o pedido e a operação marca entregue ao mesmo tempo: nenhuma das duas termina em 500 e o estado final é coerente', async () => {
     // Janelas abertas de propósito: a corrida segura o lock enquanto a auditoria demora; o cancelamento segura o pedido enquanto o estoque demora.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- guardamos o original para chamá-lo com `apply`
     const realAudit = AuditService.prototype.record;
     vi.spyOn(AuditService.prototype, 'record').mockImplementation(async function (this: AuditService, ...args: Parameters<AuditService['record']>) {
       if (args[2].action.startsWith('delivery.')) await sleep(400);
       return realAudit.apply(this, args);
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- idem
     const realRestock = InventoryService.prototype.restock;
     vi.spyOn(InventoryService.prototype, 'restock').mockImplementation(async function (this: InventoryService, ...args: Parameters<InventoryService['restock']>) {
       await sleep(250);
