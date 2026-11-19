@@ -20,7 +20,8 @@ const createSchema = z
     addressId: z.uuid().optional(),
     cartRevision: z.number().int().min(0),
     paymentMethod: z.enum(['pix', 'card']),
-    expectedTotalCents: z.number().int().min(0).optional(),
+    /** SEC-147: obrigatório. O total que o cliente viu; se frete ou desconto mudaram, o pedido não sai sem ele ver o novo valor. */
+    expectedTotalCents: z.number().int().min(0),
     card: z
       .strictObject({
         token: z.string().min(8).max(200),

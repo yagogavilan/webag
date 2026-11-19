@@ -29,13 +29,19 @@ export const addToCart = (ctx: TestContext, user: RegisteredUser, variantId: str
   ctx.http.put(`/v1/cart/items/${variantId}`).set(bearer(user.accessToken)).send({ quantity });
 
 export async function cartRevision(ctx: TestContext, user: RegisteredUser, addressId: string): Promise<number> {
-  return (await ctx.http.get(`/v1/cart?addressId=${addressId}`).set(bearer(user.accessToken)).expect(200)).body.revision as number;
+  return (await cartView(ctx, user, addressId)).revision;
+}
+
+/** A sacola como o cliente a vê: a revisão e o total (centavos) que o app manda de volta ao criar o pedido (SEC-147). */
+export async function cartView(ctx: TestContext, user: RegisteredUser, addressId?: string): Promise<{ revision: number; totalCents: number }> {
+  const body = (await ctx.http.get(addressId ? `/v1/cart?addressId=${addressId}` : '/v1/cart?mode=pickup').set(bearer(user.accessToken)).expect(200)).body as { revision: number; total?: { amount: number }; summary?: { total: { amount: number } } };
+  return { revision: body.revision, totalCents: (body.total ?? body.summary?.total)?.amount ?? 0 };
 }
 
 /** POST /v1/orders com a revisão atual da sacola (o que o app faz). */
 export async function placeOrder(ctx: TestContext, user: RegisteredUser, addressId: string, over: Record<string, unknown> = {}, key: string = randomUUID()) {
-  const revision = await cartRevision(ctx, user, addressId);
-  return ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'delivery', addressId, cartRevision: revision, paymentMethod: 'pix', ...over });
+  const { revision, totalCents } = await cartView(ctx, user, addressId);
+  return ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'delivery', addressId, cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix', ...over });
 }
 
 export async function attemptOf(ctx: TestContext, orderId: string) {

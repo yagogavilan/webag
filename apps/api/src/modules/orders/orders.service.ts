@@ -35,8 +35,8 @@ export interface CreateOrderInput {
   addressId?: string | undefined;
   cartRevision: number;
   paymentMethod: 'pix' | 'card';
-  /** Opcional: total que o cliente viu; se divergir, o servidor responde `CART_CHANGED` (frete ou desconto mudaram). */
-  expectedTotalCents?: number | undefined;
+  /** SEC-147, obrigatório: total que o cliente viu; se divergir, o servidor responde `CART_CHANGED` (frete ou desconto mudaram). */
+  expectedTotalCents: number;
   card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined;
   payerDocument?: string | undefined;
 }
@@ -141,8 +141,10 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (quote.cartRevision !== input.cartRevision || changes.length > 0) {
       throw errors.conflict('CART_CHANGED', 'Sua sacola mudou', 'Confira os valores antes de pagar.', { changes, cart: view });
     }
-    if (input.expectedTotalCents !== undefined && input.expectedTotalCents !== quote.result.totalCents) {
-      const kind = quote.result.deliveryFeeCents === 0 ? 'DISCOUNT_CHANGED' : 'DELIVERY_FEE_CHANGED';
+    if (input.expectedTotalCents !== quote.result.totalCents) {
+      // Cupom que deixou de valer (esgotou, venceu) ou frete grátis: mudou o desconto; senão, mudou a taxa de entrega.
+      const couponLost = view.coupon !== null && !view.coupon.applied;
+      const kind = couponLost || quote.result.deliveryFeeCents === 0 ? 'DISCOUNT_CHANGED' : 'DELIVERY_FEE_CHANGED';
       throw errors.conflict('CART_CHANGED', 'O valor mudou', 'Confira o novo total antes de pagar.', { changes: [{ kind, fromCents: input.expectedTotalCents, toCents: quote.result.totalCents }], cart: view });
     }
     await this.assertBlockers(quote);

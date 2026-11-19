@@ -5,7 +5,7 @@ import { LedgerService } from '../src/modules/finance/ledger.service.js';
 import { orders, paymentAlerts, paymentRefunds, productVariants, storeMembers } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureCity, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
-import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
+import { addToCart, cartView, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
 
 describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-067 a WB-072, RN-07, RN-08)', () => {
   let ctx: TestContext;
@@ -94,8 +94,8 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 30 }], { pickupEnabled: true });
     const buyer = await customerAt(ctx, shop.origin);
     await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
-    const revision = (await ctx.http.get('/v1/cart?mode=pickup').set(bearer(buyer.user.accessToken)).expect(200)).body.revision;
-    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' }).expect(201)).body;
+    const { revision, totalCents } = await cartView(ctx, buyer.user, undefined);
+    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix' }).expect(201)).body;
     await approve(ctx, buyer.user, (await attemptOf(ctx, created.id)).id);
     const id = created.id as string;
     const status = (to: string, body: Record<string, unknown> = {}) => ctx.http.post(`${base(shop)}/${id}/status`).set(owner(shop)).send({ status: to, ...body });
@@ -114,8 +114,8 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 30 }], { pickupEnabled: true });
     const buyer = await customerAt(ctx, shop.origin);
     await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
-    const revision = (await ctx.http.get('/v1/cart?mode=pickup').set(bearer(buyer.user.accessToken)).expect(200)).body.revision;
-    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' }).expect(201)).body;
+    const { revision, totalCents } = await cartView(ctx, buyer.user, undefined);
+    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix' }).expect(201)).body;
     await approve(ctx, buyer.user, (await attemptOf(ctx, created.id)).id);
     const id = created.id as string;
     const status = (to: string, body: Record<string, unknown> = {}) => ctx.http.post(`${base(shop)}/${id}/status`).set(owner(shop)).send({ status: to, ...body });

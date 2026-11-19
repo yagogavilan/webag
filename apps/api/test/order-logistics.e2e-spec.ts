@@ -6,7 +6,7 @@ import { OrderEventBus, type OrderEvent } from '../src/modules/orders/order-even
 import { deliveries, deliveryEvents, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
-import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
+import { addToCart, cartView, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
 
 /** L.4 e L.5 (DEC-036): o pedido de entrega passa pela logística da Webag; aviso ao admin e ao cliente; devolução à loja. */
 describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
@@ -149,8 +149,8 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 5 }], { pickupEnabled: true });
     const buyer = await customerAt(ctx, shop.origin);
     await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
-    const revision = (await ctx.http.get('/v1/cart?mode=pickup').set(bearer(buyer.user.accessToken)).expect(200)).body.revision;
-    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', crypto.randomUUID()).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' }).expect(201)).body;
+    const { revision, totalCents } = await cartView(ctx, buyer.user, undefined);
+    const created = (await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', crypto.randomUUID()).send({ mode: 'pickup', cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix' }).expect(201)).body;
     await approve(ctx, buyer.user, (await attemptOf(ctx, created.id)).id);
     await ctx.http.post(`/v1/stores/${shop.store.id}/orders/${created.id}/accept`).set(store(shop)).expect(200);
     expect((await ctx.http.post(`/v1/stores/${shop.store.id}/orders/${created.id}/status`).set(store(shop)).send({ status: 'ready_for_collection' })).status).toBe(409); // retirada não vai à coleta da Webag

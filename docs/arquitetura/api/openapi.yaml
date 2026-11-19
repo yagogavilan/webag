@@ -5441,7 +5441,7 @@ paths:
 
         **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
 
-        **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (opcional) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+        **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (obrigatório, SEC-147) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
 
         **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
 
@@ -9342,12 +9342,12 @@ components:
     CreateOrderRequest:
       type: object
       additionalProperties: false
-      required: [mode, cartRevision, paymentMethod]
+      required: [mode, cartRevision, expectedTotalCents, paymentMethod]
       properties:
         mode: { type: string, enum: [delivery, pickup] }
         addressId: { type: string, format: uuid, description: 'Obrigatório na entrega; deve ser do cliente (404 se de outra conta)' }
         cartRevision: { type: integer, description: '`revision` da sacola que o cliente viu' }
-        expectedTotalCents: { type: integer, minimum: 0, description: 'Total (centavos) que o cliente viu. Opcional; se diferir do calculado pelo servidor: 409 CART_CHANGED' }
+        expectedTotalCents: { type: integer, minimum: 0, description: 'Total (centavos) que o cliente viu (`summary.total` da sacola). OBRIGATÓRIO (SEC-147; 400 sem ele); se diferir do calculado pelo servidor (frete mudou, cupom esgotou): 409 CART_CHANGED com `DELIVERY_FEE_CHANGED` ou `DISCOUNT_CHANGED`' }
         paymentMethod: { type: string, enum: [pix, card] }
         card:
           type: object

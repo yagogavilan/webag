@@ -8,7 +8,7 @@ import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { carts, couponRedemptions, orderEvents, orderItems, orders, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureCity, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
-import { addToCart, approve, attemptOf, customerAt, makeCoupon, orderRow, placeOrder, shopWith } from './helpers/orders.js';
+import { addToCart, cartView, approve, attemptOf, customerAt, makeCoupon, orderRow, placeOrder, shopWith } from './helpers/orders.js';
 
 describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeouts (WB-023 a WB-030, RN-05 a RN-08)', () => {
   let ctx: TestContext;
@@ -50,13 +50,13 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
 
       // repetição (3G): mesma chave e mesmo corpo → 200 e o mesmo pedido, sem nova reserva nem nova cobrança
       const revision = first.body.id ? (await ctx.db.select().from(orders).where(eq(orders.id, first.body.id)))[0]!.cartRevision : 0;
-      const again = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'delivery', addressId, cartRevision: revision, paymentMethod: 'pix' });
+      const again = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'delivery', addressId, cartRevision: revision, expectedTotalCents: first.body.summary.total.amount, paymentMethod: 'pix' });
       expect(again.status).toBe(200);
       expect(again.body.id).toBe(first.body.id);
       expect(await variantRow(shop.variants[0]!)).toMatchObject({ reserved: 2 });
       expect(await ctx.db.select().from(orders).where(eq(orders.userId, user.userId))).toHaveLength(1);
       // mesma chave com outro corpo: 409
-      const reused = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' });
+      const reused = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', key).send({ mode: 'pickup', cartRevision: revision, expectedTotalCents: first.body.summary.total.amount, paymentMethod: 'pix' });
       expect(reused.status).toBe(409);
       expect(reused.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
     });
@@ -65,10 +65,10 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 2_000, stock: 5 }]);
       const { user, addressId } = await customerAt(ctx, shop.origin);
       await ctx.http.post('/v1/orders').send({}).expect(401);
-      await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).send({ mode: 'delivery', addressId, cartRevision: 0, paymentMethod: 'pix' }).expect(400);
+      await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).send({ mode: 'delivery', addressId, cartRevision: 0, expectedTotalCents: 0, paymentMethod: 'pix' }).expect(400);
       expect((await placeOrder(ctx, user, addressId)).body).toMatchObject({ code: 'EMPTY_CART', status: 422 });
       await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
-      const stale = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId, cartRevision: 0, paymentMethod: 'pix' });
+      const stale = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId, cartRevision: 0, expectedTotalCents: 2_500, paymentMethod: 'pix' });
       expect(stale.status).toBe(409);
       expect(stale.body.code).toBe('CART_CHANGED');
       // preço mudou depois que o cliente viu: CART_CHANGED com PRICE_CHANGED e nada cobrado
@@ -85,6 +85,47 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       expect(wrongTotal.body.changes[0].toCents).toBe(3_000);
     });
 
+    it('SEC-147: expectedTotalCents é obrigatório (400 sem ele) e a mudança de frete entre a cotação e o pedido dá 409 sem cobrar', async () => {
+      const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 5 }]);
+      const { user, addressId } = await customerAt(ctx, shop.origin);
+      await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
+      const { revision, totalCents } = await cartView(ctx, user, addressId);
+      const bare = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId, cartRevision: revision, paymentMethod: 'pix' });
+      expect(bare.status, JSON.stringify(bare.body)).toBe(400);
+      expect(bare.body.errors?.[0]?.field ?? '').toContain('expectedTotalCents');
+      expect(await ctx.db.select().from(orders).where(eq(orders.userId, user.userId))).toHaveLength(0);
+      // o frete mudou depois que o cliente viu o total (vigência da tabela / faixa): o total esperado deixa de bater
+      const stale = await placeOrder(ctx, user, addressId, { expectedTotalCents: totalCents - 100 });
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe('CART_CHANGED');
+      expect(stale.body.changes[0]).toMatchObject({ fromCents: totalCents - 100, toCents: totalCents });
+      expect(await ctx.db.select().from(orders).where(eq(orders.userId, user.userId))).toHaveLength(0);
+      expect((await placeOrder(ctx, user, addressId, { expectedTotalCents: totalCents })).status).toBe(201);
+    });
+
+    it('P.3: cupom esgotado ENTRE a cotação e o pedido: o 2º cliente recebe 409 CART_CHANGED (DISCOUNT_CHANGED) e não é cobrado sem o cupom', async () => {
+      const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 10_000, stock: 5 }]);
+      const coupon = await makeCoupon(ctx, { kind: 'fixed', scope: 'store', storeId: shop.store.id, value: 1_000, maxUses: 1 });
+      const a = await customerAt(ctx, shop.origin);
+      const b = await customerAt(ctx, shop.origin);
+      const seen: number[] = [];
+      for (const c of [a, b]) {
+        await addToCart(ctx, c.user, shop.variants[0]!, 1).expect(200);
+        await ctx.http.put('/v1/cart/coupon').set(bearer(c.user.accessToken)).send({ code: coupon.code }).expect(200);
+        seen.push((await cartView(ctx, c.user, c.addressId)).totalCents);
+      }
+      expect(seen).toEqual([10_500 - 1_000, 10_500 - 1_000]);
+      // o 1º leva o último uso; o 2º ainda vê o total com cupom e tenta pagar
+      expect((await placeOrder(ctx, a.user, a.addressId, { expectedTotalCents: seen[0] })).status).toBe(201);
+      const late = await placeOrder(ctx, b.user, b.addressId, { expectedTotalCents: seen[1] });
+      expect(late.status, JSON.stringify(late.body)).toBe(409);
+      expect(late.body.code).toBe('CART_CHANGED');
+      expect(late.body.changes[0]).toMatchObject({ kind: 'DISCOUNT_CHANGED', fromCents: 9_500 });
+      expect(late.body.changes[0].toCents).toBeGreaterThan(9_500); // sem o cupom o total é maior: o cliente decide
+      expect(await ctx.db.select().from(orders).where(eq(orders.userId, b.user.userId))).toHaveLength(0);
+      expect(await ctx.db.select().from(couponRedemptions).where(eq(couponRedemptions.couponId, coupon.id))).toHaveLength(1);
+    });
+
     it('valor vem do servidor: nenhum campo de preço é aceito no corpo', async () => {
       const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 2_000, stock: 5 }]);
       const { user, addressId } = await customerAt(ctx, shop.origin);
@@ -97,8 +138,8 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 5 }], { pickupEnabled: true });
       const { user, addressId } = await customerAt(ctx, shop.origin);
       await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
-      const revision = (await ctx.http.get('/v1/cart?mode=pickup').set(bearer(user.accessToken)).expect(200)).body.revision;
-      const res = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, paymentMethod: 'pix' });
+      const { revision, totalCents } = await cartView(ctx, user, undefined);
+      const res = await ctx.http.post('/v1/orders').set(bearer(user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'pickup', cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix' });
       expect(res.status, JSON.stringify(res.body)).toBe(201);
       expect(res.body).toMatchObject({ mode: 'pickup', delivery: null, summary: { delivery: { amount: 0 }, total: { amount: 3_000 } } });
       expect(res.body.pickup.code).toBeNull();
@@ -294,7 +335,10 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       const [ra, rb] = await Promise.all([placeOrder(ctx, a.user, a.addressId), placeOrder(ctx, b.user, b.addressId)]);
       const winners = [ra, rb].filter((r) => r.status === 201);
       expect(winners).toHaveLength(1);
-      expect([ra, rb].filter((r) => r.status === 422)[0]!.body.code).toBe('COUPON_EXHAUSTED');
+      // quem perde a corrida vê o cupom esgotar: 409 (o total esperado deixou de bater, SEC-147) ou 422 se o esgotamento aconteceu depois da conferência
+      const loser = [ra, rb].find((r) => r.status !== 201)!;
+      expect([409, 422]).toContain(loser.status);
+      expect(['CART_CHANGED', 'COUPON_EXHAUSTED']).toContain(loser.body.code);
       const row = await orderRow(ctx, winners[0]!.body.id);
       expect(row).toMatchObject({ storeCouponCents: 1_000, commissionCents: 900, applicationFeeCents: 900 + 500, totalCents: 10_000 - 1_000 + 500 });
       expect(await ctx.db.select().from(couponRedemptions).where(eq(couponRedemptions.couponId, coupon.id))).toHaveLength(1);
@@ -419,7 +463,7 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       expect((await orderRow(ctx, created.id)).status).toBe('awaiting_payment');
       // endereço de outra conta no pedido: 404
       const stranger = await customerAt(ctx, shop.origin);
-      const res = await ctx.http.post('/v1/orders').set(bearer(owner.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId: stranger.addressId, cartRevision: 1, paymentMethod: 'pix' });
+      const res = await ctx.http.post('/v1/orders').set(bearer(owner.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId: stranger.addressId, cartRevision: 1, expectedTotalCents: 1_000, paymentMethod: 'pix' });
       expect(res.status).toBe(404);
     });
 
