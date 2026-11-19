@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSession } from '../../../src/api/session';
+import { Dialog } from '../../../src/components/Dialog';
 import { Button } from '../../../src/components/Button';
 import { Receipt } from '../../../src/components/icons';
 import { Screen } from '../../../src/components/Screen';
@@ -14,7 +15,7 @@ import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { EmailVerifyBanner } from '../../../src/features/auth/EmailVerifyBanner';
-import { useCartParams } from '../../../src/features/cart/hooks';
+import { useCartParams, useCartView } from '../../../src/features/cart/hooks';
 import { useOrdersList } from '../../../src/features/orders/hooks';
 import { OrderRow } from '../../../src/features/orders/OrderRow';
 import { reorderItems } from '../../../src/features/orders/reorder';
@@ -38,6 +39,8 @@ export default function OrdersScreen() {
   const active = useOrdersList('active', { connected });
   const past = useOrdersList('past');
   const [busy, setBusy] = useState<string | null>(null);
+  const { view: cartView } = useCartView();
+  const [switchTo, setSwitchTo] = useState<OrderSummary | null>(null);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
@@ -70,7 +73,7 @@ export default function OrdersScreen() {
   };
 
   const title = (
-    <Text accessibilityRole="header" style={styles.title} variant="title1">
+    <Text accessibilityRole="header" style={styles.title} variant="poster">
       {t('orders.title')}
     </Text>
   );
@@ -119,13 +122,26 @@ export default function OrdersScreen() {
               <OrderRow
                 onPress={() => open(item.order.id)}
                 {...(item.order.status === 'awaiting_payment' ? { onPay: () => router.push({ pathname: '/pay/[orderId]', params: { orderId: item.order.id } } as never) } : {})}
-                {...(item.order.status === 'delivered' && busy !== item.order.id ? { onReorder: () => void onReorder(item.order) } : {})}
+                {...(item.order.status === 'delivered' && busy !== item.order.id
+                  ? {
+                      onReorder: () => {
+                        // Pedir de novo em outra loja esvazia a sacola atual: avisa antes
+                        if (cartView && cartView.count > 0 && cartView.storeId !== item.order.store.id) setSwitchTo(item.order);
+                        else void onReorder(item.order);
+                      },
+                    }
+                  : {})}
+                onHelp={() => router.push({ pathname: '/help', params: { order: item.order.number } } as never)}
                 order={item.order}
               />
             )
           }
         />
       )}
+      <Dialog onClose={() => setSwitchTo(null)} testID="orders.switch-dialog" text={t('orders.switchText', { store: cartView?.storeName ?? '' })} title={t('orders.switchTitle')} visible={switchTo !== null}>
+        <Button label={t('orders.switchConfirm')} onPress={() => { const target = switchTo; setSwitchTo(null); if (target) void onReorder(target); }} testID="orders.switch-confirm" />
+        <Button label={t('orders.switchKeep')} onPress={() => setSwitchTo(null)} variant="text" />
+      </Dialog>
     </Screen>
   );
 }

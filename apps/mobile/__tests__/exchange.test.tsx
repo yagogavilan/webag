@@ -157,9 +157,9 @@ describe('X2b. Acompanhar a troca', () => {
 describe('S6. Pedido confirmado', () => {
   it('mostra número, previsão e leva ao acompanhamento; avisos são opcionais', async () => {
     await renderScreen(<ConfirmedScreen />);
-    expect(await screen.findByTestId('confirmed.title')).toHaveTextContent('Pagamento confirmado. A loja já recebeu seu pedido!');
+    expect(await screen.findByTestId('confirmed.title')).toHaveTextContent('Pedido feito.');
     expect(await screen.findByTestId('confirmed.order-number')).toHaveTextContent('Pedido #1042');
-    expect(screen.getByTestId('confirmed.estimate')).toHaveTextContent('Chega em 30 a 45 min');
+    expect(screen.getByTestId('confirmed.estimate')).toHaveTextContent(/Chega entre\d{2}:\d{2} – \d{2}:\d{2}/);
     expect(await screen.findByTestId('confirmed.push-enable')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('confirmed.track'));
     expect(router.replace).toHaveBeenCalledWith({ pathname: '/order/[id]', params: { id: ORDER_ID } });

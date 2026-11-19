@@ -14,10 +14,11 @@ export interface OrderRowProps {
   onPress: () => void;
   onPay?: () => void;
   onReorder?: () => void;
+  onHelp?: () => void;
 }
 
 /** Linha de Meus pedidos (spec S8): logo, loja, selo, data e itens, total. Lida inteira como uma frase. */
-export function OrderRow({ order, onPress, onPay, onReorder }: OrderRowProps) {
+export function OrderRow({ order, onPress, onPay, onReorder, onHelp }: OrderRowProps) {
   const status = presentStatus(order.status);
   return (
     <View style={styles.wrap}>
@@ -29,7 +30,7 @@ export function OrderRow({ order, onPress, onPay, onReorder }: OrderRowProps) {
         style={styles.row}
         testID={`orders.item-${order.id}`}
       >
-        <RemoteImage alt="" height={40} radius={theme.radius.lg} urls={order.store.logo.urls} width={40} />
+        <RemoteImage alt="" height={48} radius={14} urls={order.store.logo.urls} width={48} />
         <View style={styles.texts}>
           <Text numberOfLines={1} variant="bodyStrong">
             {order.store.name}
@@ -39,18 +40,22 @@ export function OrderRow({ order, onPress, onPay, onReorder }: OrderRowProps) {
             {`${formatDateTime(order.createdAt)} · ${itemCountLabel(order.itemCount)}`}
           </Text>
         </View>
-        <Text variant="price">{formatMoney(order.total.amount)}</Text>
+        <Text variant="priceStrong">{formatMoney(order.total.amount)}</Text>
       </Pressable>
       {onPay ? (
         <Button accessibilityLabel={t('orders.payA11y', { store: order.store.name })} label={`${t('orders.pixPending')} · ${t('orders.pay')}`} onPress={onPay} testID={`orders.pay-pix-${order.id}`} variant="text" />
       ) : null}
-      {onReorder ? <Button label={t('order.reorder')} onPress={onReorder} testID={`orders.reorder-${order.id}`} variant="text" /> : null}
+      <View style={styles.actions}>
+        {onReorder ? <Button label={t('order.reorder')} onPress={onReorder} testID={`orders.reorder-${order.id}`} variant="ink" /> : null}
+        {onHelp ? <Button accessibilityLabel={t('orders.helpA11y', { store: order.store.name })} label={t('orders.help')} onPress={onHelp} testID={`orders.help-${order.id}`} variant="text" /> : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { borderBottomWidth: theme.borderWidth.hairline, borderBottomColor: theme.color.border.subtle },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], paddingBottom: theme.space[3] },
   row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: theme.space[3], paddingVertical: theme.space[3] },
   texts: { flex: 1, gap: theme.space[1], alignItems: 'flex-start' },
 });

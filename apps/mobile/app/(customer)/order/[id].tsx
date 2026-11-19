@@ -3,14 +3,13 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { reportNotReceived } from '../../../src/api/orders-api';
 import { Banner } from '../../../src/components/Banner';
-import { Badge } from '../../../src/components/Badge';
 import { Button } from '../../../src/components/Button';
 import { Dialog } from '../../../src/components/Dialog';
 import { Header } from '../../../src/components/Header';
 import { ArrowsLeftRight, Star, WhatsappLogo } from '../../../src/components/icons';
+import { OrderHero } from '../../../src/features/orders/OrderHero';
 import { Screen } from '../../../src/components/Screen';
 import { Skeleton } from '../../../src/components/Skeleton';
-import { SpeedLines } from '../../../src/components/SpeedLines';
 import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
@@ -21,7 +20,7 @@ import { useOrder } from '../../../src/features/checkout/hooks';
 import { getPushStatus, openNotificationSettings, type PushStatus } from '../../../src/features/notifications/push';
 import { useCancelOrder } from '../../../src/features/orders/hooks';
 import { openDirections, openWhatsapp } from '../../../src/features/orders/links';
-import { isActive, formatDateTime, formatHour, itemCountLabel, presentStatus, spacedCode } from '../../../src/features/orders/model';
+import { isActive, formatDateTime, formatHour, itemCountLabel } from '../../../src/features/orders/model';
 import { reorderItems } from '../../../src/features/orders/reorder';
 import { StatusTimeline } from '../../../src/features/orders/StatusTimeline';
 import { useInvalidateOnEvent } from '../../../src/features/realtime/useRealtime';
@@ -87,7 +86,6 @@ export default function OrderScreen() {
   }
   if (!order) return <Screen header={header}>{null}</Screen>;
 
-  const st = presentStatus(order.status);
   const allowed = new Set<string>(order.allowedActions);
   const onNotReceived = async () => {
     setNotReceivedOpen(false);
@@ -133,16 +131,15 @@ export default function OrderScreen() {
     else router.push('/cart');
   };
 
-  const eta = order.delivery ? `${order.delivery.etaMinMinutes} a ${order.delivery.etaMaxMinutes} min` : order.pickup ? `${order.pickup.prepMinMinutes} a ${order.pickup.prepMaxMinutes} min` : null;
+  // Entrega: a faixa de horário vai no herói (OrderHero); aqui só a retirada tem prazo em minutos
+  const eta = order.pickup && order.mode === 'pickup' ? `${order.pickup.prepMinMinutes} a ${order.pickup.prepMaxMinutes} min` : null;
   const hint =
     order.status === 'awaiting_payment'
       ? t('order.hintAwaiting')
       : order.status === 'received'
         ? t('order.hintReceived')
         : active && eta
-          ? order.mode === 'pickup'
-            ? t('order.hintPickup', { eta })
-            : t('order.hintDelivery', { eta })
+          ? t('order.hintPickup', { eta })
           : null;
   const paidMethod = order.payment.method === 'pix' ? t('order.paymentPix') : t('order.paymentCard');
   const updatedAt = query.dataUpdatedAt > 0 ? formatHour(new Date(query.dataUpdatedAt).toISOString()) : null;
@@ -157,30 +154,7 @@ export default function OrderScreen() {
         <Banner actionLabel={t('confirmed.pushSettings')} onAction={() => void openNotificationSettings()} testID="order.banner-push" text={t('confirmed.pushBlocked')} tone="info" />
       ) : null}
 
-      <View accessibilityLiveRegion="polite" style={styles.status} testID="order.status">
-        <View style={styles.statusLines}>
-          <SpeedLines color={theme.color.brand[300]} thickness={4} />
-        </View>
-        <Badge icon={st.icon} label={st.label} tone={st.tone} />
-        <Text style={styles.onBrand} variant="title1">
-          {st.label}
-        </Text>
-        {hint ? (
-          <Text style={styles.onBrand} testID="order.hint">
-            {hint}
-          </Text>
-        ) : null}
-        {order.pickup?.code && order.status === 'ready_for_pickup' ? (
-          <Text accessibilityLabel={t('confirmed.pickupCodeA11y', { code: spacedCode(order.pickup.code) })} style={styles.onBrand} testID="order.pickup-code" variant="numeral">
-            {spacedCode(order.pickup.code)}
-          </Text>
-        ) : null}
-        {order.tracking?.deliveryCode && order.status === 'out_for_delivery' ? (
-          <Text style={styles.onBrand} testID="order.delivery-code" variant="bodyStrong">
-            {`${t('order.deliveryCode')}: ${spacedCode(order.tracking.deliveryCode)}`}
-          </Text>
-        ) : null}
-      </View>
+      <OrderHero hint={hint} order={order} />
 
       <StatusTimeline order={order} />
 
