@@ -1,6 +1,6 @@
 const preset = require('jest-expo/jest-preset');
 
-// phosphor-react-native e @tanstack/@hookform entregam fonte moderno/TS: o Jest precisa transformá-los (Metro já faz isso no app).
+// @tanstack/@hookform entregam fonte moderno/TS: o Jest precisa transformá-los (Metro já faz isso no app).
 const [nodeModulesRule, ...otherRules] = preset.transformIgnorePatterns;
 
 module.exports = {
