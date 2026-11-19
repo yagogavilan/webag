@@ -9779,12 +9779,12 @@ export const RequestOrderCancelResponse = zod.object({
  * Permissão `orders`. Cancela o pedido (ator loja, estoque devolvido, estorno total). 409 `NO_CANCEL_REQUEST` se não há pedido pendente. Idempotente.
  * @summary A loja aprova o pedido de cancelamento do cliente (cancela e estorna)
  */
-export const ApproveStoreOrderCancelRequestParams = zod.object({
+export const AcceptStoreOrderCancelRequestParams = zod.object({
   "storeId": zod.uuid(),
   "orderId": zod.uuid()
 })
 
-export const ApproveStoreOrderCancelRequestResponse = zod.object({
+export const AcceptStoreOrderCancelRequestResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
   "status": zod.enum(['pending', 'approved', 'refused']),
@@ -9891,21 +9891,21 @@ export const ApproveStoreOrderCancelRequestResponse = zod.object({
  * Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente.
  * @summary A loja recusa o pedido de cancelamento do cliente, com motivo
  */
-export const RefuseStoreOrderCancelRequestParams = zod.object({
+export const DeclineStoreOrderCancelRequestParams = zod.object({
   "storeId": zod.uuid(),
   "orderId": zod.uuid()
 })
 
-export const refuseStoreOrderCancelRequestBodyReasonMin = 3;
-export const refuseStoreOrderCancelRequestBodyReasonMax = 200;
+export const declineStoreOrderCancelRequestBodyReasonMin = 3;
+export const declineStoreOrderCancelRequestBodyReasonMax = 200;
 
 
 
-export const RefuseStoreOrderCancelRequestBody = zod.object({
-  "reason": zod.string().min(refuseStoreOrderCancelRequestBodyReasonMin).max(refuseStoreOrderCancelRequestBodyReasonMax)
+export const DeclineStoreOrderCancelRequestBody = zod.object({
+  "reason": zod.string().min(declineStoreOrderCancelRequestBodyReasonMin).max(declineStoreOrderCancelRequestBodyReasonMax)
 })
 
-export const RefuseStoreOrderCancelRequestResponse = zod.object({
+export const DeclineStoreOrderCancelRequestResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
   "status": zod.enum(['pending', 'approved', 'refused']),
