@@ -18,9 +18,10 @@ import { PriceSummary } from '../../src/features/cart/PriceSummary';
 import { formatOpensAt } from '../../src/features/catalog/format';
 import { modeStore } from '../../src/features/catalog/queries';
 import { ChangedSheet } from '../../src/features/checkout/ChangedSheet';
-import { isCheckoutEnabled } from '../../src/features/checkout/config';
+import { isCheckoutEnabled, PAYMENT_MODE } from '../../src/features/checkout/config';
 import type { CheckoutFailure } from '../../src/features/checkout/errors';
 import { useCheckoutCart, useGuestMergePending, useSubmitOrder } from '../../src/features/checkout/hooks';
+import { CardBlock } from '../../src/features/checkout/CardBlock';
 import { PaymentBlock } from '../../src/features/checkout/PaymentBlock';
 import { ReceiveBlock } from '../../src/features/checkout/ReceiveBlock';
 import { addressIsReady, deriveGate, payLabel, pendingChanges, type PayMethod, type ReceiveMode } from '../../src/features/checkout/state';
@@ -41,6 +42,9 @@ export default function CheckoutScreen() {
   const address = useCurrentAddress();
   const [mode, setMode] = useState<ReceiveMode>(() => modeStore.get());
   const [method, setMethod] = useState<PayMethod>('pix');
+  const [cardToken, setCardToken] = useState<string | null>(null);
+  const [installments, setInstallments] = useState(1);
+  const [cardError, setCardError] = useState<string | null>(null);
   const [cpf, setCpf] = useState('');
   const [cpfError, setCpfError] = useState<string | null>(null);
   const [needsCpf, setNeedsCpf] = useState(false);
@@ -112,7 +116,7 @@ export default function CheckoutScreen() {
   const gate = deriveGate(view, mode, address);
   const summary = view.summary;
   const total = cart.cart.summary.total.amount;
-  const label = gate.kind !== 'ready' ? (gate.label ?? t('checkout.backToCart')) : submitting ? (method === 'pix' ? t('checkout.generatingPix') : t('checkout.paying')) : payLabel(method, total);
+  const label = gate.kind !== 'ready' ? (gate.label ?? t('checkout.backToCart')) : submitting ? (method === 'pix' ? t('checkout.generatingPix') : t('checkout.paying')) : payLabel(method, total, installments);
 
   const onFailure = (f: CheckoutFailure) => {
     void haptic('error');
@@ -149,6 +153,10 @@ export default function CheckoutScreen() {
       setChangedOpen(true);
       return;
     }
+    if (method === 'card' && !cardToken) {
+      setCardError(t('card.fillCard'));
+      return;
+    }
     if (needsCpf && !isValidCpf(cpf)) {
       setCpfError(t('checkout.cpfInvalid'));
       return;
@@ -158,6 +166,7 @@ export default function CheckoutScreen() {
       mode,
       addressId: address && addressIsReady(address) ? address.id : null,
       method,
+      ...(method === 'card' && cardToken ? { card: { token: cardToken, installments } } : {}),
       ...(needsCpf ? { payerDocument: onlyDigits(cpf) } : {}),
     });
     if ('ignored' in result) return;
@@ -179,7 +188,7 @@ export default function CheckoutScreen() {
     }
   };
 
-  const failureBanner = failure ? <FailureBanner failure={failure} onBackToCart={() => router.replace('/cart')} onVerify={() => router.push('/verify-email')} /> : null;
+  const failureBanner = failure ? <FailureBanner failure={failure} onChangeCard={() => { setFailure(null); setCardToken(null); }} onPix={() => { setFailure(null); setMethod('pix'); }} onBackToCart={() => router.replace('/cart')} onVerify={() => router.push('/verify-email')} /> : null;
 
   const footer = (
     <View style={styles.footer}>
@@ -209,7 +218,20 @@ export default function CheckoutScreen() {
         ready={addressIsReady(address)}
       />
       <PaymentBlock
-        cardAvailable={false}
+        cardAvailable={PAYMENT_MODE === 'fake'}
+        cardDisabledReason={PAYMENT_MODE === 'fake' ? undefined : t('card.needsKey')}
+        cardForm={
+          <CardBlock
+            error={cardError}
+            installments={installments}
+            onInstallments={setInstallments}
+            onToken={(token) => {
+              setCardToken(token);
+              setCardError(null);
+            }}
+            token={cardToken}
+          />
+        }
         cpfField={
           needsCpf ? (
             <TextField
@@ -253,8 +275,16 @@ export default function CheckoutScreen() {
   );
 }
 
-function FailureBanner({ failure, onBackToCart, onVerify }: { failure: CheckoutFailure; onBackToCart: () => void; onVerify: () => void }) {
+function FailureBanner({ failure, onBackToCart, onVerify, onChangeCard, onPix }: { failure: CheckoutFailure; onBackToCart: () => void; onVerify: () => void; onChangeCard: () => void; onPix: () => void }) {
   switch (failure.kind) {
+    case 'declined':
+      return (
+        <View style={styles.summary}>
+          <Banner testID="card.error-sheet" text={`${t('card.declinedTitle')} ${failure.reason ?? t('card.declinedDefault')} ${t('card.declinedHint')}`} tone="danger" />
+          <Button label={t('card.changeCard')} onPress={onChangeCard} testID="card.change-card" />
+          <Button label={t('card.payWithPix')} onPress={onPix} testID="card.pay-with-pix" variant="secondary" />
+        </View>
+      );
     case 'store-closed': {
       const when = formatOpensAt(failure.opensAt);
       return <Banner actionLabel={t('checkout.backToCart')} onAction={onBackToCart} testID="checkout.closed-banner" text={when ? t('checkout.closedBannerAt', { when }) : t('checkout.closedBanner')} tone="danger" />;

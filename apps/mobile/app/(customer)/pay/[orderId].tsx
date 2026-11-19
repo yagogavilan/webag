@@ -18,6 +18,7 @@ import { useToast } from '../../../src/components/Toast';
 import { useCartParams } from '../../../src/features/cart/hooks';
 import { orderKey, paymentKey, useOrder, useOrderPayment } from '../../../src/features/checkout/hooks';
 import { reorderItems } from '../../../src/features/orders/reorder';
+import { ThreeDsModal } from '../../../src/features/checkout/ThreeDsModal';
 import { PixRing } from '../../../src/features/pix/PixRing';
 import { useSecondsUntil } from '../../../src/features/pix/useSecondsUntil';
 import { useInvalidateOnEvent } from '../../../src/features/realtime/useRealtime';
@@ -55,6 +56,7 @@ export default function PixScreen() {
   const [copied, setCopied] = useState(false);
   const [showAlreadyPaid, setShowAlreadyPaid] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [threeDsOpen, setThreeDsOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -177,6 +179,32 @@ export default function PixScreen() {
             {t('pix.paidTitle')}
           </Text>
         </View>
+      </Screen>
+    );
+  }
+
+  const isCard = payment.data?.method === 'card';
+  if (isCard) {
+    const ps = payment.data?.status;
+    const failed = ps === 'declined' || ps === 'expired' || ps === 'cancelled' || status === 'expired' || cancelled;
+    if (failed) {
+      return (
+        <Screen header={header} testID="card.declined">
+          <EmptyState actionLabel={t('card.changeCard')} icon={Clock} onAction={() => void onRegenerate()} testID="card.change-card" text={`${payment.data?.declineReason ?? t('card.declinedDefault')} ${t('card.declinedHint')}`} title={t('card.declinedTitle')} />
+          {regenError ? <Banner actionLabel={t('checkout.backToCart')} onAction={() => router.replace('/cart')} text={regenError} tone="danger" /> : null}
+          <Button label={t('card.payWithPix')} onPress={() => void onRegenerate()} testID="card.pay-with-pix" variant="secondary" />
+        </Screen>
+      );
+    }
+    return (
+      <Screen header={header} testID="card.processing">
+        <View accessibilityLiveRegion="polite" style={styles.paid}>
+          <Skeleton height={64} radius={32} width={64} />
+          <Text style={styles.center} variant="title2">{ps === 'pending_3ds' ? t('card.threeDsTitle') : t('card.processing')}</Text>
+          <Text color="secondary" style={styles.center}>{ps === 'pending_3ds' ? t('card.threeDsText') : t('card.processingSlow')}</Text>
+          {ps === 'pending_3ds' && payment.data?.threeDsUrl ? <Button label={t('card.threeDsTitle')} onPress={() => setThreeDsOpen(true)} size="lg" testID="card.3ds-open" /> : null}
+        </View>
+        <ThreeDsModal onClose={() => { setThreeDsOpen(false); void payment.refetch(); }} url={payment.data?.threeDsUrl ?? null} visible={threeDsOpen} />
       </Screen>
     );
   }

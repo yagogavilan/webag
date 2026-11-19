@@ -1,6 +1,6 @@
 /**
- * Ambiente do app e liberação do checkout. DEC-033: o Security vetou o pagamento em PRODUÇÃO; o checkout só roda em
- * desenvolvimento e staging (provedor `fake` ou sandbox). Tudo aqui é público (EXPO_PUBLIC_*): nenhum segredo.
+ * Ambiente do app e liberação do checkout (DEC-043: liberado em produção). Provedor `fake`/sandbox fora de produção.
+ * Tudo aqui é público (EXPO_PUBLIC_*): nenhum segredo.
  *
  * `production` é o padrão para qualquer valor desconhecido: errar para o lado fechado.
  */
@@ -14,8 +14,8 @@ export function resolveAppEnv(raw: string | undefined, isDev: boolean): AppEnv {
 
 export const APP_ENV: AppEnv = resolveAppEnv(process.env.EXPO_PUBLIC_APP_ENV, __DEV__);
 
-/** Pagamento liberado? Produção só depois da reverificação do Security (DEC-033), com mudança explícita aqui. */
-export const isCheckoutEnabled = (env: AppEnv = APP_ENV): boolean => env !== 'production';
+/** Pagamento liberado? Sim em todos os ambientes: o Security reverificou e liberou o checkout em produção (DEC-043, DEC-033 fechada). */
+export const isCheckoutEnabled = (_env: AppEnv = APP_ENV): boolean => true;
 
 /** `fake`: cartões de teste do provedor simulado (sem digitar cartão). `mercadopago`: campos seguros do Mercado Pago. */
 export function resolvePaymentMode(raw: string | undefined, env: AppEnv): PaymentMode {

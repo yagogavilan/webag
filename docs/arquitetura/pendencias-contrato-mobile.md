@@ -15,3 +15,13 @@ Registro do `mobile-dev` (2026-11-18). O app contorna cada item com a hipótese 
 
 ## E2E (Maestro)
 `apps/mobile/e2e/explorar-ate-sacola.yaml` (endereço por cidade/bairro, loja, produto, sacola, criar conta ao pagar) foi escrito sem emulador: [HIPÓTESE] não executado. IDs dinâmicos usam regex (`home.store-.*`); a primeira variação pode estar esgotada no seed, o que exigiria `tapOn` por id fixo. Validar no primeiro emulador Android disponível (QA).
+
+## Onda 4 e 5 no app (2026-11-19)
+| # | Pedido | Hoje no app (hipótese) | Dono |
+|---|---|---|---|
+| 8 | **Resolvida:** checkout (`POST /v1/orders`) está no contrato e no app (DEC-043 liberou produção) | n/a | n/a |
+| 9 | Página de cartão do Mercado Pago (`/pagamento/cartao/[tentativa]` em `apps/web`, ADR-002 §4) para abrir em WebView com o token de uso único | Em `PAYMENT_MODE=mercadopago` o cartão fica indisponível ("O cartão não está disponível agora. Pague com PIX"); em dev e staging (`fake`) o cliente escolhe um cartão de teste e o app manda `fake_tok_*` | backend-dev (web) |
+| 10 | `qrCodeBase64` do PIX pode vir `null` (provedor fake) | App mostra só o copia e cola; sem biblioteca de QR no app | backend-dev |
+| 11 | Endpoint de "Pedir de novo": não existe | App devolve os itens do pedido à sacola um a um (`PUT /v1/cart/items`); item recusado entra na lista "faltam" | backend-dev (Should) |
+| 12 | "Não recebi meu pedido" (`report_not_received` em `allowedActions`) sem operação no contrato | Ação não é exibida | backend-dev |
+| 13 | `POST /v1/me/push-devices` exige o `projectId` do EAS para o token Expo: `extra.eas.projectId` (`EAS_PROJECT_ID`) | Sem projectId (dev local) o registro falha em silêncio e o pedido segue sem push | fundador (`eas init`) |
