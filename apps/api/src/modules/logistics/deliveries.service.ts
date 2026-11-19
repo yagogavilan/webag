@@ -37,6 +37,8 @@ export interface LateCancelRequestView {
   reason: string | null;
   requestedAt: string;
   respondBy: string;
+  /** Z.7 / D-15: minutos do "Chego em até N min" (= `entrega_cancel_resposta_min`), o que o botão da Logística e a nota padrão da recusa dizem. */
+  arriveSoonMinutes: number;
   decidedAt: string | null;
   decidedBy: string | null;
   decisionNote: string | null;
@@ -363,7 +365,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       order by r.order_id, r.requested_at desc`);
     for (const r of res.rows) {
       const requestedAt = new Date(r.requested_at);
-      map.set(r.order_id, { id: r.id, status: r.status, reason: r.reason, requestedAt: requestedAt.toISOString(), respondBy: new Date(requestedAt.getTime() + timeoutMin * 60_000).toISOString(), decidedAt: r.decided_at ? new Date(r.decided_at).toISOString() : null, decidedBy: r.decided_by, decisionNote: r.decision_note });
+      map.set(r.order_id, { id: r.id, status: r.status, reason: r.reason, requestedAt: requestedAt.toISOString(), respondBy: new Date(requestedAt.getTime() + timeoutMin * 60_000).toISOString(), arriveSoonMinutes: timeoutMin, decidedAt: r.decided_at ? new Date(r.decided_at).toISOString() : null, decidedBy: r.decided_by, decisionNote: r.decision_note });
     }
     return map;
   }

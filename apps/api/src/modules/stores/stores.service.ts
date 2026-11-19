@@ -9,6 +9,7 @@ import { categories, cities } from '../admin/db/schema.js';
 import { storeMembers, users } from '../identity/db/schema.js';
 import { CommissionService } from '../finance/index.js';
 import { MediaService } from '../media/index.js';
+import { products } from '../catalog/db/schema.js';
 import {
   paymentAccounts,
   storeDocuments,
@@ -23,6 +24,7 @@ import {
 } from './db/schema.js';
 import { isValidDocument, maskDocument, normalizeDocument } from './domain/document.js';
 import { canTransitionStore, isEditableByMerchant, type StoreActor } from './domain/state.js';
+import { isStoreVisible } from './domain/visibility.js';
 import { GEOCODING_PROVIDER, type GeocodingProvider } from './geocoding.js';
 import type { ProfileInput } from './stores.schemas.js';
 
@@ -67,6 +69,19 @@ export class StoresService {
   async providerFeeView(): Promise<{ pixPct: number; cardPct: number }> {
     const [pixPct, cardPct] = await Promise.all([this.params.getNumber('taxa_provedor_pix_pct'), this.params.getNumber('taxa_provedor_cartao_pct')]);
     return { pixPct, cardPct };
+  }
+
+  /**
+   * Z.1 / DEC-072f: loja "no ar" = aprovada + 1 ou mais produtos ativos (não removidos nem pausados pela moderação) + conta de recebimento ativa
+   * (a mesma regra de `isStoreVisible`, RN-03). Só o painel do dono usa (o cliente vê a loja pelo feed, que já aplica a regra).
+   */
+  async isLive(store: Pick<Store, 'id' | 'status'>): Promise<boolean> {
+    if (store.status !== 'approved') return false;
+    const [account, product] = await Promise.all([
+      this.db.select({ id: paymentAccounts.id }).from(paymentAccounts).where(and(eq(paymentAccounts.storeId, store.id), eq(paymentAccounts.status, 'active'))).limit(1),
+      this.db.select({ id: products.id }).from(products).where(and(eq(products.storeId, store.id), eq(products.status, 'active'), sql`${products.moderationStatus} not in ('removed', 'paused')`)).limit(1),
+    ]);
+    return isStoreVisible({ status: store.status, paymentAccountActive: account.length > 0, activeProducts: product.length });
   }
 
   async getStore(storeId: string, executor: DbOrTx = this.db): Promise<Store> {

@@ -1645,6 +1645,8 @@ export interface CancelRequest {
   reason: string | null;
   requestedAt: string;
   respondBy: string;
+  /** Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional */
+  arriveSoonMinutes?: number;
   /** @nullable */
   decidedAt: string | null;
   /** @nullable */
@@ -2332,6 +2334,8 @@ export interface StoreSettings {
 
 export interface Store {
   id: string;
+  /** Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo */
+  live?: boolean;
   status: StoreStatus;
   documentType: StoreDocumentType;
   /** Inteiro para dono e admin; mascarado para funcionário */

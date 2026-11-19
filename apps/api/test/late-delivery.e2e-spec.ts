@@ -153,6 +153,23 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
     expect((await orderRow(ctx, r.orderId)).status).toBe('out_for_delivery');
   });
 
+  it('Z.7 / D-15: o "chego em até N min" é o parâmetro `entrega_cancel_resposta_min` (não um 10 fixo): a corrida traz o número e a nota padrão da recusa o usa', async () => {
+    const r = await outForDelivery();
+    await late(r.orderId, 20);
+    await useParam(ctx, 'entrega_cancel_resposta_min', 15);
+    try {
+      await cancelLate(r).expect(200);
+      const detail = (await ctx.http.get(`${base}/deliveries/${r.delivery.id}`).set(bearer(ops.accessToken)).expect(200)).body;
+      expect(detail.lateCancelRequest).toMatchObject({ status: 'pending', arriveSoonMinutes: 15 });
+      expect(Date.parse(detail.lateCancelRequest.respondBy) - Date.parse(detail.lateCancelRequest.requestedAt)).toBe(15 * 60_000);
+      const answer = await ctx.http.post(`/v1/admin/orders/${r.orderId}/late-cancel/respond`).set(bearer(ops.accessToken)).send({ action: 'arrive_soon' }); // sem nota: vale o texto padrão
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+      expect(answer.body.decisionNote).toBe('Chegamos em até 15 minutos');
+    } finally {
+      await useParam(ctx, 'entrega_cancel_resposta_min', 10);
+    }
+  });
+
   it('aviso de atraso: 1 push por pedido ao passar do fim da faixa (não antes)', async () => {
     const r = await readyOrder();
     const svc = ctx.app.get(LateDeliveryService);

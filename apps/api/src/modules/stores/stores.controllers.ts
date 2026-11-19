@@ -48,7 +48,7 @@ export async function presentStore(
   store: Store,
   viewer: 'owner' | 'staff' | 'admin',
 ) {
-  const [extra, logo, cover, open, commission, providerFee] = await Promise.all([
+  const [extra, logo, cover, open, commission, providerFee, live] = await Promise.all([
     services.stores.extraCategoryIds(store.id),
     store.logoAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : Promise.resolve([]),
     store.coverAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.coverAssetId)) : Promise.resolve([]),
@@ -57,10 +57,13 @@ export async function presentStore(
     viewer === 'staff' ? Promise.resolve(null) : services.stores.commissionView(store.id),
     // WB-242 C1: a tarifa estimada do provedor entra no "Você recebe"; é financeiro, então segue a regra da comissão (funcionário não vê).
     viewer === 'staff' ? Promise.resolve(null) : services.stores.providerFeeView(),
+    services.stores.isLive(store),
   ]);
   return {
     id: store.id,
     status: store.status,
+    /** Z.1 / DEC-072f: "no ar" = aprovada + produto ativo + conta de recebimento conectada. O painel do dia do lojista usa este campo (não deduz). */
+    live,
     documentType: store.documentType,
     document: viewer === 'staff' ? maskDocument(store.documentNumber) : store.documentNumber,
     legalName: store.legalName,

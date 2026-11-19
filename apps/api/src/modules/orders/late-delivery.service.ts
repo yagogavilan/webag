@@ -124,7 +124,9 @@ export class LateDeliveryService implements DeliveryListener, OnModuleInit, OnAp
     let order: typeof orders.$inferSelect | undefined;
     let superseded = false;
     let afterAct: (() => Promise<void>) | null = null;
-    const noteText = note?.slice(0, 200) ?? (decision === 'refused' ? 'Chegamos em até 10 minutos' : null);
+    // Z.7 / D-15: o prazo do "chego em até N min" é o mesmo parâmetro da resposta (`entrega_cancel_resposta_min`), não um 10 fixo.
+    const arriveMin = await this.params.getNumber('entrega_cancel_resposta_min');
+    const noteText = note?.slice(0, 200) ?? (decision === 'refused' ? `Chegamos em até ${arriveMin} minutos` : null);
     await this.db.transaction(async (tx) => {
       [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
       if (!order) throw errors.notFound('Pedido não encontrado.');

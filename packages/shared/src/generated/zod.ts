@@ -1955,6 +1955,7 @@ export const ListDeliveriesResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2028,6 +2029,7 @@ export const GetDeliveryResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2178,6 +2180,7 @@ export const AssignDeliveryBatchResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2280,6 +2283,7 @@ export const AssignDeliveryResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2420,6 +2424,7 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2523,6 +2528,7 @@ export const SetDeliveryCostResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -2795,6 +2801,7 @@ export const AdminRespondLateCancelResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -3745,6 +3752,7 @@ export const createStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const CreateStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -3861,6 +3869,7 @@ export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp
 export const ListMyStoresResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -3982,6 +3991,7 @@ export const getStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegEx
 
 export const GetStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -4142,6 +4152,7 @@ export const updateStoreProfileResponseSettingsHoursItemIntervalsItemEndRegExp =
 
 export const UpdateStoreProfileResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -4320,6 +4331,7 @@ export const submitStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const SubmitStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5018,6 +5030,7 @@ export const getAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new 
 export const GetAdminStoreResponse = zod.object({
   "store": zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5274,6 +5287,7 @@ export const editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new
 
 export const EditAdminStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5413,6 +5427,7 @@ export const approveStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new R
 
 export const ApproveStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5532,6 +5547,7 @@ export const reactivateStoreResponseSettingsHoursItemIntervalsItemEndRegExp = ne
 
 export const ReactivateStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5665,6 +5681,7 @@ export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemEndRegE
 
 export const RequestStoreCorrectionResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5793,6 +5810,7 @@ export const rejectStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const RejectStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -5921,6 +5939,7 @@ export const suspendStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new R
 
 export const SuspendStoreResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -6086,6 +6105,7 @@ export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemEndRegEx
 
 export const DecideStoreDataReviewResponse = zod.object({
   "id": zod.uuid(),
+  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
@@ -9660,6 +9680,7 @@ export const GetStoreOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -9796,6 +9817,7 @@ export const AcceptOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -9918,6 +9940,7 @@ export const RefuseOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10045,6 +10068,7 @@ export const AdvanceOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10158,6 +10182,7 @@ export const ConfirmReturnReceivedByStoreResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10280,6 +10305,7 @@ export const CancelOrderByStoreResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10440,6 +10466,7 @@ export const CreateOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10456,6 +10483,7 @@ export const CreateOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10676,6 +10704,7 @@ export const GetOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10692,6 +10721,7 @@ export const GetOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10871,6 +10901,7 @@ export const RequestOrderCancelResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10899,6 +10930,7 @@ export const CancelOrderLateResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -10915,6 +10947,7 @@ export const CancelOrderLateResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -11088,6 +11121,7 @@ export const AcceptStoreOrderCancelRequestResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -11210,6 +11244,7 @@ export const RejectStoreOrderCancelRequestResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -11333,6 +11368,7 @@ export const CancelOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
@@ -11349,6 +11385,7 @@ export const CancelOrderResponse = zod.object({
   "reason": zod.string().nullable(),
   "requestedAt": zod.iso.datetime({"offset":true}),
   "respondBy": zod.iso.datetime({"offset":true}),
+  "arriveSoonMinutes": zod.int().optional().describe('Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão "Chego em até N min" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional'),
   "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()

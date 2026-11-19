@@ -10532,6 +10532,9 @@ components:
         id:
           type: string
           format: uuid
+        live:
+          type: boolean
+          description: "Z.1 / DEC-072f: loja \"no ar\" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo"
         status:
           type: string
           enum:
@@ -12001,6 +12004,7 @@ components:
         reason: { type: [string, 'null'] }
         requestedAt: { type: string, format: date-time }
         respondBy: { type: string, format: date-time }
+        arriveSoonMinutes: { type: integer, description: "Z.7 / D-15: só no pedido de cancelamento por atraso da corrida (`Delivery.lateCancelRequest`). Os minutos do botão \"Chego em até N min\" da Logística e da nota padrão da recusa (`Chegamos em até N minutos`): são o `entrega_cancel_resposta_min`, então o botão não mente se o parâmetro mudar. Campo novo, opcional" }
         decidedAt: { type: [string, 'null'], format: date-time }
         decidedBy: { type: [string, 'null'], enum: [store, admin, system, null] }
         decisionNote: { type: [string, 'null'] }
