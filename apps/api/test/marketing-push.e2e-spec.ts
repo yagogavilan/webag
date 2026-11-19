@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { vi } from 'vitest';
 import { PushTransport } from '../src/modules/notifications/index.js';
 import { PushCampaignsService } from '../src/modules/marketing/push-campaigns.service.js';
-import { pushCampaignRecipients, pushCampaigns, pushDevices, users } from '../src/platform/database/schema.js';
+import { paymentAlerts, pushCampaignRecipients, pushCampaigns, pushDevices, users } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { useParam } from './helpers/fees.js';
 import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, registerUser, verifyEmailOf, type RegisteredUser, type TestAdmin } from './helpers/fixtures.js';
@@ -142,6 +143,54 @@ describe('Push segmentado do admin (WB-197, WB-196)', () => {
     const audit = (await ctx.http.get('/v1/admin/audit-log?action=push_campaign.created').set(bearer((await createAdmin(ctx, 'super_admin')).accessToken)).expect(200)).body.data as { targetId: string }[];
     expect(audit.some((a) => a.targetId === created.id)).toBe(true);
     await ctx.http.put('/v1/me/consents/marketing_push').set(bearer(late.accessToken)).send({ granted: true }).expect(200); // devolve para os próximos testes
+  });
+
+  it('SEC-165: se a gravação depois do envio falhar, quem já recebeu NÃO recebe de novo; no teto de 3 tentativas a campanha é cancelada com alerta; presa em envio por 30 min também', async () => {
+    await resetCampaigns();
+    const created = (await post('campaigns', campaign({ title: 'Sem reenvio' })).expect(201)).body as { id: string; sendAt: string };
+    const { AuditService } = await import('../src/modules/admin/index.js');
+    const spy = vi.spyOn(AuditService.prototype, 'record').mockRejectedValueOnce(new Error('auditoria fora do ar'));
+    const at = new Date(created.sendAt);
+    try {
+      expect(await service.processDue(at)).toEqual({ sent: 0, deferred: 0, cancelled: 0 }); // falhou depois do envio
+    } finally {
+      spy.mockRestore();
+    }
+    const firstRound = transport.sent.length;
+    expect(firstRound).toBeGreaterThan(0);
+    const reachedCount = new Set(transport.sent.map((m) => m.to)).size;
+    const [back] = await ctx.db.select().from(pushCampaigns).where(eq(pushCampaigns.id, created.id));
+    expect(back).toMatchObject({ status: 'scheduled', attempts: 1 });
+    expect(await ctx.db.select().from(pushCampaignRecipients).where(eq(pushCampaignRecipients.campaignId, created.id))).toHaveLength(reachedCount);
+    // o retry 5 min depois: ninguém recebe de novo e a campanha fecha como enviada, com a contagem real
+    expect(await service.processDue(new Date(at.getTime() + 6 * 60_000))).toMatchObject({ sent: 1 });
+    expect(transport.sent).toHaveLength(firstRound);
+    expect((await ctx.db.select().from(pushCampaigns).where(eq(pushCampaigns.id, created.id)))[0]).toMatchObject({ status: 'sent', recipientsCount: reachedCount });
+
+    // teto de 3 tentativas
+    await resetCampaigns();
+    const loop = (await post('campaigns', campaign({ title: 'Em laço' })).expect(201)).body as { id: string; sendAt: string };
+    const boom = vi.spyOn(transport, 'send').mockRejectedValue(new Error('provedor fora'));
+    try {
+      let when = new Date(loop.sendAt);
+      for (let i = 0; i < 3; i += 1) {
+        await service.processDue(when);
+        when = new Date(when.getTime() + 6 * 60_000);
+      }
+    } finally {
+      boom.mockRestore();
+    }
+    expect((await ctx.db.select().from(pushCampaigns).where(eq(pushCampaigns.id, loop.id)))[0]).toMatchObject({ status: 'cancelled', attempts: 3 });
+    expect((await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'push_campaign_failed'))).some((a) => (a.details as { campaignId?: string }).campaignId === loop.id)).toBe(true);
+
+    // presa em `sending` por mais de 30 min: cancelada com alerta, sem reenvio
+    await resetCampaigns();
+    const stuck = (await post('campaigns', campaign({ title: 'Presa' })).expect(201)).body as { id: string; sendAt: string };
+    await ctx.db.update(pushCampaigns).set({ status: 'sending', sendingStartedAt: new Date(Date.now() - 40 * 60_000) }).where(eq(pushCampaigns.id, stuck.id));
+    const before = transport.sent.length;
+    await service.processDue(new Date(stuck.sendAt));
+    expect((await ctx.db.select().from(pushCampaigns).where(eq(pushCampaigns.id, stuck.id)))[0]!.status).toBe('cancelled');
+    expect(transport.sent).toHaveLength(before);
   });
 
   it('janela de 9h às 20h: fora dela o envio vai para o próximo início; agendar noite vira 9h do dia seguinte', async () => {

@@ -28,6 +28,9 @@ export const pushCampaigns = pgTable(
     deliveredCount: integer().notNull().default(0),
     excludedByCapCount: integer().notNull().default(0),
     cancelReason: text(),
+    /** SEC-165: tentativas de envio (teto de 3) e quando a última começou (campanha presa em `sending` por 30 min vira cancelada com alerta, sem reenvio). */
+    attempts: integer().notNull().default(0),
+    sendingStartedAt: timestamp({ withTimezone: true }),
     createdBy: uuid().references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

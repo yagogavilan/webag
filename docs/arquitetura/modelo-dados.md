@@ -132,7 +132,9 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 
 `orders.pickup_reminded_at` (0045): um aviso por pedido 24 h antes de a retirada vencer (BUG-014).
 
-## Mapa das migrações (0000 a 0045)
+`push_campaigns.attempts` e `sending_started_at` (0046, SEC-165): teto de 3 tentativas de envio e detecção de campanha presa em `sending` (30 min); destinatários gravados logo depois do envio.
+
+## Mapa das migrações (0000 a 0046)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
 | Migração | O que muda |
@@ -183,3 +185,4 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0043 sec170_payer_document_hash | `orders.payer_document_hash` |
 | 0044 bug017_parameters_wiring | Código de retirada de até 6 dígitos; lembrete de aceite; alerta de reembolso da troca |
 | 0045 bug014_pickup_reminder | `orders.pickup_reminded_at` |
+| 0046 sec165_push_campaign_attempts | `push_campaigns.attempts`, `sending_started_at` |

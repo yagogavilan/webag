@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import * as t from '../../platform/database/schema.js';
@@ -29,6 +29,7 @@ export interface Audience {
 }
 
 const SYSTEM_CTX: RequestContext = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
+const MAX_SEND_ATTEMPTS = 3;
 const MAX_AUDIENCE = 50_000;
 
 /**
@@ -260,10 +261,11 @@ export class PushCampaignsService implements OnApplicationBootstrap, OnApplicati
   /** Varredura (1 min): envia as campanhas vencidas dentro da janela; fora dela, empurra para o próximo início. */
   async processDue(now = new Date()): Promise<{ sent: number; deferred: number; cancelled: number }> {
     const totals = { sent: 0, deferred: 0, cancelled: 0 };
+    await this.failStuck(now);
     const window = await this.params.get('push_mkt_janela').then(String);
     for (;;) {
       const claimed = await this.db.execute<{ id: string }>(sql`
-        update push_campaigns set status = 'sending'
+        update push_campaigns set status = 'sending', sending_started_at = ${now.toISOString()}::timestamptz, attempts = attempts + 1
         where id = (select id from push_campaigns where status = 'scheduled' and send_at <= ${now.toISOString()}::timestamptz order by send_at for update skip locked limit 1)
         returning id`);
       const id = claimed.rows[0]?.id;
@@ -281,10 +283,29 @@ export class PushCampaignsService implements OnApplicationBootstrap, OnApplicati
         totals[outcome] += 1;
       } catch (error) {
         this.logger.error(`campanha ${id} falhou: ${safeErrorMessage(error)}`);
-        // Volta para a fila: quem já recebeu está em `push_campaign_recipients` e não recebe de novo.
-        await this.db.update(pushCampaigns).set({ status: 'scheduled', sendAt: new Date(now.getTime() + 5 * 60_000) }).where(eq(pushCampaigns.id, id));
+        // SEC-165: quem já recebeu está em `push_campaign_recipients` (gravado logo depois do envio) e não recebe de novo. Teto de 3
+        // tentativas; depois a campanha é cancelada com alerta (nunca reenviada em laço).
+        if (campaign.attempts >= MAX_SEND_ATTEMPTS) {
+          await this.failCampaign(id, `Falhou ${MAX_SEND_ATTEMPTS} vezes no envio`);
+          totals.cancelled += 1;
+        } else {
+          await this.db.update(pushCampaigns).set({ status: 'scheduled', sendAt: new Date(now.getTime() + 5 * 60_000) }).where(eq(pushCampaigns.id, id));
+        }
       }
     }
+  }
+
+  private async failCampaign(id: string, reason: string): Promise<void> {
+    await this.db.update(pushCampaigns).set({ status: 'cancelled', cancelReason: reason }).where(eq(pushCampaigns.id, id));
+    await this.db.insert(t.paymentAlerts).values({ attemptId: null, kind: 'push_campaign_failed', details: { campaignId: id, reason } });
+  }
+
+  /** SEC-165: campanha em `sending` há mais de 30 min (processo caiu no meio) não é reenviada: vira cancelada e alerta o admin. */
+  async failStuck(now: Date): Promise<number> {
+    const cutoff = new Date(now.getTime() - 30 * 60_000);
+    const stuck = await this.db.select({ id: pushCampaigns.id }).from(pushCampaigns).where(and(eq(pushCampaigns.status, 'sending'), lte(pushCampaigns.sendingStartedAt, cutoff))).limit(20);
+    for (const { id } of stuck) await this.failCampaign(id, 'Envio interrompido (presa em envio por mais de 30 minutos); confira quem recebeu antes de reagendar');
+    return stuck.length;
   }
 
   private async cancelAtSend(campaign: typeof pushCampaigns.$inferSelect, reason: string): Promise<'cancelled'> {
@@ -313,10 +334,12 @@ export class PushCampaignsService implements OnApplicationBootstrap, OnApplicati
       if (results[i]?.ok) reached.add(d.userId);
       if (results[i]?.invalidToken) dead.push(d.id);
     });
+    // SEC-165: quem recebeu é gravado ANTES do resto (auditoria, contadores): se a próxima transação falhar, o retry não reenvia a eles.
+    if (reached.size > 0) await this.db.insert(pushCampaignRecipients).values([...reached].map((userId) => ({ campaignId: campaign.id, userId, sentAt: now }))).onConflictDoNothing();
+    const [{ total: totalRecipients } = { total: 0 }] = await this.db.select({ total: sql<number>`count(*)::int` }).from(pushCampaignRecipients).where(eq(pushCampaignRecipients.campaignId, campaign.id));
     await this.db.transaction(async (tx) => {
-      if (reached.size > 0) await tx.insert(pushCampaignRecipients).values([...reached].map((userId) => ({ campaignId: campaign.id, userId, sentAt: now }))).onConflictDoNothing();
       if (dead.length > 0) await tx.update(t.pushDevices).set({ disabledAt: new Date() }).where(inArray(t.pushDevices.id, dead));
-      await tx.update(pushCampaigns).set({ status: 'sent', sentAt: now, recipientsCount: reached.size, deliveredCount: results.filter((r) => r.ok).length, excludedByCapCount: audience.excludedByCap }).where(eq(pushCampaigns.id, campaign.id));
+      await tx.update(pushCampaigns).set({ status: 'sent', sentAt: now, recipientsCount: totalRecipients, deliveredCount: sql`${pushCampaigns.deliveredCount} + ${results.filter((r) => r.ok).length}`, excludedByCapCount: audience.excludedByCap }).where(eq(pushCampaigns.id, campaign.id));
       await this.audit.record(tx, SYSTEM_CTX, { action: 'push_campaign.sent', targetType: 'push_campaign', targetId: campaign.id, after: { recipients: reached.size, messages: messages.length }, actorId: null, actorRole: 'system' });
     });
     return 'sent';
