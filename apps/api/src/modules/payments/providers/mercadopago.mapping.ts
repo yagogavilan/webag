@@ -25,7 +25,7 @@ export interface MpPayment {
 /**
  * Estados do MP para os do domínio (ADR-002). `authorized`/`in_process` ainda não são dinheiro: seguem `pending`.
  * PIX vencido chega como `cancelled` com `status_detail = expired`. `charged_back` e `in_mediation` mantêm `approved`
- * (chargeback é WB-159, Should; hoje só alerta).
+ * (chargeback é WB-159, Should; hoje NADA detecta nem alerta: ver review-ondas-3-5 I5).
  */
 export function mapStatus(payment: MpPayment): PaymentStatus {
   switch (payment.status) {

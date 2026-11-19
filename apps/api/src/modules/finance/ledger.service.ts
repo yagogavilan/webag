@@ -118,7 +118,7 @@ export class LedgerService {
       .select({ total: sql<string>`coalesce(sum(case when ${ledgerEntries.account} = 'provider_clearing' and ${ledgerEntries.direction} = 'credit' then ${ledgerEntries.amountCents} else 0 end), 0)` })
       .from(ledgerEntries)
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
-      .where(and(eq(ledgerTransactions.kind, 'exchange_fee_refund'), sql`${ledgerTransactions.dedupeKey} like ${`exchange-fee-refund:${input.exchangeId}:%`}`));
+      .where(and(eq(ledgerTransactions.orderId, input.orderId), eq(ledgerTransactions.kind, 'exchange_fee_refund'), sql`${ledgerTransactions.dedupeKey} like ${`exchange-fee-refund:${input.exchangeId}:%`}`));
     const before = Number(row?.total ?? 0);
     return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'exchange_fee_refund', dedupeKey, meta: { exchangeId: input.exchangeId, refundCents: input.refundCents, refundedBeforeCents: before } }, exchangeFeeRefundLines(input.feeCents, input.differenceCents, before, input.refundCents));
   }
@@ -136,7 +136,7 @@ export class LedgerService {
       })
       .from(ledgerEntries)
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
-      .where(and(eq(ledgerTransactions.kind, 'logistics_cost'), sql`${ledgerTransactions.dedupeKey} like ${`${prefix}%`}`));
+      .where(and(eq(ledgerTransactions.orderId, input.orderId), eq(ledgerTransactions.kind, 'logistics_cost'), sql`${ledgerTransactions.dedupeKey} like ${`${prefix}%`}`));
     const delta = input.costCents - Number(row?.booked ?? 0);
     if (delta === 0) return false;
     return this.post(tx, { orderId: input.orderId, storeId: null, attemptId: null, kind: 'logistics_cost', dedupeKey: `${prefix}${(row?.n ?? 0) + 1}`, meta: { deliveryId: input.deliveryId, deliveryKind: input.kind, costCents: input.costCents, deltaCents: delta } }, logisticsCostLines(delta));

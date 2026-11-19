@@ -1,6 +1,6 @@
 import { Inject } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, type OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Server, Socket } from 'socket.io';
 import { adminHasPermission, memberHasStorePermission } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
@@ -83,8 +83,7 @@ export class RealtimeGateway implements OnGatewayInit {
     const [order] = await this.db.select({ userId: orders.userId, storeId: orders.storeId }).from(orders).where(eq(orders.id, orderId));
     let allowed = order?.userId === userId;
     if (order && !allowed) {
-      const members = await this.db.select().from(storeMembers).where(inArray(storeMembers.storeId, [order.storeId]));
-      const mine = members.find((m) => m.userId === userId);
+      const [mine] = await this.db.select().from(storeMembers).where(and(eq(storeMembers.storeId, order.storeId), eq(storeMembers.userId, userId)));
       allowed = mine !== undefined && memberHasStorePermission(mine, 'orders');
     }
     if (!allowed) return { ok: false };
