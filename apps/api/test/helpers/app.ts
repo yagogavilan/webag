@@ -34,10 +34,12 @@ export class MemoryMailService extends MailService {
   }
   /** Último código de 6 dígitos enviado ao endereço. */
   lastCode(address: string): string {
-    const last = this.to(address).at(-1);
-    const match = last ? /\b(\d{6})\b/.exec(last.subject) : null;
-    if (!match?.[1]) throw new Error(`Nenhum código enviado para ${address}`);
-    return match[1];
+    // O último e-mail COM código no assunto: depois do código podem chegar outros avisos (ex.: B2, pedido novo à loja) sem trocar qual código vale.
+    for (const mail of [...this.to(address)].reverse()) {
+      const match = /\b(\d{6})\b/.exec(mail.subject);
+      if (match?.[1]) return match[1];
+    }
+    throw new Error(`Nenhum código enviado para ${address}`);
   }
 }
 
