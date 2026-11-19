@@ -12,7 +12,7 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
  * deixa passar o que cada área usa. A autorização de verdade é da API.
  */
 const ALLOWED: Record<SessionArea, RegExp> = {
-  admin: /^(admin\/.+|me(\/.*)?|realtime\/tickets|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
+  admin: /^(admin\/.+|me(\/.*)?|realtime\/tickets|uploads(\/[0-9a-f-]{36}\/complete)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
     /^(me(\/.*)?|realtime\/tickets|auth\/(reauth|logout-all|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/flags|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
 };

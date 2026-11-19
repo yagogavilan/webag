@@ -10,7 +10,7 @@ import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import { effectivePrice, InventoryService } from '../catalog/index.js';
 import { products, productVariants } from '../catalog/db/schema.js';
-import { LedgerService } from '../finance/index.js';
+import { allocateProportional, applyBp, LedgerService } from '../finance/index.js';
 import { IdempotencyService } from '../idempotency/index.js';
 import { users } from '../identity/db/schema.js';
 import { DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
@@ -313,6 +313,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     const fee = collectionFeeCents({ type: ex.type, method: ex.method, tableExchangeFeeCents: await this.tableFee(order), approved: true });
     let { resolution, newVariantId } = ex;
     let difference = 0;
+    let differenceCommission = 0;
     let reservation: ExchangeRow['reservationState'] = 'none';
     let note = by.reason;
     if (resolution === 'replace' && newVariantId) {
@@ -323,6 +324,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
         const [replacement] = await tx.select().from(productVariants).where(eq(productVariants.id, newVariantId));
         const [oldNow, newNow] = await Promise.all([this.variantPrice(tx, item.productId, original?.priceCents ?? null, now), this.variantPrice(tx, item.productId, replacement?.priceCents ?? null, now)]);
         difference = priceDifferenceCents(newNow, oldNow) * ex.quantity;
+        differenceCommission = difference > 0 ? applyBp(difference, item.commissionPctBp) : 0;
       } catch (error) {
         if (!(error instanceof AppError) || error.code !== 'STOCK_CONFLICT') throw error;
         if (by.actor !== 'system') throw errors.conflict('EXCHANGE_NO_STOCK', 'Sem estoque na variação pedida', 'Acabou o estoque do tamanho pedido. Recuse ou aguarde a reposição.');
@@ -336,7 +338,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     const hours = await this.params.getNumber('troca_taxa_pagamento_h');
     const [updated] = await tx
       .update(exchangeRequests)
-      .set({ status: to, resolution, newVariantId, reservationState: reservation, feeCents: fee, differenceCents: difference, feeDueAt: due > 0 ? new Date(now.getTime() + hours * 3_600_000) : null, decidedAt: now, decidedBy: by.actor, autoApproved: by.auto, decisionReason: note?.slice(0, 200) ?? null, updatedAt: now })
+      .set({ status: to, resolution, newVariantId, reservationState: reservation, feeCents: fee, differenceCents: difference, differenceCommissionCents: differenceCommission, feeDueAt: due > 0 ? new Date(now.getTime() + hours * 3_600_000) : null, decidedAt: now, decidedBy: by.actor, autoApproved: by.auto, decisionReason: note?.slice(0, 200) ?? null, updatedAt: now })
       .where(and(eq(exchangeRequests.id, ex.id), eq(exchangeRequests.status, ex.status)))
       .returning();
     if (!updated) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', 'A troca mudou enquanto você agia.');
@@ -533,6 +535,14 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   }
 
   /**
+   * I12 (DEC-047, ADR-011): com diferença de preço positiva a cobrança é na conta da LOJA com split (`application_fee` = taxa de coleta +
+   * comissão da diferença) e o resto cai direto com o lojista. Sem diferença, só a taxa de coleta: conta da Webag, sem split.
+   */
+  private payTarget(ex: ExchangeRow): { storeId: string | null; applicationFeeCents: number } {
+    return ex.differenceCents > 0 ? { storeId: ex.storeId, applicationFeeCents: ex.feeCents + ex.differenceCommissionCents } : { storeId: null, applicationFeeCents: 0 };
+  }
+
+  /**
    * I8: a troca fica travada (`FOR UPDATE`) enquanto se relê a tentativa aberta e se cria a cobrança: toque duplo ou 2 aparelhos
    * viram UMA cobrança. Aceita `Idempotency-Key` (escopo `exchange-pay:<usuário>`); repetir com a mesma chave devolve o mesmo resultado.
    */
@@ -558,13 +568,14 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       if (ex.feeDueAt && ex.feeDueAt.getTime() <= Date.now()) throw errors.conflict('EXCHANGE_FEE_EXPIRED', 'O prazo para pagar a taxa acabou', 'Peça a troca de novo ou escolha levar à loja.');
       const reference = `exchange:${ex.id}`;
       const open = await this.payments.latestForReference(reference);
-      if (open && ['creating', 'pending', 'pending_3ds'].includes(open.status) && open.method === input.paymentMethod && open.amountCents === this.dueCents(ex)) return this.paymentView(ex, open);
+      const target = this.payTarget(ex);
+      if (open && ['creating', 'pending', 'pending_3ds'].includes(open.status) && open.method === input.paymentMethod && open.amountCents === this.dueCents(ex) && open.storeId === target.storeId && open.applicationFeeCents === target.applicationFeeCents) return this.paymentView(ex, open);
       const attempt = await this.payments.createPayment({
         externalReference: reference,
         method: input.paymentMethod,
         amountCents: this.dueCents(ex),
-        storeId: null, // conta da Webag, sem split: a taxa é receita da Webag
-        applicationFeeCents: 0,
+        storeId: target.storeId,
+        applicationFeeCents: target.applicationFeeCents,
         installments: input.card?.installments ?? 1,
         ...(input.card ? { cardToken: input.card.token, card: { paymentMethodId: input.card.paymentMethodId, issuerId: input.card.issuerId } } : {}),
         payer: { email: principal.email, ...(input.payerDocument ? { document: input.payerDocument } : {}) },
@@ -605,13 +616,14 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     const [probe] = await tx.select().from(exchangeRequests).where(eq(exchangeRequests.id, id));
     if (!probe) return;
     const { ex, order } = await this.lockFor(tx, id);
-    // SEC-134: só vale a tentativa com o valor devido e sem loja (conta da Webag); outra cai no estorno de `afterTransition`.
-    if (ex.status !== 'awaiting_fee' || attempt.amountCents !== this.dueCents(ex) || attempt.storeId !== null) return;
+    // SEC-134: só vale a tentativa com o valor devido, a conta e a comissão esperadas; outra cai no estorno de `afterTransition`.
+    const target = this.payTarget(ex);
+    if (ex.status !== 'awaiting_fee' || attempt.amountCents !== this.dueCents(ex) || attempt.storeId !== target.storeId || attempt.applicationFeeCents !== target.applicationFeeCents) return;
     const now = new Date();
     const [paid] = await tx.update(exchangeRequests).set({ status: 'approved', feePaidAt: now, feeAttemptId: attempt.id, updatedAt: now }).where(eq(exchangeRequests.id, ex.id)).returning();
     await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'awaiting_fee', toStatus: 'approved', actor: 'system', reason: 'Taxa de troca paga' });
     // DT-049: a taxa é receita da Webag no ledger (a diferença de preço, quando há, fica a favor da loja).
-    await this.ledger.recordExchangePayment(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0) });
+    await this.ledger.recordExchangePayment(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0), differenceCommissionCents: ex.differenceCommissionCents });
     const active = await this.activate(tx, paid!, order);
     this.pendingEvents.set(attempt.id, [this.eventOf(active, 'awaiting_fee', 'approved', 'system', 'Taxa de troca paga', now)]);
   }
@@ -623,7 +635,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     if (!UUID_RE.test(id)) return;
     const [ex] = await tx.select().from(exchangeRequests).where(eq(exchangeRequests.id, id));
     if (!ex || ex.feeAttemptId !== attempt.id) return;
-    await this.ledger.recordExchangeFeeRefund(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0), refundCents: refund.amountCents, refundKey: refund.idempotencyKey });
+    await this.ledger.recordExchangeFeeRefund(tx, { orderId: ex.orderId, storeId: ex.storeId, exchangeId: ex.id, attemptId: attempt.id, feeCents: ex.feeCents, differenceCents: Math.max(ex.differenceCents, 0), differenceCommissionCents: ex.differenceCommissionCents, refundCents: refund.amountCents, refundKey: refund.idempotencyKey });
   }
 
   async afterTransition(attempt: PaymentAttempt): Promise<void> {
@@ -672,16 +684,25 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
   // =================================================================== recebimento e resolução (loja)
 
-  /** Reembolso do item (e, no arrependimento do último item, da taxa de entrega paga). Cupom entra proporcional ao item. */
+  /**
+   * Reembolso do item (e, no arrependimento do último item, da taxa de entrega PAGA). I4: o desconto que incide nos itens (cupom da loja ou
+   * da plataforma, exceto frete grátis) é rateado entre TODOS os itens do pedido pelo maior resto (a soma das partes é exata); o cupom de
+   * frete grátis não reduz o item e o frete devolvido é só o que o cliente pagou. Pedido antigo, sem esses campos, usa o desconto inteiro.
+   */
   private async refundAmount(tx: Tx, ex: ExchangeRow, order: OrderRow, item: ItemRow): Promise<number> {
-    const discountShare = order.subtotalCents > 0 ? Math.round((order.discountCents * item.lineTotalCents) / order.subtotalCents) : 0;
+    const finance = order.finance as { itemDiscountCents?: number; deliveryDiscountCents?: number };
+    const itemDiscount = finance.itemDiscountCents ?? order.discountCents;
+    const all = await tx.select({ id: orderItems.id, lineTotalCents: orderItems.lineTotalCents }).from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.id));
+    const shares = allocateProportional(itemDiscount, all.map((i) => i.lineTotalCents));
+    const discountShare = shares[all.findIndex((i) => i.id === item.id)] ?? 0;
     const [{ others } = { others: 0 }] = await tx.select({ others: count() }).from(orderItems).where(and(eq(orderItems.orderId, order.id), ne(orderItems.id, item.id)));
     const [{ refundedOthers } = { refundedOthers: 0 }] = await tx
       .select({ refundedOthers: count() })
       .from(exchangeRequests)
       .where(and(eq(exchangeRequests.orderId, order.id), ne(exchangeRequests.orderItemId, item.id), eq(exchangeRequests.status, 'completed'), eq(exchangeRequests.resolution, 'refund')));
     const lastItem = others - refundedOthers <= 0;
-    return refundCents({ type: ex.type, itemsCents: item.lineTotalCents - discountShare, deliveryFeePaidCents: lastItem ? order.deliveryFeeCents : 0 });
+    const deliveryPaid = Math.max(order.deliveryFeeCents - (finance.deliveryDiscountCents ?? 0), 0);
+    return refundCents({ type: ex.type, itemsCents: item.lineTotalCents - discountShare, deliveryFeePaidCents: lastItem ? deliveryPaid : 0 });
   }
 
   private async scheduleOrderRefund(tx: Tx, order: OrderRow, amountCents: number, reason: string, key: string, by: ExchangeActor, userId: string | null): Promise<PendingRefund | null> {

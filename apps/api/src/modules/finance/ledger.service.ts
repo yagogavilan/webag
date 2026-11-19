@@ -122,12 +122,12 @@ export class LedgerService {
    * DT-049: pagamento da taxa da troca (e da diferença de preço da peça nova) aprovado na conta da Webag. Os lançamentos ficam sob o
    * pedido original da troca (`orderId`), sem loja na taxa; a diferença fica a favor da loja. Idempotente por troca.
    */
-  recordExchangePayment(tx: DbOrTx, input: { orderId: string; storeId: string; exchangeId: string; attemptId: string; feeCents: number; differenceCents: number }): Promise<boolean> {
-    return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'exchange_fee', dedupeKey: `exchange-fee:${input.exchangeId}`, meta: { exchangeId: input.exchangeId, feeCents: input.feeCents, differenceCents: input.differenceCents } }, exchangeFeeLines(input.feeCents, input.differenceCents));
+  recordExchangePayment(tx: DbOrTx, input: { orderId: string; storeId: string; exchangeId: string; attemptId: string; feeCents: number; differenceCents: number; differenceCommissionCents?: number }): Promise<boolean> {
+    return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'exchange_fee', dedupeKey: `exchange-fee:${input.exchangeId}`, meta: { exchangeId: input.exchangeId, feeCents: input.feeCents, differenceCents: input.differenceCents, differenceCommissionCents: input.differenceCommissionCents ?? 0 } }, exchangeFeeLines(input.feeCents, input.differenceCents, input.differenceCommissionCents ?? 0));
   }
 
   /** Estorno do pagamento da troca confirmado pelo provedor (troca cancelada/expirada). Idempotente por chave de estorno. */
-  async recordExchangeFeeRefund(tx: DbOrTx, input: { orderId: string; storeId: string; exchangeId: string; attemptId: string; feeCents: number; differenceCents: number; refundCents: number; refundKey: string }): Promise<boolean> {
+  async recordExchangeFeeRefund(tx: DbOrTx, input: { orderId: string; storeId: string; exchangeId: string; attemptId: string; feeCents: number; differenceCents: number; differenceCommissionCents?: number; refundCents: number; refundKey: string }): Promise<boolean> {
     const dedupeKey = `exchange-fee-refund:${input.exchangeId}:${input.refundKey}`;
     const [received] = await tx.select({ id: ledgerTransactions.id }).from(ledgerTransactions).where(eq(ledgerTransactions.dedupeKey, `exchange-fee:${input.exchangeId}`));
     if (!received) return false; // pagamento nunca lançado (ex.: tentativa de troca que não valeu): nada a reverter
@@ -139,7 +139,7 @@ export class LedgerService {
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
       .where(and(eq(ledgerTransactions.orderId, input.orderId), eq(ledgerTransactions.kind, 'exchange_fee_refund'), sql`${ledgerTransactions.dedupeKey} like ${`exchange-fee-refund:${input.exchangeId}:%`}`));
     const before = Number(row?.total ?? 0);
-    return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'exchange_fee_refund', dedupeKey, meta: { exchangeId: input.exchangeId, refundCents: input.refundCents, refundedBeforeCents: before } }, exchangeFeeRefundLines(input.feeCents, input.differenceCents, before, input.refundCents));
+    return this.post(tx, { orderId: input.orderId, storeId: input.storeId, attemptId: input.attemptId, kind: 'exchange_fee_refund', dedupeKey, meta: { exchangeId: input.exchangeId, refundCents: input.refundCents, refundedBeforeCents: before } }, exchangeFeeRefundLines(input.feeCents, input.differenceCents, before, input.refundCents, input.differenceCommissionCents ?? 0));
   }
 
   /**

@@ -40,6 +40,8 @@ export class StoreFinanceService {
   ) {}
 
   private paid = sql`${orders.status} in (${sql.join(PAID_STATUSES.map((s) => sql`${s}`), sql`, `)}) and ${orders.paidAt} is not null`;
+  /** Extrato e resumo (I6): todo pedido pago no período, também o cancelado depois (a tarifa do provedor não volta e entra no líquido). */
+  private everPaid = sql`${orders.paidAt} is not null`;
 
   /** Vendas do período sem comissão nem líquido: vale para quem tem `sales_values` (funcionário com permissão). */
   async sales(storeId: string, from: string, to: string) {
@@ -80,10 +82,14 @@ export class StoreFinanceService {
     const carencia = await this.params.getNumber('repasse_carencia_dias');
     const [sales, ledger, receivable] = await Promise.all([
       this.sales(storeId, from, to),
+      // I6: UMA definição de "líquido da loja" (a mesma do extrato e do a receber): tudo que o ledger lançou em `merchant_payable`
+      // dos pedidos PAGOS no período (por data de pagamento, qualquer estado atual, inclusive cancelado), de qualquer tipo de lançamento.
       this.db.execute(sql`
         select t.kind, e.account, e.direction, coalesce(sum(e.amount_cents), 0)::int as total
-        from ledger_transactions t join ledger_entries e on e.transaction_id = t.id
-        where t.store_id = ${storeId}::uuid and t.created_at >= ${start}::timestamptz and t.created_at < ${end}::timestamptz
+        from orders o
+        join ledger_transactions t on t.order_id = o.id
+        join ledger_entries e on e.transaction_id = t.id
+        where o.store_id = ${storeId}::uuid and o.paid_at is not null and o.paid_at >= ${start}::timestamptz and o.paid_at < ${end}::timestamptz
         group by t.kind, e.account, e.direction`),
       this.db.execute(sql`
         with net as (
@@ -100,10 +106,12 @@ export class StoreFinanceService {
     const sum = (kind: string, account: string, direction: 'debit' | 'credit'): number =>
       (ledger.rows as { kind: string; account: string; direction: string; total: number }[]).filter((r) => r.kind === kind && r.account === account && r.direction === direction).reduce((a, r) => a + r.total, 0);
     const commissionCharged = sum('sale', 'commission_revenue', 'credit');
-    const commissionReturned = sum('refund', 'commission_revenue', 'debit');
+    const returnKinds = ['refund', 'coverage', 'adjustment'] as const; // `adjustment` = chargeback (I2)
+    const commissionReturned = returnKinds.reduce((a, kind) => a + sum(kind, 'commission_revenue', 'debit'), 0);
     const providerFees = sum('provider_fee', 'merchant_payable', 'debit');
-    const refunded = sum('refund', 'provider_clearing', 'credit');
-    const net = (['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] as const).reduce((a, kind) => a + sum(kind, 'merchant_payable', 'credit') - sum(kind, 'merchant_payable', 'debit'), 0);
+    const refunded = sum('refund', 'provider_clearing', 'credit') + sum('adjustment', 'provider_clearing', 'credit');
+    const kinds = [...new Set((ledger.rows as { kind: string }[]).map((r) => r.kind))];
+    const net = kinds.reduce((a, kind) => a + sum(kind, 'merchant_payable', 'credit') - sum(kind, 'merchant_payable', 'debit'), 0);
     const bucket = (name: PayoutStatus) => receivableRows.find((r) => r.bucket === name);
     return {
       period: { from, to },
@@ -130,7 +138,7 @@ export class StoreFinanceService {
     const rows = await this.db
       .select()
       .from(orders)
-      .where(and(eq(orders.storeId, storeId), this.paid, gte(orders.paidAt, dayStart(from)), lt(orders.paidAt, dayAfter(to)), timestampCursorBefore(orders.paidAt, orders.id, cursor)))
+      .where(and(eq(orders.storeId, storeId), this.everPaid, gte(orders.paidAt, dayStart(from)), lt(orders.paidAt, dayAfter(to)), timestampCursorBefore(orders.paidAt, orders.id, cursor)))
       .orderBy(...timestampOrderDesc(orders.paidAt, orders.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
@@ -143,7 +151,7 @@ export class StoreFinanceService {
     const rows = await this.db
       .select()
       .from(orders)
-      .where(and(eq(orders.storeId, storeId), this.paid, gte(orders.paidAt, dayStart(from)), lt(orders.paidAt, dayAfter(to))))
+      .where(and(eq(orders.storeId, storeId), this.everPaid, gte(orders.paidAt, dayStart(from)), lt(orders.paidAt, dayAfter(to))))
       .orderBy(...timestampOrderDesc(orders.paidAt, orders.id))
       .limit(max);
     return this.lines(rows);
@@ -155,7 +163,7 @@ export class StoreFinanceService {
     const result = await this.db.execute(sql`
       select t.order_id,
              coalesce(sum(case when t.kind = 'provider_fee' and e.account = 'merchant_payable' and e.direction = 'debit' then e.amount_cents else 0 end), 0)::int as provider_fee,
-             coalesce(sum(case when t.kind = 'refund' and e.account = 'provider_clearing' and e.direction = 'credit' then e.amount_cents else 0 end), 0)::int as refunded,
+             coalesce(sum(case when t.kind in ('refund', 'adjustment') and e.account = 'provider_clearing' and e.direction = 'credit' then e.amount_cents else 0 end), 0)::int as refunded,
              coalesce(sum(case when e.account = 'merchant_payable' then (case when e.direction = 'credit' then 1 else -1 end) * e.amount_cents else 0 end), 0)::int as net
       from ledger_transactions t join ledger_entries e on e.transaction_id = t.id
       where t.order_id in (${sql.join(page.map((o) => sql`${o.id}::uuid`), sql`, `)})

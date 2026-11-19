@@ -81,22 +81,31 @@ export function refundLines(finance: OrderFinance, refundedBeforeCents: number, 
 }
 
 /**
- * Pagamento da troca (conta da Webag, sem split): entra `fee + difference` no provedor; a taxa é receita da Webag e a diferença de
- * preço da peça nova fica a favor da loja (`merchant_payable`, repasse por fora do split).
+ * Pagamento da troca (DEC-047/I12): entra `fee + difference` no provedor. A taxa de coleta é receita da Webag; a diferença de preço
+ * da peça nova é da loja, menos a comissão proporcional (`differenceCommission`, receita da Webag), como numa venda. Com diferença,
+ * a cobrança é na conta da loja com `application_fee = taxa + comissão da diferença` (split): nada fica como passivo sem repasse.
  */
-export function exchangeFeeLines(feeCents: number, differenceCents: number): LedgerLine[] {
-  const lines = [...signed('provider_clearing', feeCents + differenceCents), ...signed('exchange_fee_revenue', -feeCents), ...signed('merchant_payable', -differenceCents)];
+export function exchangeFeeLines(feeCents: number, differenceCents: number, differenceCommissionCents = 0): LedgerLine[] {
+  if (differenceCommissionCents < 0 || differenceCommissionCents > differenceCents) throw new Error('comissão da diferença inválida');
+  const lines = [
+    ...signed('provider_clearing', feeCents + differenceCents),
+    ...signed('exchange_fee_revenue', -feeCents),
+    ...signed('commission_revenue', -differenceCommissionCents),
+    ...signed('merchant_payable', -(differenceCents - differenceCommissionCents)),
+  ];
   assertBalanced(lines);
   return lines;
 }
 
-/** Estorno do pagamento da troca (troca cancelada/expirada): devolve taxa e diferença na mesma proporção, pela diferença dos acumulados arredondados. */
-export function exchangeFeeRefundLines(feeCents: number, differenceCents: number, refundedBeforeCents: number, refundCents: number): LedgerLine[] {
+/** Estorno do pagamento da troca (troca cancelada/expirada): devolve taxa, comissão e diferença na mesma proporção, pela diferença dos acumulados arredondados. */
+export function exchangeFeeRefundLines(feeCents: number, differenceCents: number, refundedBeforeCents: number, refundCents: number, differenceCommissionCents = 0): LedgerLine[] {
   const total = feeCents + differenceCents;
   const after = refundedBeforeCents + refundCents;
   if (refundCents <= 0 || after > total) throw new Error('estorno fora do valor pago');
-  const fee = roundHalfUp(feeCents * after, total) - roundHalfUp(feeCents * refundedBeforeCents, total);
-  const lines = [...signed('provider_clearing', -refundCents), ...signed('exchange_fee_revenue', fee), ...signed('merchant_payable', refundCents - fee)];
+  const share = (component: number): number => roundHalfUp(component * after, total) - roundHalfUp(component * refundedBeforeCents, total);
+  const fee = share(feeCents);
+  const commission = share(differenceCommissionCents);
+  const lines = [...signed('provider_clearing', -refundCents), ...signed('exchange_fee_revenue', fee), ...signed('commission_revenue', commission), ...signed('merchant_payable', refundCents - fee - commission)];
   assertBalanced(lines);
   return lines;
 }

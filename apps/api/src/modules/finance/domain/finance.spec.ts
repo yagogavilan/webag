@@ -214,6 +214,21 @@ describe('troca e logística no ledger (DT-049)', () => {
     expect(() => exchangeFeeRefundLines(900, 1500, 2000, 401)).toThrow();
   });
 
+  it('I12: diferença de preço com comissão: a loja recebe a diferença menos a comissão e o estorno devolve as partes proporcionais', () => {
+    const lines = exchangeFeeLines(900, 1000, 150);
+    expect(isBalanced(lines)).toBe(true);
+    expect(accountBalance(lines, 'commission_revenue')).toBe(-150);
+    expect(accountBalance(lines, 'merchant_payable')).toBe(-850);
+    expect(accountBalance(lines, 'exchange_fee_revenue')).toBe(-900);
+    const parts = [1000, 900];
+    const total = parts.flatMap((part, i) => exchangeFeeRefundLines(900, 1000, i === 0 ? 0 : 1000, part, 150));
+    expect(isBalanced(total)).toBe(true);
+    expect(accountBalance(total, 'provider_clearing')).toBe(-1900);
+    expect(accountBalance(total, 'commission_revenue')).toBe(150);
+    expect(accountBalance([...lines, ...total], 'merchant_payable')).toBe(0);
+    expect(() => exchangeFeeLines(900, 1000, 1001)).toThrow();
+  });
+
   it('custo do motoboy: despesa a pagar; correção para baixo é o lançamento inverso; pagar quita o a pagar', () => {
     const cost = logisticsCostLines(700);
     expect(accountBalance(cost, 'logistics_cost_expense')).toBe(700);

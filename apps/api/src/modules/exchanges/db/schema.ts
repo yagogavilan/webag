@@ -53,6 +53,8 @@ export const exchangeRequests = pgTable(
     /** Congelados na aprovação (centavos). `differenceCents` negativo = a Webag estorna. */
     feeCents: integer().notNull().default(0),
     differenceCents: integer().notNull().default(0),
+    /** I12: comissão da Webag sobre a diferença de preço POSITIVA (percentual do item original, congelado na aprovação); entra na `application_fee` do split. */
+    differenceCommissionCents: integer().notNull().default(0),
     /** Tentativa de pagamento aprovada da taxa + diferença (referência `exchange:<id>`, conta da Webag, sem split). */
     feeAttemptId: uuid(),
     feeDueAt: timestamp({ withTimezone: true }),

@@ -71,6 +71,24 @@ Biblioteca: **Reanimated 3** (thread de UI), `expo-haptics`, `react-native-svg`.
 | `motion.bob` | Itens da ilustração flutuam 5 px | loop 2.400 ms | não |
 | `motion.shake` | Grupo de tamanhos balança 2x 8 px quando escolhe tamanho esgotado ou falta escolher | 350 ms | `notificationAsync(Error)` |
 
+## 7. Objetos de produto (rodada 2, 2026-11-19)
+
+Substituem a arte chapada da rodada 1 (camiseta com manchas, círculos vazando, vestido e bolsa rudimentares). Fonte única: bloco `OBJ` em `docs/prototipo/app-cliente-v3.html` (um `<symbol id="o-NOME">` por objeto). Folha de revisão: `app-cliente-v3.html#objetos`.
+
+| Regra | Valor |
+|---|---|
+| Estilo (um só) | **Geométrico sólido, sem contorno.** Formas de reta e curva simples; cantos arredondados por traço da mesma cor (5 px, junção redonda), nunca por desenho à mão |
+| Tons por objeto | 3: `--b` base, `--s` sombra sólida, `--h` realce. Derivados da base por regra fixa (`tones()`): base clara → sombra 11% noite e realce branco; média → sombra 24% noite e realce 30% branco; escura → sombra 45% preto e realce 16% branco |
+| Detalhes fixos | `#2C2632` (sola, tampa, solado, olhal, ponteiro), `#FFFFFF` (etiqueta, entressola, mostrador), `#C9A24A` (metal). Acento do contexto `--x` (barras do tênis, fruta da cesta) |
+| Luz | De cima à esquerda: sombra sempre no lado direito e embaixo; realce como faixa estreita à esquerda ou na borda superior |
+| Sombra de chão | Elipse sólida sob o objeto (`--g`, sem desfoque). Padrão `rgba(28,23,33,.16)`; sobre noite/cor de loja `rgba(0,0,0,.28 a .45)`; dentro de ilustração de etapa, `transparent` |
+| Grade | 200 x 200; objeto pousado em y ≈ 176, chão em y = 184; largura útil 120 a 170 |
+| Construção | Roupas de frente com manga encaixada na cava (costura visível), gola com interior das costas em sombra, barra. Tênis de perfil com entressola, ponteira, contraforte e as **3 barras da marca** (não diagonais iguais, para não lembrar outra marca) |
+| Uso | `art(nome, corBase, classe, acento)` gera `<svg><use href="#o-nome"/></svg>` com as variáveis. No app: um componente SVGR por objeto com props `base`, `shade`, `light`, `ground`, `accent` |
+| Proibido | Contorno parcial, gradiente, textura, olhal/círculo decorativo atrás do produto, objeto cortado sem intenção, mais de 3 tons da mesma cor |
+
+Conjunto: camiseta, vestido, bolsa, tênis, calça, perfume, fone, vaso, caderno, ração, cesta, relógio. Faltam (se a categoria entrar no catálogo inicial): celular, panela, brinquedo.
+
 ## 6. Aplicação em foto real (quando as fotos chegarem)
 
 | Peça | Hoje (arte) | Com foto |

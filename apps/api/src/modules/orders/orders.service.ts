@@ -324,7 +324,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               commissionCents: finance.commissionCents,
               applicationFeeCents: finance.applicationFeeCents,
               deliverySnapshot: input.mode === 'delivery' ? (quote.deliverySnapshot as unknown as Record<string, unknown> | null) : null,
-              finance: { ...finance, platformDiscountCapped: finance.platformDiscountCapped || quote.result.platformDiscountCapped },
+              // I4: o desconto de frete grátis não reduz o item (e o frete devolvido numa troca é só o que o cliente pagou).
+              finance: {
+                ...finance,
+                platformDiscountCapped: finance.platformDiscountCapped || quote.result.platformDiscountCapped,
+                itemDiscountCents: quote.coupon?.kind === 'free_shipping' ? 0 : quote.result.discountCents,
+                deliveryDiscountCents: quote.coupon?.kind === 'free_shipping' ? quote.result.discountCents : 0,
+              },
               paymentMethod: input.paymentMethod,
               exchangeVoluntaryDays: settings.voluntaryExchangeDays,
               exchangeCollectionFeeCents: settings.collectionFeeCents,

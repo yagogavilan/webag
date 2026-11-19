@@ -25,3 +25,22 @@ const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 export function formatCents(cents: number): string {
   return brl.format(cents / 100);
 }
+
+/** Valor de `<input type="datetime-local">` (hora local) a partir de um instante ISO. */
+export function toLocalInput(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Instante ISO (UTC) a partir do valor de `<input type="datetime-local">`; `null` se vazio ou inválido. */
+export function fromLocalInput(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Percentual com 1 casa e vírgula ("6,9%"). */
+export function formatPct(value: number | null | undefined): string {
+  return value === null || value === undefined ? '-' : `${value.toFixed(1).replace('.', ',')}%`;
+}

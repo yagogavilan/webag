@@ -195,8 +195,26 @@ Tokens novos (proposta, aplicar só após aceite, em `packages/tokens` via tema 
 2. Acento: **lima** `#D6FF4A` ou **sol** `#FFC93C`?
 3. Título da Início com voz ("O que vai pra sacola hoje?") ou a assinatura C3 do PO ("Escolha no app. Receba em casa.")? O PO fecha a copy final.
 
+## 8b. Rodada 2 (2026-11-19): resposta à crítica `prototipo/render/r1/CRITICA.md`
+
+Decisões do CEO aplicadas: acento **lima** (sol descartado), título da Início mantido, Bricolage + Figtree mantidas.
+
+| # crítica | O que mudou | Por quê |
+|---|---|---|
+| 1 Ilustrações | Sistema novo de 12 objetos em `<symbol>` (`kit-marca-v3.md` §7), usado em categorias, herói, loja, produto, sacola, pedido e acompanhamento. Palco do produto sem olhais | Um estilo só e regra de tom calculada: acaba o "meio realista torto" |
+| 2 Início | Índice tipográfico vira **faixa de categorias** (objeto + nome; Moda maior em noite; quadrado, círculo e trapézio). Herói recomposto: sacola atrás, tênis inteiro na zona livre à direita do título, selo -17% sobre a sacola | Categoria se reconhece pela imagem antes da leitura (iFood §1.3); nada corta o produto |
+| 3 Confirmado | Hora em 1 linha (52 px, sem quebra); resumo e aviso no mesmo cartão com coluna de 44 px alinhada; "Acompanhar pedido" primário; "Voltar ao início" centralizado | Hierarquia e respiro; o interruptor deixa de flutuar |
+| 4 Acompanhamento | Bug era colisão de classe (`.now` do rótulo "Agora" aplicada ao segmento e à etapa da lista). Classe renomeada para `.agora`; rótulo "Etapa N de 5" ancorado sob o segmento atual com marcador lima | 5 segmentos alinhados; a etapa atual da lista volta a ser texto escuro (antes, lima sobre branco reprovava AA) |
+| 5 Loja | Capa 330 → 184 px; cupons e vantagens em bilhetes; **Destaques** com foto, preço, riscado e selo; abas visíveis acima da mini sacola na 1ª dobra | Produto na 1ª dobra (iFood §1.8) |
+| 6 Produto | Cor e tamanho como **grupos obrigatórios** (faixa, "Escolha 1 opção", selo OBRIGATÓRIO que vira check); amostras de cor com a peça na cor; botão "Escolha o tamanho" inativo até escolher, e ao tocar rola, balança e explica | Reduz erro de pedido (iFood §1.9); cor inteira visível acima da barra |
+| 7 Sacola | Vão no preço era a classe `.pp` (flex com gap) aplicada ao próprio preço; corrigido. "Peça também" (itens com variação abrem a ficha); "Resumo de valores" com cupom. Check da opção de recebimento estava cinza sobre lima (herança de cor); corrigido. **Sem barra de frete grátis** (HIP-L12) | Kerning e contraste; ticket médio sem fricção |
+| 8 Rolagem | Respiro inferior de 184 px no fim da Início e da lista de pedidos; no modo `longo`, mini sacola com largura total | Nada fica escondido atrás da barra |
+| iFood | Estado `?carregando=1` em todas as telas (skeleton com a forma real; no confirmado, "Confirmando seu pagamento"); `?endereco=1` com a folha "Seu endereço está certo?"; tela **Pedidos** com "Ajuda" e "Pedir de novo" (avisa ao trocar de loja) | Princípios de escala aplicáveis, sem copiar identidade |
+
+Pendências para o PO: copy final de "Pedir de novo" quando a sacola tem outra loja; regra de quando a folha de endereço aparece (proposta: endereço > 1 km da localização, 1 vez por sessão) **[HIPÓTESE]**.
+
 ## 9. Como renderizar (para o CEO)
 
 - Fontes: embutir **Bricolage Grotesque** 600/700/800 (`docs/design/recursos/fontes/bricolage-grotesque-latin-{600,700,800}-normal.woff2`, família CSS `"Bricolage Grotesque"`) e **Figtree** 400/600/700/800 entre `<!--WEBAG-FONTS--><!--/WEBAG-FONTS-->`. Outfit não é necessária (o logo está em curvas).
-- Capturar 390 x 844 a 2x, com `?estatico=1` (sem animação) para cada hash: `#inicio #loja #produto #sacola #confirmado #acompanha`. Para ver a tela inteira: `?estatico=1&longo=1`. Para comparar acento: `&acento=sol`.
+- Capturar 390 x 844 a 2x, com `?estatico=1` (sem animação) para cada hash: `#inicio #loja #produto #sacola #confirmado #acompanha #pedidos #objetos`. Para ver a tela inteira: `?estatico=1&longo=1`. Estados: `?estatico=1&carregando=1` (por tela) e `?estatico=1&endereco=1#inicio`.
 - Sem `?estatico=1`, esperar ≥ 1,5 s antes da captura (cascata de entrada).
