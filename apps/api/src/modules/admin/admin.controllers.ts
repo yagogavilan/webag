@@ -12,6 +12,7 @@ import { CategoriesService } from './categories.service.js';
 import { LEGAL_DOCUMENT_TYPES, type LegalDocumentType } from './db/schema.js';
 import { FeatureFlagsService } from './feature-flags.service.js';
 import { LegalService } from './legal.service.js';
+import { MaintenanceService } from './maintenance.service.js';
 import { ParametersService } from './parameters.service.js';
 import { RegionsService } from './regions.service.js';
 
@@ -52,6 +53,13 @@ const expectedUpdatedAt = z.iso.datetime().nullable().optional();
 const parameterUpdateSchema = z.strictObject({ value: z.union([z.number(), z.string().max(40)]), reason: reasonSchema, expectedUpdatedAt });
 const parameterResetSchema = z.strictObject({ reason: reasonSchema, expectedUpdatedAt });
 const flagSchema = z.strictObject({ enabled: z.boolean(), reason: reasonSchema.optional() });
+/** WB-121: `message` e `expectedBackAt` só valem ao ligar; ao desligar são ignorados. */
+const maintenanceSchema = z.strictObject({
+  enabled: z.boolean(),
+  message: z.string().trim().min(5, 'A mensagem precisa de ao menos 5 caracteres.').max(200).optional(),
+  expectedBackAt: z.iso.datetime().nullable().optional(),
+  reason: reasonSchema,
+});
 const legalSchema = z.strictObject({
   title: z.string().trim().min(3).max(120),
   content: z.string().trim().min(20, 'O texto não pode ficar vazio.').max(200_000),
@@ -170,6 +178,7 @@ export class ConfigController {
   constructor(
     private readonly parameters: ParametersService,
     private readonly flags: FeatureFlagsService,
+    private readonly maintenance: MaintenanceService,
   ) {}
 
   @AdminOnly('parameters:read')
@@ -209,6 +218,30 @@ export class ConfigController {
   @Put('admin/feature-flags/:key')
   setFlag(@Param('key') key: string, @Body(new ZodPipe(flagSchema)) body: z.infer<typeof flagSchema>, @Ctx() ctx: RequestContext) {
     return this.flags.set(key, body.enabled, ctx, body.reason);
+  }
+
+  /** WB-121: público, para o app e a web mostrarem "Voltamos já" antes de o cliente montar o pedido. Guardado por até 15 s. */
+  @Public()
+  @RateLimit({ name: 'maintenance-public', limit: 120, windowSeconds: 60 })
+  @Get('config/maintenance')
+  @Header('Cache-Control', 'public, max-age=15')
+  publicMaintenance() {
+    return this.maintenance.status();
+  }
+
+  @AdminOnly('maintenance:read')
+  @Get('admin/maintenance')
+  adminMaintenance() {
+    return this.maintenance.adminView();
+  }
+
+  /** Liga/desliga o modo manutenção (só super admin; motivo obrigatório; auditado). Bloqueia pedido NOVO; o resto da plataforma segue. */
+  @AdminOnly('maintenance:write')
+  @Put('admin/maintenance')
+  setMaintenance(@Body(new ZodPipe(maintenanceSchema)) body: z.infer<typeof maintenanceSchema>, @Ctx() ctx: RequestContext) {
+    const expectedBackAt = body.expectedBackAt ? new Date(body.expectedBackAt) : null;
+    if (body.enabled && expectedBackAt && expectedBackAt.getTime() <= Date.now()) throw errors.validation([{ field: 'expectedBackAt', message: 'A previsão de volta precisa estar no futuro.' }]);
+    return this.maintenance.set({ enabled: body.enabled, message: body.message, expectedBackAt, reason: body.reason }, ctx);
   }
 }
 

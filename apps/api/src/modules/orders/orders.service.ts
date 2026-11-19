@@ -7,7 +7,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { presentAddress } from '../addresses/index.js';
-import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { AuditService, FeatureFlagsService, MaintenanceService, ParametersService } from '../admin/index.js';
 import { CartService } from '../cart/index.js';
 import { carts, cartItems, couponRedemptions, coupons } from '../cart/db/schema.js';
 import { InventoryService } from '../catalog/index.js';
@@ -129,6 +129,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     private readonly idempotency: IdempotencyService,
     private readonly params: ParametersService,
     private readonly flags: FeatureFlagsService,
+    private readonly maintenance: MaintenanceService,
     private readonly media: MediaService,
     private readonly exposure: ExposureLimitService,
     private readonly deliveries: DeliveriesService,
@@ -171,6 +172,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   }
 
   private async createOnce(principal: Principal, input: CreateOrderInput): Promise<string> {
+    await this.maintenance.assertNewOrdersAllowed(); // WB-121: modo manutenção recusa pedido NOVO (a repetição de um pedido já criado volta pela idempotência, antes daqui)
     if (input.mode === 'delivery' && !input.addressId) throw errors.unprocessable('ADDRESS_REQUIRED', 'Escolha o endereço de entrega');
     if (input.paymentMethod === 'card' && !input.card) throw errors.validation([{ field: 'card', message: 'Informe o cartão.' }]);
     const { view, quote } = await this.cart.quote(principal, { mode: input.mode, addressId: input.addressId });

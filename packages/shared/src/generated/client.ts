@@ -763,6 +763,48 @@ export interface SetFlagRequest {
   reason?: string;
 }
 
+export interface MaintenanceStatus {
+  active: boolean;
+  /**
+     * Texto para mostrar ao cliente; nulo desligado
+     * @nullable
+     */
+  message: string | null;
+  /**
+     * Previsão de volta (informativa; não desliga sozinha)
+     * @nullable
+     */
+  expectedBackAt: string | null;
+}
+
+export type MaintenanceAdminStatus = MaintenanceStatus & ({
+  /** @nullable */
+  updatedAt: string | null;
+  /** @nullable */
+  updatedByName: string | null;
+});
+
+export interface SetMaintenanceRequest {
+  enabled: boolean;
+  /**
+     * Só ao ligar; sem ela vale o texto padrão
+     * @minLength 5
+     * @maxLength 200
+     */
+  message?: string;
+  /**
+     * Só ao ligar; precisa estar no futuro
+     * @nullable
+     */
+  expectedBackAt?: string | null;
+  /**
+     * Motivo (vai à auditoria)
+     * @minLength 5
+     * @maxLength 300
+     */
+  reason: string;
+}
+
 export type PublicFlagsFlags = {[key: string]: boolean};
 
 export interface PublicFlags {
@@ -1613,6 +1655,15 @@ export type StoreCommissionCategoriesItem = {
   pct: number;
 };
 
+/**
+ * Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O 'Você recebe' é preço - comissão - tarifa, dito 'cerca de'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)
+ * @nullable
+ */
+export type StoreProviderFeePct = {
+  pix: number;
+  card: number;
+} | null;
+
 export interface Interval {
   /** @pattern ^([01]\d|2[0-3]):[0-5]\d$ */
   start: string;
@@ -1749,6 +1800,11 @@ export interface Store {
   commissionSource?: StoreCommissionSource;
   /** Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário */
   commissionCategories?: StoreCommissionCategoriesItem[];
+  /**
+     * Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O 'Você recebe' é preço - comissão - tarifa, dito 'cerca de'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)
+     * @nullable
+     */
+  providerFeePct?: StoreProviderFeePct;
   /** Só em /stores/mine */
   role?: string;
   settings?: StoreSettings;
@@ -6058,7 +6114,10 @@ export interface CardIntentView {
   provider: CardIntentViewProvider;
   /** @nullable */
   publicKey: string | null;
+  /** Maior número de parcelas que o servidor aceita para ESTE total: `parcelas_max` limitado pela parcela mínima (`parcela_min_cents`). Mínimo 1 (só à vista) */
   installmentsMax: number;
+  /** Valor mínimo da parcela, em centavos (`parcela_min_cents`) */
+  installmentMinCents?: number;
   expiresAt: string;
 }
 
@@ -11205,6 +11264,153 @@ export const setFeatureFlag = async (key: string,
     method: 'PUT',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(setFlagRequest)
+  }
+);}
+
+
+
+export type getPublicMaintenanceResponse200 = {
+  data: MaintenanceStatus
+  status: 200
+}
+
+export type getPublicMaintenanceResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getPublicMaintenanceResponseSuccess = (getPublicMaintenanceResponse200) & {
+  headers: Headers;
+};
+export type getPublicMaintenanceResponseError = (getPublicMaintenanceResponse429) & {
+  headers: Headers;
+};
+
+export type getPublicMaintenanceResponse = (getPublicMaintenanceResponseSuccess | getPublicMaintenanceResponseError)
+
+export const getGetPublicMaintenanceUrl = () => {
+
+
+
+
+  return `/v1/config/maintenance`
+}
+
+/**
+ * O app e a web leem antes de montar o pedido e mostram `message` ("Voltamos já"). Com `active: true` a API recusa pedido NOVO (503 `MAINTENANCE`); leitura, sacola e pedido em andamento seguem.
+ * @summary Modo manutenção (WB-121): estado público, cache de 15 s
+ */
+export const getPublicMaintenance = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getPublicMaintenanceResponse> => {
+
+  return apiFetch<getPublicMaintenanceResponse>(getGetPublicMaintenanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminMaintenanceResponse200 = {
+  data: MaintenanceAdminStatus
+  status: 200
+}
+
+export type getAdminMaintenanceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminMaintenanceResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminMaintenanceResponseSuccess = (getAdminMaintenanceResponse200) & {
+  headers: Headers;
+};
+export type getAdminMaintenanceResponseError = (getAdminMaintenanceResponse401 | getAdminMaintenanceResponse403) & {
+  headers: Headers;
+};
+
+export type getAdminMaintenanceResponse = (getAdminMaintenanceResponseSuccess | getAdminMaintenanceResponseError)
+
+export const getGetAdminMaintenanceUrl = () => {
+
+
+
+
+  return `/v1/admin/maintenance`
+}
+
+/**
+ * Permissão de admin: `maintenance:read` (todo perfil).
+ * @summary Modo manutenção (admin)
+ */
+export const getAdminMaintenance = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getAdminMaintenanceResponse> => {
+
+  return apiFetch<getAdminMaintenanceResponse>(getGetAdminMaintenanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setMaintenanceResponse200 = {
+  data: MaintenanceAdminStatus
+  status: 200
+}
+
+export type setMaintenanceResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setMaintenanceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setMaintenanceResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setMaintenanceResponseSuccess = (setMaintenanceResponse200) & {
+  headers: Headers;
+};
+export type setMaintenanceResponseError = (setMaintenanceResponse400 | setMaintenanceResponse401 | setMaintenanceResponse403) & {
+  headers: Headers;
+};
+
+export type setMaintenanceResponse = (setMaintenanceResponseSuccess | setMaintenanceResponseError)
+
+export const getSetMaintenanceUrl = () => {
+
+
+
+
+  return `/v1/admin/maintenance`
+}
+
+/**
+ * Permissão de admin: `maintenance:write` (só super admin). Ligado, `POST /v1/orders` e `POST /v1/card-intents` respondem 503 `MAINTENANCE`; leitura, sacola, pedidos em andamento (inclusive pagar o já criado), webhooks do provedor e o painel admin seguem. `message` e `expectedBackAt` só valem ao ligar (sem mensagem vale o texto padrão). Desligar não exige nada do usuário. O agendamento de início e fim (WB-121 C4) é fase 2. Auditoria: `maintenance.enable` / `maintenance.disable` com motivo, antes e depois.
+ * @summary Ligar ou desligar o modo manutenção (só super admin; auditado)
+ */
+export const setMaintenance = async (setMaintenanceRequest: SetMaintenanceRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setMaintenanceResponse> => {
+
+  return apiFetch<setMaintenanceResponse>(getSetMaintenanceUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setMaintenanceRequest)
   }
 );}
 
@@ -26077,10 +26283,15 @@ export type createCardIntentResponse429 = {
   status: 429
 }
 
+export type createCardIntentResponse503 = {
+  data: Problem
+  status: 503
+}
+
 export type createCardIntentResponseSuccess = (createCardIntentResponse201) & {
   headers: Headers;
 };
-export type createCardIntentResponseError = (createCardIntentResponse400 | createCardIntentResponse401 | createCardIntentResponse429) & {
+export type createCardIntentResponseError = (createCardIntentResponse400 | createCardIntentResponse401 | createCardIntentResponse429 | createCardIntentResponse503) & {
   headers: Headers;
 };
 

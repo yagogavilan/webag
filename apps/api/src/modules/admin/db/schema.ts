@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   bigserial,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -98,6 +99,25 @@ export const featureFlags = pgTable('feature_flags', {
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid().references(() => users.id, { onDelete: 'set null' }),
 });
+
+/**
+ * WB-121 (DEC-073): modo manutenção. UMA linha (`id = 1`): enquanto `enabled`, a API recusa pedido NOVO (503 `MAINTENANCE`); leitura, pedidos
+ * em andamento, webhooks do provedor e o painel admin seguem. Quem ligou, quando e a mensagem ficam aqui; a trilha completa, na auditoria.
+ */
+export const maintenanceState = pgTable(
+  'maintenance_state',
+  {
+    id: integer().primaryKey().default(1),
+    enabled: boolean().notNull().default(false),
+    /** Texto mostrado ao cliente ("Voltamos já"). */
+    message: varchar({ length: 200 }),
+    /** Previsão de volta (informativa; não liga nem desliga sozinha: o agendamento, WB-121 C4, é fase 2). */
+    expectedBackAt: timestamp({ withTimezone: true }),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid().references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => [check('maintenance_state_singleton_chk', sql`${t.id} = 1`)],
+);
 
 export const LEGAL_DOCUMENT_TYPES = ['customer_terms', 'merchant_terms', 'privacy'] as const;
 export type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];

@@ -1129,6 +1129,60 @@ export const SetFeatureFlagResponse = zod.object({
 
 
 /**
+ * O app e a web leem antes de montar o pedido e mostram `message` ("Voltamos já"). Com `active: true` a API recusa pedido NOVO (503 `MAINTENANCE`); leitura, sacola e pedido em andamento seguem.
+ * @summary Modo manutenção (WB-121): estado público, cache de 15 s
+ */
+export const GetPublicMaintenanceResponse = zod.object({
+  "active": zod.boolean(),
+  "message": zod.string().nullable().describe('Texto para mostrar ao cliente; nulo desligado'),
+  "expectedBackAt": zod.iso.datetime({"offset":true}).nullable().describe('Previsão de volta (informativa; não desliga sozinha)')
+})
+
+
+/**
+ * Permissão de admin: `maintenance:read` (todo perfil).
+ * @summary Modo manutenção (admin)
+ */
+export const GetAdminMaintenanceResponse = zod.object({
+  "active": zod.boolean(),
+  "message": zod.string().nullable().describe('Texto para mostrar ao cliente; nulo desligado'),
+  "expectedBackAt": zod.iso.datetime({"offset":true}).nullable().describe('Previsão de volta (informativa; não desliga sozinha)')
+}).and(zod.object({
+  "updatedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "updatedByName": zod.string().nullable()
+}))
+
+
+/**
+ * Permissão de admin: `maintenance:write` (só super admin). Ligado, `POST /v1/orders` e `POST /v1/card-intents` respondem 503 `MAINTENANCE`; leitura, sacola, pedidos em andamento (inclusive pagar o já criado), webhooks do provedor e o painel admin seguem. `message` e `expectedBackAt` só valem ao ligar (sem mensagem vale o texto padrão). Desligar não exige nada do usuário. O agendamento de início e fim (WB-121 C4) é fase 2. Auditoria: `maintenance.enable` / `maintenance.disable` com motivo, antes e depois.
+ * @summary Ligar ou desligar o modo manutenção (só super admin; auditado)
+ */
+export const setMaintenanceBodyMessageMin = 5;
+export const setMaintenanceBodyMessageMax = 200;
+
+export const setMaintenanceBodyReasonMin = 5;
+export const setMaintenanceBodyReasonMax = 300;
+
+
+
+export const SetMaintenanceBody = zod.object({
+  "enabled": zod.boolean(),
+  "message": zod.string().min(setMaintenanceBodyMessageMin).max(setMaintenanceBodyMessageMax).optional().describe('Só ao ligar; sem ela vale o texto padrão'),
+  "expectedBackAt": zod.iso.datetime({"offset":true}).nullish().describe('Só ao ligar; precisa estar no futuro'),
+  "reason": zod.string().min(setMaintenanceBodyReasonMin).max(setMaintenanceBodyReasonMax).describe('Motivo (vai à auditoria)')
+})
+
+export const SetMaintenanceResponse = zod.object({
+  "active": zod.boolean(),
+  "message": zod.string().nullable().describe('Texto para mostrar ao cliente; nulo desligado'),
+  "expectedBackAt": zod.iso.datetime({"offset":true}).nullable().describe('Previsão de volta (informativa; não desliga sozinha)')
+}).and(zod.object({
+  "updatedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "updatedByName": zod.string().nullable()
+}))
+
+
+/**
  * Alimenta as páginas /termos e /privacidade e os links do app.
  * @summary Versão vigente do documento (público)
  */
@@ -3126,6 +3180,10 @@ export const CreateStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3235,6 +3293,10 @@ export const ListMyStoresResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3349,6 +3411,10 @@ export const GetStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3502,6 +3568,10 @@ export const UpdateStoreProfileResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3673,6 +3743,10 @@ export const SubmitStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4346,6 +4420,10 @@ export const GetAdminStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4592,6 +4670,10 @@ export const EditAdminStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4724,6 +4806,10 @@ export const ApproveStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4836,6 +4922,10 @@ export const ReactivateStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4962,6 +5052,10 @@ export const RequestStoreCorrectionResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -5083,6 +5177,10 @@ export const RejectStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -5204,6 +5302,10 @@ export const SuspendStoreResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -5362,6 +5464,10 @@ export const DecideStoreDataReviewResponse = zod.object({
   "categoryId": zod.uuid(),
   "pct": zod.number()
 })).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
+  "providerFeePct": zod.object({
+  "pix": zod.number(),
+  "card": zod.number()
+}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -14132,7 +14238,8 @@ export const GetCardIntentResponse = zod.object({
 }).describe('Valor monetário em centavos.'),
   "provider": zod.enum(['fake', 'mercadopago']),
   "publicKey": zod.string().nullable(),
-  "installmentsMax": zod.int(),
+  "installmentsMax": zod.int().describe('Maior número de parcelas que o servidor aceita para ESTE total: `parcelas_max` limitado pela parcela mínima (`parcela_min_cents`). Mínimo 1 (só à vista)'),
+  "installmentMinCents": zod.int().optional().describe('Valor mínimo da parcela, em centavos (`parcela_min_cents`)'),
   "expiresAt": zod.iso.datetime({"offset":true})
 })
 

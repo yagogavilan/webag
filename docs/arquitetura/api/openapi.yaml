@@ -1246,6 +1246,59 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/config/maintenance:
+    get:
+      tags: [config]
+      operationId: getPublicMaintenance
+      summary: "Modo manutenção (WB-121): estado público, cache de 15 s"
+      description: "O app e a web leem antes de montar o pedido e mostram `message` (\"Voltamos já\"). Com `active: true` a API recusa pedido NOVO (503 `MAINTENANCE`); leitura, sacola e pedido em andamento seguem."
+      security: []
+      responses:
+        '200':
+          description: Estado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenanceStatus' }
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/maintenance:
+    get:
+      tags: [config]
+      operationId: getAdminMaintenance
+      summary: Modo manutenção (admin)
+      description: "Permissão de admin: `maintenance:read` (todo perfil)."
+      responses:
+        '200':
+          description: Estado com quem mudou por último
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenanceAdminStatus' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [config]
+      operationId: setMaintenance
+      summary: "Ligar ou desligar o modo manutenção (só super admin; auditado)"
+      description: "Permissão de admin: `maintenance:write` (só super admin). Ligado, `POST /v1/orders` e `POST /v1/card-intents` respondem 503 `MAINTENANCE`; leitura, sacola, pedidos em andamento (inclusive pagar o já criado), webhooks do provedor e o painel admin seguem. `message` e `expectedBackAt` só valem ao ligar (sem mensagem vale o texto padrão). Desligar não exige nada do usuário. O agendamento de início e fim (WB-121 C4) é fase 2. Auditoria: `maintenance.enable` / `maintenance.disable` com motivo, antes e depois."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetMaintenanceRequest' }
+      responses:
+        '200':
+          description: Estado depois da mudança
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenanceAdminStatus' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/legal/{type}:
     get:
       tags: [legal]
@@ -5875,7 +5928,10 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          description: "`PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado; tentar de novo com a mesma `Idempotency-Key`"
+          description: "`PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado; tentar de novo com a mesma `Idempotency-Key`. `MAINTENANCE` (WB-121): a plataforma está em manutenção e não aceita pedido NOVO; `detail` é a mensagem para mostrar, `expectedBackAt` a previsão (pode ser nula) e `Retry-After` vem em segundos. Nada foi criado nem cobrado; pedido já criado segue normalmente"
+          headers:
+            Retry-After:
+              schema: { type: integer }
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -8028,6 +8084,11 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: "`MAINTENANCE` (WB-121): modo manutenção; não abra a página do cartão. Mesmo formato do `POST /v1/orders`"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /v1/card-intents/{token}:
     get:
       tags: [orders]
@@ -9252,6 +9313,30 @@ components:
       required: [enabled]
       properties:
         enabled: { type: boolean }
+        reason: { type: string, minLength: 5, maxLength: 300, description: Motivo (vai à auditoria) }
+    MaintenanceStatus:
+      type: object
+      required: [active, message, expectedBackAt]
+      properties:
+        active: { type: boolean }
+        message: { type: [string, 'null'], description: "Texto para mostrar ao cliente; nulo desligado" }
+        expectedBackAt: { type: [string, 'null'], format: date-time, description: "Previsão de volta (informativa; não desliga sozinha)" }
+    MaintenanceAdminStatus:
+      allOf:
+        - $ref: '#/components/schemas/MaintenanceStatus'
+        - type: object
+          required: [updatedAt, updatedByName]
+          properties:
+            updatedAt: { type: [string, 'null'], format: date-time }
+            updatedByName: { type: [string, 'null'] }
+    SetMaintenanceRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, reason]
+      properties:
+        enabled: { type: boolean }
+        message: { type: string, minLength: 5, maxLength: 200, description: "Só ao ligar; sem ela vale o texto padrão" }
+        expectedBackAt: { type: [string, 'null'], format: date-time, description: "Só ao ligar; precisa estar no futuro" }
         reason: { type: string, minLength: 5, maxLength: 300, description: Motivo (vai à auditoria) }
     PublicFlags:
       type: object

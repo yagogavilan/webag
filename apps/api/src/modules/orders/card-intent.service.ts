@@ -6,7 +6,7 @@ import type { Env } from '../../platform/config/env.js';
 import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
 import { errors } from '../../platform/http/app-error.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
-import { ParametersService } from '../admin/index.js';
+import { MaintenanceService, ParametersService } from '../admin/index.js';
 import { PrincipalService } from '../identity/index.js';
 import { OrdersService, type CreateOrderInput } from './orders.service.js';
 
@@ -40,6 +40,7 @@ export class CardIntentService {
     private readonly principals: PrincipalService,
     private readonly orders: OrdersService,
     private readonly params: ParametersService,
+    private readonly maintenance: MaintenanceService,
   ) {}
 
   private key(token: string): string {
@@ -47,6 +48,7 @@ export class CardIntentService {
   }
 
   async create(principal: Principal, input: CardIntentInput) {
+    await this.maintenance.assertNewOrdersAllowed(); // WB-121: não manda o cliente à página do cartão para o pedido ser recusado
     const token = randomToken(32);
     const expiresAt = new Date(Date.now() + CARD_INTENT_TTL_SECONDS * 1000);
     const { payerDocument, ...rest } = input;
@@ -95,6 +97,7 @@ export class CardIntentService {
 
   /** Completa: consome a intenção (uso único), recarrega a sessão do dono e cria o pedido com o token do cartão. */
   async complete(token: string, card: NonNullable<CreateOrderInput['card']>) {
+    await this.maintenance.assertNewOrdersAllowed(); // antes de consumir a intenção (uso único): em manutenção o link continua valendo para quando voltar
     const intent = await this.read(token, true);
     const loaded = await this.principals.load(intent.userId, intent.sessionId);
     if (!loaded) throw errors.gone('CARD_INTENT_INVALID', 'A sessão do app foi encerrada', 'Volte ao app e entre de novo.');

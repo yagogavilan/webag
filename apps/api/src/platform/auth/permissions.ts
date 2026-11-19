@@ -23,6 +23,9 @@ export const ADMIN_PERMISSIONS = {
   'parameters:write': [SUPER],
   'flags:read': [SUPER, OPS, FIN, SUP],
   'flags:write': [SUPER],
+  /** WB-121 / DEC-073: modo manutenção (parar as vendas). Todo perfil vê o estado; só o super admin liga e desliga. */
+  'maintenance:read': [SUPER, OPS, FIN, SUP],
+  'maintenance:write': [SUPER],
   'legal:read': [SUPER, OPS, FIN, SUP],
   'legal:write': [SUPER],
   /** Auditoria: super admin vê tudo; os demais perfis só as próprias ações (o filtro é forçado no controller). */
