@@ -82,6 +82,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('troca_taxa_alerta_pct', 25, 5, 100, 'Taxa de troca (trocas / pedidos entregues, %) por loja acima da qual o relatório destaca e alerta (WB-248)', 'WB-248'),
   int('troca_resposta_h', 24, 4, 120, 'SLA da loja para responder à troca (h); sem resposta a troca é aprovada automaticamente (DEC-037)', 'HIP-T03'),
   int('coleta_agendamento_dias_uteis', 3, 1, 10, 'Agendamento da coleta (dias úteis)', 'HIP-019'),
+  int('coleta_atrasada_dias_uteis', 1, 1, 5, 'Novo prazo da coleta atrasada, a contar do aviso ao cliente (dias úteis)', 'DEC-062'),
   int('coleta_entrega_item_dias', 7, 1, 10, 'Prazo do cliente para entregar o item (dias)', 'HIP-019'),
   int('reembolso_dias_uteis', 3, 1, 10, 'Reembolso após recebimento (dias úteis)', 'HIP-019'),
   int('mediacao_dias_uteis', 5, 1, 15, 'Prazo da mediação (dias úteis)', 'HIP-020'),

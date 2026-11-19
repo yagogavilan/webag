@@ -346,6 +346,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
   async alertLateDue(now = new Date()): Promise<number> {
     const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
     const collectionDays = await this.params.getNumber('coleta_agendamento_dias_uteis');
+    const lateDays = await this.params.getNumber('coleta_atrasada_dias_uteis');
     const candidates = await this.db
       .select()
       .from(deliveries)
@@ -357,19 +358,19 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       const [claimed] = await this.db.update(deliveries).set({ lateAlertedAt: now }).where(and(eq(deliveries.id, d.id), isNull(deliveries.lateAlertedAt))).returning({ id: deliveries.id });
       if (!claimed) continue;
       await this.payments.raiseAlert(null, d.kind === 'exchange_pickup' ? 'collection_late' : 'delivery_late', { deliveryId: d.id, orderId: d.orderId, status: d.status, overdueMinutes }).catch((e: Error) => this.logger.error(e.message));
-      if (d.kind === 'exchange_pickup') await this.noticeCollectionLate(d, now, collectionDays);
+      if (d.kind === 'exchange_pickup') await this.noticeCollectionLate(d, now, lateDays);
       alerted += 1;
     }
     return alerted;
   }
 
   /**
-   * WB-241 C7: o cliente é avisado do novo prazo da coleta atrasada. Novo prazo = `coleta_agendamento_dias_uteis` dias úteis a contar
-   * do aviso [HIPÓTESE: o PRD não fixa o número; ver `docs/gestao/fila-backend-dev.md`]. Fica no histórico da corrida; falha de canal
-   * nunca desfaz nada.
+   * WB-241 C7 / DEC-062: o cliente é avisado do novo prazo da coleta atrasada = `coleta_atrasada_dias_uteis` (1) dias úteis a contar do
+   * aviso. Fica no histórico da corrida; falha de canal nunca desfaz nada. O relógio de entrega do item fica pausado enquanto a coleta
+   * atrasa por falta de motoboy (`lateStretchStartedAt`, usado pela troca).
    */
-  private async noticeCollectionLate(d: Delivery, now: Date, collectionDays: number): Promise<void> {
-    const newDeadlineAt = businessDeadline(now, collectionDays);
+  private async noticeCollectionLate(d: Delivery, now: Date, lateDays: number): Promise<void> {
+    const newDeadlineAt = businessDeadline(now, lateDays);
     try {
       await this.db.insert(deliveryEvents).values({ deliveryId: d.id, fromStatus: d.status, toStatus: d.status, action: 'collection_late_notice', actorId: null, actorRole: 'system', meta: { newDeadlineAt: newDeadlineAt.toISOString() } });
     } catch (error) {
@@ -382,6 +383,20 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
         this.logger.warn(`aviso de coleta atrasada da corrida ${d.id}: ${safeErrorMessage(error)}`);
       }
     }
+  }
+
+  /**
+   * DEC-062: início do trecho em que a coleta de troca ficou atrasada SEM motoboy (culpa da Webag): o maior entre o fim do prazo de
+   * agendamento (`coleta_agendamento_dias_uteis` dias úteis do "pronto") e a última vez em que a corrida voltou para a fila (`reassign`/`recreate`; os avisos do sistema também têm esse estado e não contam).
+   * Quem chama (a troca) pausa o relógio do item desse instante até a corrida sair da fila. `null` se o prazo ainda não tinha vencido.
+   */
+  async lateStretchStartedAt(tx: Tx, delivery: Pick<Delivery, 'id' | 'readyAt'>, now: Date): Promise<Date | null> {
+    const days = await this.params.getNumber('coleta_agendamento_dias_uteis');
+    const limit = businessDeadline(delivery.readyAt, days);
+    const [last] = await tx.select({ at: sql<Date | null>`max(${deliveryEvents.createdAt})` }).from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, delivery.id), inArray(deliveryEvents.action, ['reassign', 'recreate'])));
+    const entered = last?.at ? new Date(last.at) : delivery.readyAt;
+    const start = new Date(Math.max(limit.getTime(), entered.getTime()));
+    return start.getTime() < now.getTime() ? start : null;
   }
 
   // ------------------------------------------------------------------ atribuição

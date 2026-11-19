@@ -424,6 +424,46 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     }
   });
 
+  it('DEC-062: o aviso da coleta atrasada dá `coleta_atrasada_dias_uteis` (1 dia útil) e o relógio do item fica pausado enquanto a coleta atrasa sem motoboy', async () => {
+    const { businessDeadline } = await import('../src/modules/stores/index.js');
+    const { DeliveriesService } = await import('../src/modules/logistics/index.js');
+    expect((await ctx.app.get(ParametersService).getNumber('coleta_atrasada_dias_uteis'))).toBe(1);
+    const { d, id, run } = await paidPickup();
+    const readyAt = new Date(Date.now() - 8 * 86_400_000);
+    const itemDueAt = new Date(Date.now() + 2 * 3_600_000); // o prazo do item vence em 2 h
+    await ctx.db.update(deliveries).set({ readyAt }).where(eq(deliveries.id, run.id));
+    await ctx.db.update(exchangeRequests).set({ itemDueAt }).where(eq(exchangeRequests.id, id));
+    const notices: ExchangeEvent[] = [];
+    ctx.app.get(ExchangeEventBus).subscribe((e) => void (e.notice === 'collection_late' && notices.push(e)));
+    await ctx.app.get(DeliveriesService).alertLateDue();
+    const notice = notices.find((e) => e.exchangeId === id)!;
+    expect(Math.abs(notice.newDeadlineAt!.getTime() - businessDeadline(new Date(), 1).getTime())).toBeLessThan(60_000); // 1 dia útil (antes eram 3)
+    // a coleta atrasa por falta de motoboy: passado o prazo do item, a troca NÃO expira (o relógio está pausado)
+    await service().sweep(new Date(Date.now() + 3 * 3_600_000));
+    expect((await exRow(id)).status).toBe('approved');
+    // o motoboy é atribuído: o prazo do cliente ganha o tempo em que a coleta ficou atrasada
+    const limit = businessDeadline(readyAt, 3);
+    const courier = (await ctx.http.post(`${base}/couriers`).set(bearer(ops.accessToken)).send({ name: 'Moto Pausa', phone: `11 9${String(Math.floor(1e7 + Math.random() * 9e7))}`, documentsChecked: true }).expect(201)).body as { id: string };
+    const assignedAt = Date.now();
+    await ctx.http.post(`${base}/deliveries/${run.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: courier.id, addressConfirmed: true }).expect(200);
+    const extended = (await exRow(id)).itemDueAt!.getTime();
+    expect(Math.abs(extended - (itemDueAt.getTime() + (assignedAt - limit.getTime())))).toBeLessThan(60_000);
+    expect(extended).toBeGreaterThan(itemDueAt.getTime() + 24 * 3_600_000);
+    // sem a coleta atrasada na fila, o prazo volta a correr: vencido, a troca expira
+    await ctx.db.update(exchangeRequests).set({ itemDueAt: new Date(Date.now() - 1000) }).where(eq(exchangeRequests.id, id));
+    await service().sweep();
+    expect((await exRow(id)).status).toBe('expired');
+    void d;
+  });
+
+  it('DEC-062: coleta que NÃO atrasou não mexe no prazo do item', async () => {
+    const { id, run } = await paidPickup();
+    const before = (await exRow(id)).itemDueAt!.getTime();
+    const courier = (await ctx.http.post(`${base}/couriers`).set(bearer(ops.accessToken)).send({ name: 'Moto Sem Atraso', phone: `11 9${String(Math.floor(1e7 + Math.random() * 9e7))}`, documentsChecked: true }).expect(201)).body as { id: string };
+    await ctx.http.post(`${base}/deliveries/${run.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: courier.id, addressConfirmed: true }).expect(200);
+    expect((await exRow(id)).itemDueAt!.getTime()).toBe(before);
+  });
+
   it('BUG-017 / RN-11: troca com o item recebido sem desfecho depois de `reembolso_dias_uteis` dias úteis gera UM alerta ao financeiro', async () => {
     const { d, id, run } = await paidPickup();
     await courierWalk(run.id, 'delivered');

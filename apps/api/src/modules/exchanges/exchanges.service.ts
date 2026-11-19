@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, asc, count, eq, inArray, isNotNull, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, isNull, lte, ne, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -19,6 +19,7 @@ import { orderItems, orders } from '../orders/db/schema.js';
 import { generateOrderNumber } from '../orders/order-number.js';
 import { PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
 import { paymentAttempts } from '../payments/db/schema.js';
+import { deliveryEvents } from '../logistics/db/schema.js';
 import { stores } from '../stores/db/schema.js';
 import { businessDeadline } from '../stores/index.js';
 import { exchangeEvents, exchangeRequests, OPEN_EXCHANGE_STATUSES, type ExchangeActor, type ExchangeStatus } from './db/schema.js';
@@ -654,8 +655,22 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
   // =================================================================== corridas (coleta e reentrega)
 
-  async onDeliveryChange(tx: Tx, delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
-    if (!delivery.exchangeId || to !== 'delivered') return;
+  async onDeliveryChange(tx: Tx, delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
+    if (!delivery.exchangeId) return;
+    // DEC-062: a coleta saiu da fila depois de atrasar por falta de motoboy (culpa da Webag): o prazo do cliente para entregar o item
+    // ganha o tempo do atraso (o relógio ficou pausado). Ausência do cliente não passa por aqui: acontece com o motoboy já atribuído.
+    if (delivery.kind === 'exchange_pickup' && from === 'ready_for_collection' && to !== 'ready_for_collection' && to !== 'cancelled') {
+      const { ex } = await this.lockFor(tx, delivery.exchangeId);
+      const now = new Date();
+      const since = ex.status === 'approved' && ex.itemDueAt ? await this.deliveries.lateStretchStartedAt(tx, delivery, now) : null;
+      if (since && ex.itemDueAt) {
+        const pausedMs = now.getTime() - since.getTime();
+        const itemDueAt = new Date(ex.itemDueAt.getTime() + pausedMs);
+        await tx.update(exchangeRequests).set({ itemDueAt, updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
+        await tx.insert(deliveryEvents).values({ deliveryId: delivery.id, fromStatus: to, toStatus: to, action: 'item_clock_paused', actorId: null, actorRole: 'system', meta: { pausedMinutes: Math.round(pausedMs / 60_000), itemDueAt: itemDueAt.toISOString() } });
+      }
+    }
+    if (to !== 'delivered') return;
     const { ex } = await this.lockFor(tx, delivery.exchangeId);
     const now = new Date();
     if (delivery.kind === 'exchange_pickup') {
@@ -831,12 +846,14 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       }
     }
     const feeExpired = await this.closeDue('awaiting_fee', exchangeRequests.feeDueAt, now, 'cancelled', 'Taxa de troca não paga no prazo', false);
-    const itemExpired = await this.closeDue('approved', exchangeRequests.itemDueAt, now, 'expired', 'Item não entregue no prazo', false);
+    // DEC-062: o relógio do item fica pausado enquanto a coleta está atrasada na fila (sem motoboy, aviso já emitido): não expira por demora da Webag.
+    const lateCollection = sql`exists (select 1 from deliveries d where d.exchange_id = ${exchangeRequests.id} and d.kind = 'exchange_pickup' and d.status = 'ready_for_collection' and d.late_alerted_at is not null)`;
+    const itemExpired = await this.closeDue('approved', exchangeRequests.itemDueAt, now, 'expired', 'Item não entregue no prazo', false, sql`not ${lateCollection}`);
     return { autoApproved, feeExpired, itemExpired, reminders };
   }
 
-  private async closeDue(status: ExchangeStatus, column: AnyPgColumn, now: Date, to: 'cancelled' | 'expired', reason: string, refundFee: boolean): Promise<number> {
-    const due = await this.db.select({ id: exchangeRequests.id }).from(exchangeRequests).where(and(eq(exchangeRequests.status, status), lte(column, now))).limit(100);
+  private async closeDue(status: ExchangeStatus, column: AnyPgColumn, now: Date, to: 'cancelled' | 'expired', reason: string, refundFee: boolean, extra?: SQL): Promise<number> {
+    const due = await this.db.select({ id: exchangeRequests.id }).from(exchangeRequests).where(and(eq(exchangeRequests.status, status), lte(column, now), extra)).limit(100);
     let closed = 0;
     for (const row of due) {
       let done: { event: ExchangeEvent; refund: PendingRefund | null } | null = null;
