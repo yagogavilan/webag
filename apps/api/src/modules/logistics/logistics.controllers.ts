@@ -1,10 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { AdminOnly, Ctx, type RequestContext } from '../../platform/auth/decorators.js';
 import { adminHasPermission } from '../../platform/auth/permissions.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
+import { AuditService } from '../admin/index.js';
+import { LogisticsReportService } from './logistics-report.service.js';
 import { couriers } from './db/schema.js';
 import { CouriersService } from './couriers.service.js';
 import { DeliveriesService, type Delivery, type DeliveryEvent } from './deliveries.service.js';
@@ -233,5 +236,47 @@ export class DeliveriesAdminController {
   async payouts(@Body(new ZodPipe(payoutBody)) body: z.infer<typeof payoutBody>, @Ctx() ctx: RequestContext) {
     const result = await this.deliveries.markPaid(body.deliveryIds, new Date(`${body.paidOn}T12:00:00-03:00`), ctx, body.overrideReason);
     return { count: result.count, total: money(result.totalCents) };
+  }
+}
+
+const reportQuery = z
+  .strictObject({
+    from: z.iso.date(),
+    to: z.iso.date(),
+    cityId: z.uuid().optional(),
+    storeId: z.uuid().optional(),
+    courierId: z.uuid().optional(),
+    kind: z.enum(DELIVERY_KINDS).optional(),
+    format: z.enum(['json', 'csv']).optional(),
+  })
+  .refine((v) => v.from <= v.to, { message: 'O início do período não pode ser depois do fim.', path: ['from'] })
+  .refine((v) => (Date.parse(v.to) - Date.parse(v.from)) / 86_400_000 <= 366, { message: 'Período de no máximo 366 dias.', path: ['to'] });
+
+/** Relatórios de logística (WB-240): super admin, operação e financeiro; suporte não vê custo. */
+@Controller('v1/admin/logistics/reports')
+export class LogisticsReportsController {
+  constructor(
+    private readonly reports: LogisticsReportService,
+    private readonly audit: AuditService,
+  ) {}
+
+  @AdminOnly('logistics:report')
+  @Get('summary')
+  summary(@Query(new ZodPipe(reportQuery)) query: z.infer<typeof reportQuery>) {
+    return this.reports.summary({ from: query.from, to: query.to, cityId: query.cityId, storeId: query.storeId, courierId: query.courierId, kind: query.kind });
+  }
+
+  /** "A pagar por motoboy"; `format=csv` exporta e a exportação é auditada (WB-240 C2). */
+  @AdminOnly('logistics:report')
+  @Get('payable')
+  async payable(@Query(new ZodPipe(reportQuery)) query: z.infer<typeof reportQuery>, @Ctx() ctx: RequestContext, @Res({ passthrough: true }) res: Response) {
+    const report = await this.reports.payable({ from: query.from, to: query.to, cityId: query.cityId, storeId: query.storeId, courierId: query.courierId, kind: query.kind });
+    if (query.format === 'csv') {
+      await this.audit.recordStandalone(ctx, { action: 'logistics.payable.export', targetType: 'report', targetId: 'logistics-payable', after: { from: query.from, to: query.to, couriers: report.data.length, totalCents: report.total.amount } });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="a-pagar-${query.from}-${query.to}.csv"`);
+      return this.reports.payableCsv(report);
+    }
+    return report;
   }
 }

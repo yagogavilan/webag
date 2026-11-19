@@ -46,6 +46,8 @@ export const ADMIN_PERMISSIONS = {
   /** L.3: logística da Webag. Operação e super admin despacham e registram custo; financeiro e suporte só leem. */
   'logistics:read': [SUPER, OPS, FIN, SUP],
   'logistics:write': [SUPER, OPS],
+  /** WB-240: relatórios de logística (custo e margem): super admin, operação e financeiro. */
+  'logistics:report': [SUPER, OPS, FIN],
   /** SEC-145: marcar o lote do motoboy como pago é do financeiro (quem lança o custo não aprova o pagamento). */
   'logistics:payout': [SUPER, FIN],
   /** SEC-144: "Revelar" telefone e endereço do cliente da corrida, com motivo e auditoria; o detalhe comum não traz o contato. */

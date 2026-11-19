@@ -1960,6 +1960,114 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/reports/summary:
+    get:
+      tags: [logistics]
+      operationId: getLogisticsReportSummary
+      summary: Relatório de logística (WB-240)
+      description: "Corridas do período pela hora em que ficaram prontas (dia civil de Brasília), sem as canceladas. Entregas, no prazo (pronto até entregue dentro de `logistica_alerta_entrega_min`, [HIPÓTESE] até o PO definir o prazo), falhas por motivo, tempos médios em minutos, taxa cobrada, custo, margem (só das corridas com custo registrado), custo do subsídio do frete grátis (taxa zero) e margem por cidade com `negativeMargin` destacando a negativa; os totais são a soma das linhas. Permissão: `logistics:report` (super admin, operação, financeiro)."
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date, description: 'Inclusivo; no máximo 366 dias do início' } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: courierId, in: query, schema: { type: string, format: uuid } }
+        - { name: kind, in: query, schema: { type: string, enum: [delivery, exchange_pickup, exchange_return] } }
+      responses:
+        '200':
+          description: Relatório
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, totals, byCity]
+                properties:
+                  period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+                  totals:
+                    type: object
+                    properties:
+                      deliveries: { type: integer }
+                      finished: { type: integer }
+                      delivered: { type: integer }
+                      onTime: { type: integer }
+                      onTimeLimitMinutes: { type: integer }
+                      failuresByReason: { type: object, additionalProperties: { type: integer } }
+                      avgMinutes:
+                        type: object
+                        properties:
+                          readyToAssigned: { type: [number, 'null'] }
+                          readyToCollected: { type: [number, 'null'] }
+                          readyToDelivered: { type: [number, 'null'] }
+                      feeCollected: { $ref: '#/components/schemas/Money' }
+                      cost: { $ref: '#/components/schemas/Money' }
+                      margin: { $ref: '#/components/schemas/Money' }
+                      runsWithoutCost: { type: integer }
+                      freeShippingDeliveries: { type: integer }
+                      freeShippingCost: { $ref: '#/components/schemas/Money' }
+                  byCity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        cityId: { type: [string, 'null'], format: uuid }
+                        cityName: { type: [string, 'null'] }
+                        deliveries: { type: integer }
+                        fee: { $ref: '#/components/schemas/Money' }
+                        cost: { $ref: '#/components/schemas/Money' }
+                        margin: { $ref: '#/components/schemas/Money' }
+                        negativeMargin: { type: boolean }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/reports/payable:
+    get:
+      tags: [logistics]
+      operationId: getLogisticsReportPayable
+      summary: A pagar por motoboy (WB-240 C2)
+      description: "Custo das corridas já lançadas e ainda não pagas, por motoboy, com quem lançou (`registeredBy`, SEC-145). `format=csv` exporta (valores em centavos, BOM) e a exportação é auditada (`logistics.payable.export`). Permissão: `logistics:report`."
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date, description: 'Inclusivo; no máximo 366 dias do início' } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: courierId, in: query, schema: { type: string, format: uuid } }
+        - { name: kind, in: query, schema: { type: string, enum: [delivery, exchange_pickup, exchange_return] } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+      responses:
+        '200':
+          description: A pagar
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, data, total, runs]
+                properties:
+                  period: { type: object }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        courierId: { type: string, format: uuid }
+                        courierName: { type: string }
+                        courierPhone: { type: string }
+                        runs: { type: integer }
+                        total: { $ref: '#/components/schemas/Money' }
+                        oldestRunAt: { type: string, format: date-time }
+                        registeredBy: { type: array, items: { type: string, format: uuid } }
+                  total: { $ref: '#/components/schemas/Money' }
+                  runs: { type: integer }
+            text/csv:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/logistics/deliveries/payouts:
     post:
       tags: [logistics]
