@@ -77,3 +77,8 @@ Os testes `it.fails` de `apps/api/test/qa-onda3-5-lacunas.e2e-spec.ts` ficam ver
 - [x] FEITOS: O6.1 a O6.5, B.1, B.2, DT-052 parcial (commits da Onda 6; ADR-012).
 - ABERTOS, nesta ordem: Q.1 (BUG-011, ALTA, bloqueia G4), R.1 a R.6 (revisão do tech-lead), Q.2 e Q.3 (bugs do QA), DT-059 a DT-064.
 - Frontend pendente: página pública `/pagar/cartao?i=<token>` (apps/web), `POST /v1/me/push-campaigns/{id}/opened` no app, I11 (R.7).
+
+## SEGURANÇA DA ONDA 6 (DEC-050) — logo após Q.1; SEC-155 bloqueia o G4
+S6.1 [ ] SEC-155 (ALTA): conferir `firstPurchaseOnly` do cupom no servidor (e-mail confirmado + nenhum pedido pago anterior do mesmo dispositivo/telefone/endereço/documento, SEC-060); proibido criar cupom desse tipo até a correção.
+S6.2 [ ] SEC-152 (via código da página web não revela se a conta confirmada existe), SEC-153 (via por senha respeita o step-up), SEC-156 (CSV: escapar fórmula em todos os campos de texto livre: =, +, -, @, tab, CR), SEC-157 (derrubar sockets na exclusão e revogação), SEC-158 (anonimização também em texto livre: notas, endereços, motivos, mensagens), SEC-154 (arrependimento padrão 72 h, parâmetro editável), SEC-160 (alerta quando a anonimização falhar), SEC-159 (truncar IP /24 e /48 na anonimização).
+S6.3 [ ] Baixas SEC-161 a 165 e 167 conforme o tempo. Transformar os ataques A1 a A6 do `revisao-onda6.md` em testes e2e do repositório.
