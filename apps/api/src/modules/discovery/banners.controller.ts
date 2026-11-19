@@ -21,6 +21,7 @@ const bannerShape = {
   position: z.number().int().min(0).max(999).optional(),
   active: z.boolean().optional(),
 };
+const eventSchema = z.strictObject({ type: z.enum(['impression', 'click']) });
 const createSchema = z.strictObject(bannerShape);
 const updateSchema = z.strictObject(Object.fromEntries(Object.entries(bannerShape).map(([k, v]) => [k, v.optional()])) as { [K in keyof typeof bannerShape]: z.ZodOptional<(typeof bannerShape)[K]> });
 
@@ -35,6 +36,15 @@ export class BannersController {
   @Header('Cache-Control', 'public, max-age=60')
   async list(@Query(new ZodPipe(publicQuery)) query: z.infer<typeof publicQuery>) {
     return { data: await this.banners.listPublic(query.cityId), nextCursor: null };
+  }
+
+  /** O app avisa a impressão e o clique do banner (WB-115 C5). Público, com limite por IP; banner fora do ar não conta. */
+  @Public()
+  @HttpCode(204)
+  @RateLimit({ name: 'banner-event', limit: 240, windowSeconds: 60 })
+  @Post('banners/:bannerId/events')
+  async event(@Param('bannerId') id: string, @Body(new ZodPipe(eventSchema)) body: z.infer<typeof eventSchema>): Promise<void> {
+    await this.banners.recordEvent(uuidParam(id), body.type);
   }
 
   @AdminOnly('banners:read')

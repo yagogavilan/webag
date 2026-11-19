@@ -239,6 +239,13 @@
       "when": 1795058911599,
       "tag": "0033_o63_push_campaigns",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795059199764,
+      "tag": "0034_o63_highlights_banner_metrics",
+      "breakpoints": true
     }
   ]
 }

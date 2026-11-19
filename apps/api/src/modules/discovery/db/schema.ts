@@ -29,6 +29,9 @@ export const banners = pgTable(
     endsAt: timestamp({ withTimezone: true }).notNull(),
     position: integer().notNull().default(0),
     active: boolean().notNull().default(true),
+    /** WB-115 C5: contadores totais (sem dado pessoal). */
+    impressions: integer().notNull().default(0),
+    clicks: integer().notNull().default(0),
     createdBy: uuid().references(() => users.id),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

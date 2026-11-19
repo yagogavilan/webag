@@ -87,9 +87,13 @@ export class DiscoveryService {
         .sort((a, b) => b.approvedAt.localeCompare(a.approvedAt))
         .slice(0, SECTION_SIZE);
       const offers = mode === 'delivery' ? await this.products.query(feed, { promoOnly: true, sort: 'discount', offset: 0, limit: SECTION_SIZE }) : [];
+      const highlights = await this.highlights(feed, mode, now);
       return {
         mode,
         empty: feed.length === 0,
+        /** Destaques fixados pelo admin (WB-115 C4): vêm ANTES dos critérios automáticos; só itens visíveis neste ponto. */
+        highlightStores: highlights.stores.map(presentStoreCard),
+        highlightProducts: highlights.products.map(presentProductCard),
         nearbyStores: nearby.map(presentStoreCard),
         newStores: newest.map(presentStoreCard),
         offers: offers.map(presentProductCard),
@@ -98,6 +102,23 @@ export class DiscoveryService {
         availableCategoryIds: await this.availableCategories(feed),
       };
     });
+  }
+
+  private async highlights(feed: FeedStore[], mode: DiscoveryMode, now: Date) {
+    const rows = await this.db.execute<{ kind: 'store' | 'product'; target_id: string }>(sql`
+      select h.kind, h.target_id from home_highlights h
+      where h.active and h.starts_at <= ${now.toISOString()}::timestamptz and h.ends_at > ${now.toISOString()}::timestamptz
+        and (h.city_id is null or h.city_id = (case h.kind
+          when 'store' then (select s.address_city_id from stores s where s.id = h.target_id)
+          else (select s.address_city_id from products p join stores s on s.id = p.store_id where p.id = h.target_id) end))
+      order by h.position, h.created_at limit 12`);
+    const storeIds = rows.rows.filter((r) => r.kind === 'store').map((r) => r.target_id);
+    const productIds = rows.rows.filter((r) => r.kind === 'product').map((r) => r.target_id);
+    const byId = new Map(feed.map((store) => [store.id, store]));
+    const stores = storeIds.map((id) => byId.get(id)).filter((store): store is FeedStore => store !== undefined);
+    const products = mode === 'delivery' && productIds.length > 0 ? await this.products.query(feed, { productIds, sort: 'relevance', offset: 0, limit: productIds.length }) : [];
+    const rank = new Map(productIds.map((id, index) => [id, index]));
+    return { stores, products: [...products].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) };
   }
 
   /** Categorias com ao menos uma loja visível no ponto, incluindo a categoria-mãe das filhas (WB-011 C4). */

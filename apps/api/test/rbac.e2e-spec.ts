@@ -56,6 +56,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'exchanges:waive-fee': null,
   'privacy:manage': { method: 'get', path: '/v1/admin/privacy-requests' },
   'marketing:push': { method: 'get', path: '/v1/admin/push/campaigns' },
+  'coupons:read': { method: 'get', path: '/v1/admin/coupons' },
+  'coupons:write': null,
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,
   'orders:refund': null,

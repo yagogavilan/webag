@@ -16,6 +16,8 @@ export interface ProductQuery {
   minPriceCents?: number | undefined;
   maxPriceCents?: number | undefined;
   promoOnly?: boolean | undefined;
+  /** Só estes produtos (destaques da Início). */
+  productIds?: string[] | undefined;
   sort: ProductSort;
   offset: number;
   limit: number;
@@ -80,6 +82,7 @@ export class ProductFeedService {
     if (query.minPriceCents !== undefined) conditions.push(sql`${EFFECTIVE_PRICE} >= ${query.minPriceCents}`);
     if (query.maxPriceCents !== undefined) conditions.push(sql`${EFFECTIVE_PRICE} <= ${query.maxPriceCents}`);
     if (query.promoOnly) conditions.push(PROMO_ACTIVE);
+    if (query.productIds) conditions.push(sql`p.id = any(${pgArray(query.productIds, 'uuid')})`);
 
     const score = norm && text ? sql`(case when f_norm(p.name) like f_norm(${likeEscape(text)}) || '%' then 3 when f_norm(p.name) like '%' || f_norm(${likeEscape(text)}) || '%' then 2 else 0 end + word_similarity(${norm}, f_norm(p.name)))` : sql`0::float8`;
     const discount = sql`(case when ${PROMO_ACTIVE} then (p.base_price_cents - p.promo_price_cents) * 100.0 / p.base_price_cents else 0 end)`;

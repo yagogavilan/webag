@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { CacheService } from '../../platform/cache/cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
@@ -65,6 +65,16 @@ export class BannersService {
     });
   }
 
+  /** WB-115 C5: o app avisa a impressão e o clique; só conta banner vigente (sem dado do aparelho nem do cliente). */
+  async recordEvent(id: string, type: 'impression' | 'click'): Promise<void> {
+    const now = new Date();
+    const live = and(eq(banners.id, id), eq(banners.active, true), lte(banners.startsAt, now), gt(banners.endsAt, now));
+    await this.db
+      .update(banners)
+      .set(type === 'impression' ? { impressions: sql`${banners.impressions} + 1` } : { clicks: sql`${banners.clicks} + 1` })
+      .where(live);
+  }
+
   async listAdmin() {
     const rows = await this.db
       .select({ banner: banners, asset: mediaAssets })
@@ -78,6 +88,10 @@ export class BannersService {
       startsAt: banner.startsAt.toISOString(),
       endsAt: banner.endsAt.toISOString(),
       active: banner.active,
+      impressions: banner.impressions,
+      clicks: banner.clicks,
+      /** Taxa de cliques em % com 1 casa (nula sem impressão). */
+      ctrPct: banner.impressions > 0 ? Math.round((banner.clicks * 1000) / banner.impressions) / 10 : null,
       live: banner.active && banner.startsAt.getTime() <= now && banner.endsAt.getTime() > now,
     }));
   }

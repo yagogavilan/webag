@@ -63,6 +63,9 @@ export const ADMIN_PERMISSIONS = {
   'privacy:manage': [SUPER],
   /** WB-197: campanhas de push de marketing (financeiro e suporte não veem). */
   'marketing:push': [SUPER, OPS],
+  /** WB-116: cupons da plataforma. Financeiro lê (relatório de uso e custo); só operação e super admin criam e pausam. */
+  'coupons:read': [SUPER, OPS, FIN],
+  'coupons:write': [SUPER, OPS],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */
