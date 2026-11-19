@@ -228,3 +228,15 @@ Ligado e verificado contra a API local do HEAD (capturas `docs/qa/relatorios/cap
 | Demo fora do horário (CEO) | Quem clonar e rodar à noite vê "entrega indisponível" (logística 09:00-20:00, BUG-016). Em dev/seed: horário da logística 00:00-23:59 por padrão ou override `LOGISTICS_HOURS_OVERRIDE` documentado no README; produção mantém o horário real. Adicionar `OrderSummary.eta` (pendente U8.5). |
 
 | Seed de banners (CEO) | `apps/api/seed/onda3.ts` `bannerImage` gera gradiente com círculos e sem conteúdo (fere "sem gradiente"): trocar por arte sólida do kit v3 (SVG/PNG gerado: bloco sólido, objeto da categoria, título e CTA); conferir que os arquivos de banner do seed existem no armazenamento (hoje 404 em localhost:9000). |
+
+## Z2. Do Security em 2026-11-19 (revisão da DEC-073: `docs/seguranca/revisoes/onda-8-dec-073.md`)
+
+G4 **APROVADO COM RESSALVAS**. SEC-180 verificado (corrigido na API). Detalhes, cenários e "como verificar" no documento.
+
+| Item | O que fazer |
+|---|---|
+| Z2.1 [ ] **SEC-181 (Média; antes do piloto)** | Busca de `GET /v1/admin/users`: e-mail e celular **só por valor exato** (e-mail com `eq`, celular com 10 ou 11 dígitos depois do `phoneSchema`); nome por trecho com no mínimo 3 caracteres; auditar `user.search` (tipo do termo, `sha256` do termo, número de resultados, nunca o termo cru); limite por admin (`userId`). Hoje o suporte recupera celular e e-mail mascarados por trecho (13 e 223 buscas, provado) |
+| Z2.2 [ ] **SEC-182 (Média; antes do piloto e recomendado antes do G5)** | Conta `blocked` não tem caminho de exclusão. Opção A (preferida): vias A e B da `/excluir-conta` aceitam `blocked`. **Obrigatório junto:** o arrependimento (`account-deletion.service.ts:289` e `privacy:cancel-deletion`) restaura o status **anterior** (`previousUserStatus`), senão "excluir e desistir" fura o bloqueio. Opção B: CLI `privacy:delete-account` auditada |
+| Z2.3 [ ] SEC-183 (Baixa) | Na suspensão da loja causada pelo bloqueio do dono, usar texto fixo ao lojista; o motivo do bloqueio fica só em `user_status_history` e na auditoria |
+| Z2.4 [ ] SEC-184 (Baixa) | `GET /v1/admin/orders/{id}`: `values.commission`, `applicationFee` e `merchantNetBeforeProviderFee` = `null` sem `commissions:read` (operação e suporte) |
+| Z2.5 [ ] SEC-185 (Baixa) | Prazo de retenção para `user_status_history` (privacy-map + retenção diária; prazo a validar com o PO e o jurídico) |

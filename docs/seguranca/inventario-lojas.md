@@ -1,6 +1,7 @@
 # Inventário para o Data Safety (Google Play) e o App Privacy (App Store)
 
 - **Dono:** security-engineer. **Conferido contra o código em:** 2026-11-19, branch `claude/admiring-lamport-62tq1a` (`dad9c96`; app e web em `b726960`). Mudanças desde `98764b2`: geocodificador da API configurável e desligado por padrão (SEC-169), cupom pessoal de compensação, "não recebi", build do app recusa URL http (SEC-172). Tela "Meus dados" e tela de Licenças **não** criam dado novo (nome e celular já estavam no item 1/3). **Substitui** a tabela resumida de `docs/deploy/checklist-publicacao-lojas.md` §5 e a de `revisao-onda6-frontends.md` (o checklist deve apontar para cá).
+- **Reconferido em 2026-11-19 (DEC-073, `04bb1d9`):** nenhum dado novo coletado pelo app. O B2 (e-mail ao lojista), o B3, o B4 (`user_status_history`, registro interno do admin) e o modo manutenção não mudam os formulários. A DEC-072 só **restringe** o que a loja vê (§3). Ver `revisoes/onda-8-dec-073.md`.
 - **Escopo:** só o **app** (Expo, consumidor). O painel do lojista e o admin são web e não entram nos formulários das lojas. O registro de operações completo (art. 37) é o de `docs/produto/prd/lgpd.md` §Regras.
 - **Regra:** mudou o app ou a API (dado novo, SDK novo, Sentry no app, login social), atualize esta página **antes** do envio. Formulário divergente do app é motivo de remoção nas duas lojas.
 - Bases legais e prazos são recomendação técnica `[validar com o jurídico]`.
@@ -60,7 +61,7 @@ Android: `ACCESS_FINE_LOCATION` e `ACCESS_BACKGROUND_LOCATION` bloqueadas (`app.
 
 | Destinatário | Recebe | Natureza | Declarar como compartilhado? |
 |---|---|---|---|
-| Loja do pedido | Nome, telefone (mascarado + "Revelar"), endereço, itens | Controladora própria para entrega e nota (Termos do Lojista, item 3) | **Recomendado: sim** (Google isenta transferência iniciada pelo usuário, mas a loja é outra controladora; declarar é o lado seguro) `[jurídico]` |
+| Loja do pedido | Primeiro nome e itens; telefone (só entrega) e endereço **só enquanto o pedido está ativo** (DEC-072: concluído, recusado, cancelado ou expirado vai sem endereço nem telefone, também na comanda). O e-mail de pedido novo à loja (B2) não leva nenhum dado do cliente | Controladora própria para entrega e nota (Termos do Lojista, item 3) | **Recomendado: sim** (Google isenta transferência iniciada pelo usuário, mas a loja é outra controladora; declarar é o lado seguro) `[jurídico]` |
 | Motoboy (via operação, WhatsApp) | Nome, telefone, endereço da entrega | Prestador da Webag | Não (operador), mas está na política (SEC-146) |
 | Mercado Pago | E-mail, CPF (se exigido), valor; cartão direto no navegador | Operador do pagamento e controlador do próprio antifraude | Não como "compartilhamento" (operador); citar na política |
 | Expo, FCM, APNs | Token e texto da notificação | Operadores | Não |
