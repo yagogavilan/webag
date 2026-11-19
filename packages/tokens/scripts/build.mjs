@@ -53,6 +53,7 @@ const variables = flatten(tokens)
 const textClasses = Object.entries(tokens.textStyle)
   .map(([name, style]) => {
     const lines = [
+      ...(style.family === 'display' ? ['  font-family: var(--wb-font-family-display);'] : []),
       `  font-size: ${style.size}px;`,
       `  line-height: ${style.lineHeight}px;`,
       `  font-weight: ${style.weight};`,

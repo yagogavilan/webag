@@ -1,0 +1,62 @@
+{
+  "$description": "Tema de marca 'webag' (identidade v2, derivada da logo do fundador, DEC-040). Magenta #C44DD9 exato = brand.500. Racional, regras de uso e contrastes: docs/design/identidade-v2.md. Ativo via '$theme' no tokens.json.",
+  "color": {
+    "brand": {
+      "$description": "Orquidea/magenta Webag. 500 = cor exata da logo (#C44DD9): so areas amplas, simbolo, ilustracao, icone do app e TEXTO GRANDE em branco (3,9:1). 600/700/800 = acao e texto (AA). 50/100/200 = fundos suaves. 300/400/900 so decorativos, nunca texto.",
+      "50": "#FBF1FD",
+      "100": "#F6E0FA",
+      "200": "#EDC2F4",
+      "300": "#E198EC",
+      "400": "#D370E3",
+      "500": "#C44DD9",
+      "600": "#A02DB8",
+      "700": "#86249B",
+      "800": "#6B1C7D",
+      "900": "#4A1356"
+    },
+    "neutral": {
+      "$description": "Neutros com um fio de ameixa (matiz ~290, saturacao baixa) para combinar com o magenta; sem o bege quente da v1. 500 so para elemento nao textual (borda de campo, icone inativo): 3,6:1 a 4,1:1. 400 so decorativo/desabilitado.",
+      "0": "#FFFFFF",
+      "50": "#FAF8FB",
+      "100": "#F3F0F5",
+      "200": "#E8E3EB",
+      "300": "#D6CFDB",
+      "400": "#B3ABB9",
+      "500": "#837A8A",
+      "600": "#5F566A",
+      "700": "#443C4C",
+      "800": "#2C2632",
+      "900": "#1C1721"
+    },
+    "accent": {
+      "$description": "Acento de apoio 'sol' (HIPOTESE, validar com o fundador). Uso: selo de promocao, destaque de preco riscado, no maximo ~3% da tela. Sempre com texto escuro (onBase); nunca texto amarelo sobre branco; nunca como estado de alerta.",
+      "base": "#FFC93C",
+      "onBase": "{color.neutral.900}"
+    },
+    "tile": {
+      "$description": "6 fundos suaves para tiles de categoria e blocos de apoio (texto neutral.900 por cima, 13,9:1 a 15,5:1). Distinguiveis entre si; rotulo sempre visivel (nao depender so de cor).",
+      "1": "{color.brand.100}",
+      "2": "#FFE3D1",
+      "3": "#D6F2E3",
+      "4": "#DAE9FB",
+      "5": "#FFF0BF",
+      "6": "#FFDCE6"
+    },
+    "tileInk": {
+      "$description": "Tinta do icone duotone sobre cada tile (>= 4,3:1 sobre o fundo do mesmo slot).",
+      "1": "{color.brand.700}",
+      "2": "#A8400A",
+      "3": "{color.feedback.success.base}",
+      "4": "{color.feedback.info.base}",
+      "5": "{color.feedback.warning.base}",
+      "6": "#A3214F"
+    },
+    "surface": {
+      "hero": "{color.brand.500}",
+      "heroDeep": "{color.brand.800}"
+    },
+    "text": {
+      "onHero": "{color.neutral.0}"
+    }
+  }
+}

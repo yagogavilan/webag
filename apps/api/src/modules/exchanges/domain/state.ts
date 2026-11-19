@@ -1,0 +1,36 @@
+import type { ExchangeActor, ExchangeStatus } from '../db/schema.js';
+
+/** Transições válidas da solicitação de troca e quem pode fazê-las (validadas no servidor, RN-11). */
+const RULES: Record<ExchangeStatus, readonly { to: ExchangeStatus; actors: readonly ExchangeActor[] }[]> = {
+  requested: [
+    { to: 'awaiting_fee', actors: ['store', 'system', 'admin'] },
+    { to: 'approved', actors: ['store', 'system', 'admin'] },
+    { to: 'rejected', actors: ['store', 'admin'] },
+    { to: 'in_mediation', actors: ['store', 'admin'] }, // defeito: a loja não recusa sozinha, vai à mediação
+    { to: 'cancelled', actors: ['customer', 'admin'] },
+  ],
+  awaiting_fee: [
+    { to: 'approved', actors: ['system'] }, // pagamento confirmado
+    { to: 'cancelled', actors: ['customer', 'system', 'admin'] }, // desistiu ou taxa não paga no prazo
+  ],
+  approved: [
+    { to: 'item_received', actors: ['store', 'admin'] },
+    { to: 'completed', actors: ['store', 'system', 'admin'] }, // troca na loja ou reembolso direto
+    { to: 'in_mediation', actors: ['store', 'admin'] },
+    { to: 'cancelled', actors: ['customer', 'admin'] },
+    { to: 'expired', actors: ['system'] },
+  ],
+  item_received: [{ to: 'completed', actors: ['system', 'admin'] }],
+  in_mediation: [
+    { to: 'approved', actors: ['admin'] },
+    { to: 'completed', actors: ['admin'] },
+    { to: 'rejected', actors: ['admin'] },
+  ],
+  completed: [],
+  rejected: [],
+  cancelled: [],
+  expired: [],
+};
+
+export const canExchangeTransition = (from: ExchangeStatus, to: ExchangeStatus, actor: ExchangeActor): boolean => RULES[from].some((r) => r.to === to && r.actors.includes(actor));
+export const isOpenExchange = (status: ExchangeStatus): boolean => status === 'requested' || status === 'awaiting_fee' || status === 'approved' || status === 'item_received' || status === 'in_mediation';

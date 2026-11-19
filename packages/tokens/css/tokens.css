@@ -2,27 +2,27 @@
 /* Regerar: pnpm --filter @webag/tokens build */
 :root {
   color-scheme: light;
-  --wb-color-brand-50: #E6F3F3;
-  --wb-color-brand-100: #CBE6E6;
-  --wb-color-brand-200: #9FD0D1;
-  --wb-color-brand-300: #6FB9BC;
-  --wb-color-brand-400: #3A9DA2;
-  --wb-color-brand-500: #00838A;
-  --wb-color-brand-600: #00696F;
-  --wb-color-brand-700: #005A5F;
-  --wb-color-brand-800: #004A4F;
-  --wb-color-brand-900: #00363A;
+  --wb-color-brand-50: #FBF1FD;
+  --wb-color-brand-100: #F6E0FA;
+  --wb-color-brand-200: #EDC2F4;
+  --wb-color-brand-300: #E198EC;
+  --wb-color-brand-400: #D370E3;
+  --wb-color-brand-500: #C44DD9;
+  --wb-color-brand-600: #A02DB8;
+  --wb-color-brand-700: #86249B;
+  --wb-color-brand-800: #6B1C7D;
+  --wb-color-brand-900: #4A1356;
   --wb-color-neutral-0: #FFFFFF;
-  --wb-color-neutral-50: #F7F5F2;
-  --wb-color-neutral-100: #EFEBE6;
-  --wb-color-neutral-200: #E2DDD6;
-  --wb-color-neutral-300: #CFC9C0;
-  --wb-color-neutral-400: #A8A199;
-  --wb-color-neutral-500: #7D766E;
-  --wb-color-neutral-600: #5E5851;
-  --wb-color-neutral-700: #433E39;
-  --wb-color-neutral-800: #2B2724;
-  --wb-color-neutral-900: #1A1816;
+  --wb-color-neutral-50: #FAF8FB;
+  --wb-color-neutral-100: #F3F0F5;
+  --wb-color-neutral-200: #E8E3EB;
+  --wb-color-neutral-300: #D6CFDB;
+  --wb-color-neutral-400: #B3ABB9;
+  --wb-color-neutral-500: #837A8A;
+  --wb-color-neutral-600: #5F566A;
+  --wb-color-neutral-700: #443C4C;
+  --wb-color-neutral-800: #2C2632;
+  --wb-color-neutral-900: #1C1721;
   --wb-color-feedback-success-base: #1B6E3C;
   --wb-color-feedback-success-subtle: #E5F4EA;
   --wb-color-feedback-success-border: #9ED1AE;
@@ -36,43 +36,61 @@
   --wb-color-feedback-info-subtle: #E8F0FB;
   --wb-color-feedback-info-border: #9DB8E3;
   --wb-color-rating-star: #B76E00;
-  --wb-color-surface-background: #F7F5F2;
+  --wb-color-surface-background: #FAF8FB;
   --wb-color-surface-card: #FFFFFF;
-  --wb-color-surface-sunken: #EFEBE6;
-  --wb-color-surface-brand-subtle: #E6F3F3;
-  --wb-color-surface-inverse: #1A1816;
-  --wb-color-text-primary: #1A1816;
-  --wb-color-text-secondary: #5E5851;
+  --wb-color-surface-sunken: #F3F0F5;
+  --wb-color-surface-brand-subtle: #FBF1FD;
+  --wb-color-surface-inverse: #1C1721;
+  --wb-color-surface-hero: #C44DD9;
+  --wb-color-surface-hero-deep: #6B1C7D;
+  --wb-color-text-primary: #1C1721;
+  --wb-color-text-secondary: #5F566A;
   --wb-color-text-on-brand: #FFFFFF;
-  --wb-color-text-brand: #005A5F;
-  --wb-color-text-link: #005A5F;
+  --wb-color-text-brand: #86249B;
+  --wb-color-text-link: #86249B;
   --wb-color-text-inverse: #FFFFFF;
-  --wb-color-text-inverse-action: #9FD0D1;
-  --wb-color-text-disabled: #A8A199;
+  --wb-color-text-inverse-action: #EDC2F4;
+  --wb-color-text-disabled: #B3ABB9;
   --wb-color-text-success: #1B6E3C;
   --wb-color-text-warning: #7A4E00;
   --wb-color-text-danger: #B3261E;
   --wb-color-text-info: #28569E;
-  --wb-color-border-subtle: #E2DDD6;
-  --wb-color-border-default: #CFC9C0;
-  --wb-color-border-strong: #7D766E;
-  --wb-color-border-focus: #00696F;
+  --wb-color-text-on-hero: #FFFFFF;
+  --wb-color-border-subtle: #E8E3EB;
+  --wb-color-border-default: #D6CFDB;
+  --wb-color-border-strong: #837A8A;
+  --wb-color-border-focus: #A02DB8;
   --wb-color-border-danger: #B3261E;
-  --wb-color-action-primary: #00696F;
-  --wb-color-action-primary-hover: #005A5F;
-  --wb-color-action-primary-pressed: #004A4F;
-  --wb-color-action-primary-subtle: #E6F3F3;
-  --wb-color-action-primary-subtle-pressed: #CBE6E6;
-  --wb-color-action-secondary-border: #00696F;
+  --wb-color-action-primary: #A02DB8;
+  --wb-color-action-primary-hover: #86249B;
+  --wb-color-action-primary-pressed: #6B1C7D;
+  --wb-color-action-primary-subtle: #FBF1FD;
+  --wb-color-action-primary-subtle-pressed: #F6E0FA;
+  --wb-color-action-secondary-border: #A02DB8;
   --wb-color-action-destructive: #B3261E;
   --wb-color-action-destructive-pressed: #8C1D18;
-  --wb-color-action-disabled-fill: #E2DDD6;
-  --wb-color-action-disabled-text: #7D766E;
-  --wb-color-overlay-scrim: rgba(26, 24, 22, 0.72);
-  --wb-color-overlay-backdrop: rgba(26, 24, 22, 0.48);
-  --wb-color-skeleton-base: #E2DDD6;
-  --wb-color-skeleton-highlight: #EFEBE6;
+  --wb-color-action-disabled-fill: #E8E3EB;
+  --wb-color-action-disabled-text: #837A8A;
+  --wb-color-overlay-scrim: rgba(28, 23, 33, 0.72);
+  --wb-color-overlay-backdrop: rgba(28, 23, 33, 0.48);
+  --wb-color-skeleton-base: #E8E3EB;
+  --wb-color-skeleton-highlight: #F3F0F5;
+  --wb-color-accent-base: #FFC93C;
+  --wb-color-accent-on-base: #1C1721;
+  --wb-color-tile-1: #F6E0FA;
+  --wb-color-tile-2: #FFE3D1;
+  --wb-color-tile-3: #D6F2E3;
+  --wb-color-tile-4: #DAE9FB;
+  --wb-color-tile-5: #FFF0BF;
+  --wb-color-tile-6: #FFDCE6;
+  --wb-color-tile-ink-1: #86249B;
+  --wb-color-tile-ink-2: #A8400A;
+  --wb-color-tile-ink-3: #1B6E3C;
+  --wb-color-tile-ink-4: #28569E;
+  --wb-color-tile-ink-5: #7A4E00;
+  --wb-color-tile-ink-6: #A3214F;
   --wb-font-family-web: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --wb-font-family-display: "Fredoka", "Figtree", ui-rounded, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --wb-font-size-xs: 12px;
   --wb-font-size-sm: 14px;
   --wb-font-size-md: 16px;
@@ -81,6 +99,7 @@
   --wb-font-size-2xl: 32px;
   --wb-font-size-3xl: 40px;
   --wb-font-weight-regular: 400;
+  --wb-font-weight-medium: 500;
   --wb-font-weight-semibold: 600;
   --wb-font-weight-bold: 700;
   --wb-font-line-height-xs: 16px;
@@ -117,17 +136,26 @@
   --wb-radius-md: 8px;
   --wb-radius-lg: 16px;
   --wb-radius-xl: 24px;
+  --wb-radius-2xl: 32px;
   --wb-radius-full: 999px;
+  --wb-radius-tag: 8px;
+  --wb-radius-control: 12px;
+  --wb-radius-card: 16px;
+  --wb-radius-sheet: 24px;
+  --wb-radius-hero: 32px;
+  --wb-radius-pill: 999px;
   --wb-border-width-hairline: 1px;
   --wb-border-width-strong: 2px;
   --wb-shadow-none: none;
-  --wb-shadow-sm: 0 1px 2px rgba(26, 24, 22, 0.08);
-  --wb-shadow-md: 0 4px 12px rgba(26, 24, 22, 0.10);
-  --wb-shadow-lg: 0 8px 24px rgba(26, 24, 22, 0.14);
+  --wb-shadow-sm: 0 1px 2px rgba(28, 23, 33, 0.08);
+  --wb-shadow-md: 0 4px 12px rgba(28, 23, 33, 0.10);
+  --wb-shadow-lg: 0 8px 24px rgba(28, 23, 33, 0.14);
   --wb-motion-duration-fast: 150ms;
   --wb-motion-duration-base: 250ms;
   --wb-motion-duration-slow: 400ms;
   --wb-motion-duration-shimmer: 1200ms;
+  --wb-motion-duration-fly: 400ms;
+  --wb-motion-duration-celebrate: 1200ms;
   --wb-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --wb-motion-easing-enter: cubic-bezier(0, 0, 0, 1);
   --wb-motion-easing-exit: cubic-bezier(0.3, 0, 1, 1);
@@ -159,19 +187,29 @@
 }
 
 /* Estilos de texto (equivalentes aos textStyle do app). */
+.wb-text-hero {
+  font-family: var(--wb-font-family-display);
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
+}
+
 .wb-text-display {
+  font-family: var(--wb-font-family-display);
   font-size: 32px;
   line-height: 40px;
   font-weight: 700;
 }
 
 .wb-text-title1 {
+  font-family: var(--wb-font-family-display);
   font-size: 24px;
   line-height: 32px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .wb-text-title2 {
+  font-family: var(--wb-font-family-display);
   font-size: 20px;
   line-height: 28px;
   font-weight: 600;
@@ -225,6 +263,13 @@
   line-height: 48px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.wb-text-numeral-brand {
+  font-family: var(--wb-font-family-display);
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
 }
 
 /* Anel de foco padrao (WCAG 2.4.7). Aplicar em todo controle interativo. */

@@ -23,9 +23,16 @@ function familyForWeight(weight: number): string {
   return native.fontFamily.regular;
 }
 
+/** Fredoka (titulos, numeros de marca): @expo-google-fonts/fredoka -> Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold. */
+function displayFamilyForWeight(weight: number): string {
+  if (weight >= 700) return native.fontFamily.displayBold;
+  if (weight >= 600) return native.fontFamily.displaySemibold;
+  return native.fontFamily.displayMedium;
+}
+
 function toNative(style: (typeof textStyle)[TextStyleName]): NativeTextStyle {
   const base: NativeTextStyle = {
-    fontFamily: familyForWeight(style.weight),
+    fontFamily: style.family === 'display' ? displayFamilyForWeight(style.weight) : familyForWeight(style.weight),
     fontSize: style.size,
     lineHeight: style.lineHeight,
   };
@@ -33,6 +40,7 @@ function toNative(style: (typeof textStyle)[TextStyleName]): NativeTextStyle {
 }
 
 export const textStyles: Record<TextStyleName, NativeTextStyle> = {
+  hero: toNative(textStyle.hero),
   display: toNative(textStyle.display),
   title1: toNative(textStyle.title1),
   title2: toNative(textStyle.title2),
@@ -44,6 +52,7 @@ export const textStyles: Record<TextStyleName, NativeTextStyle> = {
   micro: toNative(textStyle.micro),
   price: toNative(textStyle.price),
   numeral: toNative(textStyle.numeral),
+  numeralBrand: toNative(textStyle.numeralBrand),
 };
 
 /**

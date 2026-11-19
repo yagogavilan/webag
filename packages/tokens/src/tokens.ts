@@ -3,29 +3,29 @@
 export const tokens = {
   "color": {
     "brand": {
-      "50": "#E6F3F3",
-      "100": "#CBE6E6",
-      "200": "#9FD0D1",
-      "300": "#6FB9BC",
-      "400": "#3A9DA2",
-      "500": "#00838A",
-      "600": "#00696F",
-      "700": "#005A5F",
-      "800": "#004A4F",
-      "900": "#00363A"
+      "50": "#FBF1FD",
+      "100": "#F6E0FA",
+      "200": "#EDC2F4",
+      "300": "#E198EC",
+      "400": "#D370E3",
+      "500": "#C44DD9",
+      "600": "#A02DB8",
+      "700": "#86249B",
+      "800": "#6B1C7D",
+      "900": "#4A1356"
     },
     "neutral": {
       "0": "#FFFFFF",
-      "50": "#F7F5F2",
-      "100": "#EFEBE6",
-      "200": "#E2DDD6",
-      "300": "#CFC9C0",
-      "400": "#A8A199",
-      "500": "#7D766E",
-      "600": "#5E5851",
-      "700": "#433E39",
-      "800": "#2B2724",
-      "900": "#1A1816"
+      "50": "#FAF8FB",
+      "100": "#F3F0F5",
+      "200": "#E8E3EB",
+      "300": "#D6CFDB",
+      "400": "#B3ABB9",
+      "500": "#837A8A",
+      "600": "#5F566A",
+      "700": "#443C4C",
+      "800": "#2C2632",
+      "900": "#1C1721"
     },
     "feedback": {
       "success": {
@@ -53,57 +53,81 @@ export const tokens = {
       "star": "#B76E00"
     },
     "surface": {
-      "background": "#F7F5F2",
+      "background": "#FAF8FB",
       "card": "#FFFFFF",
-      "sunken": "#EFEBE6",
-      "brandSubtle": "#E6F3F3",
-      "inverse": "#1A1816"
+      "sunken": "#F3F0F5",
+      "brandSubtle": "#FBF1FD",
+      "inverse": "#1C1721",
+      "hero": "#C44DD9",
+      "heroDeep": "#6B1C7D"
     },
     "text": {
-      "primary": "#1A1816",
-      "secondary": "#5E5851",
+      "primary": "#1C1721",
+      "secondary": "#5F566A",
       "onBrand": "#FFFFFF",
-      "brand": "#005A5F",
-      "link": "#005A5F",
+      "brand": "#86249B",
+      "link": "#86249B",
       "inverse": "#FFFFFF",
-      "inverseAction": "#9FD0D1",
-      "disabled": "#A8A199",
+      "inverseAction": "#EDC2F4",
+      "disabled": "#B3ABB9",
       "success": "#1B6E3C",
       "warning": "#7A4E00",
       "danger": "#B3261E",
-      "info": "#28569E"
+      "info": "#28569E",
+      "onHero": "#FFFFFF"
     },
     "border": {
-      "subtle": "#E2DDD6",
-      "default": "#CFC9C0",
-      "strong": "#7D766E",
-      "focus": "#00696F",
+      "subtle": "#E8E3EB",
+      "default": "#D6CFDB",
+      "strong": "#837A8A",
+      "focus": "#A02DB8",
       "danger": "#B3261E"
     },
     "action": {
-      "primary": "#00696F",
-      "primaryHover": "#005A5F",
-      "primaryPressed": "#004A4F",
-      "primarySubtle": "#E6F3F3",
-      "primarySubtlePressed": "#CBE6E6",
-      "secondaryBorder": "#00696F",
+      "primary": "#A02DB8",
+      "primaryHover": "#86249B",
+      "primaryPressed": "#6B1C7D",
+      "primarySubtle": "#FBF1FD",
+      "primarySubtlePressed": "#F6E0FA",
+      "secondaryBorder": "#A02DB8",
       "destructive": "#B3261E",
       "destructivePressed": "#8C1D18",
-      "disabledFill": "#E2DDD6",
-      "disabledText": "#7D766E"
+      "disabledFill": "#E8E3EB",
+      "disabledText": "#837A8A"
     },
     "overlay": {
-      "scrim": "rgba(26, 24, 22, 0.72)",
-      "backdrop": "rgba(26, 24, 22, 0.48)"
+      "scrim": "rgba(28, 23, 33, 0.72)",
+      "backdrop": "rgba(28, 23, 33, 0.48)"
     },
     "skeleton": {
-      "base": "#E2DDD6",
-      "highlight": "#EFEBE6"
+      "base": "#E8E3EB",
+      "highlight": "#F3F0F5"
+    },
+    "accent": {
+      "base": "#FFC93C",
+      "onBase": "#1C1721"
+    },
+    "tile": {
+      "1": "#F6E0FA",
+      "2": "#FFE3D1",
+      "3": "#D6F2E3",
+      "4": "#DAE9FB",
+      "5": "#FFF0BF",
+      "6": "#FFDCE6"
+    },
+    "tileInk": {
+      "1": "#86249B",
+      "2": "#A8400A",
+      "3": "#1B6E3C",
+      "4": "#28569E",
+      "5": "#7A4E00",
+      "6": "#A3214F"
     }
   },
   "font": {
     "family": {
-      "web": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif"
+      "web": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+      "display": "\"Fredoka\", \"Figtree\", ui-rounded, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif"
     },
     "size": {
       "xs": 12,
@@ -116,6 +140,7 @@ export const tokens = {
     },
     "weight": {
       "regular": 400,
+      "medium": 500,
       "semibold": 600,
       "bold": 700
     },
@@ -130,71 +155,96 @@ export const tokens = {
     }
   },
   "textStyle": {
+    "hero": {
+      "family": "display",
+      "size": 40,
+      "lineHeight": 48,
+      "weight": 700,
+      "tabular": false
+    },
     "display": {
+      "family": "display",
       "size": 32,
       "lineHeight": 40,
       "weight": 700,
       "tabular": false
     },
     "title1": {
+      "family": "display",
       "size": 24,
       "lineHeight": 32,
-      "weight": 700,
+      "weight": 600,
       "tabular": false
     },
     "title2": {
+      "family": "display",
       "size": 20,
       "lineHeight": 28,
       "weight": 600,
       "tabular": false
     },
     "body": {
+      "family": "text",
       "size": 16,
       "lineHeight": 24,
       "weight": 400,
       "tabular": false
     },
     "bodyStrong": {
+      "family": "text",
       "size": 16,
       "lineHeight": 24,
       "weight": 600,
       "tabular": false
     },
     "label": {
+      "family": "text",
       "size": 16,
       "lineHeight": 24,
       "weight": 600,
       "tabular": false
     },
     "caption": {
+      "family": "text",
       "size": 14,
       "lineHeight": 20,
       "weight": 400,
       "tabular": false
     },
     "captionStrong": {
+      "family": "text",
       "size": 14,
       "lineHeight": 20,
       "weight": 600,
       "tabular": false
     },
     "micro": {
+      "family": "text",
       "size": 12,
       "lineHeight": 16,
       "weight": 600,
       "tabular": false
     },
     "price": {
+      "family": "text",
       "size": 20,
       "lineHeight": 28,
       "weight": 700,
       "tabular": true
     },
     "numeral": {
+      "family": "text",
       "size": 40,
       "lineHeight": 48,
       "weight": 700,
       "tabular": true
+    },
+    "numeralBrand": {
+      "family": "display",
+      "size": 40,
+      "lineHeight": 48,
+      "weight": 700,
+      "tabular": false
     }
   },
   "space": {
@@ -229,7 +279,14 @@ export const tokens = {
     "md": 8,
     "lg": 16,
     "xl": 24,
-    "full": 999
+    "2xl": 32,
+    "full": 999,
+    "tag": 8,
+    "control": 12,
+    "card": 16,
+    "sheet": 24,
+    "hero": 32,
+    "pill": 999
   },
   "borderWidth": {
     "hairline": 1,
@@ -237,16 +294,18 @@ export const tokens = {
   },
   "shadow": {
     "none": "none",
-    "sm": "0 1px 2px rgba(26, 24, 22, 0.08)",
-    "md": "0 4px 12px rgba(26, 24, 22, 0.10)",
-    "lg": "0 8px 24px rgba(26, 24, 22, 0.14)"
+    "sm": "0 1px 2px rgba(28, 23, 33, 0.08)",
+    "md": "0 4px 12px rgba(28, 23, 33, 0.10)",
+    "lg": "0 8px 24px rgba(28, 23, 33, 0.14)"
   },
   "motion": {
     "duration": {
       "fast": 150,
       "base": 250,
       "slow": 400,
-      "shimmer": 1200
+      "shimmer": 1200,
+      "fly": 400,
+      "celebrate": 1200
     },
     "easing": {
       "standard": "cubic-bezier(0.2, 0, 0, 1)",
@@ -282,14 +341,17 @@ export const tokens = {
     "fontFamily": {
       "regular": "Figtree_400Regular",
       "semibold": "Figtree_600SemiBold",
-      "bold": "Figtree_700Bold"
+      "bold": "Figtree_700Bold",
+      "displayMedium": "Fredoka_500Medium",
+      "displaySemibold": "Fredoka_600SemiBold",
+      "displayBold": "Fredoka_700Bold"
     },
     "maxFontSizeMultiplier": {
       "default": 1.5,
       "compact": 1.2,
       "heading": 1.3
     },
-    "shadowColor": "#1A1816",
+    "shadowColor": "#1C1721",
     "shadow": {
       "sm": {
         "offsetY": 1,

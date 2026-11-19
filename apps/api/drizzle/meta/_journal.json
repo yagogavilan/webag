@@ -176,6 +176,13 @@
       "when": 1795051599648,
       "tag": "0024_t4_size_chart_exchange_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795052320202,
+      "tag": "0025_t2_exchange_requests",
+      "breakpoints": true
     }
   ]
 }

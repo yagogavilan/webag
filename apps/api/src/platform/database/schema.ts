@@ -13,3 +13,4 @@ export * from '../../modules/idempotency/db/schema.js';
 export * from '../../modules/finance/db/schema.js';
 export * from '../../modules/orders/db/schema.js';
 export * from '../../modules/logistics/db/schema.js';
+export * from '../../modules/exchanges/db/schema.js';

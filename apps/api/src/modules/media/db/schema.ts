@@ -3,7 +3,7 @@ import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-o
 import { users } from '../../identity/db/schema.js';
 
 /** Finalidade do arquivo: decide bucket, formatos aceitos e quem pode ler (SEC-050, SEC-051). */
-export const MEDIA_PURPOSES = ['store_logo', 'store_cover', 'product_image', 'store_document', 'banner'] as const;
+export const MEDIA_PURPOSES = ['store_logo', 'store_cover', 'product_image', 'store_document', 'banner', 'exchange_photo'] as const;
 export type MediaPurpose = (typeof MEDIA_PURPOSES)[number];
 export const MEDIA_STATUSES = ['pending', 'ready', 'rejected'] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];

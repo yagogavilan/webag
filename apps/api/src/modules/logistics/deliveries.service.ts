@@ -156,6 +156,21 @@ export class DeliveriesService {
     await this.record(tx, ctx, actor, current, updated!, 'cancel', reason, { source: 'order_cancelled' });
   }
 
+  /** Cancela as corridas ainda canceláveis de uma troca (cliente desistiu, taxa não paga, prazo vencido). Corrida já com o pacote fica como está. */
+  async cancelForExchangeInTx(tx: Tx, exchangeId: string, reason: string, actor: DeliveryActor, ctx: RequestContext): Promise<void> {
+    const rows = await tx.select().from(deliveries).where(eq(deliveries.exchangeId, exchangeId)).for('update');
+    for (const current of rows) {
+      if (TERMINAL_STATUSES.includes(current.status) || !canMove(current.status, 'cancelled')) continue;
+      const [updated] = await tx.update(deliveries).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(deliveries.id, current.id)).returning();
+      await this.record(tx, ctx, actor, current, updated!, 'cancel', reason, { source: 'exchange_closed' });
+    }
+  }
+
+  /** Corridas de uma troca (coleta e reentrega), da mais antiga para a mais nova. */
+  async forExchange(exchangeId: string, exec: Db | Tx = this.db): Promise<Delivery[]> {
+    return exec.select().from(deliveries).where(eq(deliveries.exchangeId, exchangeId)).orderBy(deliveries.createdAt);
+  }
+
   // ------------------------------------------------------------------ leitura
 
   async get(id: string): Promise<Delivery> {

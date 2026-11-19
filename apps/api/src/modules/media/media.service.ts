@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Principal } from '../../platform/auth/decorators.js';
 import { adminHasPermission, memberHasStorePermission, type StorePermissionName } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
-import { OBJECT_STORAGE, type ObjectStorage } from '../../platform/storage/object-storage.js';
+import { OBJECT_STORAGE, PRIVATE_URL_TTL_SECONDS, type ObjectStorage } from '../../platform/storage/object-storage.js';
 import { ParametersService } from '../admin/index.js';
 import { PrincipalService } from '../identity/index.js';
-import { ImageRejected, inspectImage, ratioWithin, renderVariants, VARIANT_WIDTHS } from './image.processor.js';
+import { ImageRejected, inspectImage, ratioWithin, renderVariant, renderVariants, VARIANT_WIDTHS } from './image.processor.js';
 import { mediaAssets, type MediaPurpose } from './db/schema.js';
 import { detectType, isImage, type DetectedType } from './sniff.js';
 
@@ -16,9 +16,11 @@ export type MediaAsset = typeof mediaAssets.$inferSelect;
 
 const IMAGE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 const UPLOAD_WINDOW_SECONDS = 900;
+/** PRD de trocas: foto de até 5 MB. */
+const EXCHANGE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Quem pode enviar o quê: a permissão da loja que a finalidade exige (RN-13). */
-const PURPOSE_PERMISSION: Record<Exclude<MediaPurpose, 'banner'>, StorePermissionName> = {
+const PURPOSE_PERMISSION: Record<Exclude<MediaPurpose, 'banner' | 'exchange_photo'>, StorePermissionName> = {
   store_logo: 'settings',
   store_cover: 'settings',
   store_document: 'settings',
@@ -53,7 +55,10 @@ export class MediaService {
 
   async create(principal: Principal, input: { purpose: MediaPurpose; contentType: string; sizeBytes: number; storeId?: string | undefined }) {
     let owner: string | null = null;
-    if (input.purpose === 'banner') {
+    if (input.purpose === 'exchange_photo') {
+      // Foto de troca (WB-170): do CLIENTE, sem loja, privada. Quem lê é o dono, a loja do pedido e o admin (URL assinada curta).
+      if (input.storeId !== undefined) throw errors.validation([{ field: 'storeId', message: 'Foto de troca não pertence a uma loja.' }]);
+    } else if (input.purpose === 'banner') {
       // Banner da home (WB-115): sem loja; só admin com a permissão e o segundo fator concluído.
       if (input.storeId !== undefined) throw errors.validation([{ field: 'storeId', message: 'Banner não pertence a uma loja.' }]);
       if (!principal.adminProfile || !principal.mfaVerified || !adminHasPermission(principal.adminProfile, 'banners:write')) throw errors.forbidden();
@@ -63,16 +68,16 @@ export class MediaService {
       const member = await this.principals.storeMembership(principal.userId, owner);
       // 404 também para quem não é membro (SEC-020): não revela que a loja existe.
       if (!member) throw errors.notFound();
-      if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose])) throw errors.forbidden();
+      if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose as Exclude<MediaPurpose, 'banner' | 'exchange_photo'>])) throw errors.forbidden();
     }
 
     const allowed = input.purpose === 'store_document' ? [...IMAGE_TYPES, 'application/pdf'] : IMAGE_TYPES;
     if (!allowed.includes(input.contentType)) throw new UploadRejectedError('Formato não aceito. Envie JPG, PNG ou WebP' + (input.purpose === 'store_document' ? ' ou PDF.' : '.'));
-    const max = await this.maxBytes();
+    const max = input.purpose === 'exchange_photo' ? Math.min(await this.maxBytes(), EXCHANGE_PHOTO_MAX_BYTES) : await this.maxBytes();
     if (input.sizeBytes < 1 || input.sizeBytes > max) throw new UploadRejectedError(`O arquivo passa do limite de ${max / 1024 / 1024} MB.`);
 
     const id = randomUUID();
-    const objectKey = `uploads/${owner ?? 'banners'}/${id}`;
+    const objectKey = `uploads/${owner ?? (input.purpose === 'exchange_photo' ? 'exchange' : 'banners')}/${id}`;
     const post = await this.storage.presignedPost('private', objectKey, { contentType: input.contentType, maxBytes: max, expiresSeconds: UPLOAD_WINDOW_SECONDS });
     await this.db.insert(mediaAssets).values({
       id,
@@ -103,7 +108,7 @@ export class MediaService {
     if (asset.status !== 'pending') return asset; // idempotente: repetir devolve o resultado já registrado
     if (asset.expiresAt.getTime() < Date.now()) return this.reject(asset, 'O envio demorou demais. Envie de novo.');
 
-    const max = await this.maxBytes();
+    const max = asset.purpose === 'exchange_photo' ? Math.min(await this.maxBytes(), EXCHANGE_PHOTO_MAX_BYTES) : await this.maxBytes();
     const body = await this.storage.getObject('private', asset.objectKey, { maxBytes: max });
     if (!body) throw errors.conflict('UPLOAD_NOT_RECEIVED', 'Arquivo ainda não recebido', 'Envie o arquivo antes de concluir.');
     if (body.length > max) return this.reject(asset, `O arquivo passa do limite de ${max / 1024 / 1024} MB.`);
@@ -120,6 +125,12 @@ export class MediaService {
       if (asset.purpose === 'store_logo' && !ratioWithin(info, 1, 0.02)) throw new ImageRejected('A logo precisa ser quadrada (1:1).');
       if (asset.purpose === 'store_cover' && !ratioWithin(info, 16 / 9, 0.03)) throw new ImageRejected('A capa precisa ter proporção 16:9.');
       if (asset.purpose === 'banner' && !ratioWithin(info, 2, 0.03)) throw new ImageRejected('O banner precisa ter proporção 2:1.');
+      if (asset.purpose === 'exchange_photo') {
+        // LGPD: foto de troca fica PRIVADA e sai re-codificada (WebP, sem EXIF/GPS); o original é substituído.
+        const clean = await renderVariant(body, 1600);
+        await this.storage.putObject('private', asset.objectKey, clean, 'image/webp');
+        return this.ready(asset, 'image/webp' as DetectedType, clean.length, info, null);
+      }
       let variants: Record<string, string> | null = null;
       if (PUBLIC_PURPOSES.includes(asset.purpose)) {
         variants = {};
@@ -161,6 +172,22 @@ export class MediaService {
       throw errors.unprocessable('MEDIA_NOT_USABLE', 'Arquivo não pode ser usado aqui', { detail: 'Conclua o envio do arquivo certo antes.' });
     }
     return asset;
+  }
+
+  /** Fotos da troca (1 a 5): do próprio cliente, prontas e da finalidade certa. 404 para foto alheia (não revela existência). */
+  async requireExchangePhotos(userId: string, ids: readonly string[]): Promise<MediaAsset[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db.select().from(mediaAssets).where(and(inArray(mediaAssets.id, [...ids]), eq(mediaAssets.ownerUserId, userId), eq(mediaAssets.purpose, 'exchange_photo')));
+    if (rows.length !== new Set(ids).size) throw errors.notFound('Foto não encontrada.');
+    if (rows.some((a) => a.status !== 'ready')) throw errors.unprocessable('MEDIA_NOT_USABLE', 'Arquivo não pode ser usado aqui', { detail: 'Conclua o envio da foto antes.' });
+    return rows;
+  }
+
+  /** URL assinada e curta (SEC-051) de uma foto privada de troca. */
+  async privatePhotoUrl(assetId: string): Promise<string | null> {
+    const [asset] = await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, assetId));
+    if (!asset || asset.status !== 'ready' || !asset.contentType) return null;
+    return this.storage.presignedGetUrl('private', asset.objectKey, { expiresSeconds: PRIVATE_URL_TTL_SECONDS, contentType: asset.contentType });
   }
 
   /** Banner pronto (WB-115): imagem 2:1 enviada por admin, sem loja. */

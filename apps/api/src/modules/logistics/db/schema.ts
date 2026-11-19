@@ -109,6 +109,8 @@ export const deliveries = pgTable(
   (t) => [
     // Uma entrega por pedido (toque duplo em "pronto para coleta" não cria duas, WB-229 C4).
     uniqueIndex('deliveries_order_delivery_uq').on(t.orderId).where(sql`${t.kind} = 'delivery'`),
+    // Uma coleta e uma reentrega por troca (aprovação repetida não duplica a corrida).
+    uniqueIndex('deliveries_exchange_kind_uq').on(t.exchangeId, t.kind).where(sql`${t.exchangeId} is not null`),
     index('deliveries_queue_idx').on(t.status, t.readyAt),
     index('deliveries_courier_idx').on(t.courierId, t.status),
     index('deliveries_store_idx').on(t.storeId),
