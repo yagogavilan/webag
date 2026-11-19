@@ -1,7 +1,12 @@
 # Backlog Priorizado — Webag 1.0 e Fase 2
 
-Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-053; DEC-060 a DEC-065: decisões do PO sobre a fila técnica, HIP-P01 a P10)
+Status: v3 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19 (DEC-053; DEC-060 a DEC-065: decisões do PO sobre a fila técnica, HIP-P01 a P10; revisão funcional final: §9, DEC-070 a DEC-072)
 Fonte de escopo: `docs/00-visao/brief.md` §3, §4 e §9. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043, HIP-D, HIP-C01, HIP-L01 a L14, HIP-T01 a T12, HIP-E01 a E10).
+
+## Alterações 2026-11-19 (revisão funcional final do v1.0; detalhe em `docs/qa/relatorios/revisao-funcional.md`)
+- **Status por história:** §9 deste arquivo (104 aceitas, 37 com pendência, 14 não entregues, 19 não verificadas, 4 fase 2). O v1.0 **não está aceito**: 5 bloqueadores (B1 a B5, §9.2).
+- **Passam para a FASE 2** (decisão do PO, DEC-071; o CEO valida): WB-112 (no split o repasse é do Mercado Pago, DEC-060b); WB-070, WB-073, WB-079, WB-195 (Should não construídos); WB-199 e WB-010 (Could); WB-121 deixa de ser exigência da tag, mas recomendo antes do piloto. Critérios cortados: WB-242 C4, WB-255 C5, WB-257 C6, WB-113 C2/C4, WB-192 C2 (Web Push), WB-102 C4, WB-108 C3 a C5.
+- **Contagem (§2):** sem mudança até o CEO aprovar o corte; com ele, Must 142 (sai WB-112), Should 27, Could 0, Won't/fase 2 9.
 
 ## Alterações 2026-11-19 (DEC-060 a DEC-065: decisões do PO sobre DT-059 a DT-064, dúvidas do backend e F3 a F8 do app)
 Origem: `docs/arquitetura/divida-tecnica.md`, `docs/gestao/fila-backend-dev.md` (V.5, V.6, W.8, WB-241 C7), `docs/gestao/fila-mobile.md` (F3 a F8), `docs/qa/relatorios/onda-7-reverificacao.md`. Critério de corte: **o v1.0 é o que testa a hipótese** (lojista local vende pelo app, cliente recebe no prazo da faixa e recompra); o resto espera um gatilho medido.
@@ -502,3 +507,25 @@ Aceite **funcional, pela API real**. Não cobre: aparelho real e Mercado Pago re
 | WB-119 Parâmetros (BUG-017) | **Aceita com pendência** | 4 chaves alteram o comportamento; 2 só por teste automatizado; validação cruzada = BUG-022 |
 | WB-213 e WB-214 Excluir conta (app/web) | **Aceita com pendência** | Fluxo A/B, arrependimento 72 h e SEC-168 testados. Pendências: app M.2 (código de 6 dígitos), Security repete B1/B2, SEC-166 para a Play, lacunas de DEC-063 (WB-215 C6 a C8) |
 | WB-012 Home: seção "Mais vendidos" (BUG-018; HIP-032) | **Aceita** | Seis produtos de seis lojas pelo seed; vazio fora da região |
+
+## 9. Status por história (revisão funcional final, 2026-11-19)
+Base: leitura de código, OpenAPI e relatórios (sem executar). A matriz completa, com evidência por história, está em `docs/qa/relatorios/revisao-funcional.md` §2. **Toda história que não aparece abaixo está ACEITA** (104 de 178); as listadas estão ACEITA COM PENDÊNCIA (AP), NÃO ENTREGUE (NE), NÃO VERIFICADO (NV) ou FASE 2 (F2). Transversais: T1 aparelho real, T2 Mercado Pago real, T3 jurídico J1 a J16, T4 reteste do QA (BUG-019 a 025, SEC-175 a 180, seções W, X e Y).
+
+### 9.1 Status das histórias que não estão aceitas
+| Status | Histórias (motivo curto) |
+|---|---|
+| **NE, bloqueia o v1.0** | WB-023, 024, 025, 026, 261 (B1: a Sacola do app não abre o checkout); WB-102 (B4); WB-108 (B5); WB-113 (B3: sem tela) |
+| **NE, Should** | WB-070, 073, 079, 121, 195, 198 (198 entra reduzida em B3; as demais propostas à fase 2) |
+| **F2** | WB-004 C2 a C4, WB-010, WB-112, WB-161, WB-199 |
+| **AP** | Cliente: 002, 004 (C1), 020, 022, 035, 037, 251, 253, 254, 259, 260. Lojista: 052, 053, 077, 078, 257. Admin: 109, 110, 111, 114, 116, 119. Logística: 230, 241, 242, 249, 255, 258, 262. Trocas: 170 (app só troca o 1º item), 246 (app sem tabela de medidas). Notificações: 190, 192 (B2). LGPD: 213, 214, 215. Segurança: 223 |
+| **NV (sem caso de QA)** | Cliente: 034, 036, 038. Lojista: 071, 074, 227. Admin: 122, 124, 125. Pagamentos: 159. Logística: 256. Trocas: 245, 247, 248. Notificações: 196, 197. LGPD: 212, 217. Segurança: 228 |
+
+### 9.2 Bloqueadores do v1.0 e o que paga por eles
+| # | Bloqueador | Escopo mínimo (o resto é corte) | Dono |
+|---|---|---|---|
+| B1 | Compra no app inalcançável (`cart.tsx:174-181`) | `router.push('/checkout')` e teste da Sacola até o checkout | mobile-dev |
+| B2 | Lojista sem aviso com o painel fechado (WB-192 C2/C3) | e-mail de pedido novo e de lembrete de aceite, sem dado do cliente; Web Push = fase 2 | backend-dev |
+| B3 | Alertas de operação sem tela (WB-198, WB-113) | lista somente leitura de alertas abertos e contador no Início do admin | web (admin) |
+| B4 | Sem Usuários no admin (WB-102) | busca, detalhe mascarado, bloquear e desbloquear com motivo; sem redefinir senha | backend-dev e web |
+| B5 | Sem Pedidos no admin (WB-108, 109) | lista com filtros, detalhe com linha do tempo, cancelar e estornar; sem CSV, "Atenção" nem "Revelar" | backend-dev e web |
+Ordem se o prazo apertar: B1, B2, B3, B4, B5 (o último a entrar). Correções pequenas junto: padrão de comissão 15%, tarifa do provedor no "Você recebe" (WB-242 C1), alcance mínimo de 3 km (HIP-P08), `troca_resposta_h` 6-72, parcelas lidas dos parâmetros, escolha do item na troca (WB-170), tabela de medidas no app (WB-246). Divergências e decisões: `revisao-funcional.md` §5 e DEC-070 a DEC-072.

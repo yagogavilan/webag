@@ -444,7 +444,7 @@ Como cliente, quero saber por que a loja não entrega agora, para escolher entre
 
 ### WB-261 Horário mudou antes de pagar — Must — dep: WB-249 C5, WB-250 C7 (F6a)
 Como cliente, quero ser avisado se o horário de chegada piorou entre a sacola e o pagamento, para não pagar uma promessa diferente da que vi.
-- **C1** Dado o fim da faixa calculado na criação do pedido **mais tarde** que o mostrado na sacola (qualquer diferença, `[HIPÓTESE; evita folga de tolerância que vira promessa diferente]`), então a API responde 409 `ETA_CHANGED` com a faixa nova e **nenhum pedido é criado**; o app abre a folha "O horário mudou" com a faixa nova e "Continuar" ou "Voltar à sacola"; ao continuar, o pedido é criado com a faixa nova.
+- **C1** Dado o fim da faixa calculado na criação do pedido **mais tarde** que o mostrado na sacola (**só se passar de 5 min**, `ETA_WORSE_TOLERANCE_MIN`: a faixa anda com o relógio e "qualquer diferença" avisaria a cada minuto; DEC-068; `[HIPÓTESE]`), então a API responde 409 `ETA_CHANGED` com a faixa nova e **nenhum pedido é criado**; o app abre a folha "O horário mudou" com a faixa nova e "Continuar" ou "Voltar à sacola"; ao continuar, o pedido é criado com a faixa nova.
 - **C2** Dado a faixa nova **igual ou mais cedo**, então o pedido é criado sem aviso (o cliente vê a faixa real na confirmação; sem folha).
 - **C3** Dado a faixa nova que **tira a loja do alcance** (passou do teto ou do fechamento), então vale `OUT_OF_RANGE` (WB-251 C5) e não `ETA_CHANGED`.
 - **C4** Dado toque duplo em "Continuar", então um só pedido (idempotência).
