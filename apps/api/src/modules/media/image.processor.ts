@@ -16,9 +16,12 @@ export class ImageRejected extends Error {}
 /** Semáforo em memória: a vaga só volta quando o trabalho do sharp termina de verdade (o timeout não o interrompe). */
 let running = 0;
 const waiting: (() => void)[] = [];
+/** Contadores do semáforo (BUG-010): `peak` é o maior número de trabalhos do sharp simultâneos desde o início; o teste prova que nunca passa do teto. */
+export const imageJobStats = { peak: 0, waiting: () => waiting.length, running: () => running };
 async function withSlot<T>(work: () => Promise<T>): Promise<T> {
   if (running >= MAX_CONCURRENT_IMAGE_JOBS) await new Promise<void>((resolve) => waiting.push(resolve));
   else running += 1;
+  imageJobStats.peak = Math.max(imageJobStats.peak, running);
   const release = () => {
     const next = waiting.shift();
     if (next) next(); // a vaga passa direto para o próximo
