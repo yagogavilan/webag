@@ -57,3 +57,12 @@ O6.2 [ ] Realtime por ticket de uso único (`POST /v1/realtime/tickets`, 60 s, a
 O6.3 [ ] Push segmentado do admin (WB-197: segmento mínimo `push_mkt_min_segmento`, consentimento de marketing, agendamento) e banners/destaques/cupons da plataforma que faltarem; textos legais já existem.
 O6.4 [ ] Relatórios do admin: pedidos, GMV, novas lojas, novos clientes, recompra, cancelamentos, com filtros e exportação CSV (brief §3.3).
 O6.5 [ ] Ajuda do cliente e do lojista (WB-227), denúncia de produto/loja e moderação, avaliação de resposta do lojista; B.1 e B.2 (cartão seguro) da seção anterior.
+
+## Correções da revisão do tech-lead (DEC-047) — fazer logo após O6.1; antes de o QA fechar as ondas 3 a 5
+R.1 [ ] I5/SEC-148: impedir 2 pedidos e 2 cobranças (trava + Idempotency-Key no pedido); I8: pagamento da troca com trava e Idempotency-Key.
+R.2 [ ] I1: Idempotency-Key não deve repetir por 24 h erros de estado (loja fechada, 429), só resultados definitivos.
+R.3 [ ] I2: tornar chargeback visível (evento, estado do pedido, alerta ao admin e ao financeiro, lançamento no ledger); I3: tarifa do provedor recuperável se faltar na 1ª leitura.
+R.4 [ ] I4: reembolso de troca com cupom de frete grátis; I6: UMA definição de "líquido da loja" usada em resumo, extrato e a receber; I12: diferença de preço da troca por pagamento com split (DEC-047) e ADR-011.
+R.5 [ ] I7: ordem global de locks (corrida, pedido, troca) sem deadlock, com teste de concorrência; I10: `disconnectSession` na revogação de sessão e limite de taxa por mensagem WebSocket (e `@SubscribeMessage` novo nascer protegido).
+R.6 [ ] I9: eliminar N+1 nas listas de pedidos e usar `/rt` com o ticket no painel (O6.2); DT-053 a 058.
+R.7 [ ] Frontend (mobile-dev, depois): I11 PIX vencido pelo relógio do servidor e um único socket compartilhado no app.

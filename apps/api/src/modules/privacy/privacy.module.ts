@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { AdminModule } from '../admin/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { AccountDeletionService } from './account-deletion.service.js';
-import { AccountDeletionController, AccountDeletionPublicController } from './privacy.controller.js';
+import { DataExportService } from './data-export.service.js';
+import { AccountDeletionController, AccountDeletionPublicController, DataExportController, DataExportDownloadController } from './privacy.controller.js';
 
 /**
  * LGPD (O6.1): exclusão de conta, exportação de dados, pedidos de titulares e retenção. Exceção consciente à regra "um módulo não
@@ -11,8 +12,8 @@ import { AccountDeletionController, AccountDeletionPublicController } from './pr
  */
 @Module({
   imports: [AdminModule, IdentityModule],
-  controllers: [AccountDeletionController, AccountDeletionPublicController],
-  providers: [AccountDeletionService],
-  exports: [AccountDeletionService],
+  controllers: [AccountDeletionController, AccountDeletionPublicController, DataExportController, DataExportDownloadController],
+  providers: [AccountDeletionService, DataExportService],
+  exports: [AccountDeletionService, DataExportService],
 })
 export class PrivacyModule {}
