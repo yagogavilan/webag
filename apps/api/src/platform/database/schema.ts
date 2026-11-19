@@ -14,3 +14,4 @@ export * from '../../modules/finance/db/schema.js';
 export * from '../../modules/orders/db/schema.js';
 export * from '../../modules/logistics/db/schema.js';
 export * from '../../modules/exchanges/db/schema.js';
+export * from '../../modules/notifications/db/schema.js';

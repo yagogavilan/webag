@@ -45,6 +45,10 @@ export const envSchema = z
     LOG_LEVEL: z
       .enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'])
       .default('info'),
+    /** Push (ADR-004): `expo` envia pelo Expo Push Service; `log` só registra (padrão: dev, teste e ambiente sem credencial). */
+    PUSH_PROVIDER: z.enum(['log', 'expo']).default('log'),
+    /** Token de acesso do Expo ("enhanced push security"); opcional. */
+    EXPO_ACCESS_TOKEN: z.string().optional(),
     CORS_ORIGINS: csv,
     /**
      * Proxies confiáveis na frente da API: número de saltos (nginx = 1; 0 = IP do socket) OU lista de IP/CIDR

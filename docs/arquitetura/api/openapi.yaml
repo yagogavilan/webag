@@ -5819,6 +5819,46 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/me/push-devices:
+    put:
+      tags: [me]
+      operationId: registerPushDevice
+      summary: Registrar o aparelho para push (RF-NOT-01)
+      description: "Token do Expo (`ExponentPushToken[...]`) e plataforma. Idempotente. O token é do aparelho: se outra conta entrar no mesmo aparelho, o token passa a ela e a anterior deixa de receber. Push transacional (pedido e troca) não exige consentimento; marketing exige (`marketing_push`). O push nunca leva dado pessoal nem o código de retirada."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterPushDeviceRequest' }
+      responses:
+        '204':
+          description: Registrado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me/push-devices/revoke:
+    post:
+      tags: [me]
+      operationId: revokePushDevice
+      summary: Desligar o push neste aparelho (logout)
+      description: "Só o dono do token revoga; token de outra conta é ignorado (204, sem revelar nada). Chame no logout."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevokePushDeviceRequest' }
+      responses:
+        '204':
+          description: Revogado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -9557,3 +9597,16 @@ components:
               byType: { type: object, additionalProperties: { type: integer } }
               sizeColorWithSizeChart: { type: integer }
               sizeColorWithoutSizeChart: { type: integer }
+    RegisterPushDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [token, platform]
+      properties:
+        token: { type: string, pattern: '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,80}\]$' }
+        platform: { type: string, enum: [android, ios] }
+    RevokePushDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string }
