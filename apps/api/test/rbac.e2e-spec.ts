@@ -105,6 +105,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'GET /v1/browse/stores/:storeId/reviews',
         'GET /v1/categories',
         'GET /v1/config/flags',
+        'GET /v1/data-exports/download/:token',
         'GET /v1/legal/:type',
         'GET /v1/home',
         'GET /v1/regions',

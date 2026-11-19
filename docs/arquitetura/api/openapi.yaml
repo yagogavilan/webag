@@ -6363,6 +6363,97 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/me/data-exports:
+    get:
+      tags: [privacy]
+      operationId: getMyDataExport
+      summary: Status da minha última exportação de dados
+      description: "`latest` é nulo se nunca pediu; `nextRequestAt` é quando dá para pedir outra (1 por dia). `status = ready` vencido aparece como `expired`."
+      responses:
+        '200':
+          description: Cartão de status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExportStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [privacy]
+      operationId: requestDataExport
+      summary: Pedir a exportação dos meus dados (senha)
+      description: "Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataExportRequest'
+      responses:
+        '202':
+          description: Pedido na fila
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExportStatus'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me/data-exports/{exportId}/download-link:
+    post:
+      tags: [privacy]
+      operationId: createDataExportDownloadLink
+      summary: Gerar o link de download (uso único, curta duração)
+      description: "Só o dono (outro usuário ou id inexistente: 404). O link vale `exportacao_link_min` (5 min) e é consumido na 1ª leitura. 410 `EXPORT_NOT_AVAILABLE` se o arquivo ainda não está pronto ou venceu (`exportacao_validade_dias`)."
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Link
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExportLink'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/data-exports/download/{token}:
+    get:
+      tags: [privacy]
+      operationId: downloadDataExport
+      summary: Baixar a exportação (link de uso único)
+      description: "O token do link é a credencial (sem login). Devolve o JSON como anexo (`Cache-Control: no-store`). Inexistente, já usado, vencido ou arquivo vencido: 410 `EXPORT_LINK_INVALID` (mesma resposta)."
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Arquivo JSON com os dados do titular
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -10213,3 +10304,31 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
+    DataExportStatus:
+      type: object
+      required: [id, status, requestedAt, readyAt, expiresAt, sizeBytes]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, processing, ready, failed, expired] }
+        requestedAt: { type: string, format: date-time }
+        readyAt: { type: [string, 'null'], format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        sizeBytes: { type: [integer, 'null'] }
+    DataExportStatusResponse:
+      type: object
+      required: [latest, nextRequestAt]
+      properties:
+        latest: { oneOf: [{ $ref: '#/components/schemas/DataExportStatus' }, { type: 'null' }] }
+        nextRequestAt: { type: [string, 'null'], format: date-time }
+    DataExportRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string }
+    DataExportLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri, description: "Abrir uma vez (GET); vale poucos minutos" }
+        expiresAt: { type: string, format: date-time }

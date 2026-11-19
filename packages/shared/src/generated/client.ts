@@ -4835,6 +4835,45 @@ export interface CancelAccountDeletionRequest {
   password: string;
 }
 
+export type DataExportStatusStatus = typeof DataExportStatusStatus[keyof typeof DataExportStatusStatus];
+
+
+export const DataExportStatusStatus = {
+  queued: 'queued',
+  processing: 'processing',
+  ready: 'ready',
+  failed: 'failed',
+  expired: 'expired',
+} as const;
+
+export interface DataExportStatus {
+  id: string;
+  status: DataExportStatusStatus;
+  requestedAt: string;
+  /** @nullable */
+  readyAt: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  sizeBytes: number | null;
+}
+
+export interface DataExportStatusResponse {
+  latest: DataExportStatus | null;
+  /** @nullable */
+  nextRequestAt: string | null;
+}
+
+export interface DataExportRequest {
+  password: string;
+}
+
+export interface DataExportLink {
+  /** Abrir uma vez (GET); vale poucos minutos */
+  url: string;
+  expiresAt: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -6089,6 +6128,8 @@ export type GetStoreStatementCsvParams = {
   /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
   to: string;
 };
+
+export type DownloadDataExport200 = { [key: string]: unknown };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -20242,5 +20283,221 @@ export const cancelAccountDeletion = async (cancelAccountDeletionRequest: Cancel
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelAccountDeletionRequest)
+  }
+);}
+
+
+
+export type getMyDataExportResponse200 = {
+  data: DataExportStatusResponse
+  status: 200
+}
+
+export type getMyDataExportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getMyDataExportResponseSuccess = (getMyDataExportResponse200) & {
+  headers: Headers;
+};
+export type getMyDataExportResponseError = (getMyDataExportResponse401) & {
+  headers: Headers;
+};
+
+export type getMyDataExportResponse = (getMyDataExportResponseSuccess | getMyDataExportResponseError)
+
+export const getGetMyDataExportUrl = () => {
+
+
+
+
+  return `/v1/me/data-exports`
+}
+
+/**
+ * `latest` é nulo se nunca pediu; `nextRequestAt` é quando dá para pedir outra (1 por dia). `status = ready` vencido aparece como `expired`.
+ * @summary Status da minha última exportação de dados
+ */
+export const getMyDataExport = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getMyDataExportResponse> => {
+
+  return apiFetch<getMyDataExportResponse>(getGetMyDataExportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type requestDataExportResponse202 = {
+  data: DataExportStatus
+  status: 202
+}
+
+export type requestDataExportResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type requestDataExportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type requestDataExportResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type requestDataExportResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type requestDataExportResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type requestDataExportResponseSuccess = (requestDataExportResponse202) & {
+  headers: Headers;
+};
+export type requestDataExportResponseError = (requestDataExportResponse400 | requestDataExportResponse401 | requestDataExportResponse403 | requestDataExportResponse409 | requestDataExportResponse429) & {
+  headers: Headers;
+};
+
+export type requestDataExportResponse = (requestDataExportResponseSuccess | requestDataExportResponseError)
+
+export const getRequestDataExportUrl = () => {
+
+
+
+
+  return `/v1/me/data-exports`
+}
+
+/**
+ * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`).
+ * @summary Pedir a exportação dos meus dados (senha)
+ */
+export const requestDataExport = async (dataExportRequest: DataExportRequest, options?: Parameters<typeof apiFetch>[1]): Promise<requestDataExportResponse> => {
+
+  return apiFetch<requestDataExportResponse>(getRequestDataExportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(dataExportRequest)
+  }
+);}
+
+
+
+export type createDataExportDownloadLinkResponse200 = {
+  data: DataExportLink
+  status: 200
+}
+
+export type createDataExportDownloadLinkResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createDataExportDownloadLinkResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createDataExportDownloadLinkResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type createDataExportDownloadLinkResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createDataExportDownloadLinkResponseSuccess = (createDataExportDownloadLinkResponse200) & {
+  headers: Headers;
+};
+export type createDataExportDownloadLinkResponseError = (createDataExportDownloadLinkResponse401 | createDataExportDownloadLinkResponse404 | createDataExportDownloadLinkResponse410 | createDataExportDownloadLinkResponse429) & {
+  headers: Headers;
+};
+
+export type createDataExportDownloadLinkResponse = (createDataExportDownloadLinkResponseSuccess | createDataExportDownloadLinkResponseError)
+
+export const getCreateDataExportDownloadLinkUrl = (exportId: string,) => {
+
+
+
+
+  return `/v1/me/data-exports/${exportId}/download-link`
+}
+
+/**
+ * Só o dono (outro usuário ou id inexistente: 404). O link vale `exportacao_link_min` (5 min) e é consumido na 1ª leitura. 410 `EXPORT_NOT_AVAILABLE` se o arquivo ainda não está pronto ou venceu (`exportacao_validade_dias`).
+ * @summary Gerar o link de download (uso único, curta duração)
+ */
+export const createDataExportDownloadLink = async (exportId: string, options?: Parameters<typeof apiFetch>[1]): Promise<createDataExportDownloadLinkResponse> => {
+
+  return apiFetch<createDataExportDownloadLinkResponse>(getCreateDataExportDownloadLinkUrl(exportId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type downloadDataExportResponse200 = {
+  data: DownloadDataExport200
+  status: 200
+}
+
+export type downloadDataExportResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type downloadDataExportResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type downloadDataExportResponseSuccess = (downloadDataExportResponse200) & {
+  headers: Headers;
+};
+export type downloadDataExportResponseError = (downloadDataExportResponse410 | downloadDataExportResponse429) & {
+  headers: Headers;
+};
+
+export type downloadDataExportResponse = (downloadDataExportResponseSuccess | downloadDataExportResponseError)
+
+export const getDownloadDataExportUrl = (token: string,) => {
+
+
+
+
+  return `/v1/data-exports/download/${token}`
+}
+
+/**
+ * O token do link é a credencial (sem login). Devolve o JSON como anexo (`Cache-Control: no-store`). Inexistente, já usado, vencido ou arquivo vencido: 410 `EXPORT_LINK_INVALID` (mesma resposta).
+ * @summary Baixar a exportação (link de uso único)
+ */
+export const downloadDataExport = async (token: string, options?: Parameters<typeof apiFetch>[1]): Promise<downloadDataExportResponse> => {
+
+  return apiFetch<downloadDataExportResponse>(getDownloadDataExportUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}

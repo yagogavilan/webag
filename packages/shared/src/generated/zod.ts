@@ -10787,3 +10787,63 @@ export const CancelAccountDeletionBody = zod.object({
 })
 
 export const CancelAccountDeletionResponse = zod.void()
+
+
+/**
+ * `latest` é nulo se nunca pediu; `nextRequestAt` é quando dá para pedir outra (1 por dia). `status = ready` vencido aparece como `expired`.
+ * @summary Status da minha última exportação de dados
+ */
+export const GetMyDataExportResponse = zod.object({
+  "latest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['queued', 'processing', 'ready', 'failed', 'expired']),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "readyAt": zod.iso.datetime({"offset":true}).nullable(),
+  "expiresAt": zod.iso.datetime({"offset":true}).nullable(),
+  "sizeBytes": zod.int().nullable()
+}),zod.null()]),
+  "nextRequestAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`).
+ * @summary Pedir a exportação dos meus dados (senha)
+ */
+export const RequestDataExportBody = zod.object({
+  "password": zod.string()
+})
+
+export const RequestDataExportResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['queued', 'processing', 'ready', 'failed', 'expired']),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "readyAt": zod.iso.datetime({"offset":true}).nullable(),
+  "expiresAt": zod.iso.datetime({"offset":true}).nullable(),
+  "sizeBytes": zod.int().nullable()
+})
+
+
+/**
+ * Só o dono (outro usuário ou id inexistente: 404). O link vale `exportacao_link_min` (5 min) e é consumido na 1ª leitura. 410 `EXPORT_NOT_AVAILABLE` se o arquivo ainda não está pronto ou venceu (`exportacao_validade_dias`).
+ * @summary Gerar o link de download (uso único, curta duração)
+ */
+export const CreateDataExportDownloadLinkParams = zod.object({
+  "exportId": zod.uuid()
+})
+
+export const CreateDataExportDownloadLinkResponse = zod.object({
+  "url": zod.url().describe('Abrir uma vez (GET); vale poucos minutos'),
+  "expiresAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * O token do link é a credencial (sem login). Devolve o JSON como anexo (`Cache-Control: no-store`). Inexistente, já usado, vencido ou arquivo vencido: 410 `EXPORT_LINK_INVALID` (mesma resposta).
+ * @summary Baixar a exportação (link de uso único)
+ */
+export const DownloadDataExportParams = zod.object({
+  "token": zod.string()
+})
+
+export const DownloadDataExportResponse = zod.record(zod.string(), zod.unknown())
