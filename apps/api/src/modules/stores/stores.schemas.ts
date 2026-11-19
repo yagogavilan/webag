@@ -114,7 +114,9 @@ export const pickupSchema = z.strictObject({
 
 /** Piso legal (arrependimento e defeito) NÃO é campo: payload com ele é 400 (strictObject, DEC-011). */
 export const exchangePolicySchema = z.strictObject({
-  voluntaryDays: z.number().int().min(0).max(30),
+  /** 0 = não aceita; senão dentro de `troca_voluntaria_dias_min` e `_max` (admin). */
+  voluntaryDays: z.number().int().min(0).max(90),
+  /** @deprecated ignorado: a taxa de coleta é da tabela do admin por região (DEC-037). */
   collectionFeeCents: cents(100_000).default(0),
   /** Religar a troca confirma o prazo (R-26). */
   confirmDefault: z.boolean().optional(),

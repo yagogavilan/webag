@@ -229,17 +229,18 @@ export class StoreSettingsService {
   /** WB-059: só a troca VOLUNTÁRIA é configurável; arrependimento e defeito são piso legal fixo (DEC-011). */
   async setExchangePolicy(store: Store, input: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }, actor: Actor, ctx: RequestContext): Promise<void> {
     this.assertEditable(store, actor);
-    const maxFee = await this.params.getNumber('taxa_coleta_max_cents');
+    // DEC-037: o prazo da troca por tamanho/cor é da loja DENTRO do mínimo e máximo do admin; a taxa de coleta é da tabela do
+    // admin por região (a loja não define): o campo antigo é aceito e ignorado.
+    const [minDays, maxDays] = await Promise.all([this.params.getNumber('troca_voluntaria_dias_min'), this.params.getNumber('troca_voluntaria_dias_max')]);
     const fieldErrors: { field: string; message: string }[] = [];
-    if (input.collectionFeeCents > maxFee) fieldErrors.push({ field: 'collectionFeeCents', message: `A taxa de coleta vai de R$ 0,00 a R$ ${(maxFee / 100).toFixed(2).replace('.', ',')}.` });
-    if (input.voluntaryDays !== 0 && input.voluntaryDays < 1) fieldErrors.push({ field: 'voluntaryDays', message: 'O prazo vai de 1 a 30 dias.' });
+    if (input.voluntaryDays !== 0 && (input.voluntaryDays < minDays || input.voluntaryDays > maxDays)) fieldErrors.push({ field: 'voluntaryDays', message: `O prazo vai de ${minDays} a ${maxDays} dias (ou 0 para não aceitar).` });
     if (input.voluntaryDays > 0 && !(await this.flags.isEnabled('trocas_voluntarias'))) fieldErrors.push({ field: 'voluntaryDays', message: 'Trocas voluntárias estão desligadas no momento.' });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_EXCHANGE_POLICY', 'Política de trocas inválida', { errors: fieldErrors });
     await this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!before) throw errors.notFound('Loja não encontrada.');
       const days = input.voluntaryDays === 0 ? 0 : input.voluntaryDays;
-      const collection = days === 0 ? 0 : input.collectionFeeCents;
+      const collection = 0; // taxa de coleta é da tabela do admin (DEC-037)
       const changed = before.voluntaryExchangeDays !== days || before.collectionFeeCents !== collection;
       await tx
         .update(storeSettings)

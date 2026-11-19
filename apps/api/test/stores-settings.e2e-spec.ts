@@ -153,21 +153,22 @@ describe('Loja: horários, feriados, pausa, entrega, retirada e política de tro
   });
 
   describe('política de trocas e estoque baixo (WB-059, WB-064)', () => {
-    it('O2-TRC: só a troca voluntária é configurável; o piso legal (arrependimento e defeito) não é campo (400) e só aparece como informação; a versão sobe só quando algo muda', async () => {
+    it('O2-TRC: só a troca voluntária é configurável, dentro do mínimo e máximo do admin; o piso legal não é campo (400); a taxa de coleta é do admin (campo antigo ignorado); a versão sobe só quando algo muda', async () => {
       const put = (body: Record<string, unknown>) => ctx.http.put(url('exchange-policy')).set(as(owner)).send(body);
-      await put({ voluntaryDays: 7, collectionFeeCents: 1000, withdrawalDays: 0 }).expect(400);
+      await put({ voluntaryDays: 7, withdrawalDays: 0 }).expect(400);
       await put({ voluntaryDays: 7, defectDays: 5 }).expect(400);
-      await put({ voluntaryDays: 31 }).expect(400);
-      await put({ voluntaryDays: 7, collectionFeeCents: 99_999 }).expect(422); // acima da taxa de coleta máxima
+      await put({ voluntaryDays: 91 }).expect(400);
+      expect((await put({ voluntaryDays: 31 })).status).toBe(422); // acima do máximo do admin (30)
+      expect((await put({ voluntaryDays: 2 })).status).toBe(422); // abaixo do mínimo do admin (3)
       const before = (await settings()).exchangePolicy;
       expect(before.legalFloor).toEqual({ withdrawalDays: 7, defectDays: 30 });
-      await put({ voluntaryDays: 7, collectionFeeCents: 1000 }).expect(204);
+      await put({ voluntaryDays: 7, collectionFeeCents: 1000 }).expect(204); // campo antigo: aceito e ignorado
       const v1 = (await settings()).exchangePolicy;
-      expect(v1).toMatchObject({ voluntaryDays: 7, collectionFeeCents: 1000, version: before.version + 1 });
-      await put({ voluntaryDays: 7, collectionFeeCents: 1000 }).expect(204);
+      expect(v1).toMatchObject({ voluntaryDays: 7, collectionFeeCents: 0, version: before.version + 1 });
+      await put({ voluntaryDays: 7 }).expect(204);
       expect((await settings()).exchangePolicy.version).toBe(v1.version); // nada mudou: mesma versão
-      await put({ voluntaryDays: 0, collectionFeeCents: 500 }).expect(204);
-      expect((await settings()).exchangePolicy).toMatchObject({ voluntaryDays: 0, collectionFeeCents: 0 }); // sem troca, sem taxa
+      await put({ voluntaryDays: 0 }).expect(204);
+      expect((await settings()).exchangePolicy).toMatchObject({ voluntaryDays: 0, collectionFeeCents: 0 });
     });
 
     it('limite de estoque baixo da loja: 0 a 100 ou nulo (volta ao padrão); 101 → 400', async () => {

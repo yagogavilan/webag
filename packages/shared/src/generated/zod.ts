@@ -3364,15 +3364,15 @@ export const SetStoreExchangePolicyParams = zod.object({
 })
 
 export const setStoreExchangePolicyBodyVoluntaryDaysMin = 0;
-export const setStoreExchangePolicyBodyVoluntaryDaysMax = 30;
+export const setStoreExchangePolicyBodyVoluntaryDaysMax = 90;
 
 export const setStoreExchangePolicyBodyCollectionFeeCentsMin = 0;
 
 
 
 export const SetStoreExchangePolicyBody = zod.object({
-  "voluntaryDays": zod.int().min(setStoreExchangePolicyBodyVoluntaryDaysMin).max(setStoreExchangePolicyBodyVoluntaryDaysMax).describe('0 = não aceita troca voluntária'),
-  "collectionFeeCents": zod.int().min(setStoreExchangePolicyBodyCollectionFeeCentsMin).optional(),
+  "voluntaryDays": zod.int().min(setStoreExchangePolicyBodyVoluntaryDaysMin).max(setStoreExchangePolicyBodyVoluntaryDaysMax).describe('0 = não aceita troca voluntária (tamanho/cor); senão entre `troca_voluntaria_dias_min` (3) e `troca_voluntaria_dias_max` (30), definidos pelo admin (422 `INVALID_EXCHANGE_POLICY` fora disso). Arrependimento (7 dias) e defeito (30/90 dias) são piso legal fixo e não são campos.'),
+  "collectionFeeCents": zod.int().min(setStoreExchangePolicyBodyCollectionFeeCentsMin).optional().describe('Ignorado (DEC-037): a taxa de coleta da troca é da tabela do admin por região (`exchangeFeeCents` das faixas), cobrada só depois da aprovação.'),
   "confirmDefault": zod.boolean().optional()
 })
 
@@ -4800,6 +4800,8 @@ export const createProductResponseNameMax = 80;
 
 export const createProductResponseDescriptionMax = 1000;
 
+export const createProductResponseSizeChartMax = 2000;
+
 export const createProductResponseBasePriceCentsMax = 9999999;
 
 export const createProductResponseVariantsItemStockMin = 0;
@@ -4811,6 +4813,8 @@ export const CreateProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(createProductResponseNameMax),
   "description": zod.string().max(createProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(createProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -4948,6 +4952,8 @@ export const getProductResponseNameMax = 80;
 
 export const getProductResponseDescriptionMax = 1000;
 
+export const getProductResponseSizeChartMax = 2000;
+
 export const getProductResponseBasePriceCentsMax = 9999999;
 
 export const getProductResponseVariantsItemStockMin = 0;
@@ -4959,6 +4965,8 @@ export const GetProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(getProductResponseNameMax),
   "description": zod.string().max(getProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(getProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5012,6 +5020,8 @@ export const updateProductBodyNameMax = 80;
 
 export const updateProductBodyDescriptionMax = 1000;
 
+export const updateProductBodySizeChartMax = 2000;
+
 
 
 export const UpdateProductBody = zod.object({
@@ -5022,12 +5032,16 @@ export const UpdateProductBody = zod.object({
   "basePriceCents": zod.int().nullish(),
   "promoPriceCents": zod.int().nullish(),
   "promoStartsAt": zod.iso.datetime({"offset":true}).nullish(),
-  "promoEndsAt": zod.iso.datetime({"offset":true}).nullish()
+  "promoEndsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "sizeChart": zod.string().max(updateProductBodySizeChartMax).nullish(),
+  "noVoluntaryExchange": zod.boolean().optional()
 })
 
 export const updateProductResponseNameMax = 80;
 
 export const updateProductResponseDescriptionMax = 1000;
+
+export const updateProductResponseSizeChartMax = 2000;
 
 export const updateProductResponseBasePriceCentsMax = 9999999;
 
@@ -5040,6 +5054,8 @@ export const UpdateProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(updateProductResponseNameMax),
   "description": zod.string().max(updateProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(updateProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5127,6 +5143,8 @@ export const setProductVariantsResponseNameMax = 80;
 
 export const setProductVariantsResponseDescriptionMax = 1000;
 
+export const setProductVariantsResponseSizeChartMax = 2000;
+
 export const setProductVariantsResponseBasePriceCentsMax = 9999999;
 
 export const setProductVariantsResponseVariantsItemStockMin = 0;
@@ -5138,6 +5156,8 @@ export const SetProductVariantsResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(setProductVariantsResponseNameMax),
   "description": zod.string().max(setProductVariantsResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(setProductVariantsResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5235,6 +5255,8 @@ export const setProductImagesResponseNameMax = 80;
 
 export const setProductImagesResponseDescriptionMax = 1000;
 
+export const setProductImagesResponseSizeChartMax = 2000;
+
 export const setProductImagesResponseBasePriceCentsMax = 9999999;
 
 export const setProductImagesResponseVariantsItemStockMin = 0;
@@ -5246,6 +5268,8 @@ export const SetProductImagesResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(setProductImagesResponseNameMax),
   "description": zod.string().max(setProductImagesResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(setProductImagesResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5298,6 +5322,8 @@ export const publishProductResponseNameMax = 80;
 
 export const publishProductResponseDescriptionMax = 1000;
 
+export const publishProductResponseSizeChartMax = 2000;
+
 export const publishProductResponseBasePriceCentsMax = 9999999;
 
 export const publishProductResponseVariantsItemStockMin = 0;
@@ -5309,6 +5335,8 @@ export const PublishProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(publishProductResponseNameMax),
   "description": zod.string().max(publishProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(publishProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5361,6 +5389,8 @@ export const pauseProductResponseNameMax = 80;
 
 export const pauseProductResponseDescriptionMax = 1000;
 
+export const pauseProductResponseSizeChartMax = 2000;
+
 export const pauseProductResponseBasePriceCentsMax = 9999999;
 
 export const pauseProductResponseVariantsItemStockMin = 0;
@@ -5372,6 +5402,8 @@ export const PauseProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(pauseProductResponseNameMax),
   "description": zod.string().max(pauseProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(pauseProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -5424,6 +5456,8 @@ export const resumeProductResponseNameMax = 80;
 
 export const resumeProductResponseDescriptionMax = 1000;
 
+export const resumeProductResponseSizeChartMax = 2000;
+
 export const resumeProductResponseBasePriceCentsMax = 9999999;
 
 export const resumeProductResponseVariantsItemStockMin = 0;
@@ -5435,6 +5469,8 @@ export const ResumeProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string().max(resumeProductResponseNameMax),
   "description": zod.string().max(resumeProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(resumeProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
   "categoryId": zod.uuid().nullable(),
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
@@ -6525,6 +6561,7 @@ export const ListBrowseStoreReviewsResponse = zod.object({
   "id": zod.uuid(),
   "rating": zod.int().min(1).max(listBrowseStoreReviewsResponseDataItemRatingMax),
   "comment": zod.string().nullable(),
+  "fit": zod.union([zod.literal('small'),zod.literal('ok'),zod.literal('large'),zod.literal(null)]).nullish().describe('Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.'),
   "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
   "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
   "createdAt": zod.iso.datetime({"offset":true}),
@@ -6547,6 +6584,8 @@ export const GetBrowseProductResponse = zod.object({
   "id": zod.uuid(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "sizeChart": zod.string().nullish().describe('Tabela de medidas do lojista (WB-246).'),
+  "acceptsVoluntaryExchange": zod.boolean().optional().describe('false = produto marcado sem troca voluntária (WB-244).'),
   "categoryId": zod.uuid().nullish(),
   "available": zod.boolean(),
   "unavailableReason": zod.union([zod.literal('PAUSED'),zod.literal('MODERATED'),zod.literal('SOLD_OUT'),zod.literal(null)]).nullish(),
@@ -6633,6 +6672,7 @@ export const ListBrowseProductReviewsResponse = zod.object({
   "id": zod.uuid(),
   "rating": zod.int().min(1).max(listBrowseProductReviewsResponseDataItemRatingMax),
   "comment": zod.string().nullable(),
+  "fit": zod.union([zod.literal('small'),zod.literal('ok'),zod.literal('large'),zod.literal(null)]).nullish().describe('Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.'),
   "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
   "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
   "createdAt": zod.iso.datetime({"offset":true}),

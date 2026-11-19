@@ -169,6 +169,13 @@
       "when": 1795050733561,
       "tag": "0023_l3_logistics",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795051599648,
+      "tag": "0024_t4_size_chart_exchange_flag",
+      "breakpoints": true
     }
   ]
 }

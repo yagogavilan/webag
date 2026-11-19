@@ -59,7 +59,7 @@ export const reviews = pgTable(
     rating: smallint().notNull(),
     comment: varchar({ length: 500 }),
     /** "Como vestiu?" (WB-247): ajuda os próximos compradores a escolher o tamanho e reduz troca. */
-    fit: text({ enum: ['small', 'true', 'large'] }),
+    fit: text({ enum: ['small', 'ok', 'large'] }),
     storeReply: varchar({ length: 500 }),
     storeRepliedAt: timestamp({ withTimezone: true }),
     status: text({ enum: REVIEW_STATUSES }).notNull().default('published'),

@@ -1771,12 +1771,16 @@ export interface PickupRequest {
 
 export interface ExchangePolicyRequest {
   /**
-     * 0 = não aceita troca voluntária
+     * 0 = não aceita troca voluntária (tamanho/cor); senão entre `troca_voluntaria_dias_min` (3) e `troca_voluntaria_dias_max` (30), definidos pelo admin (422 `INVALID_EXCHANGE_POLICY` fora disso). Arrependimento (7 dias) e defeito (30/90 dias) são piso legal fixo e não são campos.
      * @minimum 0
-     * @maximum 30
+     * @maximum 90
      */
   voluntaryDays: number;
-  /** @minimum 0 */
+  /**
+     * Ignorado (DEC-037): a taxa de coleta da troca é da tabela do admin por região (`exchangeFeeCents` das faixas), cobrada só depois da aprovação.
+     * @deprecated
+     * @minimum 0
+     */
   collectionFeeCents?: number;
   confirmDefault?: boolean;
 }
@@ -2116,6 +2120,14 @@ export interface Product {
      * @nullable
      */
   description: string | null;
+  /**
+     * Tabela de medidas (WB-246): reduz troca por tamanho.
+     * @maxLength 2000
+     * @nullable
+     */
+  sizeChart: string | null;
+  /** Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037). */
+  noVoluntaryExchange: boolean;
   /** @nullable */
   categoryId: string | null;
   /** @nullable */
@@ -2242,6 +2254,12 @@ export interface UpdateProductRequest {
   promoStartsAt?: string | null;
   /** @nullable */
   promoEndsAt?: string | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  sizeChart?: string | null;
+  noVoluntaryExchange?: boolean;
 }
 
 export type SetVariantsRequestVariantsItemAttributes = {[key: string]: string};
@@ -3118,6 +3136,13 @@ export interface BrowseProduct {
   name: string;
   /** @nullable */
   description?: string | null;
+  /**
+     * Tabela de medidas do lojista (WB-246).
+     * @nullable
+     */
+  sizeChart?: string | null;
+  /** false = produto marcado sem troca voluntária (WB-244). */
+  acceptsVoluntaryExchange?: boolean;
   /** @nullable */
   categoryId?: string | null;
   available: boolean;
@@ -3134,6 +3159,19 @@ export interface BrowseProduct {
   store: BrowseStoreSummary;
 }
 
+/**
+ * Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.
+ * @nullable
+ */
+export type ReviewFit = typeof ReviewFit[keyof typeof ReviewFit] | null;
+
+
+export const ReviewFit = {
+  small: 'small',
+  ok: 'ok',
+  large: 'large',
+} as const;
+
 export interface Review {
   id: string;
   /**
@@ -3143,6 +3181,11 @@ export interface Review {
   rating: number;
   /** @nullable */
   comment: string | null;
+  /**
+     * Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.
+     * @nullable
+     */
+  fit?: ReviewFit;
   /** Primeiro nome e inicial do último ('Maria S.') */
   reviewer: string;
   /** 'Compra verificada' */

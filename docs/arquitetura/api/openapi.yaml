@@ -7076,11 +7076,13 @@ components:
         voluntaryDays:
           type: integer
           minimum: 0
-          maximum: 30
-          description: 0 = não aceita troca voluntária
+          maximum: 90
+          description: "0 = não aceita troca voluntária (tamanho/cor); senão entre `troca_voluntaria_dias_min` (3) e `troca_voluntaria_dias_max` (30), definidos pelo admin (422 `INVALID_EXCHANGE_POLICY` fora disso). Arrependimento (7 dias) e defeito (30/90 dias) são piso legal fixo e não são campos."
         collectionFeeCents:
           type: integer
           minimum: 0
+          deprecated: true
+          description: "Ignorado (DEC-037): a taxa de coleta da troca é da tabela do admin por região (`exchangeFeeCents` das faixas), cobrada só depois da aprovação."
         confirmDefault:
           type: boolean
     LowStockRequest:
@@ -7708,11 +7710,13 @@ components:
         low: { type: boolean, description: Disponível maior que zero e menor ou igual ao limite da loja }
     Product:
       type: object
-      required: [id, name, description, categoryId, sectionId, status, moderationStatus, moderationReason, basePriceCents, promotion, variantAttributes, variants, images, soldOut, publishedAt, createdAt, updatedAt]
+      required: [id, name, description, sizeChart, noVoluntaryExchange, categoryId, sectionId, status, moderationStatus, moderationReason, basePriceCents, promotion, variantAttributes, variants, images, soldOut, publishedAt, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         name: { type: string, maxLength: 80 }
         description: { type: [string, 'null'], maxLength: 1000 }
+        sizeChart: { type: [string, 'null'], maxLength: 2000, description: 'Tabela de medidas (WB-246): reduz troca por tamanho.' }
+        noVoluntaryExchange: { type: boolean, description: 'Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).' }
         categoryId: { type: [string, 'null'], format: uuid }
         sectionId: { type: [string, 'null'], format: uuid }
         status: { type: string, enum: [draft, active, paused, archived] }
@@ -7787,6 +7791,8 @@ components:
         promoPriceCents: { type: [integer, 'null'] }
         promoStartsAt: { type: [string, 'null'], format: date-time }
         promoEndsAt: { type: [string, 'null'], format: date-time }
+        sizeChart: { type: [string, 'null'], maxLength: 2000 }
+        noVoluntaryExchange: { type: boolean }
     SetVariantsRequest:
       type: object
       additionalProperties: false
@@ -8309,6 +8315,8 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: [string, 'null'] }
+        sizeChart: { type: [string, 'null'], description: 'Tabela de medidas do lojista (WB-246).' }
+        acceptsVoluntaryExchange: { type: boolean, description: 'false = produto marcado sem troca voluntária (WB-244).' }
         categoryId: { type: [string, 'null'], format: uuid }
         available: { type: boolean }
         unavailableReason: { type: [string, 'null'], enum: [PAUSED, MODERATED, SOLD_OUT, null] }
@@ -8335,6 +8343,7 @@ components:
         id: { type: string, format: uuid }
         rating: { type: integer, minimum: 1, maximum: 5 }
         comment: { type: [string, 'null'] }
+        fit: { type: [string, 'null'], enum: [small, ok, large, null], description: 'Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.' }
         reviewer: { type: string, description: "Primeiro nome e inicial do último ('Maria S.')" }
         verifiedPurchase: { type: boolean, description: "'Compra verificada'" }
         createdAt: { type: string, format: date-time }
