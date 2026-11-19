@@ -1142,6 +1142,27 @@ route('POST', '/v1/admin/logistics/deliveries/:id/status', { perm: 'logistics:wr
   json(res, 200, { ...deliveryView(d), contact: {}, timeline: [] });
 });
 
+// Cartão pela página segura (B.2): intenções de uso único, provedor "fake" (sem MP.js).
+const cardIntents = new Map();
+route('GET', '/__test/card-intent/:name', { public: true }, (req, res, ctx) => {
+  const token = `intent_${ctx.params[0]}_aaaaaaaaaaaaaaaaaaaa`;
+  cardIntents.set(token, { amount: 5990, used: false });
+  json(res, 200, { token });
+});
+route('GET', '/v1/card-intents/:token', { public: true }, (req, res, ctx) => {
+  const intent = cardIntents.get(ctx.params[0]);
+  if (!intent || intent.used) return problem(res, 410, 'CARD_INTENT_INVALID', 'Link inválido ou já usado');
+  json(res, 200, { amount: { amount: intent.amount, currency: 'BRL' }, provider: 'fake', publicKey: null, installmentsMax: 3, expiresAt: new Date(Date.now() + 900_000).toISOString() });
+});
+route('POST', '/v1/card-intents/:token/pay', { public: true }, (req, res, ctx) => {
+  const intent = cardIntents.get(ctx.params[0]);
+  if (!intent || intent.used) return problem(res, 410, 'CARD_INTENT_INVALID', 'Link inválido ou já usado');
+  intent.used = true;
+  const card = ctx.body.card?.token;
+  if (card === 'fake_tok_insufficient') return problem(res, 422, 'PAYMENT_DECLINED', 'Pagamento recusado', 'Limite insuficiente.');
+  json(res, 200, { orderId: '11111111-1111-4111-8111-111111111111', status: 'awaiting_payment', payment: {}, threeDsUrl: null });
+});
+
 route('GET', '/__test/state', { public: true }, (req, res) => json(res, 200, { superSecret: SUPER_SECRET, audit: audit.length }));
 
 // ---------------------------------------------------------------- servidor

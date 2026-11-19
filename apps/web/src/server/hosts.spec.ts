@@ -27,3 +27,13 @@ describe('separação de hosts (SEC-116)', () => {
     expect(requestHost(headers)).toBe('admin.webag.com.br');
   });
 });
+
+describe('host público (SEC-106)', () => {
+  it('páginas públicas só no PUBLIC_HOST, nunca nos painéis', async () => {
+    const { publicAllowedOnHost } = await import('./hosts');
+    vi.stubEnv('PUBLIC_HOST', 'app.webag.com.br');
+    expect(publicAllowedOnHost(host('app.webag.com.br'))).toBe(true);
+    expect(publicAllowedOnHost(host('admin.webag.com.br'))).toBe(false);
+    expect(publicAllowedOnHost(host('lojista.webag.com.br'))).toBe(false);
+  });
+});

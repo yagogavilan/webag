@@ -36,3 +36,17 @@ export function areaHost(area: 'admin' | 'lojista'): string | null {
   const value = (area === 'admin' ? process.env.ADMIN_HOST : process.env.LOJISTA_HOST)?.trim().toLowerCase();
   return value || null;
 }
+
+/**
+ * Host público (páginas sem login do painel, como `/pagar/cartao`; SEC-106): sem sessão de painel e com CSP própria.
+ * Em produção é obrigatório (falha fechada); em dev, vazio = qualquer host.
+ */
+export function publicHost(): string | null {
+  return process.env.PUBLIC_HOST?.trim().toLowerCase() || null;
+}
+
+/** Esquema do deep link do app (`webag://`), usado para voltar da página de cartão. */
+export function appScheme(): string {
+  const value = process.env.APP_SCHEME?.trim().toLowerCase() ?? '';
+  return /^[a-z][a-z0-9+.-]{1,30}$/.test(value) ? value : 'webag';
+}

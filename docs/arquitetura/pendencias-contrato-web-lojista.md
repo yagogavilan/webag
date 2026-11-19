@@ -45,3 +45,12 @@
 | P6 | `Delivery` não traz **telefone mascarado/endereço revelável** na lista nem foto de comprovante; `contact-reveal` (SEC-144) não tem tela | O detalhe da corrida mostra o contato só para quem despacha (`logistics:write`); suporte e financeiro não têm "Revelar com motivo" |
 | P7 | Comanda: o contrato do `ticket` não traz telefone do cliente nem endereço (só `destination`) | A comanda imprime "Coleta Webag" no lugar do endereço de entrega (a logística despacha pelo detalhe) |
 | P8 | Lista de pedidos só filtra por `number`; sem período, estado, tipo nem nome do cliente | O histórico filtra estado e tipo no navegador, sobre as páginas já carregadas |
+
+## Onda 6 (2026-11-19, mobile-dev, web)
+> Para o tech-lead, security-engineer e backend-dev. Marcos pequenos, um commit por marco.
+
+| # | Item | Situação |
+|---|---|---|
+| O6-1 | **Página pública `/pagar/cartao?i=<token>` (B.2)** em `apps/web`. Variáveis novas do web (servidor): `PUBLIC_HOST` (host público; **obrigatória em produção**, falha fechada; os painéis não respondem nele e a página não responde nos hosts dos painéis, SEC-106) e `APP_SCHEME` (padrão `webag`; deep link de volta). A chave pública do MP **não é variável do web**: vem da API em `GET /v1/card-intents/{token}` (`publicKey`). Incluir `PUBLIC_HOST` em `infra/env.example`/`env.prod.example` e no guia de deploy (tech-lead); `WEB_PUBLIC_URL` da API deve apontar para esse host | Feito. Testado: Vitest (provedor fake, Brick simulado, 3DS, erros), Playwright contra a API falsa. **Não validado:** o Brick real do Mercado Pago (precisa de `MP_PUBLIC_KEY` e conta de teste; fundador/QA) e 3DS real |
+| O6-1a | CSP própria só de `/pagar/*` (proxy.ts): `script-src` com nonce + `strict-dynamic`, `frame-src`/`connect-src`/`img-src` limitados a `*.mercadopago.com(.br)`, `*.mercadolibre.com`, `*.mlstatic.com`. Se o MP exigir outra origem em produção, ajustar aqui e registrar. **Security deve revisar** | Aberto (revisão) |
+| O6-1b | Retorno ao app por deep link (`webag://order/<id>`, `webag://checkout`) é botão, nunca confirma pagamento. O 3DS abre em iframe só se a URL for HTTPS do Mercado Pago; sem retorno automático do banco, o cliente toca "Já confirmei, voltar ao app" e o app consulta o servidor. **Backend:** confirmar que `threeDsUrl` do MP funciona em iframe (se o banco bloquear `frame-ancestors`, trocar por redirecionamento com URL de retorno na intenção) | Aberto [HIPÓTESE] |

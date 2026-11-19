@@ -1,5 +1,5 @@
 import 'server-only';
-import { IS_PROD, areaHost } from './config';
+import { IS_PROD, areaHost, publicHost } from './config';
 import type { SessionArea } from './cookies';
 
 /** Host da requisição. `X-Forwarded-Host` só vale com `WEB_TRUST_FORWARDED_HOST=true` (proxy que o sobrescreve). */
@@ -16,6 +16,13 @@ export function requestHost(headers: Headers): string {
  */
 export function areaAllowedOnHost(area: SessionArea, headers: Headers): boolean {
   const expected = areaHost(area);
+  if (!expected) return !IS_PROD;
+  return requestHost(headers) === expected;
+}
+
+/** Páginas públicas (`/pagar/cartao`) só respondem no `PUBLIC_HOST`; nunca nos hosts dos painéis (SEC-106). */
+export function publicAllowedOnHost(headers: Headers): boolean {
+  const expected = publicHost();
   if (!expected) return !IS_PROD;
   return requestHost(headers) === expected;
 }

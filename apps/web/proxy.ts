@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { clearedCookies, cookieNames, sessionCookies } from '@/server/cookies';
 import { refreshSession } from '@/server/refresh';
-import { areaAllowedOnHost } from '@/server/hosts';
+import { areaAllowedOnHost, publicAllowedOnHost } from '@/server/hosts';
 import { clientHints } from '@/server/upstream';
 
 /**
@@ -45,8 +45,48 @@ function csp(nonce: string): string {
   ].join('; ');
 }
 
+/**
+ * CSP das páginas públicas de pagamento (`/pagar/*`, SEC-106). Só aqui entra o Mercado Pago (MP.js e os iframes dos campos de
+ * cartão e do 3DS); os painéis seguem sem nenhuma origem de terceiros.
+ */
+const MP_HOSTS = 'https://*.mercadopago.com https://*.mercadopago.com.br https://*.mercadolibre.com https://*.mlstatic.com';
+
+function publicPayCsp(nonce: string): string {
+  const dev = process.env.NODE_ENV !== 'production';
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://sdk.mercadopago.com${dev ? " 'unsafe-eval'" : ''}`,
+    `style-src 'self' 'unsafe-inline' ${MP_HOSTS}`,
+    `img-src 'self' data: blob: ${MP_HOSTS}`,
+    `font-src 'self' ${MP_HOSTS}`,
+    `connect-src 'self' ${MP_HOSTS}`,
+    `frame-src ${MP_HOSTS}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+}
+
+/** Páginas públicas: sem sessão de painel, só host público, sem cache e com a CSP acima. */
+function publicPage(request: NextRequest): NextResponse {
+  if (!publicAllowedOnHost(request.headers)) {
+    return new NextResponse('Não encontrado', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+  }
+  const nonce = btoa(crypto.randomUUID());
+  const policy = publicPayCsp(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('content-security-policy', policy);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set('content-security-policy', policy);
+  response.headers.set('cache-control', 'no-store');
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  if (pathname === '/pagar' || pathname.startsWith('/pagar/')) return publicPage(request);
   const area: Area = pathname === '/lojista' || pathname.startsWith('/lojista/') ? 'lojista' : 'admin';
   const { access: AT, refresh: RT } = cookieNames(area);
   const home = `/${area}`;
@@ -102,4 +142,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ['/admin/:path*', '/lojista/:path*'] };
+export const config = { matcher: ['/admin/:path*', '/lojista/:path*', '/pagar/:path*'] };

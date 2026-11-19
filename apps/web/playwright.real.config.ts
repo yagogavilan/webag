@@ -38,7 +38,7 @@ export default defineConfig({
     command: `pnpm build && pnpm exec next start --port ${WEB_PORT}`,
     port: WEB_PORT,
     timeout: 300_000,
-    env: { API_URL, COOKIE_SECURE: 'false', ADMIN_HOST: `localhost:${WEB_PORT}`, LOJISTA_HOST: `localhost:${WEB_PORT}`, STORAGE_ORIGIN },
+    env: { API_URL, COOKIE_SECURE: 'false', ADMIN_HOST: `localhost:${WEB_PORT}`, LOJISTA_HOST: `localhost:${WEB_PORT}`, PUBLIC_HOST: `localhost:${WEB_PORT}`, STORAGE_ORIGIN },
     reuseExistingServer: true,
   },
 });
