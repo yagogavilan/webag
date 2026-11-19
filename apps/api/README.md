@@ -49,7 +49,15 @@ O mesmo código roda nos dois modos (`PaymentProvider`). Trocar não exige deplo
 - PIX: o pedido nasce `awaiting_payment`; `POST /v1/dev/payments/{attemptId}/approve|decline|expire` (id em `GET /v1/orders/{id}/payment` não aparece: consulte `payment_attempts.external_reference = <orderId>`) dispara o MESMO caminho do webhook real. Tarifa simulada: PIX 0,99% e cartão 4,98%.
 
 ## Módulos (ADR-007)
-`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, Mercado Pago, webhook, conciliação) · `finance` (comissão, ledger) · `orders` (pedido, estados, estoque) · `logistics` (tabela de taxa de entrega do admin, motoboys, corridas, WhatsApp, custo; DEC-036) · `exchanges` (regras puras de prazo e elegibilidade da troca; DEC-037). Um módulo só importa o `index.ts` do outro.
+`identity` (auth, sessões, TOTP, convites) · `users` (termos, consentimentos) · `admin` (regiões, categorias, parâmetros, flags, termos, auditoria) · `payments` (PaymentProvider, fake, Mercado Pago, webhook, conciliação) · `finance` (comissão, ledger) · `orders` (pedido, estados, estoque) · `logistics` (tabela de taxa de entrega do admin, motoboys, corridas, WhatsApp, custo; DEC-036) · `exchanges` (solicitações de troca, taxa após aprovação, reserva do tamanho novo, aprovação por SLA, relatório; DEC-037) · `realtime` (Socket.IO `/rt`, ADR-004) · `notifications` (push Expo e e-mail transacional). Um módulo só importa o `index.ts` do outro.
+
+## Tempo real, push e e-mail transacional (ADR-004)
+- **Socket.IO** em `/rt` (mesma porta da API). Handshake com `auth: { token: <access JWT> }`; sem token válido a conexão é recusada. As salas são decididas pelo servidor: `user:{id}`, `store:{id}` (membro com `orders`) e `admin:ops` (admin com MFA e `logistics:read`). `subscribe {orderId}` só aceita pedido do usuário ou da loja dele. Eventos: `order.status_changed`, `order.created` (loja), `delivery_ready` (operação), `exchange.status_changed`, `exchange.requested` (loja). O evento é só aviso: o estado sempre se recupera pelo REST. CORS pelo `CORS_ORIGINS`.
+- **Push:** `PUT /v1/me/push-devices` registra o token do Expo; `PUSH_PROVIDER=log` (padrão) só registra, `expo` envia (exige FCM v1 e APNs no EAS, conta do fundador). Texto no catálogo `modules/notifications/domain/catalog.ts` (sem dado pessoal). E-mail transacional pelo mesmo SMTP do resto da API.
+- **Taxa da troca:** cobrada na conta da Webag (sem split, `storeId` nulo no pagamento), só depois da aprovação da loja; o PIX da taxa usa o mesmo webhook (`external_reference = exchange:<id>`).
+
+## Seed de demonstração
+`pnpm db:seed` (fora de produção) cria lojas, clientes, avaliações, cupons, tabela de frete inicial (`seedLogistics`) e **pedidos `WB-DMxxx` em vários estados** (aguardando pagamento até entregue, cancelado e recusado, corridas na fila e uma troca pedida). Comissão padrão de 15% só no CLI do seed. Em produção só roda o seed base.
 
 ## Proxy e IP do cliente (SEC-114)
 
