@@ -26,6 +26,8 @@ WORKDIR /app
 # o servidor fica em apps/web/server.js.
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+# O "standalone" NÃO inclui a pasta public: sem esta linha o logotipo, o favicon e a fonte Outfit dão 404 em produção.
+COPY --from=build --chown=node:node /repo/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3001
 # A página inicial (/) é pública e fica fora do proxy de autenticação: qualquer resposta < 500 = servidor vivo.

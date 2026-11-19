@@ -107,3 +107,7 @@ jobs:
 
       - name: Imagem Docker da API (só build, sem push)
         run: docker build -f apps/api/Dockerfile -t webag-api:ci .
+
+      # DT-040: um erro no Dockerfile do web (ex.: arquivo que o "standalone" não copia) só aparecia no deploy.
+      - name: Imagem Docker do painel web (só build, sem push)
+        run: docker build -f apps/web/Dockerfile -t webag-web:ci .
