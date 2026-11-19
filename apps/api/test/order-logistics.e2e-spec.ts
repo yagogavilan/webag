@@ -1,8 +1,9 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { LedgerService } from '../src/modules/finance/index.js';
+import { DeliveriesService } from '../src/modules/logistics/index.js';
 import { OrderEventBus, type OrderEvent } from '../src/modules/orders/order-events.bus.js';
-import { deliveries, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
+import { deliveries, deliveryEvents, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
@@ -151,5 +152,23 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     await ctx.http.post(`/v1/stores/${shop.store.id}/orders/${created.id}/accept`).set(store(shop)).expect(200);
     expect((await ctx.http.post(`/v1/stores/${shop.store.id}/orders/${created.id}/status`).set(store(shop)).send({ status: 'ready_for_collection' })).status).toBe(409); // retirada não vai à coleta da Webag
     expect((await ctx.http.get(`/v1/orders/${created.id}`).set(bearer(buyer.user.accessToken)).expect(200)).body.tracking).toBeNull();
+  });
+
+  it('auto-conclusão: corrida em "saiu para entrega" há mais de 24 h é concluída pelo sistema e o pedido acompanha; antes disso, nada muda (DT-046)', async () => {
+    const r = await readyOrder();
+    const m = await courier();
+    await ctx.http.post(`${base}/deliveries/${r.delivery.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: m.id }).expect(200);
+    await act(r.delivery.id, { action: 'confirm' }).expect(200);
+    await act(r.delivery.id, { action: 'picked_up' }).expect(200);
+    const svc = ctx.app.get(DeliveriesService);
+    await svc.autoConcludeDue();
+    expect((await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.status).toBe('out_for_delivery'); // dentro do prazo
+    const later = new Date(Date.now() + 25 * 3_600_000); // o histórico é append-only: avança o relógio
+    expect(await svc.autoConcludeDue(later)).toBeGreaterThanOrEqual(1);
+    expect((await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.status).toBe('delivered');
+    expect((await orderRow(ctx, r.orderId)).status).toBe('delivered');
+    const [last] = await ctx.db.select().from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, r.delivery.id), eq(deliveryEvents.toStatus, 'delivered')));
+    expect(last).toMatchObject({ actorRole: 'system', action: 'delivered' });
+    expect(await svc.autoConcludeDue(later)).toBe(0); // idempotente
   });
 });

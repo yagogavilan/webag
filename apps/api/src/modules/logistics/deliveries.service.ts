@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -58,8 +58,9 @@ const CODE_MAX_FAILS = 5;
  * (append-only) e auditoria na MESMA transação; quem depende da corrida (pedido, troca) reage por `DeliveryListener`.
  */
 @Injectable()
-export class DeliveriesService {
+export class DeliveriesService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(DeliveriesService.name);
+  private timers: NodeJS.Timeout[] = [];
   private readonly listeners: DeliveryListener[] = [];
 
   constructor(
@@ -68,6 +69,40 @@ export class DeliveriesService {
     private readonly flags: FeatureFlagsService,
     private readonly params: ParametersService,
   ) {}
+
+  /** Auto-conclusão a cada 5 min. Desligada em teste e na CLI (os testes chamam `autoConcludeDue`). */
+  onApplicationBootstrap(): void {
+    if (process.env.NODE_ENV === 'test' || process.env.WEBAG_CLI === '1') return;
+    this.timers.push(setInterval(() => void this.autoConcludeDue().catch((e: Error) => this.logger.error(e.message)), 5 * 60_000).unref());
+  }
+
+  onApplicationShutdown(): void {
+    this.timers.forEach(clearInterval);
+  }
+
+  /**
+   * DT-046 / RN-18: corrida em "saiu para entrega" há mais de `auto_conclusao_entrega_h` (24 h) é concluída pelo sistema, com o
+   * ator "sistema" no histórico e na auditoria, e o pedido (ou a troca) acompanha. Sem código de entrega: ninguém confirmou.
+   */
+  async autoConcludeDue(now = new Date()): Promise<number> {
+    const hours = await this.params.getNumber('auto_conclusao_entrega_h');
+    const cutoff = new Date(now.getTime() - hours * 3_600_000);
+    const due = await this.db
+      .select({ id: deliveries.id })
+      .from(deliveries)
+      .where(and(eq(deliveries.status, 'out_for_delivery'), sql`(select max(e.created_at) from ${deliveryEvents} e where e.delivery_id = ${deliveries.id} and e.to_status = 'out_for_delivery') <= ${cutoff.toISOString()}::timestamptz`))
+      .limit(100);
+    let concluded = 0;
+    for (const row of due) {
+      try {
+        await this.act(row.id, 'delivered', { reason: `Conclusão automática: ${hours} h sem ocorrência` }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+        concluded += 1;
+      } catch (error) {
+        this.logger.warn(`auto-conclusão da corrida ${row.id} falhou: ${safeErrorMessage(error)}`);
+      }
+    }
+    return concluded;
+  }
 
   registerListener(listener: DeliveryListener): void {
     this.listeners.push(listener);
@@ -329,6 +364,7 @@ export class DeliveriesService {
 
   private async checkCode(delivery: Delivery, input: { code?: string | undefined; overrideReason?: string | undefined }, actor: DeliveryActor): Promise<void> {
     if (!delivery.deliveryCode || delivery.kind !== 'delivery') return; // flag desligada ou corrida sem código
+    if (actor.role === 'system') return; // auto-conclusão por prazo: não há quem digite o código
     if (input.overrideReason?.trim()) {
       if (actor.role !== 'super_admin') throw new AppError(403, 'SUPER_ADMIN_REQUIRED', 'Só o super admin conclui sem o código', { detail: 'Peça ao super admin para concluir sem o código.' });
       return;
