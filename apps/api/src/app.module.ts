@@ -103,7 +103,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     OrdersModule,
     FinanceModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
-    ...devModulesFor(process.env.NODE_ENV, process.env.APP_ENV, process.env.PAYMENT_PROVIDER ?? 'fake'),
+    ...devModulesFor(process.env.NODE_ENV),
   ],
   providers: [{ provide: APP_FILTER, useClass: ProblemFilter }],
 })

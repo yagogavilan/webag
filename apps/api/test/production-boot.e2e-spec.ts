@@ -73,6 +73,19 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     }
   });
 
+  it('APP_ENV=staging (DT-038) sobe com pagamento fake, mas SEM as rotas /v1/dev/payments (SEC-135) e com segredo DEV_* ainda recusado', async () => {
+    const staging = { ...productionEnv, APP_ENV: 'staging', PAYMENT_PROVIDER: 'fake', GEOCODING_PROVIDER: 'fake' };
+    const app = await boot(staging);
+    try {
+      await request(app.getHttpServer()).post('/v1/dev/payments').send({ amountCents: 100, method: 'pix' }).expect(404);
+      await request(app.getHttpServer()).post(`/v1/dev/payments/${randomUUID()}/approve`).expect(404);
+    } finally {
+      await app.close();
+    }
+    const { DEV_JWT_ACCESS_SECRET } = await import('../src/platform/config/env.js');
+    await expect(boot({ ...staging, JWT_ACCESS_SECRET: DEV_JWT_ACCESS_SECRET })).rejects.toThrow(/JWT_ACCESS_SECRET/);
+  });
+
   it('NODE_ENV=production com PAYMENT_PROVIDER=fake: o processo não sobe, com erro claro e sem imprimir segredos', async () => {
     let message = '';
     try {
