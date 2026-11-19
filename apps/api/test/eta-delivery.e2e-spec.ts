@@ -121,15 +121,16 @@ describe('ETA de entrega em até 2 h (DEC-053)', () => {
     expect(paid.etaFromAt!.getTime()).toBeGreaterThanOrEqual(row.etaFromAt!.getTime());
     expect(paid.etaToAt!.getTime() - paid.etaFromAt!.getTime()).toBe((row.etaMaxMinutes - row.etaMinMinutes) * 60_000);
 
-    // Endereço fora do alcance (parâmetro apertado): a sacola bloqueia e o pedido não nasce.
-    await useParam(ctx, 'entrega_max_min', 30);
+    // Endereço fora do alcance (teto no menor valor que a validação do BUG-022 aceita, 60 min, e um endereço a ~7 km): a sacola bloqueia e o pedido não nasce.
+    await useParam(ctx, 'entrega_max_min', 60);
+    const far = await customerAt(ctx, { lat: shop.origin.lat + 0.06, lng: shop.origin.lng });
     try {
-      await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
-      const blocked = (await ctx.http.get(`/v1/cart?addressId=${buyer.addressId}`).set(bearer(buyer.user.accessToken)).expect(200)).body;
+      await addToCart(ctx, far.user, shop.variants[0]!, 1).expect(200);
+      const blocked = (await ctx.http.get(`/v1/cart?addressId=${far.addressId}`).set(bearer(far.user.accessToken)).expect(200)).body;
       expect(blocked.checkout.blockers).toContain('OUT_OF_RANGE');
       expect(blocked.delivery).toMatchObject({ available: false, eta: null });
-      const { revision, totalCents } = await cartView(ctx, buyer.user, buyer.addressId);
-      const refused = await ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', crypto.randomUUID()).send({ mode: 'delivery', addressId: buyer.addressId, cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'card', card: { token: 'fake_tok_approved', installments: 1 } });
+      const { revision, totalCents } = await cartView(ctx, far.user, far.addressId);
+      const refused = await ctx.http.post('/v1/orders').set(bearer(far.user.accessToken)).set('Idempotency-Key', crypto.randomUUID()).send({ mode: 'delivery', addressId: far.addressId, cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'card', card: { token: 'fake_tok_approved', installments: 1 } });
       expect(refused.status).toBeGreaterThanOrEqual(400);
     } finally {
       await useParam(ctx, 'entrega_max_min', 120);

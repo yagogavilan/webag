@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
+import { maxDistanceForCeilingM } from '../logistics/domain/eta.js';
 import { AuditService } from './audit.service.js';
 import { parameterHistory, parameters } from './db/schema.js';
 import {
@@ -85,6 +86,7 @@ export class ParametersService {
     const problem = validateParameterValue(definition, value);
     if (problem) throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: problem, errors: [{ field: 'value', message: problem }] });
     await this.assertFreeShippingRule(key, value as number);
+    await this.assertEtaRules(key, value as number);
     await this.write(definition, value as string | number, reason, ctx, 'parameter.update', expectedUpdatedAt);
     return this.view(key);
   }
@@ -100,11 +102,33 @@ export class ParametersService {
     }
   }
 
+  /**
+   * RN-02 / BUG-022: validação cruzada dos parâmetros do ETA (DEC-053/054). Valor que zera o alcance da entrega da plataforma inteira é
+   * recusado (422), com a prévia de alcance em km do que o valor proposto faria. `entrega_max_min` - `entrega_faixa_min` precisa ser
+   * >= preparo padrão + despacho + 5 min (senão nenhuma loja alcança ninguém) e `entrega_faixa_min` <= `entrega_max_min` / 4.
+   */
+  private async assertEtaRules(key: string, value: number): Promise<void> {
+    const keys = ['entrega_max_min', 'entrega_faixa_min', 'entrega_preparo_padrao_min', 'entrega_despacho_min'];
+    if (!keys.includes(key)) return;
+    const next = async (k: string): Promise<number> => (k === key ? value : this.getNumber(k));
+    const [max, band, prep, dispatch, factor, perKm] = await Promise.all([next('entrega_max_min'), next('entrega_faixa_min'), next('entrega_preparo_padrao_min'), next('entrega_despacho_min'), this.getNumber('entrega_rota_fator_pct'), this.getNumber('entrega_min_por_km')]);
+    const reachKm = maxDistanceForCeilingM({ defaultPrepMin: prep, dispatchMin: dispatch, routeFactorPct: factor, minPerKm: perKm, bandMin: band, maxMin: max }, prep) / 1000;
+    const preview = `Com estes valores a entrega alcança até ${reachKm.toFixed(1).replace('.', ',')} km da loja.`;
+    const fail = (detail: string): never => {
+      throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: `${detail} ${preview}`, errors: [{ field: 'value', message: detail }], extensions: { reachKm } });
+    };
+    if (max - band < prep + dispatch + 5) {
+      fail(`O teto (${max} min) menos a folga (${band} min) precisa cobrir preparo (${prep}) + despacho (${dispatch}) + 5 min, ou seja, teto de pelo menos ${prep + dispatch + 5 + band} min; senão nenhuma loja alcança ninguém.`);
+    }
+    if (band > max / 4) fail(`A folga (${band} min) não pode passar de um quarto do teto (${max} min).`);
+  }
+
   /** WB-119 C4: volta ao padrão de seed. */
   async reset(key: string, reason: string, ctx: RequestContext, expectedUpdatedAt?: string | null): Promise<ParameterView> {
     const definition = PARAMETER_BY_KEY.get(key);
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
     if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
+    await this.assertEtaRules(key, definition.default as number);
     await this.write(definition, definition.default, reason, ctx, 'parameter.reset', expectedUpdatedAt);
     return this.view(key);
   }

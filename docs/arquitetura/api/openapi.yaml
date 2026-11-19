@@ -1124,7 +1124,7 @@ paths:
       tags: [config]
       operationId: updateParameter
       summary: Alterar parâmetro
-      description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Validação cruzada do ETA (RN-02, BUG-022), também no `reset`: `entrega_max_min` menos `entrega_faixa_min` precisa cobrir `entrega_preparo_padrao_min` + `entrega_despacho_min` + 5 e `entrega_faixa_min` <= `entrega_max_min` / 4; senão 422 `PARAMETER_OUT_OF_RANGE` com a prévia do alcance no `detail` e em `reachKm` (km de alcance que o valor proposto daria). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
         - { name: key, in: path, required: true, description: Chave do parâmetro, schema: { type: string } }
       requestBody:
