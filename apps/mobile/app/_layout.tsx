@@ -22,6 +22,7 @@ import { ToastProvider, useToast } from '../src/components/Toast';
 import { registerCartCleanup, useMergeGuestCart } from '../src/features/cart/hooks';
 import { cartActions, cartStore } from '../src/features/cart/store';
 import { modeStore } from '../src/features/catalog/queries';
+import { usePushOpenHandler } from '../src/features/notifications/open';
 import { registerFavoritesCleanup } from '../src/features/favorites/hooks';
 import { searchHistoryStore } from '../src/features/search/history';
 import { t } from '../src/i18n';
@@ -50,6 +51,12 @@ function CartExpiredNotice({ expired }: { expired: boolean }) {
 function CartMerge() {
   const toast = useToast();
   useMergeGuestCart(toast.show);
+  return null;
+}
+
+/** Toque em push: conta a abertura da campanha e abre o pedido/troca. */
+function PushOpen() {
+  usePushOpenHandler();
   return null;
 }
 
@@ -109,6 +116,7 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <CartExpiredNotice expired={cartExpired} />
           <CartMerge />
+          <PushOpen />
           <Stack
             screenOptions={{
               headerShown: false,

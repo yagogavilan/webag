@@ -1,52 +1,93 @@
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { signOut } from '../../../src/api/auth-api';
 import { useSession } from '../../../src/api/session';
 import { Button } from '../../../src/components/Button';
-import { ArrowsClockwise, Heart, MapPin, Question, Receipt } from '../../../src/components/icons';
+import { ArrowsClockwise, Bell, Heart, MapPin, Question, Receipt, ShieldUser, Document } from '../../../src/components/icons';
 import { ListItem } from '../../../src/components/ListItem';
 import { Screen } from '../../../src/components/Screen';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { EmailVerifyBanner } from '../../../src/features/auth/EmailVerifyBanner';
+import { initials } from '../../../src/features/catalog/StoreRow';
 import { t } from '../../../src/i18n';
 import { theme } from '../../../src/theme';
 
-/** Conta (WB-032, versão enxuta): acesso, endereços, favoritos e termos. Dados pessoais e pedidos entram nas ondas seguintes. */
+/** Conta (CC1): cartão da pessoa e a lista em 3 grupos (vida no Webag, avisos e ajuda, privacidade e legal). Visitante só vê o que não pede conta. */
 export default function AccountScreen() {
   const router = useRouter();
   const toast = useToast();
   const session = useSession();
   const loggedIn = session.status === 'authenticated';
+  const version = Constants.expoConfig?.version ?? '';
 
   return (
     <Screen bottomInset={false} scroll testID="account.screen">
-      <Text accessibilityRole="header" variant="title1">
+      <Text accessibilityRole="header" variant="poster">
         {t('account.title')}
       </Text>
 
       <EmailVerifyBanner />
 
       {loggedIn ? (
-        <View style={styles.hello} testID="home.account">
-          <Text variant="title2">{t('home.greeting', { name: session.user.name.split(' ')[0] ?? '' })}</Text>
-          <Text color="secondary">{session.user.email}</Text>
+        <View accessible accessibilityLabel={t('account.initialsLabel', { name: session.user.name, email: session.user.email })} style={styles.profile} testID="home.account">
+          <View style={styles.avatar}>
+            <Text allowFontScaling={false} style={styles.avatarText} variant="title1">
+              {initials(session.user.name)}
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text numberOfLines={1} variant="title2">
+              {session.user.name}
+            </Text>
+            <Text color="secondary" numberOfLines={1}>
+              {session.user.email}
+            </Text>
+          </View>
         </View>
       ) : (
-        <View style={styles.hello} testID="home.visitor">
-          <Text variant="title2">{t('account.visitorTitle')}</Text>
-          <Text color="secondary">{t('account.visitorText')}</Text>
-          <Button label={t('login.submit')} onPress={() => router.push('/login')} size="lg" testID="home.login" />
-          <Button label={t('signup.submit')} onPress={() => router.push('/signup')} testID="home.signup" variant="secondary" />
+        <View style={styles.visitor} testID="home.visitor">
+          <Text style={styles.onInk} variant="title1">
+            {t('account.visitorTitle')}
+          </Text>
+          <Text style={styles.onInkMuted}>{t('account.visitorText')}</Text>
+          <Button label={t('login.submit')} onPress={() => router.push('/login')} size="lg" testID="home.login" variant="onInk" />
+          <Button label={t('signup.submit')} onPress={() => router.push('/signup')} testID="home.signup" variant="onBrandText" />
         </View>
       )}
 
-      <View>
-        <ListItem icon={MapPin} onPress={() => router.push('/addresses')} testID="account.addresses" title={t('account.addresses')} />
-        {loggedIn ? <ListItem icon={ArrowsClockwise} onPress={() => router.push('/exchanges' as never)} testID="account.exchanges" title={t('exchange.listTitle')} /> : null}
-        <ListItem icon={Heart} onPress={() => router.push('/favorites')} testID="account.favorites" title={t('account.favorites')} />
+      {loggedIn ? (
+        <View style={styles.group}>
+          <Text color="secondary" variant="captionStrong">
+            {t('account.groupLife')}
+          </Text>
+          <ListItem icon={MapPin} onPress={() => router.push('/addresses')} testID="account.addresses" title={t('account.addresses')} />
+          <ListItem icon={Heart} onPress={() => router.push('/favorites')} testID="account.favorites" title={t('account.favorites')} />
+          <ListItem icon={ArrowsClockwise} onPress={() => router.push('/exchanges' as never)} testID="account.exchanges" title={t('exchange.listTitle')} />
+        </View>
+      ) : (
+        <View style={styles.group}>
+          <ListItem icon={MapPin} onPress={() => router.push('/addresses')} testID="account.addresses" title={t('account.addresses')} />
+          <ListItem icon={Heart} onPress={() => router.push('/favorites')} testID="account.favorites" title={t('account.favorites')} />
+        </View>
+      )}
+
+      <View style={styles.group}>
+        <Text color="secondary" variant="captionStrong">
+          {t('account.groupHelp')}
+        </Text>
+        {loggedIn ? <ListItem icon={Bell} onPress={() => router.push('/privacy/notifications' as never)} testID="account.item-notifications" title={t('account.notificationsItem')} /> : null}
+        <ListItem icon={Question} onPress={() => router.push('/help' as never)} testID="account.item-help" title={t('account.helpItem')} />
+      </View>
+
+      <View style={styles.group}>
+        <Text color="secondary" variant="captionStrong">
+          {t('account.groupPrivacy')}
+        </Text>
+        <ListItem icon={ShieldUser} onPress={() => router.push('/privacy' as never)} testID="account.item-privacy" title={t('account.privacyItem')} />
         <ListItem icon={Receipt} onPress={() => router.push('/legal/customer_terms')} testID="account.legal" title={t('account.legal')} />
-        <ListItem icon={Question} onPress={() => router.push('/legal/privacy')} testID="account.privacy" title={t('legal.privacy')} />
+        <ListItem icon={Document} onPress={() => router.push('/legal/privacy')} testID="account.privacy" title={t('legal.privacy')} />
       </View>
 
       {loggedIn ? (
@@ -60,10 +101,22 @@ export default function AccountScreen() {
           variant="secondary"
         />
       ) : null}
+      {version ? (
+        <Text color="secondary" testID="account.version" variant="caption">
+          {t('account.version', { version })}
+        </Text>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hello: { gap: theme.space[2], paddingVertical: theme.space[2] },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: theme.space[3], backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.card, padding: theme.space[4] },
+  avatar: { width: 56, height: 56, borderRadius: theme.radius.lg, backgroundColor: theme.color.brand[500], alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: theme.color.neutral[0] },
+  visitor: { gap: theme.space[3], backgroundColor: theme.color.surface.ink, borderRadius: theme.radius.card, padding: theme.space[5] },
+  onInk: { color: theme.color.neutral[0] },
+  onInkMuted: { color: theme.color.text.onInkMuted },
+  group: { gap: theme.space[1], paddingTop: theme.space[3] },
+  flex: { flex: 1 },
 });

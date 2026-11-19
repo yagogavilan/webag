@@ -18,3 +18,13 @@ export function formatCountdown(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/** "18 nov, 10:15" (ou "18 nov" sem hora) a partir de uma data ISO. Sem Intl: o Hermes de aparelho de entrada pode vir sem ICU completo. */
+export function formatWhen(iso: string, opts: { time?: boolean } = { time: true }): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = `${d.getDate()} ${MONTHS[d.getMonth()] ?? ''}`;
+  return opts.time === false ? day : `${day}, ${formatClock(d.getTime())}`;
+}

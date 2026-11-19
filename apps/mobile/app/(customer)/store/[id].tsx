@@ -13,6 +13,7 @@ import { Sticker } from '../../../src/components/Sticker';
 import { ProductArt, objectFor } from '../../../src/art/ProductArt';
 import { MiniBag } from '../../../src/features/cart/MiniBag';
 import { Pressy } from '../../../src/motion';
+import { ReportButton } from '../../../src/features/report/ReportSheet';
 import { deliveryEta } from '../../../src/features/catalog/eta';
 import { coverColor, initials } from '../../../src/features/catalog/StoreRow';
 import { IconButton } from '../../../src/components/IconButton';
@@ -393,6 +394,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
         <View style={styles.links}>
           <Button label={t('store.exchangePolicy')} onPress={onExchange} testID="store.exchange-policy" variant="text" />
           <Button label={t('store.about')} onPress={onAbout} testID="store.about" variant="text" />
+          <ReportButton target="store" targetId={store.id} label={t('report.titleStore')} testID="store.report" />
         </View>
       </View>
     </View>

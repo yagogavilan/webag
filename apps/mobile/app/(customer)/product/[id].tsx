@@ -7,6 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } 
 import { Palco } from '../../../src/art/Palco';
 import { ProductArt, objectFor } from '../../../src/art/ProductArt';
 import { Pressy } from '../../../src/motion';
+import { ReportButton } from '../../../src/features/report/ReportSheet';
 import { fetchProduct } from '../../../src/api/catalog-api';
 import { ApiError } from '../../../src/api/problem';
 import { Badge } from '../../../src/components/Badge';
@@ -378,6 +379,7 @@ export default function ProductScreen() {
             onAll={() => router.push({ pathname: '/reviews', params: { kind: 'product', id: product.id, name: product.name } })}
             reviews={reviews.data?.pages[0]?.data.slice(0, 3) ?? []}
           />
+          <ReportButton target="product" targetId={product.id} label={t('report.titleProduct')} testID="product.report" />
           {!storeOpen && !allSoldOut ? (
             <Button label={t('product.seeStoreProducts')} onPress={() => router.push(`/store/${product.store.id}`)} variant="text" />
           ) : null}

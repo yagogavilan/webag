@@ -30,7 +30,7 @@ describe('Conta do cliente', () => {
       user: { id: 'u1', name: 'Maria Souza', email: 'maria@gmail.com', emailVerified: false },
     });
     await renderScreen(<AccountScreen />);
-    expect(screen.getByText('Olá, Maria')).toBeOnTheScreen();
+    expect(screen.getByText('Maria Souza')).toBeOnTheScreen();
     expect(screen.getByText('Confirme seu e-mail para fazer outros pedidos e usar cupons.')).toBeOnTheScreen();
     expect(screen.getByText('Código enviado para maria@gmail.com.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Digitar código' }));
