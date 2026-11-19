@@ -1,6 +1,6 @@
 # Design System Webag
 
-> Autor: product-designer. Data: 2026-11-18. Versão 0.3.0 (0.3.0: §3.1c componentes das ondas 1B, 5 e 6; OTPInput com reenvio em 1:00; 0.2.0: PasswordField com confirmação por DEC-012; §3.1b componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
+> Autor: product-designer. Data: 2026-11-18. Versão 0.4.0 (0.4.0: §3.1d componentes de logística, troca e medidas; 0.3.0: §3.1c componentes das ondas 1B, 5 e 6; OTPInput com reenvio em 1:00; 0.2.0: PasswordField com confirmação por DEC-012; §3.1b componentes das ondas 2 a 4). Valores de cor, tipo, espaço, raio, sombra e movimento vêm de `packages/tokens/` (nunca escrever hex ou px solto em componente). Marca e tom: `identidade.md`. Fluxos: `fluxos.md`. Referências: `pesquisa-referencias.md`.
 > Alvos: app Expo (cliente) e web Next.js (lojista e admin). Mesma linguagem, componentes implementados nos dois, comportamento nativo de cada plataforma quando divergir (§8).
 
 ## 1. Princípios
@@ -138,6 +138,23 @@ Compostos de tokens e componentes existentes; nenhum cria cor, raio ou sombra. E
 | **DiagnosticRow** | Ajuda do lojista | Ícone + rótulo + estado **em texto** ("Ligado", "Desligado") + ação de correção quando falha; nunca só cor |
 | **EstimateCard** | Push segmentado | Número grande (`numeral`) + legenda + linha de exclusões; abaixo do mínimo o número vira "Poucas pessoas (12)" e o botão de envio fica inerte com o motivo no rótulo |
 | **ParamRow** | Parâmetros | ListItem 72: nome legível, valor com unidade, "Padrão X · de A a B", chave técnica em `caption`, selo "Alterado" ou "Lei" (piso legal) |
+
+### 3.1d Componentes adicionados em 2026-11-19 (v0.4.0: logística, troca sem atrito, medidas)
+
+Compostos de tokens e componentes existentes; nenhum cria cor, raio ou sombra. Estados: §3.2. Detalhe de uso em `telas/onda-4d-logistica-admin.md`, `onda-5b-troca.md` e `onda-5c-ajustes-produto.md`.
+
+| Componente | Onde | Regras |
+|---|---|---|
+| **WaitChip** | Logística (fila), troca do lojista (prazo de resposta) | Selo de 32 com ícone + texto sobre tempo. Normal `surface.sunken` + `Clock`; Atenção `warning.subtle` + `Warning`; Atrasado/Urgente `danger.subtle` + `WarningCircle`. Variantes: **espera** (minutos), **prazo** (dias ou horas até vencer). Anuncia ao leitor só ao mudar de nível, nunca a cada minuto |
+| **RadioCard** | Troca (motivo, como devolver) | Cartão de rádio >= 56: título `bodyStrong`, 1 linha de apoio com **prazo e custo escritos**, ícone à esquerda; selecionado = borda 2 `brand.600` + check; **inerte** = `opacity.disabled` + `Info` + motivo escrito (toque explica, sem erro) |
+| **VariantSelector (com estoque)** | Troca, produto | Extensão do VariantSelector: opção atual inerte "Seu tamanho: M"; sem estoque riscada com o texto "Sem estoque"; "Resta 1" com 3 ou menos |
+| **StickySummary** | Troca (rodapé) | Rodapé fixo com 2 linhas (escolha vivo + "Hoje você paga R$ 0,00") e o botão `lg`; empilha a 150% sem truncar valor |
+| **MessagePreview** | Logística (WhatsApp) | Texto somente leitura recolhido ("Ver mensagem") + "Copiar mensagem"; o corpo não é editável, só o recado |
+| **DriverPicker** | Logística (atribuir) | Lista de rádio 64: nome, "Livre" ou "Em corrida: 1", celular; livres primeiro; cadastro inline quando vazio |
+| **EarningsHint** ("Você recebe") | Formulário de produto | Cartão `surface.sunken` de 2 linhas: valor `bodyStrong` e a comissão `caption`; `role="status"`; some para quem não vê valores (RN-13) |
+| **MeasureTable** | Ficha do produto (folha) | Tabela de dados: 1ª coluna fixa, rolagem horizontal só dentro da tabela, tamanho escolhido com borda + check + "Seu tamanho", sem estoque em texto |
+| **MeasureEditor** | Formulário de produto | Celular: 1 cartão por tamanho com campos empilhados; desktop: tabela; linhas vêm das variações; atalhos "Usar de outro produto" e modelo da loja |
+| **FitPicker / FitSummary** | Avaliação, ficha, painel do lojista | 3 chips "Ficou pequeno / Serviu certinho / Ficou grande" (rádio 48); resumo em barra de 3 segmentos com rótulos e percentuais escritos, só com >= 5 respostas |
 
 ### 3.2 Matriz de estados (cada componente interativo)
 
