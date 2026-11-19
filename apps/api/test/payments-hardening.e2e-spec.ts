@@ -7,7 +7,7 @@ import { ProviderTimeoutError } from '../src/modules/payments/payment-provider.j
 import { auditLog, paymentAlerts, paymentAttempts, paymentRefundIntents, paymentRefunds, webhookEvents } from '../src/platform/database/schema.js';
 import { DRIZZLE } from '../src/platform/database/database.module.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
-import { ensureLegalDocs, registerUser } from './helpers/fixtures.js';
+import { ensureLegalDocs, registerUser, retirePreviousPaymentAttempts } from './helpers/fixtures.js';
 
 /** Endurecimento de pagamentos pedido no review da Onda 1: I2, I3, I4, I5, I6. */
 describe('Pagamentos: endurecimento (review I2-I6)', () => {
@@ -26,6 +26,7 @@ describe('Pagamentos: endurecimento (review I2-I6)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     await ensureLegalDocs(ctx);
+    await retirePreviousPaymentAttempts(ctx); // a conciliação olha só os 200 mais antigos: não deixe a suíte inteira empurrar os deste arquivo para fora
     payments = ctx.app.get(PaymentsService);
     fake = ctx.app.get(FakePaymentProvider);
     user = await registerUser(ctx);

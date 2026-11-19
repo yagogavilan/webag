@@ -7,7 +7,7 @@ import { signedWebhookHeaders } from '../src/modules/payments/webhook-signature.
 import { DEV_FAKE_WEBHOOK_SECRET } from '../src/platform/config/env.js';
 import { auditLog, paymentAlerts, paymentAttempts, paymentRefunds, webhookEvents } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, listRoutes, type TestContext } from './helpers/app.js';
-import { createAdmin, ensureLegalDocs, registerUser, type TestAdmin } from './helpers/fixtures.js';
+import { createAdmin, ensureLegalDocs, registerUser, retirePreviousPaymentAttempts, type TestAdmin } from './helpers/fixtures.js';
 
 describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB-150, WB-153, SEC-030..044)', () => {
   let ctx: TestContext;
@@ -33,6 +33,7 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
   beforeAll(async () => {
     ctx = await createTestApp();
     await ensureLegalDocs(ctx);
+    await retirePreviousPaymentAttempts(ctx); // a conciliação olha só os 200 mais antigos: não deixe a suíte inteira empurrar os deste arquivo para fora
     payments = ctx.app.get(PaymentsService);
     fake = ctx.app.get(FakePaymentProvider);
     user = await registerUser(ctx);

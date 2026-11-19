@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import sharp from 'sharp';
 import { vi } from 'vitest';
 import { GEOCODING_PROVIDER, type GeocodingProvider } from '../../src/modules/stores/index.js';
 import { OBJECT_STORAGE } from '../../src/platform/storage/object-storage.js';
 import { MemoryObjectStorage } from '../../src/platform/storage/memory.storage.js';
-import { sessions } from '../../src/platform/database/schema.js';
+import { paymentAttempts, sessions } from '../../src/platform/database/schema.js';
 import { generateTotpSecret } from '../../src/modules/identity/totp.js';
 import { PasswordService } from '../../src/modules/identity/password.service.js';
 import { sealMfaSecret } from '../../src/platform/crypto/mfa-seal.js';
@@ -314,6 +314,16 @@ export async function expireReauth(ctx: TestContext, userId: string): Promise<vo
 // ------------------------------------------------------------------ Onda 3
 
 /** Cidade ativa por nome (cria se faltar). Os testes compartilham o banco: nunca assumem que está vazio. */
+/**
+ * A conciliação de pagamentos olha só os 200 pagamentos mais antigos (por `updated_at`) com `provider_payment_id`. O banco de teste é
+ * COMPARTILHADO entre os arquivos de uma execução: quanto mais testes rodam antes, mais pagamentos antigos empurram os do teste para fora dos
+ * 200 e a conciliação devolve `synced: 0` (só na suíte inteira). Chame em `beforeAll` de quem chama `reconcile()`: retira da conciliação os
+ * pagamentos de arquivos anteriores (as linhas seguem no banco; só perdem o id do provedor).
+ */
+export async function retirePreviousPaymentAttempts(ctx: TestContext): Promise<void> {
+  await ctx.db.update(paymentAttempts).set({ providerPaymentId: null }).where(isNotNull(paymentAttempts.providerPaymentId));
+}
+
 /**
  * SEC-169: o município do CEP agora é SEMPRE conferido com a cidade informada. Testes que isolam coortes em cidades próprias (nome
  * aleatório) fazem o provedor de CEP simulado responder essa cidade, em vez de a do prefixo do CEP.
