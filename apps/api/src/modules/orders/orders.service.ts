@@ -10,6 +10,7 @@ import { FeatureFlagsService, ParametersService } from '../admin/index.js';
 import { CartService } from '../cart/index.js';
 import { carts, cartItems, couponRedemptions, coupons } from '../cart/db/schema.js';
 import { InventoryService } from '../catalog/index.js';
+import { ExposureLimitService } from '../stores/index.js';
 import { computeOrderFinance, LedgerService, type OrderFinance } from '../finance/index.js';
 import { IdempotencyService } from '../idempotency/index.js';
 import { MediaService } from '../media/index.js';
@@ -76,6 +77,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   private timers: NodeJS.Timeout[] = [];
   /** Eventos do pedido gerados dentro da transação do pagamento; saem no `afterTransition` (depois do commit). */
   private readonly pendingEvents = new Map<string, OrderEvent[]>();
+  /** Tentativas cujo valor, loja ou vínculo não batem com o pedido (SEC-134): tratadas no `afterTransition`. */
+  private readonly rejectedAttempts = new Set<string>();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
@@ -87,6 +90,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     private readonly params: ParametersService,
     private readonly flags: FeatureFlagsService,
     private readonly media: MediaService,
+    private readonly exposure: ExposureLimitService,
     readonly bus: OrderEventBus,
   ) {}
 
@@ -125,8 +129,6 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   private async createOnce(principal: Principal, input: CreateOrderInput): Promise<string> {
     if (input.mode === 'delivery' && !input.addressId) throw errors.unprocessable('ADDRESS_REQUIRED', 'Escolha o endereço de entrega');
     if (input.paymentMethod === 'card' && !input.card) throw errors.validation([{ field: 'card', message: 'Informe o cartão.' }]);
-    await this.assertEmailRule(principal);
-
     const { view, quote } = await this.cart.quote(principal, { mode: input.mode, addressId: input.addressId });
     if (!quote) throw errors.unprocessable('EMPTY_CART', 'Sacola vazia');
 
@@ -139,7 +141,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       const kind = quote.result.deliveryFeeCents === 0 ? 'DISCOUNT_CHANGED' : 'DELIVERY_FEE_CHANGED';
       throw errors.conflict('CART_CHANGED', 'O valor mudou', 'Confira o novo total antes de pagar.', { changes: [{ kind, fromCents: input.expectedTotalCents, toCents: quote.result.totalCents }], cart: view });
     }
-    this.assertBlockers(quote);
+    await this.assertBlockers(quote);
     if (this.payments.provider.requiresPayerDocument?.(input.paymentMethod) && !input.payerDocument) {
       throw errors.unprocessable('PAYER_DOCUMENT_REQUIRED', 'Informe o CPF', { detail: 'O pagamento exige o CPF do pagador.' });
     }
@@ -184,15 +186,35 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return order.id;
   }
 
-  /** DEC-014: sem confirmar o e-mail, no máximo 1 pedido pago; com a flag da variante B, nenhum. */
-  private async assertEmailRule(principal: Principal): Promise<void> {
+  /**
+   * SEC-131 / SEC-064 / DEC-014, sob trava da conta (criações simultâneas da mesma conta se enfileiram): teto de pedidos
+   * aguardando pagamento, de PIX por hora e, sem e-mail confirmado, de pedidos pagos + pendentes.
+   */
+  private async assertAccountLimits(tx: Tx, principal: Principal, paymentMethod: 'pix' | 'card'): Promise<void> {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`order-create:${principal.userId}`}))`);
+    const [pending] = await tx.select({ n: count() }).from(orders).where(and(eq(orders.userId, principal.userId), eq(orders.status, 'awaiting_payment')));
+    const pendingCount = pending?.n ?? 0;
+    if (pendingCount >= (await this.params.getNumber('pedidos_pendentes_max'))) {
+      throw new AppError(429, 'TOO_MANY_PENDING_ORDERS', 'Você já tem pedidos aguardando pagamento', { detail: 'Pague ou cancele o pedido em aberto antes de fazer outro.', retryAfterSeconds: 60 });
+    }
+    if (paymentMethod === 'pix') {
+      const [pix] = await tx
+        .select({ n: count() })
+        .from(orders)
+        .where(and(eq(orders.userId, principal.userId), eq(orders.paymentMethod, 'pix'), sql`${orders.createdAt} > now() - interval '1 hour'`));
+      if ((pix?.n ?? 0) >= (await this.params.getNumber('pix_hora_max'))) {
+        throw new AppError(429, 'TOO_MANY_PIX_ORDERS', 'Muitos pedidos com PIX em pouco tempo', { detail: 'Tente de novo em alguns minutos.', retryAfterSeconds: 300 });
+      }
+    }
     if (principal.emailVerified) return;
     const blocksAll = await this.flags.isEnabled('confirmacao_email_bloqueia_compra');
-    const [row] = await this.db.select({ n: count() }).from(orders).where(and(eq(orders.userId, principal.userId), inArray(orders.status, [...PAID_STATUSES])));
-    if (blocksAll || (row?.n ?? 0) >= 1) throw errors.unprocessable('EMAIL_UNVERIFIED', 'Confirme seu e-mail', { detail: 'Falta confirmar seu e-mail para pagar.' });
+    const [paid] = await tx.select({ n: count() }).from(orders).where(and(eq(orders.userId, principal.userId), inArray(orders.status, [...PAID_STATUSES])));
+    if (blocksAll || (paid?.n ?? 0) + pendingCount >= (await this.params.getNumber('email_nao_confirmado_pedidos_max'))) {
+      throw errors.unprocessable('EMAIL_UNVERIFIED', 'Confirme seu e-mail', { detail: 'Falta confirmar seu e-mail para pagar.' });
+    }
   }
 
-  private assertBlockers(quote: NonNullable<Awaited<ReturnType<CartService['quote']>>['quote']>): void {
+  private async assertBlockers(quote: NonNullable<Awaited<ReturnType<CartService['quote']>>['quote']>): Promise<void> {
     const blockers = quote.blockers;
     if (blockers.includes('STORE_CLOSED')) throw errors.conflict('STORE_CLOSED', 'Loja fechada', 'A loja está fechada agora.', { opensAt: quote.opening.opensAt });
     const map: [string, string, string][] = [
@@ -206,6 +228,11 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       ['ABOVE_MAX_ORDER', 'ABOVE_MAX_ORDER', 'Pedido acima do limite'],
     ];
     for (const [blocker, code, title] of map) if (blockers.includes(blocker as never)) throw errors.unprocessable(code, title);
+    if (blockers.includes('NEW_STORE_LIMIT')) {
+      const limit = await this.exposure.forStore(quote.store.id);
+      const reais = ((limit.maxOrderCents ?? 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      throw errors.unprocessable('NEW_STORE_LIMIT', 'Pedido acima do limite da loja nova', { detail: `Esta loja é nova e, por enquanto, aceita pedidos de até ${reais}.` });
+    }
   }
 
   /** Cupom da loja reduz a base da comissão; cupom da plataforma é custo da Webag e limitado à comissão (DEC-016). */
@@ -233,6 +260,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.db.transaction(async (tx) => {
+          await this.assertAccountLimits(tx, principal, input.paymentMethod);
           const [cart] = await tx.select().from(carts).where(eq(carts.id, quote.cartId)).for('update');
           if (!cart || cart.revision !== input.cartRevision) throw errors.conflict('CART_CHANGED', 'Sua sacola mudou', 'Confira os valores antes de pagar.');
           if (quote.coupon) await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
@@ -431,6 +459,11 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!UUID_RE.test(attempt.externalReference)) return;
     const [order] = await tx.select().from(orders).where(eq(orders.id, attempt.externalReference)).for('update');
     if (!order) return; // pagamento avulso (ferramentas de dev)
+    // SEC-134: a tentativa precisa ser a do pedido (vínculo, valor e loja); senão não paga, alerta e (se aprovada) estorna.
+    if ((order.paymentAttemptId && order.paymentAttemptId !== attempt.id) || attempt.amountCents !== order.totalCents || attempt.storeId !== order.storeId) {
+      this.rejectedAttempts.add(attempt.id);
+      return;
+    }
     if (!order.paymentAttemptId) await tx.update(orders).set({ paymentAttemptId: attempt.id }).where(eq(orders.id, order.id));
     if (order.status !== 'awaiting_payment') return; // pedido já encerrado: o `afterTransition` estorna se foi pago
 
@@ -462,6 +495,11 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const events = this.pendingEvents.get(attempt.id) ?? [];
     this.pendingEvents.delete(attempt.id);
     for (const event of events) await this.bus.emit(event);
+    if (this.rejectedAttempts.delete(attempt.id)) {
+      await this.payments.raiseAlert(attempt.id, 'order_attempt_mismatch', { orderId: attempt.externalReference });
+      if (attempt.status === 'approved') await this.payments.refundBySystem(attempt.id, attempt.amountCents, 'order_attempt_mismatch', `auto-refund-mismatch:${attempt.id}`);
+      return;
+    }
     if (attempt.status !== 'approved' || !UUID_RE.test(attempt.externalReference)) return;
     const [order] = await this.db.select().from(orders).where(eq(orders.id, attempt.externalReference));
     if (order && (order.status === 'cancelled' || order.status === 'expired' || order.status === 'refused')) {

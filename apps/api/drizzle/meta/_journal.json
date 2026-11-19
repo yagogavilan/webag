@@ -127,6 +127,13 @@
       "when": 1795044606454,
       "tag": "0017_payment_attempt_pix_qr_3ds",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795046639327,
+      "tag": "0018_store_exposure_limit",
+      "breakpoints": true
     }
   ]
 }

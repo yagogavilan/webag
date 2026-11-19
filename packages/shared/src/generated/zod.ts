@@ -1382,6 +1382,83 @@ export const SetStoreCommissionResponse = zod.object({
 
 
 /**
+ * Qualquer membro da loja. O teto por pedido vale até 30 dias da aprovação OU 20 pedidos entregues, o que vier primeiro (parâmetros `loja_nova_*`, DEC-020b). `maxOrder` é `null` quando não há limite.
+ * @summary Limite de exposição da loja nova (banner de pedidos até R$ 500,00)
+ */
+export const GetStoreExposureLimitParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreExposureLimitResponse = zod.object({
+  "active": zod.boolean().describe('O teto vale agora'),
+  "mode": zod.enum(['default', 'released', 'custom']),
+  "maxOrder": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Teto por pedido; null sem limite'),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable().describe('Fim pelo prazo (aprovação + loja_nova_dias); null se liberada'),
+  "deliveredOrders": zod.int(),
+  "ordersToEnd": zod.int().nullable().describe('Quantos pedidos entregues faltam para encerrar o limite')
+})
+
+
+/**
+ * Permissão de admin: `stores:read`.
+ * @summary Limite de exposição da loja (admin)
+ */
+export const GetAdminStoreExposureLimitParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetAdminStoreExposureLimitResponse = zod.object({
+  "active": zod.boolean().describe('O teto vale agora'),
+  "mode": zod.enum(['default', 'released', 'custom']),
+  "maxOrder": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Teto por pedido; null sem limite'),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable().describe('Fim pelo prazo (aprovação + loja_nova_dias); null se liberada'),
+  "deliveredOrders": zod.int(),
+  "ordersToEnd": zod.int().nullable().describe('Quantos pedidos entregues faltam para encerrar o limite')
+})
+
+
+/**
+ * Permissão de admin: `stores:decide` (operação e super admin). `default` volta aos parâmetros, `released` tira o limite, `custom` troca o teto (R$ 100,00 a R$ 50.000,00). Motivo obrigatório; auditado.
+ * @summary Liberar ou ajustar o limite da loja nova
+ */
+export const SetAdminStoreExposureLimitParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const setAdminStoreExposureLimitBodyMaxOrderCentsMin = 10000;
+export const setAdminStoreExposureLimitBodyMaxOrderCentsMax = 5000000;
+
+export const setAdminStoreExposureLimitBodyReasonMin = 3;
+export const setAdminStoreExposureLimitBodyReasonMax = 300;
+
+
+
+export const SetAdminStoreExposureLimitBody = zod.object({
+  "mode": zod.enum(['default', 'released', 'custom']),
+  "maxOrderCents": zod.int().min(setAdminStoreExposureLimitBodyMaxOrderCentsMin).max(setAdminStoreExposureLimitBodyMaxOrderCentsMax).optional().describe('Só com mode=custom'),
+  "reason": zod.string().min(setAdminStoreExposureLimitBodyReasonMin).max(setAdminStoreExposureLimitBodyReasonMax)
+})
+
+export const SetAdminStoreExposureLimitResponse = zod.object({
+  "active": zod.boolean().describe('O teto vale agora'),
+  "mode": zod.enum(['default', 'released', 'custom']),
+  "maxOrder": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Teto por pedido; null sem limite'),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable().describe('Fim pelo prazo (aprovação + loja_nova_dias); null se liberada'),
+  "deliveredOrders": zod.int(),
+  "ordersToEnd": zod.int().nullable().describe('Quantos pedidos entregues faltam para encerrar o limite')
+})
+
+
+/**
  * Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros.
  * @summary Histórico de comissão da categoria
  */
@@ -5999,8 +6076,12 @@ export const GetCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6122,8 +6203,12 @@ export const ClearCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6258,8 +6343,12 @@ export const SetCartItemResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6385,8 +6474,12 @@ export const RemoveCartItemResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6516,8 +6609,12 @@ export const ApplyCartCouponResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6638,8 +6735,12 @@ export const RemoveCartCouponResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6761,8 +6862,12 @@ export const AcknowledgeCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -6897,8 +7002,12 @@ export const MergeCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER'])),
-  "opensAt": zod.iso.datetime({"offset":true}).nullable()
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "newStoreMaxOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Teto por pedido da loja nova')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -7484,7 +7593,7 @@ export const CancelOrderByStoreResponse = zod.object({
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrderHeaderIdempotencyKeyMin = 8;

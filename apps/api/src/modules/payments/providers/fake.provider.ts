@@ -28,7 +28,7 @@ export interface SimulateOptions {
 }
 
 /** Tokens de texto documentados no README (WB-150 C3): resultado do cartão sem decorar sufixos. */
-const FAKE_TOKENS: Record<string, string> = { fake_tok_approved: '0000', fake_tok_insufficient: '0001', fake_tok_3ds: '0002', fake_tok_timeout: '0003' };
+const FAKE_TOKENS: Record<string, string> = { fake_tok_approved: '0000', fake_tok_insufficient: '0001', fake_tok_3ds: '0002', fake_tok_timeout: '0003', fake_tok_wrong_fee: '0004' };
 /** Tarifa simulada (`fee_details`): PIX 0,99% e cartão 4,98%, as estimativas do PRD (HIP-016). */
 const feeOf = (payment: ProviderPayment, method: 'pix' | 'card'): number => Math.round((payment.amountCents * (method === 'pix' ? 99 : 498)) / 10_000);
 
@@ -42,7 +42,7 @@ const TTL_SECONDS = 7 * 86_400;
  * (`getPayment`) é uma ida ao "provedor" de verdade, como no Mercado Pago.
  *
  * Cartão de teste (últimos 4 dígitos do `cardToken`, ex.: `tok_0001`): 0000 aprova, 0001 recusa por saldo,
- * 0002 exige 3DS (fica pendente até simular), 0003 dá timeout; qualquer outro recusa por cartão inválido.
+ * 0002 exige 3DS (fica pendente até simular), 0003 dá timeout, 0004 aprova com comissão e recebedor errados (SEC-133); qualquer outro recusa por cartão inválido.
  */
 @Injectable()
 export class FakePaymentProvider implements PaymentProvider {
@@ -88,6 +88,7 @@ export class FakePaymentProvider implements PaymentProvider {
       const last4 = FAKE_TOKENS[input.cardToken ?? ''] ?? (input.cardToken ?? '').slice(-4);
       if (last4 === '0003') throw new ProviderTimeoutError();
       if (last4 === '0000') Object.assign(base, { status: 'approved', providerFeeCents: feeOf(base, 'card') });
+      else if (last4 === '0004') Object.assign(base, { status: 'approved', applicationFeeCents: 0, receiverId: 'fake-seller-outro', providerFeeCents: feeOf(base, 'card') }); // aprovado, mas com comissão e recebedor errados (SEC-133)
       else if (last4 === '0001') Object.assign(base, { status: 'declined', declineReason: 'insufficient_funds' });
       else if (last4 === '0002') Object.assign(base, { status: 'pending_3ds', threeDsUrl: `https://fake-3ds.webag.local/challenge/${id}` });
       else Object.assign(base, { status: 'declined', declineReason: 'invalid_card' });

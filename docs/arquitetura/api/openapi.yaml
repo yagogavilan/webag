@@ -1429,6 +1429,74 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/ValidationError'
+  /v1/stores/{storeId}/exposure-limit:
+    get:
+      tags: [stores]
+      operationId: getStoreExposureLimit
+      summary: Limite de exposição da loja nova (banner de pedidos até R$ 500,00)
+      description: "Qualquer membro da loja. O teto por pedido vale até 30 dias da aprovação OU 20 pedidos entregues, o que vier primeiro (parâmetros `loja_nova_*`, DEC-020b). `maxOrder` é `null` quando não há limite."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Limite atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposureLimit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/stores/{storeId}/exposure-limit:
+    get:
+      tags: [stores]
+      operationId: getAdminStoreExposureLimit
+      summary: Limite de exposição da loja (admin)
+      description: "Permissão de admin: `stores:read`."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Limite atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposureLimit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [stores]
+      operationId: setAdminStoreExposureLimit
+      summary: Liberar ou ajustar o limite da loja nova
+      description: "Permissão de admin: `stores:decide` (operação e super admin). `default` volta aos parâmetros, `released` tira o limite, `custom` troca o teto (R$ 100,00 a R$ 50.000,00). Motivo obrigatório; auditado."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExposureLimitInput'
+      responses:
+        '200':
+          description: Limite atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposureLimit'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/admin/categories/{categoryId}/commission:
     get:
       tags: [finance]
@@ -4690,7 +4758,7 @@ paths:
 
         **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
 
-        **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+        **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
       parameters:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
       requestBody:
@@ -7694,6 +7762,23 @@ components:
         minimumTotalApplied: { type: boolean, description: "Cupom que zeraria o total: mostrar 'Valor mínimo cobrado'" }
         platformDiscountCapped: { type: boolean, description: Desconto da plataforma cortado no teto da comissão }
         missingForMinimum: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: "'Faltam R$ X para o pedido mínimo'" }
+    ExposureLimit:
+      type: object
+      required: [active, mode, maxOrder, endsAt, deliveredOrders, ordersToEnd]
+      properties:
+        active: { type: boolean, description: O teto vale agora }
+        mode: { type: string, enum: [default, released, custom] }
+        maxOrder: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: Teto por pedido; null sem limite }
+        endsAt: { type: [string, 'null'], format: date-time, description: Fim pelo prazo (aprovação + loja_nova_dias); null se liberada }
+        deliveredOrders: { type: integer }
+        ordersToEnd: { type: [integer, 'null'], description: Quantos pedidos entregues faltam para encerrar o limite }
+    ExposureLimitInput:
+      type: object
+      required: [mode, reason]
+      properties:
+        mode: { type: string, enum: [default, released, custom] }
+        maxOrderCents: { type: integer, minimum: 10000, maximum: 5000000, description: "Só com mode=custom" }
+        reason: { type: string, minLength: 3, maxLength: 300 }
     CartCheckout:
       type: object
       required: [canCheckout, blockers, opensAt]
@@ -7701,8 +7786,9 @@ components:
         canCheckout: { type: boolean }
         blockers:
           type: array
-          items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER] }
+          items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER, NEW_STORE_LIMIT] }
         opensAt: { type: [string, 'null'], format: date-time }
+        newStoreMaxOrder: { $ref: '#/components/schemas/Money', description: Teto por pedido da loja nova, quando o limite está ativo (WB-225) }
     Cart:
       type: object
       required: [id, revision, store, items, coupon, delivery, summary, checkout, notices]

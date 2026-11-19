@@ -192,6 +192,20 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
   /** Preenche a tentativa `creating` com a resposta do provedor (também usada pela conciliação). */
   private async completeCreation(attemptId: string, remote: ProviderPayment): Promise<PaymentAttempt> {
+    // SEC-133: cartão aprovado já na resposta da criação passa pela MESMA conferência do webhook (valor, moeda, referência,
+    // comissão e recebedor) antes de virar pago; divergente fica `divergent` + alerta, sem tocar o pedido.
+    if (remote.status === 'approved') {
+      const [current] = await this.db.select().from(paymentAttempts).where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')));
+      const mismatches = current ? await this.mismatches(current, remote) : [];
+      if (current && mismatches.length > 0) {
+        await this.db
+          .update(paymentAttempts)
+          .set({ providerPaymentId: remote.providerPaymentId, status: 'divergent', updatedAt: new Date() })
+          .where(and(eq(paymentAttempts.id, attemptId), eq(paymentAttempts.status, 'creating')));
+        await this.alert(attemptId, 'conciliation_mismatch', { mismatches });
+        return this.getAttempt(attemptId);
+      }
+    }
     const attempt = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(paymentAttempts)

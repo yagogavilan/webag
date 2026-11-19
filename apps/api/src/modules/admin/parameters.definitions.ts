@@ -59,6 +59,8 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('senha_min', 8, 8, 64, 'Tamanho mínimo da senha', 'HIP-023'),
   int('login_stepup_falhas_h', 20, 10, 100, 'Falhas na conta em 1 h que exigem código por e-mail no login', 'HIP-023'),
   int('email_nao_confirmado_pedidos_max', 1, 0, 3, 'Pedidos pagos permitidos com e-mail não confirmado', 'DEC-014'),
+  int('pedidos_pendentes_max', 2, 1, 5, 'Pedidos aguardando pagamento ao mesmo tempo por conta', 'SEC-064'),
+  int('pix_hora_max', 5, 2, 30, 'PIX gerados por conta na última hora', 'SEC-064'),
   int('loja_nova_dias', 30, 7, 90, 'Duração do limite de exposição da loja nova (dias)', 'DEC-016'),
   int('loja_nova_pedidos', 20, 5, 100, 'Pedidos entregues que encerram o limite da loja nova', 'DEC-016'),
   int('loja_nova_pedido_max_cents', 50000, 10000, undefined, 'Valor máximo por pedido de loja nova (centavos)', 'DEC-016'),

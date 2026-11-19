@@ -3017,6 +3017,58 @@ export interface CartSummary {
   missingForMinimum: Money | null;
 }
 
+export type ExposureLimitMode = typeof ExposureLimitMode[keyof typeof ExposureLimitMode];
+
+
+export const ExposureLimitMode = {
+  default: 'default',
+  released: 'released',
+  custom: 'custom',
+} as const;
+
+export interface ExposureLimit {
+  /** O teto vale agora */
+  active: boolean;
+  mode: ExposureLimitMode;
+  /** Teto por pedido; null sem limite */
+  maxOrder: Money | null;
+  /**
+     * Fim pelo prazo (aprovação + loja_nova_dias); null se liberada
+     * @nullable
+     */
+  endsAt: string | null;
+  deliveredOrders: number;
+  /**
+     * Quantos pedidos entregues faltam para encerrar o limite
+     * @nullable
+     */
+  ordersToEnd: number | null;
+}
+
+export type ExposureLimitInputMode = typeof ExposureLimitInputMode[keyof typeof ExposureLimitInputMode];
+
+
+export const ExposureLimitInputMode = {
+  default: 'default',
+  released: 'released',
+  custom: 'custom',
+} as const;
+
+export interface ExposureLimitInput {
+  mode: ExposureLimitInputMode;
+  /**
+     * Só com mode=custom
+     * @minimum 10000
+     * @maximum 5000000
+     */
+  maxOrderCents?: number;
+  /**
+     * @minLength 3
+     * @maxLength 300
+     */
+  reason: string;
+}
+
 export type CartCheckoutBlockersItem = typeof CartCheckoutBlockersItem[keyof typeof CartCheckoutBlockersItem];
 
 
@@ -3030,6 +3082,7 @@ export const CartCheckoutBlockersItem = {
   NEEDS_ADDRESS: 'NEEDS_ADDRESS',
   PICKUP_UNAVAILABLE: 'PICKUP_UNAVAILABLE',
   ABOVE_MAX_ORDER: 'ABOVE_MAX_ORDER',
+  NEW_STORE_LIMIT: 'NEW_STORE_LIMIT',
 } as const;
 
 export interface CartCheckout {
@@ -3037,6 +3090,8 @@ export interface CartCheckout {
   blockers: CartCheckoutBlockersItem[];
   /** @nullable */
   opensAt: string | null;
+  /** Teto por pedido da loja nova */
+  newStoreMaxOrder?: Money;
 }
 
 export type CartStore = {
@@ -7691,6 +7746,169 @@ export const setStoreCommission = async (storeId: string,
     method: 'PUT',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(commissionRateInput)
+  }
+);}
+
+
+
+export type getStoreExposureLimitResponse200 = {
+  data: ExposureLimit
+  status: 200
+}
+
+export type getStoreExposureLimitResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreExposureLimitResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreExposureLimitResponseSuccess = (getStoreExposureLimitResponse200) & {
+  headers: Headers;
+};
+export type getStoreExposureLimitResponseError = (getStoreExposureLimitResponse401 | getStoreExposureLimitResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreExposureLimitResponse = (getStoreExposureLimitResponseSuccess | getStoreExposureLimitResponseError)
+
+export const getGetStoreExposureLimitUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exposure-limit`
+}
+
+/**
+ * Qualquer membro da loja. O teto por pedido vale até 30 dias da aprovação OU 20 pedidos entregues, o que vier primeiro (parâmetros `loja_nova_*`, DEC-020b). `maxOrder` é `null` quando não há limite.
+ * @summary Limite de exposição da loja nova (banner de pedidos até R$ 500,00)
+ */
+export const getStoreExposureLimit = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreExposureLimitResponse> => {
+
+  return apiFetch<getStoreExposureLimitResponse>(getGetStoreExposureLimitUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminStoreExposureLimitResponse200 = {
+  data: ExposureLimit
+  status: 200
+}
+
+export type getAdminStoreExposureLimitResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreExposureLimitResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreExposureLimitResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreExposureLimitResponseSuccess = (getAdminStoreExposureLimitResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreExposureLimitResponseError = (getAdminStoreExposureLimitResponse401 | getAdminStoreExposureLimitResponse403 | getAdminStoreExposureLimitResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreExposureLimitResponse = (getAdminStoreExposureLimitResponseSuccess | getAdminStoreExposureLimitResponseError)
+
+export const getGetAdminStoreExposureLimitUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/exposure-limit`
+}
+
+/**
+ * Permissão de admin: `stores:read`.
+ * @summary Limite de exposição da loja (admin)
+ */
+export const getAdminStoreExposureLimit = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreExposureLimitResponse> => {
+
+  return apiFetch<getAdminStoreExposureLimitResponse>(getGetAdminStoreExposureLimitUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setAdminStoreExposureLimitResponse200 = {
+  data: ExposureLimit
+  status: 200
+}
+
+export type setAdminStoreExposureLimitResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setAdminStoreExposureLimitResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setAdminStoreExposureLimitResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setAdminStoreExposureLimitResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setAdminStoreExposureLimitResponseSuccess = (setAdminStoreExposureLimitResponse200) & {
+  headers: Headers;
+};
+export type setAdminStoreExposureLimitResponseError = (setAdminStoreExposureLimitResponse400 | setAdminStoreExposureLimitResponse401 | setAdminStoreExposureLimitResponse403 | setAdminStoreExposureLimitResponse404) & {
+  headers: Headers;
+};
+
+export type setAdminStoreExposureLimitResponse = (setAdminStoreExposureLimitResponseSuccess | setAdminStoreExposureLimitResponseError)
+
+export const getSetAdminStoreExposureLimitUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/exposure-limit`
+}
+
+/**
+ * Permissão de admin: `stores:decide` (operação e super admin). `default` volta aos parâmetros, `released` tira o limite, `custom` troca o teto (R$ 100,00 a R$ 50.000,00). Motivo obrigatório; auditado.
+ * @summary Liberar ou ajustar o limite da loja nova
+ */
+export const setAdminStoreExposureLimit = async (storeId: string,
+    exposureLimitInput: ExposureLimitInput, options?: Parameters<typeof apiFetch>[1]): Promise<setAdminStoreExposureLimitResponse> => {
+
+  return apiFetch<setAdminStoreExposureLimitResponse>(getSetAdminStoreExposureLimitUrl(storeId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(exposureLimitInput)
   }
 );}
 
@@ -15008,7 +15226,7 @@ export const getCreateOrderUrl = () => {
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrder = async (createOrderRequest: CreateOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createOrderResponse> => {

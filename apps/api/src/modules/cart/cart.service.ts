@@ -12,7 +12,7 @@ import { CommissionService, computeOrderFinance } from '../finance/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { stores, storeSettings } from '../stores/db/schema.js';
-import { hoursToday, isOpen, nextOpening, StoreSettingsService, type OpeningInput } from '../stores/index.js';
+import { ExposureLimitService, hoursToday, isOpen, nextOpening, StoreSettingsService, type OpeningInput } from '../stores/index.js';
 import { cartItems, carts, couponRedemptions, coupons } from './db/schema.js';
 import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
 import { serviceFeeCents, startingFee, summarize } from './domain/pricing.js';
@@ -38,7 +38,7 @@ export type Notice =
   | { code: 'MERGE_KEPT_ACCOUNT_CART'; message: string }
   | { code: 'MERGE_ITEM_SKIPPED'; message: string; variantId: string };
 
-export type Blocker = 'EMPTY' | 'ITEM_UNAVAILABLE' | 'STORE_UNAVAILABLE' | 'STORE_CLOSED' | 'BELOW_MINIMUM' | 'OUT_OF_RANGE' | 'NEEDS_ADDRESS' | 'PICKUP_UNAVAILABLE' | 'ABOVE_MAX_ORDER';
+export type Blocker = 'EMPTY' | 'ITEM_UNAVAILABLE' | 'STORE_UNAVAILABLE' | 'STORE_CLOSED' | 'BELOW_MINIMUM' | 'OUT_OF_RANGE' | 'NEEDS_ADDRESS' | 'PICKUP_UNAVAILABLE' | 'ABOVE_MAX_ORDER' | 'NEW_STORE_LIMIT';
 
 /** Produto comprável agora (RN-03): ativo, não pausado/removido pela moderação, variação ativa. */
 const isBuyable = (product: typeof products.$inferSelect, variant: typeof productVariants.$inferSelect): boolean =>
@@ -59,6 +59,7 @@ export class CartService {
     private readonly media: MediaService,
     private readonly purchases: PurchaseHistoryPort,
     private readonly commissions: CommissionService,
+    private readonly exposure: ExposureLimitService,
   ) {}
 
   // ------------------------------------------------------------------ leitura
@@ -253,6 +254,9 @@ export class CartService {
     const missing = subtotal < settings.minOrderCents ? settings.minOrderCents - subtotal : null;
     if (missing !== null && subtotal > 0) blockers.push('BELOW_MINIMUM');
     if (result.totalCents > (await this.params.getNumber('pedido_max_cents'))) blockers.push('ABOVE_MAX_ORDER');
+    // WB-225 / SEC-062: loja nova tem teto por pedido (R$ 500 por padrão) até completar o prazo ou os pedidos entregues.
+    const exposure = await this.exposure.forStore(store.id, now);
+    if (exposure.active && exposure.maxOrderCents !== null && result.totalCents > exposure.maxOrderCents) blockers.push('NEW_STORE_LIMIT');
     if (subtotal === 0) blockers.unshift('EMPTY');
 
     const [logo] = store.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
@@ -273,7 +277,7 @@ export class CartService {
       coupon: couponView,
       delivery,
       summary: this.presentSummary(result, { deliveryEstimated, missingForMinimumCents: missing }),
-      checkout: { canCheckout: blockers.length === 0, blockers, opensAt: opening.opensAt },
+      checkout: { canCheckout: blockers.length === 0, blockers, opensAt: opening.opensAt, ...(exposure.active && exposure.maxOrderCents !== null ? { newStoreMaxOrder: money(exposure.maxOrderCents) } : {}) },
       notices,
     };
     const quote = {

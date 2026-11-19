@@ -69,6 +69,15 @@ export const stores = pgTable(
     suspensionReason: text(),
     /** Nome ou documento alterado depois de aprovada: análise de dados, a loja segue vendendo com os antigos (R-23). */
     pendingChanges: jsonb().$type<Record<string, string> | null>(),
+    /**
+     * Limite de exposição da loja nova (WB-225, DEC-016/020b): `default` aplica os parâmetros `loja_nova_*`; `released` tira o
+     * limite; `custom` troca só o teto por pedido (centavos). Toda mudança é auditada com motivo no admin.
+     */
+    exposureLimitMode: text({ enum: ['default', 'released', 'custom'] }).notNull().default('default'),
+    exposureLimitMaxCents: integer(),
+    exposureLimitReason: text(),
+    exposureLimitSetBy: uuid().references(() => users.id),
+    exposureLimitSetAt: timestamp({ withTimezone: true }),
     /** 3 remoções de produto em 30 dias (WB-107 C4). */
     suspensionReviewFlaggedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

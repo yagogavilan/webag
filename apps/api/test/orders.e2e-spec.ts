@@ -429,7 +429,9 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       const ids: string[] = [];
       for (let i = 0; i < 5; i++) {
         await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
-        ids.push((await placeOrder(ctx, user, addressId)).body.id);
+        const created = (await placeOrder(ctx, user, addressId)).body;
+        await approve(ctx, user, (await attemptOf(ctx, created.id)).id); // paga: o teto de pedidos aguardando pagamento é 2 (SEC-131)
+        ids.push(created.id);
       }
       await ctx.http.post(`/v1/orders/${ids[0]}/cancel`).set(bearer(user.accessToken)).send({}).expect(200);
       const p1 = (await ctx.http.get('/v1/orders?limit=2').set(bearer(user.accessToken)).expect(200)).body;
