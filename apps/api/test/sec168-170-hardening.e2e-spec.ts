@@ -263,3 +263,37 @@ describe('SEC-170: cupom de primeira compra contra multiconta', () => {
     void customerAt;
   });
 });
+
+/** SEC-173: o aceite dos termos não guarda o user agent inteiro. */
+describe('SEC-173: plataforma do aceite reduzida à família', () => {
+  let ctx: TestContext;
+  beforeAll(async () => {
+    ctx = await createTestApp();
+    await ensureLegalDocs(ctx);
+    await useParam(ctx, 'exclusao_arrependimento_horas', 0);
+  });
+  afterAll(() => ctx.close());
+
+  it('novos aceites gravam só a família (e a versão do app); a anonimização reduz o user agent antigo à família e o trigger só admite isso', async () => {
+    const { termsAcceptances } = await import('../src/platform/database/schema.js');
+    const user = await createCustomer(ctx);
+    const rows = await ctx.db.select().from(termsAcceptances).where(eq(termsAcceptances.userId, user.userId));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.platform === null || /^(ios|android|web)(;[0-9][0-9A-Za-z.+-]*)?$/.test(r.platform), String(r.platform)).toBe(true);
+
+    // Linha antiga (anterior à correção): user agent inteiro. O trigger bloqueia qualquer outra mudança.
+    const client = await ctx.pool.connect();
+    try {
+      await client.query('set session_replication_role = replica');
+      await client.query(`update terms_acceptances set platform = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UP1A) AppleWebKit/537.36' where user_id = $1`, [user.userId]);
+      await client.query('set session_replication_role = origin');
+    } finally {
+      client.release();
+    }
+    await expect(ctx.pool.query(`update terms_acceptances set platform = 'qualquer coisa' where user_id = $1`, [user.userId])).rejects.toThrow(/append-only/);
+    await ctx.http.post('/v1/me/deletion').set(bearer(user.accessToken)).send({ password: STRONG_PASSWORD }).expect(200);
+    const after = await ctx.db.select().from(termsAcceptances).where(eq(termsAcceptances.userId, user.userId));
+    expect(after.length).toBe(rows.length);
+    for (const r of after) expect(r.platform).toBe('android');
+  });
+});

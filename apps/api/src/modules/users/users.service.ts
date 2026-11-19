@@ -62,7 +62,7 @@ export class UsersService {
   async recordAcceptance(executor: DbOrTx, userId: string, documentIds: string[], ctx: RequestContext): Promise<void> {
     if (documentIds.length === 0) return;
     await executor.insert(termsAcceptances).values(
-      documentIds.map((documentId) => ({ userId, documentId, ip: ctx.ip, platform: ctx.userAgent?.slice(0, 120) ?? null })),
+      documentIds.map((documentId) => ({ userId, documentId, ip: ctx.ip, platform: platformFamilyOf(ctx.userAgent) })),
     );
   }
 
@@ -137,4 +137,15 @@ export class UsersService {
       ip: ctx.ip,
     });
   }
+}
+
+/**
+ * SEC-173 / LGPD: o aceite guarda só a família da plataforma (`ios`, `android` ou `web`) e a versão do app (`android;1.4.0`), nunca o user
+ * agent inteiro (modelo do aparelho e do sistema identificam a pessoa). Sem user agent: nulo.
+ */
+export function platformFamilyOf(userAgent: string | null | undefined): string | null {
+  if (!userAgent) return null;
+  const family = /iphone|ipad|ipod|ios|cfnetwork|darwin/i.test(userAgent) ? 'ios' : /android|okhttp|dalvik/i.test(userAgent) ? 'android' : 'web';
+  const version = /\bwebag(?:-app)?\/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.]{1,10})?)/i.exec(userAgent)?.[1];
+  return version ? `${family};${version}` : family;
 }

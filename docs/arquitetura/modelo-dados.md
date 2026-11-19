@@ -134,7 +134,9 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 
 `push_campaigns.attempts` e `sending_started_at` (0046, SEC-165): teto de 3 tentativas de envio e detecção de campanha presa em `sending` (30 min); destinatários gravados logo depois do envio.
 
-## Mapa das migrações (0000 a 0046)
+`terms_acceptances.platform` (0047, SEC-173): só a família (`ios`/`android`/`web`) e a versão do app; o trigger append-only admite, além do truncamento do IP, a redução do `platform` à família do próprio valor (`webag_platform_family`).
+
+## Mapa das migrações (0000 a 0047)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
 | Migração | O que muda |
@@ -186,3 +188,4 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0044 bug017_parameters_wiring | Código de retirada de até 6 dígitos; lembrete de aceite; alerta de reembolso da troca |
 | 0045 bug014_pickup_reminder | `orders.pickup_reminded_at` |
 | 0046 sec165_push_campaign_attempts | `push_campaigns.attempts`, `sending_started_at` |
+| 0047 sec173_platform_family | Função `webag_platform_family` e trigger append-only estendido |

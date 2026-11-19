@@ -397,10 +397,13 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
 
       // SEC-159 / DEC-050(b): o IP do aceite e do consentimento é truncado (IPv4 /24, IPv6 /48), não apagado: a prova do consentimento
       // fica (versão, data, plataforma) sem identificar a pessoa. As tabelas são append-only; o trigger só admite este truncamento.
-      for (const table of ['terms_acceptances', 'consents'] as const) {
-        const done = await tx.execute(sql`update ${sql.identifier(table)} set ip = webag_truncate_ip(ip) where user_id = ${userId}::uuid and ip is not null and ip is distinct from webag_truncate_ip(ip) returning 1`);
-        summary[`${table}IpsTruncated`] = done.rows.length;
-      }
+      // SEC-173: no aceite, o user agent antigo (`platform`) é reduzido à família da plataforma NA MESMA atualização (o trigger exige as duas
+      // mudanças juntas e só admite esta redução do próprio valor).
+      const terms = await tx.execute(sql`update terms_acceptances set ip = webag_truncate_ip(ip), platform = webag_platform_family(platform) where user_id = ${userId}::uuid and ((ip is not null and ip is distinct from webag_truncate_ip(ip)) or (platform is not null and platform is distinct from webag_platform_family(platform))) returning 1`);
+      summary.terms_acceptancesIpsTruncated = terms.rows.length;
+      summary.termsAcceptancesPlatformReduced = terms.rows.length;
+      const consentRows = await tx.execute(sql`update consents set ip = webag_truncate_ip(ip) where user_id = ${userId}::uuid and ip is not null and ip is distinct from webag_truncate_ip(ip) returning 1`);
+      summary.consentsIpsTruncated = consentRows.rows.length;
 
       // Exportações e pedidos de titular da conta: o arquivo e os links somem; o protocolo fica sem o e-mail e a mensagem.
       await tx.delete(dataExportLinks).where(inArray(dataExportLinks.exportId, tx.select({ id: dataExports.id }).from(dataExports).where(eq(dataExports.userId, userId))));
