@@ -12181,7 +12181,7 @@ export const DeleteAccountResponse = zod.object({
  * **Fluxo do código de step-up (SEC-168/176; app e `/lojista/desistir-da-exclusao` usam o mesmo):**
  * 1. `POST` com `{ email, password }`. Sem ataque em curso: `204` e a conta reabre.
  * 2. Se a conta está sob ataque (5 falhas/h na conta, contador compartilhado com o login, ou mais de 10 tentativas/h no e-mail, de qualquer IP) e a senha está CERTA: `403` com `code = LOGIN_CODE_REQUIRED`; o código `delete_web` (6 dígitos, 10 min, uso único) é enviado ao e-mail. O app mostra "Enviamos um código ao seu e-mail" e o campo de 6 dígitos.
- * 3. Repetir o `POST` com `{ email, password, code }`: `204`. Código errado ou usado: `400 CODE_INVALID`; vencido: `400 CODE_EXPIRED` (repita o passo 1 sem `code` para receber outro). **Reenviar o código = repetir o passo 1 sem `code`**; o reenvio respeita `otp_reenvio_s` (429 `Retry-After`).
+ * 3. Repetir o `POST` com `{ email, password, code }`: `204`. Código errado ou usado: `400 CODE_INVALID`; vencido: `400 CODE_EXPIRED` (repita o passo 1 sem `code` para receber outro). **Reenviar o código = repetir o passo 1 sem `code`**; **SEC-180:** enquanto há um código válido (10 min) NÃO se emite outro (a resposta é a mesma `403`, sem e-mail novo e sem gastar limite; vencido, o passo 1 envia outro). O código desta rota tem finalidade própria (`delete_cancel`) e o limite de envio é um orçamento de quem provou a senha (por conta: 5/h e 10/dia, e por IP), que quem só sabe o e-mail nunca consome: o dono com a senha certa não recebe 429 por causa de terceiros. Reabrir pela operação (e-mail não confirmado): CLI `privacy:cancel-deletion`, `docs/seguranca/runbook-dsr.md`.
  * 4. Senha errada recebe sempre `401 INVALID_CREDENTIALS`, com ou sem `code`, e NUNCA dispara o envio de código (quem só sabe o e-mail não consegue esgotar o limite de envio nem bloquear o dono).
  * 5. E-mail não confirmado sob ataque: a mesma `401` genérica (não há para onde enviar o código; o suporte resolve).
  *
@@ -12456,7 +12456,7 @@ export const AnswerPrivacyRequestResponse = zod.object({
 
 
 /**
- * WB-214 / SEC-096. Sem `password` (via A): envia o código `delete_web` SÓ se a conta existe, tem e-mail confirmado e não é de admin; resposta sempre `{ sent: true }`. Com `password` (via B, única via com e-mail não confirmado): devolve o `deleteTicket`; senha errada, e-mail inexistente e conta de admin dão a mesma 401 `INVALID_CREDENTIALS`. Nenhuma sessão nem cookie é emitido. 5 por hora por IP e por e-mail.
+ * WB-214 / SEC-096. Sem `password` (via A): envia o código `delete_web` SÓ se a conta existe, tem e-mail confirmado e não é de admin; resposta sempre `{ sent: true }`. Com `password` (via B, única via com e-mail não confirmado): devolve o `deleteTicket`; senha errada, e-mail inexistente e conta de admin dão a mesma 401 `INVALID_CREDENTIALS`. Nenhuma sessão nem cookie é emitido. Limites: 5 por hora por IP e, no pedido de código (via A), 5 por hora por IP + e-mail (SEC-180: um IP não esgota o orçamento de outro); na via B o limite por e-mail é global (freia a adivinhação de senha). **SEC-180 / W.2:** na via B com a senha CERTA e a conta sob ataque (step-up), a resposta `403 LOGIN_CODE_REQUIRED` já envia o código `delete_web` (orçamento de quem provou a senha; sem outro código se um ainda vale), que abre a via A (`verify-code`).
  * @summary Exclusão pela web - passo 1 (código ou senha)
  */
 export const StartWebAccountDeletionBody = zod.object({

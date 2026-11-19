@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import type { Env } from '../../platform/config/env.js';
 import { hmacHex, safeEqual, sha256Hex } from '../../platform/crypto/crypto.js';
@@ -33,16 +33,38 @@ export class CodeService {
   }
 
   /**
-   * Aplica os limites de envio (SEC-003). `ownerKey` é o userId (fluxos logados) ou o hash do e-mail
-   * (fluxos anônimos): assim existir ou não a conta não muda a resposta.
+   * Aplica os limites de envio (SEC-003, SEC-180). Três orçamentos, que NUNCA se consomem entre si:
+   *  - `session` (padrão): quem já está logado (confirmar e-mail, trocar e-mail). `ownerKey` = userId.
+   *  - `anonymous`: fluxos sem login ("esqueci a senha", via A da exclusão). `ownerKey` = hash do e-mail, que existindo ou não a conta não muda a
+   *    resposta. Os limites são por IP + e-mail: quem só sabe o e-mail esgota o orçamento do PRÓPRIO IP, nunca o de outro IP nem o de quem provou a senha.
+   *  - `proved`: quem acabou de provar a senha certa (desistir da exclusão, step-up do login). `ownerKey` = userId; as chaves (e o limite por IP)
+   *    são próprias, então nenhum terceiro que só sabe o e-mail consegue consumir isto e travar o dono (SEC-180).
+   * O 429 de IP (`code:ip:*`) continua protegendo contra o volume de um mesmo IP.
    */
-  async enforceSendLimits(ownerKey: string, purpose: CodePurpose, destinationEmail: string, ctx: RequestContext): Promise<void> {
+  async enforceSendLimits(ownerKey: string, purpose: CodePurpose, destinationEmail: string, ctx: RequestContext, mode: 'session' | 'anonymous' | 'proved' = 'session'): Promise<void> {
+    const ip = ctx.ip ?? 'unknown';
+    const scope = mode === 'proved' ? `proved:${ownerKey}` : mode === 'anonymous' ? `anon:${ownerKey}:${ip}` : ownerKey;
     const interval = await this.params.getNumber('otp_reenvio_s');
-    const wait = await this.limiter.hit(`code:int:${ownerKey}:${purpose}`, interval);
+    const wait = await this.limiter.hit(`code:int:${scope}:${purpose}`, interval);
     if (wait.count > 1) throw errors.tooMany(wait.ttlSeconds, 'Aguarde um pouco antes de pedir outro código.');
-    await this.limiter.enforce(`code:h:${ownerKey}:${purpose}`, 5, 3600);
-    await this.limiter.enforce(`code:ip:${ctx.ip ?? 'unknown'}`, 30, 3600);
-    await this.limiter.enforce(`code:dest:${sha256Hex(destinationEmail)}`, 10, 86_400);
+    await this.limiter.enforce(`code:h:${scope}:${purpose}`, 5, 3600);
+    await this.limiter.enforce(`code:ip:${mode === 'proved' ? 'proved:' : ''}${ip}`, 30, 3600);
+    const destination = sha256Hex(destinationEmail);
+    await this.limiter.enforce(`code:dest:${mode === 'proved' ? `proved:${ownerKey}` : mode === 'anonymous' ? `anon:${destination}:${ip}` : destination}`, 10, 86_400);
+  }
+
+  /**
+   * SEC-180 (2): há um código desta finalidade ainda válido (não usado, não vencido, com tentativas)? Quem chama NÃO emite outro: emitir
+   * invalidaria o que o dono acabou de receber (um terceiro com a senha vazada não pode ficar "trocando" o código debaixo dele).
+   */
+  async hasLiveCode(userId: string, purpose: CodePurpose): Promise<boolean> {
+    const maxAttempts = await this.params.getNumber('otp_tentativas');
+    const [row] = await this.db
+      .select({ id: authCodes.id })
+      .from(authCodes)
+      .where(and(eq(authCodes.userId, userId), eq(authCodes.purpose, purpose), isNull(authCodes.consumedAt), isNull(authCodes.invalidatedAt), gt(authCodes.expiresAt, new Date()), lt(authCodes.attempts, maxAttempts)))
+      .limit(1);
+    return row !== undefined;
   }
 
   /** Gera, grava (invalidando os anteriores) e envia. Não aplica limites: chame `enforceSendLimits` antes. */

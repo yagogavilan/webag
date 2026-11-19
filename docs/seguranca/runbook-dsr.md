@@ -13,6 +13,10 @@
 3. **"Revelar"** o e-mail e a mensagem só quando necessário, com motivo (fica auditado).
 4. Conta **bloqueada** pelo admin não exclui pelo app: tratar aqui, com a mesma conferência.
 5. Pedido sem conta com o e-mail: responder que não há conta; não confirmar nem negar outros dados.
+6. **Reabrir uma exclusão pendente a pedido do dono (SEC-180):** o dono não consegue desistir pelo app nem pela página (conta com e-mail **não confirmado** sob ataque, ou o dono perdeu o e-mail). Só dentro do período de arrependimento (`exclusao_arrependimento_horas`; depois a anonimização é irreversível). Conferir a identidade pela regra 2 (resposta **do e-mail cadastrado** a uma mensagem sua com o protocolo; para conta não confirmada, documento e selfie por canal seguro, a critério do encarregado) e executar, no servidor, como super admin:
+   `node dist/cli.js privacy:cancel-deletion --email <e> --reason "<motivo, >= 20 caracteres>" --identity-proof "<como a identidade foi conferida e o protocolo, >= 10 caracteres>" [--dry-run]`
+   O comando pede o e-mail de novo para confirmar, reabre a conta (e a loja, se foi encerrada com ela), zera os contadores de ataque da conta, avisa o dono por e-mail e grava na auditoria (`account.deletion_cancelled_by_operator`, ator `cli`, operador do SO e a prova de identidade). Registrar no histórico do pedido: "exclusão reaberta pela operação".
+7. **Alerta `account_deletion_under_attack`** (painel de pagamentos/alertas): uma conta em período de exclusão recebeu tentativas demais de desistir (e-mail ou conta passaram do limite). Pode ser o dono esquecendo a senha ou um ataque para tornar a exclusão irreversível. Ação: ver quanto falta para a anonimização; se o dono pedir, executar o passo 6; se for ataque, avisar o security-engineer (SEC-154, SEC-180).
 
 ## Por tipo
 

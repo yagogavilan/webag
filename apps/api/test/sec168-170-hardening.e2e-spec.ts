@@ -91,8 +91,8 @@ describe('SEC-168: arrependimento da exclusão sob força bruta distribuída', (
     const withCode = await cancel({ email: user.email, password: 'errada-errada-1', code: '123456' });
     expect(withCode.status).toBe(401);
     expect(ctx.mail.outbox.filter((m) => m.to === user.email)).toHaveLength(0); // nenhum código enviado a quem não tem a senha
-    const sends = await ctx.app.get(RateLimitService).peek(`code:h:${sha256Hex(user.email)}:delete_web`);
-    expect(sends.count).toBe(0);
+    const sends = await ctx.app.get(RateLimitService).peek(`code:h:proved:${user.userId}:delete_cancel`);
+    expect(sends.count).toBe(0); // SEC-180: o orçamento de quem provou a senha também fica intacto
   });
 
   it('o limite por IP + e-mail segue valendo: o MESMO IP insistindo recebe 429 (outro IP não é afetado)', async () => {

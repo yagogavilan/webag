@@ -140,8 +140,10 @@ describe('Códigos por e-mail, confirmação e reset de senha (WB-007, WB-009, S
       const known = await registerUser(ctx);
       const unknownEmail = uniqueEmail();
       for (const email of [known.email, unknownEmail]) {
-        await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email }).expect(202);
-        await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', randomIp()).send({ email }).expect(429);
+        // SEC-180: o intervalo de reenvio é por IP + e-mail (outro IP não é afetado, para o terceiro não "segurar" o pedido do dono); o mesmo IP em seguida: 429 igual.
+        const ip = randomIp();
+        await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', ip).send({ email }).expect(202);
+        await ctx.http.post('/v1/auth/password/forgot').set('X-Forwarded-For', ip).send({ email }).expect(429);
       }
       expect(ctx.mail.to(unknownEmail)).toHaveLength(0);
     });

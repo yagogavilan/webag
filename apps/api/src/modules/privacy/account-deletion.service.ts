@@ -24,6 +24,17 @@ export interface DeletionBlocker {
   status: string;
 }
 
+/** Erro de uso da CLI `privacy:cancel-deletion` (mensagem para o operador, sem dado pessoal). */
+export class DeletionOpsError extends Error {
+  constructor(
+    readonly code: 'CONFIRM_MISMATCH' | 'REASON_TOO_SHORT' | 'IDENTITY_PROOF_REQUIRED' | 'NO_PENDING_DELETION' | 'DELETION_DUE',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DeletionOpsError';
+  }
+}
+
 export interface DeletionOutcome {
   status: 'completed' | 'pending';
   /** Quando a anonimização acontece (já passou quando `completed`). */
@@ -223,6 +234,12 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       .from(t.users)
       .innerJoin(accountDeletions, and(eq(accountDeletions.userId, t.users.id), eq(accountDeletions.status, 'pending')))
       .where(eq(t.users.email, email));
+    // SEC-180 (4): conta pendente com o limite de tentativas estourado (e-mail ou conta) = sinal de ataque à loja: UM alerta à operação por exclusão,
+    // mesmo que as tentativas tenham errado a senha. O alerta não leva dado pessoal (só o id da exclusão e as contagens).
+    const stepUpLimit = await this.params.getNumber('login_stepup_falhas_h');
+    const accountFails = row ? await this.limiter.peek(`lfa:${row.user.id}`) : { count: 0 };
+    const underAttack = emailUnderAttack || accountFails.count >= stepUpLimit;
+    if (row && underAttack) await this.alertOnce('account_deletion_under_attack', row.deletion.id, { accountFails: accountFails.count, emailAttempts: byEmail.count });
     const passwordOk = await this.passwords.verify(row?.user.passwordHash ?? null, password);
     if (!row || !passwordOk || row.deletion.effectiveAt <= new Date() || row.user.status !== 'deleted') {
       // SEC-168: a falha soma no contador POR CONTA (o mesmo do login, `lfa`), de qualquer origem; o step-up do login passa a valer aqui.
@@ -231,36 +248,88 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     }
     // Conta sob ataque (step-up do login ativo ou muitas tentativas no e-mail) não reabre só com a senha. E-mail confirmado: exige o
     // código enviado ao e-mail; não confirmado: a mesma resposta genérica de senha errada (nunca revela o motivo).
-    const accountFails = await this.limiter.peek(`lfa:${row.user.id}`);
-    if (emailUnderAttack || accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
+    if (underAttack) {
       if (row.user.emailVerifiedAt === null) throw invalid();
       if (!code) {
-        await this.codes.enforceSendLimits(emailHash, 'delete_web', email, ctx);
-        await this.codes.issue(row.user.id, 'delete_web', email);
+        // SEC-180 (1)(2): a senha está CERTA. O envio usa o orçamento de quem provou a senha (chave por conta, finalidade `delete_cancel`),
+        // que quem só sabe o e-mail nunca consome; e, se o código anterior ainda vale, não se emite outro (não invalida o que o dono já recebeu).
+        if (!(await this.codes.hasLiveCode(row.user.id, 'delete_cancel'))) {
+          await this.codes.enforceSendLimits(row.user.id, 'delete_cancel', email, ctx, 'proved');
+          await this.codes.issue(row.user.id, 'delete_cancel', email);
+        }
         throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Para sua segurança, confirme com o código enviado ao seu e-mail.');
       }
-      await this.codes.verify(row.user.id, 'delete_web', code); // 400 `CODE_INVALID`/`CODE_EXPIRED`; uso único
+      await this.codes.verify(row.user.id, 'delete_cancel', code); // 400 `CODE_INVALID`/`CODE_EXPIRED`; uso único
     }
 
-    const restored = await this.db.transaction(async (tx) => {
-      const [done] = await tx
-        .update(accountDeletions)
-        .set({ status: 'cancelled', cancelledAt: new Date() })
-        .where(and(eq(accountDeletions.id, row.deletion.id), eq(accountDeletions.status, 'pending'), sql`${accountDeletions.effectiveAt} > now()`))
-        .returning({ id: accountDeletions.id });
-      if (!done) return false;
-      await tx.update(t.users).set({ status: 'active', updatedAt: new Date() }).where(eq(t.users.id, row.user.id));
-      if (row.deletion.storeId && row.deletion.storePreviousStatus) {
-        await tx.update(t.stores).set({ status: row.deletion.storePreviousStatus as 'approved', updatedAt: new Date() }).where(and(eq(t.stores.id, row.deletion.storeId), eq(t.stores.status, 'closed')));
-        await tx.insert(t.storeStatusHistory).values({ storeId: row.deletion.storeId, fromStatus: 'closed', toStatus: row.deletion.storePreviousStatus as 'approved', actorId: row.user.id, reason: 'Exclusão da conta cancelada' });
-      }
-      await this.audit.record(tx, ctx, { action: 'account.deletion_cancelled', targetType: 'user', targetId: row.user.id, actorId: row.user.id, actorRole: 'customer' });
-      return true;
-    });
+    const restored = await this.db.transaction((tx) => this.restoreInTx(tx, row.deletion, row.user.id, ctx, { actorId: row.user.id, actorRole: 'customer', action: 'account.deletion_cancelled' }));
     if (!restored) throw invalid();
     await this.limiter.reset(key);
     await this.limiter.reset(`deletion-cancel:email:${emailHash}`); // o dono provou quem é: o ruído de terceiros não pesa mais
     this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail() });
+  }
+
+  /**
+   * Reabre a conta de uma exclusão `pending` (e a loja do dono, se foi encerrada com ela). Usado pelo próprio dono (`cancel`) e pela operação
+   * (`cancelByOperator`). Falso se a exclusão já não está `pending` ou o prazo de arrependimento acabou.
+   */
+  private async restoreInTx(
+    tx: DbOrTx,
+    deletion: typeof accountDeletions.$inferSelect,
+    userId: string,
+    ctx: RequestContext,
+    audit: { actorId: string | null; actorRole: string; action: string; reason?: string; after?: Record<string, unknown> },
+  ): Promise<boolean> {
+    const [done] = await tx
+      .update(accountDeletions)
+      .set({ status: 'cancelled', cancelledAt: new Date() })
+      .where(and(eq(accountDeletions.id, deletion.id), eq(accountDeletions.status, 'pending'), sql`${accountDeletions.effectiveAt} > now()`))
+      .returning({ id: accountDeletions.id });
+    if (!done) return false;
+    await tx.update(t.users).set({ status: 'active', updatedAt: new Date() }).where(eq(t.users.id, userId));
+    if (deletion.storeId && deletion.storePreviousStatus) {
+      await tx.update(t.stores).set({ status: deletion.storePreviousStatus as 'approved', updatedAt: new Date() }).where(and(eq(t.stores.id, deletion.storeId), eq(t.stores.status, 'closed')));
+      await tx.insert(t.storeStatusHistory).values({ storeId: deletion.storeId, fromStatus: 'closed', toStatus: deletion.storePreviousStatus as 'approved', actorId: audit.actorId, reason: 'Exclusão da conta cancelada' });
+    }
+    await this.audit.record(tx, ctx, { action: audit.action, targetType: 'user', targetId: userId, actorId: audit.actorId, actorRole: audit.actorRole, ...(audit.reason ? { reason: audit.reason } : {}), ...(audit.after ? { after: audit.after } : {}) });
+    return true;
+  }
+
+  /**
+   * SEC-180 (3): rede de segurança da operação (CLI `privacy:cancel-deletion`, nunca rota HTTP). Reabre a conta de uma exclusão `pending` a pedido do
+   * dono, com a IDENTIDADE conferida fora do sistema (runbook-dsr.md, passo 5) e registrada: serve também para a conta com e-mail NÃO confirmado sob
+   * ataque, que não tem caminho de volta pelo `cancel`. Zera os contadores de ataque da conta, avisa o dono por e-mail e audita (ator `cli`).
+   */
+  async cancelByOperator(input: { email: string; confirmEmail: string; reason: string; identityProof: string; dryRun?: boolean; osUser: string; host: string }): Promise<{ dryRun: boolean; email: string; userId: string; storeRestored: boolean }> {
+    const email = input.email.trim().toLowerCase();
+    if (input.confirmEmail.trim().toLowerCase() !== email) throw new DeletionOpsError('CONFIRM_MISMATCH', 'O e-mail de confirmação não confere.');
+    if (input.reason.trim().length < 20) throw new DeletionOpsError('REASON_TOO_SHORT', 'O motivo precisa ter pelo menos 20 caracteres.');
+    if (input.identityProof.trim().length < 10) throw new DeletionOpsError('IDENTITY_PROOF_REQUIRED', 'Descreva como a identidade foi conferida (protocolo do atendimento, runbook-dsr.md): pelo menos 10 caracteres.');
+    const [row] = await this.db
+      .select({ user: t.users, deletion: accountDeletions })
+      .from(t.users)
+      .innerJoin(accountDeletions, and(eq(accountDeletions.userId, t.users.id), eq(accountDeletions.status, 'pending')))
+      .where(eq(t.users.email, email));
+    if (!row || row.user.status !== 'deleted') throw new DeletionOpsError('NO_PENDING_DELETION', 'Não há exclusão pendente para este e-mail.');
+    if (row.deletion.effectiveAt <= new Date()) throw new DeletionOpsError('DELETION_DUE', 'O prazo de arrependimento já acabou: a anonimização é irreversível.');
+    const storeRestored = row.deletion.storeId !== null && row.deletion.storePreviousStatus !== null;
+    if (input.dryRun) return { dryRun: true, email, userId: row.user.id, storeRestored };
+    const ctx: RequestContext = { ip: null, userAgent: 'cli', requestId: null, deviceId: null, principal: null };
+    this.logger.warn(`privacy:cancel-deletion executado (operador do SO ${input.osUser}@${input.host})`);
+    const restored = await this.db.transaction((tx) =>
+      this.restoreInTx(tx, row.deletion, row.user.id, ctx, {
+        actorId: null,
+        actorRole: 'cli',
+        action: 'account.deletion_cancelled_by_operator',
+        reason: input.reason.trim(),
+        after: { identityProof: input.identityProof.trim().slice(0, 200), osUser: input.osUser, host: input.host },
+      }),
+    );
+    if (!restored) throw new DeletionOpsError('DELETION_DUE', 'A exclusão mudou enquanto o comando rodava (cancelada ou anonimizada).');
+    await this.limiter.reset(`lfa:${row.user.id}`);
+    await this.limiter.reset(`deletion-cancel:email:${sha256Hex(email)}`);
+    this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail() });
+    return { dryRun: false, email, userId: row.user.id, storeRestored };
   }
 
   // ------------------------------------------------------------- anonimização

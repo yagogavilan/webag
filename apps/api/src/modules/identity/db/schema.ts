@@ -24,6 +24,8 @@ export const CODE_PURPOSES = [
   'reset_password',
   'change_email',
   'delete_web',
+  /** SEC-180: step-up de quem já provou a senha ao desistir da exclusão (o orçamento de envio é próprio, fora do anônimo). */
+  'delete_cancel',
   'login_stepup',
 ] as const;
 

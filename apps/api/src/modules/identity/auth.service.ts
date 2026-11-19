@@ -194,8 +194,12 @@ export class AuthService {
     const needsStepUp = accountFails.count >= stepUpLimit;
     if (needsStepUp) {
       if (!input.code) {
-        await this.codes.enforceSendLimits(user.id, 'login_stepup', user.email, ctx);
-        await this.codes.issue(user.id, 'login_stepup', user.email);
+        // SEC-180: a senha está CERTA, então o envio usa o orçamento de quem provou a senha (próprio, que terceiros sem a senha não consomem);
+        // e, se o código anterior ainda vale, não se emite outro (não invalida o que o dono já recebeu).
+        if (!(await this.codes.hasLiveCode(user.id, 'login_stepup'))) {
+          await this.codes.enforceSendLimits(user.id, 'login_stepup', user.email, ctx, 'proved');
+          await this.codes.issue(user.id, 'login_stepup', user.email);
+        }
         throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Enviamos um código para o seu e-mail. Informe-o para entrar.');
       }
       await this.codes.verify(user.id, 'login_stepup', input.code);
@@ -300,7 +304,7 @@ export class AuthService {
    */
   async forgotPassword(email: string, ctx: RequestContext): Promise<void> {
     const ownerKey = sha256Hex(email);
-    await this.codes.enforceSendLimits(ownerKey, 'reset_password', email, ctx);
+    await this.codes.enforceSendLimits(ownerKey, 'reset_password', email, ctx, 'anonymous');
     const [user] = await this.db.select().from(users).where(eq(users.email, email));
     if (!user || user.status === 'deleted') return;
     await this.codes.issue(user.id, 'reset_password', user.email);

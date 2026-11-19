@@ -43,17 +43,23 @@ export class WebAccountDeletionService {
     return { user, isAdmin: admin !== undefined };
   }
 
-  private async limits(email: string, ctx: RequestContext): Promise<void> {
-    await this.limiter.enforce(`delweb:ip:${ctx.ip ?? 'unknown'}`, 5, 3600);
-    await this.limiter.enforce(`delweb:email:${sha256Hex(email)}`, 5, 3600);
+  /**
+   * `code` (via A, pede código): o limite por e-mail é por IP + e-mail (SEC-180): quem só sabe o e-mail esgota o orçamento do próprio IP, nunca
+   * o de outro IP. `password` (via B): o limite por e-mail é GLOBAL, porque ele freia a adivinhação distribuída de senha (o step-up por conta
+   * também vale aqui, SEC-153).
+   */
+  private async limits(email: string, ctx: RequestContext, kind: 'code' | 'password'): Promise<void> {
+    const ip = ctx.ip ?? 'unknown';
+    await this.limiter.enforce(`delweb:ip:${ip}`, 5, 3600);
+    await this.limiter.enforce(kind === 'code' ? `delweb:email:${sha256Hex(email)}:${ip}` : `delweb:email:${sha256Hex(email)}`, 5, 3600);
   }
 
   /** Passo 1 da via A: pede o código. Resposta sempre igual. */
   async requestCode(email: string, ctx: RequestContext): Promise<void> {
-    await this.limits(email, ctx);
+    await this.limits(email, ctx, 'code');
     // SEC-152: os limites de envio rodam ANTES de achar a conta, para TODO e-mail. Senão o 2º pedido em 60 s daria 429 só para
-    // conta confirmada e 200 para e-mail inexistente (enumeração de clientes e lojistas).
-    await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx);
+    // conta confirmada e 200 para e-mail inexistente (enumeração de clientes e lojistas). SEC-180: orçamento anônimo, por IP + e-mail.
+    await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx, 'anonymous');
     const found = await this.find(email);
     if (!found || found.isAdmin || found.user.status !== 'active' || found.user.emailVerifiedAt === null) return; // SEC-096: nada é enviado
     await this.codes.issue(found.user.id, 'delete_web', email);
@@ -72,7 +78,7 @@ export class WebAccountDeletionService {
 
   /** Via B: e-mail + senha. Erro de senha e e-mail inexistente dão a mesma resposta; as falhas contam no limite do login. */
   async withPassword(email: string, password: string, ctx: RequestContext): Promise<{ deleteTicket: string; expiresIn: number }> {
-    await this.limits(email, ctx);
+    await this.limits(email, ctx, 'password');
     const maxFails = await this.params.getNumber('login_falhas');
     const waitSeconds = (await this.params.getNumber('login_espera_min')) * 60;
     const key = `lf:${sha256Hex(email)}:${ctx.ip ?? 'unknown'}`;
@@ -93,6 +99,12 @@ export class WebAccountDeletionService {
     const accountFails = await this.limiter.peek(`lfa:${found.user.id}`);
     if (accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
       if (found.user.emailVerifiedAt === null) throw INVALID();
+      // SEC-180 / W.2: a senha está CERTA: o código já sai nesta resposta (como no `cancel`), pelo orçamento de quem provou a senha, e sem emitir
+      // outro se o anterior ainda vale. Quem não tem a senha nunca chega aqui (401 genérico antes).
+      if (!(await this.codes.hasLiveCode(found.user.id, 'delete_web'))) {
+        await this.codes.enforceSendLimits(found.user.id, 'delete_web', found.user.email, ctx, 'proved');
+        await this.codes.issue(found.user.id, 'delete_web', found.user.email);
+      }
       throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Para sua segurança, confirme a exclusão pelo código enviado ao seu e-mail.');
     }
     await this.limiter.release(key);
