@@ -174,7 +174,7 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
     await ask(user.accessToken, STRONG_PASSWORD).expect(202);
     const [row] = await ctx.db.select().from(dataExports).where(eq(dataExports.userId, user.userId));
     const key = `exports/${user.userId}/${row!.id}.json`;
-    const db = ctx.app.get(DRIZZLE) as typeof ctx.db;
+    const db = ctx.app.get<typeof ctx.db>(DRIZZLE);
     const realUpdate = db.update.bind(db);
     let armed = true;
     const spy = vi.spyOn(db, 'update').mockImplementation(((table: Parameters<typeof db.update>[0]) => {
@@ -187,11 +187,11 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
             armed = false;
             throw new Error('banco caiu depois do upload');
           }
-          return originalSet(values as never);
+          return originalSet(values);
         };
       }
       return builder;
-    }) as typeof db.update);
+    }));
     try {
       expect(await service.processQueue()).toMatchObject({ failed: 1 });
     } finally {
