@@ -1,15 +1,16 @@
 # Guia de deploy do Webag
 
-Para quem vai colocar o Webag no ar, mesmo sem ser da área técnica. Cada passo diz o que digitar e o que esperar ver. Escrito em 2026-11-18 com base no código da `main`; tudo que é preço, tela de terceiros ou limite de serviço está marcado `[HIPÓTESE]` e precisa ser conferido no dia (fornecedores mudam).
+Para quem vai colocar o Webag no ar, mesmo sem ser da área técnica. Cada passo diz o que digitar e o que esperar ver. Escrito em 2026-11-18 e revisado em 2026-11-19 (Onda 7: site público, variáveis novas, pendências conferidas contra o código); tudo que é preço, tela de terceiros ou limite de serviço está marcado `[HIPÓTESE]` e precisa ser conferido no dia (fornecedores mudam).
 
 Arquivos usados: `infra/docker-compose.prod.yml`, `infra/env.prod.example`, `infra/nginx/`, `infra/backup/`, `infra/scripts/`, `apps/api/Dockerfile`, `apps/web/Dockerfile`.
 
 ## 1. Visão geral e o que decidir
 
 ```
-Internet ──> nginx (80/443, HTTPS) ──┬─ api.<domínio>      ──> API (porta interna 3000)
+Internet ──> nginx (80/443, HTTPS) ──┬─ api.<domínio>      ──> API (porta interna 3000; app, webhook, tempo real)
                                      ├─ admin.<domínio>    ──> web (painel admin)
                                      ├─ lojista.<domínio>  ──> web (painel lojista)
+                                     ├─ <domínio>          ──> web (site público: início, privacidade, termos, exclusão de conta, página do cartão)
                                      └─ arquivos.<domínio> ──> armazenamento S3 (fotos)
 Rede interna (sem porta aberta): API, web, PostgreSQL+PostGIS, Redis, armazenamento, backup
 ```
@@ -20,6 +21,7 @@ Rede interna (sem porta aberta): API, web, PostgreSQL+PostGIS, Redis, armazename
 | Alternativa | **Caminho B: gerenciado** (seção 4) | Menos manutenção de servidor; custo maior e variável; as peças (PostGIS, Redis sem perda de dados) precisam ser conferidas no provedor |
 | Fotos | VPS: no próprio servidor (padrão do compose). Gerenciado: Cloudflare R2 ou AWS S3 | Em servidor próprio o disco é o ponto único de falha; o backup de arquivos (seção 8) cobre isso |
 | Admin e lojista | Hosts **separados** (obrigatório, SEC-116) | Falha de segurança em um painel não vaza para o outro |
+| Site público | Domínio principal (`PUBLIC_HOST`, ex.: `webag.com.br`), servido pelo mesmo `web` | As lojas exigem URLs públicas de privacidade e de exclusão de conta; a página segura do cartão (`/pagar/cartao`) também vive aqui e **só responde neste host** (SEC-106) |
 
 ### O que o fundador precisa fornecer (ninguém consegue fazer por ele)
 
@@ -31,17 +33,19 @@ Rede interna (sem porta aberta): API, web, PostgreSQL+PostGIS, Redis, armazename
 | Conta de e-mail transacional (Brevo, Resend, SES...) com domínio verificado | Antes do 1º boot | Seção 6.3 |
 | Conta Expo (EAS), Apple Developer, Google Play Console | Para publicar o app | `docs/deploy/checklist-publicacao-lojas.md` |
 | Conta Cloudflare R2 (ou S3) para **backup fora do servidor** | Antes de aceitar pedidos reais | Seção 8 |
-| Conta Sentry [opcional] | Quando o time ligar o Sentry no código | Ainda não lido pelo código (ver abaixo) |
+| Conta Sentry [opcional] | Antes de aceitar pedidos reais | A API já lê `SENTRY_DSN`; o painel web e o app ainda não (DT-039) |
 
 ### Pendências conhecidas do código (afetam o deploy)
 
-Verificadas no código em 2026-11-18. Estão em `docs/arquitetura/divida-tecnica.md`.
+Conferidas no código em 2026-11-19. Estão em `docs/arquitetura/divida-tecnica.md`.
 
-1. **Não existe modo "staging".** Com `NODE_ENV=production` a API **recusa** o pagamento simulado, credencial `TEST-` do Mercado Pago, geocodificador simulado e segredos de desenvolvimento. Ou seja, para subir **qualquer** servidor é preciso preencher `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET`. Para um servidor de **ensaio** (sem aceitar pedidos), dá para colocar um valor qualquer que comece com `APP_USR-` (foi como o boot foi testado): a API sobe, mas qualquer pagamento falha. Nunca divulgue esse servidor a clientes. Correção definitiva: pedir ao backend-dev um ambiente `staging` (DT-038).
-2. **Sentry ainda não está ligado**: `SENTRY_DSN` existe no modelo, mas nem a API, nem o painel, nem o app leem a variável (DT-039). Erros ficam só nos logs (seção 10).
-3. **Tempo real (WebSocket)** está no desenho (ADR-004) e o nginx já tem a rota `/socket.io/` pronta, mas o servidor Socket.IO ainda não está na API (verificar na entrega da Onda 4). O app recupera o estado por REST de qualquer forma.
-4. **Exclusão de conta no app e na web** (exigência da Apple e da Google) está no backlog (WB-213/214) e não existe no contrato da API hoje. Bloqueia o G5, não o deploy.
-5. **Rotação do `BFF_SHARED_SECRET` sem janela de erro** depende de código (DT-031). Hoje há uma janela de segundos (seção 9).
+1. **Ambiente de ensaio (`staging`) existe** (DT-038): `APP_ENV=staging` aceita pagamento simulado, credencial `TEST-` do Mercado Pago e geocodificador simulado, **sem** rotas de simulação (`/v1/dev/payments` nunca existe fora de desenvolvimento). Produção (`APP_ENV=production`, o padrão) **recusa** os três e os segredos de desenvolvimento. Nunca use `staging` com clientes reais.
+2. **Mercado Pago real nunca foi exercitado contra o provedor.** O adaptador foi escrito contra o SDK oficial e testado com respostas simuladas; os pontos marcados `[confirmar no sandbox]` em `apps/api/README.md` exigem rodar o sandbox do Mercado Pago com chaves do fundador antes do primeiro pedido real. Com `PAYMENT_PROVIDER=mercadopago`, **cinco** chaves são obrigatórias no boot (`MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_OAUTH_REDIRECT_URI`; a última o compose preenche sozinho).
+3. **Sentry**: a API já envia erros (sem dado pessoal) quando `SENTRY_DSN` está preenchido; o painel web e o app ainda não (DT-039). Erros desses dois ficam nos logs (seção 10).
+4. **Tempo real (Socket.IO `/rt`)** está na API e o nginx já encaminha `/socket.io/`. O app e os painéis recuperam o estado por REST se a conexão cair.
+5. **Exclusão de conta** (exigência da Apple e da Google) existe na API, no app e na web (`/excluir-conta`, no site público). A publicação nas lojas ainda depende do que está em `docs/deploy/checklist-publicacao-lojas.md`.
+6. **Rotação do `BFF_SHARED_SECRET` sem janela de erro** depende de código (DT-031). Hoje há uma janela de segundos (seção 9).
+7. **Push de verdade** exige `PUSH_PROVIDER=expo` e as credenciais FCM/APNs cadastradas no EAS (conta do fundador). O padrão `log` só registra e **ninguém recebe notificação**.
 
 ## 2. Custos estimados [HIPÓTESE]
 
@@ -56,7 +60,7 @@ Ordem de grandeza para o lançamento, valores de mercado de memória (nov/2026),
 | Armazenamento de fotos | incluído (disco) | R2: 10 GB grátis, depois ~US$ 0,015/GB/mês, sem cobrança de saída [HIPÓTESE] | |
 | Backup fora do servidor | R2: centavos no início | idem | Bucket separado |
 | E-mail transacional | Grátis até alguns milhares/mês (Brevo, Resend) [HIPÓTESE] | idem | SES: ~US$ 0,10 por 1.000 |
-| Sentry | Plano grátis (limite de eventos) | idem | Quando ligado |
+| Sentry | Plano grátis (limite de eventos) | idem | Só a API envia hoje (DT-039) |
 | Apple Developer | US$ 99/ano | idem | Obrigatório para iPhone |
 | Google Play | US$ 25 uma vez | idem | Obrigatório para Android |
 | Mercado Pago | tarifa por transação (PIX e cartão) | idem | Descontada da venda; ver tarifas vigentes no MP |
@@ -74,10 +78,11 @@ Tempo: 2 a 3 horas na primeira vez (o primeiro build das imagens leva 10 a 20 mi
 
 ### Passo 2. Apontar o DNS (Registro.br ou onde o domínio estiver)
 
-Crie **4 registros do tipo A**, todos com o IP do servidor (substitua `webag.com.br` pelo seu domínio):
+Crie **5 registros do tipo A**, todos com o IP do servidor (substitua `webag.com.br` pelo seu domínio):
 
 | Nome (host) | Tipo | Valor |
 |---|---|---|
+| `@` (o domínio sem prefixo; no Registro.br, deixe o nome em branco) | A | IP do servidor |
 | `api` | A | IP do servidor |
 | `admin` | A | IP do servidor |
 | `lojista` | A | IP do servidor |
@@ -85,7 +90,7 @@ Crie **4 registros do tipo A**, todos com o IP do servidor (substitua `webag.com
 
 Se usar Cloudflare para o DNS, deixe cada registro em **"somente DNS" (nuvem cinza)**. Com o proxy da Cloudflare ligado (nuvem laranja) o nginx deixa de ver o IP real do cliente e o limite de tentativas de login (SEC-114/129) passa a valer para todos de uma vez.
 
-Teste (pode levar de minutos a horas): `nslookup api.webag.com.br` deve mostrar o IP do servidor. Só siga quando os 4 nomes responderem.
+Teste (pode levar de minutos a horas): `nslookup api.webag.com.br` deve mostrar o IP do servidor. Só siga quando os 5 nomes responderem (`nslookup webag.com.br` também).
 
 ### Passo 3. Preparar o servidor (acesso, usuário, firewall, swap)
 
@@ -147,9 +152,9 @@ nano .env
 
 O primeiro comando cria o `.env` e **sorteia todos os segredos** (senha do banco, chaves de login etc.). No `nano`, ajuste (setas para andar, `Ctrl+O` Enter para salvar, `Ctrl+X` para sair):
 
-1. Os 4 hosts: troque `exemplo.com.br` pelo seu domínio em `API_HOST`, `ADMIN_HOST`, `LOJISTA_HOST`, `FILES_HOST`, e também em `S3_ENDPOINT`, `S3_PUBLIC_URL` e `SMTP_FROM`.
+1. Os 5 hosts: troque `exemplo.com.br` pelo seu domínio em `API_HOST`, `ADMIN_HOST`, `LOJISTA_HOST`, `FILES_HOST` e `PUBLIC_HOST` (o domínio principal, sem prefixo), e também em `S3_ENDPOINT`, `S3_PUBLIC_URL` e `SMTP_FROM`.
 2. `LETSENCRYPT_EMAIL`: seu e-mail.
-3. Mercado Pago: `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` (seção 7; ver pendência 1 da seção 1 para servidor de ensaio).
+3. Mercado Pago: `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `MP_CLIENT_ID`, `MP_CLIENT_SECRET` e `MP_PUBLIC_KEY` (seção 7). Para um servidor de **ensaio** sem chaves reais, use `APP_ENV=staging` e `PAYMENT_PROVIDER=fake` (pendência 1 da seção 1).
 4. E-mail: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` (seção 6.3).
 5. Primeiro administrador: `SEED_ADMIN_EMAIL` e uma `SEED_ADMIN_PASSWORD` longa (será trocada no 1º login).
 6. Backup fora do servidor: `BACKUP_S3_*` (seção 8). Pode deixar para depois, **mas faça antes de receber pedidos reais**.
@@ -194,9 +199,10 @@ Cria o administrador, categorias, cidades/bairros, parâmetros e textos legais (
 
 1. Abra `https://admin.SEU-DOMINIO/admin/entrar` e entre com o e-mail/senha do seed. O sistema pede para configurar o segundo fator (app autenticador, TOTP) e **guarde os códigos de recuperação**. Troque a senha.
 2. `https://api.SEU-DOMINIO/health` deve responder `{"status":"ok",...}`.
-3. `https://lojista.SEU-DOMINIO/lojista/entrar` deve abrir o painel do lojista; `https://lojista.SEU-DOMINIO/admin/entrar` deve dar "Não encontrado" (é o esperado: SEC-116).
-4. Estado dos serviços: `sh infra/scripts/prod.sh ps` (todos "healthy"; `migrate` aparece como "Exited (0)", que é normal).
-5. Teste de IP real (SEC-129): erre a senha do admin 5 vezes seguidas num navegador e confirme que a conta é travada **para esse IP** e que outra pessoa/rede ainda consegue entrar numa conta diferente. (Ao testar do próprio servidor, o IP aparece como `172.30.0.1`: é o gateway do Docker, não é um erro.)
+3. Site público (o que as lojas e o app usam): `https://SEU-DOMINIO/` (página inicial), `https://SEU-DOMINIO/privacidade`, `https://SEU-DOMINIO/termos`, `https://SEU-DOMINIO/excluir-conta` e `https://SEU-DOMINIO/licencas` devem abrir sem login. `https://SEU-DOMINIO/admin/entrar` deve dar "Não encontrado" (o painel não existe neste host).
+4. `https://lojista.SEU-DOMINIO/lojista/entrar` deve abrir o painel do lojista; `https://lojista.SEU-DOMINIO/admin/entrar` deve dar "Não encontrado" (é o esperado: SEC-116).
+5. Estado dos serviços: `sh infra/scripts/prod.sh ps` (todos "healthy"; `migrate` aparece como "Exited (0)", que é normal).
+6. Teste de IP real (SEC-129): erre a senha do admin 5 vezes seguidas num navegador e confirme que a conta é travada **para esse IP** e que outra pessoa/rede ainda consegue entrar numa conta diferente. (Ao testar do próprio servidor, o IP aparece como `172.30.0.1`: é o gateway do Docker, não é um erro.)
 
 ### Passo 10. Backup, monitoramento e webhook (não pule)
 
@@ -225,8 +231,8 @@ Funciona sem o nginx e o compose deste repositório: o provedor termina o HTTPS 
 1. **Banco**: crie o Postgres, ative PostGIS (`CREATE EXTENSION IF NOT EXISTS postgis;` num cliente SQL, ou pelo painel). Copie a URL de conexão (`postgresql://...`). Se o provedor exige TLS, use `?sslmode=require` no fim.
 2. **Redis**: crie e copie a URL.
 3. **R2**: crie os buckets `webag-public` e `webag-private`; em `webag-public` habilite acesso público por um domínio (ex.: `fotos.webag.com.br`) ou pelo domínio `r2.dev` (só ensaio); crie um token de API S3 com acesso aos dois. Configure **CORS** no bucket privado e no público para permitir `POST` e `GET` vindos de `https://admin.<domínio>` e `https://lojista.<domínio>` (o navegador envia fotos direto ao bucket, ADR-005). Variáveis: `S3_ENDPOINT=https://<conta>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=true`, `S3_PUBLIC_URL=https://fotos.<domínio>`, chaves do token.
-4. **API**: crie o serviço apontando para o repositório e para `apps/api/Dockerfile`. Variáveis: as da tabela da seção 6 (use as secretas do provedor, não o `.env`). Em vez de `TRUST_PROXY=172.30.0.10`, use o **número de saltos** de proxy do provedor (comece com `1`; `[HIPÓTESE]` pode ser 2 se houver CDN na frente). Domínio personalizado: `api.<domínio>`.
-5. **Painel web**: serviço com `apps/web/Dockerfile`. Variáveis: `ADMIN_HOST`, `LOJISTA_HOST`, `API_URL` (endereço **interno/privado** da API, se o provedor tiver rede privada; senão a URL pública `https://api.<domínio>`), `BFF_SHARED_SECRET` (igual ao da API), `STORAGE_ORIGIN`. **Sem nginx** não existe o cabeçalho `X-Real-IP`: use `WEB_TRUSTED_PROXY_HOPS=1` no lugar de `WEB_CLIENT_IP_HEADER` e confirme com o teste de IP (passo 9.5). Domínios personalizados: **os dois** (`admin.<domínio>` e `lojista.<domínio>`) no mesmo serviço.
+4. **API**: crie o serviço apontando para o repositório e para `apps/api/Dockerfile`. Variáveis: as da tabela da seção 6 (use as secretas do provedor, não o `.env`). Lembre que `WEB_PUBLIC_URL` é `https://<PUBLIC_HOST>` e `MP_OAUTH_REDIRECT_URI` é `https://<LOJISTA_HOST>/lojista/onboarding/4` (o compose do Caminho A preenche os dois sozinho). Em vez de `TRUST_PROXY=172.30.0.10`, use o **número de saltos** de proxy do provedor (comece com `1`; `[HIPÓTESE]` pode ser 2 se houver CDN na frente). Domínio personalizado: `api.<domínio>`.
+5. **Painel web**: serviço com `apps/web/Dockerfile`. Variáveis: `ADMIN_HOST`, `LOJISTA_HOST`, `PUBLIC_HOST` (o domínio principal; sem ele as páginas públicas e a do cartão dão 404), `PUBLIC_URL`, `REALTIME_URL` (`https://api.<domínio>`), `PLAY_STORE_URL`/`APP_STORE_URL` (depois de publicar), `API_URL` (endereço **interno/privado** da API, se o provedor tiver rede privada; senão a URL pública `https://api.<domínio>`), `BFF_SHARED_SECRET` (igual ao da API), `STORAGE_ORIGIN`. **Sem nginx** não existe o cabeçalho `X-Real-IP`: use `WEB_TRUSTED_PROXY_HOPS=1` no lugar de `WEB_CLIENT_IP_HEADER` e confirme com o teste de IP (passo 9.5). Domínios personalizados: **os dois** (`admin.<domínio>` e `lojista.<domínio>`) no mesmo serviço.
 6. **Primeiro deploy**: a migração roda sozinha (pre-deploy). Para o **seed** (primeiro admin), rode uma vez do seu computador, com o código baixado e Node 24 + pnpm instalados:
 
    ```bash
@@ -234,7 +240,7 @@ Funciona sem o nginx e o compose deste repositório: o provedor termina o HTTPS 
    NODE_ENV=production DATABASE_URL='postgresql://...' SEED_ADMIN_EMAIL='voce@dominio' SEED_ADMIN_PASSWORD='senha-longa' pnpm --filter @webag/api db:seed
    ```
    (No Windows PowerShell, defina cada variável com `$env:NOME='valor'` antes do `pnpm`.) O banco precisa aceitar conexão do seu IP nesse momento.
-7. **DNS**: aponte `api`, `admin`, `lojista` (e `fotos`) para os alvos que o provedor indicar (CNAME), como no passo 2 do Caminho A.
+7. **DNS**: aponte `api`, `admin`, `lojista`, o domínio principal (`PUBLIC_HOST`) e `fotos` para os alvos que o provedor indicar (CNAME), como no passo 2 do Caminho A.
 8. **Backup**: o backup automático do provedor é bem-vindo, mas **não substitui** um backup cifrado fora do provedor: agende a partir de um servidor barato (ou do seu computador) o `pg_dump` conforme a seção 8, ou use o ponto de restauração do plano **e teste a restauração**.
 
 Pontos de atenção do gerenciado: planos grátis "dormem" (a API não pode dormir: webhook do Mercado Pago e filas); conexão ao Postgres limitada pelo plano; `TRUST_PROXY` e IP do cliente validados com o teste de lockout (se falhar, todos os usuários do painel dividem o mesmo IP: SEC-129).
@@ -247,9 +253,9 @@ Pontos de atenção do gerenciado: planos grátis "dormem" (a API não pode dorm
 | `admin.<domínio>` | Painel do administrador | Equipe Webag |
 | `lojista.<domínio>` | Painel do lojista | Lojistas |
 | `arquivos.<domínio>` | Fotos e documentos (só no Caminho A com armazenamento local) | Navegador, app |
-| `<domínio>` (raiz) | Landing page e páginas públicas (política de privacidade, termos) | Público |
+| `<domínio>` (raiz, `PUBLIC_HOST`) | Site público: página inicial, `/privacidade`, `/termos`, `/suporte`, `/ajuda`, `/licencas`, `/excluir-conta` e a página segura do cartão `/pagar/cartao` | Público, app, lojas |
 
-A landing page e as políticas de privacidade/termos precisam de uma URL pública (as lojas exigem). Este repositório gera os textos em `apps/web/src/features/legal`; a hospedagem da landing é decisão aberta (pode ser outra hospedagem estática barata). `[HIPÓTESE]`
+O site público é servido pelo mesmo contêiner `web` dos painéis (os textos legais vêm de `apps/web/src/features/legal`). **Essas URLs vão nos formulários da Apple e da Google** (privacidade e exclusão de conta) e `https://<domínio>` é o valor de `EXPO_PUBLIC_WEB_URL` do app (seção 6.4). O nginx deste repositório já tem o bloco do `PUBLIC_HOST` e o certificado cobre o nome.
 
 E-mail: no provedor de e-mail, adicione ao DNS os registros que ele pedir (SPF, DKIM e, recomendado, DMARC) para o domínio do remetente; sem isso os e-mails (código de confirmação, convite de admin) caem no spam.
 
@@ -271,7 +277,13 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `PAYMENT_PROVIDER` | Sim | `mercadopago` (o `fake` é recusado em produção) | Fixo |
 | `MP_ACCESS_TOKEN` | Sim com MP | Chamar a API do Mercado Pago | Seção 7 |
 | `MP_WEBHOOK_SECRET` | Sim com MP | Validar a assinatura dos webhooks | Seção 7 |
-| `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_OAUTH_REDIRECT_URI` | Não (hoje) | Reservadas para o OAuth do lojista (WB-053); **a API ainda não as lê** (2026-11-18) | Seção 7 |
+| `MP_CLIENT_ID`, `MP_CLIENT_SECRET` | Sim com MP | OAuth do split: cada lojista conecta a própria conta do Mercado Pago | Seção 7 |
+| `MP_OAUTH_REDIRECT_URI` | Sim com MP | Página que recebe `code` e `state` na volta do Mercado Pago, cadastrada igual no app do MP | Compose: vazio = `https://<LOJISTA_HOST>/lojista/onboarding/4` |
+| `MP_PUBLIC_KEY` | Sim com cartão | Chave **pública** do Mercado Pago (página segura de cartão, `/pagar/cartao`); não é segredo | Seção 7 |
+| `MP_OAUTH_PKCE`, `MP_PAYER_DOCUMENT_REQUIRED` | Não | PKCE no OAuth (deixe `true`); CPF do pagador no PIX (`[confirmar no sandbox]`) | Padrões `true` e `false` |
+| `APP_ENV` | Não | `production` (padrão) ou `staging` (ensaio; seção 1, pendência 1) | |
+| `WEB_PUBLIC_URL` | Sim | Base das páginas públicas, em especial `/pagar/cartao`: `https://<PUBLIC_HOST>` (o app só abre esta origem) | Compose: montada |
+| `PUSH_PROVIDER`, `EXPO_ACCESS_TOKEN` | Não | `log` (padrão, não envia nada) ou `expo` (envia; exige FCM/APNs no EAS). Token do Expo é opcional ("enhanced push security") | expo.dev > Access tokens |
 | `API_PUBLIC_URL` | Sim | URL pública da API (base do redirect OAuth) | `https://api.<domínio>` (montada) |
 | `ADMIN_WEB_URL` | Sim | Prefixo dos links nos e-mails (convite de admin) | `https://admin.<domínio>` (montada) |
 | `CORS_ORIGINS` | Sim | Origens exatas permitidas (sem `*`) | Montada: admin e lojista |
@@ -282,13 +294,18 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `LOG_LEVEL` | Não | `info` por padrão | |
 | `API_DOCS_ENABLED` | Não | **Nunca** `true` em produção (o boot recusa) | |
 | `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TTL_DAYS`, `REFRESH_ABSOLUTE_TTL_DAYS`, `REFRESH_REUSE_WINDOW_SECONDS` | Não | Duração de sessão (padrões: 900 s, 30 d, 90 d, 30 s) | Só se o produto mudar a regra; adicione em `environment` do serviço `api` |
-| `SENTRY_DSN` | Não | Reservada; **ainda não lida** (DT-039) | Sentry > Projeto > Settings > Client Keys (DSN) |
+| `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE` | Não | Erros da API no Sentry, sem dado pessoal; vazio = desligado. Traces de 0 a 1 (0 = só erros) | Sentry > Projeto > Settings > Client Keys (DSN) |
 
 ### 6.2 Painel web (`apps/web`) e demais serviços
 
 | Variável | Serviço | Obrigatória | Para quê | Onde pegar |
 |---|---|---|---|---|
 | `ADMIN_HOST`, `LOJISTA_HOST` | web, nginx | Sim | Cada painel só responde no seu host (SEC-116); sem eles o painel recusa tudo | Seus subdomínios (sem `https://`) |
+| `PUBLIC_HOST` | web, nginx, certbot | Sim | Site público e `/pagar/cartao` só respondem neste host (SEC-106); sem ele essas páginas dão 404 | O domínio principal (sem `https://`) |
+| `PUBLIC_URL` | web | Não | Origem pública usada em sitemap, robots e URLs canônicas; padrão `https://<PUBLIC_HOST>` | Compose: montada |
+| `PLAY_STORE_URL`, `APP_STORE_URL` | web | Não | Botões de download da página inicial (https). Vazios: a página mostra "em breve" | Links reais depois de publicar (G5) |
+| `REALTIME_URL` | web | Não (recomendada) | Origem pública do Socket.IO que o navegador do painel alcança; sem ela os painéis usam só polling | Compose: `https://<API_HOST>` |
+| `APP_SCHEME` | web | Não | Esquema do deep link do app para voltar da página do cartão; padrão `webag` | |
 | `BFF_SHARED_SECRET` | web, api | Sim | Igual ao da API | `[G]` |
 | `API_URL` | web | Sim | Endereço **interno** da API | Compose: `http://api:3000` |
 | `WEB_CLIENT_IP_HEADER` | web | Uma das duas | `x-real-ip`, que o nginx sobrescreve | Compose: já definida |
@@ -314,17 +331,32 @@ As telas desses serviços mudam; os caminhos abaixo são os de nov/2026 `[HIPÓT
 | Mercado Pago | `MP_ACCESS_TOKEN` | https://www.mercadopago.com.br/developers > Suas integrações > (sua aplicação) > Credenciais de produção. A conta precisa estar ativada para produção (dados do negócio). Valor começa com `APP_USR-` |
 | Mercado Pago | `MP_WEBHOOK_SECRET` | Mesma aplicação > Webhooks > configurar notificações > ao salvar a URL (seção 7), clique em "Revelar" na **assinatura secreta** |
 | Expo / EAS | `EXPO_TOKEN` (só para CI) e `EAS_PROJECT_ID` | https://expo.dev > conta > Access tokens. O id do projeto aparece após `eas init` (não é segredo). Veja `docs/deploy/checklist-publicacao-lojas.md` |
-| Sentry (quando ligado) | `SENTRY_DSN` | https://sentry.io > Projects > (projeto) > Settings > Client Keys (DSN). Crie um projeto por componente (API, painel, app) |
+| Sentry | `SENTRY_DSN` | https://sentry.io > Projects > (projeto) > Settings > Client Keys (DSN). Crie um projeto por componente (API, painel, app) |
 | E-mail (Brevo) | `SMTP_*` | Brevo > SMTP & API > SMTP: host `smtp-relay.brevo.com`, porta `587`, login e "chave SMTP". Verifique o domínio do remetente `[HIPÓTESE]` |
 | E-mail (Resend) | `SMTP_*` | Resend > Domains (verificar domínio) > API Keys: host `smtp.resend.com`, porta `587`, usuário `resend`, senha = chave `[HIPÓTESE]` |
 | E-mail (Amazon SES) | `SMTP_*` | SES > SMTP settings (região `sa-east-1`: host `email-smtp.sa-east-1.amazonaws.com`, porta 587) > criar credenciais SMTP; sair do modo "sandbox" `[HIPÓTESE]` |
 | Cloudflare R2 | `S3_*` / `BACKUP_S3_*` | Cloudflare > R2 > criar buckets > Manage API tokens (Object Read & Write, limitado aos buckets). `ENDPOINT` = `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
 | healthchecks.io [opcional] | `BACKUP_HEARTBEAT_URL` | Criar um "check" com período de 1 dia e tolerância de poucas horas; copiar a URL de ping |
 
+### 6.4 App mobile (EAS) e parâmetros que NÃO são variáveis do servidor
+
+O app é compilado no EAS (não no servidor). Tudo que começa com `EXPO_PUBLIC_` é **embutido no aplicativo e público**: nunca coloque segredo. Cadastre no EAS (Environment Variables, por ambiente `preview` e `production`) ou em `eas.json`:
+
+| Variável | Valor em produção | Para quê |
+|---|---|---|
+| `EXPO_PUBLIC_API_URL` | `https://api.<domínio>` | Endereço da API |
+| `EXPO_PUBLIC_WEB_URL` | `https://<domínio>` (= `WEB_PUBLIC_URL` da API) | O cartão abre `<url>/pagar/cartao` no navegador do sistema; o app confere a origem antes de abrir |
+| `EXPO_PUBLIC_APP_ENV` | `production` (ou `staging`) | Em `production` o app exige o cartão real do Mercado Pago; fora dele aceita o provedor simulado |
+| `EXPO_PUBLIC_MP_PUBLIC_KEY` | a mesma de `MP_PUBLIC_KEY` | Chave pública do Mercado Pago |
+| `EXPO_PUBLIC_SUPPORT_WHATSAPP` | só dígitos com DDI | Suporte pelo WhatsApp (opcional) |
+| `EAS_PROJECT_ID` | id do `eas init` | Vínculo com o projeto no Expo (não é segredo) |
+
+Os **parâmetros de negócio** (comissão, prazos, ETA de entrega: `entrega_preparo_padrao_min`, `entrega_despacho_min`, `entrega_rota_fator_pct`, `entrega_min_por_km`, `entrega_faixa_min`, `entrega_max_min`, `entrega_atraso_tolerancia_min`, `entrega_compensacao_*`, horário da logística `logistica_horario` e outros) **não são variáveis de ambiente**: ficam no banco, com valores padrão criados pelo seed, e o administrador os altera no painel (Parâmetros), com histórico e motivo. Os valores de ETA e de atraso são hipóteses (DEC-053/054) a calibrar com a operação real.
+
 ## 7. Mercado Pago: chaves e URL do webhook
 
 1. Crie (ou abra) sua aplicação em Suas integrações no painel de desenvolvedores do Mercado Pago. Para marketplace, o modelo de cobrança e o OAuth dos lojistas estão em `docs/arquitetura/adr/ADR-002-pagamentos-marketplace.md`.
-2. Ative as credenciais de produção e copie o **Access Token** para `MP_ACCESS_TOKEN` no `.env`.
+2. Ative as credenciais de produção e copie para o `.env`: o **Access Token** em `MP_ACCESS_TOKEN`, a **Public Key** em `MP_PUBLIC_KEY` (e a mesma no EAS, `EXPO_PUBLIC_MP_PUBLIC_KEY`) e o **Client ID** e **Client Secret** do OAuth em `MP_CLIENT_ID` e `MP_CLIENT_SECRET`. Em "URLs de redirecionamento" da aplicação cadastre `https://lojista.SEU-DOMINIO/lojista/onboarding/4` (é a `MP_OAUTH_REDIRECT_URI` que o compose usa por padrão).
 3. **URL do webhook**, em Suas integrações > sua aplicação > Webhooks > Configurar notificações > modo **Produção**:
 
    ```
@@ -449,7 +481,7 @@ Cada contêiner guarda no máximo 5 arquivos de 10 MB (não enche o disco). Erro
 | Certificado | O Let's Encrypt avisa por e-mail 20 dias antes de vencer (`LETSENCRYPT_EMAIL`); o monitor externo também pode checar | Menos de 14 dias |
 | Disco e memória | `df -h /` e `docker system df`, `free -h` | Disco > 80% |
 | Pagamentos | Painel admin > Pagamentos (alertas e webhooks com falha, reprocessar) | Alerta aberto |
-| Erros da aplicação | Sentry (quando ligado, DT-039) | |
+| Erros da aplicação | Sentry (API; painel e app ainda não, DT-039) | |
 
 Rotina semanal de 10 minutos: `ps`, `df -h`, listar backups, ver alertas de pagamento, `apt list --upgradable`.
 
@@ -487,7 +519,7 @@ sh infra/scripts/prod.sh ps                      # conferir "healthy"
 |---|---|---|
 | `api` reinicia sem parar, log "Configuração de ambiente inválida" | Variável faltando ou insegura | A mensagem lista o nome. Corrija o `.env`, `up -d api` |
 | `nginx` não sobe, "unhealthy" | API ou web não saudáveis, ou sem certificado | `prod.sh ps`; rode `init-tls.sh` se for o 1º uso |
-| `init-tls.sh` falha na etapa 3 | DNS não propagou ou porta 80 fechada | Confira os 4 nomes (`nslookup`), firewall do provedor e `ufw` |
+| `init-tls.sh` falha na etapa 3 | DNS não propagou ou porta 80 fechada | Confira os 5 nomes (`nslookup`), firewall do provedor e `ufw` |
 | Painel mostra "Não encontrado" | Acessando a área no host errado (admin no host do lojista) | Use `admin.` para `/admin` e `lojista.` para `/lojista` |
 | Todo usuário do painel "tranca" junto no login | IP do cliente não chega (SEC-129) | Confira `WEB_CLIENT_IP_HEADER=x-real-ip`/saltos de proxy e `TRUST_PROXY`; DNS da Cloudflare em "somente DNS" |
 | Foto não envia (erro de CORS no navegador) | `FILES_HOST`/`STORAGE_ORIGIN` errados ou bucket sem CORS (R2) | Confira `S3_ENDPOINT` = `https://arquivos.<domínio>` e o CORS do bucket |

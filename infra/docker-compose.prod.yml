@@ -148,8 +148,7 @@ services:
       BFF_SHARED_SECRET: ${BFF_SHARED_SECRET:?defina BFF_SHARED_SECRET no .env}
       API_PUBLIC_URL: https://${API_HOST:?defina API_HOST no .env}
       ADMIN_WEB_URL: https://${ADMIN_HOST:?defina ADMIN_HOST no .env}
-      # B.2: base da página segura de cartão (/pagar/cartao), servida pelo web do lojista/admin.
-      # Base da página segura do cartão (/pagar/cartao): é o SITE PÚBLICO (PUBLIC_HOST), não um painel. O app confere esta URL (EXPO_PUBLIC_WEB_URL).
+      # B.2: base da página segura de cartão (/pagar/cartao). Base da página segura do cartão (/pagar/cartao): é o SITE PÚBLICO (PUBLIC_HOST), não um painel. O app confere esta URL (EXPO_PUBLIC_WEB_URL).
       WEB_PUBLIC_URL: https://${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
       MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
       # Origens exatas (sem "*"): os painéis.
@@ -167,6 +166,16 @@ services:
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mercadopago}
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
       MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # OAuth do split (cada lojista conecta a própria conta). Com PAYMENT_PROVIDER=mercadopago os três são obrigatórios no boot.
+      MP_CLIENT_ID: ${MP_CLIENT_ID:-}
+      MP_CLIENT_SECRET: ${MP_CLIENT_SECRET:-}
+      # Página que recebe `code` e `state` na volta do Mercado Pago: etapa 4 do cadastro, no host do lojista. Cadastre a MESMA URL no app do MP.
+      MP_OAUTH_REDIRECT_URI: ${MP_OAUTH_REDIRECT_URI:-https://${LOJISTA_HOST}/lojista/onboarding/4}
+      MP_OAUTH_PKCE: ${MP_OAUTH_PKCE:-true}
+      MP_PAYER_DOCUMENT_REQUIRED: ${MP_PAYER_DOCUMENT_REQUIRED:-false}
+      # `log` NÃO envia push (só registra); `expo` envia (credenciais FCM/APNs no EAS, conta do fundador).
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-log}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       SMTP_HOST: ${SMTP_HOST:?defina SMTP_HOST no .env}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
