@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { Check } from '../../components/icons';
 import { useReducedMotion } from '../../lib/useReducedMotion';
@@ -11,8 +11,8 @@ import { theme } from '../../theme';
  */
 export function Celebration({ size = 96 }: { size?: number }) {
   const reduced = useReducedMotion();
-  const scale = useRef(new Animated.Value(0.6)).current;
-  const checkOpacity = useRef(new Animated.Value(0)).current;
+  const [scale] = useState(() => new Animated.Value(0.6));
+  const [checkOpacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (reduced) {

@@ -27,7 +27,8 @@ export async function getPushStatus(): Promise<PushStatus> {
 export async function enablePush(): Promise<PushStatus> {
   try {
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('orders', { name: 'Pedidos', importance: Notifications.AndroidImportance.HIGH });
+      await Notifications.setNotificationChannelAsync('orders', { name: 'Pedidos', // eslint-disable-next-line import/namespace
+      importance: Notifications.AndroidImportance.HIGH });
     }
     const asked = await Notifications.requestPermissionsAsync();
     if (!asked.granted) return asked.canAskAgain === false ? 'blocked' : 'denied';

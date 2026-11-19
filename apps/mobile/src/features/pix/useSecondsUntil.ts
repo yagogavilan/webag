@@ -5,7 +5,6 @@ export function useSecondsUntil(iso: string | null | undefined): number | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!iso) return;
-    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [iso]);

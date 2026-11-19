@@ -743,7 +743,7 @@ export const ptBR = {
     hintDelivery: 'Chega em {eta}.',
     hintPickup: 'Fica pronto em {eta}.',
     hintAwaiting: 'Falta o pagamento para a loja receber o pedido.',
-    updatedAgo: 'Atualizado há {time}',
+    updatedAgo: 'Atualizado às {time}',
     updatedNow: 'Atualizado agora',
     offline: 'Sem conexão. Mostrando o último estado salvo.',
     late: 'Seu pedido está demorando mais que o normal.',
@@ -785,6 +785,9 @@ export const ptBR = {
     reason: 'Motivo: {reason}',
     emailBanner: 'Confirme seu e-mail para os próximos pedidos.',
     quantityTimes: '{n}x',
+    rate: 'Avaliar pedido',
+    requestExchange: 'Pedir troca',
+    deliveryCode: 'Código de entrega',
   },
   nav: {
     notFoundTitle: 'Página não encontrada',

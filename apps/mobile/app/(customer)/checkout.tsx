@@ -25,7 +25,6 @@ import { PaymentBlock } from '../../src/features/checkout/PaymentBlock';
 import { ReceiveBlock } from '../../src/features/checkout/ReceiveBlock';
 import { addressIsReady, deriveGate, payLabel, pendingChanges, type PayMethod, type ReceiveMode } from '../../src/features/checkout/state';
 import { t } from '../../src/i18n';
-import { formatMoney } from '../../src/lib/format';
 import { haptic } from '../../src/lib/haptics';
 import { isValidCpf, maskCpf, onlyDigits } from '../../src/lib/masks';
 import { useOnline } from '../../src/lib/useOnline';

@@ -33,7 +33,9 @@ export function useRealtime({ orderId, onEvent, enabled = true }: RealtimeOption
   const authed = session.status === 'authenticated';
   const [connected, setConnected] = useState(false);
   const handler = useRef(onEvent);
-  handler.current = onEvent;
+  useEffect(() => {
+    handler.current = onEvent;
+  });
 
   useEffect(() => {
     if (!enabled || !authed) return;
