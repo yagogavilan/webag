@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { DeliveriesService } from '../src/modules/logistics/index.js';
-import { auditLog, coupons, deliveries, orders } from '../src/platform/database/schema.js';
+import { auditLog, couponRedemptions, coupons, deliveries, orders } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { restoreFees } from './helpers/fees.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
@@ -44,8 +44,8 @@ describe('Hora real da entrega informada pela operação (WB-262)', () => {
   const courier = async () => (await ctx.http.post(`${base}/couriers`).set(bearer(ops.accessToken)).send({ name: 'Moto Hora', phone: `11 9${String(Math.floor(1e7 + Math.random() * 9e7))}`, documentsChecked: true }).expect(201)).body as { id: string };
 
   /** Pedido real, pago, aceito, com a corrida SAIU para entrega; a saída é recuada em `departedMinutesAgo` (o evento é a referência da regra). */
-  async function outForDelivery(departedMinutesAgo = 90) {
-    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 8_000, stock: 20 }]);
+  async function outForDelivery(departedMinutesAgo = 90, shopArg?: Awaited<ReturnType<typeof shopWith>>) {
+    const shop = shopArg ?? (await shopWith(ctx, [{ name: 'Item', priceCents: 8_000, stock: 20 }]));
     const buyer = await customerAt(ctx, shop.origin);
     await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
     const created = (await placeOrder(ctx, buyer.user, buyer.addressId)).body as { id: string };
@@ -186,5 +186,45 @@ describe('Hora real da entrega informada pela operação (WB-262)', () => {
     expect(report.totals.avgMinutes.readyToDelivered).toBeGreaterThan(49);
     expect(report.totals.avgMinutes.readyToDelivered).toBeLessThan(51);
     expect(report.totals.onTime).toBe(1);
+  });
+
+  it('W.4: indicadores do piloto pela hora real: no prazo, dentro do teto, precisão, cancelamento por atraso, compensação e preparo real por loja (3 ou mais)', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 8_000, stock: 50 }]);
+    const day = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+    const stats = async (extra = '') => (await ctx.http.get(`${base}/stats?from=${day}&to=${day}&storeId=${shop.store.id}${extra}`).set(bearer(ops.accessToken)).expect(200)).body;
+    expect((await stats()).delivered).toBe(0);
+    expect((await stats()).onTime.pct).toBeNull(); // sem entrega: nada de 0%
+    const a = await outForDelivery(90, shop);
+    const b = await outForDelivery(90, shop);
+    const c = await outForDelivery(90, shop);
+    const d = await outForDelivery(90, shop);
+    // A e C no prazo (fim da faixa no futuro); B atrasada (40 min depois do fim da faixa); D cancelada por atraso pelo cliente
+    for (const r of [a, c]) await ctx.db.update(orders).set({ etaFromAt: minutesAgo(-10), etaToAt: minutesAgo(-40) }).where(eq(orders.id, r.orderId));
+    await ctx.db.update(orders).set({ etaFromAt: minutesAgo(70), etaToAt: minutesAgo(40) }).where(eq(orders.id, b.orderId));
+    // o preparo real da loja passa de 40 min (aceito há 1 h, pronto agora); o informado é o do pedido (padrão 20 min)
+    for (const r of [a, b, c, d]) await ctx.db.update(orders).set({ acceptedAt: minutesAgo(60) }).where(eq(orders.id, r.orderId));
+    for (const r of [a, b, c]) await act(r.deliveryId, { action: 'delivered', code: r.code }).expect(200);
+    await ctx.db.update(orders).set({ status: 'cancelled', cancelledBy: 'customer', cancelReason: 'Atraso na entrega', cancelledAt: new Date() }).where(eq(orders.id, d.orderId));
+    const [coupon] = await ctx.db.select().from(coupons).where(eq(coupons.sourceOrderId, b.orderId));
+    expect(coupon).toBeDefined(); // a entrega atrasada concedeu a compensação
+    await ctx.db.insert(couponRedemptions).values({ couponId: coupon!.id, userId: b.buyer.user.userId, orderId: randomUUID(), discountCents: 700 });
+
+    const s = await stats();
+    expect(s.delivered).toBe(3);
+    expect(s.onTime).toEqual({ count: 2, of: 3, pct: 66.7 });
+    expect(s.withinCeiling).toMatchObject({ count: 3, of: 3, pct: 100, ceilingMinutes: 120 });
+    expect(typeof s.precisionMedianMinutes).toBe('number');
+    expect(s.lateCancellations).toBe(1);
+    expect(s.compensations).toEqual({ granted: 1, redeemed: 1, cost: { amount: 700, currency: 'BRL' }, abdicatedFee: { amount: 700, currency: 'BRL' } });
+    expect(s.prepByStore).toHaveLength(1);
+    expect(s.prepByStore[0]).toMatchObject({ storeId: shop.store.id, orders: 4, informedMinutes: 20, warn: true });
+    expect(s.prepByStore[0].realMedianMinutes).toBeGreaterThan(55);
+    expect(s.prepByStore[0].differenceMinutes).toBeGreaterThan(30);
+    // permissões e validação
+    await ctx.http.get(`${base}/stats?from=${day}&to=${day}`).set(bearer(support.accessToken)).expect(403);
+    await ctx.http.get(`${base}/stats?from=${day}&to=2000-01-01`).set(bearer(ops.accessToken)).expect(400);
+    await ctx.http.get(`${base}/stats?from=${day}&to=${day}`).expect(401);
+    // outro período: vazio
+    expect((await ctx.http.get(`${base}/stats?from=2001-01-01&to=2001-01-02&storeId=${shop.store.id}`).set(bearer(ops.accessToken)).expect(200)).body).toMatchObject({ delivered: 0, lateCancellations: 0, prepByStore: [] });
   });
 });

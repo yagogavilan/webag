@@ -346,4 +346,25 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       expect(await couponsOf(r.orderId)).toHaveLength(1);
     });
   });
+
+  it('W.3: a corrida do admin traz o pedido de cancelamento por atraso (com `respondBy`) e `lateAlertedAt`; as outras vêm nulas', async () => {
+    const r = await outForDelivery();
+    const plain = await outForDelivery();
+    await late(r.orderId, 20);
+    expect((await cancelLate(r)).status).toBe(200); // em saída, o cancelamento por atraso vira PEDIDO à operação
+    const find = async () => ((await ctx.http.get(`${base}/deliveries`).query({ limit: '100' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; lateAlertedAt: string | null; lateCancelRequest: { status: string; requestedAt: string; respondBy: string } | null }[]);
+    const mine = (await find()).find((d) => d.id === r.delivery.id)!;
+    expect(mine.lateCancelRequest).toMatchObject({ status: 'pending', decidedAt: null, decidedBy: null });
+    expect(Date.parse(mine.lateCancelRequest!.respondBy) - Date.parse(mine.lateCancelRequest!.requestedAt)).toBe(10 * 60_000); // entrega_cancel_resposta_min
+    expect((await find()).find((d) => d.id === plain.delivery.id)!.lateCancelRequest).toBeNull();
+    // `lateAlertedAt`: o alerta de atraso (um por corrida) já saiu para a corrida atrasada (o prazo da corrida é cópia do pedido)
+    await ctx.db.update(deliveries).set({ etaToAt: minutesAgo(20) }).where(eq(deliveries.id, r.delivery.id));
+    await ctx.app.get(DeliveriesService).alertLateDue();
+    expect((await find()).find((d) => d.id === r.delivery.id)!.lateAlertedAt).toEqual(expect.any(String));
+    expect((await find()).find((d) => d.id === plain.delivery.id)!.lateAlertedAt).toBeNull();
+    // o detalhe também
+    const detail = (await ctx.http.get(`${base}/deliveries/${r.delivery.id}`).set(bearer(ops.accessToken)).expect(200)).body;
+    expect(detail.lateCancelRequest).toMatchObject({ status: 'pending' });
+    expect(detail.lateAlertedAt).toEqual(expect.any(String));
+  });
 });

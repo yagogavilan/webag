@@ -66,6 +66,8 @@ export const ADMIN_PERMISSIONS = {
   'help:write': [SUPER, OPS],
   /** WB-197: campanhas de push de marketing (financeiro e suporte não veem). */
   'marketing:push': [SUPER, OPS],
+  /** W.7 (WB-125): contagens de pendências do Início do admin; todo perfil lê, mas cada área só vem para quem tem a permissão dela (o resto vai nulo). */
+  'overview:read': [SUPER, OPS, FIN, SUP],
   /** WB-122: relatórios operacionais (suporte não vê). */
   'reports:operations': [SUPER, OPS, FIN],
   /** WB-114 (DT-060): os 2 CSV financeiros do piloto (Receita por pedido e Estornos): comissão, taxa do provedor e líquido da loja; só financeiro e super admin. */

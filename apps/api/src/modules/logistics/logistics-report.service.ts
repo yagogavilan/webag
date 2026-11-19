@@ -145,4 +145,75 @@ export class LogisticsReportService {
     const lines = report.data.map((r) => [csvCell(r.courierId), csvCell(r.courierName), csvCell(r.courierPhone), r.runs, r.total.amount, r.oldestRunAt, csvCell(r.registeredBy.join('|'))].join(';'));
     return `${BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`;
   }
+
+  /**
+   * W.4 / WB-258 C5: indicadores do piloto (o 4º número da Logística, "No prazo hoje", e o bloco "Prazo no piloto"). Período por dia civil de Brasília
+   * da hora REAL da entrega (`deliveries.delivered_at`, WB-262). Definições (RN-19 / logistica.md): "no prazo" = entregue até o fim da faixa
+   * reancorada no pagamento (`orders.eta_to_at`); "dentro do teto" = até `entrega_max_min` depois do pagamento (a meta de 95% em 2 h); precisão =
+   * mediana de |entrega real - meio da faixa| `[HIPÓTESE: o PO não definiu a conta da precisão]`; cancelamentos por atraso = pedidos cancelados pelo
+   * cliente com o motivo "Atraso na entrega"; compensações = cupons concedidos por atraso e o que já foi RESGATADO (custo real); taxa abdicada = o
+   * frete que os cupons de frete grátis de compensação já zeraram; preparo real = ACEITO até PRONTO, por loja, só com 3 ou mais pedidos.
+   * "Atrasos por causa" NÃO está aqui: a causa é marcada pela operação (WB-255 C5) e esse registro ainda não existe na API.
+   */
+  async stats(query: { from: string; to: string; cityId?: string | undefined; storeId?: string | undefined }) {
+    const from = dayStart(query.from).toISOString();
+    const to = dayAfter(query.to).toISOString();
+    const [ceilingMin, warnDiff] = [await this.params.getNumber('entrega_max_min'), 10];
+    const cityFilter = query.cityId ? sql`and d.city_id = ${query.cityId}::uuid` : sql``;
+    const storeFilter = query.storeId ? sql`and d.store_id = ${query.storeId}::uuid` : sql``;
+    const orderStore = query.storeId ? sql`and o.store_id = ${query.storeId}::uuid` : sql``;
+    const orderCity = query.cityId ? sql`and s.address_city_id = ${query.cityId}::uuid` : sql``;
+    const [timing, cancellations, compensation, prep] = await Promise.all([
+      this.db.execute<{ total: number; with_eta: number; on_time: number; with_paid: number; within: number; precision_min: number | null }>(sql`
+        select count(*)::int as total,
+               count(*) filter (where o.eta_to_at is not null)::int as with_eta,
+               count(*) filter (where o.eta_to_at is not null and d.delivered_at <= o.eta_to_at)::int as on_time,
+               count(*) filter (where o.paid_at is not null)::int as with_paid,
+               count(*) filter (where o.paid_at is not null and d.delivered_at <= o.paid_at + make_interval(mins => ${ceilingMin}))::int as within,
+               (percentile_cont(0.5) within group (order by abs(extract(epoch from (d.delivered_at - (o.eta_from_at + (o.eta_to_at - o.eta_from_at) / 2))) / 60)) filter (where o.eta_to_at is not null and o.eta_from_at is not null))::float8 as precision_min
+        from deliveries d join orders o on o.id = d.order_id
+        where d.kind = 'delivery' and d.status = 'delivered' and d.delivered_at >= ${from}::timestamptz and d.delivered_at < ${to}::timestamptz ${cityFilter} ${storeFilter}`),
+      this.db.execute<{ n: number }>(sql`
+        select count(*)::int as n from orders o join stores s on s.id = o.store_id
+        where o.status = 'cancelled' and o.cancelled_by = 'customer' and o.cancel_reason = 'Atraso na entrega' and o.cancelled_at >= ${from}::timestamptz and o.cancelled_at < ${to}::timestamptz ${orderStore} ${orderCity}`),
+      this.db.execute<{ granted: number; redeemed: number; cost: number; fee: number }>(sql`
+        select count(distinct c.id)::int as granted,
+               count(r.id) filter (where r.released_at is null)::int as redeemed,
+               coalesce(sum(r.discount_cents) filter (where r.released_at is null), 0)::int as cost,
+               coalesce(sum(r.discount_cents) filter (where r.released_at is null and c.kind = 'free_shipping'), 0)::int as fee
+        from coupons c join orders o on o.id = c.source_order_id join stores s on s.id = o.store_id
+        left join coupon_redemptions r on r.coupon_id = c.id
+        where c.source_order_id is not null and c.created_at >= ${from}::timestamptz and c.created_at < ${to}::timestamptz ${orderStore} ${orderCity}`),
+      this.db.execute<{ store_id: string; store_name: string | null; n: number; real_med: number; informed_med: number }>(sql`
+        select o.store_id, s.name as store_name, count(*)::int as n,
+               (percentile_cont(0.5) within group (order by extract(epoch from (e.at - o.accepted_at)) / 60))::float8 as real_med,
+               (percentile_cont(0.5) within group (order by (o.delivery_snapshot -> 'eta' ->> 'prepMin')::numeric))::float8 as informed_med
+        from orders o
+        join stores s on s.id = o.store_id
+        join lateral (select min(oe.at) as at from order_events oe where oe.order_id = o.id and oe.to_status = 'ready_for_collection') e on e.at is not null
+        where o.mode = 'delivery' and o.accepted_at is not null and o.accepted_at >= ${from}::timestamptz and o.accepted_at < ${to}::timestamptz
+          and (o.delivery_snapshot -> 'eta' ->> 'prepMin') is not null ${orderStore} ${orderCity}
+        group by o.store_id, s.name having count(*) >= 3
+        order by (percentile_cont(0.5) within group (order by extract(epoch from (e.at - o.accepted_at)) / 60)) desc, s.name
+        limit 100`),
+    ]);
+    const t = timing.rows[0];
+    const pct = (count: number, of: number): number | null => (of === 0 ? null : Math.round((count / of) * 1000) / 10);
+    const round1 = (v: number | null | undefined): number | null => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.round(Number(v) * 10) / 10);
+    const c = compensation.rows[0];
+    return {
+      period: { from: query.from, to: query.to },
+      delivered: t?.total ?? 0,
+      onTime: { count: t?.on_time ?? 0, of: t?.with_eta ?? 0, pct: pct(t?.on_time ?? 0, t?.with_eta ?? 0) },
+      withinCeiling: { count: t?.within ?? 0, of: t?.with_paid ?? 0, pct: pct(t?.within ?? 0, t?.with_paid ?? 0), ceilingMinutes: ceilingMin },
+      precisionMedianMinutes: round1(t?.precision_min),
+      lateCancellations: cancellations.rows[0]?.n ?? 0,
+      compensations: { granted: c?.granted ?? 0, redeemed: c?.redeemed ?? 0, cost: money(c?.cost ?? 0), abdicatedFee: money(c?.fee ?? 0) },
+      prepByStore: prep.rows.map((r) => {
+        const real = round1(r.real_med) ?? 0;
+        const informed = round1(r.informed_med) ?? 0;
+        return { storeId: r.store_id, storeName: r.store_name, orders: r.n, realMedianMinutes: real, informedMinutes: informed, differenceMinutes: round1(real - informed) ?? 0, warn: real - informed >= warnDiff };
+      }),
+    };
+  }
 }

@@ -360,4 +360,29 @@ export class ReportsService {
     const lines = res.rows.map((r) => [csvCell(r.order_number ?? ''), csvCell(r.exchange_number ?? ''), csvCell(r.store_name ?? ''), new Date(r.created_at).toISOString(), reais(r.amount), csvCell(r.method), csvCell(r.reason), csvCell(r.status), csvCell(r.actor_role ?? 'system'), csvCell(r.actor_id ?? '')].join(';'));
     return { csv: `${CSV_BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`, rows: res.rows.length };
   }
+
+  // ------------------------------------------------------------------ pendências do Início do admin (W.7, WB-125)
+
+  /**
+   * Contagens de pendências por área para a visão geral e para os contadores da barra. Cada área só é calculada se o perfil tem a permissão dela
+   * (`allowed`); as outras voltam nulas, para o painel não mostrar número que a pessoa não pode abrir. Só contagens: nenhum dado pessoal.
+   *  - lojas: em análise (`in_review`); disputas: trocas em mediação; estornos: recusados pelo provedor que esperam a operação (esgotados, ou
+   *    com falha e ainda em nova tentativa), como a fila de estornos; titulares: pedidos LGPD abertos e quantos vencem em até 5 dias ou já venceram.
+   */
+  async pendingCounts(allowed: { stores: boolean; disputes: boolean; refunds: boolean; dataRequests: boolean }) {
+    const n = async (query: SQL): Promise<number> => ((await this.db.execute<{ n: number }>(query)).rows[0]?.n ?? 0);
+    const [stores, disputes, refunds, requests] = await Promise.all([
+      allowed.stores ? n(sql`select count(*)::int as n from stores where status = 'in_review'`) : null,
+      allowed.disputes ? n(sql`select count(*)::int as n from exchange_requests where status = 'in_mediation'`) : null,
+      allowed.refunds ? n(sql`select count(*)::int as n from payment_refund_intents where status = 'exhausted' or (status = 'pending' and failures > 0)`) : null,
+      allowed.dataRequests ? this.db.execute<{ open: number; due_soon: number }>(sql`select count(*)::int as open, count(*) filter (where due_at <= now() + interval '5 days')::int as due_soon from privacy_requests where status <> 'answered'`) : null,
+    ]);
+    const request = requests?.rows[0];
+    return {
+      stores: stores === null ? null : { inReview: stores },
+      disputes: disputes === null ? null : { inMediation: disputes },
+      refunds: refunds === null ? null : { needingAction: refunds },
+      dataRequests: request === undefined ? null : { open: request.open, dueSoon: request.due_soon },
+    };
+  }
 }

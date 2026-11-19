@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { AdminOnly, Ctx, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, StorePermission, type RequestContext } from '../../platform/auth/decorators.js';
+import { errors } from '../../platform/http/app-error.js';
+import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { DeliveryFeesService, type FeeTable } from './delivery-fees.service.js';
 import { FEE_SCOPE_TYPES } from './db/schema.js';
@@ -99,5 +101,34 @@ export class DeliveryFeesAdminController {
       ctx,
     );
     return present(table);
+  }
+}
+
+const storePreviewBody = z
+  .strictObject({
+    /** Ponto do endereço de teste OU a distância direta em km (exatamente um dos dois). */
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+    distanceKm: z.number().min(0).max(100).optional(),
+    /** Preparo do formulário (ainda não salvo); sem ele vale o salvo da loja. */
+    prepMin: z.number().int().min(5).max(120).optional(),
+    cityId: z.uuid().optional(),
+    neighborhoodId: z.uuid().optional(),
+  })
+  .refine((v) => (v.distanceKm !== undefined) !== (v.lat !== undefined || v.lng !== undefined), { message: 'Informe o ponto (lat e lng) OU a distância em km.', path: ['distanceKm'] })
+  .refine((v) => (v.lat === undefined) === (v.lng === undefined), { message: 'Informe lat e lng juntos.', path: ['lat'] });
+
+/** W.5 (WB-257): "Prévia para o cliente" do lojista, com a mesma conta do checkout. Só o dono (permissão `settings`); outra loja: 404. */
+@Controller('v1/stores/:storeId/delivery-preview')
+export class StoreDeliveryPreviewController {
+  constructor(private readonly fees: DeliveryFeesService) {}
+
+  @StorePermission('settings')
+  @HttpCode(200)
+  @RateLimit({ name: 'store-delivery-preview', limit: 240, windowSeconds: 3600 })
+  @Post()
+  preview(@Param('storeId') storeId: string, @Body(new ZodPipe(storePreviewBody)) body: z.infer<typeof storePreviewBody>) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(storeId)) throw errors.notFound();
+    return this.fees.previewForStore(storeId, body);
   }
 }

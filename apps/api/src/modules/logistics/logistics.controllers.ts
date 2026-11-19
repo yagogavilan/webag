@@ -59,6 +59,9 @@ function presentDelivery(d: Delivery & Partial<DeliveryListExtras>, detail: bool
     sla: d.sla ?? null,
     /** DEC-053: fim da faixa prometida ao cliente e atraso sobre ela. */
     etaToAt: d.etaToAt?.toISOString() ?? null,
+    /** W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez) e o pedido de cancelamento por atraso do cliente, com `respondBy`. */
+    lateAlertedAt: d.lateAlertedAt?.toISOString() ?? null,
+    lateCancelRequest: d.lateCancelRequest ?? null,
     overdue: d.overdue ?? false,
     overdueMinutes: d.overdueMinutes ?? null,
     area: d.area ?? null,
@@ -196,6 +199,11 @@ export class DeliveriesAdminController {
     return id ? (await this.couriers.get(id)).name : null;
   }
 
+  /** W.3: o pedido de cancelamento por atraso da corrida de entrega (nulo nas demais). */
+  private async lateRequestOf(delivery: Delivery) {
+    return delivery.kind === 'delivery' ? ((await this.deliveries.lateCancelRequestsFor([delivery.orderId])).get(delivery.orderId) ?? null) : null;
+  }
+
   @AdminOnly('logistics:read')
   @Get()
   async list(@Query(new ZodPipe(listQuery)) query: z.infer<typeof listQuery>) {
@@ -213,7 +221,7 @@ export class DeliveriesAdminController {
     const delivery = await this.deliveries.get(uuid(deliveryId));
     const profile = ctx.principal?.adminProfile;
     const showContact = !!profile && adminHasPermission(profile, 'logistics:write');
-    return { ...presentDelivery(delivery, showContact, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
+    return { ...presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, showContact, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
   }
 
   /** "Revelar" o contato do cliente: motivo obrigatório, leitura auditada, 409 depois da retenção (SEC-144). */
@@ -234,7 +242,8 @@ export class DeliveriesAdminController {
   async assignBatch(@Body(new ZodPipe(assignBatchBody)) body: z.infer<typeof assignBatchBody>, @Ctx() ctx: RequestContext) {
     const result = await this.deliveries.assignBatch(body.deliveryIds, body.courierId, { addressConfirmed: body.addressConfirmed === true }, ctx);
     const name = await this.courierName(body.courierId);
-    return { assigned: result.assigned.map((d) => presentDelivery(d, true, name)), failed: result.failed };
+    const late = await this.deliveries.lateCancelRequestsFor(result.assigned.filter((d) => d.kind === 'delivery').map((d) => d.orderId));
+    return { assigned: result.assigned.map((d) => presentDelivery({ ...d, lateCancelRequest: late.get(d.orderId) ?? null }, true, name)), failed: result.failed };
   }
 
   /** Atribuir: PRONTA -> AGUARDANDO. 409 `DELIVERY_ALREADY_ASSIGNED` se outra pessoa chegou primeiro. */
@@ -243,7 +252,7 @@ export class DeliveriesAdminController {
   @Post(':deliveryId/assign')
   async assign(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(assignBody)) body: z.infer<typeof assignBody>, @Ctx() ctx: RequestContext) {
     const delivery = await this.deliveries.assign(uuid(deliveryId), body.courierId, { addressConfirmed: body.addressConfirmed === true }, ctx);
-    return presentDelivery(delivery, true, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, true, await this.courierName(delivery.courierId));
   }
 
   /** SEC-144: a mensagem leva telefone e endereço do cliente; só quem despacha. */
@@ -267,7 +276,7 @@ export class DeliveriesAdminController {
   async status(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(actionBody)) body: z.infer<typeof actionBody>, @Ctx() ctx: RequestContext) {
     const { action, ...input } = body;
     const delivery = await this.deliveries.act(uuid(deliveryId), action, input, ctx);
-    return presentDelivery(delivery, true, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, true, await this.courierName(delivery.courierId));
   }
 
   /** Custo pago ao motoboy (WB-239); correção exige motivo e preserva o valor anterior no histórico. */
@@ -275,7 +284,7 @@ export class DeliveriesAdminController {
   @Put(':deliveryId/cost')
   async cost(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(costBody)) body: z.infer<typeof costBody>, @Ctx() ctx: RequestContext) {
     const delivery = await this.deliveries.setCost(uuid(deliveryId), body.costCents, body.reason, ctx);
-    return presentDelivery(delivery, false, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, false, await this.courierName(delivery.courierId));
   }
 
   /** SEC-145: financeiro e super admin; quem lançou o custo não marca como pago (403 `SEGREGATION_OF_DUTIES`; super admin com `overrideReason`). */
@@ -327,5 +336,22 @@ export class LogisticsReportsController {
       return this.reports.payableCsv(report);
     }
     return report;
+  }
+}
+
+const statsQuery = z
+  .strictObject({ from: z.iso.date(), to: z.iso.date(), cityId: z.uuid().optional(), storeId: z.uuid().optional() })
+  .refine((v) => v.from <= v.to, { message: 'O início do período não pode ser depois do fim.', path: ['from'] })
+  .refine((v) => (Date.parse(v.to) - Date.parse(v.from)) / 86_400_000 <= 366, { message: 'Período de no máximo 366 dias.', path: ['to'] });
+
+/** W.4: indicadores do piloto (o 4º número da Logística e o bloco "Prazo no piloto"): super admin, operação e financeiro. */
+@Controller('v1/admin/logistics/stats')
+export class LogisticsStatsController {
+  constructor(private readonly reports: LogisticsReportService) {}
+
+  @AdminOnly('logistics:report')
+  @Get()
+  stats(@Query(new ZodPipe(statsQuery)) query: z.infer<typeof statsQuery>) {
+    return this.reports.stats(query);
   }
 }

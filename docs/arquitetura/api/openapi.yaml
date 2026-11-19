@@ -2197,6 +2197,59 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/stats:
+    get:
+      tags: [logistics]
+      operationId: getLogisticsStats
+      summary: Indicadores do piloto da logística (W.4, WB-258 C5)
+      description: "Permissão `logistics:report` (super admin, operação e financeiro). Alimenta o 4º número da Logística (\"No prazo hoje\": use `from` = `to` = hoje) e o bloco \"Prazo no piloto\". Período por dia civil de Brasília da hora REAL da entrega (`deliveredAt`, WB-262). `onTime`: entregue até o fim da faixa reancorada no pagamento (`of` = entregas com faixa; `pct` nulo sem entregas). `withinCeiling`: até `entrega_max_min` (120) depois do pagamento, a meta de 95% em 2 h. `precisionMedianMinutes`: mediana de |entrega real - meio da faixa| `[HIPÓTESE: o PO não definiu a conta]`. `lateCancellations`: pedidos cancelados pelo cliente com o motivo 'Atraso na entrega'. `compensations`: cupons concedidos por atraso (`granted`), os já resgatados e o custo real deles; `abdicatedFee`: o frete que os cupons de frete grátis de compensação já zeraram. `prepByStore`: preparo real (ACEITO até PRONTO) x informado por loja, mediana, só lojas com 3 ou mais pedidos; `warn` quando o real passa do informado em 10 min ou mais (WB-258 C6). **Não traz 'atrasos por causa'**: a causa é marcada pela operação (WB-255 C5) e esse registro ainda não existe na API."
+      parameters:
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: cityId, in: query, description: 'Cidade de destino da corrida / da loja', schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Indicadores
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, delivered, onTime, withinCeiling, precisionMedianMinutes, lateCancellations, compensations, prepByStore]
+                properties:
+                  period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+                  delivered: { type: integer }
+                  onTime: { type: object, required: [count, of, pct], properties: { count: { type: integer }, of: { type: integer }, pct: { type: [number, 'null'] } } }
+                  withinCeiling: { type: object, required: [count, of, pct, ceilingMinutes], properties: { count: { type: integer }, of: { type: integer }, pct: { type: [number, 'null'] }, ceilingMinutes: { type: integer } } }
+                  precisionMedianMinutes: { type: [number, 'null'] }
+                  lateCancellations: { type: integer }
+                  compensations:
+                    type: object
+                    required: [granted, redeemed, cost, abdicatedFee]
+                    properties:
+                      granted: { type: integer }
+                      redeemed: { type: integer }
+                      cost: { $ref: '#/components/schemas/Money' }
+                      abdicatedFee: { $ref: '#/components/schemas/Money' }
+                  prepByStore:
+                    type: array
+                    items:
+                      type: object
+                      required: [storeId, storeName, orders, realMedianMinutes, informedMinutes, differenceMinutes, warn]
+                      properties:
+                        storeId: { type: string, format: uuid }
+                        storeName: { type: [string, 'null'] }
+                        orders: { type: integer }
+                        realMedianMinutes: { type: number }
+                        informedMinutes: { type: number }
+                        differenceMinutes: { type: number }
+                        warn: { type: boolean }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/logistics/deliveries/payouts:
     post:
       tags: [logistics]
@@ -7208,6 +7261,70 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/delivery-preview:
+    post:
+      tags: [stores]
+      operationId: previewStoreDelivery
+      summary: Prévia de entrega do lojista com a mesma conta do checkout (W.5, WB-257)
+      description: "Permissão da loja `settings` (só o dono; outra loja: 404). Para a 'Prévia para o cliente' e o aviso de alcance em Minha loja > Entrega e retirada: é a MESMA conta do `quote` do checkout (`computeEta` com os parâmetros `entrega_*`, o teto no FIM da faixa e `raio_max_km`), só com o preparo do formulário (`prepMin`, ainda não salvo; sem ele vale o salvo) e sem o que depende do carrinho. O web não calcula isto no navegador. Destino: ponto (`lat` e `lng`, distância medida a partir da loja) OU `distanceKm`, exatamente um dos dois (400). `cityId`/`neighborhoodId` escolhem a tabela de taxa (senão a padrão). `reachKm`: até onde a loja alcança com este preparo (menor entre o raio máximo e o limite do teto de entrega); `maxPrepMin`: o maior preparo que ainda deixa a loja entregar em algum lugar. Sem horário da logística, estoque ou frete grátis. Não grava nada."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                lat: { type: number, minimum: -90, maximum: 90 }
+                lng: { type: number, minimum: -180, maximum: 180 }
+                distanceKm: { type: number, minimum: 0, maximum: 100 }
+                prepMin: { type: integer, minimum: 5, maximum: 120 }
+                cityId: { type: string, format: uuid }
+                neighborhoodId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Prévia
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available, reason, distanceM, eta, etaRange, fee, prepMin, reachKm, maxPrepMin, radiusKm]
+                properties:
+                  available: { type: boolean }
+                  reason: { type: [string, 'null'], enum: [OUT_OF_RANGE, NO_FEE_TABLE, null] }
+                  distanceM: { type: [integer, 'null'] }
+                  eta:
+                    oneOf:
+                      - type: 'null'
+                      - type: object
+                        required: [estimateMin, fromMin, toMin, prepMin, dispatchMin, travelMin, bandMin, withinCeiling]
+                        properties:
+                          estimateMin: { type: integer }
+                          fromMin: { type: integer }
+                          toMin: { type: integer }
+                          prepMin: { type: integer }
+                          dispatchMin: { type: integer }
+                          travelMin: { type: integer }
+                          bandMin: { type: integer, description: 'Folga de + e - minutos da faixa' }
+                          withinCeiling: { type: boolean }
+                  etaRange: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }] }
+                  fee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: 'Taxa de entrega da faixa de distância (sem frete grátis)' }
+                  prepMin: { type: integer }
+                  reachKm: { type: number }
+                  maxPrepMin: { type: integer }
+                  radiusKm: { type: number }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /v1/stores/{storeId}/reviews/summary:
     get:
       tags: [stores]
@@ -7235,6 +7352,29 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/admin/overview/pending:
+    get:
+      tags: [reports]
+      operationId: getAdminPendingCounts
+      summary: Pendências por área para o Início e a barra do admin (W.7)
+      description: "Qualquer perfil de admin lê, mas cada área só vem para quem tem a permissão dela; as outras voltam `null` (o painel não mostra número que a pessoa não pode abrir). `stores.inReview`: lojas em análise (`stores:read`). `disputes.inMediation`: trocas em mediação (`exchanges:mediate`: operação e super admin). `refunds.needingAction`: estornos recusados pelo provedor que esperam a operação, os mesmos da fila de estornos sem os já cobertos (`payments:refunds:read`: financeiro e super admin). `dataRequests`: pedidos de titular (LGPD) abertos e quantos vencem em até 5 dias ou já venceram (`privacy:manage`: super admin). Só contagens, sem dado pessoal."
+      responses:
+        '200':
+          description: Contagens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stores, disputes, refunds, dataRequests]
+                properties:
+                  stores: { oneOf: [{ type: 'null' }, { type: object, required: [inReview], properties: { inReview: { type: integer } } }] }
+                  disputes: { oneOf: [{ type: 'null' }, { type: object, required: [inMediation], properties: { inMediation: { type: integer } } }] }
+                  refunds: { oneOf: [{ type: 'null' }, { type: object, required: [needingAction], properties: { needingAction: { type: integer } } }] }
+                  dataRequests: { oneOf: [{ type: 'null' }, { type: object, required: [open, dueSoon], properties: { open: { type: integer }, dueSoon: { type: integer } } }] }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/exchange-requests:
     get:
       tags: [exchanges]
@@ -9262,6 +9402,8 @@ components:
         attempts: { type: integer }
         failReason: { type: [string, 'null'] }
         whatsappSentAt: { type: [string, 'null'], format: date-time }
+        lateAlertedAt: { type: [string, 'null'], format: date-time, description: 'W.3: quando o alerta de atraso saiu (um por corrida; o painel toca o som uma vez). Nulo enquanto não passou do prazo. Campo novo opcional.' }
+        lateCancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }], description: 'W.3 (WB-255 C6): o pedido de cancelamento por atraso mais recente do pedido (só corrida de entrega; `respondBy` = pedido + `entrega_cancel_resposta_min`) para a faixa "O cliente pediu cancelamento. Responda em 06:58". A resposta é `adminRespondLateCancel`. Nulo se nunca houve. Campo novo opcional.' }
         deliveredAt: { type: [string, 'null'], format: date-time, description: 'WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.' }
         codeRequired: { type: boolean }
         allowedActions: { type: array, items: { type: string, enum: [assign, confirm, picked_up, delivered, not_delivered, reattempt, return_confirmed, reassign, cancel] } }

@@ -1,7 +1,8 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { AdminOnly, Ctx, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { adminHasPermission } from '../../platform/auth/permissions.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AuditService } from '../admin/index.js';
@@ -86,5 +87,19 @@ export class ReportsController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="estornos-${query.from}-${query.to}.csv"`);
     return csv;
+  }
+}
+
+/** W.7 (WB-125): pendências do Início do admin. */
+@Controller('v1/admin/overview')
+export class AdminOverviewController {
+  constructor(private readonly reports: ReportsService) {}
+
+  @AdminOnly('overview:read')
+  @Get('pending')
+  pending(@CurrentPrincipal() principal: Principal) {
+    const profile = principal.adminProfile;
+    const can = (permission: Parameters<typeof adminHasPermission>[1]) => profile !== null && adminHasPermission(profile, permission);
+    return this.reports.pendingCounts({ stores: can('stores:read'), disputes: can('exchanges:mediate'), refunds: can('payments:refunds:read'), dataRequests: can('privacy:manage') });
   }
 }

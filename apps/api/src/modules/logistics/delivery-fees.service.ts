@@ -8,7 +8,7 @@ import { cities, neighborhoods } from '../admin/db/schema.js';
 import { DeliveryQuoteRegistry, StoresService } from '../stores/index.js';
 import { LogisticsAvailabilityService } from './logistics-availability.service.js';
 import { deliveryFeeTables, deliveryFeeTiers } from './db/schema.js';
-import { computeEta, type EtaConfig, type EtaEstimate } from './domain/eta.js';
+import { computeEta, maxDistanceForCeilingM, presentEta, type EtaConfig, type EtaEstimate } from './domain/eta.js';
 import { applyFreeShipping, pickTier, startingFee, validateFeeTiers, type FeeScopeType, type FeeTier } from './domain/fees.js';
 
 export type FeeTable = typeof deliveryFeeTables.$inferSelect & { tiers: FeeTier[] };
@@ -147,6 +147,38 @@ export class DeliveryFeesService implements OnModuleInit {
       etaMinutes: eta.estimateMin,
       eta,
       snapshot: { tableId: table.id, scopeType: table.scopeType, scopeKey: table.scopeKey, version: table.version, tierPosition: picked.position, distanceM, baseFeeCents: picked.tier.feeCents, exchangeFeeCents: picked.tier.exchangeFeeCents, expectedCostCents: picked.tier.expectedCostCents, etaMinutes: eta.estimateMin },
+    };
+  }
+
+  /**
+   * W.5 (WB-257): "Prévia para o cliente" do lojista em Minha loja > Entrega e retirada, ANTES de salvar o preparo. É a MESMA conta do `quote` do
+   * checkout (`computeEta` com os mesmos parâmetros, o mesmo teto no FIM da faixa e o mesmo raio), só com o preparo do formulário no lugar do salvo e
+   * sem o que depende do carrinho (subtotal, frete grátis, horário da logística). O destino é um ponto (`lat`/`lng`, distância medida a partir da loja)
+   * ou a distância direta em km. A taxa é a da tabela do destino (cidade/bairro informados, senão o padrão geral) para a faixa da distância.
+   */
+  async previewForStore(storeId: string, input: { lat?: number | undefined; lng?: number | undefined; distanceKm?: number | undefined; prepMin?: number | null | undefined; cityId?: string | null | undefined; neighborhoodId?: string | null | undefined }, now = new Date()) {
+    const [radiusKm, etaConfig, settings] = await Promise.all([this.params.getNumber('raio_max_km'), this.etaConfig(), this.stores.getSettings(storeId)]);
+    const prepMin = input.prepMin ?? settings.prepMinutes ?? etaConfig.defaultPrepMin;
+    const reachKm = Math.min(radiusKm, Math.floor(maxDistanceForCeilingM(etaConfig, prepMin) / 100) / 10);
+    const maxPrepMin = etaConfig.maxMin - etaConfig.dispatchMin - etaConfig.bandMin - 1; // o preparo precisa ser MENOR que a folga (como em `setDelivery`)
+    const measured = input.distanceKm !== undefined ? input.distanceKm * 1000 : input.lat !== undefined && input.lng !== undefined ? await this.stores.distanceMeters(storeId, { lat: input.lat, lng: input.lng }) : null;
+    const base = { prepMin, reachKm, maxPrepMin, radiusKm };
+    if (measured === null) return { ...base, available: false, reason: 'OUT_OF_RANGE' as const, distanceM: null, eta: null, etaRange: null, fee: null };
+    const distanceM = Math.round(measured);
+    const eta = computeEta(etaConfig, { distanceM, prepMin });
+    const table = await this.resolve({ cityId: input.cityId ?? null, neighborhoodId: input.neighborhoodId ?? null }, now);
+    const picked = table ? pickTier(table.tiers, distanceM) : null;
+    const withinRadius = distanceM <= radiusKm * 1000;
+    const available = withinRadius && eta.withinCeiling && picked !== null;
+    const reason = !withinRadius || !eta.withinCeiling ? ('OUT_OF_RANGE' as const) : picked === null ? ('NO_FEE_TABLE' as const) : null;
+    return {
+      ...base,
+      available,
+      reason,
+      distanceM,
+      eta: { estimateMin: eta.estimateMin, fromMin: eta.fromMin, toMin: eta.toMin, prepMin: eta.prepMin, dispatchMin: eta.dispatchMin, travelMin: eta.travelMin, bandMin: etaConfig.bandMin, withinCeiling: eta.withinCeiling },
+      etaRange: presentEta({ minMinutes: eta.fromMin, maxMinutes: eta.toMin }, now),
+      fee: picked ? { amount: picked.tier.feeCents, currency: 'BRL' as const } : null,
     };
   }
 

@@ -25,6 +25,19 @@ export interface DeliveryListExtras {
   overdueMinutes: number | null;
   /** Área (bairro, senão cidade) e quantas corridas prontas, sem motoboy, há nela agora: candidatas a sair no mesmo lote. */
   area: { key: string | null; readyCount: number };
+  /** W.3: o pedido de cancelamento por atraso mais recente do pedido (só entrega); nulo se nunca houve. */
+  lateCancelRequest: LateCancelRequestView | null;
+}
+/** Mesma forma de `CancelRequest` do pedido (`respondBy` = pedido + `entrega_cancel_resposta_min`); lida direto da tabela do pedido (sem depender do módulo de pedidos). */
+export interface LateCancelRequestView {
+  id: string;
+  status: string;
+  reason: string | null;
+  requestedAt: string;
+  respondBy: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
 }
 export type DeliveryEvent = typeof deliveryEvents.$inferSelect;
 export type DeliveryActor = { id: string | null; role: string };
@@ -311,6 +324,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
     const collectionDays = await this.params.getNumber('coleta_agendamento_dias_uteis');
     const areaCounts = tab === 'active' ? await this.readyByArea() : new Map<string, number>();
+    const lateRequests = await this.lateCancelRequestsFor(page.filter((d) => d.kind === 'delivery').map((d) => d.orderId));
     return {
       data: page.map((d) => {
         const waiting = d.status === 'ready_for_collection' ? Math.floor((now - d.readyAt.getTime()) / 60_000) : null;
@@ -323,10 +337,31 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
           overdue,
           overdueMinutes,
           area: { key: areaKey, readyCount: areaKey ? (areaCounts.get(areaKey) ?? 0) : 0 },
+          lateCancelRequest: d.kind === 'delivery' ? (lateRequests.get(d.orderId) ?? null) : null,
         };
       }),
       nextCursor: rows.length > limit && last ? encodeCursor({ at: (tab === 'active' ? last.readyAt : last.updatedAt).toISOString(), id: last.id }) : null,
     };
+  }
+
+  /**
+   * W.3: o pedido de cancelamento por atraso (o mais recente) dos pedidos dados, para a faixa "O cliente pediu cancelamento. Responda em 06:58" e o
+   * alerta sonoro da Logística. Uma consulta por página.
+   */
+  async lateCancelRequestsFor(orderIds: string[]): Promise<Map<string, LateCancelRequestView>> {
+    const map = new Map<string, LateCancelRequestView>();
+    if (orderIds.length === 0) return map;
+    const timeoutMin = await this.params.getNumber('entrega_cancel_resposta_min');
+    const res = await this.db.execute<{ id: string; order_id: string; status: string; reason: string | null; requested_at: Date | string; decided_at: Date | string | null; decided_by: string | null; decision_note: string | null }>(sql`
+      select distinct on (r.order_id) r.id, r.order_id, r.status, r.reason, r.requested_at, r.decided_at, r.decided_by, r.decision_note
+      from order_cancel_requests r
+      where r.kind = 'late' and r.order_id in (${sql.join(orderIds.map((id) => sql`${id}::uuid`), sql`, `)})
+      order by r.order_id, r.requested_at desc`);
+    for (const r of res.rows) {
+      const requestedAt = new Date(r.requested_at);
+      map.set(r.order_id, { id: r.id, status: r.status, reason: r.reason, requestedAt: requestedAt.toISOString(), respondBy: new Date(requestedAt.getTime() + timeoutMin * 60_000).toISOString(), decidedAt: r.decided_at ? new Date(r.decided_at).toISOString() : null, decidedBy: r.decided_by, decisionNote: r.decision_note });
+    }
+    return map;
   }
 
   /** Corridas prontas e sem motoboy por área (bairro, senão cidade): base da sugestão de lote (DEC-053). */
