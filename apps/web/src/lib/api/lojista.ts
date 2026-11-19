@@ -53,6 +53,8 @@ export interface MerchantStore {
   permissions: string[];
   /** Comissão efetiva da loja em %, ou `null` se a API ainda não informa (pendência de contrato). */
   commissionPct?: number | null;
+  /** Tarifa estimada do provedor (%) por meio de pagamento (DEC-074e); `null` = a API não informou (ou é funcionário). */
+  providerFeePct?: { pix: number; card: number } | null;
   /** Maior etapa concluída (0 a 4), calculada do que a API diz que falta (WB-051 C4). */
   step: number;
   legalType: LegalType | null;
@@ -155,6 +157,7 @@ interface ApiStore {
   permissions?: string[];
   /** Comissão efetiva da loja (%), quando a API a devolve. Pendência de contrato: sem ela o "Você recebe" fica indisponível. */
   commissionPct?: number | null;
+  providerFeePct?: { pix: number; card: number } | null;
   settings?: { hours: { weekday: number; intervals: unknown[] }[] };
 }
 interface ApiOnboarding {
@@ -215,6 +218,7 @@ async function loadStore(): Promise<MerchantStore | null> {
     role: owner ? 'owner' : 'staff',
     permissions: store.permissions ?? [],
     commissionPct: store.commissionPct ?? null,
+    providerFeePct: store.providerFeePct ?? null,
     step: stepsDone(missing, payout.status === 'connected', true),
     legalType: view.documentType,
     document: view.document,

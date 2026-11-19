@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Banner, Button, Dialog, Switch, TextArea, TextField, cx, ui } from '@/components/ui';
 import { useMerchant } from '@/features/lojista/store-context';
 import type { ProductFormValues } from '@/lib/catalog/form';
-import { commissionCents, pctText, priceToReceive, youReceive } from '@/lib/catalog/receive';
+import { pctText, priceToReceive, worstProviderFeePct, youReceive } from '@/lib/catalog/receive';
 import { formatCents } from '@/lib/format';
 import { canSeeSalesValues } from '@/lib/lojista-access';
 import { centsFromDigits, moneyField } from '@/lib/money';
@@ -52,6 +52,8 @@ export function ReceiveLines({ priceCents, promoCents, onUsePrice }: { priceCent
     );
   }
   const pct = data?.commissionPct ?? null;
+  const feePct = worstProviderFeePct(data?.providerFeePct);
+  const main = price && pct !== null ? youReceive(price, pct, feePct) : null;
   return (
     <div className={ui.stack}>
       <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }} data-testid={T('price-hint')}>
@@ -63,13 +65,21 @@ export function ReceiveLines({ priceCents, promoCents, onUsePrice }: { priceCent
       <div role="status" aria-live="polite" style={{ padding: 12, borderRadius: 12, background: 'var(--wb-color-surface-sunken)', display: 'grid', gap: 2 }} data-testid={T('receive-line')}>
         {pct === null ? (
           <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-unavailable')}>Não conseguimos calcular agora. Você pode publicar e conferir depois.</p>
-        ) : !price ? (
+        ) : !price || !main ? (
           <p className="wb-text-caption" style={{ margin: 0 }}>Informe o preço para ver quanto você recebe.</p>
         ) : (
           <>
-            <p className="wb-text-body-strong" style={{ margin: 0 }} aria-label={`Você recebe ${spoken(youReceive(price, pct).receive)}`}>Você recebe {formatCents(youReceive(price, pct).receive)}</p>
-            <p className="wb-text-caption" style={{ margin: 0 }}>Comissão da Webag: {pctText(pct)} ({formatCents(commissionCents(price, pct))}). A tarifa do Mercado Pago é descontada à parte.</p>
-            {promo ? <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-promo-line')}>Na promoção você recebe {formatCents(youReceive(promo, pct).receive)}.</p> : null}
+            <p className="wb-text-body-strong" style={{ margin: 0 }} aria-label={`Você recebe, estimado, ${spoken(main.receive)}`} data-testid={T('receive-value')}>Você recebe {formatCents(main.receive)} <span className="wb-text-caption">(estimado)</span></p>
+            <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-commission')}>Comissão da Webag: {pctText(pct)} ({formatCents(main.commission)}).</p>
+            {feePct > 0 ? (
+              <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-fee')}>Tarifa do Mercado Pago: até {pctText(feePct)} ({formatCents(main.fee)}), pela forma de pagamento mais cara.</p>
+            ) : (
+              <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-fee')}>A tarifa do Mercado Pago é descontada à parte.</p>
+            )}
+            {promo ? <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('receive-promo-line')}>Na promoção você recebe {formatCents(youReceive(promo, pct, feePct).receive)}.</p> : null}
+            <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }} data-testid={T('receive-estimate-note')}>
+              Valor estimado: a tarifa real depende de como o cliente paga e aparece no seu extrato.
+            </p>
           </>
         )}
       </div>
@@ -78,22 +88,22 @@ export function ReceiveLines({ priceCents, promoCents, onUsePrice }: { priceCent
           <Button variant="text" onClick={() => setCalc(true)} data-testid={T('receive-calc-link')}>Quero receber um valor</Button>
         </div>
       ) : null}
-      {calc && pct !== null ? <CalcDialog pct={pct} onClose={() => setCalc(false)} onUse={(cents) => { onUsePrice(cents); setCalc(false); }} /> : null}
+      {calc && pct !== null ? <CalcDialog pct={pct} feePct={feePct} onClose={() => setCalc(false)} onUse={(cents) => { onUsePrice(cents); setCalc(false); }} /> : null}
       {how ? (
         <Dialog title="Como funciona" onClose={() => setHow(false)} testId={T('receive-how-sheet')} actions={<Button size="lg" onClick={() => setHow(false)}>Entendi</Button>}>
-          <p className="wb-text-body" style={{ margin: 0 }}>Exemplo: preço R$ 100,00, comissão {pct === null ? '' : `(${pctText(pct)}) `}e o valor que você recebe.</p>
+          <p className="wb-text-body" style={{ margin: 0 }}>Exemplo: preço R$ 100,00, menos a comissão {pct === null ? '' : `(${pctText(pct)}) `}e a tarifa do Mercado Pago, é o valor que você recebe.</p>
           <p className="wb-text-body" style={{ margin: 0 }}>A Webag retém a comissão de cada venda. O percentual da sua loja é definido pela Webag. Vale a comissão do dia da venda.</p>
-          <p className="wb-text-body" style={{ margin: 0 }}>A tarifa do Mercado Pago também sai do seu valor.</p>
+          <p className="wb-text-body" style={{ margin: 0 }}>A tarifa do Mercado Pago também sai do seu valor. Para não errar para menos, a conta usa a forma de pagamento mais cara (PIX ou cartão). O extrato mostra a tarifa real de cada venda.</p>
         </Dialog>
       ) : null}
     </div>
   );
 }
 
-function CalcDialog({ pct, onClose, onUse }: { pct: number; onClose: () => void; onUse: (cents: number) => void }) {
+function CalcDialog({ pct, feePct, onClose, onUse }: { pct: number; feePct: number; onClose: () => void; onUse: (cents: number) => void }) {
   const [wanted, setWanted] = useState<number | null>(null);
   const [error, setError] = useState<string | undefined>();
-  const price = wanted ? priceToReceive(wanted, pct) : null;
+  const price = wanted ? priceToReceive(wanted, pct, feePct) : null;
   return (
     <Dialog
       title="Quanto você quer receber?"

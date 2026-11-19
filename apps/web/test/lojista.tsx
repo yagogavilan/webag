@@ -87,7 +87,7 @@ export function storeHandlers(store: MerchantStore | null): Handler[] {
   };
   const base = `/api/proxy/lojista/stores`;
   return [
-    (url) => (url.pathname === `${base}/mine` ? respond({ data: [{ ...api, role: store.role, permissions: store.permissions, commissionPct: store.commissionPct ?? null }] }) : undefined),
+    (url) => (url.pathname === `${base}/mine` ? respond({ data: [{ ...api, role: store.role, permissions: store.permissions, commissionPct: store.commissionPct ?? null, providerFeePct: store.providerFeePct ?? null }] }) : undefined),
     (url) => (url.pathname === `${base}/${store.id}` ? respond(api) : undefined),
     (url) => (url.pathname === `${base}/${store.id}/documents` ? respond({ data: store.documents.map((d) => ({ id: d.id ?? `doc-${d.kind}`, kind: d.kind, uploadedAt: d.uploadedAt, current: true })), nextCursor: null }) : undefined),
     (url) => (url.pathname === `${base}/${store.id}/onboarding` ? respond({ status: store.status, complete: false, missing, paymentAccount: null, history: [] }) : undefined),

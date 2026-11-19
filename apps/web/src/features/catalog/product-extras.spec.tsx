@@ -41,6 +41,24 @@ describe('produto: Você recebe, troca e tabela de medidas', () => {
     expect(screen.getByTestId('lojista.produto.receive-promo-line')).toHaveTextContent("67,91");
   });
 
+  it('com a tarifa do provedor, desconta a do meio mais caro e explica que é estimativa (DEC-074e)', async () => {
+    serve({ commissionPct: 15, providerFeePct: { pix: 0.99, card: 4.98 } });
+    renderLojista(<Harness commission={15} />);
+    // 8990 - 1349 (15%) - 448 (4,98%) = 7193
+    expect(await screen.findByText(/Você recebe R\$\s*71,93/)).toBeInTheDocument();
+    expect(screen.getByTestId('lojista.produto.receive-commission')).toHaveTextContent('Comissão da Webag: 15% (R$ 13,49)');
+    expect(screen.getByTestId('lojista.produto.receive-fee')).toHaveTextContent('Tarifa do Mercado Pago: até 4,98% (R$ 4,48)');
+    expect(screen.getByTestId('lojista.produto.receive-promo-line')).toHaveTextContent('63,93'); // 7990 - 1199 - 398 (arredonda cada parcela)
+    expect(screen.getByTestId('lojista.produto.receive-estimate-note')).toHaveTextContent('Valor estimado');
+  });
+
+  it('sem a tarifa na API mantém só a comissão e o aviso de que a tarifa sai à parte', async () => {
+    serve({ commissionPct: 15, providerFeePct: null });
+    renderLojista(<Harness commission={15} />);
+    expect(await screen.findByText(/Você recebe R\$\s*76,41/)).toBeInTheDocument();
+    expect(screen.getByTestId('lojista.produto.receive-fee')).toHaveTextContent('descontada à parte');
+  });
+
   it('funcionário sem `vendas_valores` não vê valor nem percentual', async () => {
     serve({ role: 'staff', permissions: ['catalog'], commissionPct: 15 });
     renderLojista(<Harness commission={15} />);
