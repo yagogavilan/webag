@@ -5655,6 +5655,309 @@ export interface CardIntentResult {
   threeDsUrl: string | null;
 }
 
+export type HelpAudience = typeof HelpAudience[keyof typeof HelpAudience];
+
+
+export const HelpAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type HelpContactsProperty = {
+  /**
+     * Só dígitos com DDD
+     * @nullable
+     */
+  whatsapp: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  hours: string | null;
+};
+
+export type HelpPrivacy = {
+  /** @nullable */
+  officerName: string | null;
+  /** @nullable */
+  officerEmail: string | null;
+};
+
+export type HelpGroupsItemItemsItem = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
+export type HelpGroupsItem = {
+  id: string;
+  label: string;
+  items: HelpGroupsItemItemsItem[];
+};
+
+export interface Help {
+  audience: HelpAudience;
+  contacts: HelpContactsProperty;
+  privacy: HelpPrivacy;
+  groups: HelpGroupsItem[];
+}
+
+export type HelpFaqAudience = typeof HelpFaqAudience[keyof typeof HelpFaqAudience];
+
+
+export const HelpFaqAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export interface HelpFaq {
+  id: string;
+  audience: HelpFaqAudience;
+  group: string;
+  question: string;
+  answer: string;
+  position: number;
+  published: boolean;
+  updatedAt: string;
+}
+
+export interface HelpFaqList {
+  data: HelpFaq[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export type HelpFaqCreateAudience = typeof HelpFaqCreateAudience[keyof typeof HelpFaqCreateAudience];
+
+
+export const HelpFaqCreateAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export interface HelpFaqCreate {
+  audience: HelpFaqCreateAudience;
+  group: string;
+  /**
+     * @minLength 3
+     * @maxLength 100
+     */
+  question: string;
+  /**
+     * @minLength 3
+     * @maxLength 600
+     */
+  answer: string;
+  published?: boolean;
+}
+
+export interface HelpContacts {
+  /** @nullable */
+  supportWhatsapp: string | null;
+  /** @nullable */
+  supportEmail: string | null;
+  /** @nullable */
+  supportHours: string | null;
+  /** @nullable */
+  privacyOfficerName: string | null;
+  /** @nullable */
+  privacyOfficerEmail: string | null;
+}
+
+export interface HelpContactsPatch {
+  /** @nullable */
+  supportWhatsapp?: string | null;
+  /** @nullable */
+  supportEmail?: string | null;
+  /**
+     * @maxLength 60
+     * @nullable
+     */
+  supportHours?: string | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  privacyOfficerName?: string | null;
+  /** @nullable */
+  privacyOfficerEmail?: string | null;
+}
+
+export type ContentReportRequestTargetType = typeof ContentReportRequestTargetType[keyof typeof ContentReportRequestTargetType];
+
+
+export const ContentReportRequestTargetType = {
+  review: 'review',
+  product: 'product',
+  store: 'store',
+} as const;
+
+export type ContentReportRequestReason = typeof ContentReportRequestReason[keyof typeof ContentReportRequestReason];
+
+
+export const ContentReportRequestReason = {
+  offensive: 'offensive',
+  false: 'false',
+  prohibited: 'prohibited',
+  scam: 'scam',
+  other: 'other',
+} as const;
+
+export interface ContentReportRequest {
+  targetType: ContentReportRequestTargetType;
+  targetId: string;
+  reason: ContentReportRequestReason;
+  /** @maxLength 200 */
+  text?: string;
+}
+
+export type ContentReportQueueDataItemTargetType = typeof ContentReportQueueDataItemTargetType[keyof typeof ContentReportQueueDataItemTargetType];
+
+
+export const ContentReportQueueDataItemTargetType = {
+  review: 'review',
+  product: 'product',
+  store: 'store',
+} as const;
+
+export type ContentReportQueueDataItem = {
+  targetType: ContentReportQueueDataItemTargetType;
+  targetId: string;
+  reports: number;
+  reasons: string[];
+  oldestAt: string;
+  overdue: boolean;
+  title: string;
+  /** @nullable */
+  excerpt: string | null;
+  available: boolean;
+};
+
+export interface ContentReportQueue {
+  data: ContentReportQueueDataItem[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type ContentReportCaseTargetType = typeof ContentReportCaseTargetType[keyof typeof ContentReportCaseTargetType];
+
+
+export const ContentReportCaseTargetType = {
+  review: 'review',
+  product: 'product',
+  store: 'store',
+} as const;
+
+/**
+ * Avaliação: nota, texto, autor abreviado, loja, resposta
+ */
+export type ContentReportCaseItem = { [key: string]: unknown };
+
+export type ContentReportCaseReportsItemStatus = typeof ContentReportCaseReportsItemStatus[keyof typeof ContentReportCaseReportsItemStatus];
+
+
+export const ContentReportCaseReportsItemStatus = {
+  open: 'open',
+  kept: 'kept',
+  removed: 'removed',
+  forwarded: 'forwarded',
+} as const;
+
+export type ContentReportCaseReportsItem = {
+  reason: string;
+  /** @nullable */
+  text: string | null;
+  /** Iniciais */
+  reporter: string;
+  status: ContentReportCaseReportsItemStatus;
+  reportedAt: string;
+  /** @nullable */
+  handledAt: string | null;
+  /** @nullable */
+  resolution: string | null;
+};
+
+export interface ContentReportCase {
+  targetType: ContentReportCaseTargetType;
+  targetId: string;
+  title: string;
+  /** @nullable */
+  excerpt: string | null;
+  available: boolean;
+  /** Avaliação: nota, texto, autor abreviado, loja, resposta */
+  item: ContentReportCaseItem;
+  reports: ContentReportCaseReportsItem[];
+}
+
+export type ContentReportOutcomeStatus = typeof ContentReportOutcomeStatus[keyof typeof ContentReportOutcomeStatus];
+
+
+export const ContentReportOutcomeStatus = {
+  kept: 'kept',
+  removed: 'removed',
+  forwarded: 'forwarded',
+} as const;
+
+/**
+ * Só em forward: para onde seguir (moderação de produto ou de loja)
+ */
+export type ContentReportOutcomeNext = { [key: string]: unknown };
+
+export interface ContentReportOutcome {
+  status: ContentReportOutcomeStatus;
+  reports: number;
+  /** Só em forward: para onde seguir (moderação de produto ou de loja) */
+  next?: ContentReportOutcomeNext;
+}
+
+/**
+ * @nullable
+ */
+export type StoreReviewFit = typeof StoreReviewFit[keyof typeof StoreReviewFit] | null;
+
+
+export const StoreReviewFit = {
+  small: 'small',
+  ok: 'ok',
+  large: 'large',
+} as const;
+
+export type StoreReviewTargetType = typeof StoreReviewTargetType[keyof typeof StoreReviewTargetType];
+
+
+export const StoreReviewTargetType = {
+  product: 'product',
+  store: 'store',
+} as const;
+
+export type StoreReviewTarget = {
+  type: StoreReviewTargetType;
+  id: string;
+  /** @nullable */
+  name: string | null;
+};
+
+export interface StoreReview {
+  id: string;
+  rating: number;
+  /** @nullable */
+  comment: string | null;
+  /** @nullable */
+  fit: StoreReviewFit;
+  reviewer: string;
+  target: StoreReviewTarget;
+  createdAt: string;
+  /** @nullable */
+  storeReply: string | null;
+  /** @nullable */
+  storeRepliedAt: string | null;
+}
+
+export interface StoreReviewPage {
+  data: StoreReview[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -7097,6 +7400,160 @@ export type ExportReportOrdersCsvParams = {
 
 export type ReportOrderNotReceived202 = {
   reported: true;
+};
+
+export type GetHelpParams = {
+  audience?: GetHelpAudience;
+};
+
+export type GetHelpAudience = typeof GetHelpAudience[keyof typeof GetHelpAudience];
+
+
+export const GetHelpAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type ListHelpFaqsParams = {
+  audience?: ListHelpFaqsAudience;
+};
+
+export type ListHelpFaqsAudience = typeof ListHelpFaqsAudience[keyof typeof ListHelpFaqsAudience];
+
+
+export const ListHelpFaqsAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type ReorderHelpFaqsBodyAudience = typeof ReorderHelpFaqsBodyAudience[keyof typeof ReorderHelpFaqsBodyAudience];
+
+
+export const ReorderHelpFaqsBodyAudience = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type ReorderHelpFaqsBody = {
+  audience: ReorderHelpFaqsBodyAudience;
+  group: string;
+  ids: string[];
+};
+
+export type UpdateHelpFaqBody = {
+  group?: string;
+  /** @maxLength 100 */
+  question?: string;
+  /** @maxLength 600 */
+  answer?: string;
+  published?: boolean;
+};
+
+export type ReportContent202 = {
+  received: true;
+};
+
+export type ListMyReports200DataItemTargetType = typeof ListMyReports200DataItemTargetType[keyof typeof ListMyReports200DataItemTargetType];
+
+
+export const ListMyReports200DataItemTargetType = {
+  review: 'review',
+  product: 'product',
+  store: 'store',
+} as const;
+
+export type ListMyReports200DataItem = {
+  targetType: ListMyReports200DataItemTargetType;
+  targetId: string;
+};
+
+export type ListMyReports200 = {
+  data: ListMyReports200DataItem[];
+  /** @nullable */
+  nextCursor: null;
+};
+
+export type ListContentReportsParams = {
+  targetType: ListContentReportsTargetType;
+  status?: ListContentReportsStatus;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListContentReportsTargetType = typeof ListContentReportsTargetType[keyof typeof ListContentReportsTargetType];
+
+
+export const ListContentReportsTargetType = {
+  review: 'review',
+  product: 'product',
+  store: 'store',
+} as const;
+
+export type ListContentReportsStatus = typeof ListContentReportsStatus[keyof typeof ListContentReportsStatus];
+
+
+export const ListContentReportsStatus = {
+  open: 'open',
+  handled: 'handled',
+} as const;
+
+export type KeepReportedContentBody = {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  note?: string;
+};
+
+export type RemoveReportedReviewBodyReasonCode = typeof RemoveReportedReviewBodyReasonCode[keyof typeof RemoveReportedReviewBodyReasonCode];
+
+
+export const RemoveReportedReviewBodyReasonCode = {
+  offense: 'offense',
+  personal_data: 'personal_data',
+  illegal: 'illegal',
+  spam: 'spam',
+} as const;
+
+export type RemoveReportedReviewBody = {
+  reasonCode: RemoveReportedReviewBodyReasonCode;
+  /** @maxLength 150 */
+  note?: string;
+};
+
+export type ForwardReportedContentBody = { [key: string]: never };
+
+export type ListStoreReviewsParams = {
+  replied?: boolean;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating?: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ReplyToReviewBody = {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  text: string;
+};
+
+export type ReplyToReview200 = {
+  id: string;
+  storeReply: string;
+  storeRepliedAt: string;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -23812,5 +24269,1051 @@ export const payCardIntent = async (token: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cardIntentPayRequest)
+  }
+);}
+
+
+
+export type getHelpResponse200 = {
+  data: Help
+  status: 200
+}
+
+export type getHelpResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getHelpResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getHelpResponseSuccess = (getHelpResponse200) & {
+  headers: Headers;
+};
+export type getHelpResponseError = (getHelpResponse400 | getHelpResponse429) & {
+  headers: Headers;
+};
+
+export type getHelpResponse = (getHelpResponseSuccess | getHelpResponseError)
+
+export const getGetHelpUrl = (params?: GetHelpParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/help?${stringifiedParams}` : `/v1/help`
+}
+
+/**
+ * Visitante, cliente e lojista (`audience=customer|merchant`). Texto e contatos vêm da configuração editada pelo admin (WB-034 C1); cache de 60 s no servidor. Grupo sem pergunta publicada não vem. `privacy` traz o encarregado (WB-217 C1).
+ * @summary Ajuda pública (perguntas publicadas e contatos)
+ */
+export const getHelp = async (params?: GetHelpParams, options?: Parameters<typeof apiFetch>[1]): Promise<getHelpResponse> => {
+
+  return apiFetch<getHelpResponse>(getGetHelpUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listHelpFaqsResponse200 = {
+  data: HelpFaqList
+  status: 200
+}
+
+export type listHelpFaqsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listHelpFaqsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listHelpFaqsResponseSuccess = (listHelpFaqsResponse200) & {
+  headers: Headers;
+};
+export type listHelpFaqsResponseError = (listHelpFaqsResponse401 | listHelpFaqsResponse403) & {
+  headers: Headers;
+};
+
+export type listHelpFaqsResponse = (listHelpFaqsResponseSuccess | listHelpFaqsResponseError)
+
+export const getListHelpFaqsUrl = (params?: ListHelpFaqsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/help/faqs?${stringifiedParams}` : `/v1/admin/help/faqs`
+}
+
+/**
+ * `help:read` (todos os perfis de admin).
+ * @summary Perguntas da ajuda (admin)
+ */
+export const listHelpFaqs = async (params?: ListHelpFaqsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listHelpFaqsResponse> => {
+
+  return apiFetch<listHelpFaqsResponse>(getListHelpFaqsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createHelpFaqResponse201 = {
+  data: HelpFaq
+  status: 201
+}
+
+export type createHelpFaqResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createHelpFaqResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createHelpFaqResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createHelpFaqResponseSuccess = (createHelpFaqResponse201) & {
+  headers: Headers;
+};
+export type createHelpFaqResponseError = (createHelpFaqResponse400 | createHelpFaqResponse401 | createHelpFaqResponse403) & {
+  headers: Headers;
+};
+
+export type createHelpFaqResponse = (createHelpFaqResponseSuccess | createHelpFaqResponseError)
+
+export const getCreateHelpFaqUrl = () => {
+
+
+
+
+  return `/v1/admin/help/faqs`
+}
+
+/**
+ * Grupos do cliente: order, payment, exchange, account; do lojista: orders, products, exchanges, money, team. Entra no fim do grupo. Auditado.
+ * @summary Nova pergunta (operação e super admin)
+ */
+export const createHelpFaq = async (helpFaqCreate: HelpFaqCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createHelpFaqResponse> => {
+
+  return apiFetch<createHelpFaqResponse>(getCreateHelpFaqUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(helpFaqCreate)
+  }
+);}
+
+
+
+export type reorderHelpFaqsResponse200 = {
+  data: HelpFaqList
+  status: 200
+}
+
+export type reorderHelpFaqsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type reorderHelpFaqsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type reorderHelpFaqsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type reorderHelpFaqsResponseSuccess = (reorderHelpFaqsResponse200) & {
+  headers: Headers;
+};
+export type reorderHelpFaqsResponseError = (reorderHelpFaqsResponse400 | reorderHelpFaqsResponse401 | reorderHelpFaqsResponse403) & {
+  headers: Headers;
+};
+
+export type reorderHelpFaqsResponse = (reorderHelpFaqsResponseSuccess | reorderHelpFaqsResponseError)
+
+export const getReorderHelpFaqsUrl = () => {
+
+
+
+
+  return `/v1/admin/help/faqs/reorder`
+}
+
+/**
+ * `ids` precisa ser exatamente o conjunto de perguntas do grupo, uma vez cada (400 caso contrário).
+ * @summary Nova ordem de um grupo
+ */
+export const reorderHelpFaqs = async (reorderHelpFaqsBody: ReorderHelpFaqsBody, options?: Parameters<typeof apiFetch>[1]): Promise<reorderHelpFaqsResponse> => {
+
+  return apiFetch<reorderHelpFaqsResponse>(getReorderHelpFaqsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(reorderHelpFaqsBody)
+  }
+);}
+
+
+
+export type updateHelpFaqResponse200 = {
+  data: HelpFaq
+  status: 200
+}
+
+export type updateHelpFaqResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateHelpFaqResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateHelpFaqResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateHelpFaqResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateHelpFaqResponseSuccess = (updateHelpFaqResponse200) & {
+  headers: Headers;
+};
+export type updateHelpFaqResponseError = (updateHelpFaqResponse400 | updateHelpFaqResponse401 | updateHelpFaqResponse403 | updateHelpFaqResponse404) & {
+  headers: Headers;
+};
+
+export type updateHelpFaqResponse = (updateHelpFaqResponseSuccess | updateHelpFaqResponseError)
+
+export const getUpdateHelpFaqUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/help/faqs/${id}`
+}
+
+/**
+ * @summary Editar, mover de grupo ou (des)publicar uma pergunta
+ */
+export const updateHelpFaq = async (id: string,
+    updateHelpFaqBody: UpdateHelpFaqBody, options?: Parameters<typeof apiFetch>[1]): Promise<updateHelpFaqResponse> => {
+
+  return apiFetch<updateHelpFaqResponse>(getUpdateHelpFaqUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateHelpFaqBody)
+  }
+);}
+
+
+
+export type deleteHelpFaqResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteHelpFaqResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteHelpFaqResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteHelpFaqResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteHelpFaqResponseSuccess = (deleteHelpFaqResponse204) & {
+  headers: Headers;
+};
+export type deleteHelpFaqResponseError = (deleteHelpFaqResponse401 | deleteHelpFaqResponse403 | deleteHelpFaqResponse404) & {
+  headers: Headers;
+};
+
+export type deleteHelpFaqResponse = (deleteHelpFaqResponseSuccess | deleteHelpFaqResponseError)
+
+export const getDeleteHelpFaqUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/help/faqs/${id}`
+}
+
+/**
+ * @summary Apagar uma pergunta
+ */
+export const deleteHelpFaq = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteHelpFaqResponse> => {
+
+  return apiFetch<deleteHelpFaqResponse>(getDeleteHelpFaqUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getHelpContactsResponse200 = {
+  data: HelpContacts
+  status: 200
+}
+
+export type getHelpContactsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getHelpContactsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getHelpContactsResponseSuccess = (getHelpContactsResponse200) & {
+  headers: Headers;
+};
+export type getHelpContactsResponseError = (getHelpContactsResponse401 | getHelpContactsResponse403) & {
+  headers: Headers;
+};
+
+export type getHelpContactsResponse = (getHelpContactsResponseSuccess | getHelpContactsResponseError)
+
+export const getGetHelpContactsUrl = () => {
+
+
+
+
+  return `/v1/admin/help/contacts`
+}
+
+/**
+ * @summary Contatos do suporte e do encarregado
+ */
+export const getHelpContacts = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getHelpContactsResponse> => {
+
+  return apiFetch<getHelpContactsResponse>(getGetHelpContactsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type putHelpContactsResponse200 = {
+  data: HelpContacts
+  status: 200
+}
+
+export type putHelpContactsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type putHelpContactsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type putHelpContactsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type putHelpContactsResponseSuccess = (putHelpContactsResponse200) & {
+  headers: Headers;
+};
+export type putHelpContactsResponseError = (putHelpContactsResponse400 | putHelpContactsResponse401 | putHelpContactsResponse403) & {
+  headers: Headers;
+};
+
+export type putHelpContactsResponse = (putHelpContactsResponseSuccess | putHelpContactsResponseError)
+
+export const getPutHelpContactsUrl = () => {
+
+
+
+
+  return `/v1/admin/help/contacts`
+}
+
+/**
+ * `help:write`. WhatsApp com DDD (10 a 13 dígitos), e-mails válidos, horário até 60 caracteres. Auditado.
+ * @summary Salvar contatos (campo ausente = não muda; nulo ou vazio = apaga)
+ */
+export const putHelpContacts = async (helpContactsPatch: HelpContactsPatch, options?: Parameters<typeof apiFetch>[1]): Promise<putHelpContactsResponse> => {
+
+  return apiFetch<putHelpContactsResponse>(getPutHelpContactsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(helpContactsPatch)
+  }
+);}
+
+
+
+export type reportContentResponse202 = {
+  data: ReportContent202
+  status: 202
+}
+
+export type reportContentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type reportContentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type reportContentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type reportContentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type reportContentResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type reportContentResponseSuccess = (reportContentResponse202) & {
+  headers: Headers;
+};
+export type reportContentResponseError = (reportContentResponse400 | reportContentResponse401 | reportContentResponse403 | reportContentResponse404 | reportContentResponse429) & {
+  headers: Headers;
+};
+
+export type reportContentResponse = (reportContentResponseSuccess | reportContentResponseError)
+
+export const getReportContentUrl = () => {
+
+
+
+
+  return `/v1/reports`
+}
+
+/**
+ * Sempre `202 { received: true }`, também na repetição (uma por alvo e denunciante) e na denúncia da própria avaliação: não revela o que já existia. Dono e equipe da loja não denunciam a própria loja ou produto (403 `CANNOT_REPORT_OWN`). 20 por hora.
+ * @summary Denunciar avaliação, produto ou loja (DN1)
+ */
+export const reportContent = async (contentReportRequest: ContentReportRequest, options?: Parameters<typeof apiFetch>[1]): Promise<reportContentResponse> => {
+
+  return apiFetch<reportContentResponse>(getReportContentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(contentReportRequest)
+  }
+);}
+
+
+
+export type listMyReportsResponse200 = {
+  data: ListMyReports200
+  status: 200
+}
+
+export type listMyReportsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listMyReportsResponseSuccess = (listMyReportsResponse200) & {
+  headers: Headers;
+};
+export type listMyReportsResponseError = (listMyReportsResponse401) & {
+  headers: Headers;
+};
+
+export type listMyReportsResponse = (listMyReportsResponseSuccess | listMyReportsResponseError)
+
+export const getListMyReportsUrl = () => {
+
+
+
+
+  return `/v1/me/reports`
+}
+
+/**
+ * @summary O que já denunciei (o menu mostra "Denunciada")
+ */
+export const listMyReports = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listMyReportsResponse> => {
+
+  return apiFetch<listMyReportsResponse>(getListMyReportsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listContentReportsResponse200 = {
+  data: ContentReportQueue
+  status: 200
+}
+
+export type listContentReportsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listContentReportsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listContentReportsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listContentReportsResponseSuccess = (listContentReportsResponse200) & {
+  headers: Headers;
+};
+export type listContentReportsResponseError = (listContentReportsResponse400 | listContentReportsResponse401 | listContentReportsResponse403) & {
+  headers: Headers;
+};
+
+export type listContentReportsResponse = (listContentReportsResponseSuccess | listContentReportsResponseError)
+
+export const getListContentReportsUrl = (params: ListContentReportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/content-reports?${stringifiedParams}` : `/v1/admin/content-reports`
+}
+
+/**
+ * `moderation:read` (super admin e operação). Várias denúncias do mesmo item viram uma linha, a mais antiga primeiro, com `overdue` depois de `denuncia_prazo_dias_uteis` dias úteis.
+ * @summary Fila de denúncias por alvo (DN2)
+ */
+export const listContentReports = async (params: ListContentReportsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listContentReportsResponse> => {
+
+  return apiFetch<listContentReportsResponse>(getListContentReportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getContentReportResponse200 = {
+  data: ContentReportCase
+  status: 200
+}
+
+export type getContentReportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getContentReportResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getContentReportResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getContentReportResponseSuccess = (getContentReportResponse200) & {
+  headers: Headers;
+};
+export type getContentReportResponseError = (getContentReportResponse401 | getContentReportResponse403 | getContentReportResponse404) & {
+  headers: Headers;
+};
+
+export type getContentReportResponse = (getContentReportResponseSuccess | getContentReportResponseError)
+
+export const getGetContentReportUrl = (targetType: 'review' | 'product' | 'store',
+    targetId: string,) => {
+
+
+
+
+  return `/v1/admin/content-reports/${targetType}/${targetId}`
+}
+
+/**
+ * @summary Caso: item denunciado e denúncias (denunciante abreviado)
+ */
+export const getContentReport = async (targetType: 'review' | 'product' | 'store',
+    targetId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getContentReportResponse> => {
+
+  return apiFetch<getContentReportResponse>(getGetContentReportUrl(targetType,targetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type keepReportedContentResponse200 = {
+  data: ContentReportOutcome
+  status: 200
+}
+
+export type keepReportedContentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type keepReportedContentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type keepReportedContentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type keepReportedContentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type keepReportedContentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type keepReportedContentResponseSuccess = (keepReportedContentResponse200) & {
+  headers: Headers;
+};
+export type keepReportedContentResponseError = (keepReportedContentResponse400 | keepReportedContentResponse401 | keepReportedContentResponse403 | keepReportedContentResponse404 | keepReportedContentResponse409) & {
+  headers: Headers;
+};
+
+export type keepReportedContentResponse = (keepReportedContentResponseSuccess | keepReportedContentResponseError)
+
+export const getKeepReportedContentUrl = (targetType: 'review' | 'product' | 'store',
+    targetId: string,) => {
+
+
+
+
+  return `/v1/admin/content-reports/${targetType}/${targetId}/keep`
+}
+
+/**
+ * `moderation:write`. 409 `REPORT_ALREADY_HANDLED` se não há denúncia aberta.
+ * @summary Manter (encerra as denúncias e avisa os denunciantes por e-mail)
+ */
+export const keepReportedContent = async (targetType: 'review' | 'product' | 'store',
+    targetId: string,
+    keepReportedContentBody: KeepReportedContentBody, options?: Parameters<typeof apiFetch>[1]): Promise<keepReportedContentResponse> => {
+
+  return apiFetch<keepReportedContentResponse>(getKeepReportedContentUrl(targetType,targetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(keepReportedContentBody)
+  }
+);}
+
+
+
+export type removeReportedReviewResponse200 = {
+  data: ContentReportOutcome
+  status: 200
+}
+
+export type removeReportedReviewResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type removeReportedReviewResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type removeReportedReviewResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type removeReportedReviewResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type removeReportedReviewResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type removeReportedReviewResponseSuccess = (removeReportedReviewResponse200) & {
+  headers: Headers;
+};
+export type removeReportedReviewResponseError = (removeReportedReviewResponse400 | removeReportedReviewResponse401 | removeReportedReviewResponse403 | removeReportedReviewResponse404 | removeReportedReviewResponse409) & {
+  headers: Headers;
+};
+
+export type removeReportedReviewResponse = (removeReportedReviewResponseSuccess | removeReportedReviewResponseError)
+
+export const getRemoveReportedReviewUrl = (targetId: string,) => {
+
+
+
+
+  return `/v1/admin/content-reports/review/${targetId}/remove`
+}
+
+/**
+ * `moderation:write`. NÃO existe o motivo "avaliação negativa" (RN-12). A nota deixa de contar, o autor e os denunciantes são avisados por e-mail e a ação é auditada (`review.removed`).
+ * @summary Remover a avaliação (ofensa, dado pessoal, ilegal ou spam)
+ */
+export const removeReportedReview = async (targetId: string,
+    removeReportedReviewBody: RemoveReportedReviewBody, options?: Parameters<typeof apiFetch>[1]): Promise<removeReportedReviewResponse> => {
+
+  return apiFetch<removeReportedReviewResponse>(getRemoveReportedReviewUrl(targetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(removeReportedReviewBody)
+  }
+);}
+
+
+
+export type forwardReportedContentResponse200 = {
+  data: ContentReportOutcome
+  status: 200
+}
+
+export type forwardReportedContentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type forwardReportedContentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type forwardReportedContentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type forwardReportedContentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type forwardReportedContentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type forwardReportedContentResponseSuccess = (forwardReportedContentResponse200) & {
+  headers: Headers;
+};
+export type forwardReportedContentResponseError = (forwardReportedContentResponse400 | forwardReportedContentResponse401 | forwardReportedContentResponse403 | forwardReportedContentResponse404 | forwardReportedContentResponse409) & {
+  headers: Headers;
+};
+
+export type forwardReportedContentResponse = (forwardReportedContentResponseSuccess | forwardReportedContentResponseError)
+
+export const getForwardReportedContentUrl = (targetType: 'product' | 'store',
+    targetId: string,) => {
+
+
+
+
+  return `/v1/admin/content-reports/${targetType}/${targetId}/forward`
+}
+
+/**
+ * Só `product` e `store` (avaliação se mantém ou se remove). Devolve `next` com o destino da moderação.
+ * @summary Encaminhar produto ou loja à moderação própria
+ */
+export const forwardReportedContent = async (targetType: 'product' | 'store',
+    targetId: string,
+    forwardReportedContentBody?: ForwardReportedContentBody, options?: Parameters<typeof apiFetch>[1]): Promise<forwardReportedContentResponse> => {
+
+  return apiFetch<forwardReportedContentResponse>(getForwardReportedContentUrl(targetType,targetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(forwardReportedContentBody)
+  }
+);}
+
+
+
+export type listStoreReviewsResponse200 = {
+  data: StoreReviewPage
+  status: 200
+}
+
+export type listStoreReviewsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listStoreReviewsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreReviewsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreReviewsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreReviewsResponseSuccess = (listStoreReviewsResponse200) & {
+  headers: Headers;
+};
+export type listStoreReviewsResponseError = (listStoreReviewsResponse400 | listStoreReviewsResponse401 | listStoreReviewsResponse403 | listStoreReviewsResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreReviewsResponse = (listStoreReviewsResponseSuccess | listStoreReviewsResponseError)
+
+export const getListStoreReviewsUrl = (storeId: string,
+    params?: ListStoreReviewsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/reviews?${stringifiedParams}` : `/v1/stores/${storeId}/reviews`
+}
+
+/**
+ * Permissão da loja `reviews`. Só publicadas; autor abreviado ('Joana L.'). Funcionário sem a permissão: 403; outra loja: 404.
+ * @summary Avaliações da loja no painel (com a resposta)
+ */
+export const listStoreReviews = async (storeId: string,
+    params?: ListStoreReviewsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreReviewsResponse> => {
+
+  return apiFetch<listStoreReviewsResponse>(getListStoreReviewsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type replyToReviewResponse200 = {
+  data: ReplyToReview200
+  status: 200
+}
+
+export type replyToReviewResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type replyToReviewResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type replyToReviewResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type replyToReviewResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type replyToReviewResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type replyToReviewResponseSuccess = (replyToReviewResponse200) & {
+  headers: Headers;
+};
+export type replyToReviewResponseError = (replyToReviewResponse400 | replyToReviewResponse401 | replyToReviewResponse403 | replyToReviewResponse404 | replyToReviewResponse429) & {
+  headers: Headers;
+};
+
+export type replyToReviewResponse = (replyToReviewResponseSuccess | replyToReviewResponseError)
+
+export const getReplyToReviewUrl = (storeId: string,
+    reviewId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/reviews/${reviewId}/reply`
+}
+
+/**
+ * Permissão da loja `reviews`. Uma resposta pública por avaliação, até 500 caracteres; a resposta aparece nas avaliações públicas (`storeReply`). Avaliação de outra loja ou removida: 404.
+ * @summary Responder (ou editar a resposta) a uma avaliação
+ */
+export const replyToReview = async (storeId: string,
+    reviewId: string,
+    replyToReviewBody: ReplyToReviewBody, options?: Parameters<typeof apiFetch>[1]): Promise<replyToReviewResponse> => {
+
+  return apiFetch<replyToReviewResponse>(getReplyToReviewUrl(storeId,reviewId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(replyToReviewBody)
+  }
+);}
+
+
+
+export type deleteReviewReplyResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteReviewReplyResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteReviewReplyResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteReviewReplyResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteReviewReplyResponseSuccess = (deleteReviewReplyResponse204) & {
+  headers: Headers;
+};
+export type deleteReviewReplyResponseError = (deleteReviewReplyResponse401 | deleteReviewReplyResponse403 | deleteReviewReplyResponse404) & {
+  headers: Headers;
+};
+
+export type deleteReviewReplyResponse = (deleteReviewReplyResponseSuccess | deleteReviewReplyResponseError)
+
+export const getDeleteReviewReplyUrl = (storeId: string,
+    reviewId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/reviews/${reviewId}/reply`
+}
+
+/**
+ * @summary Apagar a resposta (idempotente)
+ */
+export const deleteReviewReply = async (storeId: string,
+    reviewId: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteReviewReplyResponse> => {
+
+  return apiFetch<deleteReviewReplyResponse>(getDeleteReviewReplyUrl(storeId,reviewId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}

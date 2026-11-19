@@ -74,6 +74,10 @@ tags:
     description: Marketing do admin (push segmentado, cupons da plataforma, destaques) e métricas de campanha
   - name: reports
     description: Relatórios operacionais do admin (RN-15)
+  - name: help
+    description: Ajuda (FAQ e contatos) do cliente e do lojista, editável pelo admin
+  - name: content-reports
+    description: Denúncia de avaliação, produto ou loja e moderação
 security:
   - bearerAuth: []
 paths:
@@ -7436,6 +7440,457 @@ paths:
           $ref: '#/components/responses/Unprocessable'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/help:
+    get:
+      tags: [help]
+      operationId: getHelp
+      summary: Ajuda pública (perguntas publicadas e contatos)
+      description: "Visitante, cliente e lojista (`audience=customer|merchant`). Texto e contatos vêm da configuração editada pelo admin (WB-034 C1); cache de 60 s no servidor. Grupo sem pergunta publicada não vem. `privacy` traz o encarregado (WB-217 C1)."
+      security: []
+      parameters:
+        - { name: audience, in: query, schema: { type: string, enum: [customer, merchant], default: customer } }
+      responses:
+        '200':
+          description: Ajuda
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Help' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/help/faqs:
+    get:
+      tags: [help]
+      operationId: listHelpFaqs
+      summary: Perguntas da ajuda (admin)
+      description: "`help:read` (todos os perfis de admin)."
+      parameters:
+        - { name: audience, in: query, schema: { type: string, enum: [customer, merchant] } }
+      responses:
+        '200':
+          description: Perguntas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpFaqList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [help]
+      operationId: createHelpFaq
+      summary: Nova pergunta (operação e super admin)
+      description: "Grupos do cliente: order, payment, exchange, account; do lojista: orders, products, exchanges, money, team. Entra no fim do grupo. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HelpFaqCreate' }
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpFaq' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/help/faqs/reorder:
+    post:
+      tags: [help]
+      operationId: reorderHelpFaqs
+      summary: Nova ordem de um grupo
+      description: "`ids` precisa ser exatamente o conjunto de perguntas do grupo, uma vez cada (400 caso contrário)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [audience, group, ids]
+              properties:
+                audience: { type: string, enum: [customer, merchant] }
+                group: { type: string }
+                ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Perguntas do público na nova ordem
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpFaqList' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/help/faqs/{id}:
+    patch:
+      tags: [help]
+      operationId: updateHelpFaq
+      summary: Editar, mover de grupo ou (des)publicar uma pergunta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                group: { type: string }
+                question: { type: string, maxLength: 100 }
+                answer: { type: string, maxLength: 600 }
+                published: { type: boolean }
+      responses:
+        '200':
+          description: Atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpFaq' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [help]
+      operationId: deleteHelpFaq
+      summary: Apagar uma pergunta
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Apagada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/help/contacts:
+    get:
+      tags: [help]
+      operationId: getHelpContacts
+      summary: Contatos do suporte e do encarregado
+      responses:
+        '200':
+          description: Contatos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpContacts' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [help]
+      operationId: putHelpContacts
+      summary: Salvar contatos (campo ausente = não muda; nulo ou vazio = apaga)
+      description: "`help:write`. WhatsApp com DDD (10 a 13 dígitos), e-mails válidos, horário até 60 caracteres. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HelpContactsPatch' }
+      responses:
+        '200':
+          description: Contatos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpContacts' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/reports:
+    post:
+      tags: [content-reports]
+      operationId: reportContent
+      summary: Denunciar avaliação, produto ou loja (DN1)
+      description: "Sempre `202 { received: true }`, também na repetição (uma por alvo e denunciante) e na denúncia da própria avaliação: não revela o que já existia. Dono e equipe da loja não denunciam a própria loja ou produto (403 `CANNOT_REPORT_OWN`). 20 por hora."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContentReportRequest' }
+      responses:
+        '202':
+          description: Recebida
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties: { received: { type: boolean, enum: [true] } }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/me/reports:
+    get:
+      tags: [content-reports]
+      operationId: listMyReports
+      summary: O que já denunciei (o menu mostra "Denunciada")
+      responses:
+        '200':
+          description: Alvos denunciados por mim
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [targetType, targetId]
+                      properties:
+                        targetType: { type: string, enum: [review, product, store] }
+                        targetId: { type: string, format: uuid }
+                  nextCursor: { type: 'null' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/admin/content-reports:
+    get:
+      tags: [content-reports]
+      operationId: listContentReports
+      summary: Fila de denúncias por alvo (DN2)
+      description: "`moderation:read` (super admin e operação). Várias denúncias do mesmo item viram uma linha, a mais antiga primeiro, com `overdue` depois de `denuncia_prazo_dias_uteis` dias úteis."
+      parameters:
+        - { name: targetType, in: query, required: true, schema: { type: string, enum: [review, product, store] } }
+        - { name: status, in: query, schema: { type: string, enum: [open, handled], default: open } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentReportQueue' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/content-reports/{targetType}/{targetId}:
+    get:
+      tags: [content-reports]
+      operationId: getContentReport
+      summary: "Caso: item denunciado e denúncias (denunciante abreviado)"
+      parameters:
+        - { name: targetType, in: path, required: true, schema: { type: string, enum: [review, product, store] } }
+        - { name: targetId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Caso
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentReportCase' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/content-reports/{targetType}/{targetId}/keep:
+    post:
+      tags: [content-reports]
+      operationId: keepReportedContent
+      summary: "Manter (encerra as denúncias e avisa os denunciantes por e-mail)"
+      description: "`moderation:write`. 409 `REPORT_ALREADY_HANDLED` se não há denúncia aberta."
+      parameters:
+        - { name: targetType, in: path, required: true, schema: { type: string, enum: [review, product, store] } }
+        - { name: targetId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: { note: { type: string, minLength: 3, maxLength: 200 } }
+      responses:
+        '200':
+          description: Encerrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentReportOutcome' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/content-reports/review/{targetId}/remove:
+    post:
+      tags: [content-reports]
+      operationId: removeReportedReview
+      summary: Remover a avaliação (ofensa, dado pessoal, ilegal ou spam)
+      description: "`moderation:write`. NÃO existe o motivo \"avaliação negativa\" (RN-12). A nota deixa de contar, o autor e os denunciantes são avisados por e-mail e a ação é auditada (`review.removed`)."
+      parameters:
+        - { name: targetId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reasonCode]
+              properties:
+                reasonCode: { type: string, enum: [offense, personal_data, illegal, spam] }
+                note: { type: string, maxLength: 150 }
+      responses:
+        '200':
+          description: Removida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentReportOutcome' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/content-reports/{targetType}/{targetId}/forward:
+    post:
+      tags: [content-reports]
+      operationId: forwardReportedContent
+      summary: Encaminhar produto ou loja à moderação própria
+      description: "Só `product` e `store` (avaliação se mantém ou se remove). Devolve `next` com o destino da moderação."
+      parameters:
+        - { name: targetType, in: path, required: true, schema: { type: string, enum: [product, store] } }
+        - { name: targetId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Encaminhada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentReportOutcome' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/stores/{storeId}/reviews:
+    get:
+      tags: [stores]
+      operationId: listStoreReviews
+      summary: Avaliações da loja no painel (com a resposta)
+      description: "Permissão da loja `reviews`. Só publicadas; autor abreviado ('Joana L.'). Funcionário sem a permissão: 403; outra loja: 404."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: replied, in: query, schema: { type: boolean } }
+        - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreReviewPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/reviews/{reviewId}/reply:
+    put:
+      tags: [stores]
+      operationId: replyToReview
+      summary: Responder (ou editar a resposta) a uma avaliação
+      description: "Permissão da loja `reviews`. Uma resposta pública por avaliação, até 500 caracteres; a resposta aparece nas avaliações públicas (`storeReply`). Avaliação de outra loja ou removida: 404."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: reviewId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties: { text: { type: string, minLength: 1, maxLength: 500 } }
+      responses:
+        '200':
+          description: Resposta publicada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, storeReply, storeRepliedAt]
+                properties:
+                  id: { type: string, format: uuid }
+                  storeReply: { type: string }
+                  storeRepliedAt: { type: string, format: date-time }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [stores]
+      operationId: deleteReviewReply
+      summary: Apagar a resposta (idempotente)
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: reviewId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Apagada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -11840,3 +12295,168 @@ components:
         status: { $ref: '#/components/schemas/OrderStatus' }
         payment: { $ref: '#/components/schemas/OrderPayment' }
         threeDsUrl: { type: [string, 'null'] }
+    Help:
+      type: object
+      required: [audience, contacts, privacy, groups]
+      properties:
+        audience: { type: string, enum: [customer, merchant] }
+        contacts:
+          type: object
+          required: [whatsapp, email, hours]
+          properties:
+            whatsapp: { type: [string, 'null'], description: "Só dígitos com DDD" }
+            email: { type: [string, 'null'] }
+            hours: { type: [string, 'null'] }
+        privacy:
+          type: object
+          required: [officerName, officerEmail]
+          properties:
+            officerName: { type: [string, 'null'] }
+            officerEmail: { type: [string, 'null'] }
+        groups:
+          type: array
+          items:
+            type: object
+            required: [id, label, items]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              items:
+                type: array
+                items:
+                  type: object
+                  required: [id, question, answer]
+                  properties:
+                    id: { type: string, format: uuid }
+                    question: { type: string }
+                    answer: { type: string }
+    HelpFaq:
+      type: object
+      required: [id, audience, group, question, answer, position, published, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        audience: { type: string, enum: [customer, merchant] }
+        group: { type: string }
+        question: { type: string }
+        answer: { type: string }
+        position: { type: integer }
+        published: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    HelpFaqList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/HelpFaq' } }
+        nextCursor: { type: 'null' }
+    HelpFaqCreate:
+      type: object
+      additionalProperties: false
+      required: [audience, group, question, answer]
+      properties:
+        audience: { type: string, enum: [customer, merchant] }
+        group: { type: string }
+        question: { type: string, minLength: 3, maxLength: 100 }
+        answer: { type: string, minLength: 3, maxLength: 600 }
+        published: { type: boolean }
+    HelpContacts:
+      type: object
+      required: [supportWhatsapp, supportEmail, supportHours, privacyOfficerName, privacyOfficerEmail]
+      properties:
+        supportWhatsapp: { type: [string, 'null'] }
+        supportEmail: { type: [string, 'null'] }
+        supportHours: { type: [string, 'null'] }
+        privacyOfficerName: { type: [string, 'null'] }
+        privacyOfficerEmail: { type: [string, 'null'] }
+    HelpContactsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        supportWhatsapp: { type: [string, 'null'] }
+        supportEmail: { type: [string, 'null'] }
+        supportHours: { type: [string, 'null'], maxLength: 60 }
+        privacyOfficerName: { type: [string, 'null'], maxLength: 80 }
+        privacyOfficerEmail: { type: [string, 'null'] }
+    ContentReportRequest:
+      type: object
+      additionalProperties: false
+      required: [targetType, targetId, reason]
+      properties:
+        targetType: { type: string, enum: [review, product, store] }
+        targetId: { type: string, format: uuid }
+        reason: { type: string, enum: [offensive, 'false', prohibited, scam, other] }
+        text: { type: string, maxLength: 200 }
+    ContentReportQueue:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [targetType, targetId, reports, reasons, oldestAt, overdue, title, excerpt, available]
+            properties:
+              targetType: { type: string, enum: [review, product, store] }
+              targetId: { type: string, format: uuid }
+              reports: { type: integer }
+              reasons: { type: array, items: { type: string } }
+              oldestAt: { type: string, format: date-time }
+              overdue: { type: boolean }
+              title: { type: string }
+              excerpt: { type: [string, 'null'] }
+              available: { type: boolean }
+        nextCursor: { type: [string, 'null'] }
+    ContentReportCase:
+      type: object
+      required: [targetType, targetId, title, excerpt, available, item, reports]
+      properties:
+        targetType: { type: string, enum: [review, product, store] }
+        targetId: { type: string, format: uuid }
+        title: { type: string }
+        excerpt: { type: [string, 'null'] }
+        available: { type: boolean }
+        item: { type: object, additionalProperties: true, description: "Avaliação: nota, texto, autor abreviado, loja, resposta" }
+        reports:
+          type: array
+          items:
+            type: object
+            required: [reason, text, reporter, status, reportedAt, handledAt, resolution]
+            properties:
+              reason: { type: string }
+              text: { type: [string, 'null'] }
+              reporter: { type: string, description: "Iniciais" }
+              status: { type: string, enum: [open, kept, removed, forwarded] }
+              reportedAt: { type: string, format: date-time }
+              handledAt: { type: [string, 'null'], format: date-time }
+              resolution: { type: [string, 'null'] }
+    ContentReportOutcome:
+      type: object
+      required: [status, reports]
+      properties:
+        status: { type: string, enum: [kept, removed, forwarded] }
+        reports: { type: integer }
+        next: { type: object, additionalProperties: true, description: "Só em forward: para onde seguir (moderação de produto ou de loja)" }
+    StoreReview:
+      type: object
+      required: [id, rating, comment, fit, reviewer, target, createdAt, storeReply, storeRepliedAt]
+      properties:
+        id: { type: string, format: uuid }
+        rating: { type: integer }
+        comment: { type: [string, 'null'] }
+        fit: { type: [string, 'null'], enum: [small, ok, large, null] }
+        reviewer: { type: string }
+        target:
+          type: object
+          required: [type, id, name]
+          properties:
+            type: { type: string, enum: [product, store] }
+            id: { type: string, format: uuid }
+            name: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        storeReply: { type: [string, 'null'] }
+        storeRepliedAt: { type: [string, 'null'], format: date-time }
+    StoreReviewPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StoreReview' } }
+        nextCursor: { type: [string, 'null'] }

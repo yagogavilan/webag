@@ -117,6 +117,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'GET /v1/card-intents/:token',
         'GET /v1/data-exports/download/:token',
         'GET /v1/legal/:type',
+        'GET /v1/help',
         'GET /v1/home',
         'GET /v1/regions',
         'GET /v1/search/products',

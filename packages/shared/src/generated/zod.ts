@@ -12608,3 +12608,433 @@ export const PayCardIntentResponse = zod.object({
 }),
   "threeDsUrl": zod.string().nullable()
 })
+
+
+/**
+ * Visitante, cliente e lojista (`audience=customer|merchant`). Texto e contatos vêm da configuração editada pelo admin (WB-034 C1); cache de 60 s no servidor. Grupo sem pergunta publicada não vem. `privacy` traz o encarregado (WB-217 C1).
+ * @summary Ajuda pública (perguntas publicadas e contatos)
+ */
+export const getHelpQueryAudienceDefault = `customer`;
+
+export const GetHelpQueryParams = zod.object({
+  "audience": zod.enum(['customer', 'merchant']).default(getHelpQueryAudienceDefault)
+})
+
+export const GetHelpResponse = zod.object({
+  "audience": zod.enum(['customer', 'merchant']),
+  "contacts": zod.object({
+  "whatsapp": zod.string().nullable().describe('Só dígitos com DDD'),
+  "email": zod.string().nullable(),
+  "hours": zod.string().nullable()
+}),
+  "privacy": zod.object({
+  "officerName": zod.string().nullable(),
+  "officerEmail": zod.string().nullable()
+}),
+  "groups": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "question": zod.string(),
+  "answer": zod.string()
+}))
+}))
+})
+
+
+/**
+ * `help:read` (todos os perfis de admin).
+ * @summary Perguntas da ajuda (admin)
+ */
+export const ListHelpFaqsQueryParams = zod.object({
+  "audience": zod.enum(['customer', 'merchant']).optional()
+})
+
+export const ListHelpFaqsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "position": zod.int(),
+  "published": zod.boolean(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Grupos do cliente: order, payment, exchange, account; do lojista: orders, products, exchanges, money, team. Entra no fim do grupo. Auditado.
+ * @summary Nova pergunta (operação e super admin)
+ */
+export const createHelpFaqBodyQuestionMin = 3;
+export const createHelpFaqBodyQuestionMax = 100;
+
+export const createHelpFaqBodyAnswerMin = 3;
+export const createHelpFaqBodyAnswerMax = 600;
+
+
+
+export const CreateHelpFaqBody = zod.object({
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "question": zod.string().min(createHelpFaqBodyQuestionMin).max(createHelpFaqBodyQuestionMax),
+  "answer": zod.string().min(createHelpFaqBodyAnswerMin).max(createHelpFaqBodyAnswerMax),
+  "published": zod.boolean().optional()
+})
+
+export const CreateHelpFaqResponse = zod.object({
+  "id": zod.uuid(),
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "position": zod.int(),
+  "published": zod.boolean(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * `ids` precisa ser exatamente o conjunto de perguntas do grupo, uma vez cada (400 caso contrário).
+ * @summary Nova ordem de um grupo
+ */
+export const ReorderHelpFaqsBody = zod.object({
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "ids": zod.array(zod.uuid())
+})
+
+export const ReorderHelpFaqsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "position": zod.int(),
+  "published": zod.boolean(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * @summary Editar, mover de grupo ou (des)publicar uma pergunta
+ */
+export const UpdateHelpFaqParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const updateHelpFaqBodyQuestionMax = 100;
+
+export const updateHelpFaqBodyAnswerMax = 600;
+
+
+
+export const UpdateHelpFaqBody = zod.object({
+  "group": zod.string().optional(),
+  "question": zod.string().max(updateHelpFaqBodyQuestionMax).optional(),
+  "answer": zod.string().max(updateHelpFaqBodyAnswerMax).optional(),
+  "published": zod.boolean().optional()
+})
+
+export const UpdateHelpFaqResponse = zod.object({
+  "id": zod.uuid(),
+  "audience": zod.enum(['customer', 'merchant']),
+  "group": zod.string(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "position": zod.int(),
+  "published": zod.boolean(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * @summary Apagar uma pergunta
+ */
+export const DeleteHelpFaqParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteHelpFaqResponse = zod.void()
+
+
+/**
+ * @summary Contatos do suporte e do encarregado
+ */
+export const GetHelpContactsResponse = zod.object({
+  "supportWhatsapp": zod.string().nullable(),
+  "supportEmail": zod.string().nullable(),
+  "supportHours": zod.string().nullable(),
+  "privacyOfficerName": zod.string().nullable(),
+  "privacyOfficerEmail": zod.string().nullable()
+})
+
+
+/**
+ * `help:write`. WhatsApp com DDD (10 a 13 dígitos), e-mails válidos, horário até 60 caracteres. Auditado.
+ * @summary Salvar contatos (campo ausente = não muda; nulo ou vazio = apaga)
+ */
+export const putHelpContactsBodySupportHoursMax = 60;
+
+export const putHelpContactsBodyPrivacyOfficerNameMax = 80;
+
+
+
+export const PutHelpContactsBody = zod.object({
+  "supportWhatsapp": zod.string().nullish(),
+  "supportEmail": zod.string().nullish(),
+  "supportHours": zod.string().max(putHelpContactsBodySupportHoursMax).nullish(),
+  "privacyOfficerName": zod.string().max(putHelpContactsBodyPrivacyOfficerNameMax).nullish(),
+  "privacyOfficerEmail": zod.string().nullish()
+})
+
+export const PutHelpContactsResponse = zod.object({
+  "supportWhatsapp": zod.string().nullable(),
+  "supportEmail": zod.string().nullable(),
+  "supportHours": zod.string().nullable(),
+  "privacyOfficerName": zod.string().nullable(),
+  "privacyOfficerEmail": zod.string().nullable()
+})
+
+
+/**
+ * Sempre `202 { received: true }`, também na repetição (uma por alvo e denunciante) e na denúncia da própria avaliação: não revela o que já existia. Dono e equipe da loja não denunciam a própria loja ou produto (403 `CANNOT_REPORT_OWN`). 20 por hora.
+ * @summary Denunciar avaliação, produto ou loja (DN1)
+ */
+export const reportContentBodyTextMax = 200;
+
+
+
+export const ReportContentBody = zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid(),
+  "reason": zod.enum(['offensive', 'false', 'prohibited', 'scam', 'other']),
+  "text": zod.string().max(reportContentBodyTextMax).optional()
+})
+
+export const ReportContentResponse = zod.object({
+  "received": zod.literal(true)
+})
+
+
+/**
+ * @summary O que já denunciei (o menu mostra "Denunciada")
+ */
+export const ListMyReportsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid()
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * `moderation:read` (super admin e operação). Várias denúncias do mesmo item viram uma linha, a mais antiga primeiro, com `overdue` depois de `denuncia_prazo_dias_uteis` dias úteis.
+ * @summary Fila de denúncias por alvo (DN2)
+ */
+export const listContentReportsQueryStatusDefault = `open`;
+export const listContentReportsQueryLimitMax = 100;
+
+
+
+export const ListContentReportsQueryParams = zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "status": zod.enum(['open', 'handled']).default(listContentReportsQueryStatusDefault),
+  "limit": zod.int().min(1).max(listContentReportsQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListContentReportsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid(),
+  "reports": zod.int(),
+  "reasons": zod.array(zod.string()),
+  "oldestAt": zod.iso.datetime({"offset":true}),
+  "overdue": zod.boolean(),
+  "title": zod.string(),
+  "excerpt": zod.string().nullable(),
+  "available": zod.boolean()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * @summary Caso: item denunciado e denúncias (denunciante abreviado)
+ */
+export const GetContentReportParams = zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid()
+})
+
+export const GetContentReportResponse = zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid(),
+  "title": zod.string(),
+  "excerpt": zod.string().nullable(),
+  "available": zod.boolean(),
+  "item": zod.record(zod.string(), zod.unknown()).describe('Avaliação: nota, texto, autor abreviado, loja, resposta'),
+  "reports": zod.array(zod.object({
+  "reason": zod.string(),
+  "text": zod.string().nullable(),
+  "reporter": zod.string().describe('Iniciais'),
+  "status": zod.enum(['open', 'kept', 'removed', 'forwarded']),
+  "reportedAt": zod.iso.datetime({"offset":true}),
+  "handledAt": zod.iso.datetime({"offset":true}).nullable(),
+  "resolution": zod.string().nullable()
+}))
+})
+
+
+/**
+ * `moderation:write`. 409 `REPORT_ALREADY_HANDLED` se não há denúncia aberta.
+ * @summary Manter (encerra as denúncias e avisa os denunciantes por e-mail)
+ */
+export const KeepReportedContentParams = zod.object({
+  "targetType": zod.enum(['review', 'product', 'store']),
+  "targetId": zod.uuid()
+})
+
+export const keepReportedContentBodyNoteMin = 3;
+export const keepReportedContentBodyNoteMax = 200;
+
+
+
+export const KeepReportedContentBody = zod.object({
+  "note": zod.string().min(keepReportedContentBodyNoteMin).max(keepReportedContentBodyNoteMax).optional()
+})
+
+export const KeepReportedContentResponse = zod.object({
+  "status": zod.enum(['kept', 'removed', 'forwarded']),
+  "reports": zod.int(),
+  "next": zod.record(zod.string(), zod.unknown()).optional().describe('Só em forward: para onde seguir (moderação de produto ou de loja)')
+})
+
+
+/**
+ * `moderation:write`. NÃO existe o motivo "avaliação negativa" (RN-12). A nota deixa de contar, o autor e os denunciantes são avisados por e-mail e a ação é auditada (`review.removed`).
+ * @summary Remover a avaliação (ofensa, dado pessoal, ilegal ou spam)
+ */
+export const RemoveReportedReviewParams = zod.object({
+  "targetId": zod.uuid()
+})
+
+export const removeReportedReviewBodyNoteMax = 150;
+
+
+
+export const RemoveReportedReviewBody = zod.object({
+  "reasonCode": zod.enum(['offense', 'personal_data', 'illegal', 'spam']),
+  "note": zod.string().max(removeReportedReviewBodyNoteMax).optional()
+})
+
+export const RemoveReportedReviewResponse = zod.object({
+  "status": zod.enum(['kept', 'removed', 'forwarded']),
+  "reports": zod.int(),
+  "next": zod.record(zod.string(), zod.unknown()).optional().describe('Só em forward: para onde seguir (moderação de produto ou de loja)')
+})
+
+
+/**
+ * Só `product` e `store` (avaliação se mantém ou se remove). Devolve `next` com o destino da moderação.
+ * @summary Encaminhar produto ou loja à moderação própria
+ */
+export const ForwardReportedContentParams = zod.object({
+  "targetType": zod.enum(['product', 'store']),
+  "targetId": zod.uuid()
+})
+
+export const ForwardReportedContentBody = zod.object({
+
+})
+
+export const ForwardReportedContentResponse = zod.object({
+  "status": zod.enum(['kept', 'removed', 'forwarded']),
+  "reports": zod.int(),
+  "next": zod.record(zod.string(), zod.unknown()).optional().describe('Só em forward: para onde seguir (moderação de produto ou de loja)')
+})
+
+
+/**
+ * Permissão da loja `reviews`. Só publicadas; autor abreviado ('Joana L.'). Funcionário sem a permissão: 403; outra loja: 404.
+ * @summary Avaliações da loja no painel (com a resposta)
+ */
+export const ListStoreReviewsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listStoreReviewsQueryRatingMax = 5;
+
+export const listStoreReviewsQueryLimitMax = 100;
+
+
+
+export const ListStoreReviewsQueryParams = zod.object({
+  "replied": zod.boolean().optional(),
+  "rating": zod.int().min(1).max(listStoreReviewsQueryRatingMax).optional(),
+  "limit": zod.int().min(1).max(listStoreReviewsQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListStoreReviewsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "rating": zod.int(),
+  "comment": zod.string().nullable(),
+  "fit": zod.union([zod.literal('small'),zod.literal('ok'),zod.literal('large'),zod.literal(null)]).nullable(),
+  "reviewer": zod.string(),
+  "target": zod.object({
+  "type": zod.enum(['product', 'store']),
+  "id": zod.uuid(),
+  "name": zod.string().nullable()
+}),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "storeReply": zod.string().nullable(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão da loja `reviews`. Uma resposta pública por avaliação, até 500 caracteres; a resposta aparece nas avaliações públicas (`storeReply`). Avaliação de outra loja ou removida: 404.
+ * @summary Responder (ou editar a resposta) a uma avaliação
+ */
+export const ReplyToReviewParams = zod.object({
+  "storeId": zod.uuid(),
+  "reviewId": zod.uuid()
+})
+
+export const replyToReviewBodyTextMax = 500;
+
+
+
+export const ReplyToReviewBody = zod.object({
+  "text": zod.string().min(1).max(replyToReviewBodyTextMax)
+})
+
+export const ReplyToReviewResponse = zod.object({
+  "id": zod.uuid(),
+  "storeReply": zod.string(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * @summary Apagar a resposta (idempotente)
+ */
+export const DeleteReviewReplyParams = zod.object({
+  "storeId": zod.uuid(),
+  "reviewId": zod.uuid()
+})
+
+export const DeleteReviewReplyResponse = zod.void()
