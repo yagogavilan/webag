@@ -15,6 +15,10 @@ const closing = (e: OrderEvent): string => (e.reason ? ` Motivo: ${e.reason}.` :
 export function customerOrderNotice(e: OrderEvent, storeName: string): Notice | null {
   const data = { type: 'order', orderId: e.orderId };
   if (e.notice === 'accept_reminder') return null; // lembrete de aceite é só da loja
+  if (e.notice === 'pickup_reminder') {
+    const until = e.pickupUntil ? e.pickupUntil.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às') : 'amanhã';
+    return { push: { title: 'Seu pedido espera por você', body: `Retire o pedido ${e.number} até ${until}. Depois disso ele é cancelado e o valor devolvido.`, data } };
+  }
   // RN-19 4b/4c: textos neutros (não culpam loja nem motoboy, não admitem culpa jurídica); sem dado pessoal no push.
   if (e.notice === 'late') return { push: { title: 'Seu pedido está demorando mais que o previsto', body: 'Já estamos cuidando disso. Se precisar, fale com a gente.', data } };
   if (e.notice === 'late_compensation') {

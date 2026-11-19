@@ -895,6 +895,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const pickupExpired = await this.expirePickups(now);
     await this.alertStaleCancelRequests(now);
     await this.remindAccept(now);
+    await this.remindPickups(now);
     await this.alertStoreCancelRate(now);
     return { expiredPix, orphans, acceptTimeouts, pickupExpired };
   }
@@ -967,6 +968,31 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       const [claimed] = await this.db.update(orderCancelRequests).set({ alertedAt: now }).where(and(eq(orderCancelRequests.id, row.id), isNull(orderCancelRequests.alertedAt))).returning({ id: orderCancelRequests.id });
       if (claimed) await this.payments.raiseAlert(null, 'cancel_request_unanswered', { orderId: row.orderId, requestId: row.id }).catch(() => undefined);
     }
+  }
+
+  /**
+   * BUG-014: 24 h antes de a retirada vencer (`retirada_prazo_horas`, contadas de "pronto para retirar") o cliente recebe UM aviso com
+   * o prazo final. Com prazo curto (<= 24 h) o aviso sai na metade do prazo. A reivindicação é atômica (sem aviso repetido).
+   */
+  async remindPickups(now: Date): Promise<number> {
+    const hours = await this.params.getNumber('retirada_prazo_horas');
+    const leadH = Math.min(24, hours / 2);
+    const remindFrom = new Date(now.getTime() - (hours - leadH) * 3_600_000);
+    const expiredBefore = new Date(now.getTime() - hours * 3_600_000);
+    const readyAt = sql`(select max(e.at) from order_events e where e.order_id = ${orders.id} and e.to_status = 'ready_for_pickup')`;
+    const due = await this.db
+      .select({ order: orders, readyAt: sql<string>`${readyAt}` })
+      .from(orders)
+      .where(and(eq(orders.status, 'ready_for_pickup'), isNull(orders.pickupRemindedAt), sql`${readyAt} <= ${remindFrom.toISOString()}::timestamptz`, sql`${readyAt} > ${expiredBefore.toISOString()}::timestamptz`))
+      .limit(100);
+    let n = 0;
+    for (const { order, readyAt: ready } of due) {
+      const [claimed] = await this.db.update(orders).set({ pickupRemindedAt: now }).where(and(eq(orders.id, order.id), eq(orders.status, 'ready_for_pickup'), isNull(orders.pickupRemindedAt))).returning({ id: orders.id });
+      if (!claimed) continue;
+      n += 1;
+      await this.bus.emit({ ...this.eventOf(order, order.status, 'system', null, now), notice: 'pickup_reminder', pickupUntil: new Date(new Date(ready).getTime() + hours * 3_600_000) });
+    }
+    return n;
   }
 
   private async expirePickups(now: Date): Promise<number> {

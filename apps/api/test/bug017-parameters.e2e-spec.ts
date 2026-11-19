@@ -99,4 +99,25 @@ describe('Parâmetros do admin ligados ao comportamento (BUG-017)', () => {
     await svc.alertStoreCancelRate(new Date(), true);
     expect(await alerts()).toHaveLength(1); // sem alerta duplicado
   });
+
+  it('BUG-014: o cliente é avisado UMA vez 24 h antes de a retirada vencer, com o prazo final; depois de retirar, não', async () => {
+    const r = await paidOrder('pickup');
+    const url = `/v1/stores/${r.shop.store.id}/orders/${r.id}`;
+    await ctx.http.post(`${url}/accept`).set(bearer(r.shop.store.owner.accessToken)).expect(200);
+    await ctx.http.post(`${url}/status`).set(bearer(r.shop.store.owner.accessToken)).send({ status: 'ready_for_pickup' }).expect(200);
+    const svc = ctx.app.get(OrdersService);
+    const mine = () => events.filter((e) => e.orderId === r.id && e.notice === 'pickup_reminder');
+    await svc.remindPickups(new Date(Date.now() + 10 * 3_600_000)); // 10 h depois: faltam 38 h
+    expect(mine()).toHaveLength(0);
+    const at = new Date(Date.now() + 25 * 3_600_000); // 25 h depois: faltam 23 h
+    await svc.remindPickups(at);
+    await svc.remindPickups(at);
+    expect(mine()).toHaveLength(1);
+    const until = mine()[0]!.pickupUntil!;
+    expect(Math.round((until.getTime() - Date.now()) / 3_600_000)).toBe(48);
+    expect((await orderRow(ctx, r.id)).pickupRemindedAt).not.toBeNull();
+    // depois de vencido, quem cuida é o cancelamento, não o lembrete
+    await svc.sweep(new Date(Date.now() + 49 * 3_600_000));
+    expect((await orderRow(ctx, r.id)).status).toBe('cancelled');
+  });
 });

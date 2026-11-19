@@ -130,7 +130,9 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 ## SEC-170 e BUG-017 (migrações 0043 e 0044)
 `orders.payer_document_hash` (HMAC do CPF do pagador, nunca o CPF; chave do cupom de primeira compra contra multiconta). `orders.pickup_code` passa a `varchar(6)` (`codigo_retirada_digitos`, 4 a 6); `orders.accept_reminded_at` (um lembrete de aceite por pedido); `exchange_requests.refund_late_alerted_at` (um alerta de reembolso fora do prazo por troca). Parâmetros sem uso na 1.0 saíram do painel: ver `DISABLED_PARAMETERS` em `parameters.definitions.ts`.
 
-## Mapa das migrações (0000 a 0044)
+`orders.pickup_reminded_at` (0045): um aviso por pedido 24 h antes de a retirada vencer (BUG-014).
+
+## Mapa das migrações (0000 a 0045)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
 | Migração | O que muda |
@@ -180,3 +182,4 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0042 e3_late_compensation | Cupom de compensação por atraso; cancelamento por atraso |
 | 0043 sec170_payer_document_hash | `orders.payer_document_hash` |
 | 0044 bug017_parameters_wiring | Código de retirada de até 6 dígitos; lembrete de aceite; alerta de reembolso da troca |
+| 0045 bug014_pickup_reminder | `orders.pickup_reminded_at` |

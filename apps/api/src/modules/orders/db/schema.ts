@@ -73,6 +73,8 @@ export const orders = pgTable(
     lateNotifiedAt: timestamp({ withTimezone: true }),
     /** BUG-017: lembrete à loja de pedido sem aceite (`loja_aceite_lembrete_min`); nulo = ainda não lembrou. */
     acceptRemindedAt: timestamp({ withTimezone: true }),
+    /** BUG-014: aviso ao cliente 24 h antes de a retirada vencer; nulo = ainda não avisou. */
+    pickupRemindedAt: timestamp({ withTimezone: true }),
     /** SEC-170: HMAC do CPF do pagador (nunca o CPF), chave do cupom de primeira compra contra multiconta. */
     payerDocumentHash: varchar({ length: 64 }),
     cancelledBy: text({ enum: ['customer', 'store', 'system', 'admin'] }),

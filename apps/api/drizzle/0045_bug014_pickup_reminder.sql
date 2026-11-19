@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "pickup_reminded_at" timestamp with time zone;
