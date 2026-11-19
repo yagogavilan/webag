@@ -92,4 +92,18 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect(keys).toContain('logistica_horario'); // obtido: parâmetro inexistente; checkout oferece entrega 24 h e não há como pausar
     void orders;
   });
+
+  it.fails('BUG-018 (WB-012 C3, RN-03): "Mais vendidos" aparece na home com 5+ pedidos pagos nos últimos 30 dias na região', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Campeão de Vendas', priceCents: 3_000, stock: 50 }]);
+    for (let i = 0; i < 5; i++) {
+      const buyer = await customerAt(ctx, shop.origin);
+      await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
+      const res = await placeOrder(ctx, buyer.user, buyer.addressId);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      await approve(ctx, buyer.user, (await attemptOf(ctx, res.body.id as string)).id);
+    }
+    await ctx.redis.flushdb();
+    const home = (await ctx.http.get(`/v1/home?lat=${shop.origin.lat}&lng=${shop.origin.lng}`).expect(200)).body as { bestSellers: { name: string }[] };
+    expect(home.bestSellers.map((p) => p.name)).toContain('Campeão de Vendas'); // obtido: [] sempre (discovery.service.ts: "até lá a seção vem vazia")
+  });
 });
