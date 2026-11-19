@@ -370,8 +370,12 @@ async function teto() {
       record(`TETO-${target}b`, 'o servidor RECUSA criar o pedido acima do teto (não depende do app)', !placed.order, `HTTP ${placed.res.status} ${JSON.stringify(placed.res.data).slice(0, 160)}`);
     }
   }
+  // RN-02: validação ao salvar (422): teto - folga >= preparo + despacho + 5 e folga <= teto / 4
   const bad = await adminCall('PUT', '/v1/admin/parameters/entrega_max_min', { value: 40, reason: 'Reteste QA: teto impossível' });
-  record('TETO-RN02', 'admin não consegue salvar teto que nenhuma loja alcança (422)', bad.status === 422, `HTTP ${bad.status} ${JSON.stringify(bad.data).slice(0, 200)}`);
+  const bad2 = await adminCall('PUT', '/v1/admin/parameters/entrega_faixa_min', { value: 60, reason: 'Reteste QA: folga maior que teto/4' });
+  await resetParam('entrega_max_min');
+  await resetParam('entrega_faixa_min');
+  record('TETO-RN02', 'RN-02: o admin não consegue salvar um teto que nenhuma loja alcança (entrega_max_min=40 com preparo 20, despacho 15, folga 15) nem folga > teto/4 (60): 422', bad.status === 422 && bad2.status === 422, `teto=40 HTTP ${bad.status}; folga=60 HTTP ${bad2.status} (valores restaurados ao padrão logo depois)`);
   const home = await api('GET', `/v1/home?lat=${LAT}&lng=${LNG}`);
   record('TETO-home', 'a descoberta mostra a faixa em minutos (nunca número único)', JSON.stringify(home.data).includes('minMinutes'), 'campo minMinutes presente na home');
 }
@@ -507,19 +511,22 @@ async function sec170() {
   await store();
   const coupons = sql(`select code||':'||coalesce(max_uses::text,'sem teto') from coupons where first_purchase_only`);
   console.log(`  cupons de primeira compra no seed: ${coupons || 'nenhum'}`);
-  const code = sql(`select code from coupons where first_purchase_only and (max_uses is not null) and (ends_at is null or ends_at > now()) limit 1`) || 'BEMVINDO10';
-  const a = await newCustomer({ address: { cep: '07900-200', number: '777' } });
+  const created = await adminCall('POST', '/v1/admin/coupons', { code: `QAPC${Date.now() % 1000000}`, kind: 'percent', value: 10, startsAt: new Date(Date.now() - 60_000).toISOString(), endsAt: new Date(Date.now() + 864e5).toISOString(), firstPurchaseOnly: true, minOrderCents: 0, maxUses: 50 });
+  const code = created.data?.code ?? 'BEMVINDO10';
+  console.log(`  cupom de primeira compra do teste: ${code} (criação HTTP ${created.status})`);
+  const tag = String(Date.now() % 100000); // endereço novo a cada execução (a regra olha pedidos pagos anteriores no mesmo CEP+número)
+  const a = await newCustomer({ address: { cep: '07900-200', number: tag } });
   const a1 = await place(a, 'delivery', { couponCode: code });
   record('SEC-170a', `primeira compra com ${code}: pedido nasce com desconto`, Boolean(a1.order) && money(a1.cart?.summary?.discount) > 0, `HTTP ${a1.res.status}; desconto=${JSON.stringify(a1.cart?.summary?.discount)}`);
   if (a1.order) await pay(a, a1.order.id);
   // (a) outra conta, mesmo CEP + número, complemento diferente
-  const b = await newCustomer({ address: { cep: '07900-200', number: '777', complement: 'Apto 12' } });
+  const b = await newCustomer({ address: { cep: '07900-200', number: tag, complement: 'Apto 12' } });
   const b1 = await place(b, 'delivery', { couponCode: code });
   const applied = money(b1.cart?.summary?.discount) > 0;
   record('SEC-170b', 'multiconta: outra conta no MESMO CEP+número (só o complemento muda) não leva o cupom', !applied || !b1.order, `pedido=${Boolean(b1.order)} desconto=${JSON.stringify(b1.cart?.summary?.discount)}; HTTP ${b1.res.status} ${JSON.stringify(b1.res.data).slice(0, 160)}`);
   // (b) pedidos simultâneos não pagos no mesmo endereço
-  const c1 = await newCustomer({ address: { cep: '07900-300', number: '888' } });
-  const c2 = await newCustomer({ address: { cep: '07900-300', number: '888', complement: 'Casa 2' } });
+  const c1 = await newCustomer({ address: { cep: '07900-300', number: tag } });
+  const c2 = await newCustomer({ address: { cep: '07900-300', number: tag, complement: 'Casa 2' } });
   const [p1, p2] = await Promise.all([place(c1, 'delivery', { couponCode: code }), place(c2, 'delivery', { couponCode: code })]);
   const winners = [p1, p2].filter((p) => p.order && money(p.order.summary?.discount ?? p.cart?.summary?.discount) > 0).length;
   record('SEC-170c', 'pedidos SIMULTÂNEOS (não pagos) no mesmo endereço: só um leva o desconto', winners <= 1, `descontos concedidos=${winners}; HTTP ${p1.res.status}/${p2.res.status}`);
@@ -527,13 +534,21 @@ async function sec170() {
   const again = await place(a, 'delivery', { couponCode: code });
   record('SEC-155a', 'quem já tem pedido pago não usa o cupom de primeira compra de novo', !again.order || !(money(again.cart?.summary?.discount) > 0), `HTTP ${again.res.status}; desconto=${JSON.stringify(again.cart?.summary?.discount)}`);
   // (d) e-mail não confirmado
-  const unv = await newCustomer({ verify: false, address: { cep: '07900-400', number: '999' } });
+  const unv = await newCustomer({ verify: false, address: { cep: '07900-400', number: tag } });
   await cartOf(unv, 'delivery');
   const r = await api('PUT', `/v1/cart/coupon?mode=delivery&addressId=${unv.addressId}`, { token: unv.token, body: { code } });
   record('SEC-155b', 'e-mail não confirmado: cupom de primeira compra recusado (COUPON_EMAIL_UNVERIFIED)', r.status === 422 && /EMAIL_UNVERIFIED/.test(JSON.stringify(r.data)), `HTTP ${r.status} ${r.data?.code}`);
-  // (e) admin: cupom de primeira compra sem teto
-  const create = await adminCall('POST', '/v1/admin/coupons', { code: `QA7${Date.now() % 100000}`, kind: 'percent', scope: 'platform', value: 10, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 864e5).toISOString(), firstPurchaseOnly: true, minOrderCents: 0 });
-  record('SEC-170d', 'criar cupom de primeira compra SEM teto de usos (maxUses) é recusado pelo admin', create.status >= 400 && create.status < 500, `HTTP ${create.status} ${JSON.stringify(create.data).slice(0, 200)}`);
+  // (e) admin: cupom de primeira compra exige teto de usos (SEC-170d)
+  const base = { kind: 'percent', value: 10, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 864e5).toISOString(), firstPurchaseOnly: true, minOrderCents: 0 };
+  const noCap = await adminCall('POST', '/v1/admin/coupons', { ...base, code: `QA7A${Date.now() % 100000}` });
+  record('SEC-170d', 'criar cupom de primeira compra SEM teto de usos (maxUses) é recusado pelo admin (4xx)', noCap.status >= 400 && noCap.status < 500, `HTTP ${noCap.status} ${JSON.stringify(noCap.data).slice(0, 200)}`);
+  const withCap = await adminCall('POST', '/v1/admin/coupons', { ...base, code: `QA7B${Date.now() % 100000}`, maxUses: 5 });
+  record('SEC-170e', 'com teto de usos (maxUses=5) o mesmo cupom é criado (201)', withCap.status === 201, `HTTP ${withCap.status} ${JSON.stringify(withCap.data).slice(0, 120)}`);
+  if (withCap.status === 201) {
+    const remove = await adminCall('PATCH', `/v1/admin/coupons/${withCap.data.id}`, { maxUses: null });
+    record('SEC-170f', 'remover o teto depois (PATCH maxUses=null) de um cupom de primeira compra também é recusado', remove.status >= 400 && remove.status < 500, `HTTP ${remove.status} ${JSON.stringify(remove.data).slice(0, 160)}`);
+  }
+  record('SEC-170g', 'o cupom de demonstração BEMVINDO10 do seed é de primeira compra e NÃO tem teto (maxUses nulo), contra a regra que o admin impõe', sql(`select max_uses is not null from coupons where code = 'BEMVINDO10'`) === 't', `max_uses=${sql(`select coalesce(max_uses::text,'nulo') from coupons where code = 'BEMVINDO10'`)} (só dados de desenvolvimento)`);
   for (const o of [a1.order, b1.order, p1.order, p2.order]) if (o) await adminCall('POST', `/v1/admin/orders/${o.id}/cancel`, { reason: 'Reteste QA SEC-170: limpar', refund: true }).catch(() => undefined);
 }
 
@@ -546,7 +561,7 @@ async function sec168() {
   const lastCode = async (email, since) => {
     for (let i = 0; i < 12; i++) {
       const found = await (await fetch(`${mail}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json();
-      const mails = (found.messages ?? []).filter((x) => /código/i.test(x.Subject) && new Date(x.Created).getTime() >= since - 2000).sort((a, b) => new Date(b.Created) - new Date(a.Created));
+      const mails = (found.messages ?? []).filter((x) => /código/i.test(x.Subject) && new Date(x.Created).getTime() >= since - 300).sort((a, b) => new Date(b.Created) - new Date(a.Created));
       const code = mails[0]?.Subject.match(/\b(\d{6})\b/)?.[1];
       if (code) return code;
       await sleep(400);
@@ -576,7 +591,7 @@ async function sec168() {
     const okCode = await cancel(u.email, SEED_PASSWORD, '203.0.113.52', code);
     const reuse = await cancel(u.email, SEED_PASSWORD, '203.0.113.53', code);
     const reopened = await login(u.email);
-    record('SEC-168b', 'código errado: 400; conta continua fechada; com o código certo reabre (204); o código é de uso único', badCode.status === 400 && stillClosed.status >= 400 && okCode.status === 204 && reuse.status === 401 && reopened.status === 200, `errado ${badCode.status}; login fechado ${stillClosed.status}; certo ${okCode.status}; reuso ${reuse.status}; login depois ${reopened.status}`);
+    record('SEC-168b', 'código errado: 400; conta continua fechada; com o código certo reabre (204); o código é de uso único', badCode.status === 400 && stillClosed.status >= 400 && okCode.status === 204 && reuse.status === 401 && reopened.status === 200, `errado ${badCode.status} ${badCode.data?.code}; login fechado ${stillClosed.status}; certo ${okCode.status} ${okCode.data?.code ?? ''} ${okCode.data?.detail ?? ''}; reuso ${reuse.status}; login depois ${reopened.status}; código usado=${code}`);
 
     const v = await pending();
     const seq = [];
@@ -721,7 +736,25 @@ async function troca() {
   } else record('TROCA-11', 'loja recusa, cliente contesta', false, `criação HTTP ${v5.status} ${v5.data?.code}`);
 }
 
-const sections = { troca, limpeza, estoque, bug011, bug012, bug014, bug015, bug016, bug017, bug018, teto, atraso, sec169, sec170, sec168 };
+// ------------------------------------------------------------------------------------------------ BUG-013 (pedido duplicado por corrida)
+async function bug013() {
+  await store();
+  const c = await newCustomer();
+  const { cart } = await cartOf(c, 'pickup');
+  const body = { mode: 'pickup', cartRevision: cart.data.revision, expectedTotalCents: cart.data.summary.total.amount, paymentMethod: 'pix' };
+  const res = await Promise.all([0, 1, 2].map((i) => api('POST', '/v1/orders', { token: c.token, headers: { 'Idempotency-Key': `qa7-dup-${Date.now()}-${i}` }, body })));
+  const created = res.filter((r) => r.status === 201).length;
+  const orders = Number(sql(`select count(*) from orders where user_id = (select id from users where email = '${c.email}')`));
+  record('BUG-013a', '3 criações simultâneas da mesma revisão da sacola com chaves de idempotência DIFERENTES geram 1 pedido', created === 1 && orders === 1, `HTTP ${res.map((r) => `${r.status}:${r.data?.code ?? 'ok'}`).join(' ')}; pedidos no banco=${orders}`);
+  const key = `qa7-same-${Date.now()}`;
+  const c2 = await newCustomer();
+  const { cart: cart2 } = await cartOf(c2, 'pickup');
+  const body2 = { mode: 'pickup', cartRevision: cart2.data.revision, expectedTotalCents: cart2.data.summary.total.amount, paymentMethod: 'pix' };
+  const [r1, r2] = await Promise.all([api('POST', '/v1/orders', { token: c2.token, headers: { 'Idempotency-Key': key }, body: body2 }), api('POST', '/v1/orders', { token: c2.token, headers: { 'Idempotency-Key': key }, body: body2 })]);
+  record('BUG-013b', 'toque duplo com a MESMA chave devolve o mesmo pedido (mesmo id), sem segundo pedido', r1.status === 201 && r2.status === 201 && r1.data?.id === r2.data?.id, `HTTP ${r1.status}/${r2.status}; ids iguais=${r1.data?.id === r2.data?.id}`);
+}
+
+const sections = { bug013, troca, limpeza, estoque, bug011, bug012, bug014, bug015, bug016, bug017, bug018, teto, atraso, sec169, sec170, sec168 };
 const wanted = process.argv.slice(2);
 // Acomodação do gerador (não é o que se testa): um cliente só gera 5 PIX por hora (`pix_hora_max`); os cenários precisam de mais.
 await setParam('pix_hora_max', 30, 'Reteste QA Onda 7: acomodação do gerador de pedidos (restaurado no fim)');
