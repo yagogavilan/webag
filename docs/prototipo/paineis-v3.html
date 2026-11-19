@@ -115,6 +115,8 @@ html.clean .proto{display:none}
  .side{display:none}
  .sheet{border-radius:30px 30px 0 0;padding:24px 16px 32px;box-shadow:none;min-height:calc(100vh - 160px)}
  .bnav{display:grid}
+ .alert{display:grid;grid-template-columns:56px minmax(0,1fr);align-items:start;gap:12px 14px;padding:16px}
+ .alert>.btn{grid-column:1/-1;width:100%}
  .lead .row{margin-left:0}
 }
 @media (min-width:1024px){.hide-d{display:none!important}}
@@ -249,6 +251,7 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .suf{position:relative}.suf>span{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--n6);font-weight:700;pointer-events:none}
 .help{font:14px/20px var(--fu);color:var(--n6);margin-top:6px}
 .err{display:flex;gap:6px;align-items:center;font:700 14px/20px var(--fu);color:var(--bad);margin-top:6px}
+.err[hidden]{display:none}
 .chk{display:flex;gap:12px;align-items:flex-start;min-height:44px;font:15px/22px var(--fu)}
 .chk input,.radio input{width:22px;height:22px;accent-color:var(--noite);flex:none;margin-top:1px}
 .radio{display:flex;gap:12px;align-items:center;min-height:52px;padding:0 14px;border-radius:14px;background:var(--n1);font:600 15px/20px var(--fu);cursor:pointer}
@@ -313,21 +316,21 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .alert .h2{color:#fff}
 
 /* Logística: prazo restante, lote, atraso */
-.lg{display:grid;grid-template-columns:132px minmax(0,1fr) auto;gap:16px;align-items:center;padding:14px;border-radius:24px;box-shadow:inset 0 0 0 1px var(--n2);background:#fff}
-.lg.late{box-shadow:inset 0 0 0 2px var(--bad)}
-.lg.risk{box-shadow:inset 0 0 0 2px var(--alB)}
-.lg.sel{box-shadow:inset 0 0 0 3px var(--noite)}
+.lgc{display:grid;grid-template-columns:132px minmax(0,1fr) auto;gap:16px;align-items:center;padding:14px;border-radius:24px;box-shadow:inset 0 0 0 1px var(--n2);background:#fff}
+.lgc.late{box-shadow:inset 0 0 0 2px var(--bad)}
+.lgc.risk{box-shadow:inset 0 0 0 2px var(--alB)}
+.lgc.sel{box-shadow:inset 0 0 0 3px var(--noite)}
 .pz{border-radius:18px;padding:12px 14px;background:var(--n1);min-height:96px;display:flex;flex-direction:column;justify-content:center}
 .pz b{font:800 40px/1 var(--fd);letter-spacing:-.05em;font-variant-numeric:tabular-nums}
 .pz span{font:700 13px/17px var(--fu);margin-top:4px}
-.lg.risk .pz{background:var(--alS);color:var(--al)}
-.lg.late .pz{background:var(--bad);color:#fff}
-.lg .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font:14px/20px var(--fu);color:var(--n6);margin-top:4px}
-.lg .route{font:800 19px/24px var(--fd);letter-spacing:-.02em;margin-top:6px}
-.lg .acts{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:170px}
+.lgc.risk .pz{background:var(--alS);color:var(--al)}
+.lgc.late .pz{background:var(--bad);color:#fff}
+.lgc .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font:14px/20px var(--fu);color:var(--n6);margin-top:4px}
+.lgc .route{font:800 19px/24px var(--fd);letter-spacing:-.02em;margin-top:6px}
+.lgc .acts{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:170px}
 .lotchk{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 12px;border-radius:14px;background:var(--n1);font:700 14px/1 var(--fu);cursor:pointer}
 .lotchk input{width:22px;height:22px;accent-color:var(--noite)}
-@media (max-width:760px){.lg{grid-template-columns:minmax(0,1fr)}.pz{flex-direction:row;align-items:baseline;gap:10px;min-height:0}.pz b{font-size:32px}.lg .acts{flex-direction:row;flex-wrap:wrap;min-width:0}.lg .acts>*{flex:1}}
+@media (max-width:760px){.lgc{grid-template-columns:minmax(0,1fr)}.pz{flex-direction:row;align-items:baseline;gap:10px;min-height:0}.pz b{font-size:32px}.lgc .acts{flex-direction:row;flex-wrap:wrap;min-width:0}.lgc .acts>*{flex:1}}
 .kpi{padding:18px;border-radius:22px;background:var(--n1)}
 .kpi p{font:700 14px/20px var(--fu);color:var(--n6)}
 .kpi b{display:block;font:800 46px/1 var(--fd);letter-spacing:-.05em;margin-top:6px;font-variant-numeric:tabular-nums}
@@ -349,7 +352,10 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 
 /* Modal (folha no celular), toast */
 #modal[hidden]{display:none}
-.scrim{position:fixed;inset:0;z-index:90;background:rgba(28,23,33,.55);animation:fadeIn .2s both}
+body{position:relative}
+#modal{position:absolute;inset:0;z-index:90}
+[tabindex="-1"]:focus,[tabindex="-1"]:focus-visible{outline:none}
+.scrim{position:absolute;inset:0;z-index:90;background:rgba(28,23,33,.55);animation:fadeIn .2s both}
 .dlg{position:fixed;z-index:91;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;background:#fff;border-radius:30px;padding:24px;animation:dlgIn .3s var(--ease) both}
 .dlg.wide{width:min(720px,calc(100vw - 32px))}
 .dlg h2.t{font:800 30px/1.02 var(--fd);letter-spacing:-.04em;margin-bottom:8px}
@@ -375,6 +381,7 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 @keyframes pop{0%{transform:scale(.96)}60%{transform:scale(1.01)}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 html.static *,html.static *::before,html.static *::after{animation:none!important;transition:none!important}
+html.static .bnav{position:absolute}
 @media print{body>*{display:none!important}#print{display:block!important}}
 #print{display:none}
 </style>
@@ -925,7 +932,7 @@ function lgRow(e,first){const p=prazo(e),st=ST_ENT[e.st],m=e.mb?MB(e.mb):null,ro
   if(e.st==='coletado'&&!e.cancelReq)acts=btn('Marcar entregue','lgSt',{d:e.id+'|entregue',i:'check'})+btn('Não entregue','lgNao',{d:e.id,k:'bad'});}
  const who=e.st==='aguardando'?`Pronto há <span data-since="${e.ready}">${since(e.ready)}</span>`:m?`${esc(m.n.split(' ')[0])} · ${e.st==='a_caminho'?'a caminho da loja':'com o pedido'} há ${since(e.since||e.ready)}`:'';
  const req=e.cancelReq&&!e.cancelDone?`<div class="note bad" style="grid-column:1/-1;align-items:center" data-testid="admin.logistica.cancel-request-${e.id}">${ic('dangerD',24)}<div class="grow"><p class="b">O cliente pediu cancelamento por atraso</p><p class="cap">Responda em <b data-cd="${e.cancelReq+num(S.par.resp)*MIN}">${mmss(e.cancelReq+num(S.par.resp)*MIN-Date.now())}</b>. Sem resposta, o sistema aceita e o pacote volta à loja.</p></div>${ro?'':`<div class="row">${btn('Chego em até 10 min','lgCancel',{d:e.id+'|eta',k:'ink',sz:'sm'})}${btn('Aceitar cancelamento','lgCancel',{d:e.id+'|ok',k:'bad',sz:'sm'})}</div>`}</div>`:'';
- return `<article class="lg ${p.cls} ${sel?'sel':''}" aria-labelledby="${e.id}" data-testid="admin.logistica.${e.st==='aguardando'?'fila':'andamento'}.row-${e.id}">
+ return `<article class="lgc ${p.cls} ${sel?'sel':''}" aria-labelledby="${e.id}" data-testid="admin.logistica.${e.st==='aguardando'?'fila':'andamento'}.row-${e.id}">
  <div class="pz" data-testid="admin.logistica.row-${e.id}-deadline"><span>${p.cls==='late'?ic('danger',16):''}${p.lbl}</span><b>${p.big}</b><span>${p.sub}</span></div>
  <div><div class="row">${tag(e.tipo==='troca'?'info':'',e.tipo==='troca'?'refresh':'box',`<span id="${e.id}">${e.id}</span> · ${e.tipo==='troca'?'Coleta de troca':'Entrega'}`)}${tag(st[0],st[1],st[2])}</div>
  <p class="route">${esc(e.tipo==='troca'?e.cli:e.loja)} → ${esc(e.tipo==='troca'?e.loja:e.bairro)}</p>

@@ -88,7 +88,7 @@ Folha (raio 30) sobre a sacola ou o checkout, ao tocar em "Ir para o pagamento".
 - **Cartão:** título "Passamos do prazo" · "Você pode cancelar sem custo e receber **R$ 156,79** de volta, com a entrega. Se preferir esperar, ganha entrega grátis no próximo pedido." · 2 botões contornados de mesmo peso, empilhados: "Continuar esperando" e "Cancelar sem custo" (D6) · link "Falar com a Webag".
   - Com `entrega_compensacao_tipo` = `cupom_valor`: "...ganha R$ 10,00 de desconto no próximo pedido."; com `nenhuma`: a frase da compensação some.
 - **"Continuar esperando":** o cartão vira "Combinado, seguimos" · "Quando o pedido chegar, você ganha **entrega grátis no próximo pedido**. Se mudar de ideia antes de ele sair da loja, ainda dá para cancelar sem custo." · link "Cancelar sem custo" (D5). Foco vai ao título novo.
-- **"Cancelar sem custo":** folha de confirmação "Cancelar o pedido #4821?" · "Você recebe **R$ 156,79** de volta, com a entrega, em até 1 dia útil no PIX. Os itens voltam para a loja." · botão destrutivo (`danger` #B3261E, branco 6,5:1) "Cancelar pedido" · texto "Voltar". O prazo e o meio vêm do pagamento (WB-028 C1; no cartão: "em até 2 faturas" conforme o emissor **[PO confirma o texto]**). Toque duplo = 1 cancelamento (WB-253 C5).
+- **"Cancelar sem custo":** folha de confirmação "Cancelar o pedido #4821?" · "Você recebe **R$ 156,79** de volta, com a entrega, em até 1 dia útil, na mesma forma de pagamento. Os itens voltam para a loja." · botão destrutivo (`danger` #B3261E, branco 6,5:1) "Cancelar pedido" · texto "Voltar". O prazo e o meio vêm do pagamento (WB-028 C1; no cartão: "em até 2 faturas" conforme o emissor **[PO confirma o texto]**). Toque duplo = 1 cancelamento (WB-253 C5).
 - **Corrida contra o motoboy:** se o pedido sair da loja com a folha aberta, a confirmação responde "Seu pedido acabou de sair da loja. Agora o cancelamento precisa da resposta da Webag." e a tela passa ao E5b. Se foi entregue: "Seu pedido já foi entregue." (WB-253 C5).
 - testID: `tracking.late-wait`, `tracking.late-cancel`, `tracking.late-cancel-sheet`, `tracking.late-cancel-confirm`. Eventos: `late_cancel_requested {status}`, `late_cancel_done`.
 
@@ -96,12 +96,12 @@ Folha (raio 30) sobre a sacola ou o checkout, ao tocar em "Ir para o pagamento".
 - **Cartão:** "Passamos do prazo" · "Seu pedido já está com o motoboy. Se quiser cancelar mesmo assim, a Webag responde em até 10 min. Sem resposta, o cancelamento é aceito." · "Continuar esperando" e "Pedir cancelamento" (mesmo peso).
 - **Enviado:** "Pedido de cancelamento enviado" · "A Webag responde até **19:48**. Sem resposta, cancelamos e devolvemos o valor inteiro, com a entrega."
 - **Resposta "chego em até 10 min":** "Chega até 19:48" · "O motoboy está perto. Se não chegar até lá, o cancelamento é aceito sozinho e devolvemos o valor inteiro." (P: "A Webag respondeu: seu pedido chega até 19:48.")
-- **Aceito (pela operação ou pelo silêncio):** "Cancelamento aceito" · "O motoboy devolve o pedido à loja. Devolvemos **R$ 156,79**, com a entrega, em até 1 dia útil no PIX." (estorno ao concluir a devolução, RN-18).
+- **Aceito (pela operação ou pelo silêncio):** "Cancelamento aceito" · "O motoboy devolve o pedido à loja. Devolvemos **R$ 156,79**, com a entrega, em até 1 dia útil, na mesma forma de pagamento." (estorno ao concluir a devolução, RN-18).
 - testID: `tracking.late-request-cancel`, `tracking.late-request-sent`.
 
 ### 3.6 E6: cancelado por atraso
 - Cabeçalho noite sem segmentos: "CANCELADO · 19:40" (ícone fechar) · "Pedido cancelado" · "Devolvemos" + **R$ 156,79** (Bricolage 54) · "O valor inteiro, com a entrega."
-- Cartão: "Cancelado sem custo" · "Devolvemos **R$ 156,79** no PIX, com a entrega. Cai em até 1 dia útil. Os itens voltaram para a loja." · botão noite "Voltar ao início". Sem código de entrega, sem etapas. Não há compensação (RN-19 4d).
+- Cartão: "Cancelado sem custo" · "Devolvemos **R$ 156,79**, com a entrega, na mesma forma de pagamento. Cai em até 1 dia útil. Os itens voltaram para a loja." · botão noite "Voltar ao início". Sem código de entrega, sem etapas. Não há compensação (RN-19 4d).
 - testID: `tracking.refund`, `tracking.late-cancelled`.
 
 ### 3.7 E7: entregue com atraso e compensação — WB-254
