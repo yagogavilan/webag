@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { orders, users } from '../src/platform/database/schema.js';
 import { sha256Hex } from '../src/platform/crypto/crypto.js';
 import { RateLimitService } from '../src/platform/ratelimit/rate-limit.service.js';
 import { bearer, createTestApp, STRONG_PASSWORD, type TestContext } from './helpers/app.js';
 import { useParam } from './helpers/fees.js';
-import { createCustomer, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
+import { createAdmin, createCustomer, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
+import { addToCart, approve, attemptOf, customerAt, makeCoupon, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
 
 /** F.1 SEC-168: arrependimento da exclusão com limite por CONTA e reautenticação completa ao reabrir (ataque B2 da revisão). */
 describe('SEC-168: arrependimento da exclusão sob força bruta distribuída', () => {
@@ -138,5 +141,125 @@ describe('SEC-169: pino do endereço coerente com o CEP', () => {
     } finally {
       await useParam(ctx, 'endereco_pino_max_m', 2000);
     }
+  });
+});
+
+/** F.3 SEC-170: cupom de primeira compra sem burla por complemento, por pedidos simultâneos não pagos nem por documento (ataque B7). */
+describe('SEC-170: cupom de primeira compra contra multiconta', () => {
+  let ctx: TestContext;
+  let seq = 0;
+  beforeAll(async () => {
+    ctx = await createTestApp();
+    await ensureLegalDocs(ctx);
+    await ensureCity(ctx, 'Francisco Morato');
+  });
+  afterAll(() => ctx.close());
+
+  const unique = () => ({ cep: `0791${String(1000 + (seq += 1)).padStart(4, '0')}`, number: String(300 + seq) });
+  const applyCoupon = (token: string, code: string) => ctx.http.put('/v1/cart/coupon').set(bearer(token)).send({ code });
+  const firstCoupon = () => makeCoupon(ctx, { kind: 'fixed', scope: 'platform', value: 1_000, firstPurchaseOnly: true, perCustomerLimit: 5, maxUses: 50 });
+  /** Cada conta de teste ganha telefone e aparelho próprios, senão todas pareceriam a mesma pessoa. */
+  async function fresh(shop: Shop, over: { cep?: string; number?: string; complement?: string } = unique()) {
+    const user = await createCustomer(ctx);
+    await ctx.db.update(users).set({ phone: `5511${String(700000000 + (seq += 1))}` }).where(eq(users.id, user.userId));
+    const res = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send({ cep: over.cep ?? '07900-100', street: 'Rua B7', number: over.number ?? '10', ...(over.complement ? { complement: over.complement } : {}), neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', lat: shop.origin.lat, lng: shop.origin.lng });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    return { user, addressId: res.body.id as string };
+  }
+  async function paidOnce(shop: Shop, over: { cep: string; number: string; complement?: string }, extra: Record<string, unknown> = {}) {
+    const buyer = await fresh(shop, over);
+    await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
+    const created = await placeOrder(ctx, buyer.user, buyer.addressId, extra);
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    await approve(ctx, buyer.user, (await attemptOf(ctx, created.body.id as string)).id);
+    return buyer;
+  }
+
+  it('(a) trocar só o complemento do endereço não burla: CEP + número iguais ao de um pedido pago continuam recusados', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 50 }]);
+    const coupon = await firstCoupon();
+    const address = unique();
+    await paidOnce(shop, address);
+    const clone = await fresh(shop, { ...address, complement: 'casa 2' });
+    await addToCart(ctx, clone.user, shop.variants[0]!, 1).expect(200);
+    const res = await applyCoupon(clone.user.accessToken, coupon.code);
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+    expect(res.body.code).toBe('COUPON_FIRST_PURCHASE_ONLY');
+    // "S/N", maiúsculas e pontuação no número também são o mesmo endereço
+    const sn = unique();
+    await paidOnce(shop, { ...sn, number: 'S/N' });
+    const clone2 = await fresh(shop, { ...sn, number: 's n' });
+    await addToCart(ctx, clone2.user, shop.variants[0]!, 1).expect(200);
+    expect((await applyCoupon(clone2.user.accessToken, coupon.code)).status).toBe(422);
+  });
+
+  it('(b) pedido ainda não pago também conta: o 2º no mesmo endereço fica sem o cupom', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 50 }]);
+    const coupon = await firstCoupon();
+    const address = unique();
+    const c = await fresh(shop, address);
+    const d = await fresh(shop, { ...address, complement: 'fundos' });
+    for (const who of [c, d]) {
+      await addToCart(ctx, who.user, shop.variants[0]!, 1).expect(200);
+      await applyCoupon(who.user.accessToken, coupon.code).expect(200); // as duas aplicaram ANTES de qualquer pedido
+    }
+    const first = await placeOrder(ctx, c.user, c.addressId);
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    expect(first.body.summary.discount.amount).toBe(1_000);
+    const second = await placeOrder(ctx, d.user, d.addressId); // C ainda não pagou
+    expect(second.status === 201 ? second.body.summary.discount.amount : 0).toBe(0);
+    expect([201, 409, 422]).toContain(second.status);
+    expect(await ctx.db.select().from(orders).where(eq(orders.couponCode, coupon.code))).toHaveLength(1);
+  });
+
+  it('(b) pedidos SIMULTÂNEOS no mesmo endereço antes do pagamento: só um leva o desconto', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 50 }]);
+    const coupon = await firstCoupon();
+    const address = unique();
+    const who = [await fresh(shop, address), await fresh(shop, { ...address, complement: 'ap 2' }), await fresh(shop, { ...address, complement: 'ap 3' })];
+    for (const w of who) {
+      await addToCart(ctx, w.user, shop.variants[0]!, 1).expect(200);
+      await applyCoupon(w.user.accessToken, coupon.code).expect(200);
+    }
+    const results = await Promise.all(who.map((w) => placeOrder(ctx, w.user, w.addressId)));
+    const discounted = results.filter((r) => r.status === 201 && r.body.summary.discount.amount > 0);
+    expect(discounted).toHaveLength(1);
+    expect(await ctx.db.select().from(orders).where(eq(orders.couponCode, coupon.code))).toHaveLength(1);
+  });
+
+  it('(c) o documento do pagador entra como chave: outra conta, outro endereço, telefone e aparelho, mesmo CPF, é recusada no pedido', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 5_000, stock: 50 }]);
+    const coupon = await firstCoupon();
+    const document = '52998224725';
+    const buyer = await paidOnce(shop, unique(), { payerDocument: document });
+    expect((await orderRow(ctx, (await ctx.db.select().from(orders).where(eq(orders.userId, buyer.user.userId)))[0]!.id)).payerDocumentHash).toMatch(/^[0-9a-f]{64}$/); // só o HMAC, nunca o CPF
+    const other = await fresh(shop, unique());
+    await addToCart(ctx, other.user, shop.variants[0]!, 1).expect(200);
+    await applyCoupon(other.user.accessToken, coupon.code).expect(200); // o CPF ainda não é conhecido na sacola
+    const res = await placeOrder(ctx, other.user, other.addressId, { payerDocument: document });
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+    expect(res.body.code).toBe('COUPON_FIRST_PURCHASE_ONLY');
+    const honest = await fresh(shop, unique());
+    await addToCart(ctx, honest.user, shop.variants[0]!, 1).expect(200);
+    await applyCoupon(honest.user.accessToken, coupon.code).expect(200);
+    expect((await placeOrder(ctx, honest.user, honest.addressId, { payerDocument: '11144477735' })).status).toBe(201);
+  });
+
+  it('(d) cupom de primeira compra só com teto de orçamento por campanha (`maxUses` obrigatório)', async () => {
+    const ops = await createAdmin(ctx, 'operations');
+    const base = { kind: 'fixed', value: 1_000, minOrderCents: 0, startsAt: new Date(Date.now() - 1000).toISOString(), endsAt: new Date(Date.now() + 86_400_000).toISOString(), perCustomerLimit: 1, firstPurchaseOnly: true };
+    const create = (over: Record<string, unknown>) => ctx.http.post('/v1/admin/coupons').set(bearer(ops.accessToken)).send({ ...base, ...over });
+    const code = () => `PB${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const without = await create({ code: code() });
+    expect(without.status).toBe(400);
+    expect(JSON.stringify(without.body)).toContain('maxUses');
+    const made = await create({ code: code(), maxUses: 200 });
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    const removeCap = await ctx.http.patch(`/v1/admin/coupons/${made.body.id}`).set(bearer(ops.accessToken)).send({ maxUses: null });
+    expect(removeCap.status).toBe(400);
+    const turnOn = await create({ code: code(), firstPurchaseOnly: false });
+    expect(turnOn.status).toBe(201);
+    expect((await ctx.http.patch(`/v1/admin/coupons/${turnOn.body.id}`).set(bearer(ops.accessToken)).send({ firstPurchaseOnly: true })).status).toBe(400); // liga sem teto
+    void customerAt;
   });
 });

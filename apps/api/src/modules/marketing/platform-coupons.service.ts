@@ -88,6 +88,8 @@ export class PlatformCouponsService {
     if (input.kind === 'fixed' && input.value < 1) problems.push({ field: 'value', message: 'Informe o valor do desconto em centavos.' });
     if (input.kind === 'free_shipping' && input.value !== 0) problems.push({ field: 'value', message: 'Frete grátis não leva valor.' });
     if (input.kind !== 'percent' && input.percentCapCents != null) problems.push({ field: 'percentCapCents', message: 'O teto só vale para cupom percentual.' });
+    // SEC-170 (DEC-050): cupom de primeira compra só com teto de orçamento por campanha (usos totais), porque a multiconta nunca fecha 100%.
+    if (input.firstPurchaseOnly && (input.maxUses === null || input.maxUses === undefined)) problems.push({ field: 'maxUses', message: 'Cupom de primeira compra precisa de um limite total de usos (teto da campanha).' });
     if (input.endsAt <= input.startsAt) problems.push({ field: 'endsAt', message: 'O fim precisa ser depois do início.' });
     if (problems.length > 0) throw errors.validation(problems);
   }

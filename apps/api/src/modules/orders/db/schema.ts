@@ -71,6 +71,8 @@ export const orders = pgTable(
     cancelledAt: timestamp({ withTimezone: true }),
     /** WB-253 C1: quando o aviso de atraso (1 push por pedido) saiu; nulo = ainda não avisou. */
     lateNotifiedAt: timestamp({ withTimezone: true }),
+    /** SEC-170: HMAC do CPF do pagador (nunca o CPF), chave do cupom de primeira compra contra multiconta. */
+    payerDocumentHash: varchar({ length: 64 }),
     cancelledBy: text({ enum: ['customer', 'store', 'system', 'admin'] }),
     cancelReason: varchar({ length: 200 }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

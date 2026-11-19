@@ -291,7 +291,16 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           // I5 / SEC-148: a revisão é "consumida" na mesma transação do pedido; a criação concorrente (outra chave, outro aparelho)
           // enxerga a revisão nova sob a trava e recebe CART_CHANGED, em vez de gerar 2 pedidos e 2 cobranças.
           await tx.update(carts).set({ revision: sql`${carts.revision} + 1`, updatedAt: new Date() }).where(eq(carts.id, quote.cartId));
-          if (quote.coupon) await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
+          const payerDocumentHash = input.payerDocument ? this.cart.payerDocumentHash(input.payerDocument) : null;
+          if (quote.coupon) {
+            await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
+            // SEC-170: sob a trava do cupom (pedidos simultâneos se enfileiram), reconfere a primeira compra já com o documento do
+            // pagador e vendo os pedidos não pagos das outras contas. O uso fica reservado a partir deste pedido (resgate abaixo).
+            if (quote.coupon.firstPurchaseOnly) {
+              const taken = await this.cart.hasTakenFirstPurchase(principal.userId, { address: input.mode === 'delivery' && quote.address ? { cep: quote.address.cep, number: quote.address.number, complement: quote.address.complement } : null, documentHash: payerDocumentHash });
+              if (taken) throw errors.unprocessable('COUPON_FIRST_PURCHASE_ONLY', 'Cupom só para a primeira compra', { detail: 'Este cupom é só para a primeira compra e já foi usado por você, neste endereço, telefone, aparelho ou documento.' });
+            }
+          }
           try {
             await this.inventory.reserve(tx, lines);
           } catch (error) {
@@ -321,6 +330,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               etaToAt: input.mode === 'delivery' && quote.eta ? new Date(Date.now() + quote.eta.toMin * 60_000) : null,
               pickup: input.mode === 'pickup' ? { address: settings.pickupUseStoreAddress ? storeAddressLine(store) : (settings.pickupAddress ?? storeAddressLine(store)), instructions: settings.pickupInstructions, prepMinMinutes: settings.pickupPrepMinMinutes, prepMaxMinutes: settings.pickupPrepMaxMinutes } : null,
               pickupCode: input.mode === 'pickup' ? generatePickupCode() : null,
+              payerDocumentHash,
               couponId: quote.coupon?.id ?? null,
               couponCode: quote.coupon?.code ?? null,
               subtotalCents: finance.subtotalCents,

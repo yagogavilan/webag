@@ -18,19 +18,28 @@ import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
 import { serviceFeeCents, summarize } from './domain/pricing.js';
 import { computeEta, DeliveryFeesService, presentEta, type DeliveryFeeSnapshot, type EtaEstimate, type EtaView } from '../logistics/index.js';
 
-/** Endereço do pedido normalizado para comparar entre contas (SEC-060): CEP, número e complemento. */
+/** Endereço do pedido para comparar entre contas (SEC-060/SEC-170): só CEP e número contam; o complemento é ignorado (trocá-lo não é outro endereço). */
 export interface PurchaseAddressHint {
   cep: string | null;
   number: string | null;
   complement: string | null;
 }
 
+export interface PurchaseHints {
+  address?: PurchaseAddressHint | null;
+  /** HMAC do CPF do pagador (SEC-170); só se conhece na criação do pedido. */
+  documentHash?: string | null;
+}
+
 export abstract class PurchaseHistoryPort {
   /**
-   * "Primeira compra" (SEC-155/SEC-060): a conta, OU outra conta com o mesmo telefone, aparelho ou endereço (CEP + número +
-   * complemento), já tem pedido pago e não encerrado sem entrega? Pedido cancelado, recusado ou expirado não conta (foi estornado).
+   * "Primeira compra" (SEC-155/SEC-060/SEC-170): a conta, OU outra conta com o mesmo telefone, aparelho, endereço (CEP + número,
+   * SEM o complemento) ou documento do pagador, já tem pedido pago e não encerrado sem entrega, ou um pedido ainda não pago (e
+   * não vencido) que reservou um cupom de primeira compra? Pedido cancelado, recusado ou expirado não conta (foi estornado).
    */
-  abstract hasPaidOrder(userId: string, hints?: { address?: PurchaseAddressHint | null }): Promise<boolean>;
+  abstract hasPaidOrder(userId: string, hints?: PurchaseHints): Promise<boolean>;
+  /** HMAC do CPF (só dígitos) para guardar no pedido; o CPF em si não é guardado. */
+  abstract documentHash(document: string): string;
 }
 
 export type CartMode = 'delivery' | 'pickup';
@@ -130,6 +139,15 @@ export class CartService {
    * Fotografia do checkout (Onda 4): a MESMA conta da sacola, com os dados internos que o pedido congela (categoria e
    * comissão por item, cupom e endereço). O que a sacola mostra é o que o pedido cobra.
    */
+  /** SEC-170: o pedido, já sob a trava do cupom, reconfere a "primeira compra" com o documento do pagador (e vê pedidos simultâneos não pagos). */
+  hasTakenFirstPurchase(userId: string, hints: PurchaseHints): Promise<boolean> {
+    return this.purchases.hasPaidOrder(userId, hints);
+  }
+
+  payerDocumentHash(document: string): string {
+    return this.purchases.documentHash(document);
+  }
+
   async quote(principal: Principal, ctx: CartContext) {
     await this.expireIfStale(principal.userId);
     return this.buildFull(principal, ctx, []);
@@ -372,7 +390,7 @@ export class CartService {
       totalUses: uses?.total ?? 0,
       customerUses: uses?.mine ?? 0,
       // Só consulta o histórico quando o cupom é de primeira compra (evita a consulta nos demais).
-      hasPaidOrder: coupon.firstPurchaseOnly ? await this.purchases.hasPaidOrder(principal.userId, { address }) : false,
+      hasPaidOrder: coupon.firstPurchaseOnly ? await this.purchases.hasPaidOrder(principal.userId, { address }) : false, // sem o documento: ele só é conhecido ao criar o pedido
       isStoreMember: member !== undefined,
     });
   }
