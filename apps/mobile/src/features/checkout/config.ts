@@ -31,3 +31,20 @@ export const MP_PUBLIC_KEY: string = process.env.EXPO_PUBLIC_MP_PUBLIC_KEY ?? ''
 
 /** PIX vale 15 min (RN, WB-024): só para a contagem de fallback; o valor oficial é `pix.expiresAt` do servidor. */
 export const PIX_ALERT_SECONDS = 120;
+
+/**
+ * Site público do Webag (página segura do cartão). `EXPO_PUBLIC_WEB_URL` por ambiente; tudo aqui é público.
+ * O app só abre `WEB_PUBLIC_URL/pagar/cartao?i=<token>`: a URL que vem da API é conferida contra este endereço antes de abrir.
+ */
+export const WEB_PUBLIC_URL: string = (process.env.EXPO_PUBLIC_WEB_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+
+/** A URL da intenção é da página segura do Webag (mesma origem, rota fixa, token `i`)? Qualquer outra coisa nunca é aberta (SEC-126). */
+export function isSecureCardUrl(raw: string, base: string = WEB_PUBLIC_URL): boolean {
+  try {
+    const url = new URL(raw);
+    const origin = new URL(base);
+    return url.origin === origin.origin && url.pathname === '/pagar/cartao' && (url.searchParams.get('i') ?? '').length >= 16 && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}

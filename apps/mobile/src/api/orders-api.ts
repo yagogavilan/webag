@@ -1,9 +1,12 @@
 import {
   cancelOrder,
+  createCardIntent,
   createOrder,
   getOrder,
   getOrderPayment,
   listOrders,
+  type CardIntent,
+  type CardIntentRequest,
   type CreateOrderRequest,
   type Order,
   type OrderPage,
@@ -33,3 +36,9 @@ export const fetchOrderPayment = (orderId: string, signal?: AbortSignal): Promis
 /** Idempotente no servidor: cancelar de novo devolve 200 com o mesmo pedido. */
 export const cancelMyOrder = (orderId: string, reason?: string): Promise<Order> =>
   request((init) => cancelOrder(orderId, reason ? { reason } : {}, init), { retry: true });
+
+/**
+ * Cartão pela página segura (B.2): o app NUNCA toca em dado de cartão. Pede a intenção (o que quer comprar e o total que viu,
+ * SEC-147) e abre `url` no navegador do sistema. Sem `retry`: cada tentativa é uma intenção nova de uso único.
+ */
+export const startCardIntent = (body: CardIntentRequest): Promise<CardIntent> => request((init) => createCardIntent(body, init));

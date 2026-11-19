@@ -7,7 +7,8 @@ import { theme } from '../../theme';
 import type { PayMethod } from './state';
 
 export interface PaymentBlockProps {
-  method: PayMethod;
+  /** Sem escolha padrão: PIX e cartão têm o mesmo peso (DEC-035). */
+  method: PayMethod | null;
   onMethodChange: (method: PayMethod) => void;
   cardAvailable: boolean;
   cardDisabledReason?: string | undefined;
@@ -17,11 +18,11 @@ export interface PaymentBlockProps {
   cpfField?: React.ReactNode;
 }
 
-/** Bloco "Como você quer pagar?" (spec S3, 3): PIX (padrão) e cartão de crédito. */
+/** Bloco "Como você quer pagar?": PIX e cartão com o mesmo peso e nenhum pré-selecionado (DEC-035: sem destaque ao PIX). */
 export function PaymentBlock({ method, onMethodChange, cardAvailable, cardDisabledReason, cardForm, cpfField }: PaymentBlockProps) {
   return (
     <View style={styles.block} testID="checkout.payment">
-      <Text accessibilityRole="header" variant="title2">
+      <Text accessibilityRole="header" variant="title1">
         {t('checkout.pay')}
       </Text>
       <View accessibilityRole="radiogroup" style={styles.group}>

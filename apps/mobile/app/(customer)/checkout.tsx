@@ -1,11 +1,11 @@
 import type { CheckoutChange } from '@webag/shared';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
 import { Header } from '../../src/components/Header';
-import { Handbag } from '../../src/components/icons';
+import { Handbag, Lock } from '../../src/components/icons';
 import { Screen } from '../../src/components/Screen';
 import { Skeleton } from '../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../src/components/StateViews';
@@ -18,14 +18,17 @@ import { PriceSummary } from '../../src/features/cart/PriceSummary';
 import { formatOpensAt } from '../../src/features/catalog/format';
 import { modeStore } from '../../src/features/catalog/queries';
 import { ChangedSheet } from '../../src/features/checkout/ChangedSheet';
-import { isCheckoutEnabled, PAYMENT_MODE } from '../../src/features/checkout/config';
-import type { CheckoutFailure } from '../../src/features/checkout/errors';
+import { isCheckoutEnabled, isSecureCardUrl } from '../../src/features/checkout/config';
+import { cardIntentMemory } from '../../src/features/checkout/card-intent';
+import { startCardIntent } from '../../src/api/orders-api';
+import { ApiError } from '../../src/api/problem';
+import { toCheckoutFailure, type CheckoutFailure } from '../../src/features/checkout/errors';
 import { useCheckoutCart, useGuestMergePending, useSubmitOrder } from '../../src/features/checkout/hooks';
-import { CardBlock } from '../../src/features/checkout/CardBlock';
 import { PaymentBlock } from '../../src/features/checkout/PaymentBlock';
 import { ReceiveBlock } from '../../src/features/checkout/ReceiveBlock';
 import { addressIsReady, deriveGate, payLabel, pendingChanges, type PayMethod, type ReceiveMode } from '../../src/features/checkout/state';
 import { t } from '../../src/i18n';
+import { formatMoney } from '../../src/lib/format';
 import { haptic } from '../../src/lib/haptics';
 import { isValidCpf, maskCpf, onlyDigits } from '../../src/lib/masks';
 import { useOnline } from '../../src/lib/useOnline';
@@ -41,16 +44,15 @@ export default function CheckoutScreen() {
   const online = useOnline();
   const address = useCurrentAddress();
   const [mode, setMode] = useState<ReceiveMode>(() => modeStore.get());
-  const [method, setMethod] = useState<PayMethod>('pix');
-  const [cardToken, setCardToken] = useState<string | null>(null);
-  const [installments, setInstallments] = useState(1);
-  const [cardError, setCardError] = useState<string | null>(null);
+  const [method, setMethod] = useState<PayMethod | null>(null);
+  const [methodError, setMethodError] = useState<string | null>(null);
   const [cpf, setCpf] = useState('');
   const [cpfError, setCpfError] = useState<string | null>(null);
   const [needsCpf, setNeedsCpf] = useState(false);
   const [failure, setFailure] = useState<CheckoutFailure | null>(null);
   const [changedOpen, setChangedOpen] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [cardBusy, setCardBusy] = useState(false);
   const [serverChanges, setServerChanges] = useState<CheckoutChange[]>([]);
   const cart = useCheckoutCart(mode);
   const mergePending = useGuestMergePending();
@@ -116,7 +118,18 @@ export default function CheckoutScreen() {
   const gate = deriveGate(view, mode, address);
   const summary = view.summary;
   const total = cart.cart.summary.total.amount;
-  const label = gate.kind !== 'ready' ? (gate.label ?? t('checkout.backToCart')) : submitting ? (method === 'pix' ? t('checkout.generatingPix') : t('checkout.paying')) : payLabel(method, total, installments);
+  const label =
+    gate.kind !== 'ready'
+      ? (gate.label ?? t('checkout.backToCart'))
+      : method === null
+        ? t('checkout.choosePay')
+        : submitting
+          ? method === 'pix'
+            ? t('checkout.generatingPix')
+            : t('checkout.paying')
+          : method === 'card'
+            ? t('checkout.payCardSecure', { total: formatMoney(total) })
+            : payLabel(method, total);
 
   const onFailure = (f: CheckoutFailure) => {
     void haptic('error');
@@ -153,8 +166,9 @@ export default function CheckoutScreen() {
       setChangedOpen(true);
       return;
     }
-    if (method === 'card' && !cardToken) {
-      setCardError(t('card.fillCard'));
+    if (method === null) {
+      void haptic('error');
+      setMethodError(t('checkout.choosePayError'));
       return;
     }
     if (needsCpf && !isValidCpf(cpf)) {
@@ -162,17 +176,47 @@ export default function CheckoutScreen() {
       return;
     }
     setFailure(null);
+    if (method === 'card') return void onCard();
     const result = await submit(cart.cart as NonNullable<typeof cart.cart>, {
       mode,
       addressId: address && addressIsReady(address) ? address.id : null,
       method,
-      ...(method === 'card' && cardToken ? { card: { token: cardToken, installments } } : {}),
       ...(needsCpf ? { payerDocument: onlyDigits(cpf) } : {}),
     });
     if ('ignored' in result) return;
     if (!result.ok) return onFailure(result.failure);
     void haptic('success');
     router.replace({ pathname: '/pay/[orderId]', params: { orderId: result.order.id } } as never);
+  };
+
+  /** Cartão: o app NUNCA toca em dado de cartão. Pede a intenção ao servidor (o total que o cliente viu, SEC-147) e abre a página segura. */
+  const onCard = async () => {
+    const current = cart.cart;
+    if (!current || cardBusy) return;
+    setCardBusy(true);
+    try {
+      const intent = await startCardIntent({
+        mode,
+        ...(mode === 'delivery' && address && addressIsReady(address) ? { addressId: address.id } : {}),
+        cartRevision: current.revision,
+        expectedTotalCents: current.summary.total.amount,
+        ...(needsCpf ? { payerDocument: onlyDigits(cpf) } : {}),
+      });
+      // A URL vem da API, mas só a página segura do Webag (mesma origem, rota fixa) é aberta: qualquer outra é recusada (SEC-126)
+      if (!isSecureCardUrl(intent.url)) {
+        toast.show(t('cardWait.notOpened'));
+        return;
+      }
+      cardIntentMemory.set({ url: intent.url, startedAt: Date.now(), expiresAt: new Date(intent.expiresAt).getTime() });
+      await Linking.openURL(intent.url);
+      void haptic('light');
+      router.push('/card-wait' as never);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'PAYER_DOCUMENT_REQUIRED') return onFailure({ kind: 'payer-document' });
+      onFailure(toCheckoutFailure(e));
+    } finally {
+      setCardBusy(false);
+    }
   };
 
   const onAccept = async () => {
@@ -188,7 +232,10 @@ export default function CheckoutScreen() {
     }
   };
 
-  const failureBanner = failure ? <FailureBanner failure={failure} onChangeCard={() => { setFailure(null); setCardToken(null); }} onPix={() => { setFailure(null); setMethod('pix'); }} onBackToCart={() => router.replace('/cart')} onVerify={() => router.push('/verify-email')} /> : null;
+  const failureBanner = failure ? <FailureBanner failure={failure} onChangeCard={() => setFailure(null)} onPix={() => {
+          setFailure(null);
+          setMethod('pix');
+        }} onBackToCart={() => router.replace('/cart')} onVerify={() => router.push('/verify-email')} /> : null;
 
   const footer = (
     <View style={styles.footer}>
@@ -199,7 +246,7 @@ export default function CheckoutScreen() {
           {t('checkout.stillGenerating')}
         </Text>
       ) : null}
-      <Button disabled={gate.inert} label={label} loading={submitting} onPress={() => void onPay()} size="lg" testID="checkout.submit" />
+      <Button disabled={gate.inert} label={label} loading={submitting || cardBusy} muted={gate.kind === 'ready' && method === null} onPress={() => void onPay()} size="lg" testID="checkout.submit" />
     </View>
   );
 
@@ -218,19 +265,14 @@ export default function CheckoutScreen() {
         ready={addressIsReady(address)}
       />
       <PaymentBlock
-        cardAvailable={PAYMENT_MODE === 'fake'}
-        cardDisabledReason={PAYMENT_MODE === 'fake' ? undefined : t('card.needsKey')}
+        cardAvailable
         cardForm={
-          <CardBlock
-            error={cardError}
-            installments={installments}
-            onInstallments={setInstallments}
-            onToken={(token) => {
-              setCardToken(token);
-              setCardError(null);
-            }}
-            token={cardToken}
-          />
+          <View accessible style={styles.secureNote} testID="checkout.card-secure-note">
+            <Lock color={theme.color.action.primary} duo={theme.color.brand[300]} size={24} weight="duotone" />
+            <Text style={styles.secureText} variant="caption">
+              {t('cardWait.notice')}
+            </Text>
+          </View>
         }
         cpfField={
           needsCpf ? (
@@ -251,8 +293,12 @@ export default function CheckoutScreen() {
           ) : null
         }
         method={method}
-        onMethodChange={setMethod}
+        onMethodChange={(next) => {
+          setMethod(next);
+          setMethodError(null);
+        }}
       />
+      {methodError ? <Banner testID="checkout.method-error" text={methodError} tone="warning" /> : null}
       <View style={styles.summary} testID="checkout.summary">
         <Text accessibilityRole="header" variant="title2">
           {t('checkout.summary')}
@@ -309,4 +355,6 @@ function FailureBanner({ failure, onBackToCart, onVerify, onChangeCard, onPix }:
 const styles = StyleSheet.create({
   footer: { gap: theme.space[2] },
   summary: { gap: theme.space[2] },
+  secureNote: { flexDirection: 'row', gap: theme.space[3], alignItems: 'center', backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.lg, padding: theme.space[3] },
+  secureText: { flex: 1 },
 });

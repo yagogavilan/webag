@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import CheckoutScreen from '../app/(customer)/checkout';
 import { ApiError } from '../src/api/problem';
 import { sessionStore } from '../src/api/session';
@@ -14,7 +15,8 @@ const router = expoRouter.__router;
 const mockFetch = jest.fn();
 jest.mock('../src/api/cart-api', () => ({ fetchCart: (...a: unknown[]) => mockFetch(...a), acceptCartChanges: jest.fn(), putCartItem: jest.fn(), mergeGuestCart: jest.fn() }));
 const mockPlace = jest.fn();
-jest.mock('../src/api/orders-api', () => ({ placeOrder: (...a: unknown[]) => mockPlace(...a) }));
+const mockIntent = jest.fn();
+jest.mock('../src/api/orders-api', () => ({ placeOrder: (...a: unknown[]) => mockPlace(...a), startCardIntent: (...a: unknown[]) => mockIntent(...a), fetchOrders: jest.fn() }));
 
 const login = () => sessionStore.setSession({ accessToken: 'a', refreshToken: 'r'.repeat(40), accessExpiresAt: Date.now() + 900_000, user: { id: 'u1', name: 'Maria', email: 'm@x.com', emailVerified: true } });
 
@@ -22,6 +24,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   mockFetch.mockReset();
   mockPlace.mockReset();
+  mockIntent.mockReset();
   mockFetch.mockResolvedValue(serverCart());
   await sessionStore.clear();
   await seedAddress('full', true);
@@ -40,6 +43,7 @@ describe('S3. Checkout', () => {
     await login();
     mockPlace.mockResolvedValue(orderFixture({ status: 'awaiting_payment' }));
     await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
     const pay = await screen.findByTestId('checkout.submit');
     expect(screen.getByTestId('checkout.summary')).toBeOnTheScreen();
     await fireEvent.press(pay);
@@ -55,6 +59,7 @@ describe('S3. Checkout', () => {
     let release: (v: unknown) => void = () => undefined;
     mockPlace.mockReturnValue(new Promise((r) => (release = r)));
     await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
     const pay = await screen.findByTestId('checkout.submit');
     await fireEvent.press(pay);
     await fireEvent.press(pay);
@@ -62,43 +67,50 @@ describe('S3. Checkout', () => {
     release(orderFixture());
   });
 
-  it('cartão de teste: manda só o token do provedor, nunca dados de cartão', async () => {
+  it('nenhum meio vem escolhido (sem destaque ao PIX): tocar em pagar pede a escolha e não chama a API', async () => {
     await login();
-    mockPlace.mockResolvedValue(orderFixture({ payment: { method: 'card', status: 'approved' } }));
     await renderScreen(<CheckoutScreen />);
-    await fireEvent.press(await screen.findByTestId('checkout.pay-card'));
-    await fireEvent.press(screen.getByTestId('card.test-fake_tok_approved'));
-    await fireEvent.press(screen.getByTestId('card.installment-2'));
-    await fireEvent.press(screen.getByTestId('checkout.submit'));
-    await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(1));
-    expect(mockPlace.mock.calls[0]?.[0]).toMatchObject({ paymentMethod: 'card', card: { token: 'fake_tok_approved', installments: 2 } });
+    const pay = await screen.findByTestId('checkout.submit');
+    expect(screen.getByText('Escolha como pagar')).toBeOnTheScreen();
+    await fireEvent.press(pay);
+    expect(await screen.findByTestId('checkout.method-error')).toBeOnTheScreen();
+    expect(mockPlace).not.toHaveBeenCalled();
+    expect(mockIntent).not.toHaveBeenCalled();
   });
 
-  it('cartão sem escolher: diz o que falta ao tocar, sem chamar a API', async () => {
+  it('cartão: pede a intenção com o total visto e abre SÓ a página segura do Webag; nunca cria pedido nem lê cartão', async () => {
     await login();
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    mockIntent.mockResolvedValue({ token: 'tok', url: 'http://localhost:3001/pagar/cartao?i=0123456789abcdef0123', expiresAt: new Date(Date.now() + 900_000).toISOString(), amount: { amount: 18680, currency: 'BRL' } });
     await renderScreen(<CheckoutScreen />);
     await fireEvent.press(await screen.findByTestId('checkout.pay-card'));
+    expect(screen.getByTestId('checkout.card-secure-note')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('checkout.submit'));
-    expect(await screen.findByText('Confira os dados do cartão.')).toBeOnTheScreen();
+    await waitFor(() => expect(mockIntent).toHaveBeenCalledTimes(1));
+    expect(mockIntent.mock.calls[0]?.[0]).toMatchObject({ mode: 'delivery', cartRevision: 3, expectedTotalCents: 18680 });
+    expect(JSON.stringify(mockIntent.mock.calls[0]?.[0])).not.toMatch(/token|card|cvv|number/i);
+    await waitFor(() => expect(open).toHaveBeenCalledWith('http://localhost:3001/pagar/cartao?i=0123456789abcdef0123'));
+    expect(router.push).toHaveBeenCalledWith('/card-wait');
     expect(mockPlace).not.toHaveBeenCalled();
   });
 
-  it('cartão recusado: oferece trocar o cartão ou pagar com PIX', async () => {
+  it('cartão: URL de outro endereço vinda da API nunca é aberta', async () => {
     await login();
-    mockPlace.mockRejectedValue(new ApiError({ kind: 'problem', status: 422, code: 'PAYMENT_DECLINED', detail: 'Saldo insuficiente.' }));
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    open.mockClear();
+    mockIntent.mockResolvedValue({ token: 'tok', url: 'https://evil.example/pagar/cartao?i=0123456789abcdef0123', expiresAt: new Date(Date.now() + 900_000).toISOString(), amount: { amount: 18680, currency: 'BRL' } });
     await renderScreen(<CheckoutScreen />);
     await fireEvent.press(await screen.findByTestId('checkout.pay-card'));
-    await fireEvent.press(screen.getByTestId('card.test-fake_tok_insufficient'));
     await fireEvent.press(screen.getByTestId('checkout.submit'));
-    expect(await screen.findByTestId('card.error-sheet')).toHaveTextContent(/O banco não aprovou esse cartão/);
-    await fireEvent.press(screen.getByTestId('card.pay-with-pix'));
-    expect(screen.queryByTestId('card.error-sheet')).toBeNull();
+    await waitFor(() => expect(mockIntent).toHaveBeenCalled());
+    expect(open).not.toHaveBeenCalled();
   });
 
   it('sem conexão ao pagar: avisa e não envia', async () => {
     await login();
     (jest.requireMock('expo-network') as { useNetworkState: jest.Mock }).useNetworkState.mockReturnValue({ isConnected: false, isInternetReachable: false });
     await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
     await fireEvent.press(await screen.findByTestId('checkout.submit'));
     expect(mockPlace).not.toHaveBeenCalled();
     (jest.requireMock('expo-network') as { useNetworkState: jest.Mock }).useNetworkState.mockReturnValue({ isConnected: true, isInternetReachable: true });

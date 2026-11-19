@@ -54,7 +54,11 @@ export const fetchStoreProducts = (storeId: string, params: { sectionId?: string
 export const fetchStoreReviews = (storeId: string, cursor?: string) =>
   request((init) => listBrowseStoreReviews(storeId, { limit: 10, ...(cursor ? { cursor } : {}) }, init), PUBLIC);
 
-export const fetchProduct = (productId: string) => request((init) => getBrowseProduct(productId, init), PUBLIC);
+// `getBrowseProduct` ganhou `params` (lat/lng, DEC-053). Chamada tolerante às duas assinaturas até o cliente gerado ser regerado
+// em todos os ambientes (aridade 3 = com params). Remover o ramo antigo quando `packages/shared` estiver no contrato novo.
+const getProduct = getBrowseProduct as unknown as (id: string, ...rest: unknown[]) => ReturnType<typeof getBrowseProduct>;
+export const fetchProduct = (productId: string) =>
+  request((init) => (getBrowseProduct.length >= 3 ? getProduct(productId, undefined, init) : getProduct(productId, init)), PUBLIC);
 
 export const fetchProductReviews = (productId: string, cursor?: string) =>
   request((init) => listBrowseProductReviews(productId, { limit: 10, ...(cursor ? { cursor } : {}) }, init), PUBLIC);
