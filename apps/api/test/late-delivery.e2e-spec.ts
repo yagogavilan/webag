@@ -186,6 +186,9 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       // o cliente vê o cupom em "Meus cupons"; o outro cliente não
       const listed = await ctx.http.get('/v1/me/coupons').set(bearer(r.buyer.user.accessToken)).expect(200);
       expect(listed.body.data).toEqual([expect.objectContaining({ code: coupon!.code, kind: 'free_shipping', status: 'available', origin: 'late_delivery' })]);
+      // F2: o pedido mostra a compensação (bilhete "Entrega grátis no próximo pedido"); a outra conta não lê o pedido (404)
+      const view = (await ctx.http.get(`/v1/orders/${r.orderId}`).set(bearer(r.buyer.user.accessToken)).expect(200)).body;
+      expect(view.compensation).toEqual({ kind: 'free_shipping', valueCents: null, code: coupon!.code, validUntil: coupon!.endsAt.toISOString(), status: 'available' });
       // intransferível: outro cliente não aplica nem descobre o código
       const other = await shopWith(ctx, [{ name: 'Item', priceCents: 8_000, stock: 5 }]);
       const stranger = await customerAt(ctx, other.origin);
@@ -199,6 +202,16 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
       await addToCart(ctx, r.buyer.user, shop2.variants[0]!, 1).expect(200);
       const mine = await ctx.http.put('/v1/cart/coupon').set(bearer(r.buyer.user.accessToken)).send({ code: coupon!.code });
       expect(mine.status, JSON.stringify(mine.body)).toBe(200);
+    });
+
+    it('F2: sem compensação o pedido traz `compensation: null`; com cupom de valor traz o valor em centavos', async () => {
+      const none = await deliver(5); // dentro da tolerância
+      expect((await ctx.http.get(`/v1/orders/${none.orderId}`).set(bearer(none.buyer.user.accessToken)).expect(200)).body.compensation).toBeNull();
+      await useParam(ctx, 'entrega_compensacao_tipo', 'cupom_valor');
+      await useParam(ctx, 'entrega_compensacao_cents', 1200);
+      const paid = await deliver(30);
+      expect((await ctx.http.get(`/v1/orders/${paid.orderId}`).set(bearer(paid.buyer.user.accessToken)).expect(200)).body.compensation).toMatchObject({ kind: 'fixed', valueCents: 1200, status: 'available' });
+      await useParam(ctx, 'entrega_compensacao_tipo', 'frete_gratis_proximo');
     });
 
     it('dentro da tolerância, no prazo ou com tipo "nenhuma": nenhum cupom', async () => {

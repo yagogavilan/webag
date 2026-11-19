@@ -1011,7 +1011,7 @@ export const ListParametersResponse = zod.object({
 
 
 /**
- * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Validação cruzada do ETA (RN-02, BUG-022), também no `reset`: `entrega_max_min` menos `entrega_faixa_min` precisa cobrir `entrega_preparo_padrao_min` + `entrega_despacho_min` + 5 e `entrega_faixa_min` <= `entrega_max_min` / 4; senão 422 `PARAMETER_OUT_OF_RANGE` com a prévia do alcance no `detail` e em `reachKm` (km de alcance que o valor proposto daria). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alterar parâmetro
  */
 export const UpdateParameterParams = zod.object({
@@ -7614,7 +7614,7 @@ export const GetCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7748,7 +7748,7 @@ export const ClearCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7895,7 +7895,7 @@ export const SetCartItemResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8033,7 +8033,7 @@ export const RemoveCartItemResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8175,7 +8175,7 @@ export const ApplyCartCouponResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8308,7 +8308,7 @@ export const RemoveCartCouponResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8442,7 +8442,7 @@ export const AcknowledgeCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8589,7 +8589,7 @@ export const MergeCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
-  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -9449,7 +9449,7 @@ export const CancelOrderByStoreResponse = zod.object({
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016: fora do horário da logística ou pausada; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  *
  * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
@@ -9519,6 +9519,13 @@ export const CreateOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
 }),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
+  "compensation": zod.union([zod.null(),zod.object({
+  "kind": zod.enum(['free_shipping', 'fixed']),
+  "valueCents": zod.int().nullable().describe('Só `fixed` (centavos); nulo em entrega grátis.'),
+  "code": zod.string().describe('Enviar em `PUT /v1/cart/coupon`; só o dono do pedido vê.'),
+  "validUntil": zod.iso.datetime({"offset":true}),
+  "status": zod.enum(['available', 'used', 'expired'])
+})]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9737,6 +9744,13 @@ export const GetOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
 }),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
+  "compensation": zod.union([zod.null(),zod.object({
+  "kind": zod.enum(['free_shipping', 'fixed']),
+  "valueCents": zod.int().nullable().describe('Só `fixed` (centavos); nulo em entrega grátis.'),
+  "code": zod.string().describe('Enviar em `PUT /v1/cart/coupon`; só o dono do pedido vê.'),
+  "validUntil": zod.iso.datetime({"offset":true}),
+  "status": zod.enum(['available', 'used', 'expired'])
+})]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9942,6 +9956,13 @@ export const CancelOrderLateResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
 }),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
+  "compensation": zod.union([zod.null(),zod.object({
+  "kind": zod.enum(['free_shipping', 'fixed']),
+  "valueCents": zod.int().nullable().describe('Só `fixed` (centavos); nulo em entrega grátis.'),
+  "code": zod.string().describe('Enviar em `PUT /v1/cart/coupon`; só o dono do pedido vê.'),
+  "validUntil": zod.iso.datetime({"offset":true}),
+  "status": zod.enum(['available', 'used', 'expired'])
+})]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -10356,6 +10377,13 @@ export const CancelOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
 }),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
+  "compensation": zod.union([zod.null(),zod.object({
+  "kind": zod.enum(['free_shipping', 'fixed']),
+  "valueCents": zod.int().nullable().describe('Só `fixed` (centavos); nulo em entrega grátis.'),
+  "code": zod.string().describe('Enviar em `PUT /v1/cart/coupon`; só o dono do pedido vê.'),
+  "validUntil": zod.iso.datetime({"offset":true}),
+  "status": zod.enum(['available', 'used', 'expired'])
+})]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -13546,7 +13574,7 @@ export const ExportReportOrdersCsvResponse = zod.unknown()
 
 
 /**
- * Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado. Repetir é idempotente. Pedido de outra conta: 404.
+ * Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado, mas impede a auto-conclusão de 24 h da corrida (RN-07): a operação decide (alerta `delivery_auto_conclude_held`). Repetir é idempotente. Pedido de outra conta: 404.
  * @summary Não recebi meu pedido (B.1)
  */
 export const ReportOrderNotReceivedParams = zod.object({

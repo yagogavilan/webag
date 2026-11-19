@@ -1126,6 +1126,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       cancelRequest,
       /** WB-253: atraso da entrega calculado no servidor (aviso, cancelamento sem custo e a resposta da operação); nulo fora da entrega ativa. */
       delay,
+      /** F2: compensação por atraso concedida a este pedido (cupom pessoal da migração 0042); nulo se não houve. O cupom está também em `GET /v1/me/coupons`. */
+      compensation: await this.compensationOf(order),
       /** B.1: prazos finais da troca já na entrada do pedido ("Troca até 25/11"); nulos fora do prazo ou sem entrega. */
       exchange: this.exchangeWindowOf(order),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
@@ -1134,6 +1136,19 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   }
 
   /** WB-253: estado de atraso do pedido de entrega; `null` quando o pedido não está em entrega ativa. */
+  /** F2: o cupom de compensação por atraso gerado por este pedido (`coupons.source_order_id`), só para o dono; entregue com atraso. */
+  private async compensationOf(order: OrderRow) {
+    if (order.mode !== 'delivery' || order.status !== 'delivered') return null;
+    const [coupon] = await this.db
+      .select({ code: coupons.code, kind: coupons.kind, value: coupons.value, endsAt: coupons.endsAt, active: coupons.active, used: sql<boolean>`exists (select 1 from ${couponRedemptions} r where r.coupon_id = ${coupons.id} and r.user_id = ${order.userId}::uuid and r.released_at is null)` })
+      .from(coupons)
+      .where(and(eq(coupons.sourceOrderId, order.id), eq(coupons.ownerUserId, order.userId)));
+    if (!coupon || (coupon.kind !== 'free_shipping' && coupon.kind !== 'fixed')) return null;
+    // Mesma regra de `GET /v1/me/coupons`.
+    const status = coupon.used ? 'used' : coupon.endsAt.getTime() <= Date.now() || !coupon.active ? 'expired' : 'available';
+    return { kind: coupon.kind, valueCents: coupon.kind === 'fixed' ? coupon.value : null, code: coupon.code, validUntil: coupon.endsAt.toISOString(), status };
+  }
+
   private async delayOf(order: OrderRow) {
     if (order.mode !== 'delivery') return null;
     const state = lateStateOf(order, await this.params.getNumber('entrega_atraso_tolerancia_min'), new Date());

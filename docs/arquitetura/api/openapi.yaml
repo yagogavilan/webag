@@ -11758,6 +11758,19 @@ components:
                 cancelMode: { type: [string, 'null'], enum: [immediate, request, null] }
                 cancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }] }
             - type: 'null'
+        compensation:
+          description: 'F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [kind, valueCents, code, validUntil, status]
+              properties:
+                kind: { type: string, enum: [free_shipping, fixed] }
+                valueCents: { type: [integer, 'null'], description: 'Só `fixed` (centavos); nulo em entrega grátis.' }
+                code: { type: string, description: 'Enviar em `PUT /v1/cart/coupon`; só o dono do pedido vê.' }
+                validUntil: { type: string, format: date-time }
+                status: { type: string, enum: [available, used, expired] }
         tracking:
           description: 'Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'
           oneOf:
