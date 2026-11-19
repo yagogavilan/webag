@@ -10,7 +10,7 @@ import { AuditService } from '../admin/index.js';
 import { LogisticsReportService } from './logistics-report.service.js';
 import { couriers } from './db/schema.js';
 import { CouriersService } from './couriers.service.js';
-import { DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras } from './deliveries.service.js';
+import { DELIVERED_AT_REASONS, DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras } from './deliveries.service.js';
 import { ACTIVE_STATUSES, DELIVERY_KINDS, DELIVERY_STATUSES, NOT_DELIVERED_REASONS } from './domain/state.js';
 import type { DeliveryMessageData } from './domain/whatsapp.js';
 
@@ -78,6 +78,8 @@ function presentDelivery(d: Delivery & Partial<DeliveryListExtras>, detail: bool
     attempts: d.attempts,
     failReason: d.failReason,
     whatsappSentAt: d.whatsappSentAt?.toISOString() ?? null,
+    /** WB-262: a hora real da entrega (a informada pela operação ou a do clique); nulo enquanto não entregue. */
+    deliveredAt: d.deliveredAt?.toISOString() ?? null,
     codeRequired: d.deliveryCode !== null && d.status !== 'delivered',
     allowedActions: allowedActions(d.status),
     updatedAt: d.updatedAt.toISOString(),
@@ -96,7 +98,21 @@ const ACTIONS_BY_STATUS: Record<string, string[]> = {
 };
 const allowedActions = (status: string): string[] => ACTIONS_BY_STATUS[status] ?? [];
 
-const presentEvent = (e: DeliveryEvent) => ({ id: e.id, from: e.fromStatus, to: e.toStatus, action: e.action, actorRole: e.actorRole, reason: e.reason, at: e.createdAt.toISOString() });
+const presentEvent = (e: DeliveryEvent) => {
+  const meta: Record<string, unknown> = e.meta ?? {};
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  return {
+    id: e.id,
+    from: e.fromStatus,
+    to: e.toStatus,
+    action: e.action,
+    actorRole: e.actorRole,
+    reason: e.reason,
+    at: e.createdAt.toISOString(),
+    /** WB-262 C3: na entrega com hora informada, a hora real e a do clique (e o motivo do recuo) ficam no histórico. */
+    ...(e.action === 'delivered' && str(meta.deliveredAt) ? { deliveredAt: str(meta.deliveredAt), clickedAt: str(meta.clickedAt), deliveredAtReason: str(meta.deliveredAtReason), deliveredAtNote: str(meta.deliveredAtNote) } : {}),
+  };
+};
 
 const courierBody = z.strictObject({
   name: z.string().trim().min(2).max(60),
@@ -123,13 +139,19 @@ const listQuery = z.strictObject({
 });
 const assignBody = z.strictObject({ courierId: z.uuid(), addressConfirmed: z.boolean().optional() });
 const assignBatchBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(2).max(10), courierId: z.uuid(), addressConfirmed: z.boolean().optional() });
-const actionBody = z.strictObject({
-  action: z.enum(['confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel']),
-  reason: z.string().trim().max(200).optional(),
-  code: z.string().regex(/^\d{4}$/).optional(),
-  failReason: z.enum(NOT_DELIVERED_REASONS).optional(),
-  overrideReason: z.string().trim().min(10).max(200).optional(),
-});
+const actionBody = z
+  .strictObject({
+    action: z.enum(['confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel']),
+    reason: z.string().trim().max(200).optional(),
+    code: z.string().regex(/^\d{4}$/).optional(),
+    failReason: z.enum(NOT_DELIVERED_REASONS).optional(),
+    overrideReason: z.string().trim().min(10).max(200).optional(),
+    /** WB-262: hora real da entrega (só com `delivered`); recuo até 60 min, motivo acima de 5 min. */
+    deliveredAt: z.iso.datetime({ offset: true }).transform((v) => new Date(v)).optional(),
+    deliveredAtReason: z.enum(DELIVERED_AT_REASONS).optional(),
+    deliveredAtNote: z.string().trim().max(200).optional(),
+  })
+  .refine((v) => v.action === 'delivered' || (v.deliveredAt === undefined && v.deliveredAtReason === undefined && v.deliveredAtNote === undefined), { message: 'A hora real só vale com a ação "delivered".', path: ['deliveredAt'] });
 const costBody = z.strictObject({ costCents: z.number().int().min(0).max(100_000), reason: z.string().trim().min(3).max(200).optional() });
 const payoutBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(1).max(100), paidOn: z.iso.date(), overrideReason: z.string().trim().min(10).max(200).optional() });
 const revealBody = z.strictObject({ reason: z.string().trim().min(10).max(200) });

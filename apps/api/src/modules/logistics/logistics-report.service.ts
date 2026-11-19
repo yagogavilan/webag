@@ -57,12 +57,13 @@ export class LogisticsReportService {
     const from = dayStart(query.from);
     const to = dayAfter(query.to);
     // "No prazo" = do pronto à entrega dentro do limite de atenção da fila (`logistica_alerta_entrega_min`) [HIPÓTESE: o PO ainda não definiu o prazo].
+    // WB-262 C5: a hora da entrega é a REAL (`deliveries.delivered_at`, informada pela operação), não a do clique.
     const [rows, limitMin] = await Promise.all([
       this.db.execute(sql`
         select d.id, d.kind, d.status, d.city_id, c.name as city_name, d.fee_cents, d.cost_cents, d.fail_reason,
                extract(epoch from ((select min(e.created_at) from delivery_events e where e.delivery_id = d.id and e.to_status = 'awaiting_courier') - d.ready_at)) / 60 as to_assigned_min,
                extract(epoch from ((select min(e.created_at) from delivery_events e where e.delivery_id = d.id and e.to_status = 'out_for_delivery') - d.ready_at)) / 60 as to_collected_min,
-               extract(epoch from ((select min(e.created_at) from delivery_events e where e.delivery_id = d.id and e.to_status = 'delivered') - d.ready_at)) / 60 as to_delivered_min
+               extract(epoch from (coalesce(d.delivered_at, (select min(e.created_at) from delivery_events e where e.delivery_id = d.id and e.to_status = 'delivered')) - d.ready_at)) / 60 as to_delivered_min
         from deliveries d left join cities c on c.id = d.city_id
         where d.ready_at >= ${from.toISOString()}::timestamptz and d.ready_at < ${to.toISOString()}::timestamptz and d.status <> 'cancelled' ${this.filters(query)}`),
       this.params.getNumber('logistica_alerta_entrega_min'),

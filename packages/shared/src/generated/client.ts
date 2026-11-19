@@ -1068,6 +1068,11 @@ export interface Delivery {
   failReason?: string | null;
   /** @nullable */
   whatsappSentAt?: string | null;
+  /**
+     * WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.
+     * @nullable
+     */
+  deliveredAt?: string | null;
   codeRequired?: boolean;
   allowedActions: DeliveryAllowedActionsItem[];
   updatedAt: string;
@@ -1089,6 +1094,18 @@ export type DeliveryDetailContact = {
   customerPhone?: string | null;
 };
 
+/**
+ * @nullable
+ */
+export type DeliveryDetailTimelineItemDeliveredAtReason = typeof DeliveryDetailTimelineItemDeliveredAtReason[keyof typeof DeliveryDetailTimelineItemDeliveredAtReason] | null;
+
+
+export const DeliveryDetailTimelineItemDeliveredAtReason = {
+  courier_notified_late: 'courier_notified_late',
+  no_signal: 'no_signal',
+  other: 'other',
+} as const;
+
 export type DeliveryDetailTimelineItem = {
   id?: string;
   /** @nullable */
@@ -1099,7 +1116,19 @@ export type DeliveryDetailTimelineItem = {
   actorRole?: string | null;
   /** @nullable */
   reason?: string | null;
+  /** Hora do registro (do clique). */
   at?: string;
+  /**
+     * WB-262 C3: só no evento `delivered` com hora informada: a hora real da entrega (o `at` é a do clique).
+     * @nullable
+     */
+  deliveredAt?: string | null;
+  /** @nullable */
+  clickedAt?: string | null;
+  /** @nullable */
+  deliveredAtReason?: DeliveryDetailTimelineItemDeliveredAtReason;
+  /** @nullable */
+  deliveredAtNote?: string | null;
 };
 
 export type DeliveryDetail = Delivery & {
@@ -6633,6 +6662,18 @@ export const UpdateDeliveryStatusBodyFailReason = {
   other: 'other',
 } as const;
 
+/**
+ * Obrigatório se a hora recuou mais de 5 min (400); opcional até 5 min. `other` exige `deliveredAtNote`.
+ */
+export type UpdateDeliveryStatusBodyDeliveredAtReason = typeof UpdateDeliveryStatusBodyDeliveredAtReason[keyof typeof UpdateDeliveryStatusBodyDeliveredAtReason];
+
+
+export const UpdateDeliveryStatusBodyDeliveredAtReason = {
+  courier_notified_late: 'courier_notified_late',
+  no_signal: 'no_signal',
+  other: 'other',
+} as const;
+
 export type UpdateDeliveryStatusBody = {
   action: UpdateDeliveryStatusBodyAction;
   /** @maxLength 200 */
@@ -6645,6 +6686,12 @@ export type UpdateDeliveryStatusBody = {
      * @maxLength 200
      */
   overrideReason?: string;
+  /** WB-262 (só com `delivered` de entrega de pedido): a hora real da entrega. Omitida = a hora do clique. Nunca no futuro (tolerância de 2 min ao relógio do navegador, vale a hora do clique), nunca antes da saída para entrega e no máximo 60 min para trás: senão 422 `DELIVERED_AT_IN_FUTURE` | `DELIVERED_AT_TOO_OLD` | `DELIVERED_AT_BEFORE_DEPARTURE`. Corrida de troca e conclusão automática: 422 `DELIVERED_AT_NOT_ALLOWED`. */
+  deliveredAt?: string;
+  /** Obrigatório se a hora recuou mais de 5 min (400); opcional até 5 min. `other` exige `deliveredAtNote`. */
+  deliveredAtReason?: UpdateDeliveryStatusBodyDeliveredAtReason;
+  /** @maxLength 200 */
+  deliveredAtNote?: string;
 };
 
 export type SetDeliveryCostBody = {
@@ -12656,7 +12703,7 @@ export const getUpdateDeliveryStatusUrl = (deliveryId: string,) => {
 }
 
 /**
- * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. Permissão: `logistics:write`.
+ * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. **WB-262:** em `delivered` a operação pode informar `deliveredAt` (a hora real, recuo até 60 min, motivo acima de 5 min); a hora real e a do clique ficam no histórico e na auditoria; a compensação por atraso (RN-19 4c), o relatório de prazo e as janelas de troca e avaliação contam da hora real. Permissão: `logistics:write`.
  * @summary Avançar a corrida (RN-18)
  */
 export const updateDeliveryStatus = async (deliveryId: string,

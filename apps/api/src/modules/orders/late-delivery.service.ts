@@ -212,7 +212,9 @@ export class LateDeliveryService implements DeliveryListener, OnModuleInit, OnAp
     if (!order) return;
     const [tolerance, kind, valueCents] = await Promise.all([this.params.getNumber('entrega_atraso_tolerancia_min'), this.params.get('entrega_compensacao_tipo'), this.params.getNumber('entrega_compensacao_cents')]);
     const now = new Date();
-    if (!deservesCompensation(order, now, tolerance)) return;
+    // WB-262 C4: a compensação conta da hora REAL da entrega (informada pela operação), não do clique; só nasce, nunca é revogada.
+    const deliveredAt = delivery.deliveredAt ?? now;
+    if (!deservesCompensation(order, deliveredAt, tolerance)) return;
     // SEC-177: o atraso foi causado pelo cliente/endereço (ausente, endereço não encontrado, recusou) se a corrida já falhou por um desses motivos.
     const [fault] = await tx
       .select({ reason: sql<string>`${deliveryEvents.meta} ->> 'failReason'` })

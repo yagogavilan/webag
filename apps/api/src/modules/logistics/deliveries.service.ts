@@ -58,11 +58,24 @@ export interface CreateDeliveryInput {
   actor?: DeliveryActor;
 }
 
+/** WB-262 C2: motivo curto de quem informa uma hora de entrega anterior à do clique. */
+export const DELIVERED_AT_REASONS = ['courier_notified_late', 'no_signal', 'other'] as const;
+export type DeliveredAtReason = (typeof DELIVERED_AT_REASONS)[number];
+/** WB-262 (DEC-064, HIP-P07 `[HIPÓTESE]`): recuo máximo e limite a partir do qual o motivo é obrigatório. Viram parâmetros se a operação pedir. */
+export const DELIVERED_AT_MAX_BACKDATE_MIN = 60;
+export const DELIVERED_AT_REASON_ABOVE_MIN = 5;
+/** Tolerância ao relógio do navegador da operação (que preenche "agora"); acima disso é futuro de verdade (422). */
+const DELIVERED_AT_CLOCK_SKEW_MS = 2 * 60_000;
+
 export interface ActInput {
   reason?: string | undefined;
   code?: string | undefined;
   failReason?: NotDeliveredReason | undefined;
   overrideReason?: string | undefined;
+  /** WB-262: só em `delivered` de entrega de pedido: a hora real (recuo até 60 min; sem ela vale a hora do clique). */
+  deliveredAt?: Date | undefined;
+  deliveredAtReason?: DeliveredAtReason | undefined;
+  deliveredAtNote?: string | undefined;
 }
 export type DeliveryAction = 'confirm' | 'picked_up' | 'delivered' | 'not_delivered' | 'reattempt' | 'return_confirmed' | 'reassign' | 'cancel';
 const ACTION_TARGET: Record<DeliveryAction, DeliveryStatus> = {
@@ -518,16 +531,50 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       set.failNote = input.reason?.slice(0, 200) ?? null;
     }
     if (action === 'reattempt') set.attempts = current.attempts + 1;
-    if (action === 'delivered') set.deliveryCode = null; // o código de uso único não vale depois da entrega
+    let deliveredMeta: Record<string, unknown> = {};
+    if (action === 'delivered') {
+      set.deliveryCode = null; // o código de uso único não vale depois da entrega
+      const resolved = await this.resolveDeliveredAt(tx, current, input, actor);
+      set.deliveredAt = resolved.at;
+      deliveredMeta = resolved.meta;
+    }
     const [updated] = await tx.update(deliveries).set(set).where(and(eq(deliveries.id, id), eq(deliveries.status, current.status))).returning();
     if (!updated) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
     const meta: Record<string, unknown> = {
       ...(action === 'not_delivered' ? { failReason: input.failReason, storeFault: isStoreFault(input.failReason!) } : {}),
       ...(action === 'reassign' ? { previousCourierId: current.courierId, keepsReadyAt: current.readyAt.toISOString() } : {}),
       ...(action === 'delivered' && input.overrideReason ? { codeOverrideReason: input.overrideReason } : {}),
+      ...deliveredMeta,
     };
     await this.record(tx, ctx, actor, current, updated, action, input.reason ?? null, meta);
     return updated;
+  }
+
+  /**
+   * WB-262: a hora real da entrega. Sem `deliveredAt` vale a hora do clique. Informada: nunca no futuro, nunca antes da saída para entrega
+   * e no máximo `DELIVERED_AT_MAX_BACKDATE_MIN` para trás (422 com o motivo escrito e nada muda); recuo acima de
+   * `DELIVERED_AT_REASON_ABOVE_MIN` exige motivo (e texto em "outro"). O histórico guarda a hora informada E a do clique.
+   */
+  private async resolveDeliveredAt(tx: Tx, delivery: Delivery, input: ActInput, actor: DeliveryActor): Promise<{ at: Date; meta: Record<string, unknown> }> {
+    const clickedAt = new Date();
+    if (!input.deliveredAt) return { at: clickedAt, meta: {} };
+    const invalid = (code: string, detail: string) => errors.unprocessable(code, 'Hora de entrega inválida', { detail });
+    if (delivery.kind !== 'delivery') throw invalid('DELIVERED_AT_NOT_ALLOWED', 'A hora real só vale na entrega de um pedido.');
+    if (actor.role === 'system') throw invalid('DELIVERED_AT_NOT_ALLOWED', 'A conclusão automática usa a hora do sistema.');
+    const asked = input.deliveredAt.getTime();
+    if (asked > clickedAt.getTime() + DELIVERED_AT_CLOCK_SKEW_MS) throw invalid('DELIVERED_AT_IN_FUTURE', 'A hora da entrega não pode ser no futuro.');
+    const at = new Date(Math.min(asked, clickedAt.getTime())); // dentro da tolerância do relógio: vale a hora do clique
+    const backdatedMin = Math.round((clickedAt.getTime() - at.getTime()) / 60_000);
+    if (clickedAt.getTime() - at.getTime() > DELIVERED_AT_MAX_BACKDATE_MIN * 60_000) throw invalid('DELIVERED_AT_TOO_OLD', `A hora da entrega só pode recuar até ${DELIVERED_AT_MAX_BACKDATE_MIN} minutos. Para mais, peça ao super admin.`);
+    const [departed] = await tx.select({ at: sql<Date | null>`max(${deliveryEvents.createdAt})` }).from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, delivery.id), eq(deliveryEvents.toStatus, 'out_for_delivery')));
+    if (departed?.at && at.getTime() < new Date(departed.at).getTime()) throw invalid('DELIVERED_AT_BEFORE_DEPARTURE', 'A hora da entrega não pode ser antes de a corrida sair para entrega.');
+    const needsReason = backdatedMin > DELIVERED_AT_REASON_ABOVE_MIN;
+    if (needsReason && !input.deliveredAtReason) throw errors.validation([{ field: 'deliveredAtReason', message: `Informe o motivo: a hora recuou mais de ${DELIVERED_AT_REASON_ABOVE_MIN} minutos.` }]);
+    if (input.deliveredAtReason === 'other' && !input.deliveredAtNote?.trim()) throw errors.validation([{ field: 'deliveredAtNote', message: 'Descreva o motivo.' }]);
+    return {
+      at,
+      meta: { deliveredAt: at.toISOString(), clickedAt: clickedAt.toISOString(), backdatedMin, ...(input.deliveredAtReason ? { deliveredAtReason: input.deliveredAtReason } : {}), ...(input.deliveredAtNote?.trim() ? { deliveredAtNote: input.deliveredAtNote.trim().slice(0, 200) } : {}) },
+    };
   }
 
   private async checkCode(delivery: Delivery, input: { code?: string | undefined; overrideReason?: string | undefined }, actor: DeliveryActor): Promise<void> {
@@ -545,7 +592,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
 
   private async record(tx: Tx, ctx: RequestContext, actor: DeliveryActor, before: Delivery, after: Delivery, action: string, reason: string | null, meta: Record<string, unknown>): Promise<void> {
     await tx.insert(deliveryEvents).values({ deliveryId: after.id, fromStatus: before.status, toStatus: after.status, action, actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta });
-    await this.audit.record(tx, ctx, { action: `delivery.${action}`, targetType: 'delivery', targetId: after.id, before: { status: before.status, courierId: before.courierId }, after: { status: after.status, courierId: after.courierId }, ...(reason ? { reason } : {}) });
+    await this.audit.record(tx, ctx, { action: `delivery.${action}`, targetType: 'delivery', targetId: after.id, before: { status: before.status, courierId: before.courierId }, after: { status: after.status, courierId: after.courierId, ...(action === 'delivered' && after.deliveredAt ? { deliveredAt: after.deliveredAt.toISOString(), ...(typeof meta.clickedAt === 'string' ? { clickedAt: meta.clickedAt } : {}) } : {}) }, ...(reason ? { reason } : {}) });
     for (const listener of this.listeners) await listener.onDeliveryChange?.(tx, after, before.status, after.status, actor, reason);
   }
 

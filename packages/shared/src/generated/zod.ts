@@ -1893,6 +1893,7 @@ export const ListDeliveriesResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -1953,6 +1954,7 @@ export const GetDeliveryResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -1971,7 +1973,11 @@ export const GetDeliveryResponse = zod.object({
   "action": zod.string().optional(),
   "actorRole": zod.string().nullish(),
   "reason": zod.string().nullish(),
-  "at": zod.iso.datetime({"offset":true}).optional()
+  "at": zod.iso.datetime({"offset":true}).optional().describe('Hora do registro (do clique).'),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262 C3: só no evento `delivered` com hora informada: a hora real da entrega (o `at` é a do clique).'),
+  "clickedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAtReason": zod.union([zod.literal('courier_notified_late'),zod.literal('no_signal'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "deliveredAtNote": zod.string().nullish()
 })).optional()
 }))
 
@@ -2086,6 +2092,7 @@ export const AssignDeliveryBatchResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -2104,7 +2111,11 @@ export const AssignDeliveryBatchResponse = zod.object({
   "action": zod.string().optional(),
   "actorRole": zod.string().nullish(),
   "reason": zod.string().nullish(),
-  "at": zod.iso.datetime({"offset":true}).optional()
+  "at": zod.iso.datetime({"offset":true}).optional().describe('Hora do registro (do clique).'),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262 C3: só no evento `delivered` com hora informada: a hora real da entrega (o `at` é a do clique).'),
+  "clickedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAtReason": zod.union([zod.literal('courier_notified_late'),zod.literal('no_signal'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "deliveredAtNote": zod.string().nullish()
 })).optional()
 }))),
   "failed": zod.array(zod.object({
@@ -2171,6 +2182,7 @@ export const AssignDeliveryResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -2189,7 +2201,11 @@ export const AssignDeliveryResponse = zod.object({
   "action": zod.string().optional(),
   "actorRole": zod.string().nullish(),
   "reason": zod.string().nullish(),
-  "at": zod.iso.datetime({"offset":true}).optional()
+  "at": zod.iso.datetime({"offset":true}).optional().describe('Hora do registro (do clique).'),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262 C3: só no evento `delivered` com hora informada: a hora real da entrega (o `at` é a do clique).'),
+  "clickedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAtReason": zod.union([zod.literal('courier_notified_late'),zod.literal('no_signal'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "deliveredAtNote": zod.string().nullish()
 })).optional()
 }))
 
@@ -2222,7 +2238,7 @@ export const MarkDeliveryWhatsappSentResponse = zod.void()
 
 
 /**
- * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. Permissão: `logistics:write`.
+ * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. **WB-262:** em `delivered` a operação pode informar `deliveredAt` (a hora real, recuo até 60 min, motivo acima de 5 min); a hora real e a do clique ficam no histórico e na auditoria; a compensação por atraso (RN-19 4c), o relatório de prazo e as janelas de troca e avaliação contam da hora real. Permissão: `logistics:write`.
  * @summary Avançar a corrida (RN-18)
  */
 export const UpdateDeliveryStatusParams = zod.object({
@@ -2235,6 +2251,8 @@ export const updateDeliveryStatusBodyCodeRegExp = new RegExp('^\\d{4}$');
 export const updateDeliveryStatusBodyOverrideReasonMin = 10;
 export const updateDeliveryStatusBodyOverrideReasonMax = 200;
 
+export const updateDeliveryStatusBodyDeliveredAtNoteMax = 200;
+
 
 
 export const UpdateDeliveryStatusBody = zod.object({
@@ -2242,7 +2260,10 @@ export const UpdateDeliveryStatusBody = zod.object({
   "reason": zod.string().max(updateDeliveryStatusBodyReasonMax).optional(),
   "code": zod.string().regex(updateDeliveryStatusBodyCodeRegExp).optional(),
   "failReason": zod.enum(['customer_absent', 'address_not_found', 'customer_refused', 'safety_risk', 'store_fault', 'other']).optional(),
-  "overrideReason": zod.string().min(updateDeliveryStatusBodyOverrideReasonMin).max(updateDeliveryStatusBodyOverrideReasonMax).optional()
+  "overrideReason": zod.string().min(updateDeliveryStatusBodyOverrideReasonMin).max(updateDeliveryStatusBodyOverrideReasonMax).optional(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).optional().describe('WB-262 (só com `delivered` de entrega de pedido): a hora real da entrega. Omitida = a hora do clique. Nunca no futuro (tolerância de 2 min ao relógio do navegador, vale a hora do clique), nunca antes da saída para entrega e no máximo 60 min para trás: senão 422 `DELIVERED_AT_IN_FUTURE` | `DELIVERED_AT_TOO_OLD` | `DELIVERED_AT_BEFORE_DEPARTURE`. Corrida de troca e conclusão automática: 422 `DELIVERED_AT_NOT_ALLOWED`.'),
+  "deliveredAtReason": zod.enum(['courier_notified_late', 'no_signal', 'other']).optional().describe('Obrigatório se a hora recuou mais de 5 min (400); opcional até 5 min. `other` exige `deliveredAtNote`.'),
+  "deliveredAtNote": zod.string().max(updateDeliveryStatusBodyDeliveredAtNoteMax).optional()
 })
 
 export const UpdateDeliveryStatusResponse = zod.object({
@@ -2289,6 +2310,7 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})
@@ -2307,7 +2329,11 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "action": zod.string().optional(),
   "actorRole": zod.string().nullish(),
   "reason": zod.string().nullish(),
-  "at": zod.iso.datetime({"offset":true}).optional()
+  "at": zod.iso.datetime({"offset":true}).optional().describe('Hora do registro (do clique).'),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262 C3: só no evento `delivered` com hora informada: a hora real da entrega (o `at` é a do clique).'),
+  "clickedAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAtReason": zod.union([zod.literal('courier_notified_late'),zod.literal('no_signal'),zod.literal('other'),zod.literal(null)]).nullish(),
+  "deliveredAtNote": zod.string().nullish()
 })).optional()
 }))
 
@@ -2375,6 +2401,7 @@ export const SetDeliveryCostResponse = zod.object({
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullish().describe('WB-262: a hora REAL da entrega (a informada pela operação, ou a do clique em "entregue"); nulo enquanto não entregue. Base da compensação, da pontualidade e dos relatórios. Campo novo opcional.'),
   "codeRequired": zod.boolean().optional(),
   "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
   "updatedAt": zod.iso.datetime({"offset":true})

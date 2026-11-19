@@ -111,6 +111,11 @@ export const deliveries = pgTable(
     whatsappSentAt: timestamp({ withTimezone: true }),
     failReason: text({ enum: NOT_DELIVERED_REASONS }),
     failNote: text(),
+    /**
+     * WB-262: a hora REAL da entrega (a operação atualiza o status com atraso e pode recuar até 60 min, com motivo e auditoria); sem
+     * recuo = a hora do clique. Base da compensação, da medida de pontualidade e do relatório. Nulo enquanto não entregue.
+     */
+    deliveredAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

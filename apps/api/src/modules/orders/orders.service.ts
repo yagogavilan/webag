@@ -571,7 +571,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
    * Transição que não encerra o pedido (aceite, separação, saída, entrega). Valida ator e modo, grava horário e evento.
    * Repetir o mesmo destino é idempotente (toque duplo, retry de rede): devolve `null` e nada muda.
    */
-  async advance(tx: Tx, order: OrderRow, to: OrderStatus, actor: OrderActor, actorUserId: string | null, reason: string | null = null): Promise<OrderEvent | null> {
+  async advance(tx: Tx, order: OrderRow, to: OrderStatus, actor: OrderActor, actorUserId: string | null, reason: string | null = null, deliveredAt?: Date): Promise<OrderEvent | null> {
     if (order.status === to) return null;
     if (!canTransition(order.status, to, actor, order.mode)) {
       throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', `O pedido está em "${order.status}" e não pode ir para "${to}".`, { currentStatus: order.status });
@@ -579,7 +579,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const now = new Date();
     await tx
       .update(orders)
-      .set({ status: to, updatedAt: now, ...(to === 'accepted' ? { acceptedAt: now, acceptDeadlineAt: null } : {}), ...(to === 'delivered' ? { deliveredAt: now } : {}) })
+      .set({ status: to, updatedAt: now, ...(to === 'accepted' ? { acceptedAt: now, acceptDeadlineAt: null } : {}), ...(to === 'delivered' ? { deliveredAt: deliveredAt ?? now } : {}) })
       .where(eq(orders.id, order.id));
     await tx.insert(orderEvents).values({ orderId: order.id, fromStatus: order.status, toStatus: to, actor, actorUserId, reason: reason?.slice(0, 200) ?? null });
     return this.eventOf(order, to, actor, reason, now);
@@ -858,7 +858,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       if (event) events.push(event);
       await this.refreshEtaOnDispatch(tx, order);
     } else if (to === 'delivered' && order.status === 'out_for_delivery') {
-      const event = await this.advance(tx, order, 'delivered', who, actor.id, 'Entrega concluída');
+      // WB-262: a hora real informada pela operação (ou a do clique) vira a `deliveredAt` do pedido: janelas de troca e de avaliação contam dela.
+      const event = await this.advance(tx, order, 'delivered', who, actor.id, 'Entrega concluída', delivery.deliveredAt ?? undefined);
       if (event) events.push(event);
     }
     // SEC-143: "devolvida à loja" é declarada pela operação; cancelar e estornar só depois que a loja confirma o recebimento
