@@ -1,10 +1,12 @@
-import { Body, Controller, Headers, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { AdminOnly, Ctx, RequireReauth, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, RequireReauth, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { parseIdempotencyKey } from '../idempotency/index.js';
+import { AdminOrdersReadService } from './admin-orders-read.service.js';
+import { ORDER_STATUSES } from './domain/state.js';
 import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
 
@@ -14,17 +16,53 @@ const refundSchema = z.strictObject({
   reason: z.string().trim().min(10).max(300),
 });
 
+/** `status` aceita uma lista separada por vírgula ("received,accepted"). */
+const statusList = z
+  .string()
+  .max(200)
+  .transform((value) => value.split(',').map((v) => v.trim()).filter(Boolean))
+  .pipe(z.array(z.enum(ORDER_STATUSES)).min(1).max(ORDER_STATUSES.length));
+const listQuerySchema = z.strictObject({
+  q: z.string().trim().min(2).max(100).optional(),
+  status: statusList.optional(),
+  mode: z.enum(['delivery', 'pickup']).optional(),
+  paymentMethod: z.enum(['pix', 'card']).optional(),
+  storeId: z.uuid().optional(),
+  userId: z.uuid().optional(),
+  city: z.string().trim().min(2).max(80).optional(),
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.string().max(4).optional(),
+});
+
 const cancelSchema = z.strictObject({ reason: z.string().trim().min(10).max(300), refund: z.boolean().default(true) });
 const lateRespondSchema = z.strictObject({ action: z.enum(['accept', 'arrive_soon']), note: z.string().trim().max(200).optional() });
 const returnSchema = z.strictObject({ reason: z.string().trim().min(10).max(300) });
 
-/** Ações do admin sobre pedidos (SEC-039). A lista/detalhe de pedidos do admin entra com o painel (Onda 4D). */
+/** Pedidos no admin: lista e detalhe (B5, WB-108) e as ações de intervenção (SEC-039, WB-109). */
 @Controller('v1/admin/orders')
 export class AdminOrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly late: LateDeliveryService,
+    private readonly read: AdminOrdersReadService,
   ) {}
+
+  /** B5 / WB-108 C1: todos os pedidos, com filtros (busca por número, e-mail do cliente ou ID; estado, tipo, pagamento, loja, cidade, período). Páginas de 50. */
+  @AdminOnly('orders:read')
+  @Get()
+  list(@Query(new ZodPipe(listQuerySchema)) query: z.infer<typeof listQuerySchema>) {
+    return this.read.list(query);
+  }
+
+  /** B5 / WB-108 C2: itens, valores (RN-10), pagamento, estornos, linha do tempo, corrida, trocas e avaliação; dado pessoal mascarado. */
+  @AdminOnly('orders:read')
+  @Get(':orderId')
+  detail(@CurrentPrincipal() principal: Principal, @Param('orderId') orderId: string) {
+    if (!UUID.test(orderId)) throw errors.notFound();
+    return this.read.detail(principal.adminProfile!, orderId);
+  }
 
   /** Estorno manual total ou parcial: reautenticação, motivo, `Idempotency-Key` obrigatória e auditoria. */
   @AdminOnly('orders:refund')

@@ -7,6 +7,7 @@ import { maskCoordinates, maskTokenPaths } from './platform/logging/mask.js';
 import { HealthModule } from './health/health.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { AdminModule } from './modules/admin/index.js';
+import { BackofficeModule } from './modules/backoffice/index.js';
 import { IdentityModule } from './modules/identity/index.js';
 import { MediaModule } from './modules/media/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
@@ -118,6 +119,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     MarketingModule,
     ReportsModule,
     FeedbackModule,
+    BackofficeModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
     ...devOrderModulesFor(process.env.NODE_ENV),

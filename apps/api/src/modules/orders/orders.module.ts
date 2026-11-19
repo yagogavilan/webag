@@ -10,6 +10,7 @@ import { PaymentsModule } from '../payments/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { StoresModule } from '../stores/index.js';
 import { AdminOrdersController } from './admin-orders.controller.js';
+import { AdminOrdersReadService } from './admin-orders-read.service.js';
 import { OrderEventBus } from './order-events.bus.js';
 import { CardIntentService } from './card-intent.service.js';
 import { CardIntentController, OrdersController } from './orders.controller.js';
@@ -21,7 +22,7 @@ import { OrdersService } from './orders.service.js';
 @Module({
   imports: [AdminModule, IdentityModule, CartModule, CatalogModule, FinanceModule, IdempotencyModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
   controllers: [OrdersController, CardIntentController, StoreOrdersController, AdminOrdersController],
-  providers: [OrdersService, LateDeliveryService, StoreOrdersService, OrderEventBus, CardIntentService],
+  providers: [OrdersService, LateDeliveryService, StoreOrdersService, OrderEventBus, CardIntentService, AdminOrdersReadService],
   exports: [OrdersService, LateDeliveryService, StoreOrdersService, OrderEventBus],
 })
 export class OrdersModule {}

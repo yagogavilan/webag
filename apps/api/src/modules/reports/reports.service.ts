@@ -4,6 +4,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit } from '../../platform/http/pagination.js';
+import { alertKindInfo } from '../admin/index.js';
 
 export interface ReportFilters {
   from: string;
@@ -369,8 +370,12 @@ export class ReportsService {
    *  - lojas: em análise (`in_review`); disputas: trocas em mediação; estornos: recusados pelo provedor que esperam a operação (esgotados, ou
    *    com falha e ainda em nova tentativa), como a fila de estornos; titulares: pedidos LGPD abertos e quantos vencem em até 5 dias ou já venceram.
    */
-  async pendingCounts(allowed: { stores: boolean; disputes: boolean; refunds: boolean; dataRequests: boolean }) {
+  async pendingCounts(allowed: { stores: boolean; disputes: boolean; refunds: boolean; dataRequests: boolean; alerts?: { kinds: string[]; all: boolean } }) {
     const n = async (query: SQL): Promise<number> => ((await this.db.execute<{ n: number }>(query)).rows[0]?.n ?? 0);
+    // B3: alertas de operação abertos que o perfil vê (a lista e o detalhe estão em /v1/admin/alerts).
+    const alertScope = allowed.alerts;
+    const alertKinds = alertScope && !alertScope.all ? alertScope.kinds : null;
+    const alertsOpen = !alertScope ? null : alertKinds !== null && alertKinds.length === 0 ? { open: 0, critical: 0 } : await this.openAlerts(alertKinds);
     const [stores, disputes, refunds, requests] = await Promise.all([
       allowed.stores ? n(sql`select count(*)::int as n from stores where status = 'in_review'`) : null,
       allowed.disputes ? n(sql`select count(*)::int as n from exchange_requests where status = 'in_mediation'`) : null,
@@ -383,6 +388,21 @@ export class ReportsService {
       disputes: disputes === null ? null : { inMediation: disputes },
       refunds: refunds === null ? null : { needingAction: refunds },
       dataRequests: request === undefined ? null : { open: request.open, dueSoon: request.due_soon },
+      alerts: alertsOpen,
     };
+  }
+
+  /** `open` = alertas abertos dos tipos informados (`null` = todos, inclusive os desconhecidos); `critical` = os de gravidade crítica no catálogo. */
+  private async openAlerts(kinds: string[] | null): Promise<{ open: number; critical: number }> {
+    const rows = await this.db.execute<{ kind: string; n: number }>(
+      kinds === null ? sql`select kind, count(*)::int as n from payment_alerts where resolved_at is null group by kind` : sql`select kind, count(*)::int as n from payment_alerts where resolved_at is null and kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)}) group by kind`,
+    );
+    let open = 0;
+    let critical = 0;
+    for (const r of rows.rows) {
+      open += r.n;
+      if (alertKindInfo(r.kind).severity === 'critical') critical += r.n;
+    }
+    return { open, critical };
   }
 }

@@ -78,6 +78,17 @@ export const ADMIN_PERMISSIONS = {
   /** WB-116: cupons da plataforma. Financeiro lê (relatório de uso e custo); só operação e super admin criam e pausam. */
   'coupons:read': [SUPER, OPS, FIN],
   'coupons:write': [SUPER, OPS],
+  /**
+   * B3 / WB-198 / WB-113 (leitura): caixa de alertas de operação. Todo perfil lê, mas só os TIPOS do seu público (`alert-catalog.ts`: dinheiro é do financeiro e do
+   * super admin; logística e pedidos, da operação e do suporte; LGPD, só do super admin). Encerrar à mão (com nota) é de quem age: super admin, operação e financeiro.
+   */
+  'alerts:read': [SUPER, OPS, FIN, SUP],
+  'alerts:resolve': [SUPER, OPS, FIN],
+  /** B4 / WB-102: buscar e ver clientes e lojistas (dados mascarados): super admin, operação e suporte. Bloquear e desbloquear: super admin e operação (a loja do lojista é suspensa junto, WB-102 C5). */
+  'users:read': [SUPER, OPS, SUP],
+  'users:block': [SUPER, OPS],
+  /** B5 / WB-108: lista e detalhe de pedidos (dados do cliente mascarados). Cancelar e estornar seguem em `orders:refund`. */
+  'orders:read': [SUPER, OPS, FIN, SUP],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */

@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
   index,
+  varchar,
 } from 'drizzle-orm/pg-core';
 
 export const PAYMENT_METHODS = ['pix', 'card'] as const;
@@ -169,6 +170,9 @@ export const paymentAlerts = pgTable(
     details: jsonb().$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     resolvedAt: timestamp({ withTimezone: true }),
+    /** B3 / WB-198: quem encerrou o alerta à mão e a nota (a trilha completa fica na auditoria). Nulos quando o sistema o resolveu sozinho. Sem FK: é só o id do admin. */
+    resolvedBy: uuid(),
+    resolutionNote: varchar({ length: 300 }),
   },
   (t) => [index('payment_alerts_open_idx').on(t.resolvedAt, t.createdAt)],
 );

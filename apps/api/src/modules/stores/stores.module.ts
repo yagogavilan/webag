@@ -44,6 +44,6 @@ import { TeamService } from './team.service.js';
       useFactory: (config: ConfigService<Env, true>, fake: FakePaymentOAuthProvider, mp: MercadoPagoOAuthProvider) => (config.get('PAYMENT_PROVIDER', { infer: true }) === 'mercadopago' ? mp : fake),
     },
   ],
-  exports: [StoresService, DeliveryQuoteRegistry, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
+  exports: [StoresService, AdminStoresService, DeliveryQuoteRegistry, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
 })
 export class StoresModule {}

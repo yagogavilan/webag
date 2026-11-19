@@ -921,18 +921,348 @@ export interface WebhookAck {
   duplicate: boolean;
 }
 
-export type PaymentAlertDetails = { [key: string]: unknown };
+export type AdminAlertArea = typeof AdminAlertArea[keyof typeof AdminAlertArea];
 
-export interface PaymentAlert {
+
+export const AdminAlertArea = {
+  payments: 'payments',
+  orders: 'orders',
+  logistics: 'logistics',
+  exchanges: 'exchanges',
+  stores: 'stores',
+  privacy: 'privacy',
+  platform: 'platform',
+} as const;
+
+/**
+ * `critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar
+ */
+export type AdminAlertSeverity = typeof AdminAlertSeverity[keyof typeof AdminAlertSeverity];
+
+
+export const AdminAlertSeverity = {
+  critical: 'critical',
+  warning: 'warning',
+  info: 'info',
+} as const;
+
+export interface AdminAlertKind {
+  kind: string;
+  label: string;
+  area: AdminAlertArea;
+  severity: AdminAlertSeverity;
+  /** O que fazer */
+  hint: string;
+}
+
+export type AdminAlertStatus = typeof AdminAlertStatus[keyof typeof AdminAlertStatus];
+
+
+export const AdminAlertStatus = {
+  open: 'open',
+  resolved: 'resolved',
+} as const;
+
+/**
+ * Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente
+ */
+export type AdminAlertDetails = { [key: string]: unknown };
+
+export type AdminAlertLinks = {
+  /** @nullable */
+  orderId: string | null;
+  /** @nullable */
+  storeId: string | null;
+  /** @nullable */
+  deliveryId: string | null;
+  /** @nullable */
+  exchangeId: string | null;
+};
+
+export interface AdminAlert {
   id: string;
+  /** Tipo estável; um tipo fora do catálogo vem com `label` "Outro alerta" (só o super admin vê) */
+  kind: string;
+  label: string;
+  area: AdminAlertArea;
+  severity: AdminAlertSeverity;
+  hint: string;
+  status: AdminAlertStatus;
   /** @nullable */
   attemptId: string | null;
-  kind: string;
-  details: PaymentAlertDetails;
+  /** Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente */
+  details: AdminAlertDetails;
+  links: AdminAlertLinks;
   createdAt: string;
   /** @nullable */
   resolvedAt: string | null;
+  /**
+     * Nulo quando o sistema encerrou sozinho
+     * @nullable
+     */
+  resolvedByName: string | null;
+  /** @nullable */
+  resolutionNote: string | null;
 }
+
+export interface AdminAlertPage {
+  data: AdminAlert[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type AdminAlertsSummaryBySeverity = {
+  critical: number;
+  warning: number;
+  info: number;
+};
+
+/**
+ * Uma chave por área (`payments`, `orders`, `logistics`, `exchanges`, `stores`, `privacy`, `platform`)
+ */
+export type AdminAlertsSummaryByArea = {[key: string]: number};
+
+export type AdminAlertsSummaryByKindItem = {
+  kind: string;
+  label: string;
+  area: AdminAlertArea;
+  severity: AdminAlertSeverity;
+  count: number;
+};
+
+export interface AdminAlertsSummary {
+  open: number;
+  bySeverity: AdminAlertsSummaryBySeverity;
+  /** Uma chave por área (`payments`, `orders`, `logistics`, `exchanges`, `stores`, `privacy`, `platform`) */
+  byArea: AdminAlertsSummaryByArea;
+  byKind: AdminAlertsSummaryByKindItem[];
+  /** @nullable */
+  oldestOpenAt: string | null;
+}
+
+export interface ResolveAlertRequest {
+  /**
+     * O que foi feito ou por que se encerra
+     * @minLength 5
+     * @maxLength 300
+     */
+  note: string;
+}
+
+export type AdminUserRowRolesItem = typeof AdminUserRowRolesItem[keyof typeof AdminUserRowRolesItem];
+
+
+export const AdminUserRowRolesItem = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type AdminUserRowStatus = typeof AdminUserRowStatus[keyof typeof AdminUserRowStatus];
+
+
+export const AdminUserRowStatus = {
+  active: 'active',
+  blocked: 'blocked',
+  deleted: 'deleted',
+} as const;
+
+export interface AdminUserRow {
+  id: string;
+  /** Abreviado ("Maria L.") */
+  name: string;
+  /** @nullable */
+  emailMasked: string | null;
+  /** @nullable */
+  phoneMasked: string | null;
+  roles: AdminUserRowRolesItem[];
+  status: AdminUserRowStatus;
+  /** Lojas em que é dono ou funcionário */
+  storeCount: number;
+  createdAt: string;
+  /** @nullable */
+  lastLoginAt: string | null;
+}
+
+export interface AdminUserPage {
+  data: AdminUserRow[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type AdminUserDetailStoresItemRole = typeof AdminUserDetailStoresItemRole[keyof typeof AdminUserDetailStoresItemRole];
+
+
+export const AdminUserDetailStoresItemRole = {
+  owner: 'owner',
+  staff: 'staff',
+} as const;
+
+export type AdminUserDetailStoresItem = {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  status: string;
+  role: AdminUserDetailStoresItemRole;
+};
+
+export type AdminUserDetailRecentOrdersItemMode = typeof AdminUserDetailRecentOrdersItemMode[keyof typeof AdminUserDetailRecentOrdersItemMode];
+
+
+export const AdminUserDetailRecentOrdersItemMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type AdminUserDetailRecentOrdersItem = {
+  id: string;
+  number: string;
+  status: string;
+  mode: AdminUserDetailRecentOrdersItemMode;
+  createdAt: string;
+  total: Money;
+  /** @nullable */
+  storeName: string | null;
+};
+
+export type AdminUserDetailBlockHistoryItemAction = typeof AdminUserDetailBlockHistoryItemAction[keyof typeof AdminUserDetailBlockHistoryItemAction];
+
+
+export const AdminUserDetailBlockHistoryItemAction = {
+  blocked: 'blocked',
+  unblocked: 'unblocked',
+} as const;
+
+export type AdminUserDetailBlockHistoryItem = {
+  action: AdminUserDetailBlockHistoryItemAction;
+  reason: string;
+  at: string;
+  /** @nullable */
+  byName: string | null;
+  suspendedStoreIds: string[];
+};
+
+export type AdminUserDetailAllowedActionsItem = typeof AdminUserDetailAllowedActionsItem[keyof typeof AdminUserDetailAllowedActionsItem];
+
+
+export const AdminUserDetailAllowedActionsItem = {
+  block: 'block',
+  unblock: 'unblock',
+} as const;
+
+export type AdminUserDetail = AdminUserRow & {
+  emailVerified: boolean;
+  stores: AdminUserDetailStoresItem[];
+  /** Os 10 pedidos mais recentes como cliente */
+  recentOrders: AdminUserDetailRecentOrdersItem[];
+  blockHistory: AdminUserDetailBlockHistoryItem[];
+  allowedActions: AdminUserDetailAllowedActionsItem[];
+};
+
+export type AdminUserBlockResult = AdminUserDetail & {
+  /** Lojas suspensas junto com o bloqueio do dono (WB-102 C5) */
+  suspendedStoreIds: string[];
+  /** Lojas que não foi possível suspender; o bloqueio do usuário vale mesmo assim */
+  failedStoreIds: string[];
+};
+
+export interface BlockUserRequest {
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
+}
+
+export type AdminOrderRowMode = typeof AdminOrderRowMode[keyof typeof AdminOrderRowMode];
+
+
+export const AdminOrderRowMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type AdminOrderRowPaymentMethod = typeof AdminOrderRowPaymentMethod[keyof typeof AdminOrderRowPaymentMethod];
+
+
+export const AdminOrderRowPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type AdminOrderRowStore = {
+  id: string;
+  name: string;
+  /** @nullable */
+  city: string | null;
+};
+
+export type AdminOrderRowCustomer = {
+  id: string;
+  /** Abreviado ("Maria L.") */
+  name: string;
+};
+
+/**
+ * Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.
+ */
+export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
+
+
+export const OrderStatus = {
+  awaiting_payment: 'awaiting_payment',
+  received: 'received',
+  accepted: 'accepted',
+  in_preparation: 'in_preparation',
+  ready_for_collection: 'ready_for_collection',
+  out_for_delivery: 'out_for_delivery',
+  ready_for_pickup: 'ready_for_pickup',
+  delivered: 'delivered',
+  cancelled: 'cancelled',
+  refused: 'refused',
+  expired: 'expired',
+} as const;
+
+export interface AdminOrderRow {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: AdminOrderRowMode;
+  paymentMethod: AdminOrderRowPaymentMethod;
+  createdAt: string;
+  /** @nullable */
+  paidAt: string | null;
+  store: AdminOrderRowStore;
+  customer: AdminOrderRowCustomer;
+  total: Money;
+}
+
+export interface AdminOrderPage {
+  data: AdminOrderRow[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+/**
+ * @nullable
+ */
+export type AdminOrderDetailCancelledBy = typeof AdminOrderDetailCancelledBy[keyof typeof AdminOrderDetailCancelledBy] | null;
+
+
+export const AdminOrderDetailCancelledBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type AdminOrderDetailCustomer = {
+  id: string;
+  name: string;
+  /** @nullable */
+  emailMasked: string | null;
+  /** @nullable */
+  phoneMasked: string | null;
+};
 
 export type DeliveryStatus = typeof DeliveryStatus[keyof typeof DeliveryStatus];
 
@@ -947,6 +1277,236 @@ export const DeliveryStatus = {
   returned_to_store: 'returned_to_store',
   cancelled: 'cancelled',
 } as const;
+
+/**
+ * @nullable
+ */
+export type AdminOrderDetailDeliveryLogistics = {
+  deliveryId: string;
+  status: DeliveryStatus;
+} | null;
+
+/**
+ * Só em pedido de entrega; endereço só com bairro, cidade e UF
+ * @nullable
+ */
+export type AdminOrderDetailDelivery = {
+  /** @nullable */
+  neighborhood: string | null;
+  /** @nullable */
+  city: string | null;
+  /** @nullable */
+  state: string | null;
+  /** @nullable */
+  logistics: AdminOrderDetailDeliveryLogistics;
+} | null;
+
+export type AdminOrderDetailItemsItemAttributes = {[key: string]: string};
+
+export type AdminOrderDetailItemsItem = {
+  name: string;
+  attributes: AdminOrderDetailItemsItemAttributes;
+  quantity: number;
+  unitPrice: Money;
+  lineTotal: Money;
+};
+
+/**
+ * A conta do pedido (RN-10), congelada no pagamento
+ */
+export type AdminOrderDetailValues = {
+  subtotal: Money;
+  delivery: Money;
+  serviceFee: Money;
+  storeDiscount: Money;
+  platformDiscount: Money;
+  total: Money;
+  commission: Money;
+  applicationFee: Money;
+  merchantNetBeforeProviderFee: Money;
+};
+
+export type AdminOrderDetailPaymentMethod = typeof AdminOrderDetailPaymentMethod[keyof typeof AdminOrderDetailPaymentMethod];
+
+
+export const AdminOrderDetailPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type AdminOrderDetailPaymentAttemptsItemMethod = typeof AdminOrderDetailPaymentAttemptsItemMethod[keyof typeof AdminOrderDetailPaymentAttemptsItemMethod];
+
+
+export const AdminOrderDetailPaymentAttemptsItemMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type AdminOrderDetailPaymentAttemptsItem = {
+  id: string;
+  status: string;
+  method: AdminOrderDetailPaymentAttemptsItemMethod;
+  amount: Money;
+  createdAt: string;
+};
+
+/**
+ * @nullable
+ */
+export type AdminOrderDetailPayment = {
+  method: AdminOrderDetailPaymentMethod;
+  /** Estado da última tentativa */
+  status: string;
+  installments: number;
+  /** @nullable */
+  declineReason: string | null;
+  attempts: AdminOrderDetailPaymentAttemptsItem[];
+} | null;
+
+export type AdminOrderDetailRefundsItemsItemStatus = typeof AdminOrderDetailRefundsItemsItemStatus[keyof typeof AdminOrderDetailRefundsItemsItemStatus];
+
+
+export const AdminOrderDetailRefundsItemsItemStatus = {
+  pending: 'pending',
+  done: 'done',
+  failed: 'failed',
+  exhausted: 'exhausted',
+  covered: 'covered',
+} as const;
+
+export type AdminOrderDetailRefundsItemsItem = {
+  id: string;
+  amount: Money;
+  status: AdminOrderDetailRefundsItemsItemStatus;
+  reason: string;
+  at: string;
+};
+
+export type AdminOrderDetailRefunds = {
+  paid: Money;
+  /** Estornado ou em fila (não conta as falhas) */
+  refunded: Money;
+  remaining: Money;
+  items: AdminOrderDetailRefundsItemsItem[];
+};
+
+export type AdminOrderDetailTimelineItemActor = typeof AdminOrderDetailTimelineItemActor[keyof typeof AdminOrderDetailTimelineItemActor];
+
+
+export const AdminOrderDetailTimelineItemActor = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type AdminOrderDetailTimelineItem = {
+  status: OrderStatus;
+  /** @nullable */
+  from: string | null;
+  at: string;
+  actor: AdminOrderDetailTimelineItemActor;
+  /**
+     * Nulo quando o ator é o sistema
+     * @nullable
+     */
+  actorName: string | null;
+  /** @nullable */
+  reason: string | null;
+};
+
+export type AdminOrderDetailExchangesItem = {
+  id: string;
+  number: string;
+  type: string;
+  status: string;
+};
+
+/**
+ * @nullable
+ */
+export type AdminOrderDetailReview = {
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  createdAt: string;
+} | null;
+
+export type AdminOrderDetailAllowedActionsItem = typeof AdminOrderDetailAllowedActionsItem[keyof typeof AdminOrderDetailAllowedActionsItem];
+
+
+export const AdminOrderDetailAllowedActionsItem = {
+  cancel: 'cancel',
+  refund: 'refund',
+} as const;
+
+export type AdminOrderDetailRefundLimit = {
+  /** `estorno_super_admin_cents` */
+  superAdminOnlyAboveCents: number;
+  /**
+     * Teto do perfil de quem pede; nulo = sem teto (super admin)
+     * @nullable
+     */
+  profileCapCents: number | null;
+};
+
+export type AdminOrderDetail = AdminOrderRow & ({
+  /** @nullable */
+  acceptedAt: string | null;
+  /** @nullable */
+  deliveredAt: string | null;
+  /** @nullable */
+  cancelledAt: string | null;
+  /** @nullable */
+  cancelledBy: AdminOrderDetailCancelledBy;
+  /** @nullable */
+  cancelReason: string | null;
+  /**
+     * Pagamento contestado pelo provedor (chargeback)
+     * @nullable
+     */
+  disputedAt: string | null;
+  /**
+     * Primeiro "não recebi" do cliente
+     * @nullable
+     */
+  notReceivedAt: string | null;
+  /** @nullable */
+  couponCode: string | null;
+  customer: AdminOrderDetailCustomer;
+  /**
+     * Só em pedido de entrega; endereço só com bairro, cidade e UF
+     * @nullable
+     */
+  delivery: AdminOrderDetailDelivery;
+  items: AdminOrderDetailItemsItem[];
+  /** A conta do pedido (RN-10), congelada no pagamento */
+  values: AdminOrderDetailValues;
+  /** @nullable */
+  payment: AdminOrderDetailPayment;
+  refunds: AdminOrderDetailRefunds;
+  timeline: AdminOrderDetailTimelineItem[];
+  exchanges: AdminOrderDetailExchangesItem[];
+  /** @nullable */
+  review: AdminOrderDetailReview;
+  allowedActions: AdminOrderDetailAllowedActionsItem[];
+  refundLimit: AdminOrderDetailRefundLimit;
+});
+
+export type PaymentAlertDetails = { [key: string]: unknown };
+
+export interface PaymentAlert {
+  id: string;
+  /** @nullable */
+  attemptId: string | null;
+  kind: string;
+  details: PaymentAlertDetails;
+  createdAt: string;
+  /** @nullable */
+  resolvedAt: string | null;
+}
 
 export interface Courier {
   id: string;
@@ -4038,26 +4598,6 @@ export const StoreOrderSummaryMode = {
   pickup: 'pickup',
 } as const;
 
-/**
- * Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.
- */
-export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
-
-
-export const OrderStatus = {
-  awaiting_payment: 'awaiting_payment',
-  received: 'received',
-  accepted: 'accepted',
-  in_preparation: 'in_preparation',
-  ready_for_collection: 'ready_for_collection',
-  out_for_delivery: 'out_for_delivery',
-  ready_for_pickup: 'ready_for_pickup',
-  delivered: 'delivered',
-  cancelled: 'cancelled',
-  refused: 'refused',
-  expired: 'expired',
-} as const;
-
 export interface StoreOrderSummary {
   id: string;
   number: string;
@@ -7128,6 +7668,132 @@ export type AdminCancelOrder200 = {
   remaining: Money;
 };
 
+export type ListAdminAlertsParams = {
+  status?: ListAdminAlertsStatus;
+  area?: AdminAlertArea;
+  severity?: AdminAlertSeverity;
+  /**
+   * Tipo exato (ver `/v1/admin/alerts/kinds`)
+   * @pattern ^[a-z_]{3,60}$
+   */
+  kind?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListAdminAlertsStatus = typeof ListAdminAlertsStatus[keyof typeof ListAdminAlertsStatus];
+
+
+export const ListAdminAlertsStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type ListAdminAlertKinds200 = {
+  data: AdminAlertKind[];
+  /** @nullable */
+  nextCursor: null;
+};
+
+export type SearchAdminUsersParams = {
+  /**
+   * @minLength 2
+   * @maxLength 100
+   */
+  q?: string;
+  role?: SearchAdminUsersRole;
+  status?: SearchAdminUsersStatus;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type SearchAdminUsersRole = typeof SearchAdminUsersRole[keyof typeof SearchAdminUsersRole];
+
+
+export const SearchAdminUsersRole = {
+  customer: 'customer',
+  merchant: 'merchant',
+} as const;
+
+export type SearchAdminUsersStatus = typeof SearchAdminUsersStatus[keyof typeof SearchAdminUsersStatus];
+
+
+export const SearchAdminUsersStatus = {
+  active: 'active',
+  blocked: 'blocked',
+  deleted: 'deleted',
+} as const;
+
+export type ListAdminOrdersParams = {
+  /**
+   * @minLength 2
+   * @maxLength 100
+   */
+  q?: string;
+  /**
+   * Lista separada por vírgula, ex.: `received,accepted`
+   * @maxLength 200
+   */
+  status?: string;
+  mode?: ListAdminOrdersMode;
+  paymentMethod?: ListAdminOrdersPaymentMethod;
+  storeId?: string;
+  userId?: string;
+  /**
+   * @minLength 2
+   * @maxLength 80
+   */
+  city?: string;
+  from?: string;
+  to?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 50, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
+};
+
+export type ListAdminOrdersMode = typeof ListAdminOrdersMode[keyof typeof ListAdminOrdersMode];
+
+
+export const ListAdminOrdersMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export type ListAdminOrdersPaymentMethod = typeof ListAdminOrdersPaymentMethod[keyof typeof ListAdminOrdersPaymentMethod];
+
+
+export const ListAdminOrdersPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
 export type ListPaymentAlertsParams = {
   openOnly?: boolean;
   /**
@@ -8103,6 +8769,14 @@ export type GetStoreReviewsSummary200 = {
   withoutReply: number;
 };
 
+/**
+ * B3: alertas de operação abertos dos tipos que o perfil vê (`alerts:read`) e quantos são `critical`; a lista está em `/v1/admin/alerts`
+ */
+export type GetAdminPendingCounts200Alerts = {
+  open: number;
+  critical: number;
+} | null;
+
 export type GetAdminPendingCounts200Stores = {
   inReview: number;
 } | null;
@@ -8121,6 +8795,8 @@ export type GetAdminPendingCounts200DataRequests = {
 } | null;
 
 export type GetAdminPendingCounts200 = {
+  /** B3: alertas de operação abertos dos tipos que o perfil vê (`alerts:read`) e quantos são `critical`; a lista está em `/v1/admin/alerts` */
+  alerts: GetAdminPendingCounts200Alerts;
   stores: GetAdminPendingCounts200Stores;
   disputes: GetAdminPendingCounts200Disputes;
   refunds: GetAdminPendingCounts200Refunds;
@@ -13850,6 +14526,668 @@ export const adminCancelOrder = async (orderId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(adminCancelOrderBody)
+  }
+);}
+
+
+
+export type listAdminAlertsResponse200 = {
+  data: AdminAlertPage
+  status: 200
+}
+
+export type listAdminAlertsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminAlertsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminAlertsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminAlertsResponseSuccess = (listAdminAlertsResponse200) & {
+  headers: Headers;
+};
+export type listAdminAlertsResponseError = (listAdminAlertsResponse400 | listAdminAlertsResponse401 | listAdminAlertsResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminAlertsResponse = (listAdminAlertsResponseSuccess | listAdminAlertsResponseError)
+
+export const getListAdminAlertsUrl = (params?: ListAdminAlertsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/alerts?${stringifiedParams}` : `/v1/admin/alerts`
+}
+
+/**
+ * Caixa de alertas do admin: tudo o que o sistema pede a um humano (conciliação e divergência de pagamento, estornos recusados, "não recebi" com auto-conclusão retida, cancelamento sem resposta, entrega e coleta atrasadas, loja com cancelamento alto, LGPD com prazo...). Mais recentes primeiro; por padrão só os abertos. Paginado por cursor.
+ *
+ * O perfil só vê os TIPOS do seu público (catálogo em `GET /v1/admin/alerts/kinds`): dinheiro é do financeiro e do super admin; pedidos, logística e trocas, da operação e do suporte; privacidade, só do super admin. Alerta de tipo que o perfil não vê não aparece na lista, nem na contagem, e o detalhe dele é 404. Permissão de admin: `alerts:read`.
+ *
+ * Cada item traz `label`, `severity` (`critical`, `warning`, `info`), `area`, `hint` (o que fazer, uma frase), `details` (os dados do alerta, sem dado pessoal do cliente) e `links` (ids de pedido, loja, corrida e troca para o painel montar o atalho). O alerta que o sistema não conhece vem como "Outro alerta" e só o super admin vê. "Ajustar" a divergência (gerar ajuste) e o alerta de 3 dias são fase 2 (DEC-071).
+ * @summary Alertas de operação (B3, WB-198 e WB-113 leitura)
+ */
+export const listAdminAlerts = async (params?: ListAdminAlertsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminAlertsResponse> => {
+
+  return apiFetch<listAdminAlertsResponse>(getListAdminAlertsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminAlertsSummaryResponse200 = {
+  data: AdminAlertsSummary
+  status: 200
+}
+
+export type getAdminAlertsSummaryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminAlertsSummaryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminAlertsSummaryResponseSuccess = (getAdminAlertsSummaryResponse200) & {
+  headers: Headers;
+};
+export type getAdminAlertsSummaryResponseError = (getAdminAlertsSummaryResponse401 | getAdminAlertsSummaryResponse403) & {
+  headers: Headers;
+};
+
+export type getAdminAlertsSummaryResponse = (getAdminAlertsSummaryResponseSuccess | getAdminAlertsSummaryResponseError)
+
+export const getGetAdminAlertsSummaryUrl = () => {
+
+
+
+
+  return `/v1/admin/alerts/summary`
+}
+
+/**
+ * Só os tipos que o perfil vê. `bySeverity` e `byArea` somam `open`. `byKind` vem do maior para o menor. Permissão de admin: `alerts:read`. O mesmo número (`open` e `critical`) vem em `GET /v1/admin/overview/pending` > `alerts`.
+ * @summary Contagem dos alertas abertos do perfil (contador do Início)
+ */
+export const getAdminAlertsSummary = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAlertsSummaryResponse> => {
+
+  return apiFetch<getAdminAlertsSummaryResponse>(getGetAdminAlertsSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAdminAlertKindsResponse200 = {
+  data: ListAdminAlertKinds200
+  status: 200
+}
+
+export type listAdminAlertKindsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminAlertKindsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminAlertKindsResponseSuccess = (listAdminAlertKindsResponse200) & {
+  headers: Headers;
+};
+export type listAdminAlertKindsResponseError = (listAdminAlertKindsResponse401 | listAdminAlertKindsResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminAlertKindsResponse = (listAdminAlertKindsResponseSuccess | listAdminAlertKindsResponseError)
+
+export const getListAdminAlertKindsUrl = () => {
+
+
+
+
+  return `/v1/admin/alerts/kinds`
+}
+
+/**
+ * Catálogo para os filtros e rótulos do painel (o painel não inventa texto). Permissão de admin: `alerts:read`.
+ * @summary Tipos de alerta que o perfil vê, com rótulo, gravidade e o que fazer
+ */
+export const listAdminAlertKinds = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listAdminAlertKindsResponse> => {
+
+  return apiFetch<listAdminAlertKindsResponse>(getListAdminAlertKindsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminAlertResponse200 = {
+  data: AdminAlert
+  status: 200
+}
+
+export type getAdminAlertResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminAlertResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminAlertResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminAlertResponseSuccess = (getAdminAlertResponse200) & {
+  headers: Headers;
+};
+export type getAdminAlertResponseError = (getAdminAlertResponse401 | getAdminAlertResponse403 | getAdminAlertResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminAlertResponse = (getAdminAlertResponseSuccess | getAdminAlertResponseError)
+
+export const getGetAdminAlertUrl = (alertId: string,) => {
+
+
+
+
+  return `/v1/admin/alerts/${alertId}`
+}
+
+/**
+ * 404 também para o tipo que o perfil não vê (não revela que existe). Permissão de admin: `alerts:read`.
+ * @summary Alerta de operação
+ */
+export const getAdminAlert = async (alertId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAlertResponse> => {
+
+  return apiFetch<getAdminAlertResponse>(getGetAdminAlertUrl(alertId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type resolveAdminAlertResponse200 = {
+  data: AdminAlert
+  status: 200
+}
+
+export type resolveAdminAlertResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type resolveAdminAlertResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type resolveAdminAlertResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resolveAdminAlertResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resolveAdminAlertResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type resolveAdminAlertResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type resolveAdminAlertResponseSuccess = (resolveAdminAlertResponse200) & {
+  headers: Headers;
+};
+export type resolveAdminAlertResponseError = (resolveAdminAlertResponse400 | resolveAdminAlertResponse401 | resolveAdminAlertResponse403 | resolveAdminAlertResponse404 | resolveAdminAlertResponse409 | resolveAdminAlertResponse429) & {
+  headers: Headers;
+};
+
+export type resolveAdminAlertResponse = (resolveAdminAlertResponseSuccess | resolveAdminAlertResponseError)
+
+export const getResolveAdminAlertUrl = (alertId: string,) => {
+
+
+
+
+  return `/v1/admin/alerts/${alertId}/resolve`
+}
+
+/**
+ * Grava quem, quando e a nota no alerta e na auditoria (`alert.resolve`). Só quem vê o tipo encerra (404 para os demais). Encerrar de novo: 409 `ALERT_ALREADY_RESOLVED`. Se o mesmo problema voltar, o sistema abre um alerta novo. Permissão de admin: `alerts:resolve` (super admin, operação e financeiro).
+ * @summary Encerrar o alerta com nota (WB-113 C2 "Resolvida")
+ */
+export const resolveAdminAlert = async (alertId: string,
+    resolveAlertRequest: ResolveAlertRequest, options?: Parameters<typeof apiFetch>[1]): Promise<resolveAdminAlertResponse> => {
+
+  return apiFetch<resolveAdminAlertResponse>(getResolveAdminAlertUrl(alertId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(resolveAlertRequest)
+  }
+);}
+
+
+
+export type searchAdminUsersResponse200 = {
+  data: AdminUserPage
+  status: 200
+}
+
+export type searchAdminUsersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type searchAdminUsersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type searchAdminUsersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type searchAdminUsersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type searchAdminUsersResponseSuccess = (searchAdminUsersResponse200) & {
+  headers: Headers;
+};
+export type searchAdminUsersResponseError = (searchAdminUsersResponse400 | searchAdminUsersResponse401 | searchAdminUsersResponse403 | searchAdminUsersResponse429) & {
+  headers: Headers;
+};
+
+export type searchAdminUsersResponse = (searchAdminUsersResponseSuccess | searchAdminUsersResponseError)
+
+export const getSearchAdminUsersUrl = (params?: SearchAdminUsersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/users?${stringifiedParams}` : `/v1/admin/users`
+}
+
+/**
+ * Busca por trecho do nome, do e-mail ou do celular (4 dígitos ou mais) ou pelo ID exato; sem `q` lista os mais recentes. Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
+ * @summary Buscar clientes e lojistas (B4, WB-102)
+ */
+export const searchAdminUsers = async (params?: SearchAdminUsersParams, options?: Parameters<typeof apiFetch>[1]): Promise<searchAdminUsersResponse> => {
+
+  return apiFetch<searchAdminUsersResponse>(getSearchAdminUsersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminUserResponse200 = {
+  data: AdminUserDetail
+  status: 200
+}
+
+export type getAdminUserResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminUserResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminUserResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminUserResponseSuccess = (getAdminUserResponse200) & {
+  headers: Headers;
+};
+export type getAdminUserResponseError = (getAdminUserResponse401 | getAdminUserResponse403 | getAdminUserResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminUserResponse = (getAdminUserResponseSuccess | getAdminUserResponseError)
+
+export const getGetAdminUserUrl = (userId: string,) => {
+
+
+
+
+  return `/v1/admin/users/${userId}`
+}
+
+/**
+ * Permissão de admin: `users:read`. `allowedActions` diz se o perfil pode `block` ou `unblock` (só super admin e operação). Conta de admin: 404.
+ * @summary Detalhe do usuário: lojas, pedidos recentes e histórico de bloqueios (mascarado)
+ */
+export const getAdminUser = async (userId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminUserResponse> => {
+
+  return apiFetch<getAdminUserResponse>(getGetAdminUserUrl(userId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type blockAdminUserResponse200 = {
+  data: AdminUserBlockResult
+  status: 200
+}
+
+export type blockAdminUserResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type blockAdminUserResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type blockAdminUserResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type blockAdminUserResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type blockAdminUserResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type blockAdminUserResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type blockAdminUserResponseSuccess = (blockAdminUserResponse200) & {
+  headers: Headers;
+};
+export type blockAdminUserResponseError = (blockAdminUserResponse400 | blockAdminUserResponse401 | blockAdminUserResponse403 | blockAdminUserResponse404 | blockAdminUserResponse409 | blockAdminUserResponse429) & {
+  headers: Headers;
+};
+
+export type blockAdminUserResponse = (blockAdminUserResponseSuccess | blockAdminUserResponseError)
+
+export const getBlockAdminUserUrl = (userId: string,) => {
+
+
+
+
+  return `/v1/admin/users/${userId}/block`
+}
+
+/**
+ * O usuário perde as sessões na hora e passa a ver "Conta indisponível" (403 `ACCOUNT_BLOCKED` no login). Se for dono de loja, a loja aprovada é suspensa junto (WB-102 C5; `suspendedStoreIds`, e `failedStoreIds` se alguma suspensão falhar: o bloqueio vale mesmo assim). Pedidos em andamento NÃO são cancelados: seguem para a decisão do admin. Auditado (`user.block`) com motivo. 409: `USER_ALREADY_BLOCKED`, `USER_NOT_ACTIVE` (excluída). Conta de admin: 404. Permissão de admin: `users:block` (super admin e operação).
+ * @summary Bloquear o usuário com motivo (WB-102 C3 e C5)
+ */
+export const blockAdminUser = async (userId: string,
+    blockUserRequest: BlockUserRequest, options?: Parameters<typeof apiFetch>[1]): Promise<blockAdminUserResponse> => {
+
+  return apiFetch<blockAdminUserResponse>(getBlockAdminUserUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(blockUserRequest)
+  }
+);}
+
+
+
+export type unblockAdminUserResponse200 = {
+  data: AdminUserDetail
+  status: 200
+}
+
+export type unblockAdminUserResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type unblockAdminUserResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type unblockAdminUserResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type unblockAdminUserResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type unblockAdminUserResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type unblockAdminUserResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type unblockAdminUserResponseSuccess = (unblockAdminUserResponse200) & {
+  headers: Headers;
+};
+export type unblockAdminUserResponseError = (unblockAdminUserResponse400 | unblockAdminUserResponse401 | unblockAdminUserResponse403 | unblockAdminUserResponse404 | unblockAdminUserResponse409 | unblockAdminUserResponse429) & {
+  headers: Headers;
+};
+
+export type unblockAdminUserResponse = (unblockAdminUserResponseSuccess | unblockAdminUserResponseError)
+
+export const getUnblockAdminUserUrl = (userId: string,) => {
+
+
+
+
+  return `/v1/admin/users/${userId}/unblock`
+}
+
+/**
+ * Reverte o bloqueio do USUÁRIO. A loja suspensa junto NÃO volta sozinha: o admin a reativa pela tela de lojas (`POST /v1/admin/stores/{id}/reactivate`), de propósito. Auditado (`user.unblock`). 409 `USER_NOT_BLOCKED`. Permissão de admin: `users:block`.
+ * @summary Desbloquear o usuário com motivo (WB-102 C3)
+ */
+export const unblockAdminUser = async (userId: string,
+    blockUserRequest: BlockUserRequest, options?: Parameters<typeof apiFetch>[1]): Promise<unblockAdminUserResponse> => {
+
+  return apiFetch<unblockAdminUserResponse>(getUnblockAdminUserUrl(userId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(blockUserRequest)
+  }
+);}
+
+
+
+export type listAdminOrdersResponse200 = {
+  data: AdminOrderPage
+  status: 200
+}
+
+export type listAdminOrdersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminOrdersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminOrdersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminOrdersResponseSuccess = (listAdminOrdersResponse200) & {
+  headers: Headers;
+};
+export type listAdminOrdersResponseError = (listAdminOrdersResponse400 | listAdminOrdersResponse401 | listAdminOrdersResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminOrdersResponse = (listAdminOrdersResponseSuccess | listAdminOrdersResponseError)
+
+export const getListAdminOrdersUrl = (params?: ListAdminOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/orders?${stringifiedParams}` : `/v1/admin/orders`
+}
+
+/**
+ * Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil).
+ * @summary Pedidos: visão geral e filtros (B5, WB-108 C1)
+ */
+export const listAdminOrders = async (params?: ListAdminOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminOrdersResponse> => {
+
+  return apiFetch<listAdminOrdersResponse>(getListAdminOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminOrderResponse200 = {
+  data: AdminOrderDetail
+  status: 200
+}
+
+export type getAdminOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminOrderResponseSuccess = (getAdminOrderResponse200) & {
+  headers: Headers;
+};
+export type getAdminOrderResponseError = (getAdminOrderResponse401 | getAdminOrderResponse403 | getAdminOrderResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminOrderResponse = (getAdminOrderResponseSuccess | getAdminOrderResponseError)
+
+export const getGetAdminOrderUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/admin/orders/${orderId}`
+}
+
+/**
+ * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+ * @summary Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)
+ */
+export const getAdminOrder = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminOrderResponse> => {
+
+  return apiFetch<getAdminOrderResponse>(getGetAdminOrderUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

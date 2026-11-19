@@ -136,7 +136,17 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 
 `terms_acceptances.platform` (0047, SEC-173): só a família (`ios`/`android`/`web`) e a versão do app; o trigger append-only admite, além do truncamento do IP, a redução do `platform` à família do próprio valor (`webag_platform_family`).
 
-## Mapa das migrações (0000 a 0047)
+## DEC-073 (migrações 0051 a 0053): modo manutenção, e-mail de pedido novo, alertas e bloqueio de usuário
+
+| Tabela / coluna | Para quê |
+|---|---|
+| `maintenance_state` (1 linha, `id = 1`) | WB-121: `enabled`, `message`, `expected_back_at`, quem e quando. Ligado, a API recusa pedido NOVO (503 `MAINTENANCE`); o resto segue. Classificada em `privacy-map` (retém; só o admin que alterou) |
+| `store_settings.notify_new_order_email boolean not null default true` | B2: liga/desliga por loja do e-mail de pedido novo e de lembrete de aceite |
+| `orders.store_notified_at timestamptz null` | B2: reivindicação atômica do e-mail de pedido novo (deduplicação); o lembrete usa `accept_reminded_at` |
+| `payment_alerts.resolved_by uuid null`, `resolution_note varchar(300) null` | B3: quem encerrou o alerta à mão e a nota (nulos quando o sistema encerra). Sem FK (só o id do admin; a auditoria guarda o resto) |
+| `user_status_history` | B4: bloqueios e desbloqueios do admin (`action`, `reason`, `actor_id`, `suspended_store_ids`). Retém (prova do ato; privacy-map) |
+
+## Mapa das migrações (0000 a 0053)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
 | Migração | O que muda |
@@ -192,3 +202,6 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0048 sec169_address_pin_verified | `user_addresses.pin_verified` |
 | 0049 bug020_not_received_at | `orders.not_received_at` |
 | 0050 wb262_delivered_at | `deliveries.delivered_at` (hora REAL da entrega: a informada pela operação, recuo até 60 min, ou a do clique; base da compensação, do relatório de prazo e de `orders.delivered_at`) |
+| 0051 wb121_maintenance_mode | `maintenance_state` |
+| 0052 b2_store_order_email | `store_settings.notify_new_order_email`, `orders.store_notified_at` |
+| 0053 b3_b4_alert_resolution_user_status_history | `payment_alerts.resolved_by`, `resolution_note`; `user_status_history` |

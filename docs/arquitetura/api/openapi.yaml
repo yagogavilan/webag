@@ -30,6 +30,8 @@ tags:
     description: Categorias de 2 níveis
   - name: config
     description: Parâmetros do negócio e feature flags
+  - name: admin-ops
+    description: "Operação do admin (DEC-073): alertas, usuários (clientes e lojistas) e pedidos"
   - name: legal
     description: Termos de uso, termos do lojista e política de privacidade versionados
   - name: audit
@@ -2547,6 +2549,285 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /v1/admin/alerts:
+    get:
+      tags: [admin-ops]
+      operationId: listAdminAlerts
+      summary: "Alertas de operação (B3, WB-198 e WB-113 leitura)"
+      description: |
+        Caixa de alertas do admin: tudo o que o sistema pede a um humano (conciliação e divergência de pagamento, estornos recusados, "não recebi" com auto-conclusão retida, cancelamento sem resposta, entrega e coleta atrasadas, loja com cancelamento alto, LGPD com prazo...). Mais recentes primeiro; por padrão só os abertos. Paginado por cursor.
+
+        O perfil só vê os TIPOS do seu público (catálogo em `GET /v1/admin/alerts/kinds`): dinheiro é do financeiro e do super admin; pedidos, logística e trocas, da operação e do suporte; privacidade, só do super admin. Alerta de tipo que o perfil não vê não aparece na lista, nem na contagem, e o detalhe dele é 404. Permissão de admin: `alerts:read`.
+
+        Cada item traz `label`, `severity` (`critical`, `warning`, `info`), `area`, `hint` (o que fazer, uma frase), `details` (os dados do alerta, sem dado pessoal do cliente) e `links` (ids de pedido, loja, corrida e troca para o painel montar o atalho). O alerta que o sistema não conhece vem como "Outro alerta" e só o super admin vê. "Ajustar" a divergência (gerar ajuste) e o alerta de 3 dias são fase 2 (DEC-071).
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved, all], default: open } }
+        - { name: area, in: query, schema: { $ref: '#/components/schemas/AdminAlertArea' } }
+        - { name: severity, in: query, schema: { $ref: '#/components/schemas/AdminAlertSeverity' } }
+        - { name: kind, in: query, description: Tipo exato (ver `/v1/admin/alerts/kinds`), schema: { type: string, pattern: '^[a-z_]{3,60}$' } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Alertas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAlertPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/alerts/summary:
+    get:
+      tags: [admin-ops]
+      operationId: getAdminAlertsSummary
+      summary: "Contagem dos alertas abertos do perfil (contador do Início)"
+      description: "Só os tipos que o perfil vê. `bySeverity` e `byArea` somam `open`. `byKind` vem do maior para o menor. Permissão de admin: `alerts:read`. O mesmo número (`open` e `critical`) vem em `GET /v1/admin/overview/pending` > `alerts`."
+      responses:
+        '200':
+          description: Contagens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAlertsSummary' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/alerts/kinds:
+    get:
+      tags: [admin-ops]
+      operationId: listAdminAlertKinds
+      summary: "Tipos de alerta que o perfil vê, com rótulo, gravidade e o que fazer"
+      description: "Catálogo para os filtros e rótulos do painel (o painel não inventa texto). Permissão de admin: `alerts:read`."
+      responses:
+        '200':
+          description: Tipos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/AdminAlertKind' } }
+                  nextCursor: { type: 'null' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/alerts/{alertId}:
+    get:
+      tags: [admin-ops]
+      operationId: getAdminAlert
+      summary: Alerta de operação
+      description: "404 também para o tipo que o perfil não vê (não revela que existe). Permissão de admin: `alerts:read`."
+      parameters:
+        - { name: alertId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Alerta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAlert' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/alerts/{alertId}/resolve:
+    post:
+      tags: [admin-ops]
+      operationId: resolveAdminAlert
+      summary: "Encerrar o alerta com nota (WB-113 C2 \"Resolvida\")"
+      description: "Grava quem, quando e a nota no alerta e na auditoria (`alert.resolve`). Só quem vê o tipo encerra (404 para os demais). Encerrar de novo: 409 `ALERT_ALREADY_RESOLVED`. Se o mesmo problema voltar, o sistema abre um alerta novo. Permissão de admin: `alerts:resolve` (super admin, operação e financeiro)."
+      parameters:
+        - { name: alertId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveAlertRequest' }
+      responses:
+        '200':
+          description: Alerta encerrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAlert' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/users:
+    get:
+      tags: [admin-ops]
+      operationId: searchAdminUsers
+      summary: "Buscar clientes e lojistas (B4, WB-102)"
+      description: |
+        Busca por trecho do nome, do e-mail ou do celular (4 dígitos ou mais) ou pelo ID exato; sem `q` lista os mais recentes. Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 2, maxLength: 100 } }
+        - { name: role, in: query, schema: { type: string, enum: [customer, merchant] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, blocked, deleted] } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Usuários
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/users/{userId}:
+    get:
+      tags: [admin-ops]
+      operationId: getAdminUser
+      summary: "Detalhe do usuário: lojas, pedidos recentes e histórico de bloqueios (mascarado)"
+      description: "Permissão de admin: `users:read`. `allowedActions` diz se o perfil pode `block` ou `unblock` (só super admin e operação). Conta de admin: 404."
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Usuário
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserDetail' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/users/{userId}/block:
+    post:
+      tags: [admin-ops]
+      operationId: blockAdminUser
+      summary: "Bloquear o usuário com motivo (WB-102 C3 e C5)"
+      description: "O usuário perde as sessões na hora e passa a ver \"Conta indisponível\" (403 `ACCOUNT_BLOCKED` no login). Se for dono de loja, a loja aprovada é suspensa junto (WB-102 C5; `suspendedStoreIds`, e `failedStoreIds` se alguma suspensão falhar: o bloqueio vale mesmo assim). Pedidos em andamento NÃO são cancelados: seguem para a decisão do admin. Auditado (`user.block`) com motivo. 409: `USER_ALREADY_BLOCKED`, `USER_NOT_ACTIVE` (excluída). Conta de admin: 404. Permissão de admin: `users:block` (super admin e operação)."
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockUserRequest' }
+      responses:
+        '200':
+          description: Usuário bloqueado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserBlockResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/users/{userId}/unblock:
+    post:
+      tags: [admin-ops]
+      operationId: unblockAdminUser
+      summary: "Desbloquear o usuário com motivo (WB-102 C3)"
+      description: "Reverte o bloqueio do USUÁRIO. A loja suspensa junto NÃO volta sozinha: o admin a reativa pela tela de lojas (`POST /v1/admin/stores/{id}/reactivate`), de propósito. Auditado (`user.unblock`). 409 `USER_NOT_BLOCKED`. Permissão de admin: `users:block`."
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockUserRequest' }
+      responses:
+        '200':
+          description: Usuário desbloqueado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserDetail' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/orders:
+    get:
+      tags: [admin-ops]
+      operationId: listAdminOrders
+      summary: "Pedidos: visão geral e filtros (B5, WB-108 C1)"
+      description: |
+        Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil).
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 2, maxLength: 100 } }
+        - { name: status, in: query, description: 'Lista separada por vírgula, ex.: `received,accepted`', schema: { type: string, maxLength: 200 } }
+        - { name: mode, in: query, schema: { type: string, enum: [delivery, pickup] } }
+        - { name: paymentMethod, in: query, schema: { type: string, enum: [pix, card] } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: userId, in: query, schema: { type: string, format: uuid } }
+        - { name: city, in: query, schema: { type: string, minLength: 2, maxLength: 80 } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, description: 'Itens por página (padrão 50, máximo 50)', schema: { type: integer, minimum: 1, maximum: 50, default: 50 } }
+      responses:
+        '200':
+          description: Pedidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOrderPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/orders/{orderId}:
+    get:
+      tags: [admin-ops]
+      operationId: getAdminOrder
+      summary: "Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)"
+      description: |
+        Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pedido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOrderDetail' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/admin/payments/alerts:
     get:
       tags: [payments]
@@ -7453,8 +7734,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [stores, disputes, refunds, dataRequests]
+                required: [stores, disputes, refunds, dataRequests, alerts]
                 properties:
+                  alerts: { oneOf: [{ type: 'null' }, { type: object, required: [open, critical], properties: { open: { type: integer }, critical: { type: integer } } }], description: "B3: alertas de operação abertos dos tipos que o perfil vê (`alerts:read`) e quantos são `critical`; a lista está em `/v1/admin/alerts`" }
                   stores: { oneOf: [{ type: 'null' }, { type: object, required: [inReview], properties: { inReview: { type: integer } } }] }
                   disputes: { oneOf: [{ type: 'null' }, { type: object, required: [inMediation], properties: { inMediation: { type: integer } } }] }
                   refunds: { oneOf: [{ type: 'null' }, { type: object, required: [needingAction], properties: { needingAction: { type: integer } } }] }
@@ -9443,6 +9725,328 @@ components:
       properties:
         received: { type: boolean }
         duplicate: { type: boolean, description: Evento já recebido antes (sem novo efeito) }
+    AdminAlertArea:
+      type: string
+      enum: [payments, orders, logistics, exchanges, stores, privacy, platform]
+    AdminAlertSeverity:
+      type: string
+      enum: [critical, warning, info]
+      description: "`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar"
+    AdminAlertKind:
+      type: object
+      required: [kind, label, area, severity, hint]
+      properties:
+        kind: { type: string, example: conciliation_mismatch }
+        label: { type: string, example: Pagamento diverge do provedor }
+        area: { $ref: '#/components/schemas/AdminAlertArea' }
+        severity: { $ref: '#/components/schemas/AdminAlertSeverity' }
+        hint: { type: string, description: O que fazer, em uma frase }
+    AdminAlert:
+      type: object
+      required: [id, kind, label, area, severity, hint, status, attemptId, details, links, createdAt, resolvedAt, resolvedByName, resolutionNote]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, description: "Tipo estável; um tipo fora do catálogo vem com `label` \"Outro alerta\" (só o super admin vê)" }
+        label: { type: string }
+        area: { $ref: '#/components/schemas/AdminAlertArea' }
+        severity: { $ref: '#/components/schemas/AdminAlertSeverity' }
+        hint: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        attemptId: { type: [string, 'null'], format: uuid }
+        details: { type: object, additionalProperties: true, description: "Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente" }
+        links:
+          type: object
+          required: [orderId, storeId, deliveryId, exchangeId]
+          properties:
+            orderId: { type: [string, 'null'], format: uuid }
+            storeId: { type: [string, 'null'], format: uuid }
+            deliveryId: { type: [string, 'null'], format: uuid }
+            exchangeId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        resolvedByName: { type: [string, 'null'], description: Nulo quando o sistema encerrou sozinho }
+        resolutionNote: { type: [string, 'null'] }
+    AdminAlertPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminAlert' } }
+        nextCursor: { type: [string, 'null'] }
+    AdminAlertsSummary:
+      type: object
+      required: [open, bySeverity, byArea, byKind, oldestOpenAt]
+      properties:
+        open: { type: integer }
+        bySeverity:
+          type: object
+          required: [critical, warning, info]
+          properties: { critical: { type: integer }, warning: { type: integer }, info: { type: integer } }
+        byArea:
+          type: object
+          additionalProperties: { type: integer }
+          description: "Uma chave por área (`payments`, `orders`, `logistics`, `exchanges`, `stores`, `privacy`, `platform`)"
+        byKind:
+          type: array
+          items:
+            type: object
+            required: [kind, label, area, severity, count]
+            properties:
+              kind: { type: string }
+              label: { type: string }
+              area: { $ref: '#/components/schemas/AdminAlertArea' }
+              severity: { $ref: '#/components/schemas/AdminAlertSeverity' }
+              count: { type: integer }
+        oldestOpenAt: { type: [string, 'null'], format: date-time }
+    ResolveAlertRequest:
+      type: object
+      additionalProperties: false
+      required: [note]
+      properties:
+        note: { type: string, minLength: 5, maxLength: 300, description: O que foi feito ou por que se encerra }
+    AdminUserRow:
+      type: object
+      required: [id, name, emailMasked, phoneMasked, roles, status, storeCount, createdAt, lastLoginAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: 'Abreviado ("Maria L.")', example: Maria L. }
+        emailMasked: { type: [string, 'null'], example: m***@gmail.com }
+        phoneMasked: { type: [string, 'null'], example: (11) 9****-8888 }
+        roles: { type: array, items: { type: string, enum: [customer, merchant] } }
+        status: { type: string, enum: [active, blocked, deleted] }
+        storeCount: { type: integer, description: Lojas em que é dono ou funcionário }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+    AdminUserPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminUserRow' } }
+        nextCursor: { type: [string, 'null'] }
+    AdminUserDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserRow'
+        - type: object
+          required: [emailVerified, stores, recentOrders, blockHistory, allowedActions]
+          properties:
+            emailVerified: { type: boolean }
+            stores:
+              type: array
+              items:
+                type: object
+                required: [id, name, status, role]
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: [string, 'null'] }
+                  status: { type: string }
+                  role: { type: string, enum: [owner, staff] }
+            recentOrders:
+              type: array
+              description: Os 10 pedidos mais recentes como cliente
+              items:
+                type: object
+                required: [id, number, status, mode, createdAt, total, storeName]
+                properties:
+                  id: { type: string, format: uuid }
+                  number: { type: string }
+                  status: { type: string }
+                  mode: { type: string, enum: [delivery, pickup] }
+                  createdAt: { type: string, format: date-time }
+                  total: { $ref: '#/components/schemas/Money' }
+                  storeName: { type: [string, 'null'] }
+            blockHistory:
+              type: array
+              items:
+                type: object
+                required: [action, reason, at, byName, suspendedStoreIds]
+                properties:
+                  action: { type: string, enum: [blocked, unblocked] }
+                  reason: { type: string }
+                  at: { type: string, format: date-time }
+                  byName: { type: [string, 'null'] }
+                  suspendedStoreIds: { type: array, items: { type: string, format: uuid } }
+            allowedActions:
+              type: array
+              items: { type: string, enum: [block, unblock] }
+    AdminUserBlockResult:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserDetail'
+        - type: object
+          required: [suspendedStoreIds, failedStoreIds]
+          properties:
+            suspendedStoreIds: { type: array, items: { type: string, format: uuid }, description: "Lojas suspensas junto com o bloqueio do dono (WB-102 C5)" }
+            failedStoreIds: { type: array, items: { type: string, format: uuid }, description: Lojas que não foi possível suspender; o bloqueio do usuário vale mesmo assim }
+    BlockUserRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 300 }
+    AdminOrderRow:
+      type: object
+      required: [id, number, status, mode, paymentMethod, createdAt, paidAt, store, customer, total]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, example: WB-4F7K2 }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        mode: { type: string, enum: [delivery, pickup] }
+        paymentMethod: { type: string, enum: [pix, card] }
+        createdAt: { type: string, format: date-time }
+        paidAt: { type: [string, 'null'], format: date-time }
+        store:
+          type: object
+          required: [id, name, city]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            city: { type: [string, 'null'] }
+        customer:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string, description: 'Abreviado ("Maria L.")' }
+        total: { $ref: '#/components/schemas/Money' }
+    AdminOrderPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminOrderRow' } }
+        nextCursor: { type: [string, 'null'] }
+    AdminOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdminOrderRow'
+        - type: object
+          required: [acceptedAt, deliveredAt, cancelledAt, cancelledBy, cancelReason, disputedAt, notReceivedAt, couponCode, customer, delivery, items, values, payment, refunds, timeline, exchanges, review, allowedActions, refundLimit]
+          properties:
+            acceptedAt: { type: [string, 'null'], format: date-time }
+            deliveredAt: { type: [string, 'null'], format: date-time }
+            cancelledAt: { type: [string, 'null'], format: date-time }
+            cancelledBy: { type: [string, 'null'], enum: [customer, store, system, admin, null] }
+            cancelReason: { type: [string, 'null'] }
+            disputedAt: { type: [string, 'null'], format: date-time, description: Pagamento contestado pelo provedor (chargeback) }
+            notReceivedAt: { type: [string, 'null'], format: date-time, description: 'Primeiro "não recebi" do cliente' }
+            couponCode: { type: [string, 'null'] }
+            customer:
+              type: object
+              required: [id, name, emailMasked, phoneMasked]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                emailMasked: { type: [string, 'null'] }
+                phoneMasked: { type: [string, 'null'] }
+            delivery:
+              type: [object, 'null']
+              description: Só em pedido de entrega; endereço só com bairro, cidade e UF
+              required: [neighborhood, city, state, logistics]
+              properties:
+                neighborhood: { type: [string, 'null'] }
+                city: { type: [string, 'null'] }
+                state: { type: [string, 'null'] }
+                logistics:
+                  type: [object, 'null']
+                  required: [deliveryId, status]
+                  properties:
+                    deliveryId: { type: string, format: uuid }
+                    status: { $ref: '#/components/schemas/DeliveryStatus' }
+            items:
+              type: array
+              items:
+                type: object
+                required: [name, attributes, quantity, unitPrice, lineTotal]
+                properties:
+                  name: { type: string }
+                  attributes: { type: object, additionalProperties: { type: string } }
+                  quantity: { type: integer }
+                  unitPrice: { $ref: '#/components/schemas/Money' }
+                  lineTotal: { $ref: '#/components/schemas/Money' }
+            values:
+              type: object
+              description: A conta do pedido (RN-10), congelada no pagamento
+              required: [subtotal, delivery, serviceFee, storeDiscount, platformDiscount, total, commission, applicationFee, merchantNetBeforeProviderFee]
+              properties:
+                subtotal: { $ref: '#/components/schemas/Money' }
+                delivery: { $ref: '#/components/schemas/Money' }
+                serviceFee: { $ref: '#/components/schemas/Money' }
+                storeDiscount: { $ref: '#/components/schemas/Money' }
+                platformDiscount: { $ref: '#/components/schemas/Money' }
+                total: { $ref: '#/components/schemas/Money' }
+                commission: { $ref: '#/components/schemas/Money' }
+                applicationFee: { $ref: '#/components/schemas/Money' }
+                merchantNetBeforeProviderFee: { $ref: '#/components/schemas/Money' }
+            payment:
+              type: [object, 'null']
+              required: [method, status, installments, declineReason, attempts]
+              properties:
+                method: { type: string, enum: [pix, card] }
+                status: { type: string, description: Estado da última tentativa }
+                installments: { type: integer }
+                declineReason: { type: [string, 'null'] }
+                attempts:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, status, method, amount, createdAt]
+                    properties:
+                      id: { type: string, format: uuid }
+                      status: { type: string }
+                      method: { type: string, enum: [pix, card] }
+                      amount: { $ref: '#/components/schemas/Money' }
+                      createdAt: { type: string, format: date-time }
+            refunds:
+              type: object
+              required: [paid, refunded, remaining, items]
+              properties:
+                paid: { $ref: '#/components/schemas/Money' }
+                refunded: { $ref: '#/components/schemas/Money', description: Estornado ou em fila (não conta as falhas) }
+                remaining: { $ref: '#/components/schemas/Money' }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, amount, status, reason, at]
+                    properties:
+                      id: { type: string, format: uuid }
+                      amount: { $ref: '#/components/schemas/Money' }
+                      status: { type: string, enum: [pending, done, failed, exhausted, covered] }
+                      reason: { type: string }
+                      at: { type: string, format: date-time }
+            timeline:
+              type: array
+              items:
+                type: object
+                required: [status, from, at, actor, actorName, reason]
+                properties:
+                  status: { $ref: '#/components/schemas/OrderStatus' }
+                  from: { type: [string, 'null'] }
+                  at: { type: string, format: date-time }
+                  actor: { type: string, enum: [customer, store, system, admin] }
+                  actorName: { type: [string, 'null'], description: Nulo quando o ator é o sistema }
+                  reason: { type: [string, 'null'] }
+            exchanges:
+              type: array
+              items:
+                type: object
+                required: [id, number, type, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  number: { type: string }
+                  type: { type: string }
+                  status: { type: string }
+            review:
+              type: [object, 'null']
+              required: [rating, createdAt]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                createdAt: { type: string, format: date-time }
+            allowedActions:
+              type: array
+              items: { type: string, enum: [cancel, refund] }
+            refundLimit:
+              type: object
+              required: [superAdminOnlyAboveCents, profileCapCents]
+              properties:
+                superAdminOnlyAboveCents: { type: integer, description: "`estorno_super_admin_cents`" }
+                profileCapCents: { type: [integer, 'null'], description: "Teto do perfil de quem pede; nulo = sem teto (super admin)" }
     PaymentAlert:
       type: object
       required: [id, attemptId, kind, details, createdAt, resolvedAt]

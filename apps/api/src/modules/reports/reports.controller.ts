@@ -5,7 +5,7 @@ import { AdminOnly, Ctx, CurrentPrincipal, type Principal, type RequestContext }
 import { adminHasPermission } from '../../platform/auth/permissions.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
-import { AuditService } from '../admin/index.js';
+import { AuditService, alertKindsVisibleTo } from '../admin/index.js';
 import { ReportsService } from './reports.service.js';
 
 const ORDER_STATUSES = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused'] as const;
@@ -100,6 +100,6 @@ export class AdminOverviewController {
   pending(@CurrentPrincipal() principal: Principal) {
     const profile = principal.adminProfile;
     const can = (permission: Parameters<typeof adminHasPermission>[1]) => profile !== null && adminHasPermission(profile, permission);
-    return this.reports.pendingCounts({ stores: can('stores:read'), disputes: can('exchanges:mediate'), refunds: can('payments:refunds:read'), dataRequests: can('privacy:manage') });
+    return this.reports.pendingCounts({ stores: can('stores:read'), disputes: can('exchanges:mediate'), refunds: can('payments:refunds:read'), dataRequests: can('privacy:manage'), ...(profile && can('alerts:read') ? { alerts: alertKindsVisibleTo(profile) } : {}) });
   }
 }

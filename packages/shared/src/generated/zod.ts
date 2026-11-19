@@ -2874,6 +2874,608 @@ export const AdminCancelOrderResponse = zod.object({
 
 
 /**
+ * Caixa de alertas do admin: tudo o que o sistema pede a um humano (conciliação e divergência de pagamento, estornos recusados, "não recebi" com auto-conclusão retida, cancelamento sem resposta, entrega e coleta atrasadas, loja com cancelamento alto, LGPD com prazo...). Mais recentes primeiro; por padrão só os abertos. Paginado por cursor.
+ *
+ * O perfil só vê os TIPOS do seu público (catálogo em `GET /v1/admin/alerts/kinds`): dinheiro é do financeiro e do super admin; pedidos, logística e trocas, da operação e do suporte; privacidade, só do super admin. Alerta de tipo que o perfil não vê não aparece na lista, nem na contagem, e o detalhe dele é 404. Permissão de admin: `alerts:read`.
+ *
+ * Cada item traz `label`, `severity` (`critical`, `warning`, `info`), `area`, `hint` (o que fazer, uma frase), `details` (os dados do alerta, sem dado pessoal do cliente) e `links` (ids de pedido, loja, corrida e troca para o painel montar o atalho). O alerta que o sistema não conhece vem como "Outro alerta" e só o super admin vê. "Ajustar" a divergência (gerar ajuste) e o alerta de 3 dias são fase 2 (DEC-071).
+ * @summary Alertas de operação (B3, WB-198 e WB-113 leitura)
+ */
+export const listAdminAlertsQueryStatusDefault = `open`;
+export const listAdminAlertsQueryKindRegExp = new RegExp('^[a-z_]{3,60}$');
+export const listAdminAlertsQueryCursorMax = 200;
+
+export const listAdminAlertsQueryLimitDefault = 20;
+export const listAdminAlertsQueryLimitMax = 50;
+
+
+
+export const ListAdminAlertsQueryParams = zod.object({
+  "status": zod.enum(['open', 'resolved', 'all']).default(listAdminAlertsQueryStatusDefault),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']).optional(),
+  "severity": zod.enum(['critical', 'warning', 'info']).optional(),
+  "kind": zod.string().regex(listAdminAlertsQueryKindRegExp).optional().describe('Tipo exato (ver `/v1/admin/alerts/kinds`)'),
+  "cursor": zod.string().max(listAdminAlertsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listAdminAlertsQueryLimitMax).default(listAdminAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListAdminAlertsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.string().describe('Tipo estável; um tipo fora do catálogo vem com `label` "Outro alerta" (só o super admin vê)'),
+  "label": zod.string(),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
+  "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
+  "hint": zod.string(),
+  "status": zod.enum(['open', 'resolved']),
+  "attemptId": zod.uuid().nullable(),
+  "details": zod.record(zod.string(), zod.unknown()).describe('Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente'),
+  "links": zod.object({
+  "orderId": zod.uuid().nullable(),
+  "storeId": zod.uuid().nullable(),
+  "deliveryId": zod.uuid().nullable(),
+  "exchangeId": zod.uuid().nullable()
+}),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "resolvedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "resolvedByName": zod.string().nullable().describe('Nulo quando o sistema encerrou sozinho'),
+  "resolutionNote": zod.string().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Só os tipos que o perfil vê. `bySeverity` e `byArea` somam `open`. `byKind` vem do maior para o menor. Permissão de admin: `alerts:read`. O mesmo número (`open` e `critical`) vem em `GET /v1/admin/overview/pending` > `alerts`.
+ * @summary Contagem dos alertas abertos do perfil (contador do Início)
+ */
+export const GetAdminAlertsSummaryResponse = zod.object({
+  "open": zod.int(),
+  "bySeverity": zod.object({
+  "critical": zod.int(),
+  "warning": zod.int(),
+  "info": zod.int()
+}),
+  "byArea": zod.record(zod.string(), zod.int()).describe('Uma chave por área (`payments`, `orders`, `logistics`, `exchanges`, `stores`, `privacy`, `platform`)'),
+  "byKind": zod.array(zod.object({
+  "kind": zod.string(),
+  "label": zod.string(),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
+  "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
+  "count": zod.int()
+})),
+  "oldestOpenAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Catálogo para os filtros e rótulos do painel (o painel não inventa texto). Permissão de admin: `alerts:read`.
+ * @summary Tipos de alerta que o perfil vê, com rótulo, gravidade e o que fazer
+ */
+export const ListAdminAlertKindsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "kind": zod.string(),
+  "label": zod.string(),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
+  "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
+  "hint": zod.string().describe('O que fazer')
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * 404 também para o tipo que o perfil não vê (não revela que existe). Permissão de admin: `alerts:read`.
+ * @summary Alerta de operação
+ */
+export const GetAdminAlertParams = zod.object({
+  "alertId": zod.uuid()
+})
+
+export const GetAdminAlertResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.string().describe('Tipo estável; um tipo fora do catálogo vem com `label` "Outro alerta" (só o super admin vê)'),
+  "label": zod.string(),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
+  "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
+  "hint": zod.string(),
+  "status": zod.enum(['open', 'resolved']),
+  "attemptId": zod.uuid().nullable(),
+  "details": zod.record(zod.string(), zod.unknown()).describe('Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente'),
+  "links": zod.object({
+  "orderId": zod.uuid().nullable(),
+  "storeId": zod.uuid().nullable(),
+  "deliveryId": zod.uuid().nullable(),
+  "exchangeId": zod.uuid().nullable()
+}),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "resolvedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "resolvedByName": zod.string().nullable().describe('Nulo quando o sistema encerrou sozinho'),
+  "resolutionNote": zod.string().nullable()
+})
+
+
+/**
+ * Grava quem, quando e a nota no alerta e na auditoria (`alert.resolve`). Só quem vê o tipo encerra (404 para os demais). Encerrar de novo: 409 `ALERT_ALREADY_RESOLVED`. Se o mesmo problema voltar, o sistema abre um alerta novo. Permissão de admin: `alerts:resolve` (super admin, operação e financeiro).
+ * @summary Encerrar o alerta com nota (WB-113 C2 "Resolvida")
+ */
+export const ResolveAdminAlertParams = zod.object({
+  "alertId": zod.uuid()
+})
+
+export const resolveAdminAlertBodyNoteMin = 5;
+export const resolveAdminAlertBodyNoteMax = 300;
+
+
+
+export const ResolveAdminAlertBody = zod.object({
+  "note": zod.string().min(resolveAdminAlertBodyNoteMin).max(resolveAdminAlertBodyNoteMax).describe('O que foi feito ou por que se encerra')
+})
+
+export const ResolveAdminAlertResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.string().describe('Tipo estável; um tipo fora do catálogo vem com `label` "Outro alerta" (só o super admin vê)'),
+  "label": zod.string(),
+  "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
+  "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
+  "hint": zod.string(),
+  "status": zod.enum(['open', 'resolved']),
+  "attemptId": zod.uuid().nullable(),
+  "details": zod.record(zod.string(), zod.unknown()).describe('Dados do alerta como o sistema gravou (ids, valores em centavos, minutos); sem dado pessoal do cliente'),
+  "links": zod.object({
+  "orderId": zod.uuid().nullable(),
+  "storeId": zod.uuid().nullable(),
+  "deliveryId": zod.uuid().nullable(),
+  "exchangeId": zod.uuid().nullable()
+}),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "resolvedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "resolvedByName": zod.string().nullable().describe('Nulo quando o sistema encerrou sozinho'),
+  "resolutionNote": zod.string().nullable()
+})
+
+
+/**
+ * Busca por trecho do nome, do e-mail ou do celular (4 dígitos ou mais) ou pelo ID exato; sem `q` lista os mais recentes. Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
+ * @summary Buscar clientes e lojistas (B4, WB-102)
+ */
+export const searchAdminUsersQueryQMin = 2;
+export const searchAdminUsersQueryQMax = 100;
+
+export const searchAdminUsersQueryCursorMax = 200;
+
+export const searchAdminUsersQueryLimitDefault = 20;
+export const searchAdminUsersQueryLimitMax = 50;
+
+
+
+export const SearchAdminUsersQueryParams = zod.object({
+  "q": zod.string().min(searchAdminUsersQueryQMin).max(searchAdminUsersQueryQMax).optional(),
+  "role": zod.enum(['customer', 'merchant']).optional(),
+  "status": zod.enum(['active', 'blocked', 'deleted']).optional(),
+  "cursor": zod.string().max(searchAdminUsersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(searchAdminUsersQueryLimitMax).default(searchAdminUsersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const SearchAdminUsersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")'),
+  "emailMasked": zod.string().nullable(),
+  "phoneMasked": zod.string().nullable(),
+  "roles": zod.array(zod.enum(['customer', 'merchant'])),
+  "status": zod.enum(['active', 'blocked', 'deleted']),
+  "storeCount": zod.int().describe('Lojas em que é dono ou funcionário'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "lastLoginAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão de admin: `users:read`. `allowedActions` diz se o perfil pode `block` ou `unblock` (só super admin e operação). Conta de admin: 404.
+ * @summary Detalhe do usuário: lojas, pedidos recentes e histórico de bloqueios (mascarado)
+ */
+export const GetAdminUserParams = zod.object({
+  "userId": zod.uuid()
+})
+
+export const GetAdminUserResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")'),
+  "emailMasked": zod.string().nullable(),
+  "phoneMasked": zod.string().nullable(),
+  "roles": zod.array(zod.enum(['customer', 'merchant'])),
+  "status": zod.enum(['active', 'blocked', 'deleted']),
+  "storeCount": zod.int().describe('Lojas em que é dono ou funcionário'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "lastLoginAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "emailVerified": zod.boolean(),
+  "stores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().nullable(),
+  "status": zod.string(),
+  "role": zod.enum(['owner', 'staff'])
+})),
+  "recentOrders": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.string(),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeName": zod.string().nullable()
+})).describe('Os 10 pedidos mais recentes como cliente'),
+  "blockHistory": zod.array(zod.object({
+  "action": zod.enum(['blocked', 'unblocked']),
+  "reason": zod.string(),
+  "at": zod.iso.datetime({"offset":true}),
+  "byName": zod.string().nullable(),
+  "suspendedStoreIds": zod.array(zod.uuid())
+})),
+  "allowedActions": zod.array(zod.enum(['block', 'unblock']))
+}))
+
+
+/**
+ * O usuário perde as sessões na hora e passa a ver "Conta indisponível" (403 `ACCOUNT_BLOCKED` no login). Se for dono de loja, a loja aprovada é suspensa junto (WB-102 C5; `suspendedStoreIds`, e `failedStoreIds` se alguma suspensão falhar: o bloqueio vale mesmo assim). Pedidos em andamento NÃO são cancelados: seguem para a decisão do admin. Auditado (`user.block`) com motivo. 409: `USER_ALREADY_BLOCKED`, `USER_NOT_ACTIVE` (excluída). Conta de admin: 404. Permissão de admin: `users:block` (super admin e operação).
+ * @summary Bloquear o usuário com motivo (WB-102 C3 e C5)
+ */
+export const BlockAdminUserParams = zod.object({
+  "userId": zod.uuid()
+})
+
+export const blockAdminUserBodyReasonMin = 10;
+export const blockAdminUserBodyReasonMax = 300;
+
+
+
+export const BlockAdminUserBody = zod.object({
+  "reason": zod.string().min(blockAdminUserBodyReasonMin).max(blockAdminUserBodyReasonMax)
+})
+
+export const BlockAdminUserResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")'),
+  "emailMasked": zod.string().nullable(),
+  "phoneMasked": zod.string().nullable(),
+  "roles": zod.array(zod.enum(['customer', 'merchant'])),
+  "status": zod.enum(['active', 'blocked', 'deleted']),
+  "storeCount": zod.int().describe('Lojas em que é dono ou funcionário'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "lastLoginAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "emailVerified": zod.boolean(),
+  "stores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().nullable(),
+  "status": zod.string(),
+  "role": zod.enum(['owner', 'staff'])
+})),
+  "recentOrders": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.string(),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeName": zod.string().nullable()
+})).describe('Os 10 pedidos mais recentes como cliente'),
+  "blockHistory": zod.array(zod.object({
+  "action": zod.enum(['blocked', 'unblocked']),
+  "reason": zod.string(),
+  "at": zod.iso.datetime({"offset":true}),
+  "byName": zod.string().nullable(),
+  "suspendedStoreIds": zod.array(zod.uuid())
+})),
+  "allowedActions": zod.array(zod.enum(['block', 'unblock']))
+})).and(zod.object({
+  "suspendedStoreIds": zod.array(zod.uuid()).describe('Lojas suspensas junto com o bloqueio do dono (WB-102 C5)'),
+  "failedStoreIds": zod.array(zod.uuid()).describe('Lojas que não foi possível suspender; o bloqueio do usuário vale mesmo assim')
+}))
+
+
+/**
+ * Reverte o bloqueio do USUÁRIO. A loja suspensa junto NÃO volta sozinha: o admin a reativa pela tela de lojas (`POST /v1/admin/stores/{id}/reactivate`), de propósito. Auditado (`user.unblock`). 409 `USER_NOT_BLOCKED`. Permissão de admin: `users:block`.
+ * @summary Desbloquear o usuário com motivo (WB-102 C3)
+ */
+export const UnblockAdminUserParams = zod.object({
+  "userId": zod.uuid()
+})
+
+export const unblockAdminUserBodyReasonMin = 10;
+export const unblockAdminUserBodyReasonMax = 300;
+
+
+
+export const UnblockAdminUserBody = zod.object({
+  "reason": zod.string().min(unblockAdminUserBodyReasonMin).max(unblockAdminUserBodyReasonMax)
+})
+
+export const UnblockAdminUserResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")'),
+  "emailMasked": zod.string().nullable(),
+  "phoneMasked": zod.string().nullable(),
+  "roles": zod.array(zod.enum(['customer', 'merchant'])),
+  "status": zod.enum(['active', 'blocked', 'deleted']),
+  "storeCount": zod.int().describe('Lojas em que é dono ou funcionário'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "lastLoginAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "emailVerified": zod.boolean(),
+  "stores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().nullable(),
+  "status": zod.string(),
+  "role": zod.enum(['owner', 'staff'])
+})),
+  "recentOrders": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.string(),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeName": zod.string().nullable()
+})).describe('Os 10 pedidos mais recentes como cliente'),
+  "blockHistory": zod.array(zod.object({
+  "action": zod.enum(['blocked', 'unblocked']),
+  "reason": zod.string(),
+  "at": zod.iso.datetime({"offset":true}),
+  "byName": zod.string().nullable(),
+  "suspendedStoreIds": zod.array(zod.uuid())
+})),
+  "allowedActions": zod.array(zod.enum(['block', 'unblock']))
+}))
+
+
+/**
+ * Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil).
+ * @summary Pedidos: visão geral e filtros (B5, WB-108 C1)
+ */
+export const listAdminOrdersQueryQMin = 2;
+export const listAdminOrdersQueryQMax = 100;
+
+export const listAdminOrdersQueryStatusMax = 200;
+
+export const listAdminOrdersQueryCityMin = 2;
+export const listAdminOrdersQueryCityMax = 80;
+
+export const listAdminOrdersQueryCursorMax = 200;
+
+export const listAdminOrdersQueryLimitDefault = 50;
+export const listAdminOrdersQueryLimitMax = 50;
+
+
+
+export const ListAdminOrdersQueryParams = zod.object({
+  "q": zod.string().min(listAdminOrdersQueryQMin).max(listAdminOrdersQueryQMax).optional(),
+  "status": zod.string().max(listAdminOrdersQueryStatusMax).optional().describe('Lista separada por vírgula, ex.: `received,accepted`'),
+  "mode": zod.enum(['delivery', 'pickup']).optional(),
+  "paymentMethod": zod.enum(['pix', 'card']).optional(),
+  "storeId": zod.uuid().optional(),
+  "userId": zod.uuid().optional(),
+  "city": zod.string().min(listAdminOrdersQueryCityMin).max(listAdminOrdersQueryCityMax).optional(),
+  "from": zod.iso.datetime({"offset":true}).optional(),
+  "to": zod.iso.datetime({"offset":true}).optional(),
+  "cursor": zod.string().max(listAdminOrdersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listAdminOrdersQueryLimitMax).default(listAdminOrdersQueryLimitDefault).describe('Itens por página (padrão 50, máximo 50)')
+})
+
+export const ListAdminOrdersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "paymentMethod": zod.enum(['pix', 'card']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "paidAt": zod.iso.datetime({"offset":true}).nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "city": zod.string().nullable()
+}),
+  "customer": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")')
+}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+ * @summary Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)
+ */
+export const GetAdminOrderParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const getAdminOrderResponseTwoReviewRatingMax = 5;
+
+
+
+export const GetAdminOrderResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "paymentMethod": zod.enum(['pix', 'card']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "paidAt": zod.iso.datetime({"offset":true}).nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "city": zod.string().nullable()
+}),
+  "customer": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().describe('Abreviado ("Maria L.")')
+}),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).and(zod.object({
+  "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullable(),
+  "cancelledAt": zod.iso.datetime({"offset":true}).nullable(),
+  "cancelledBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullable(),
+  "cancelReason": zod.string().nullable(),
+  "disputedAt": zod.iso.datetime({"offset":true}).nullable().describe('Pagamento contestado pelo provedor (chargeback)'),
+  "notReceivedAt": zod.iso.datetime({"offset":true}).nullable().describe('Primeiro "não recebi" do cliente'),
+  "couponCode": zod.string().nullable(),
+  "customer": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "emailMasked": zod.string().nullable(),
+  "phoneMasked": zod.string().nullable()
+}),
+  "delivery": zod.object({
+  "neighborhood": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "state": zod.string().nullable(),
+  "logistics": zod.object({
+  "deliveryId": zod.uuid(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled'])
+}).nullable()
+}).nullable().describe('Só em pedido de entrega; endereço só com bairro, cidade e UF'),
+  "items": zod.array(zod.object({
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "quantity": zod.int(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})),
+  "values": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "platformDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "applicationFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "merchantNetBeforeProviderFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('A conta do pedido (RN-10), congelada no pagamento'),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.string().describe('Estado da última tentativa'),
+  "installments": zod.int(),
+  "declineReason": zod.string().nullable(),
+  "attempts": zod.array(zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "method": zod.enum(['pix', 'card']),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "createdAt": zod.iso.datetime({"offset":true})
+}))
+}).nullable(),
+  "refunds": zod.object({
+  "paid": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "refunded": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Estornado ou em fila (não conta as falhas)'),
+  "remaining": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "status": zod.enum(['pending', 'done', 'failed', 'exhausted', 'covered']),
+  "reason": zod.string(),
+  "at": zod.iso.datetime({"offset":true})
+}))
+}),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "from": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "actorName": zod.string().nullable().describe('Nulo quando o ator é o sistema'),
+  "reason": zod.string().nullable()
+})),
+  "exchanges": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "type": zod.string(),
+  "status": zod.string()
+})),
+  "review": zod.object({
+  "rating": zod.int().min(1).max(getAdminOrderResponseTwoReviewRatingMax),
+  "createdAt": zod.iso.datetime({"offset":true})
+}).nullable(),
+  "allowedActions": zod.array(zod.enum(['cancel', 'refund'])),
+  "refundLimit": zod.object({
+  "superAdminOnlyAboveCents": zod.int().describe('`estorno_super_admin_cents`'),
+  "profileCapCents": zod.int().nullable().describe('Teto do perfil de quem pede; nulo = sem teto (super admin)')
+})
+}))
+
+
+/**
  * Permissão de admin: `payments:alerts:read` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alertas de conciliação e divergência
  */
@@ -13015,6 +13617,10 @@ export const GetStoreReviewsSummaryResponse = zod.object({
  * @summary Pendências por área para o Início e a barra do admin (W.7)
  */
 export const GetAdminPendingCountsResponse = zod.object({
+  "alerts": zod.union([zod.null(),zod.object({
+  "open": zod.int(),
+  "critical": zod.int()
+})]).describe('B3: alertas de operação abertos dos tipos que o perfil vê (`alerts:read`) e quantos são `critical`; a lista está em `/v1/admin/alerts`'),
   "stores": zod.union([zod.null(),zod.object({
   "inReview": zod.int()
 })]),

@@ -60,6 +60,24 @@ export const users = pgTable(
   ],
 );
 
+/** B4 / WB-102 C2: histórico de bloqueios e desbloqueios feitos pelo admin (motivo obrigatório). A auditoria guarda a mesma ação; aqui fica a leitura rápida do detalhe. */
+export const userStatusHistory = pgTable(
+  'user_status_history',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    action: text({ enum: ['blocked', 'unblocked'] }).notNull(),
+    reason: text().notNull(),
+    actorId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    /** Lojas suspensas junto com o bloqueio do lojista (WB-102 C5); vazio nos demais casos. */
+    suspendedStoreIds: jsonb().$type<string[]>().notNull().default([]),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('user_status_history_user_idx').on(t.userId, t.createdAt)],
+);
+
 export const userRoles = pgTable(
   'user_roles',
   {

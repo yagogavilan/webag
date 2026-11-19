@@ -39,6 +39,7 @@ export const PRIVACY_MAP: Record<string, PrivacyDecision> = {
   legal_documents: { kind: 'retain', basis: 'documentos jurídicos versionados (prova do que foi aceito); só o admin que publicou', where: 'fora do titular cliente' },
   logistics_pauses: { kind: 'retain', basis: 'registro operacional da logística; só o admin que pausou', where: 'fora do titular cliente' },
   media_assets: { kind: 'anonymize', what: 'fotos de troca do titular apagadas (objeto e linha); imagens de produto e logo pertencem à loja e ficam', where: 'account-deletion.service.ts `anonymizeOne` (`photos`) e retention.service.ts (órfãos)' },
+  maintenance_state: { kind: 'retain', basis: 'estado do modo manutenção da Webag; só o admin que alterou', where: 'fora do titular cliente' },
   moderation_terms: { kind: 'retain', basis: 'lista de termos da moderação; só o admin autor', where: 'fora do titular cliente' },
   order_events: { kind: 'anonymize', what: 'motivos em texto livre do cliente apagados; a linha do tempo do pedido fica (fiscal)', where: 'account-deletion.service.ts `anonymizeOne` (`orderEventReasonsCleared`)' },
   orders: { kind: 'anonymize', what: 'endereço reduzido a cidade/UF e motivo de cancelamento do cliente apagado; o pedido fica pelo prazo fiscal', where: 'account-deletion.service.ts `anonymizeOne` (`ordersAnonymized`, `orderReasonsCleared`)' },
@@ -65,5 +66,6 @@ export const PRIVACY_MAP: Record<string, PrivacyDecision> = {
   stores: { kind: 'anonymize', what: 'contato, endereço e coordenada da loja encerrada apagados; CNPJ/CPF e razão social ficam pelo prazo fiscal', where: 'account-deletion.service.ts `anonymizeOne` (bloco da loja)' },
   terms_acceptances: { kind: 'retain', basis: 'prova do aceite dos termos (LGPD art. 8º §2º), com IP truncado e plataforma reduzida à família; append-only', where: 'account-deletion.service.ts `anonymizeOne` e trigger 0047' },
   user_addresses: { kind: 'delete', what: 'endereços salvos apagados na exclusão', where: 'account-deletion.service.ts `anonymizeOne`' },
+  user_status_history: { kind: 'retain', basis: 'prova do ato administrativo de bloqueio/desbloqueio (prevenção a fraude e abuso, LGPD art. 7º IX e 37); o titular é a casca anonimizada e o motivo é texto do admin, sem dado do cliente', where: 'backoffice/accounts.service.ts' },
   user_roles: { kind: 'retain', basis: 'papéis da casca anonimizada; sem dado pessoal', where: 'identity (papéis)' },
 };
