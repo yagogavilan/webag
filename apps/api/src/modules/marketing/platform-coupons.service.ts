@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import * as t from '../../platform/database/schema.js';
@@ -111,7 +111,7 @@ export class PlatformCouponsService {
   }
 
   private async load(id: string): Promise<CouponRow> {
-    const [row] = await this.db.select().from(t.coupons).where(and(eq(t.coupons.id, id), eq(t.coupons.scope, 'platform')));
+    const [row] = await this.db.select().from(t.coupons).where(and(eq(t.coupons.id, id), eq(t.coupons.scope, 'platform'), isNull(t.coupons.ownerUserId)));
     if (!row) throw errors.notFound('Cupom não encontrado.');
     return row;
   }
@@ -124,7 +124,7 @@ export class PlatformCouponsService {
   async list(query: { status?: CouponStatus | undefined; q?: string | undefined; cursor?: string | undefined; limit?: unknown }) {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
-    const conditions: (SQL | undefined)[] = [eq(t.coupons.scope, 'platform')];
+    const conditions: (SQL | undefined)[] = [eq(t.coupons.scope, 'platform'), isNull(t.coupons.ownerUserId)]; // cupom pessoal de compensação não entra na lista da campanha
     if (query.q) conditions.push(ilike(t.coupons.code, `%${query.q.replace(/[%_\\]/g, '')}%`));
     if (cursor) conditions.push(sql`(${t.coupons.createdAt}, ${t.coupons.id}) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)`);
     const rows = await this.db.select().from(t.coupons).where(and(...conditions)).orderBy(desc(t.coupons.createdAt), desc(t.coupons.id)).limit(limit + 1);
@@ -139,7 +139,7 @@ export class PlatformCouponsService {
   /** Pausar, reativar, prorrogar, mudar limites e mínimo. Depois do 1º uso o tipo e o valor ficam travados. */
   async update(ctx: RequestContext, id: string, patch: Partial<Pick<CouponInput, 'value' | 'percentCapCents' | 'minOrderCents' | 'endsAt' | 'maxUses' | 'perCustomerLimit' | 'firstPurchaseOnly'>> & { active?: boolean | undefined }) {
     return this.db.transaction(async (tx) => {
-      const [before] = await tx.select().from(t.coupons).where(and(eq(t.coupons.id, id), eq(t.coupons.scope, 'platform'))).for('update');
+      const [before] = await tx.select().from(t.coupons).where(and(eq(t.coupons.id, id), eq(t.coupons.scope, 'platform'), isNull(t.coupons.ownerUserId))).for('update');
       if (!before) throw errors.notFound('Cupom não encontrado.');
       const stats = (await this.stats([id])).get(id) ?? { uses: 0, discountCents: 0, orders: 0 };
       const changesMoney = patch.value !== undefined || patch.percentCapCents !== undefined;

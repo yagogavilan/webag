@@ -24,10 +24,14 @@ export interface CouponFacts {
   perCustomerLimit: number;
   firstPurchaseOnly: boolean;
   active: boolean;
+  /** WB-254: cupom pessoal (compensação); só o dono o enxerga e usa. */
+  ownerUserId?: string | null;
 }
 
 export interface CouponContext {
   now: Date;
+  /** Quem aplica o cupom (confere o dono de cupom pessoal). */
+  userId?: string;
   cartStoreId: string;
   subtotalCents: number;
   emailVerified: boolean;
@@ -46,6 +50,7 @@ export interface CouponContext {
  */
 export function rejectCoupon(coupon: CouponFacts | null, ctx: CouponContext): CouponRejection | null {
   if (!coupon || !coupon.active) return 'COUPON_NOT_FOUND';
+  if (coupon.ownerUserId && coupon.ownerUserId !== ctx.userId) return 'COUPON_NOT_FOUND'; // pessoal e intransferível: não revela que existe
   if (ctx.now < coupon.startsAt) return 'COUPON_NOT_STARTED';
   if (ctx.now >= coupon.endsAt) return 'COUPON_EXPIRED';
   if (coupon.scope === 'store' && coupon.storeId !== ctx.cartStoreId) return 'COUPON_OTHER_STORE';

@@ -14,6 +14,12 @@ const closing = (e: OrderEvent): string => (e.reason ? ` Motivo: ${e.reason}.` :
 
 export function customerOrderNotice(e: OrderEvent, storeName: string): Notice | null {
   const data = { type: 'order', orderId: e.orderId };
+  // RN-19 4b/4c: textos neutros (não culpam loja nem motoboy, não admitem culpa jurídica); sem dado pessoal no push.
+  if (e.notice === 'late') return { push: { title: 'Seu pedido está demorando mais que o previsto', body: 'Já estamos cuidando disso. Se precisar, fale com a gente.', data } };
+  if (e.notice === 'late_compensation') {
+    const body = e.compensation?.kind === 'fixed' ? `Pedimos desculpas pelo atraso. Você ganhou R$ ${((e.compensation.valueCents ?? 0) / 100).toFixed(2).replace('.', ',')} de desconto no próximo pedido, válido por 30 dias.` : 'Pedimos desculpas pelo atraso. Você ganhou entrega grátis no seu próximo pedido, válida por 30 dias.';
+    return { push: { title: 'Um presente pelo atraso', body, data: { type: 'coupons' } } };
+  }
   if (e.delivery?.status === 'not_delivered') {
     return {
       push: { title: 'Não conseguimos entregar', body: `Pedido ${e.number}: combine uma nova tentativa pelo app.`, data },

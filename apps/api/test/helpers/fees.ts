@@ -7,7 +7,7 @@ import type { TestContext } from './app.js';
 const system = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 
 /** Parâmetro global do admin (DEC-036b), pelo serviço (invalida o cache). Os arquivos de teste rodam em série: restaure no `afterAll`. */
-export async function useParam(ctx: TestContext, key: string, value: number): Promise<void> {
+export async function useParam(ctx: TestContext, key: string, value: number | string): Promise<void> {
   await ctx.app.get(ParametersService).update(key, value, 'ajuste de teste', system);
 }
 
@@ -31,11 +31,15 @@ export async function useFeeTable(ctx: TestContext, tiers: { fromM: number; toM:
 /** Padrões do ETA (DEC-053), para os testes que mexem neles restaurarem. */
 export const ETA_DEFAULTS: Record<string, number> = { entrega_preparo_padrao_min: 20, entrega_despacho_min: 15, entrega_rota_fator_pct: 130, entrega_min_por_km: 6, entrega_faixa_min: 15, entrega_max_min: 120 };
 
+/** Atraso e compensação (RN-19), para os testes que mexem neles restaurarem. */
+export const LATE_DEFAULTS: Record<string, number | string> = { entrega_atraso_tolerancia_min: 15, entrega_compensacao_tipo: 'frete_gratis_proximo', entrega_compensacao_cents: 1000, entrega_cancel_resposta_min: 10 };
+
 /** Volta ao básico dos testes: tabela de R$ 5,00 até 15 km, raio 15 km, mínimo 0 e sem entrega grátis. */
 export async function restoreFees(ctx: TestContext): Promise<void> {
   await useParam(ctx, 'raio_max_km', 15);
   await useParam(ctx, 'frete_gratis_acima_cents', 0);
   await useParam(ctx, 'pedido_minimo_cents', 0);
   for (const [key, value] of Object.entries(ETA_DEFAULTS)) await useParam(ctx, key, value);
+  for (const [key, value] of Object.entries(LATE_DEFAULTS)) await useParam(ctx, key, value);
   await useFeeTable(ctx, [{ fromM: 0, toM: 15_000, feeCents: 500 }]);
 }

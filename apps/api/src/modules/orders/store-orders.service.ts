@@ -262,9 +262,9 @@ export class StoreOrdersService {
    */
   async decideCancelRequest(storeId: string, orderId: string, userId: string, decision: 'approved' | 'refused', note: string | null): Promise<void> {
     await this.act(storeId, orderId, userId, async (tx, order) => {
-      const [request] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.status, 'pending'))).for('update');
+      const [request] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'preparation'), eq(orderCancelRequests.status, 'pending'))).for('update');
       if (!request) {
-        const [last] = await tx.select().from(orderCancelRequests).where(eq(orderCancelRequests.orderId, orderId)).orderBy(sql`${orderCancelRequests.requestedAt} desc`).limit(1);
+        const [last] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'preparation'))).orderBy(sql`${orderCancelRequests.requestedAt} desc`).limit(1);
         if (last?.status === decision) return { event: null };
         throw errors.conflict('NO_CANCEL_REQUEST', 'Não há pedido de cancelamento', 'O cliente não pediu o cancelamento deste pedido, ou ele já foi decidido.');
       }

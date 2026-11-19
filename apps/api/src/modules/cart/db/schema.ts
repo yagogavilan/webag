@@ -33,9 +33,15 @@ export const coupons = pgTable(
     perCustomerLimit: integer().notNull().default(1),
     firstPurchaseOnly: boolean().notNull().default(false),
     active: boolean().notNull().default(true),
+    /** WB-254: cupom pessoal e intransferível (compensação por atraso); só o dono o enxerga e usa. Apagado com a conta (LGPD). */
+    ownerUserId: uuid().references(() => users.id, { onDelete: 'cascade' }),
+    /** WB-254 C5: pedido atrasado que originou o cupom; único, e por isso um cupom por pedido mesmo se reprocessar. */
+    sourceOrderId: uuid(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex('coupons_source_order_uq').on(t.sourceOrderId).where(sql`${t.sourceOrderId} is not null`),
+    index('coupons_owner_idx').on(t.ownerUserId).where(sql`${t.ownerUserId} is not null`),
     uniqueIndex('coupons_code_uq').on(sql`upper(${t.code})`),
     check('coupons_code_format', sql`${t.code} ~ '^[A-Z0-9]{4,20}$'`),
     check('coupons_store_scope', sql`(${t.scope} = 'store') = (${t.storeId} is not null)`),

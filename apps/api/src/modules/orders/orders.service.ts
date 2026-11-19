@@ -25,6 +25,7 @@ import { paymentAttempts } from '../payments/db/schema.js';
 import { orderCancelRequests, orderEvents, orderItems, orders } from './db/schema.js';
 import { DAY_MS, windowDays } from '../exchanges/domain/eligibility.js';
 import { etaOfOrder } from './domain/eta-view.js';
+import { lateStateOf } from './domain/late.js';
 import { canTransition, customerActions, PAID_STATUSES, refundDueOnCancel, type CustomerAction, type OrderActor, type OrderStatus } from './domain/state.js';
 import { OrderEventBus, type OrderEvent } from './order-events.bus.js';
 import { generateOrderNumber, generatePickupCode } from './order-number.js';
@@ -72,6 +73,8 @@ interface CloseOrderOptions {
   manualCap?: ManualRefundCap;
   refundKey?: string;
   ctx?: RequestContext;
+  /** WB-253: cancelamento do cliente por atraso da entrega vale em qualquer estado pago antes da saída (a regra é o atraso, não a tabela). */
+  skipTransitionCheck?: boolean;
 }
 
 interface PendingRefund {
@@ -415,7 +418,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     actorUserId: string | null,
     opts: CloseOrderOptions = {},
   ): Promise<{ event: OrderEvent; refund: PendingRefund | null }> {
-    if (!canTransition(order.status, to, actor, order.mode)) throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', `O pedido não pode ir de ${order.status} para ${to}.`);
+    if (!opts.skipTransitionCheck && !canTransition(order.status, to, actor, order.mode)) throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', `O pedido não pode ir de ${order.status} para ${to}.`);
     const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
     const reserved = items.filter((i) => i.stockState === 'reserved').map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
     const sold = items.filter((i) => i.stockState === 'sold').map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
@@ -484,7 +487,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       if (order.status !== 'in_preparation') {
         throw errors.conflict('ORDER_NOT_CANCELLABLE', 'Não dá para pedir o cancelamento agora', order.status === 'received' || order.status === 'accepted' ? 'Neste momento você pode cancelar direto.' : 'Fale com a loja.');
       }
-      const [open] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.status, 'pending')));
+      const [open] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'preparation'), eq(orderCancelRequests.status, 'pending')));
       if (open) return open;
       const [created] = await tx.insert(orderCancelRequests).values({ orderId, reason: reason?.slice(0, 200) ?? null }).returning();
       return created!;
@@ -495,8 +498,14 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
 
   /** A solicitação mais recente do pedido (qualquer estado), para as telas. */
   async cancelRequestOf(orderId: string): Promise<CancelRequestView | null> {
-    const [row] = await this.db.select().from(orderCancelRequests).where(eq(orderCancelRequests.orderId, orderId)).orderBy(desc(orderCancelRequests.requestedAt)).limit(1);
+    const [row] = await this.db.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'preparation'))).orderBy(desc(orderCancelRequests.requestedAt)).limit(1);
     return row ? presentCancelRequest(row, await this.params.getNumber('cancelamento_resposta_min')) : null;
+  }
+
+  /** WB-253 C3: a solicitação de cancelamento por atraso mais recente (pedido em saída para entrega); nula se nunca houve. */
+  async lateCancelRequestOf(orderId: string): Promise<CancelRequestView | null> {
+    const [row] = await this.db.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.kind, 'late'))).orderBy(desc(orderCancelRequests.requestedAt)).limit(1);
+    return row ? presentCancelRequest(row, await this.params.getNumber('entrega_cancel_resposta_min')) : null;
   }
 
   async cancelByCustomer(userId: string, orderId: string, reason: string | null): Promise<void> {
@@ -883,7 +892,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const stale = await this.db
       .select({ id: orderCancelRequests.id, orderId: orderCancelRequests.orderId })
       .from(orderCancelRequests)
-      .where(and(eq(orderCancelRequests.status, 'pending'), lte(orderCancelRequests.requestedAt, cutoff), isNull(orderCancelRequests.alertedAt)))
+      .where(and(eq(orderCancelRequests.kind, 'preparation'), eq(orderCancelRequests.status, 'pending'), lte(orderCancelRequests.requestedAt, cutoff), isNull(orderCancelRequests.alertedAt)))
       .limit(50);
     for (const row of stale) {
       const [claimed] = await this.db.update(orderCancelRequests).set({ alertedAt: now }).where(and(eq(orderCancelRequests.id, row.id), isNull(orderCancelRequests.alertedAt))).returning({ id: orderCancelRequests.id });
@@ -986,6 +995,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     ]);
     const [logo] = store?.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
     const cancelRequest = await this.cancelRequestOf(order.id);
+    const delay = await this.delayOf(order);
     const paid = PAID_STATUSES.includes(order.status);
     const cancelled = order.status === 'cancelled' || order.status === 'refused';
     const finance = order.finance as unknown as OrderFinance;
@@ -1019,11 +1029,21 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       allowedActions: this.actionsOf(order).filter((a) => a !== 'request_cancel' || cancelRequest?.status !== 'pending'),
       /** BUG-015: o pedido de cancelamento em separação e o que a loja respondeu; nulo se nunca houve. */
       cancelRequest,
+      /** WB-253: atraso da entrega calculado no servidor (aviso, cancelamento sem custo e a resposta da operação); nulo fora da entrega ativa. */
+      delay,
       /** B.1: prazos finais da troca já na entrada do pedido ("Troca até 25/11"); nulos fora do prazo ou sem entrega. */
       exchange: this.exchangeWindowOf(order),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
       tracking: order.mode === 'delivery' ? await this.trackingOf(order) : null,
     };
+  }
+
+  /** WB-253: estado de atraso do pedido de entrega; `null` quando o pedido não está em entrega ativa. */
+  private async delayOf(order: OrderRow) {
+    if (order.mode !== 'delivery') return null;
+    const state = lateStateOf(order, await this.params.getNumber('entrega_atraso_tolerancia_min'), new Date());
+    if (state.cancelAvailableAt === null) return null;
+    return { late: state.late, canCancelWithoutCost: state.canCancelWithoutCost, cancelAvailableAt: state.cancelAvailableAt.toISOString(), cancelMode: state.cancelMode, cancelRequest: await this.lateCancelRequestOf(order.id) };
   }
 
   private actionsOf(order: OrderRow) {

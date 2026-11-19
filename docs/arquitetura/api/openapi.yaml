@@ -2318,6 +2318,41 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/orders/{orderId}/late-cancel/respond:
+    post:
+      tags: [orders]
+      operationId: adminRespondLateCancel
+      summary: Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
+      description: "Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático)."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action: { type: string, enum: [accept, arrive_soon] }
+                note: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Pedido de cancelamento respondido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CancelRequest' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /v1/admin/orders/{orderId}/refunds:
     post:
       tags: [orders]
@@ -5823,6 +5858,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CancelRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/orders/{orderId}/cancel-late:
+    post:
+      tags: [orders]
+      operationId: cancelOrderLate
+      summary: Cancelar sem custo por atraso da entrega (WB-253, RN-19 4d)
+      description: "Vale depois do fim da faixa + `entrega_atraso_tolerancia_min` (`Order.delay.canCancelWithoutCost`). Antes de `out_for_delivery`: cancela na hora (ator cliente, motivo 'Atraso na entrega'), estoque devolvido, corrida cancelada e estorno TOTAL com a taxa de entrega. Em `out_for_delivery`: abre o pedido à operação (`Order.delay.cancelRequest`, `status=pending`); a operação aceita ou diz que chega logo e, sem resposta em `entrega_cancel_resposta_min`, o sistema aceita e a corrida segue para a devolução à loja (o pedido é cancelado e estornado por inteiro quando a loja confirma o recebimento). Idempotente (toque duplo: um só efeito). Retorna o pedido. Quem cancela por atraso não recebe compensação. 409 `LATE_CANCEL_NOT_AVAILABLE` (ainda não atrasou o suficiente), 409 `ORDER_ALREADY_DELIVERED`, 404 se o pedido não é do cliente."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Pedido cancelado, ou pedido de cancelamento aberto (ver `status` e `delay.cancelRequest`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -11597,6 +11659,19 @@ components:
       required: [id, number, status, mode, createdAt, updatedAt, store, items, summary, couponCode, delivery, pickup, payment, exchangePolicy, timeline, allowedActions, cancellation, tracking]
       properties:
         cancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }], description: 'BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.' }
+        delay:
+          description: 'WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [late, canCancelWithoutCost, cancelAvailableAt, cancelMode, cancelRequest]
+              properties:
+                late: { type: boolean }
+                canCancelWithoutCost: { type: boolean }
+                cancelAvailableAt: { type: string, format: date-time }
+                cancelMode: { type: [string, 'null'], enum: [immediate, request, null] }
+                cancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }] }
+            - type: 'null'
         tracking:
           description: 'Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'
           oneOf:

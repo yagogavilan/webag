@@ -69,6 +69,8 @@ export const orders = pgTable(
     acceptedAt: timestamp({ withTimezone: true }),
     deliveredAt: timestamp({ withTimezone: true }),
     cancelledAt: timestamp({ withTimezone: true }),
+    /** WB-253 C1: quando o aviso de atraso (1 push por pedido) saiu; nulo = ainda não avisou. */
+    lateNotifiedAt: timestamp({ withTimezone: true }),
     cancelledBy: text({ enum: ['customer', 'store', 'system', 'admin'] }),
     cancelReason: varchar({ length: 200 }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -124,6 +126,8 @@ export const orderEvents = pgTable(
 );
 
 export const CANCEL_REQUEST_STATUSES = ['pending', 'approved', 'refused'] as const;
+/** `preparation`: pedido em separação, a loja decide (BUG-015). `late`: entrega atrasada em SAIU, a operação decide (WB-253 C3). */
+export const CANCEL_REQUEST_KINDS = ['preparation', 'late'] as const;
 
 /**
  * Pedido de cancelamento do cliente com o pedido EM SEPARAÇÃO (BUG-015, WB-028 C2): a loja decide em `cancelamento_resposta_min`
@@ -134,6 +138,7 @@ export const orderCancelRequests = pgTable(
   {
     id: uuid().primaryKey().default(sql`gen_random_uuid()`),
     orderId: uuid().notNull().references(() => orders.id, { onDelete: 'cascade' }),
+    kind: text({ enum: CANCEL_REQUEST_KINDS }).notNull().default('preparation'),
     status: text({ enum: CANCEL_REQUEST_STATUSES }).notNull().default('pending'),
     reason: varchar({ length: 200 }),
     requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

@@ -2566,6 +2566,35 @@ export const AdminConfirmStoreReturnResponse = zod.object({
 
 
 /**
+ * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático).
+ * @summary Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
+ */
+export const AdminRespondLateCancelParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const adminRespondLateCancelBodyNoteMax = 200;
+
+
+
+export const AdminRespondLateCancelBody = zod.object({
+  "action": zod.enum(['accept', 'arrive_soon']),
+  "note": zod.string().max(adminRespondLateCancelBodyNoteMax).optional()
+})
+
+export const AdminRespondLateCancelResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.')
+
+
+/**
  * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Estorno que zera o pedido o leva a `cancelled` (ator admin; estoque devolvido, corrida cancelada); pedido já entregue ou encerrado fica como está (BUG-011). Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
@@ -3709,7 +3738,7 @@ export const setStoreDeliveryBodyEtaMaxMinutesMax = 1440;
 
 export const SetStoreDeliveryBody = zod.object({
   "acceptsDelivery": zod.boolean(),
-  "prepMinutes": zod.int().min(setStoreDeliveryBodyPrepMinutesMin).max(setStoreDeliveryBodyPrepMinutesMax).nullish().describe('DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho passa do teto `entrega_max_min`.'),
+  "prepMinutes": zod.int().min(setStoreDeliveryBodyPrepMinutesMin).max(setStoreDeliveryBodyPrepMinutesMax).nullish().describe('DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho + folga da faixa passa do teto `entrega_max_min` (DEC-054).'),
   "etaMinMinutes": zod.int().min(1).optional().describe('Ignorado desde a DEC-053 (o ETA é calculado).'),
   "etaMaxMinutes": zod.int().max(setStoreDeliveryBodyEtaMaxMinutesMax).optional(),
   "radiusKm": zod.number().optional(),
@@ -6625,7 +6654,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
@@ -6667,7 +6696,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
+}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
 })
 })).optional(),
   "nearbyStores": zod.array(zod.object({
@@ -6691,7 +6720,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
@@ -6725,7 +6754,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
@@ -6767,7 +6796,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
+}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
 })
 })).max(getHomeResponseOffersMax),
   "bestSellers": zod.array(zod.object({
@@ -6799,7 +6828,7 @@ export const GetHomeResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
+}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
 })
 })).max(getHomeResponseBestSellersMax),
   "availableCategoryIds": zod.array(zod.uuid())
@@ -6867,7 +6896,7 @@ export const SearchStoresResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
@@ -6961,7 +6990,7 @@ export const SearchProductsResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
+}).optional().describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').')
 })
 })),
   "nextCursor": zod.string().nullable()
@@ -7061,7 +7090,7 @@ export const GetBrowseStoreResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: com posição e dentro do teto; senão nulo.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: com posição e dentro do teto; senão nulo.'),
   "logisticsClosed": zod.boolean().optional().describe('BUG-016: logística fora do horário ou pausada para esta posição (só retirada)'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish(),
   "acceptsDelivery": zod.boolean()
@@ -7261,7 +7290,7 @@ export const GetBrowseProductResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()])
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()])
 }).describe('DEC-053: só com `lat`/`lng` na consulta do produto.')]).optional(),
   "id": zod.uuid(),
   "name": zod.string(),
@@ -7526,7 +7555,7 @@ export const GetCartResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -7660,7 +7689,7 @@ export const ClearCartResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -7807,7 +7836,7 @@ export const SetCartItemResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -7945,7 +7974,7 @@ export const RemoveCartItemResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -8087,7 +8116,7 @@ export const ApplyCartCouponResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -8220,7 +8249,7 @@ export const RemoveCartCouponResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -8354,7 +8383,7 @@ export const AcknowledgeCartResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -8501,7 +8530,7 @@ export const MergeCartResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().nullable(),
   "available": zod.boolean().nullable().describe('Entrega no endereço; nulo sem endereço ou na retirada'),
@@ -8681,7 +8710,7 @@ export const GetStoreOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -8816,7 +8845,7 @@ export const AcceptOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -8937,7 +8966,7 @@ export const RefuseOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9063,7 +9092,7 @@ export const AdvanceOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9175,7 +9204,7 @@ export const ConfirmReturnReceivedByStoreResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9296,7 +9325,7 @@ export const CancelOrderByStoreResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9407,6 +9436,22 @@ export const CreateOrderResponse = zod.object({
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
+  "delay": zod.union([zod.object({
+  "late": zod.boolean(),
+  "canCancelWithoutCost": zod.boolean(),
+  "cancelAvailableAt": zod.iso.datetime({"offset":true}),
+  "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
+}),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9506,7 +9551,7 @@ export const CreateOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9609,6 +9654,22 @@ export const GetOrderResponse = zod.object({
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
+  "delay": zod.union([zod.object({
+  "late": zod.boolean(),
+  "canCancelWithoutCost": zod.boolean(),
+  "cancelAvailableAt": zod.iso.datetime({"offset":true}),
+  "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
+}),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9708,7 +9769,7 @@ export const GetOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9776,6 +9837,183 @@ export const RequestOrderCancelResponse = zod.object({
 
 
 /**
+ * Vale depois do fim da faixa + `entrega_atraso_tolerancia_min` (`Order.delay.canCancelWithoutCost`). Antes de `out_for_delivery`: cancela na hora (ator cliente, motivo 'Atraso na entrega'), estoque devolvido, corrida cancelada e estorno TOTAL com a taxa de entrega. Em `out_for_delivery`: abre o pedido à operação (`Order.delay.cancelRequest`, `status=pending`); a operação aceita ou diz que chega logo e, sem resposta em `entrega_cancel_resposta_min`, o sistema aceita e a corrida segue para a devolução à loja (o pedido é cancelado e estornado por inteiro quando a loja confirma o recebimento). Idempotente (toque duplo: um só efeito). Retorna o pedido. Quem cancela por atraso não recebe compensação. 409 `LATE_CANCEL_NOT_AVAILABLE` (ainda não atrasou o suficiente), 409 `ORDER_ALREADY_DELIVERED`, 404 se o pedido não é do cliente.
+ * @summary Cancelar sem custo por atraso da entrega (WB-253, RN-19 4d)
+ */
+export const CancelOrderLateParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const CancelOrderLateBody = zod.object({
+
+})
+
+export const CancelOrderLateResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
+  "delay": zod.union([zod.object({
+  "late": zod.boolean(),
+  "canCancelWithoutCost": zod.boolean(),
+  "cancelAvailableAt": zod.iso.datetime({"offset":true}),
+  "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
+}),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
+  "tracking": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "courierFirstName": zod.string().nullable(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullable(),
+  "deliveryCode": zod.string().nullable().describe('Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "at": zod.iso.datetime({"offset":true})
+}))
+})]).describe('Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'),
+  "id": zod.uuid(),
+  "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "whatsapp": zod.string().nullable().describe('Para "Falar com a loja" (WB-029)')
+}),
+  "items": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "variantId": zod.uuid(),
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "lineTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Snapshot do item no momento do pedido (não muda se o produto mudar depois).')),
+  "summary": zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveryEstimated": zod.boolean().describe('\'a partir de\': sem endereço escolhido'),
+  "freeShipping": zod.boolean(),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "minimumTotalApplied": zod.boolean().describe('Cupom que zeraria o total: mostrar \'Valor mínimo cobrado\''),
+  "platformDiscountCapped": zod.boolean().describe('Desconto da plataforma cortado no teto da comissão'),
+  "missingForMinimum": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
+  "couponCode": zod.string().nullable(),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.object({
+  "id": zod.uuid(),
+  "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
+  "cep": zod.string().describe('8 dígitos'),
+  "street": zod.string(),
+  "number": zod.string().describe('"S/N" quando não há número'),
+  "complement": zod.string().nullable(),
+  "neighborhood": zod.string(),
+  "city": zod.string(),
+  "state": zod.string(),
+  "cityId": zod.uuid().nullable().describe('Região atendida resolvida na gravação'),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "eta": zod.union([zod.object({
+  "minMinutes": zod.int(),
+  "maxMinutes": zod.int(),
+  "fromAt": zod.iso.datetime({"offset":true}),
+  "toAt": zod.iso.datetime({"offset":true})
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "code": zod.string().nullable().describe('Código de 4 dígitos; só depois de pago'),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded'])
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int()
+}).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "exchange": zod.object({
+  "canRequest": zod.boolean().optional(),
+  "withdrawalUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "voluntaryUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "defectUntil": zod.iso.datetime({"offset":true}).nullish()
+}).optional().describe('Prazos finais da troca já na entrada do pedido (B.1: \'Troca até 25/11\'); tudo nulo se não foi entregue'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "allowedActions": zod.array(zod.enum(['cancel', 'request_cancel', 'contact_store', 'rate', 'report_not_received', 'request_exchange'])),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})])
+})
+
+
+/**
  * Permissão `orders`. Cancela o pedido (ator loja, estoque devolvido, estorno total). 409 `NO_CANCEL_REQUEST` se não há pedido pendente. Idempotente.
  * @summary A loja aprova o pedido de cancelamento do cliente (cancela e estorna)
  */
@@ -9837,7 +10075,7 @@ export const AcceptStoreOrderCancelRequestResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -9958,7 +10196,7 @@ export const RejectStoreOrderCancelRequestResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),
@@ -10035,6 +10273,22 @@ export const CancelOrderResponse = zod.object({
   "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
+  "delay": zod.union([zod.object({
+  "late": zod.boolean(),
+  "canCancelWithoutCost": zod.boolean(),
+  "cancelAvailableAt": zod.iso.datetime({"offset":true}),
+  "cancelMode": zod.union([zod.literal('immediate'),zod.literal('request'),zod.literal(null)]).nullable(),
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()])
+}),zod.null()]).optional().describe('WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -10134,7 +10388,7 @@ export const CancelOrderResponse = zod.object({
   "maxMinutes": zod.int(),
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
-}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
 })]),
   "pickup": zod.union([zod.null(),zod.object({
   "address": zod.string(),

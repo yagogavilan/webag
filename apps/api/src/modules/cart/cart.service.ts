@@ -245,7 +245,9 @@ export class CartService {
     let appliedCoupon: typeof coupons.$inferSelect | null = null;
     if (couponId) {
       const [coupon] = await this.db.select().from(coupons).where(eq(coupons.id, couponId));
-      const rejection = coupon ? await this.rejectionFor(principal, coupon, store.id, subtotal, now, deliveryAddress ? { cep: deliveryAddress.cep, number: deliveryAddress.number, complement: deliveryAddress.complement } : null) : 'COUPON_NOT_FOUND';
+      // WB-254 C1: cupom de entrega grátis só vale em pedido de entrega (na retirada ele seria gasto sem desconto).
+      const pickupFreeShipping = coupon?.kind === 'free_shipping' && ctx.mode === 'pickup';
+      const rejection = pickupFreeShipping ? 'COUPON_NOT_ALLOWED' as const : coupon ? await this.rejectionFor(principal, coupon, store.id, subtotal, now, deliveryAddress ? { cep: deliveryAddress.cep, number: deliveryAddress.number, complement: deliveryAddress.complement } : null) : 'COUPON_NOT_FOUND';
       if (coupon) {
         couponView = { code: coupon.code, kind: coupon.kind, scope: coupon.scope, applied: rejection === null, rejection };
         if (rejection === null) appliedCoupon = coupon;
@@ -363,6 +365,7 @@ export class CartService {
     const [member] = await this.db.select({ userId: storeMembers.userId }).from(storeMembers).where(and(eq(storeMembers.storeId, storeId), eq(storeMembers.userId, principal.userId)));
     return rejectCoupon(coupon, {
       now,
+      userId: principal.userId,
       cartStoreId: storeId,
       subtotalCents,
       emailVerified: principal.emailVerified,
@@ -559,5 +562,5 @@ const COUPON_MESSAGES: Record<CouponRejection, (coupon: typeof coupons.$inferSel
   COUPON_OTHER_STORE: () => 'Esse cupom é de outra loja.',
   COUPON_FIRST_PURCHASE_ONLY: () => 'Esse cupom vale só na primeira compra.',
   COUPON_EMAIL_UNVERIFIED: () => 'Confirme seu e-mail para usar este cupom.',
-  COUPON_NOT_ALLOWED: () => 'Você não pode usar esse cupom nessa loja.',
+  COUPON_NOT_ALLOWED: (coupon) => (coupon.kind === 'free_shipping' ? 'Cupom de entrega grátis só vale em pedido de entrega.' : 'Você não pode usar esse cupom nessa loja.'),
 };

@@ -5,6 +5,7 @@ import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { parseIdempotencyKey } from '../idempotency/index.js';
+import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14,12 +15,16 @@ const refundSchema = z.strictObject({
 });
 
 const cancelSchema = z.strictObject({ reason: z.string().trim().min(10).max(300), refund: z.boolean().default(true) });
+const lateRespondSchema = z.strictObject({ action: z.enum(['accept', 'arrive_soon']), note: z.string().trim().max(200).optional() });
 const returnSchema = z.strictObject({ reason: z.string().trim().min(10).max(300) });
 
 /** Ações do admin sobre pedidos (SEC-039). A lista/detalhe de pedidos do admin entra com o painel (Onda 4D). */
 @Controller('v1/admin/orders')
 export class AdminOrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly late: LateDeliveryService,
+  ) {}
 
   /** Estorno manual total ou parcial: reautenticação, motivo, `Idempotency-Key` obrigatória e auditoria. */
   @AdminOnly('orders:refund')
@@ -69,5 +74,15 @@ export class AdminOrdersController {
     if (!UUID.test(orderId)) throw errors.notFound();
     await this.orders.adminConfirmStoreReturn(orderId, body.reason, ctx);
     return { status: 'cancelled' as const };
+  }
+
+  /** WB-255 C6 / RN-19 4d: a operação responde ao cancelamento por atraso com o pedido em saída (aceita ou "chego em até N min"). Sem resposta em `entrega_cancel_resposta_min`, o sistema aceita. */
+  @AdminOnly('logistics:write')
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-late-cancel-respond', limit: 120, windowSeconds: 3600 })
+  @Post(':orderId/late-cancel/respond')
+  async respondLateCancel(@Param('orderId') orderId: string, @Body(new ZodPipe(lateRespondSchema)) body: z.infer<typeof lateRespondSchema>, @Ctx() ctx: RequestContext) {
+    if (!UUID.test(orderId)) throw errors.notFound();
+    return this.late.respond(orderId, body, ctx);
   }
 }

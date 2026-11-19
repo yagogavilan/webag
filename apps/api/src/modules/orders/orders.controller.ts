@@ -7,6 +7,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { parseIdempotencyKey } from '../idempotency/index.js';
 import { CardIntentService } from './card-intent.service.js';
+import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -51,7 +52,10 @@ const cancelSchema = z.strictObject({ reason: z.string().trim().max(200).optiona
 /** Pedidos do cliente. Tudo filtra pelo `userId` do token: pedido de outra conta é 404 (SEC-020). */
 @Controller('v1/orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly late: LateDeliveryService,
+  ) {}
 
   /** Criar pedido é escrita cara e repetível em 3G: `Idempotency-Key` obrigatória e limite por IP. */
   @RateLimit({ name: 'order-create', limit: 30, windowSeconds: 3600 })
@@ -97,6 +101,19 @@ export class OrdersController {
   @Post(':orderId/cancel-request')
   requestCancel(@CurrentPrincipal() principal: Principal, @Param('orderId') orderId: string, @Body(new ZodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>) {
     return this.orders.requestCancel(principal.userId, orderIdParam(orderId), body.reason ?? null);
+  }
+
+  /**
+   * WB-253 / RN-19 4d: "Cancelar sem custo" por atraso da entrega (depois do fim da faixa + tolerância). Antes da saída cancela na hora
+   * com estorno total; em saída abre o pedido à operação (`delay.cancelRequest`). 409 `LATE_CANCEL_NOT_AVAILABLE` / `ORDER_ALREADY_DELIVERED`.
+   */
+  @HttpCode(200)
+  @RateLimit({ name: 'order-cancel-late', limit: 20, windowSeconds: 3600 })
+  @Post(':orderId/cancel-late')
+  async cancelLate(@CurrentPrincipal() principal: Principal, @Param('orderId') orderId: string) {
+    const id = orderIdParam(orderId);
+    await this.late.cancelLate(principal.userId, id);
+    return this.orders.getForCustomer(principal.userId, id);
   }
 
   @HttpCode(200)

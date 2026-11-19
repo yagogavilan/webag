@@ -1792,7 +1792,7 @@ export type DeliveryRequestTiersItem = { [key: string]: unknown };
 export interface DeliveryRequest {
   acceptsDelivery: boolean;
   /**
-     * DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho passa do teto `entrega_max_min`.
+     * DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho + folga da faixa passa do teto `entrega_max_min` (DEC-054).
      * @minimum 5
      * @maximum 120
      * @nullable
@@ -2976,7 +2976,7 @@ export interface CancelRequest {
 }
 
 /**
- * DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área').
+ * DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área').
  */
 export interface EtaRange {
   minMinutes: number;
@@ -4203,6 +4203,29 @@ export interface OrderPayment {
   updatedAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type OrderDelayCancelMode = typeof OrderDelayCancelMode[keyof typeof OrderDelayCancelMode] | null;
+
+
+export const OrderDelayCancelMode = {
+  immediate: 'immediate',
+  request: 'request',
+} as const;
+
+/**
+ * WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).
+ */
+export type OrderDelay = {
+  late: boolean;
+  canCancelWithoutCost: boolean;
+  cancelAvailableAt: string;
+  /** @nullable */
+  cancelMode: OrderDelayCancelMode;
+  cancelRequest: CancelRequest | null;
+} | null;
+
 export type OrderTrackingTimelineItem = {
   status: DeliveryStatus;
   at: string;
@@ -4346,6 +4369,8 @@ export type OrderCancellation = {
 export interface Order {
   /** BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve. */
   cancelRequest?: CancelRequest | null;
+  /** WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa). */
+  delay?: OrderDelay;
   /** Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto. */
   tracking: OrderTracking;
   id: string;
@@ -6614,6 +6639,20 @@ export type AdminConfirmStoreReturn200 = {
   status: AdminConfirmStoreReturn200Status;
 };
 
+export type AdminRespondLateCancelBodyAction = typeof AdminRespondLateCancelBodyAction[keyof typeof AdminRespondLateCancelBodyAction];
+
+
+export const AdminRespondLateCancelBodyAction = {
+  accept: 'accept',
+  arrive_soon: 'arrive_soon',
+} as const;
+
+export type AdminRespondLateCancelBody = {
+  action: AdminRespondLateCancelBodyAction;
+  /** @maxLength 200 */
+  note?: string;
+};
+
 export type AdminRefundOrderBody = {
   /** @minimum 1 */
   amountCents: number;
@@ -7270,6 +7309,8 @@ export type RequestOrderCancelBody = {
   /** @maxLength 200 */
   reason?: string;
 };
+
+export type CancelOrderLateBody = { [key: string]: never };
 
 export type RejectStoreOrderCancelRequestBody = {
   /**
@@ -12798,6 +12839,71 @@ export const adminConfirmStoreReturn = async (orderId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(adminConfirmStoreReturnBody)
+  }
+);}
+
+
+
+export type adminRespondLateCancelResponse200 = {
+  data: CancelRequest
+  status: 200
+}
+
+export type adminRespondLateCancelResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adminRespondLateCancelResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adminRespondLateCancelResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adminRespondLateCancelResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adminRespondLateCancelResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type adminRespondLateCancelResponseSuccess = (adminRespondLateCancelResponse200) & {
+  headers: Headers;
+};
+export type adminRespondLateCancelResponseError = (adminRespondLateCancelResponse400 | adminRespondLateCancelResponse401 | adminRespondLateCancelResponse403 | adminRespondLateCancelResponse404 | adminRespondLateCancelResponse409) & {
+  headers: Headers;
+};
+
+export type adminRespondLateCancelResponse = (adminRespondLateCancelResponseSuccess | adminRespondLateCancelResponseError)
+
+export const getAdminRespondLateCancelUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/admin/orders/${orderId}/late-cancel/respond`
+}
+
+/**
+ * Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático).
+ * @summary Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
+ */
+export const adminRespondLateCancel = async (orderId: string,
+    adminRespondLateCancelBody: AdminRespondLateCancelBody, options?: Parameters<typeof apiFetch>[1]): Promise<adminRespondLateCancelResponse> => {
+
+  return apiFetch<adminRespondLateCancelResponse>(getAdminRespondLateCancelUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminRespondLateCancelBody)
   }
 );}
 
@@ -20572,6 +20678,66 @@ export const requestOrderCancel = async (orderId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(requestOrderCancelBody)
+  }
+);}
+
+
+
+export type cancelOrderLateResponse200 = {
+  data: Order
+  status: 200
+}
+
+export type cancelOrderLateResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelOrderLateResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type cancelOrderLateResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type cancelOrderLateResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type cancelOrderLateResponseSuccess = (cancelOrderLateResponse200) & {
+  headers: Headers;
+};
+export type cancelOrderLateResponseError = (cancelOrderLateResponse401 | cancelOrderLateResponse404 | cancelOrderLateResponse409 | cancelOrderLateResponse429) & {
+  headers: Headers;
+};
+
+export type cancelOrderLateResponse = (cancelOrderLateResponseSuccess | cancelOrderLateResponseError)
+
+export const getCancelOrderLateUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/cancel-late`
+}
+
+/**
+ * Vale depois do fim da faixa + `entrega_atraso_tolerancia_min` (`Order.delay.canCancelWithoutCost`). Antes de `out_for_delivery`: cancela na hora (ator cliente, motivo 'Atraso na entrega'), estoque devolvido, corrida cancelada e estorno TOTAL com a taxa de entrega. Em `out_for_delivery`: abre o pedido à operação (`Order.delay.cancelRequest`, `status=pending`); a operação aceita ou diz que chega logo e, sem resposta em `entrega_cancel_resposta_min`, o sistema aceita e a corrida segue para a devolução à loja (o pedido é cancelado e estornado por inteiro quando a loja confirma o recebimento). Idempotente (toque duplo: um só efeito). Retorna o pedido. Quem cancela por atraso não recebe compensação. 409 `LATE_CANCEL_NOT_AVAILABLE` (ainda não atrasou o suficiente), 409 `ORDER_ALREADY_DELIVERED`, 404 se o pedido não é do cliente.
+ * @summary Cancelar sem custo por atraso da entrega (WB-253, RN-19 4d)
+ */
+export const cancelOrderLate = async (orderId: string,
+    cancelOrderLateBody?: CancelOrderLateBody, options?: Parameters<typeof apiFetch>[1]): Promise<cancelOrderLateResponse> => {
+
+  return apiFetch<cancelOrderLateResponse>(getCancelOrderLateUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cancelOrderLateBody)
   }
 );}
 
