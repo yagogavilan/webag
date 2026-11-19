@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { ParametersService } from '../admin/index.js';
@@ -56,7 +56,8 @@ export class StoreFinanceService {
   async summary(storeId: string, from: string, to: string) {
     const start = dayStart(from).toISOString();
     const end = dayAfter(to).toISOString();
-    const [sales, ledger, receivable, carencia] = await Promise.all([
+    const carencia = await this.params.getNumber('repasse_carencia_dias');
+    const [sales, ledger, receivable] = await Promise.all([
       this.sales(storeId, from, to),
       this.db.execute(sql`
         select t.kind, e.account, e.direction, coalesce(sum(e.amount_cents), 0)::int as total
@@ -69,24 +70,12 @@ export class StoreFinanceService {
           from ledger_transactions t join ledger_entries e on e.transaction_id = t.id and e.account = 'merchant_payable'
           where t.store_id = ${storeId}::uuid group by t.order_id)
         select case when o.status <> 'delivered' then 'pending'
-                    when o.delivered_at > now() - make_interval(days => ${0}::int) then 'in_grace' else 'released' end as bucket,
-               coalesce(sum(n.net), 0)::int as total, count(*)::int as orders
-        from net n join orders o on o.id = n.order_id
-        where n.net <> 0 group by 1`),
-      this.params.getNumber('repasse_carencia_dias'),
-    ]);
-    // O parâmetro de carência entra depois da consulta base (o intervalo usa o valor lido): refaz com o valor certo.
-    const receivableRows = (await this.db.execute(sql`
-        with net as (
-          select t.order_id, sum(case when e.direction = 'credit' then e.amount_cents else -e.amount_cents end)::int as net
-          from ledger_transactions t join ledger_entries e on e.transaction_id = t.id and e.account = 'merchant_payable'
-          where t.store_id = ${storeId}::uuid group by t.order_id)
-        select case when o.status <> 'delivered' then 'pending'
                     when o.delivered_at > now() - make_interval(days => ${carencia}::int) then 'in_grace' else 'released' end as bucket,
                coalesce(sum(n.net), 0)::int as total, count(*)::int as orders
         from net n join orders o on o.id = n.order_id
-        where n.net <> 0 group by 1`)).rows as { bucket: PayoutStatus; total: number; orders: number }[];
-    void receivable;
+        where n.net <> 0 group by 1`),
+    ]);
+    const receivableRows = receivable.rows as { bucket: PayoutStatus; total: number; orders: number }[];
     const sum = (kind: string, account: string, direction: 'debit' | 'credit'): number =>
       (ledger.rows as { kind: string; account: string; direction: string; total: number }[]).filter((r) => r.kind === kind && r.account === account && r.direction === direction).reduce((a, r) => a + r.total, 0);
     const commissionCharged = sum('sale', 'commission_revenue', 'credit');
@@ -171,4 +160,3 @@ export class StoreFinanceService {
   }
 }
 
-void inArray;

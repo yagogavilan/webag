@@ -5859,6 +5859,106 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/finance/sales:
+    get:
+      tags: [finance]
+      operationId: getStoreSales
+      summary: Vendas do período (WB-075)
+      description: "Permissão da loja `sales_values` (dono ou funcionário com a permissão): total de vendas (itens menos cupom da loja, sem frete nem taxa de serviço), número de pedidos e ticket médio. Sem comissão nem líquido (esses são só do dono). Pedido pago e ainda não cancelado conta pelo dia do pagamento (Brasília)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. Período de no máximo 366 dias.', schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreSales' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/finance/summary:
+    get:
+      tags: [finance]
+      operationId: getStoreFinanceSummary
+      summary: Resumo financeiro do dono (WB-076)
+      description: "Permissão da loja `finance` (só o dono, RN-13). Vendas, comissão cobrada e devolvida, tarifa do provedor, estornos, líquido (do ledger) e o que ainda está para entrar. `receivable` é INFORMATIVO: em split o dinheiro cai direto na conta do Mercado Pago da loja e a Webag não retém nem repassa (DEC-016): `pending` = pedido ainda não entregue, `inGrace` = entregue há menos de `repasse_carencia_dias`, `released` = passou a carência."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. Período de no máximo 366 dias.', schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreFinanceSummary' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/finance/statement:
+    get:
+      tags: [finance]
+      operationId: getStoreStatement
+      summary: Extrato por pedido (WB-077)
+      description: "Permissão da loja `finance`. Um registro por pedido pago do período, do mais recente ao mais antigo, com vendas, comissão, tarifa do provedor, estornos, líquido e situação. Paginado por cursor."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. Período de no máximo 366 dias.', schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 200 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatementPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/finance/statement.csv:
+    get:
+      tags: [finance]
+      operationId: getStoreStatementCsv
+      summary: Extrato exportável em CSV (WB-077)
+      description: "Permissão da loja `finance`. UTF-8 com BOM, separador `;`, valores em reais com vírgula; até 5.000 pedidos mais recentes do período. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo. A exportação é auditada (`store.finance.export`). Limite de 20 por hora."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. Período de no máximo 366 dias.', schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: CSV
+          content:
+            application/json:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -9610,3 +9710,59 @@ components:
       required: [token]
       properties:
         token: { type: string }
+    StoreSales:
+      type: object
+      required: [period, orders, gross, averageTicket]
+      properties:
+        period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        orders: { type: integer }
+        gross: { $ref: '#/components/schemas/Money' }
+        averageTicket: { $ref: '#/components/schemas/Money' }
+    StoreFinanceSummary:
+      type: object
+      required: [period, sales, commission, providerFees, refunds, net, receivable]
+      properties:
+        period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        sales: { $ref: '#/components/schemas/StoreSales' }
+        commission:
+          type: object
+          properties:
+            charged: { $ref: '#/components/schemas/Money' }
+            returned: { $ref: '#/components/schemas/Money' }
+            net: { $ref: '#/components/schemas/Money' }
+        providerFees: { $ref: '#/components/schemas/Money' }
+        refunds: { $ref: '#/components/schemas/Money' }
+        net: { $ref: '#/components/schemas/Money' }
+        receivable:
+          type: object
+          properties:
+            informational: { type: boolean }
+            graceDays: { type: integer }
+            pending: { $ref: '#/components/schemas/ReceivableBucket' }
+            inGrace: { $ref: '#/components/schemas/ReceivableBucket' }
+            released: { $ref: '#/components/schemas/ReceivableBucket' }
+    ReceivableBucket:
+      type: object
+      properties:
+        orders: { type: integer }
+        amount: { $ref: '#/components/schemas/Money' }
+    StatementLine:
+      type: object
+      required: [orderId, number, paidAt, orderStatus, gross, commission, providerFee, refunds, net, payoutStatus]
+      properties:
+        orderId: { type: string, format: uuid }
+        number: { type: string }
+        paidAt: { type: string, format: date-time }
+        orderStatus: { type: string }
+        gross: { $ref: '#/components/schemas/Money' }
+        commission: { $ref: '#/components/schemas/Money' }
+        providerFee: { $ref: '#/components/schemas/Money' }
+        refunds: { $ref: '#/components/schemas/Money' }
+        net: { $ref: '#/components/schemas/Money' }
+        payoutStatus: { type: string, enum: [pending, in_grace, released] }
+    StatementPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StatementLine' } }
+        nextCursor: { type: [string, 'null'] }
