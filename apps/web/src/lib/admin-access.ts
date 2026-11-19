@@ -4,10 +4,11 @@ import type { AdminProfile } from './session-types';
  * Matriz de menu e edição do admin (onda-1b-contas.md §AD0, alinhada a `permissions.ts` da API).
  * Só decide o que desenhar; quem barra de verdade é a API (403).
  */
-export type AdminSection = 'lojas' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'flags' | 'termos' | 'auditoria' | 'admins';
+export type AdminSection = 'lojas' | 'logistica' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'flags' | 'termos' | 'auditoria' | 'admins';
 
 const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
   lojas: ['super_admin', 'operations', 'support'],
+  logistica: ['super_admin', 'operations', 'finance', 'support'],
   moderacao: ['super_admin', 'operations', 'support'],
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
@@ -20,6 +21,7 @@ const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
 
 const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
   lojas: ['super_admin', 'operations'],
+  logistica: ['super_admin', 'operations'],
   moderacao: ['super_admin', 'operations'],
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
@@ -65,6 +67,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { section: 'lojas', label: 'Lojas', href: '/admin/lojas' },
+  { section: 'logistica', label: 'Logística', href: '/admin/logistica' },
   { section: 'moderacao', label: 'Moderação', href: '/admin/moderacao' },
   { section: 'regioes', label: 'Regiões', href: '/admin/regioes' },
   { section: 'categorias', label: 'Categorias', href: '/admin/categorias' },

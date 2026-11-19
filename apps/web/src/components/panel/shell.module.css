@@ -105,6 +105,8 @@
 .navItem:hover { background: rgba(255, 255, 255, 0.14); }
 .navItem:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px var(--wb-color-brand-500); }
 .navItemActive, .navItemActive:hover { background: var(--wb-color-brand-100); color: var(--wb-color-brand-800); }
+.navCount { margin-left: auto; min-width: 24px; padding: 2px 8px; border-radius: var(--wb-radius-pill); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base); font-size: 12px; line-height: 16px; font-weight: 700; text-align: center; }
+.sidebarCollapsed .navCount { display: none; }
 .navLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebarCollapsed .navLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .sidebarCollapsed .navItem { justify-content: center; padding: 0; }

@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardText, FileText, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
+import { ClipboardText, FileText, Motorcycle, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -11,6 +11,7 @@ import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import type { Me } from '@/lib/session-types';
 import { createPanelQueryClient } from '@/lib/query-client';
 import { useOnline } from '@/lib/use-online';
+import { LogisticsNavCount } from '@/features/logistics/nav-count';
 import { IdleGuard } from './idle-guard';
 import { ReauthProvider } from './reauth';
 import { SessionProvider } from './session-context';
@@ -20,6 +21,7 @@ type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'du
 
 const ICONS: Record<AdminSection, IconType> = {
   lojas: Storefront,
+  logistica: Motorcycle,
   moderacao: ShieldCheck,
   regioes: MapPin,
   categorias: Tag,
@@ -42,6 +44,7 @@ function Nav({ user, collapsed, onNavigate }: { user: Me; collapsed?: boolean; o
           <Link key={item.href} href={item.href as never} className={cx(s.navItem, 'wb-text-body-strong', active && s.navItemActive)} aria-current={active ? 'page' : undefined} onClick={onNavigate} title={collapsed ? item.label : undefined} data-testid={`nav-${item.section}`}>
             <Icon size={24} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
             <span className={s.navLabel}>{item.label}</span>
+            {item.section === 'logistica' ? <LogisticsNavCount /> : null}
           </Link>
         );
       })}
