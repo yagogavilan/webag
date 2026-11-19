@@ -162,7 +162,7 @@ describe('Loja: horários, feriados, pausa, entrega, retirada e política de tro
       expect((await put({ voluntaryDays: 31 })).status).toBe(422); // acima do máximo do admin (30)
       expect((await put({ voluntaryDays: 2 })).status).toBe(422); // abaixo do mínimo do admin (3)
       const before = (await settings()).exchangePolicy;
-      expect(before.legalFloor).toEqual({ withdrawalDays: 7, defectDays: 30 });
+      expect(before.legalFloor).toEqual({ withdrawalDays: 7, defectDays: 30, defectDurableDays: 90 });
       await put({ voluntaryDays: 7, collectionFeeCents: 1000 }).expect(204); // campo antigo: aceito e ignorado
       const v1 = (await settings()).exchangePolicy;
       expect(v1).toMatchObject({ voluntaryDays: 7, collectionFeeCents: 0, version: before.version + 1 });
