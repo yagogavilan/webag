@@ -11479,3 +11479,363 @@ export const WaiveExchangeFeeResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.')
 })
+
+
+/**
+ * `marketing:push` (super admin e operação). Conta só quem aceitou receber ofertas (`marketing_push` vigente), com aparelho ativo e que não atingiu `push_mkt_max_semana`. Abaixo de `push_mkt_min_segmento` a contagem exata NÃO sai (`eligible` nulo, `belowMinimum` verdadeiro): protege contra reidentificação. `nextSendAt` é quando sairia se enviasse agora (fora das 9h-20h vira o próximo início).
+ * @summary Estimativa "Quem recebe" do push segmentado
+ */
+export const estimatePushCampaignBodySegmentThreeDaysMin = 7;
+export const estimatePushCampaignBodySegmentThreeDaysMax = 365;
+
+export const estimatePushCampaignBodySegmentFiveDaysMax = 90;
+
+
+
+export const EstimatePushCampaignBody = zod.object({
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(estimatePushCampaignBodySegmentThreeDaysMin).max(estimatePushCampaignBodySegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(estimatePushCampaignBodySegmentFiveDaysMax)
+})])
+})
+
+export const EstimatePushCampaignResponse = zod.object({
+  "eligible": zod.int().nullable().describe('Nulo abaixo do mínimo'),
+  "excludedByCap": zod.int().nullable().describe('Ficam de fora: já receberam o máximo da semana'),
+  "belowMinimum": zod.boolean(),
+  "minimum": zod.int(),
+  "marketingEnabled": zod.boolean(),
+  "nextSendAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Mais recentes primeiro. `delivered` = mensagens aceitas pelo provedor (recibo de entrega é DT-044); `opened` = o app avisou a abertura; `unsubscribed` = revogou o marketing em até 48 h do envio.
+ * @summary Histórico de campanhas (enviados, entregues, abertos, descadastros)
+ */
+export const listPushCampaignsQueryLimitMax = 100;
+
+
+
+export const ListPushCampaignsQueryParams = zod.object({
+  "status": zod.enum(['scheduled', 'sending', 'sent', 'cancelled']).optional(),
+  "limit": zod.int().min(1).max(listPushCampaignsQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const listPushCampaignsResponseDataItemSegmentThreeDaysMin = 7;
+export const listPushCampaignsResponseDataItemSegmentThreeDaysMax = 365;
+
+export const listPushCampaignsResponseDataItemSegmentFiveDaysMax = 90;
+
+
+
+export const ListPushCampaignsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "destination": zod.union([zod.object({
+  "type": zod.enum(['home'])
+}),zod.object({
+  "type": zod.enum(['store']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['category']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['coupon']),
+  "code": zod.string()
+})]),
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(listPushCampaignsResponseDataItemSegmentThreeDaysMin).max(listPushCampaignsResponseDataItemSegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(listPushCampaignsResponseDataItemSegmentFiveDaysMax)
+})]),
+  "status": zod.enum(['scheduled', 'sending', 'sent', 'cancelled']),
+  "sendAt": zod.iso.datetime({"offset":true}),
+  "sentAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "estimated": zod.int(),
+  "sent": zod.int().describe('Pessoas que receberam'),
+  "delivered": zod.int().describe('Mensagens aceitas pelo provedor'),
+  "opened": zod.int(),
+  "unsubscribed": zod.int(),
+  "excludedByCap": zod.int(),
+  "cancelReason": zod.string().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * `Idempotency-Key` evita campanha em dobro. Recusas: 409 `PUSH_MARKETING_DISABLED` (flag `push_marketing` ou limite semanal em zero), 422 `SEGMENT_TOO_SMALL` (abaixo de `push_mkt_min_segmento`), 409 `ESTIMATE_CHANGED` (o N confirmado em `expectedRecipients` mudou; vem `eligible`), 400 (destino inativo, horário passado). O público é RECALCULADO no envio (consentimento, limite semanal, mínimo e flag); fora da janela `push_mkt_janela` o envio vai para o próximo início. Auditada.
+ * @summary Criar e agendar (ou enviar na janela) uma campanha de push
+ */
+export const CreatePushCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().optional()
+})
+
+export const createPushCampaignBodyTitleMax = 60;
+
+export const createPushCampaignBodyBodyMax = 120;
+
+export const createPushCampaignBodySegmentThreeDaysMin = 7;
+export const createPushCampaignBodySegmentThreeDaysMax = 365;
+
+export const createPushCampaignBodySegmentFiveDaysMax = 90;
+
+export const createPushCampaignBodyExpectedRecipientsMin = 0;
+
+
+
+export const CreatePushCampaignBody = zod.object({
+  "title": zod.string().max(createPushCampaignBodyTitleMax),
+  "body": zod.string().max(createPushCampaignBodyBodyMax),
+  "destination": zod.union([zod.object({
+  "type": zod.enum(['home'])
+}),zod.object({
+  "type": zod.enum(['store']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['category']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['coupon']),
+  "code": zod.string()
+})]),
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(createPushCampaignBodySegmentThreeDaysMin).max(createPushCampaignBodySegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(createPushCampaignBodySegmentFiveDaysMax)
+})]),
+  "scheduleAt": zod.iso.datetime({"offset":true}).optional().describe('Futuro, em até 30 dias; fora das 9h-20h vira o próximo início da janela'),
+  "expectedRecipients": zod.int().min(createPushCampaignBodyExpectedRecipientsMin).describe('O N mostrado no \'Enviar para N pessoas?\'')
+})
+
+export const createPushCampaignResponseSegmentThreeDaysMin = 7;
+export const createPushCampaignResponseSegmentThreeDaysMax = 365;
+
+export const createPushCampaignResponseSegmentFiveDaysMax = 90;
+
+
+
+export const CreatePushCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "destination": zod.union([zod.object({
+  "type": zod.enum(['home'])
+}),zod.object({
+  "type": zod.enum(['store']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['category']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['coupon']),
+  "code": zod.string()
+})]),
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(createPushCampaignResponseSegmentThreeDaysMin).max(createPushCampaignResponseSegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(createPushCampaignResponseSegmentFiveDaysMax)
+})]),
+  "status": zod.enum(['scheduled', 'sending', 'sent', 'cancelled']),
+  "sendAt": zod.iso.datetime({"offset":true}),
+  "sentAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "estimated": zod.int(),
+  "sent": zod.int().describe('Pessoas que receberam'),
+  "delivered": zod.int().describe('Mensagens aceitas pelo provedor'),
+  "opened": zod.int(),
+  "unsubscribed": zod.int(),
+  "excludedByCap": zod.int(),
+  "cancelReason": zod.string().nullable()
+})
+
+
+/**
+ * @summary Detalhe e métricas da campanha
+ */
+export const GetPushCampaignParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const getPushCampaignResponseSegmentThreeDaysMin = 7;
+export const getPushCampaignResponseSegmentThreeDaysMax = 365;
+
+export const getPushCampaignResponseSegmentFiveDaysMax = 90;
+
+
+
+export const GetPushCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "destination": zod.union([zod.object({
+  "type": zod.enum(['home'])
+}),zod.object({
+  "type": zod.enum(['store']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['category']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['coupon']),
+  "code": zod.string()
+})]),
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(getPushCampaignResponseSegmentThreeDaysMin).max(getPushCampaignResponseSegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(getPushCampaignResponseSegmentFiveDaysMax)
+})]),
+  "status": zod.enum(['scheduled', 'sending', 'sent', 'cancelled']),
+  "sendAt": zod.iso.datetime({"offset":true}),
+  "sentAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "estimated": zod.int(),
+  "sent": zod.int().describe('Pessoas que receberam'),
+  "delivered": zod.int().describe('Mensagens aceitas pelo provedor'),
+  "opened": zod.int(),
+  "unsubscribed": zod.int(),
+  "excludedByCap": zod.int(),
+  "cancelReason": zod.string().nullable()
+})
+
+
+/**
+ * Só enquanto `scheduled`; depois do envio não há desfazer (409 `CAMPAIGN_NOT_CANCELLABLE`).
+ * @summary Cancelar campanha agendada
+ */
+export const CancelPushCampaignParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const cancelPushCampaignBodyReasonMin = 3;
+export const cancelPushCampaignBodyReasonMax = 200;
+
+
+
+export const CancelPushCampaignBody = zod.object({
+  "reason": zod.string().min(cancelPushCampaignBodyReasonMin).max(cancelPushCampaignBodyReasonMax)
+})
+
+export const cancelPushCampaignResponseSegmentThreeDaysMin = 7;
+export const cancelPushCampaignResponseSegmentThreeDaysMax = 365;
+
+export const cancelPushCampaignResponseSegmentFiveDaysMax = 90;
+
+
+
+export const CancelPushCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "destination": zod.union([zod.object({
+  "type": zod.enum(['home'])
+}),zod.object({
+  "type": zod.enum(['store']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['category']),
+  "id": zod.uuid()
+}),zod.object({
+  "type": zod.enum(['coupon']),
+  "code": zod.string()
+})]),
+  "segment": zod.union([zod.object({
+  "kind": zod.enum(['city']),
+  "cityId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['neighborhood']),
+  "neighborhoodId": zod.uuid()
+}),zod.object({
+  "kind": zod.enum(['inactive']),
+  "days": zod.int().min(cancelPushCampaignResponseSegmentThreeDaysMin).max(cancelPushCampaignResponseSegmentThreeDaysMax).describe('Já comprou e não paga pedido há N dias')
+}),zod.object({
+  "kind": zod.enum(['bought_category']),
+  "categoryId": zod.uuid().describe('Inclui as subcategorias')
+}),zod.object({
+  "kind": zod.enum(['new_customers']),
+  "days": zod.int().min(1).max(cancelPushCampaignResponseSegmentFiveDaysMax)
+})]),
+  "status": zod.enum(['scheduled', 'sending', 'sent', 'cancelled']),
+  "sendAt": zod.iso.datetime({"offset":true}),
+  "sentAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "estimated": zod.int(),
+  "sent": zod.int().describe('Pessoas que receberam'),
+  "delivered": zod.int().describe('Mensagens aceitas pelo provedor'),
+  "opened": zod.int(),
+  "unsubscribed": zod.int(),
+  "excludedByCap": zod.int(),
+  "cancelReason": zod.string().nullable()
+})
+
+
+/**
+ * Idempotente; sem efeito se o usuário não recebeu a campanha. O `campaignId` vem em `data` da notificação.
+ * @summary O app avisa que o cliente abriu a notificação da campanha
+ */
+export const MarkPushCampaignOpenedParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const MarkPushCampaignOpenedResponse = zod.void()

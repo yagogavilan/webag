@@ -61,6 +61,8 @@ export const ADMIN_PERMISSIONS = {
   'exchanges:waive-fee': [SUPER, OPS],
   /** WB-217: pedidos de titulares (LGPD) são só do super admin; revelar o e-mail do solicitante exige reautenticação e auditoria. */
   'privacy:manage': [SUPER],
+  /** WB-197: campanhas de push de marketing (financeiro e suporte não veem). */
+  'marketing:push': [SUPER, OPS],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */

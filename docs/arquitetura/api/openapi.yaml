@@ -70,6 +70,8 @@ tags:
     description: LGPD (O6.1) - excluir conta, exportar dados, pedidos de titulares e retenção
   - name: realtime
     description: Tempo real (Socket.IO /rt) - tickets de uso único para os painéis
+  - name: marketing
+    description: Marketing do admin (push segmentado, cupons da plataforma, destaques) e métricas de campanha
 security:
   - bearerAuth: []
 paths:
@@ -6860,6 +6862,150 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/push/estimate:
+    post:
+      tags: [marketing]
+      operationId: estimatePushCampaign
+      summary: Estimativa "Quem recebe" do push segmentado
+      description: "`marketing:push` (super admin e operação). Conta só quem aceitou receber ofertas (`marketing_push` vigente), com aparelho ativo e que não atingiu `push_mkt_max_semana`. Abaixo de `push_mkt_min_segmento` a contagem exata NÃO sai (`eligible` nulo, `belowMinimum` verdadeiro): protege contra reidentificação. `nextSendAt` é quando sairia se enviasse agora (fora das 9h-20h vira o próximo início)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushEstimateRequest' }
+      responses:
+        '200':
+          description: Estimativa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushEstimate' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/push/campaigns:
+    get:
+      tags: [marketing]
+      operationId: listPushCampaigns
+      summary: Histórico de campanhas (enviados, entregues, abertos, descadastros)
+      description: "Mais recentes primeiro. `delivered` = mensagens aceitas pelo provedor (recibo de entrega é DT-044); `opened` = o app avisou a abertura; `unsubscribed` = revogou o marketing em até 48 h do envio."
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, sending, sent, cancelled] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushCampaignPage' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [marketing]
+      operationId: createPushCampaign
+      summary: Criar e agendar (ou enviar na janela) uma campanha de push
+      description: "`Idempotency-Key` evita campanha em dobro. Recusas: 409 `PUSH_MARKETING_DISABLED` (flag `push_marketing` ou limite semanal em zero), 422 `SEGMENT_TOO_SMALL` (abaixo de `push_mkt_min_segmento`), 409 `ESTIMATE_CHANGED` (o N confirmado em `expectedRecipients` mudou; vem `eligible`), 400 (destino inativo, horário passado). O público é RECALCULADO no envio (consentimento, limite semanal, mínimo e flag); fora da janela `push_mkt_janela` o envio vai para o próximo início. Auditada."
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushCampaignCreate' }
+      responses:
+        '201':
+          description: Campanha criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushCampaign' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/push/campaigns/{id}:
+    get:
+      tags: [marketing]
+      operationId: getPushCampaign
+      summary: Detalhe e métricas da campanha
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Campanha
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushCampaign' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/push/campaigns/{id}/cancel:
+    post:
+      tags: [marketing]
+      operationId: cancelPushCampaign
+      summary: Cancelar campanha agendada
+      description: "Só enquanto `scheduled`; depois do envio não há desfazer (409 `CAMPAIGN_NOT_CANCELLABLE`)."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties: { reason: { type: string, minLength: 3, maxLength: 200 } }
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushCampaign' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/me/push-campaigns/{id}/opened:
+    post:
+      tags: [marketing]
+      operationId: markPushCampaignOpened
+      summary: O app avisa que o cliente abriu a notificação da campanha
+      description: "Idempotente; sem efeito se o usuário não recebeu a campanha. O `campaignId` vem em `data` da notificação."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Registrado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -10913,3 +11059,96 @@ components:
         status: { $ref: '#/components/schemas/ExchangeStatus' }
         fee: { $ref: '#/components/schemas/Money' }
         totalDue: { $ref: '#/components/schemas/Money' }
+    PushSegment:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, cityId]
+          properties: { kind: { type: string, enum: [city] }, cityId: { type: string, format: uuid } }
+        - type: object
+          additionalProperties: false
+          required: [kind, neighborhoodId]
+          properties: { kind: { type: string, enum: [neighborhood] }, neighborhoodId: { type: string, format: uuid } }
+        - type: object
+          additionalProperties: false
+          required: [kind, days]
+          properties: { kind: { type: string, enum: [inactive] }, days: { type: integer, minimum: 7, maximum: 365, description: "Já comprou e não paga pedido há N dias" } }
+        - type: object
+          additionalProperties: false
+          required: [kind, categoryId]
+          properties: { kind: { type: string, enum: [bought_category] }, categoryId: { type: string, format: uuid, description: "Inclui as subcategorias" } }
+        - type: object
+          additionalProperties: false
+          required: [kind, days]
+          properties: { kind: { type: string, enum: [new_customers] }, days: { type: integer, minimum: 1, maximum: 90 } }
+    PushDestination:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties: { type: { type: string, enum: [home] } }
+        - type: object
+          additionalProperties: false
+          required: [type, id]
+          properties: { type: { type: string, enum: [store] }, id: { type: string, format: uuid } }
+        - type: object
+          additionalProperties: false
+          required: [type, id]
+          properties: { type: { type: string, enum: [category] }, id: { type: string, format: uuid } }
+        - type: object
+          additionalProperties: false
+          required: [type, code]
+          properties: { type: { type: string, enum: [coupon] }, code: { type: string } }
+    PushEstimateRequest:
+      type: object
+      additionalProperties: false
+      required: [segment]
+      properties:
+        segment: { $ref: '#/components/schemas/PushSegment' }
+    PushEstimate:
+      type: object
+      required: [eligible, excludedByCap, belowMinimum, minimum, marketingEnabled, nextSendAt]
+      properties:
+        eligible: { type: [integer, 'null'], description: "Nulo abaixo do mínimo" }
+        excludedByCap: { type: [integer, 'null'], description: "Ficam de fora: já receberam o máximo da semana" }
+        belowMinimum: { type: boolean }
+        minimum: { type: integer }
+        marketingEnabled: { type: boolean }
+        nextSendAt: { type: string, format: date-time }
+    PushCampaignCreate:
+      type: object
+      additionalProperties: false
+      required: [title, body, destination, segment, expectedRecipients]
+      properties:
+        title: { type: string, maxLength: 60 }
+        body: { type: string, maxLength: 120 }
+        destination: { $ref: '#/components/schemas/PushDestination' }
+        segment: { $ref: '#/components/schemas/PushSegment' }
+        scheduleAt: { type: string, format: date-time, description: "Futuro, em até 30 dias; fora das 9h-20h vira o próximo início da janela" }
+        expectedRecipients: { type: integer, minimum: 0, description: "O N mostrado no 'Enviar para N pessoas?'" }
+    PushCampaign:
+      type: object
+      required: [id, title, body, destination, segment, status, sendAt, sentAt, createdAt, estimated, sent, delivered, opened, unsubscribed, excludedByCap, cancelReason]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        destination: { $ref: '#/components/schemas/PushDestination' }
+        segment: { $ref: '#/components/schemas/PushSegment' }
+        status: { type: string, enum: [scheduled, sending, sent, cancelled] }
+        sendAt: { type: string, format: date-time }
+        sentAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        estimated: { type: integer }
+        sent: { type: integer, description: "Pessoas que receberam" }
+        delivered: { type: integer, description: "Mensagens aceitas pelo provedor" }
+        opened: { type: integer }
+        unsubscribed: { type: integer }
+        excludedByCap: { type: integer }
+        cancelReason: { type: [string, 'null'] }
+    PushCampaignPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/PushCampaign' } }
+        nextCursor: { type: [string, 'null'] }

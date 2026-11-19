@@ -90,6 +90,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('exportacao_link_min', 5, 1, 30, 'Validade do link de download da exportação (minutos); uso único', 'WB-212'),
   int('exportacao_validade_dias', 7, 1, 30, 'Validade do link de exportação de dados (dias)', 'HIP-025'),
   int('push_mkt_max_semana', 2, 0, 7, 'Máximo de push de marketing por semana', 'HIP-027'),
+  int('push_mkt_min_segmento', 20, 5, 1000, 'Mínimo de destinatários de uma campanha de push (proteção contra reidentificação) [HIPÓTESE]', 'WB-197'),
   { key: 'push_mkt_janela', type: 'window', default: '09:00-20:00', description: 'Janela permitida para push de marketing', ref: 'HIP-027' },
   int('aprovacao_loja_sla_dias_uteis', 2, 1, 10, 'SLA de aprovação de loja (dias úteis)', 'HIP-030'),
   int('estoque_baixo_un', 3, 0, 100, 'Alerta de estoque baixo, padrão da loja (unidades)', 'HIP-033'),

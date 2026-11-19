@@ -5115,6 +5115,122 @@ export interface WaiveExchangeFeeResponse {
   totalDue: Money;
 }
 
+export type PushSegment = {
+  kind: 'city';
+  cityId: string;
+} | {
+  kind: 'neighborhood';
+  neighborhoodId: string;
+} | {
+  kind: 'inactive';
+  /**
+     * Já comprou e não paga pedido há N dias
+     * @minimum 7
+     * @maximum 365
+     */
+  days: number;
+} | {
+  kind: 'bought_category';
+  /** Inclui as subcategorias */
+  categoryId: string;
+} | {
+  kind: 'new_customers';
+  /**
+     * @minimum 1
+     * @maximum 90
+     */
+  days: number;
+};
+
+export type PushDestination = {
+  type: 'home';
+} | {
+  type: 'store';
+  id: string;
+} | {
+  type: 'category';
+  id: string;
+} | {
+  type: 'coupon';
+  code: string;
+};
+
+export interface PushEstimateRequest {
+  segment: PushSegment;
+}
+
+export interface PushEstimate {
+  /**
+     * Nulo abaixo do mínimo
+     * @nullable
+     */
+  eligible: number | null;
+  /**
+     * Ficam de fora: já receberam o máximo da semana
+     * @nullable
+     */
+  excludedByCap: number | null;
+  belowMinimum: boolean;
+  minimum: number;
+  marketingEnabled: boolean;
+  nextSendAt: string;
+}
+
+export interface PushCampaignCreate {
+  /** @maxLength 60 */
+  title: string;
+  /** @maxLength 120 */
+  body: string;
+  destination: PushDestination;
+  segment: PushSegment;
+  /** Futuro, em até 30 dias; fora das 9h-20h vira o próximo início da janela */
+  scheduleAt?: string;
+  /**
+     * O N mostrado no 'Enviar para N pessoas?'
+     * @minimum 0
+     */
+  expectedRecipients: number;
+}
+
+export type PushCampaignStatus = typeof PushCampaignStatus[keyof typeof PushCampaignStatus];
+
+
+export const PushCampaignStatus = {
+  scheduled: 'scheduled',
+  sending: 'sending',
+  sent: 'sent',
+  cancelled: 'cancelled',
+} as const;
+
+export interface PushCampaign {
+  id: string;
+  title: string;
+  body: string;
+  destination: PushDestination;
+  segment: PushSegment;
+  status: PushCampaignStatus;
+  sendAt: string;
+  /** @nullable */
+  sentAt: string | null;
+  createdAt: string;
+  estimated: number;
+  /** Pessoas que receberam */
+  sent: number;
+  /** Mensagens aceitas pelo provedor */
+  delivered: number;
+  opened: number;
+  unsubscribed: number;
+  excludedByCap: number;
+  /** @nullable */
+  cancelReason: string | null;
+}
+
+export interface PushCampaignPage {
+  data: PushCampaign[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -6419,6 +6535,34 @@ export type ListAdminExchangesParams = {
    */
   limit?: number;
   cursor?: string;
+};
+
+export type ListPushCampaignsParams = {
+  status?: ListPushCampaignsStatus;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListPushCampaignsStatus = typeof ListPushCampaignsStatus[keyof typeof ListPushCampaignsStatus];
+
+
+export const ListPushCampaignsStatus = {
+  scheduled: 'scheduled',
+  sending: 'sending',
+  sent: 'sent',
+  cancelled: 'cancelled',
+} as const;
+
+export type CancelPushCampaignBody = {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -21716,5 +21860,361 @@ export const waiveExchangeFee = async (id: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(waiveExchangeFeeRequest)
+  }
+);}
+
+
+
+export type estimatePushCampaignResponse200 = {
+  data: PushEstimate
+  status: 200
+}
+
+export type estimatePushCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type estimatePushCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type estimatePushCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type estimatePushCampaignResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type estimatePushCampaignResponseSuccess = (estimatePushCampaignResponse200) & {
+  headers: Headers;
+};
+export type estimatePushCampaignResponseError = (estimatePushCampaignResponse400 | estimatePushCampaignResponse401 | estimatePushCampaignResponse403 | estimatePushCampaignResponse429) & {
+  headers: Headers;
+};
+
+export type estimatePushCampaignResponse = (estimatePushCampaignResponseSuccess | estimatePushCampaignResponseError)
+
+export const getEstimatePushCampaignUrl = () => {
+
+
+
+
+  return `/v1/admin/push/estimate`
+}
+
+/**
+ * `marketing:push` (super admin e operação). Conta só quem aceitou receber ofertas (`marketing_push` vigente), com aparelho ativo e que não atingiu `push_mkt_max_semana`. Abaixo de `push_mkt_min_segmento` a contagem exata NÃO sai (`eligible` nulo, `belowMinimum` verdadeiro): protege contra reidentificação. `nextSendAt` é quando sairia se enviasse agora (fora das 9h-20h vira o próximo início).
+ * @summary Estimativa "Quem recebe" do push segmentado
+ */
+export const estimatePushCampaign = async (pushEstimateRequest: PushEstimateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<estimatePushCampaignResponse> => {
+
+  return apiFetch<estimatePushCampaignResponse>(getEstimatePushCampaignUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(pushEstimateRequest)
+  }
+);}
+
+
+
+export type listPushCampaignsResponse200 = {
+  data: PushCampaignPage
+  status: 200
+}
+
+export type listPushCampaignsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listPushCampaignsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listPushCampaignsResponseSuccess = (listPushCampaignsResponse200) & {
+  headers: Headers;
+};
+export type listPushCampaignsResponseError = (listPushCampaignsResponse401 | listPushCampaignsResponse403) & {
+  headers: Headers;
+};
+
+export type listPushCampaignsResponse = (listPushCampaignsResponseSuccess | listPushCampaignsResponseError)
+
+export const getListPushCampaignsUrl = (params?: ListPushCampaignsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/push/campaigns?${stringifiedParams}` : `/v1/admin/push/campaigns`
+}
+
+/**
+ * Mais recentes primeiro. `delivered` = mensagens aceitas pelo provedor (recibo de entrega é DT-044); `opened` = o app avisou a abertura; `unsubscribed` = revogou o marketing em até 48 h do envio.
+ * @summary Histórico de campanhas (enviados, entregues, abertos, descadastros)
+ */
+export const listPushCampaigns = async (params?: ListPushCampaignsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listPushCampaignsResponse> => {
+
+  return apiFetch<listPushCampaignsResponse>(getListPushCampaignsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createPushCampaignResponse201 = {
+  data: PushCampaign
+  status: 201
+}
+
+export type createPushCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createPushCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createPushCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createPushCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createPushCampaignResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createPushCampaignResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createPushCampaignResponseSuccess = (createPushCampaignResponse201) & {
+  headers: Headers;
+};
+export type createPushCampaignResponseError = (createPushCampaignResponse400 | createPushCampaignResponse401 | createPushCampaignResponse403 | createPushCampaignResponse409 | createPushCampaignResponse422 | createPushCampaignResponse429) & {
+  headers: Headers;
+};
+
+export type createPushCampaignResponse = (createPushCampaignResponseSuccess | createPushCampaignResponseError)
+
+export const getCreatePushCampaignUrl = () => {
+
+
+
+
+  return `/v1/admin/push/campaigns`
+}
+
+/**
+ * `Idempotency-Key` evita campanha em dobro. Recusas: 409 `PUSH_MARKETING_DISABLED` (flag `push_marketing` ou limite semanal em zero), 422 `SEGMENT_TOO_SMALL` (abaixo de `push_mkt_min_segmento`), 409 `ESTIMATE_CHANGED` (o N confirmado em `expectedRecipients` mudou; vem `eligible`), 400 (destino inativo, horário passado). O público é RECALCULADO no envio (consentimento, limite semanal, mínimo e flag); fora da janela `push_mkt_janela` o envio vai para o próximo início. Auditada.
+ * @summary Criar e agendar (ou enviar na janela) uma campanha de push
+ */
+export const createPushCampaign = async (pushCampaignCreate: PushCampaignCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createPushCampaignResponse> => {
+
+  return apiFetch<createPushCampaignResponse>(getCreatePushCampaignUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(pushCampaignCreate)
+  }
+);}
+
+
+
+export type getPushCampaignResponse200 = {
+  data: PushCampaign
+  status: 200
+}
+
+export type getPushCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getPushCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getPushCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getPushCampaignResponseSuccess = (getPushCampaignResponse200) & {
+  headers: Headers;
+};
+export type getPushCampaignResponseError = (getPushCampaignResponse401 | getPushCampaignResponse403 | getPushCampaignResponse404) & {
+  headers: Headers;
+};
+
+export type getPushCampaignResponse = (getPushCampaignResponseSuccess | getPushCampaignResponseError)
+
+export const getGetPushCampaignUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/push/campaigns/${id}`
+}
+
+/**
+ * @summary Detalhe e métricas da campanha
+ */
+export const getPushCampaign = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getPushCampaignResponse> => {
+
+  return apiFetch<getPushCampaignResponse>(getGetPushCampaignUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelPushCampaignResponse200 = {
+  data: PushCampaign
+  status: 200
+}
+
+export type cancelPushCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type cancelPushCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelPushCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type cancelPushCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type cancelPushCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type cancelPushCampaignResponseSuccess = (cancelPushCampaignResponse200) & {
+  headers: Headers;
+};
+export type cancelPushCampaignResponseError = (cancelPushCampaignResponse400 | cancelPushCampaignResponse401 | cancelPushCampaignResponse403 | cancelPushCampaignResponse404 | cancelPushCampaignResponse409) & {
+  headers: Headers;
+};
+
+export type cancelPushCampaignResponse = (cancelPushCampaignResponseSuccess | cancelPushCampaignResponseError)
+
+export const getCancelPushCampaignUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/push/campaigns/${id}/cancel`
+}
+
+/**
+ * Só enquanto `scheduled`; depois do envio não há desfazer (409 `CAMPAIGN_NOT_CANCELLABLE`).
+ * @summary Cancelar campanha agendada
+ */
+export const cancelPushCampaign = async (id: string,
+    cancelPushCampaignBody: CancelPushCampaignBody, options?: Parameters<typeof apiFetch>[1]): Promise<cancelPushCampaignResponse> => {
+
+  return apiFetch<cancelPushCampaignResponse>(getCancelPushCampaignUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cancelPushCampaignBody)
+  }
+);}
+
+
+
+export type markPushCampaignOpenedResponse204 = {
+  data: void
+  status: 204
+}
+
+export type markPushCampaignOpenedResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type markPushCampaignOpenedResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type markPushCampaignOpenedResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type markPushCampaignOpenedResponseSuccess = (markPushCampaignOpenedResponse204) & {
+  headers: Headers;
+};
+export type markPushCampaignOpenedResponseError = (markPushCampaignOpenedResponse401 | markPushCampaignOpenedResponse404 | markPushCampaignOpenedResponse429) & {
+  headers: Headers;
+};
+
+export type markPushCampaignOpenedResponse = (markPushCampaignOpenedResponseSuccess | markPushCampaignOpenedResponseError)
+
+export const getMarkPushCampaignOpenedUrl = (id: string,) => {
+
+
+
+
+  return `/v1/me/push-campaigns/${id}/opened`
+}
+
+/**
+ * Idempotente; sem efeito se o usuário não recebeu a campanha. O `campaignId` vem em `data` da notificação.
+ * @summary O app avisa que o cliente abriu a notificação da campanha
+ */
+export const markPushCampaignOpened = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<markPushCampaignOpenedResponse> => {
+
+  return apiFetch<markPushCampaignOpenedResponse>(getMarkPushCampaignOpenedUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
