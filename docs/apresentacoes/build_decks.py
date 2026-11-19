@@ -50,10 +50,10 @@ c.append(slide('brand hero', f'''
   {LOGO}
   <div class="hero-grid">
     <div>
-      <div class="kicker">Francisco Morato e região</div>
-      <h1>As lojas do seu bairro, no seu celular.</h1>
-      <p class="lead">Moda, calçados, beleza, eletrônicos, casa e mais. Compre de quem é daqui e receba em casa.</p>
-      <div class="pills"><span>Entrega pelo Webag</span><span>PIX ou cartão</span><span>Retire na loja</span></div>
+      <div class="kicker">O app de compras com entrega</div>
+      <h1>Moda, beleza, casa e mais. Entregue pelo Webag.</h1>
+      <p class="lead">Escolha entre várias lojas, pague com PIX ou cartão e acompanhe o pedido até a sua porta.</p>
+      <div class="pills"><span>Entrega pelo Webag</span><span>PIX ou cartão</span><span>Acompanhe em tempo real</span></div>
     </div>
     <div class="collage">
       {phone('c-loja', 470, 'transform:rotate(-6deg) translateY(30px)')}
@@ -63,9 +63,9 @@ c.append(slide('brand hero', f'''
   </div>''', None))
 
 c.append(slide('', f'''
-  {head('O app', 'Tudo para comprar do comércio local, em um só lugar.')}
+  {head('O app', 'Várias lojas, um só app, entrega até a sua porta.')}
   <div class="feat-grid">
-    <div class="feat"><div class="ic">1</div><h3>Lojas perto de você</h3><p>Só aparecem as lojas que entregam no seu endereço, com horário e tempo de entrega.</p></div>
+    <div class="feat"><div class="ic">1</div><h3>Lojas que entregam para você</h3><p>Informe seu endereço e veja as lojas que entregam aí, com horário e tempo de entrega.</p></div>
     <div class="feat"><div class="ic">2</div><h3>Compre sem cadastro</h3><p>Explore lojas e produtos à vontade. Você só cria a conta na hora de comprar.</p></div>
     <div class="feat"><div class="ic">3</div><h3>PIX ou cartão</h3><p>Pague como preferir, com segurança. O Webag não guarda os dados do seu cartão.</p></div>
     <div class="feat"><div class="ic">4</div><h3>Entrega pelo Webag</h3><p>Nosso motoboy busca na loja e leva até você. Ou retire na loja, sem custo.</p></div>
@@ -81,9 +81,9 @@ c.append(slide('tint', f'''
   </div>''', 3))
 
 c.append(slide('', f'''
-  {head('Passo 2', 'Descubra lojas e produtos perto de você.')}
+  {head('Passo 2', 'Descubra lojas e produtos para todo gosto.')}
   <div class="phones-row three">
-    {col(phone('c-inicio', 420), 'Início', 'Ofertas, categorias e lojas perto de você')}
+    {col(phone('c-inicio', 420), 'Início', 'Ofertas, categorias e lojas que entregam para você')}
     {col(phone('c-busca', 420), 'Busca com filtros', 'Preço, distância, entrega grátis e avaliação')}
     {col(phone('c-loja', 420), 'Página da loja', 'Horário, entrega, retirada e vitrine por seção')}
   </div>''', 4))
@@ -139,7 +139,7 @@ c.append(slide('dark', f'''
   <div class="kicker" style="color:#9FD0D1">A jornada completa</div>
   <h2 style="color:#fff">Do primeiro toque à porta de casa.</h2>
   <div class="strip">{strip}</div>
-  <p class="lead" style="color:#CFC9C0;margin-top:18px">Em média, uma compra leva menos de dois minutos.</p>''', 10))
+  <p class="lead" style="color:#CFC9C0;margin-top:18px">Poucos toques do app ao pagamento.</p>''', 10))
 
 c.append(slide('', f'''
   {head('Compre com tranquilidade', 'Segurança, entrega e atendimento de verdade.')}
@@ -149,7 +149,7 @@ c.append(slide('', f'''
     <div class="feat"><div class="ic">+</div><h3>Entrega acompanhada</h3><p>Motoboy do Webag, com o status do pedido sempre à mão.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Direitos garantidos</h3><p>Compra à distância segue o Código de Defesa do Consumidor, e o app facilita pedir uma troca se precisar.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Privacidade (LGPD)</h3><p>Você controla seus dados e pode excluir a conta a qualquer momento.</p></div>
-    <div class="feat"><div class="ic">+</div><h3>Comércio local</h3><p>Cada compra fortalece as lojas e as famílias da sua região.</p></div>
+    <div class="feat"><div class="ic">+</div><h3>Fale com a loja</h3><p>Tire dúvidas pelo WhatsApp da loja, direto do seu pedido.</p></div>
   </div>''', 11))
 
 c.append(slide('brand hero', f'''
@@ -157,7 +157,7 @@ c.append(slide('brand hero', f'''
   <div class="hero-grid">
     <div>
       <div class="kicker">Em breve</div>
-      <h1>Baixe o Webag e compre de quem é daqui.</h1>
+      <h1>Baixe o Webag. Escolha no app, receba em casa.</h1>
       <p class="lead">Na Google Play e na App Store.</p>
       <p class="lead" style="font-weight:700;margin-top:26px">[link para baixar]   [Instagram]   [WhatsApp]</p>
     </div>
@@ -177,9 +177,9 @@ l.append(slide('brand hero', f'''
   {LOGO}
   <div class="hero-grid wide">
     <div>
-      <div class="kicker">Para lojistas de Francisco Morato e região</div>
-      <h1>Venda para a região inteira, não só para a sua rua.</h1>
-      <p class="lead">O Webag traz clientes para a sua loja, recebe o pagamento e cuida da entrega. Você só prepara o pedido.</p>
+      <div class="kicker">Para lojistas</div>
+      <h1>Venda para mais clientes. A entrega é com o Webag.</h1>
+      <p class="lead">O Webag traz clientes para a sua loja, cobra no app e cuida da entrega. Você só prepara o pedido.</p>
     </div>
     <div class="collage2">
       {win('l-pedidos', 640, 'transform:translateX(30px)')}
@@ -190,7 +190,7 @@ l.append(slide('brand hero', f'''
 l.append(slide('', f'''
   {head('O desafio', 'Quem compra de você hoje é quem passa na porta.')}
   <div class="feat-grid three">
-    <div class="feat"><div class="ic">!</div><h3>Alcance curto</h3><p>Sua vitrine é a sua rua. O cliente do bairro ao lado nem sabe que você existe.</p></div>
+    <div class="feat"><div class="ic">!</div><h3>Alcance curto</h3><p>Sua vitrine é a porta da loja. Quem está longe nem sabe que você existe.</p></div>
     <div class="feat"><div class="ic">!</div><h3>Sem entrega</h3><p>Moto e motoboy custam caro e tomam o tempo de quem atende no balcão.</p></div>
     <div class="feat"><div class="ic">!</div><h3>Vender online é complicado</h3><p>Site, pagamento, estoque e atendimento: muita coisa para quem já tem uma loja para tocar.</p></div>
   </div>
@@ -209,8 +209,8 @@ l.append(slide('tint', f'''
 l.append(slide('', f'''
   <div class="split">
     <div class="split-txt">
-      {head('Sua loja no app', 'Uma vitrine bonita, no celular de quem mora perto.')}
-      {checks(['Capa, logo, horário e avaliações da sua loja', 'Vitrine organizada por seções', 'Aparece para quem está na sua região', 'Aberta ou fechada, o cliente sabe na hora'])}
+      {head('Sua loja no app', 'Uma vitrine bonita, no celular de quem quer comprar.')}
+      {checks(['Capa, logo, horário e avaliações da sua loja', 'Vitrine organizada por seções', 'Aparece para quem busca o que você vende','Aberta ou fechada, o cliente sabe na hora'])}
     </div>
     <div class="split-img">{phone('c-loja', 520)}{phone('c-produto', 520)}</div>
   </div>''', 4))
@@ -257,7 +257,7 @@ l.append(slide('', f'''
     <div class="tcard"><div class="n">3</div><h3>Cliente acompanha</h3><p>Ele vê o pedido a caminho no app. Você não precisa fazer nada.</p></div>
   </div>
   <div class="split" style="margin-top:26px;align-items:center">
-    <div class="split-txt"><p class="lead" style="margin-top:0">A taxa de entrega é paga pelo cliente. Você não paga frete e vende para bairros que antes não alcançava.</p></div>
+    <div class="split-txt"><p class="lead" style="margin-top:0">A taxa de entrega é paga pelo cliente. Você não paga frete e vende para clientes que antes não alcançava.</p></div>
     <div class="split-img">{phone('c-acompanha', 250)}</div>
   </div>''', 8))
 
@@ -292,7 +292,7 @@ l.append(slide('', f'''
   <div class="feat-grid three">
     <div class="feat"><div class="ic">+</div><h3>Pagamento seguro</h3><p>O cliente paga no app pelo Mercado Pago. Você recebe direto na sua conta.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Trocas organizadas</h3><p>Pedidos de troca chegam pelo app, com motivo e fotos. Você só responde.</p></div>
-    <div class="feat"><div class="ic">+</div><h3>Suporte do Webag</h3><p>Uma equipe local para ajudar no cadastro, nos pedidos e no dia a dia.</p></div>
+    <div class="feat"><div class="ic">+</div><h3>Suporte do Webag</h3><p>Uma equipe do Webag para ajudar no cadastro, nos pedidos e no dia a dia.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Avaliações dos clientes</h3><p>Você vê o que dizem da sua loja e responde direto pelo painel.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Cupons próprios</h3><p>Crie promoções para atrair clientes novos e fazer os antigos voltarem.</p></div>
     <div class="feat"><div class="ic">+</div><h3>Controle total</h3><p>Pause produtos, feche a loja por um dia ou ajuste horários quando quiser.</p></div>
@@ -304,7 +304,7 @@ l.append(slide('brand hero', f'''
     <div>
       <div class="kicker">Vamos começar</div>
       <h1>Cadastre sua loja e entre no lançamento.</h1>
-      <p class="lead">Fale com a gente para garantir seu lugar entre as primeiras lojas da região.</p>
+      <p class="lead">Fale com a gente para garantir seu lugar entre as primeiras lojas do app.</p>
       <p class="lead" style="font-weight:700;margin-top:26px">[WhatsApp do Webag]   [site]   [e-mail]</p>
     </div>
     <div class="collage2">
