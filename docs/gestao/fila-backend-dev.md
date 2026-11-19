@@ -108,3 +108,27 @@ V.6 [~] Baixas: **SEC-167 feito** (2026-11-19): `privacy/privacy-map.ts` classif
 - `GET /v1/me/coupons` (cupons pessoais, incluindo o de atraso; paginado por cursor; `status` available|used|expired|all; sem pedido de origem): OpenAPI `listMyCoupons`, E2E `my-coupons.e2e-spec.ts`.
 - WB-241 C7: aviso ao cliente do novo prazo da coleta atrasada (push `A coleta da sua troca atrasou`, uma vez por corrida, junto do alerta `collection_late`; evento `collection_late_notice` no histórico da corrida). **Dúvida ao PO:** a RN não define o novo prazo; usei `coleta_agendamento_dias_uteis` dias úteis a contar do aviso (reuso do parâmetro, sem número novo). Se o PO quiser outro prazo (ex.: 1 dia útil), é um parâmetro novo.
 - Contrato novo para o mobile-dev: `GET /v1/me/coupons`; `Address.pinVerified` (opcional); `CancelRequest.status = superseded` (tratar como encerrado, sem "aceito"); `POST /v1/auth/account-deletion/cancel` com o fluxo do código (403 `LOGIN_CODE_REQUIRED`, 400 `CODE_INVALID`/`CODE_EXPIRED`, reenviar = repetir sem `code`); `GET /v1/cep/{cep}` para qualquer conta (lat/lng nulos possíveis); 422 `ADDRESS_CEP_NOT_FOUND`. O painel admin deve rotular os alertas novos `delivery_cancelled_with_courier`.
+
+## Pedidos do web (mobile-dev, 2026-11-19; SEC-166/178 e redesign v3 dos painéis; sem mudança de contrato feita pelo web)
+W.1 [ ] SEC-178: expor `deletionRegretHours`, `fiscalRetentionYears`, `accessLogMonths` e `privacyAnswerDays` em `GET /v1/help?audience=customer` > `privacy` (valores reais dos parâmetros e de `DSR_DEADLINE_DAYS`). Hoje `/excluir-conta` lê `deletionFacts()` (constantes com `PUBLIC_DELETION_*` por ambiente); quando o campo existir o web passa a ler dele e o ambiente vira só reserva.
+W.2 [ ] SEC-176 (detalhe): em `POST /v1/auth/account-deletion/start` com senha certa e conta sob ataque a API devolve 403 `LOGIN_CODE_REQUIRED` mas **não envia o código** (diferente do `cancel`). O web resolve chamando `start` de novo sem senha (via A). Sugestão: enviar o código `delete_web` na própria resposta 403, como no `cancel`, para poupar a segunda chamada e o limite de envio.
+W.3 [ ] Logística (WB-255 C6, `onda-7-paineis-v3.md` §3.3): o `Delivery` do admin precisa trazer o pedido de cancelamento por atraso (`lateCancelRequest: CancelRequest | null`, com `respondBy`) e `lateAlertedAt`, para a faixa "O cliente pediu cancelamento. Responda em 06:58" e o alerta sonoro uma vez por corrida. A API de resposta (`adminRespondLateCancel`) já existe; falta o dado na lista.
+W.4 [ ] Logística (WB-258 C5/C6): indicadores do piloto (`GET /v1/admin/logistics/stats?from&to`): no prazo hoje (%), dentro do teto (%), precisão mediana, atrasos por causa, cancelamentos por atraso, compensações e taxa abdicada; e preparo real x informado por loja (mediana, mín. 3 pedidos). Alimenta o 4º número da Logística ("No prazo hoje") e o bloco "Prazo no piloto" dos Parâmetros de entrega (hoje o 4º número é "Maior espera").
+W.5 [ ] Lojista, Minha loja > Entrega e retirada (WB-257): `POST /v1/stores/{id}/delivery-preview { address | distanceKm, prepMin }` com a MESMA conta do checkout (mesma de `computeEta`), para a "Prévia para o cliente" e o aviso C6. O web não calcula essa conta no navegador do lojista.
+W.6 [ ] Lojista, Início e Avaliações (v3): `GET /v1/stores/{id}/reviews/summary` (média, total, distribuição 1 a 5, sem resposta) e ranking dos mais vendidos da semana (`/sales/top-products`: nome, imagem, unidades, "você recebe"). Sem eles, o cartão "Avaliação" e o ranking não entram no Início.
+W.7 [ ] Admin, Início (RL2, WB-125): contagens de pendências por área (lojas em análise, disputas, estornos, titulares) para a visão geral e para os contadores lima da barra (hoje só Logística tem contador). O Início do admin é uma página de atalhos até lá.
+W.8 [ ] Lojista, Pedidos (§2.1): campo `readyByAt` no pedido em preparo ("Marque 'pronto' até 18:42"), com a fórmula que o PO decidir (pendência 1 da spec).
+
+## W. Decisões do CEO sobre o parecer QA da Onda 7 (2026-11-19) — fazer depois da fila V
+
+| ID | Decisão do CEO |
+|---|---|
+| BUG-020 | "Não recebi" DEVE impedir a auto-conclusão de 24 h (RN-07): corrigir, com teste. |
+| BUG-021 | Não oferecer entrega se o fim da faixa passa do fechamento da logística: aplicar na estimativa/checkout, com teste. |
+| BUG-022 | Validar `entrega_max_min` e demais parâmetros de ETA (mínimo viável; recusar valor que zera o alcance da plataforma, com mensagem e prévia de alcance). |
+| BUG-024 e BUG-019 | Estabilizar o e2e: reativar os 14 testes pulados (reports, marketing-push) adaptando ao SEC-169; eliminar dependência de ordem/carga dos testes intermitentes; meta: 3 execuções completas seguidas verdes. Sem pular teste para ficar verde. |
+| BUG-025 | CORS no storage do compose (e documentar o equivalente em produção); documentar `REAL_DB_URL`. |
+| BUG-023 | Cupom BEMVINDO10 do seed com teto de usos. |
+| BUG-010 | Reteste e fechar. |
+| Memória | Investigar o crescimento de memória da API (302 para 651 MB em rajada, sem voltar): perfil rápido e correção se for vazamento. |
+| F1-F8 | `docs/gestao/fila-mobile.md`: F1 rota dev `POST /v1/dev/orders/{orderId}/payment/{approve,decline,expire}` e F2 compensação no contrato; demais conforme custo. |
