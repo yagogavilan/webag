@@ -277,6 +277,25 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     return row?.total ?? 0;
   }
 
+  /**
+   * WB-259 (F3): o que volta ao cliente neste pedido, somando as intenções de estorno de todas as tentativas dele (menos as `failed`
+   * legadas). `processing` enquanto houver intenção por concluir (`pending`, `exhausted`: o admin ainda resolve); `completed` quando todas
+   * estão `done` ou `covered` (a Webag assumiu o valor e paga por fora: não há outro sinal depois). Nulo se não há estorno.
+   */
+  async refundSummaryForReference(reference: string): Promise<{ amountCents: number; method: PaymentMethod; status: 'processing' | 'completed' } | null> {
+    const rows = await this.db
+      .select({ amountCents: paymentRefundIntents.amountCents, status: paymentRefundIntents.status, method: paymentAttempts.method, attemptCreatedAt: paymentAttempts.createdAt })
+      .from(paymentRefundIntents)
+      .innerJoin(paymentAttempts, eq(paymentAttempts.id, paymentRefundIntents.attemptId))
+      .where(and(eq(paymentAttempts.externalReference, reference), ne(paymentRefundIntents.status, 'failed')));
+    if (rows.length === 0) return null;
+    const amountCents = rows.reduce((sum, r) => sum + r.amountCents, 0);
+    if (amountCents <= 0) return null;
+    // O meio é o da tentativa que recebeu o dinheiro (a mais recente com estorno).
+    const method = [...rows].sort((a, b) => b.attemptCreatedAt.getTime() - a.attemptCreatedAt.getTime())[0]!.method;
+    return { amountCents, method, status: rows.every((r) => r.status === 'done' || r.status === 'covered') ? 'completed' : 'processing' };
+  }
+
   /** Tentativa mais recente do pedido (`external_reference`), para o app reabrir o PIX. */
   async latestForReference(reference: string): Promise<PaymentAttempt | null> {
     const [row] = await this.db.select().from(paymentAttempts).where(eq(paymentAttempts.externalReference, reference)).orderBy(desc(paymentAttempts.createdAt)).limit(1);

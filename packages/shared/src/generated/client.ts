@@ -4179,6 +4179,8 @@ export interface CreateOrderRequest {
      */
   expectedTotalCents: number;
   paymentMethod: CreateOrderRequestPaymentMethod;
+  /** WB-261 (F6a, decisão do CEO): o FIM da faixa de chegada que o cliente viu (`delivery.eta.toAt` da sacola; ao confirmar o aviso, o `eta.toAt` do 409). Opcional (app antigo não manda e não é conferido); só na entrega. Se o fim calculado agora for mais de 5 min depois dele, 409 `ETA_CHANGED` e nenhum pedido; igual, mais cedo ou dentro dos 5 min (o horário é "agora + minutos" e anda com o relógio; o app arredonda de 5 em 5 min) cria sem aviso. Faixa que tira a loja do alcance continua 422 `OUT_OF_RANGE`/`LOGISTICS_CLOSED`. */
+  acceptedEtaToAt?: string;
   /** Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão. */
   card?: CreateOrderRequestCard;
   /**
@@ -4225,7 +4227,16 @@ export const CheckoutConflictProblemCode = {
   STORE_CLOSED: 'STORE_CLOSED',
   STOCK_CONFLICT: 'STOCK_CONFLICT',
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  ETA_CHANGED: 'ETA_CHANGED',
 } as const;
+
+/**
+ * Em `ETA_CHANGED` (WB-261): a faixa NOVA, em horário de relógio a partir de agora; o cliente confirma e o app reenvia com `acceptedEtaToAt` = `eta.toAt` (e nova `Idempotency-Key`).
+ */
+export type CheckoutConflictProblemEta = {
+  fromAt: string;
+  toAt: string;
+};
 
 export interface CheckoutConflictProblem {
   type: string;
@@ -4233,6 +4244,8 @@ export interface CheckoutConflictProblem {
   status: CheckoutConflictProblemStatus;
   detail?: string;
   code: CheckoutConflictProblemCode;
+  /** Em `ETA_CHANGED` (WB-261): a faixa NOVA, em horário de relógio a partir de agora; o cliente confirma e o app reenvia com `acceptedEtaToAt` = `eta.toAt` (e nova `Idempotency-Key`). */
+  eta?: CheckoutConflictProblemEta;
   /** Em `CART_CHANGED`: o que mudou e o novo total em `cart` */
   changes?: CheckoutChange[];
   cart?: Cart;
@@ -4367,6 +4380,36 @@ export type OrderCompensation = {
   code: string;
   validUntil: string;
   status: OrderCompensationStatus;
+} | null;
+
+export type OrderRefundMethod = typeof OrderRefundMethod[keyof typeof OrderRefundMethod];
+
+
+export const OrderRefundMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type OrderRefundStatus = typeof OrderRefundStatus[keyof typeof OrderRefundStatus];
+
+
+export const OrderRefundStatus = {
+  processing: 'processing',
+  completed: 'completed',
+} as const;
+
+/**
+ * WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional.
+ */
+export type OrderRefund = {
+  /**
+     * Centavos
+     * @minimum 1
+     */
+  amountCents: number;
+  method: OrderRefundMethod;
+  status: OrderRefundStatus;
+  deadlineText: string;
 } | null;
 
 export type OrderTrackingTimelineItem = {
@@ -4516,6 +4559,8 @@ export interface Order {
   delay?: OrderDelay;
   /** F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional. */
   compensation?: OrderCompensation;
+  /** WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional. */
+  refund?: OrderRefund;
   /** Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto. */
   tracking: OrderTracking;
   id: string;
@@ -20738,7 +20783,7 @@ export const getCreateOrderUrl = () => {
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  *
  * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)

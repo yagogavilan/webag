@@ -43,7 +43,19 @@ export interface CreateOrderInput {
   expectedTotalCents: number;
   card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined;
   payerDocument?: string | undefined;
+  /**
+   * WB-261 (F6a): o FIM da faixa de chegada (ISO) que o cliente viu na sacola. Só na entrega e opcional (app antigo não manda e não é
+   * conferido). Se o fim calculado agora for mais de `ETA_WORSE_TOLERANCE_MIN` depois dele: 409 `ETA_CHANGED` com a faixa nova e nenhum pedido.
+   */
+  acceptedEtaToAt?: string | undefined;
 }
+
+/**
+ * Quanto o fim da faixa pode ser mais tarde que o aceito sem o cliente ver diferença: o relógio do app arredonda a faixa de 5 em 5 min e o horário
+ * da faixa é "agora + minutos", então ele anda sozinho enquanto o cliente decide (e entre o aviso e o reenvio). Sem folga, TODO pedido daria
+ * `ETA_CHANGED`. `[HIPÓTESE]`: a RN/PRD diz "qualquer diferença"; isso só é possível comparando minutos, e o contrato decidido pelo CEO compara horário.
+ */
+export const ETA_WORSE_TOLERANCE_MIN = 5;
 
 type Money = { amount: number; currency: 'BRL' };
 const money = (amount: number): Money => ({ amount, currency: 'BRL' });
@@ -51,6 +63,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 /** Ações que já existem na API; o contrato lista as demais (troca, avaliação...) para ondas futuras. */
 const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'request_cancel', 'contact_store', 'report_not_received'];
+/** WB-259 C2 (RN-08): prazo do estorno por meio, texto fixo e sem data prometida. `[HIPÓTESE; HIP-P09]`: jurídico decide em J16. */
+export const REFUND_DEADLINE_TEXT = {
+  pix: 'Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.',
+  card: 'Aparece na fatura do cartão em até 2 faturas, conforme o seu banco.',
+} as const;
 /** B.1: "não recebi meu pedido" também vale por 48 h depois de marcado como entregue. */
 const NOT_RECEIVED_WINDOW_MS = 48 * 3_600_000;
 
@@ -171,6 +188,15 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       throw errors.conflict('CART_CHANGED', 'O valor mudou', 'Confira o novo total antes de pagar.', { changes: [{ kind, fromCents: input.expectedTotalCents, toCents: quote.result.totalCents }], cart: view });
     }
     await this.assertBlockers(quote);
+    // WB-261 C3: faixa que tira a loja do alcance já saiu acima (OUT_OF_RANGE, antes de chegar aqui); só a que piorou e continua dentro avisa.
+    if (input.mode === 'delivery' && input.acceptedEtaToAt && quote.eta) {
+      const accepted = new Date(input.acceptedEtaToAt).getTime();
+      const now = new Date();
+      const nowEnd = now.getTime() + quote.eta.toMin * 60_000;
+      if (nowEnd - accepted > ETA_WORSE_TOLERANCE_MIN * 60_000) {
+        throw errors.conflict('ETA_CHANGED', 'O horário mudou', 'O horário de chegada ficou mais tarde. Confira o novo horário antes de pagar.', { eta: { fromAt: new Date(now.getTime() + quote.eta.fromMin * 60_000).toISOString(), toAt: new Date(nowEnd).toISOString() } });
+      }
+    }
     if (this.payments.provider.requiresPayerDocument?.(input.paymentMethod) && !input.payerDocument) {
       throw errors.unprocessable('PAYER_DOCUMENT_REQUIRED', 'Informe o CPF', { detail: 'O pagamento exige o CPF do pagador.' });
     }
@@ -1134,6 +1160,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       delay,
       /** F2: compensação por atraso concedida a este pedido (cupom pessoal da migração 0042); nulo se não houve. O cupom está também em `GET /v1/me/coupons`. */
       compensation: await this.compensationOf(order),
+      /** WB-259 (F3): o estorno do pedido (valor, meio, andamento e o prazo em texto fixo por meio); nulo sem estorno. */
+      refund: await this.refundOf(order),
       /** B.1: prazos finais da troca já na entrada do pedido ("Troca até 25/11"); nulos fora do prazo ou sem entrega. */
       exchange: this.exchangeWindowOf(order),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
@@ -1141,7 +1169,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     };
   }
 
-  /** WB-253: estado de atraso do pedido de entrega; `null` quando o pedido não está em entrega ativa. */
+  /** WB-259 (F3): o estorno do pedido; o prazo é texto fixo por meio, sem data prometida (RN-08, DEC-065; `[HIPÓTESE; HIP-P09; J16]`). */
+  private async refundOf(order: OrderRow) {
+    const refund = await this.payments.refundSummaryForReference(order.id);
+    if (!refund) return null;
+    return { amountCents: refund.amountCents, method: refund.method, status: refund.status, deadlineText: REFUND_DEADLINE_TEXT[refund.method] };
+  }
+
   /** F2: o cupom de compensação por atraso gerado por este pedido (`coupons.source_order_id`), só para o dono; entregue com atraso. */
   private async compensationOf(order: OrderRow) {
     if (order.mode !== 'delivery' || order.status !== 'delivered') return null;

@@ -9454,7 +9454,7 @@ export const CancelOrderByStoreResponse = zod.object({
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  *
  * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
@@ -9488,6 +9488,7 @@ export const CreateOrderBody = zod.object({
   "cartRevision": zod.int().describe('`revision` da sacola que o cliente viu'),
   "expectedTotalCents": zod.int().min(createOrderBodyExpectedTotalCentsMin).describe('Total (centavos) que o cliente viu (`summary.total` da sacola). OBRIGATÓRIO (SEC-147; 400 sem ele); se diferir do calculado pelo servidor (frete mudou, cupom esgotou): 409 CART_CHANGED com `DELIVERY_FEE_CHANGED` ou `DISCOUNT_CHANGED`'),
   "paymentMethod": zod.enum(['pix', 'card']),
+  "acceptedEtaToAt": zod.iso.datetime({"offset":true}).optional().describe('WB-261 (F6a, decisão do CEO): o FIM da faixa de chegada que o cliente viu (`delivery.eta.toAt` da sacola; ao confirmar o aviso, o `eta.toAt` do 409). Opcional (app antigo não manda e não é conferido); só na entrega. Se o fim calculado agora for mais de 5 min depois dele, 409 `ETA_CHANGED` e nenhum pedido; igual, mais cedo ou dentro dos 5 min (o horário é "agora + minutos" e anda com o relógio; o app arredonda de 5 em 5 min) cria sem aviso. Faixa que tira a loja do alcance continua 422 `OUT_OF_RANGE`/`LOGISTICS_CLOSED`.'),
   "card": zod.object({
   "token": zod.string().min(createOrderBodyCardTokenMin).max(createOrderBodyCardTokenMax),
   "installments": zod.int().min(1).max(createOrderBodyCardInstallmentsMax),
@@ -9496,6 +9497,9 @@ export const CreateOrderBody = zod.object({
 }).optional().describe('Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão.'),
   "payerDocument": zod.string().regex(createOrderBodyPayerDocumentRegExp).optional().describe('CPF (11 dígitos) quando o provedor exigir (`PAYER_DOCUMENT_REQUIRED`). Vai só ao provedor; não é guardado pelo Webag além do necessário para a conciliação.')
 })
+
+
+
 
 export const CreateOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
@@ -9532,6 +9536,12 @@ export const CreateOrderResponse = zod.object({
   "validUntil": zod.iso.datetime({"offset":true}),
   "status": zod.enum(['available', 'used', 'expired'])
 })]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
+  "refund": zod.union([zod.null(),zod.object({
+  "amountCents": zod.int().min(1).describe('Centavos'),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['processing', 'completed']),
+  "deadlineText": zod.string()
+})]).optional().describe('WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9723,6 +9733,9 @@ export const GetOrderParams = zod.object({
   "orderId": zod.uuid()
 })
 
+
+
+
 export const GetOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
@@ -9758,6 +9771,12 @@ export const GetOrderResponse = zod.object({
   "validUntil": zod.iso.datetime({"offset":true}),
   "status": zod.enum(['available', 'used', 'expired'])
 })]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
+  "refund": zod.union([zod.null(),zod.object({
+  "amountCents": zod.int().min(1).describe('Centavos'),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['processing', 'completed']),
+  "deadlineText": zod.string()
+})]).optional().describe('WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9936,6 +9955,9 @@ export const CancelOrderLateBody = zod.object({
 
 })
 
+
+
+
 export const CancelOrderLateResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
@@ -9971,6 +9993,12 @@ export const CancelOrderLateResponse = zod.object({
   "validUntil": zod.iso.datetime({"offset":true}),
   "status": zod.enum(['available', 'used', 'expired'])
 })]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
+  "refund": zod.union([zod.null(),zod.object({
+  "amountCents": zod.int().min(1).describe('Centavos'),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['processing', 'completed']),
+  "deadlineText": zod.string()
+})]).optional().describe('WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -10358,6 +10386,9 @@ export const CancelOrderBody = zod.object({
   "reason": zod.string().max(cancelOrderBodyReasonMax).optional()
 })
 
+
+
+
 export const CancelOrderResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
@@ -10393,6 +10424,12 @@ export const CancelOrderResponse = zod.object({
   "validUntil": zod.iso.datetime({"offset":true}),
   "status": zod.enum(['available', 'used', 'expired'])
 })]).optional().describe('F2: compensação por atraso concedida a este pedido entregue (RN-19 4c): o cupom pessoal já listado em `GET /v1/me/coupons` (origin `late_delivery`), para o bilhete "Entrega grátis no próximo pedido" na tela do pedido. Nulo se o pedido não foi entregue, é retirada ou não houve compensação (no prazo, dentro da tolerância, tipo `nenhuma` ou atraso por culpa do cliente). Campo novo opcional.'),
+  "refund": zod.union([zod.null(),zod.object({
+  "amountCents": zod.int().min(1).describe('Centavos'),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['processing', 'completed']),
+  "deadlineText": zod.string()
+})]).optional().describe('WB-259 (F3, DEC-065): o estorno deste pedido (cancelamento, recusa, atraso, troca): soma dos valores estornados ou em andamento, o meio de pagamento e o andamento. Nulo se o pedido não tem estorno (nada foi pago ou ainda não há estorno). `status`: `processing` (a Webag ainda concluindo com o provedor) | `completed` (concluído do lado da Webag; o prazo do banco continua valendo). `deadlineText`: prazo em TEXTO FIXO por meio, sem data prometida (RN-08; `[HIPÓTESE; HIP-P09; J16]`): o app pode usar este texto ou o seu. Estorno parcial: o valor é o parcial (nunca o total do pedido). Campo novo opcional.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),

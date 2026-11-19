@@ -33,6 +33,8 @@ const createSchema = z
       })
       .optional(),
     payerDocument: z.string().regex(/^\d{11}$/).optional(),
+    /** WB-261: fim da faixa (ISO 8601) que o cliente viu; só vale na entrega. */
+    acceptedEtaToAt: z.iso.datetime({ offset: true }).optional(),
   })
   .refine((v) => v.paymentMethod !== 'card' || v.card !== undefined, { message: 'Informe o cartão.', path: ['card'] })
   .refine((v) => v.paymentMethod !== 'pix' || v.card === undefined, { message: 'Cartão só com paymentMethod=card.', path: ['card'] });
