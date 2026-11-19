@@ -174,6 +174,8 @@ export class CatalogService {
       id: product.id,
       name: product.name,
       description: product.description,
+      sizeChart: product.sizeChart,
+      noVoluntaryExchange: product.noVoluntaryExchange,
       categoryId: product.categoryId,
       sectionId: product.sectionId,
       status: product.status,
@@ -299,6 +301,8 @@ export class CatalogService {
       promoPriceCents?: number | null;
       promoStartsAt?: string | null;
       promoEndsAt?: string | null;
+      sizeChart?: string | null;
+      noVoluntaryExchange?: boolean;
     },
   ) {
     this.assertWritable(store);
@@ -330,6 +334,8 @@ export class CatalogService {
           ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
           ...(input.sectionId !== undefined ? { sectionId: input.sectionId } : {}),
           ...(input.basePriceCents !== undefined ? { basePriceCents: input.basePriceCents } : {}),
+          ...(input.sizeChart !== undefined ? { sizeChart: input.sizeChart || null } : {}),
+          ...(input.noVoluntaryExchange !== undefined ? { noVoluntaryExchange: input.noVoluntaryExchange } : {}),
           ...promo,
           updatedAt: new Date(),
         })

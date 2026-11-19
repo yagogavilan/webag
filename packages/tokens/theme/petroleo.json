@@ -1,0 +1,32 @@
+{
+  "$description": "Tema de marca 'petroleo' (identidade v1, HIPOTESE). Unico lugar com a paleta de marca e os neutros. Mesclado sobre tokens.json por scripts/lib.mjs; o tema ativo e o definido em '$theme' no tokens.json. Para trocar a marca: copiar este arquivo para theme/<nome>.json, trocar os valores, mudar '$theme' e rodar build + check. Guia completo: docs/design/direcao-visual-v2.md secao 'Tokens'.",
+  "color": {
+    "brand": {
+      "$description": "Petroleo Webag [HIPOTESE]. Usar 600/700/800 para acao e texto. 50/100/200 para fundos suaves. 300-500 e 900 so decorativos, nunca como texto.",
+      "50": "#E6F3F3",
+      "100": "#CBE6E6",
+      "200": "#9FD0D1",
+      "300": "#6FB9BC",
+      "400": "#3A9DA2",
+      "500": "#00838A",
+      "600": "#00696F",
+      "700": "#005A5F",
+      "800": "#004A4F",
+      "900": "#00363A"
+    },
+    "neutral": {
+      "$description": "Neutros quentes. 500 so para elemento nao textual (borda de campo, icone inativo): 4,5:1 raso demais para texto. 400 so decorativo/desabilitado.",
+      "0": "#FFFFFF",
+      "50": "#F7F5F2",
+      "100": "#EFEBE6",
+      "200": "#E2DDD6",
+      "300": "#CFC9C0",
+      "400": "#A8A199",
+      "500": "#7D766E",
+      "600": "#5E5851",
+      "700": "#433E39",
+      "800": "#2B2724",
+      "900": "#1A1816"
+    }
+  }
+}

@@ -18,11 +18,13 @@
   "files": [
     "src",
     "css",
+    "theme",
     "tokens.json"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node scripts/check-contrast.mjs",
+    "palette": "node scripts/palette-report.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

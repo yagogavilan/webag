@@ -33,6 +33,10 @@ export const products = pgTable(
       .references(() => stores.id),
     name: varchar({ length: 80 }).notNull(),
     description: varchar({ length: 1000 }),
+    /** Tabela de medidas (WB-246): texto livre; reduz troca por tamanho. */
+    sizeChart: varchar({ length: 2000 }),
+    /** Produto marcado "sem troca voluntária" pela loja (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037). */
+    noVoluntaryExchange: boolean().notNull().default(false),
     categoryId: uuid().references(() => categories.id),
     sectionId: uuid().references(() => storeSections.id, { onDelete: 'set null' }),
     position: integer().notNull().default(0),

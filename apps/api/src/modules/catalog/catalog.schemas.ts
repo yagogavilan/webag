@@ -25,6 +25,10 @@ export const updateProductSchema = z.strictObject({
   promoPriceCents: money.nullable().optional(),
   promoStartsAt: isoDate.nullable().optional(),
   promoEndsAt: isoDate.nullable().optional(),
+  /** Tabela de medidas (WB-246). */
+  sizeChart: z.string().trim().max(2000).nullable().optional(),
+  /** "Sem troca voluntária" (WB-244): sob medida, personalizado, íntimo ou higiene. */
+  noVoluntaryExchange: z.boolean().optional(),
 });
 
 const variantSchema = z.strictObject({

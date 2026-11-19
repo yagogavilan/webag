@@ -216,6 +216,9 @@ export class BrowseService {
       id: product.id,
       name: product.name,
       description: product.description,
+      // WB-246: tabela de medidas do lojista; WB-244: produto sem troca voluntária (tamanho/cor inertes).
+      sizeChart: product.sizeChart,
+      acceptsVoluntaryExchange: !product.noVoluntaryExchange,
       categoryId: product.categoryId,
       available: views.some((v) => v.available),
       unavailableReason: views.some((v) => v.available) ? null : 'SOLD_OUT',
@@ -262,6 +265,7 @@ export class BrowseService {
         id: review.id,
         rating: review.rating,
         comment: review.comment,
+        fit: review.fit,
         reviewer: shortName(name),
         verifiedPurchase: review.orderId !== null,
         createdAt: review.createdAt.toISOString(),
