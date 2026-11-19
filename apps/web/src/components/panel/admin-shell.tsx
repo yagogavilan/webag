@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowsClockwise, ClipboardText, CurrencyCircleDollar, FileText, MapTrifold, Motorcycle, Percent, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, Bell, ChartBar, ClipboardText, Flag as FlagReport, Image as ImageIcon, Question, Scales, Ticket, UserCircle, CurrencyCircleDollar, FileText, MapTrifold, Motorcycle, Percent, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -34,6 +34,14 @@ const ICONS: Record<AdminSection, IconType> = {
   termos: FileText,
   auditoria: ClipboardText,
   admins: UsersThree,
+  banners: ImageIcon,
+  push: Bell,
+  cupons: Ticket,
+  relatorios: ChartBar,
+  denuncias: FlagReport,
+  ajuda: Question,
+  titulares: UserCircle,
+  disputas: Scales,
 };
 
 function Nav({ user, collapsed, onNavigate }: { user: Me; collapsed?: boolean; onNavigate?: () => void }) {
