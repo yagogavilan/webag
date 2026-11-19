@@ -117,6 +117,19 @@ export class DeliveriesService {
     if (!created) {
       const [existing] = await tx.select().from(deliveries).where(and(eq(deliveries.orderId, input.orderId), eq(deliveries.kind, kind), input.exchangeId ? eq(deliveries.exchangeId, input.exchangeId) : isNull(deliveries.exchangeId)));
       if (!existing) throw new Error('corrida duplicada sem original');
+      if (existing.status === 'cancelled' && kind === 'delivery') {
+        // A loja desfez o "pronto" e marcou de novo: a MESMA corrida volta para a fila (uma por pedido), com horário e código novos.
+        const actor = input.actor ?? this.actorOf(ctx);
+        const [revived] = await tx
+          .update(deliveries)
+          .set({ status: 'ready_for_collection', readyAt: new Date(), courierId: null, whatsappSentAt: null, attempts: 1, failReason: null, failNote: null, deliveryCode: code, codeFailures: 0, volumes: Math.max(1, Math.min(input.volumes ?? 1, 99)), note: input.note?.slice(0, 100) ?? null, contact: input.contact as unknown as Record<string, unknown>, updatedAt: new Date() })
+          .where(eq(deliveries.id, existing.id))
+          .returning();
+        await tx.insert(deliveryEvents).values({ deliveryId: existing.id, fromStatus: 'cancelled', toStatus: 'ready_for_collection', action: 'recreate', actorId: actor.id, actorRole: actor.role });
+        await this.audit.record(tx, ctx, { action: 'delivery.recreate', targetType: 'delivery', targetId: existing.id, after: { status: 'ready_for_collection' }, actorId: actor.id, actorRole: actor.role });
+        for (const listener of this.listeners) await listener.onDeliveryChange?.(tx, revived!, 'cancelled', 'ready_for_collection', actor, null);
+        return { delivery: revived!, created: true };
+      }
       return { delivery: existing, created: false };
     }
     const actor = input.actor ?? this.actorOf(ctx);

@@ -104,9 +104,12 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     const back = await ctx.http.post(`${r.url}/status`).set(store(r.shop)).send({ status: 'in_preparation' }).expect(200);
     expect(back.body.status).toBe('in_preparation');
     expect((await ctx.db.select().from(deliveries).where(eq(deliveries.id, r.delivery.id)))[0]!.status).toBe('cancelled');
-    // marcar pronto de novo é possível?  A corrida antiga está cancelada: nasce a regra de uma por pedido; o 2º "pronto" reaproveita a mesma linha
-    const second = await ctx.http.post(`${r.url}/status`).set(store(r.shop)).send({ status: 'ready_for_collection' });
-    expect([200, 409]).toContain(second.status);
+    // marcou pronto de novo: a MESMA corrida (uma por pedido) volta para a fila
+    const second = await ctx.http.post(`${r.url}/status`).set(store(r.shop)).send({ status: 'ready_for_collection' }).expect(200);
+    expect(second.body.logistics.status).toBe('ready_for_collection');
+    const rows = await ctx.db.select().from(deliveries).where(eq(deliveries.orderId, r.orderId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: r.delivery.id, status: 'ready_for_collection', courierId: null });
 
     const r2 = await readyOrder();
     const m = await courier();

@@ -5259,7 +5259,7 @@ paths:
       tags: [orders]
       operationId: advanceOrder
       summary: Andamento do pedido (separação, saída, pronto, entregue)
-      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `out_for_delivery` (só entrega), `ready_for_pickup` (só retirada) e `delivered`. Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente."
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `ready_for_collection` (só entrega Webag: cria a corrida da logística; aceita `volumes` e `note`; DEC-036), `ready_for_pickup` (só retirada) e `delivered` (só retirada). Na entrega Webag a loja NÃO marca “saiu” nem “entregue”: são da logística. “Voltar para a separação” (`in_preparation`) só enquanto a corrida está sem motoboy (409 `DELIVERY_ALREADY_ASSIGNED`). Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`); 5 erros bloqueiam por 30 min (429 `PICKUP_CODE_LOCKED`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5293,7 +5293,7 @@ paths:
       tags: [orders]
       operationId: cancelOrderByStore
       summary: Loja cancela depois do aceite (RN-08)
-      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation`, `out_for_delivery` ou `ready_for_pickup`. Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente."
+      description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation` ou `ready_for_pickup` (depois de `ready_for_collection` só o admin cancela). Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5377,7 +5377,7 @@ paths:
       tags: [orders]
       operationId: listOrders
       summary: Meus pedidos (WB-030)
-      description: "Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor."
+      description: "Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`, inclusive `ready_for_collection`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor."
       parameters:
         - { name: scope, in: query, schema: { type: string, enum: [active, past] } }
         - { $ref: '#/components/parameters/Cursor' }
@@ -8575,8 +8575,10 @@ components:
       additionalProperties: false
       required: [status]
       properties:
-        status: { type: string, enum: [in_preparation, out_for_delivery, ready_for_pickup, delivered] }
+        status: { type: string, enum: [in_preparation, ready_for_collection, ready_for_pickup, delivered] }
         pickupCode: { type: string, pattern: '^\d{4}$', description: 'Obrigatório ao concluir uma retirada: o código que o cliente informa' }
+        volumes: { type: integer, minimum: 1, maximum: 99, description: 'Só em ready_for_collection (padrão 1).' }
+        note: { type: string, maxLength: 100, description: 'Só em ready_for_collection: observação para o motoboy.' }
     StoreOrderAction:
       type: string
       enum: [accept, refuse, prepare, dispatch, ready, complete, cancel]
@@ -8613,6 +8615,15 @@ components:
       type: object
       required: [id, number, status, mode, createdAt, paidAt, acceptedAt, acceptDeadlineAt, customer, items, delivery, pickup, values, couponCode, timeline, cancellation, allowedActions]
       properties:
+        logistics:
+          description: 'Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                status: { $ref: '#/components/schemas/DeliveryStatus' }
+                courierFirstName: { type: [string, 'null'] }
+                volumes: { type: integer }
         id: { type: string, format: uuid }
         number: { type: string }
         status: { $ref: '#/components/schemas/OrderStatus' }
@@ -8704,7 +8715,7 @@ components:
     OrderStatus:
       type: string
       description: "Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma."
-      enum: [awaiting_payment, received, accepted, in_preparation, out_for_delivery, ready_for_pickup, delivered, cancelled, refused, expired]
+      enum: [awaiting_payment, received, accepted, in_preparation, ready_for_collection, out_for_delivery, ready_for_pickup, delivered, cancelled, refused, expired]
     CreateOrderRequest:
       type: object
       additionalProperties: false
@@ -8794,8 +8805,28 @@ components:
         reason: { type: [string, 'null'] }
     Order:
       type: object
-      required: [id, number, status, mode, createdAt, updatedAt, store, items, summary, couponCode, delivery, pickup, payment, exchangePolicy, timeline, allowedActions, cancellation]
+      required: [id, number, status, mode, createdAt, updatedAt, store, items, summary, couponCode, delivery, pickup, payment, exchangePolicy, timeline, allowedActions, cancellation, tracking]
       properties:
+        tracking:
+          description: 'Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [status, courierFirstName, attempts, failReason, deliveryCode, timeline]
+              properties:
+                status: { $ref: '#/components/schemas/DeliveryStatus' }
+                courierFirstName: { type: [string, 'null'] }
+                attempts: { type: integer }
+                failReason: { type: [string, 'null'] }
+                deliveryCode: { type: [string, 'null'], description: 'Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.' }
+                timeline:
+                  type: array
+                  items:
+                    type: object
+                    required: [status, at]
+                    properties:
+                      status: { $ref: '#/components/schemas/DeliveryStatus' }
+                      at: { type: string, format: date-time }
         id: { type: string, format: uuid }
         number: { type: string, description: 'Código curto legível para falar com a loja e o suporte', example: 'WB-4F7K2' }
         status: { $ref: '#/components/schemas/OrderStatus' }

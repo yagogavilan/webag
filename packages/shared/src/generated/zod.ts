@@ -7853,7 +7853,7 @@ export const ListStoreOrdersResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -7896,9 +7896,14 @@ export const GetStoreOrderParams = zod.object({
 })
 
 export const GetStoreOrderResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -7963,7 +7968,7 @@ export const GetStoreOrderResponse = zod.object({
 }).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
   "couponCode": zod.string().nullable(),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8010,9 +8015,14 @@ export const AcceptOrderParams = zod.object({
 })
 
 export const AcceptOrderResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -8077,7 +8087,7 @@ export const AcceptOrderResponse = zod.object({
 }).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
   "couponCode": zod.string().nullable(),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8110,9 +8120,14 @@ export const RefuseOrderBody = zod.object({
 })
 
 export const RefuseOrderResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -8177,7 +8192,7 @@ export const RefuseOrderResponse = zod.object({
 }).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
   "couponCode": zod.string().nullable(),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8192,7 +8207,7 @@ export const RefuseOrderResponse = zod.object({
 
 
 /**
- * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `out_for_delivery` (só entrega), `ready_for_pickup` (só retirada) e `delivered`. Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente.
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `ready_for_collection` (só entrega Webag: cria a corrida da logística; aceita `volumes` e `note`; DEC-036), `ready_for_pickup` (só retirada) e `delivered` (só retirada). Na entrega Webag a loja NÃO marca “saiu” nem “entregue”: são da logística. “Voltar para a separação” (`in_preparation`) só enquanto a corrida está sem motoboy (409 `DELIVERY_ALREADY_ASSIGNED`). Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`); 5 erros bloqueiam por 30 min (429 `PICKUP_CODE_LOCKED`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente.
  * @summary Andamento do pedido (separação, saída, pronto, entregue)
  */
 export const AdvanceOrderParams = zod.object({
@@ -8201,17 +8216,28 @@ export const AdvanceOrderParams = zod.object({
 })
 
 export const advanceOrderBodyPickupCodeRegExp = new RegExp('^\\d{4}$');
+export const advanceOrderBodyVolumesMax = 99;
+
+export const advanceOrderBodyNoteMax = 100;
+
 
 
 export const AdvanceOrderBody = zod.object({
-  "status": zod.enum(['in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered']),
-  "pickupCode": zod.string().regex(advanceOrderBodyPickupCodeRegExp).optional().describe('Obrigatório ao concluir uma retirada: o código que o cliente informa')
+  "status": zod.enum(['in_preparation', 'ready_for_collection', 'ready_for_pickup', 'delivered']),
+  "pickupCode": zod.string().regex(advanceOrderBodyPickupCodeRegExp).optional().describe('Obrigatório ao concluir uma retirada: o código que o cliente informa'),
+  "volumes": zod.int().min(1).max(advanceOrderBodyVolumesMax).optional().describe('Só em ready_for_collection (padrão 1).'),
+  "note": zod.string().max(advanceOrderBodyNoteMax).optional().describe('Só em ready_for_collection: observação para o motoboy.')
 })
 
 export const AdvanceOrderResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -8276,7 +8302,7 @@ export const AdvanceOrderResponse = zod.object({
 }).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
   "couponCode": zod.string().nullable(),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8291,7 +8317,7 @@ export const AdvanceOrderResponse = zod.object({
 
 
 /**
- * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation`, `out_for_delivery` ou `ready_for_pickup`. Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation` ou `ready_for_pickup` (depois de `ready_for_collection` só o admin cancela). Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
  * @summary Loja cancela depois do aceite (RN-08)
  */
 export const CancelOrderByStoreParams = zod.object({
@@ -8309,9 +8335,14 @@ export const CancelOrderByStoreBody = zod.object({
 })
 
 export const CancelOrderByStoreResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "paidAt": zod.iso.datetime({"offset":true}).nullable(),
@@ -8376,7 +8407,7 @@ export const CancelOrderByStoreResponse = zod.object({
 }).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
   "couponCode": zod.string().nullable(),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8441,9 +8472,20 @@ export const CreateOrderBody = zod.object({
 })
 
 export const CreateOrderResponse = zod.object({
+  "tracking": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "courierFirstName": zod.string().nullable(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullable(),
+  "deliveryCode": zod.string().nullable().describe('Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "at": zod.iso.datetime({"offset":true})
+}))
+})]).describe('Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'),
   "id": zod.uuid(),
   "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true}),
@@ -8542,7 +8584,7 @@ export const CreateOrderResponse = zod.object({
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8557,7 +8599,7 @@ export const CreateOrderResponse = zod.object({
 
 
 /**
- * Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
+ * Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`, inclusive `ready_for_collection`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
  * @summary Meus pedidos (WB-030)
  */
 export const listOrdersQueryCursorMax = 200;
@@ -8577,7 +8619,7 @@ export const ListOrdersResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
   "number": zod.string(),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "store": zod.object({
   "id": zod.uuid(),
@@ -8610,9 +8652,20 @@ export const GetOrderParams = zod.object({
 })
 
 export const GetOrderResponse = zod.object({
+  "tracking": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "courierFirstName": zod.string().nullable(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullable(),
+  "deliveryCode": zod.string().nullable().describe('Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "at": zod.iso.datetime({"offset":true})
+}))
+})]).describe('Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'),
   "id": zod.uuid(),
   "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true}),
@@ -8711,7 +8764,7 @@ export const GetOrderResponse = zod.object({
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()
@@ -8742,9 +8795,20 @@ export const CancelOrderBody = zod.object({
 })
 
 export const CancelOrderResponse = zod.object({
+  "tracking": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "courierFirstName": zod.string().nullable(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullable(),
+  "deliveryCode": zod.string().nullable().describe('Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.'),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "at": zod.iso.datetime({"offset":true})
+}))
+})]).describe('Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'),
   "id": zod.uuid(),
   "number": zod.string().describe('Código curto legível para falar com a loja e o suporte'),
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "mode": zod.enum(['delivery', 'pickup']),
   "createdAt": zod.iso.datetime({"offset":true}),
   "updatedAt": zod.iso.datetime({"offset":true}),
@@ -8843,7 +8907,7 @@ export const CancelOrderResponse = zod.object({
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
   "timeline": zod.array(zod.object({
-  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
   "actor": zod.enum(['customer', 'store', 'system', 'admin']),
   "reason": zod.string().nullable()

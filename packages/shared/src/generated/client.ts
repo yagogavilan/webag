@@ -3542,7 +3542,7 @@ export type AdvanceOrderRequestStatus = typeof AdvanceOrderRequestStatus[keyof t
 
 export const AdvanceOrderRequestStatus = {
   in_preparation: 'in_preparation',
-  out_for_delivery: 'out_for_delivery',
+  ready_for_collection: 'ready_for_collection',
   ready_for_pickup: 'ready_for_pickup',
   delivered: 'delivered',
 } as const;
@@ -3554,6 +3554,17 @@ export interface AdvanceOrderRequest {
      * @pattern ^\d{4}$
      */
   pickupCode?: string;
+  /**
+     * Só em ready_for_collection (padrão 1).
+     * @minimum 1
+     * @maximum 99
+     */
+  volumes?: number;
+  /**
+     * Só em ready_for_collection: observação para o motoboy.
+     * @maxLength 100
+     */
+  note?: string;
 }
 
 export type StoreOrderAction = typeof StoreOrderAction[keyof typeof StoreOrderAction];
@@ -3588,6 +3599,7 @@ export const OrderStatus = {
   received: 'received',
   accepted: 'accepted',
   in_preparation: 'in_preparation',
+  ready_for_collection: 'ready_for_collection',
   out_for_delivery: 'out_for_delivery',
   ready_for_pickup: 'ready_for_pickup',
   delivered: 'delivered',
@@ -3628,6 +3640,16 @@ export interface StoreOrderCounts {
   in_progress: number;
   history: number;
 }
+
+/**
+ * Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.
+ */
+export type StoreOrderLogistics = {
+  status?: DeliveryStatus;
+  /** @nullable */
+  courierFirstName?: string | null;
+  volumes?: number;
+} | null;
 
 export type StoreOrderMode = typeof StoreOrderMode[keyof typeof StoreOrderMode];
 
@@ -3718,6 +3740,8 @@ export interface OrderTimelineEntry {
 }
 
 export interface StoreOrder {
+  /** Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto. */
+  logistics?: StoreOrderLogistics;
   id: string;
   number: string;
   status: OrderStatus;
@@ -3946,6 +3970,29 @@ export interface OrderPayment {
   updatedAt: string;
 }
 
+export type OrderTrackingTimelineItem = {
+  status: DeliveryStatus;
+  at: string;
+};
+
+/**
+ * Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.
+ */
+export type OrderTracking = {
+  status: DeliveryStatus;
+  /** @nullable */
+  courierFirstName: string | null;
+  attempts: number;
+  /** @nullable */
+  failReason: string | null;
+  /**
+     * Código de 4 dígitos que o cliente informa ao motoboy; só em saiu para entrega e não entregue.
+     * @nullable
+     */
+  deliveryCode: string | null;
+  timeline: OrderTrackingTimelineItem[];
+} | null;
+
 export type OrderMode = typeof OrderMode[keyof typeof OrderMode];
 
 
@@ -4049,6 +4096,8 @@ export type OrderCancellation = {
 } | null;
 
 export interface Order {
+  /** Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto. */
+  tracking: OrderTracking;
   id: string;
   /** Código curto legível para falar com a loja e o suporte */
   number: string;
@@ -16827,7 +16876,7 @@ export const getAdvanceOrderUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `out_for_delivery` (só entrega), `ready_for_pickup` (só retirada) e `delivered`. Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente.
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `in_preparation`, `ready_for_collection` (só entrega Webag: cria a corrida da logística; aceita `volumes` e `note`; DEC-036), `ready_for_pickup` (só retirada) e `delivered` (só retirada). Na entrega Webag a loja NÃO marca “saiu” nem “entregue”: são da logística. “Voltar para a separação” (`in_preparation`) só enquanto a corrida está sem motoboy (409 `DELIVERY_ALREADY_ASSIGNED`). Retirada só conclui com `pickupCode` igual ao do cliente (422 `PICKUP_CODE_INVALID`); 5 erros bloqueiam por 30 min (429 `PICKUP_CODE_LOCKED`). Transição inválida: 409 `INVALID_TRANSITION` com `currentStatus`; repetir o mesmo destino é idempotente.
  * @summary Andamento do pedido (separação, saída, pronto, entregue)
  */
 export const advanceOrder = async (storeId: string,
@@ -16899,7 +16948,7 @@ export const getCancelOrderByStoreUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation`, `out_for_delivery` ou `ready_for_pickup`. Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
+ * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation` ou `ready_for_pickup` (depois de `ready_for_collection` só o admin cancela). Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
  * @summary Loja cancela depois do aceite (RN-08)
  */
 export const cancelOrderByStore = async (storeId: string,
@@ -17044,7 +17093,7 @@ export const getListOrdersUrl = (params?: ListOrdersParams,) => {
 }
 
 /**
- * Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
+ * Só os pedidos da conta, mais recentes primeiro. `scope=active` traz os em andamento (`awaiting_payment` a `ready_for_pickup`, inclusive `ready_for_collection`); `past` os encerrados (`delivered`, `cancelled`, `refused`, `expired`). Paginado por cursor.
  * @summary Meus pedidos (WB-030)
  */
 export const listOrders = async (params?: ListOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listOrdersResponse> => {
