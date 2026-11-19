@@ -103,3 +103,6 @@ jest.mock('react-native-webview', () => ({ WebView: () => null }));
 
 // Reanimated roda a animação na thread de UI; nos testes usa o mock oficial (valores finais imediatos).
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+
+// WB-121: a sacola e o checkout consultam o modo manutenção; nos testes a rede real nunca entra (cada teste que precisa liga o aviso com seu próprio mock).
+jest.mock('./src/api/config-api', () => ({ fetchMaintenance: async () => ({ active: false, message: null, expectedBackAt: null }) }));

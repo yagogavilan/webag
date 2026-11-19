@@ -1,6 +1,6 @@
 import { ApiError } from '@/lib/api/errors';
 
-export type FailureKind = 'declined' | 'cart-changed' | 'expired' | 'busy' | 'offline' | 'other';
+export type FailureKind = 'declined' | 'cart-changed' | 'expired' | 'busy' | 'offline' | 'maintenance' | 'other';
 
 export interface Failure {
   kind: FailureKind;
@@ -11,6 +11,10 @@ export interface Failure {
 /** Mensagens da página segura. O `detail` da API só entra no recusado (texto seguro, sem dado do cartão). */
 export function describeFailure(error: unknown): Failure {
   if (error instanceof ApiError) {
+    // WB-121: 503 antes de consumir a intenção. Nada foi cobrado e o link continua valendo para quando a manutenção acabar.
+    if (error.code === 'MAINTENANCE') {
+      return { kind: 'maintenance', title: 'Voltamos já', text: `${error.detail ?? 'Estamos em manutenção rápida.'} Seu cartão não foi cobrado e sua sacola continua salva. Volte ao app e tente de novo daqui a pouco.` };
+    }
     if (error.code === 'PAYMENT_DECLINED' || error.status === 422) {
       return { kind: 'declined', title: 'O cartão foi recusado', text: error.detail ?? 'O banco não aprovou a compra. Volte ao app e tente com outro cartão ou pague com PIX.' };
     }

@@ -135,7 +135,8 @@ export async function request<R extends ApiResponse>(
       if (response.status >= 200 && response.status < 300) return response.data as Success<R>;
 
       const error = toApiError(response.status, response.data, response.headers);
-      if (error.kind === 'server' && canRetry && attempt < MAX_RETRIES) {
+      // MAINTENANCE é decisão da Webag, não falha passageira: repetir só deixaria o cliente esperando para ver o mesmo aviso.
+      if (error.kind === 'server' && error.code !== 'MAINTENANCE' && canRetry && attempt < MAX_RETRIES) {
         await sleep(backoff(attempt));
         continue;
       }

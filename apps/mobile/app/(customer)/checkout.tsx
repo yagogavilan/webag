@@ -26,6 +26,8 @@ import { cardIntentMemory } from '../../src/features/checkout/card-intent';
 import { startCardIntent } from '../../src/api/orders-api';
 import { ApiError } from '../../src/api/problem';
 import { toCheckoutFailure, type CheckoutFailure } from '../../src/features/checkout/errors';
+import { MaintenanceBanner } from '../../src/features/maintenance/MaintenanceBanner';
+import { maintenanceText } from '../../src/features/maintenance/model';
 import { useCheckoutCart, useGuestMergePending, useSubmitOrder } from '../../src/features/checkout/hooks';
 import { PaymentBlock } from '../../src/features/checkout/PaymentBlock';
 import { ReceiveBlock } from '../../src/features/checkout/ReceiveBlock';
@@ -269,6 +271,7 @@ export default function CheckoutScreen() {
 
   const footer = (
     <View style={styles.footer}>
+      {failure?.kind === 'maintenance' ? null : <MaintenanceBanner testID="checkout.maintenance-notice" />}
       {gate.banner ? <Banner testID={gate.banner.testID} text={gate.banner.text} tone={gate.banner.tone} /> : null}
       {failureBanner}
       {submitting && slow ? (
@@ -383,6 +386,8 @@ function FailureBanner({ failure, onBackToCart, onVerify, onChangeCard, onPix }:
       return <Banner actionLabel={t('checkout.emailUnverifiedAction')} onAction={onVerify} testID="checkout.email-banner" text={t('checkout.emailUnverified')} tone="warning" />;
     case 'blocked':
       return <Banner actionLabel={t('checkout.backToCart')} onAction={onBackToCart} testID="checkout.blocked-banner" text={failure.message} tone="warning" />;
+    case 'maintenance':
+      return <Banner testID="checkout.maintenance-banner" text={`${t('maintenance.title')}. ${maintenanceText(failure.message, failure.expectedBackAt)} ${t('checkout.maintenanceNote')}`} tone="warning" />;
     case 'provider-down':
       return <Banner testID="checkout.error-banner" text={t('checkout.providerDown')} tone="danger" />;
     case 'key-reused':

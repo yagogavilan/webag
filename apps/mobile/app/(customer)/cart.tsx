@@ -21,6 +21,7 @@ import { CouponSection } from '../../src/features/cart/CouponSection';
 import { useCartActions, useCartView } from '../../src/features/cart/hooks';
 import type { CartLine, CartView } from '../../src/features/cart/model';
 import { PriceSummary } from '../../src/features/cart/PriceSummary';
+import { MaintenanceBanner } from '../../src/features/maintenance/MaintenanceBanner';
 import { couponErrorMessage, deriveCta, firstBlockedIndex, hasAcknowledgeable } from '../../src/features/cart/state';
 import { t } from '../../src/i18n';
 import { formatMoney } from '../../src/lib/format';
@@ -198,6 +199,7 @@ export default function CartScreen() {
   const total = formatMoney(totalCents);
   const footer = (
     <View style={styles.footer}>
+      <MaintenanceBanner testID="cart.maintenance-banner" />
       {cta.banner ? <Banner testID={cta.banner.testID} text={cta.banner.text} tone={cta.banner.tone} /> : null}
       <View accessible accessibilityLabel={t('cart.totalA11y', { value: total })} style={styles.footerTotal}>
         <Text variant="bodyStrong">{summary ? t('cart.total') : t('cart.visitorTotal')}</Text>

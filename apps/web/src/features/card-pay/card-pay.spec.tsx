@@ -64,6 +64,16 @@ describe('página segura de cartão (provedor de teste)', () => {
     expect(await screen.findByRole('heading', { name: 'Sem conexão' })).toBeInTheDocument();
   });
 
+  it('manutenção (503 MAINTENANCE): "Voltamos já", sem cobrança e com a volta ao app', async () => {
+    fetchMock.mockResolvedValueOnce(respond({ status: 503, code: 'MAINTENANCE', title: 'Voltamos já', detail: 'Atualizando o sistema.' }, 503));
+    render(<CardPay intent={TOKEN} view={fake} scheme="webag" />);
+    await userEvent.click(screen.getByTestId('public.cartao.fake-fake_tok_approved'));
+    await userEvent.click(screen.getByTestId('public.cartao.submit'));
+    expect(await screen.findByRole('heading', { name: 'Voltamos já' })).toBeInTheDocument();
+    expect(screen.getByTestId('public.cartao.failure')).toHaveTextContent('Seu cartão não foi cobrado e sua sacola continua salva');
+    expect(screen.getByTestId('public.cartao.back-to-app')).toHaveAttribute('href', 'webag://checkout');
+  });
+
   it('3DS do Mercado Pago abre em iframe; URL de outro domínio não abre', async () => {
     fetchMock.mockResolvedValueOnce(respond({ orderId: 'ord-2', status: 'awaiting_payment', payment: {}, threeDsUrl: 'https://api.mercadopago.com/challenge/abc' }));
     const first = render(<CardPay intent={TOKEN} view={fake} scheme="webag" />);

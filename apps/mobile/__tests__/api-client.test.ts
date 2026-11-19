@@ -114,6 +114,12 @@ describe('cliente de API', () => {
     jest.useRealTimers();
   });
 
+  it('503 MAINTENANCE (WB-121) não é repetido, nem com a chave de idempotência: o aviso aparece na hora', async () => {
+    fetchMock.mockResolvedValue(json(503, { code: 'MAINTENANCE', status: 503, title: 'Voltamos já', detail: 'Atualizando o sistema.' }));
+    await expect(request((init) => getMe(init), { auth: 'none', idempotencyKey: 'abc-123' })).rejects.toMatchObject({ status: 503, code: 'MAINTENANCE', detail: 'Atualizando o sistema.' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('escrita sem Idempotency-Key NÃO é repetida sozinha; com a chave, é, e a chave é a mesma', async () => {
     fetchMock.mockRejectedValue(new TypeError('Network request failed'));
     await expect(request((init) => getMe(init), { auth: 'none' })).rejects.toMatchObject({ kind: 'network' });

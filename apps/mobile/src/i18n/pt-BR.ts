@@ -816,6 +816,7 @@ export const ptBR = {
     stockOut: 'Acabou o estoque de {name}. Volte à sacola.',
     stockOutGeneric: 'Acabou o estoque de um item. Volte à sacola.',
     providerDown: 'Não conseguimos gerar o pagamento. Nada foi cobrado. Tente de novo.',
+    maintenanceNote: 'Sua sacola continua salva. Volte daqui a pouco para finalizar.',
     keyReused: 'Algo mudou no pedido. Confira o resumo e tente de novo.',
     tooMany: 'Muitas tentativas. Tente de novo em alguns minutos.',
     unknown: 'Não conseguimos concluir o pedido agora. Nada foi cobrado. Tente de novo.',
@@ -1065,6 +1066,11 @@ export const ptBR = {
     deliveryCodeHint: 'Diga este código ao entregador para receber o pedido.',
     stepOf: 'Etapa {n} de {total} · {name}',
     arrivesBetween: 'Chega entre {start} e {end}',
+  },
+  maintenance: {
+    title: 'Voltamos já',
+    fallback: 'Estamos em manutenção para melhorar o Webag. Novos pedidos voltam em breve.',
+    backAt: 'Previsão de volta: {when}.',
   },
   ops: {
     chipBack: 'Entrega volta {when}',

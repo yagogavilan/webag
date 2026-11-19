@@ -17,6 +17,8 @@ export type CheckoutFailure =
   | { kind: 'payer-document' }
   | { kind: 'declined'; reason: string | null }
   | { kind: 'provider-down' }
+  /** 503 `MAINTENANCE` (WB-121): pedidos novos pausados pela Webag; nada foi criado nem cobrado e a sacola segue como está. `message` é o `detail` do servidor. */
+  | { kind: 'maintenance'; message: string | null; expectedBackAt: string | null }
   | { kind: 'key-reused' }
   | { kind: 'email-unverified' }
   | { kind: 'too-many' }
@@ -55,6 +57,8 @@ export function toCheckoutFailure(error: unknown): CheckoutFailure {
       return { kind: 'payer-document' };
     case 'PAYMENT_DECLINED':
       return { kind: 'declined', reason: error.detail ?? null };
+    case 'MAINTENANCE':
+      return { kind: 'maintenance', message: error.detail?.trim() || null, expectedBackAt: typeof error.body.expectedBackAt === 'string' ? error.body.expectedBackAt : null };
     case 'PAYMENT_PROVIDER_UNAVAILABLE':
       return { kind: 'provider-down' };
     case 'IDEMPOTENCY_KEY_REUSED':
