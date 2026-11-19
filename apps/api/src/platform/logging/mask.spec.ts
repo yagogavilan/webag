@@ -1,4 +1,4 @@
-import { maskPii, safeErrorMessage } from './mask.js';
+import { maskTokenPaths, maskPii, safeErrorMessage } from './mask.js';
 
 describe('maskPii (SEC-128)', () => {
   it('mascara e-mail e telefone em mensagens de erro de terceiros', () => {
@@ -31,5 +31,17 @@ describe('maskPii: CPF e CNPJ (SEC-140)', () => {
     expect(maskPii('cnpj 12.345.678/0001-95 inválido')).toBe('cnpj [documento] inválido');
     expect(maskPii('12345678000195')).toBe('[documento]');
     expect(maskPii('pedido 4821 e 99 itens')).toBe('pedido 4821 e 99 itens');
+  });
+});
+
+describe('maskTokenPaths (SEC-171)', () => {
+  it('troca o token de uso único por [token] nos três caminhos', () => {
+    expect(maskTokenPaths('/v1/data-exports/download/AbC_123-xyzAbC_123-xyz0123456789')).toBe('/v1/data-exports/download/[token]');
+    expect(maskTokenPaths('/v1/card-intents/AbC_123-xyzAbC_123-xyz0123456789/pay')).toBe('/v1/card-intents/[token]/pay');
+    expect(maskTokenPaths('/pagar/cartao?i=AbC_123-xyzAbC_123-xyz&x=1')).toBe('/pagar/cartao?i=[token]&x=1');
+  });
+  it('não mexe no resto da URL', () => {
+    expect(maskTokenPaths('/v1/orders?limit=20')).toBe('/v1/orders?limit=20');
+    expect(maskTokenPaths(undefined)).toBeUndefined();
   });
 });

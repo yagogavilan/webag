@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import type { Principal } from '../../platform/auth/decorators.js';
 import type { Env } from '../../platform/config/env.js';
-import { randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
+import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
 import { errors } from '../../platform/http/app-error.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
 import { PrincipalService } from '../identity/index.js';
@@ -16,9 +16,14 @@ export type CardIntentInput = Omit<CreateOrderInput, 'paymentMethod' | 'card'>;
 interface StoredIntent {
   userId: string;
   sessionId: string;
-  input: CardIntentInput;
+  /** SEC-171: sem `payerDocument` (o CPF não fica em claro no Redis). */
+  input: Omit<CardIntentInput, 'payerDocument'>;
+  /** CPF do pagador cifrado (AES-GCM, chave de tokens de pagamento, preso ao usuário). */
+  payerDocumentEnc?: string;
   expiresAt: string;
 }
+
+const DOCUMENT_INFO = 'card-intent-payer-document';
 
 /**
  * B.2: cartão em produção SEM o app tocar em dado de cartão (regra inviolável nº 2). O app pede uma INTENÇÃO (o que quer comprar e o total
@@ -42,7 +47,14 @@ export class CardIntentService {
   async create(principal: Principal, input: CardIntentInput) {
     const token = randomToken(32);
     const expiresAt = new Date(Date.now() + CARD_INTENT_TTL_SECONDS * 1000);
-    const stored: StoredIntent = { userId: principal.userId, sessionId: principal.sessionId, input, expiresAt: expiresAt.toISOString() };
+    const { payerDocument, ...rest } = input;
+    const stored: StoredIntent = {
+      userId: principal.userId,
+      sessionId: principal.sessionId,
+      input: rest,
+      ...(payerDocument ? { payerDocumentEnc: encryptSecret(payerDocument, this.config.get('PAYMENT_TOKEN_ENC_KEY', { infer: true }), DOCUMENT_INFO, principal.userId) } : {}),
+      expiresAt: expiresAt.toISOString(),
+    };
     await this.redis.set(this.key(token), JSON.stringify(stored), 'EX', CARD_INTENT_TTL_SECONDS);
     const base = this.config.get('WEB_PUBLIC_URL', { infer: true }).replace(/\/$/, '');
     return { token, url: `${base}/pagar/cartao?i=${token}`, expiresAt: expiresAt.toISOString(), amount: { amount: input.expectedTotalCents, currency: 'BRL' as const } };
@@ -74,7 +86,8 @@ export class CardIntentService {
     const loaded = await this.principals.load(intent.userId, intent.sessionId);
     if (!loaded) throw errors.gone('CARD_INTENT_INVALID', 'A sessão do app foi encerrada', 'Volte ao app e entre de novo.');
     const key = `card-intent-${sha256Hex(token).slice(0, 40)}`;
-    const { orderId } = await this.orders.create(loaded.principal, { ...intent.input, paymentMethod: 'card', card }, key);
+    const payerDocument = intent.payerDocumentEnc ? decryptSecret(intent.payerDocumentEnc, this.config.get('PAYMENT_TOKEN_ENC_KEY', { infer: true }), DOCUMENT_INFO, intent.userId) : undefined;
+    const { orderId } = await this.orders.create(loaded.principal, { ...intent.input, ...(payerDocument ? { payerDocument } : {}), paymentMethod: 'card', card }, key);
     const order = await this.orders.getForCustomer(intent.userId, orderId);
     return { orderId, status: order.status, payment: order.payment, threeDsUrl: (await this.orders.paymentForCustomer(intent.userId, orderId)).threeDsUrl };
   }

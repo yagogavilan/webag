@@ -25,8 +25,15 @@ map $http_origin $webag_files_cors_origin {
     "https://${LOJISTA_HOST}" $http_origin;
 }
 
+# SEC-171: o token de uso único também vai no CAMINHO (link de exportação e intenção de cartão): o log guarda `[token]`.
+map $uri $webag_logged_uri {
+    ~^(?<pre>/v1/data-exports/download/)[^/]+$   "${pre}[token]";
+    ~^(?<pre>/v1/card-intents/)[^/]+(?<post>.*)$ "${pre}[token]${post}";
+    default                                       $uri;
+}
+
 # Log sem query string (links assinados e códigos nunca vão para o log) e com o IP real.
-log_format webag '$remote_addr - [$time_iso8601] "$request_method $uri $server_protocol" '
+log_format webag '$remote_addr - [$time_iso8601] "$request_method $webag_logged_uri $server_protocol" '
                  '$status $body_bytes_sent "$http_user_agent" rt=$request_time host=$host';
 access_log /var/log/nginx/access.log webag;
 

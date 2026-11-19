@@ -27,3 +27,11 @@ export function safeErrorMessage(error: unknown): string {
 export function maskCoordinates(url: string | undefined): string | undefined {
   return url?.replace(/([?&](?:lat|lng))=[^&]*/g, '$1=[redacted]');
 }
+
+/**
+ * SEC-171: o token de uso único vai na URL (link de exportação, intenção de cartão) e a URL vai ao log de acesso. O segmento do token
+ * é trocado por `[token]`, e o `?i=` da página de pagamento também (o proxy faz o mesmo no seu log, ver infra).
+ */
+export function maskTokenPaths(url: string | undefined): string | undefined {
+  return url?.replace(/(\/data-exports\/download\/)[^/?#\s]+/g, '$1[token]').replace(/(\/card-intents\/)[^/?#\s]+/g, '$1[token]').replace(/([?&]i)=[^&#\s]*/g, '$1=[token]');
+}

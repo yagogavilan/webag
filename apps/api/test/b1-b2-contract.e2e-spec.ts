@@ -134,6 +134,21 @@ describe('Lacunas B.1 (troca e pedido) e B.2 (cartão na página segura)', () =>
     }
     const tokenOf = (url: string) => new URL(url).searchParams.get('i')!;
 
+    it('SEC-171: o CPF do pagador NÃO fica em claro no Redis e chega ao pedido (como HMAC) quando a página conclui', async () => {
+      const shop = await shopWith(ctx, [{ name: 'Item CPF', priceCents: 6_000, stock: 5 }]);
+      const { user, addressId } = await customerAt(ctx, shop.origin);
+      await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
+      const view = await cartView(ctx, user, addressId);
+      const cpf = '52998224725';
+      const res = await ctx.http.post('/v1/card-intents').set(bearer(user.accessToken)).send({ mode: 'delivery', addressId, cartRevision: view.revision, expectedTotalCents: view.totalCents, payerDocument: cpf });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const keys = await ctx.redis.keys('card-intent:*');
+      const raws = await Promise.all(keys.map((k) => ctx.redis.get(k)));
+      expect(raws.filter((r) => r?.includes(user.userId)).every((r) => !r!.includes(cpf))).toBe(true);
+      const paid = await ctx.http.post(`/v1/card-intents/${tokenOf(res.body.url as string)}/pay`).send({ card: { token: 'fake_tok_approved', installments: 1 } }).expect(200);
+      expect((await ctx.db.select().from(orders).where(eq(orders.id, paid.body.orderId)))[0]!.payerDocumentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
     it('o app cria a intenção (login obrigatório); a página lê o valor sem login; o link é de uso único e cria o pedido do DONO da intenção', async () => {
       await ctx.http.post('/v1/card-intents').send({}).expect(401);
       const { shop, user, view, res } = await intentFor();
