@@ -62,6 +62,8 @@ tags:
     description: Favoritos de lojas e produtos da conta
   - name: cart
     description: Sacola da conta no servidor (uma loja por pedido, cupom, resumo de valores)
+  - name: exchanges
+    description: Trocas e devoluções (arrependimento, defeito, tamanho/cor)
   - name: orders
     description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento) e painel de pedidos da loja (lista, detalhe, comanda, aceitar, recusar, andamento, cancelar)"
 security:
@@ -5457,6 +5459,293 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/orders/{orderId}/exchange-options:
+    get:
+      tags: [exchanges]
+      operationId: getExchangeOptions
+      summary: O que dá para trocar neste pedido (WB-170)
+      description: "Por item e por tipo (arrependimento, defeito, tamanho/cor): se está elegível, o prazo (`deadline`, 'Você tem até DD/MM', contado da ENTREGA confirmada), o motivo do bloqueio em `reason.code` (`EXCHANGE_WINDOW_EXPIRED`, `EXCHANGE_STORE_NO_VOLUNTARY`, `EXCHANGE_PRODUCT_NO_VOLUNTARY`, `EXCHANGE_VOLUNTARY_LIMIT`, `EXCHANGE_ALREADY_OPEN`, `EXCHANGE_ITEM_ALREADY_EXCHANGED`, `EXCHANGE_ORDER_NOT_DELIVERED`), a taxa de coleta em casa (`pickupFee`, cobrada só se a loja aprovar) e as variações com estoque. Pedido de outra conta: 404."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Opções
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangeOptions' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/orders/{orderId}/exchanges:
+    post:
+      tags: [exchanges]
+      operationId: createExchange
+      summary: Pedir troca ou devolução de um item (WB-170, WB-178)
+      description: "Exige `Idempotency-Key`. Um pedido de troca = um item de pedido ENTREGUE. Fotos: `photoIds` de uploads com finalidade `exchange_photo` (1 a 5 em defeito). Arrependimento nasce aprovado na hora (a loja é avisada) e é sempre reembolso (item e taxa de entrega paga); defeito e tamanho/cor esperam a loja por `troca_resposta_h` (24 h) e, sem resposta, o sistema aprova. Tamanho/cor: 1 troca por pedido; a taxa de coleta só é cobrada DEPOIS da aprovação (`awaiting_fee`) e só na coleta em casa. A reserva do tamanho novo nasce na aprovação. Erros: 422 `EXCHANGE_*` (ver exchange-options), 409 `EXCHANGE_NO_STOCK`."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateExchangeRequest' }
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/exchanges:
+    get:
+      tags: [exchanges]
+      operationId: listExchanges
+      summary: Minhas trocas
+      description: "Paginada por cursor, da mais recente para a mais antiga."
+      parameters:
+        - { name: cursor, in: query, schema: { type: string, maxLength: 200 } }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePage' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/exchanges/{id}:
+    get:
+      tags: [exchanges]
+      operationId: getExchange
+      summary: Acompanhar a troca (WB-171)
+      description: "Linha do tempo, valores (taxa, diferença, reembolso), corridas e fotos (URL assinada curta). `storeCode` (6 caracteres, troca na loja) só aparece ao cliente. Troca de outra conta: 404."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Troca
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/exchanges/{id}/cancel:
+    post:
+      tags: [exchanges]
+      operationId: cancelExchange
+      summary: Cancelar a troca antes da coleta
+      description: "Libera a reserva do tamanho novo, cancela a corrida e estorna a taxa já paga. Depois que o motoboy está a caminho: 409 `EXCHANGE_NOT_CANCELLABLE`."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelExchangeRequest' }
+      responses:
+        '200':
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/exchanges/{id}/payment:
+    get:
+      tags: [exchanges]
+      operationId: getExchangePayment
+      summary: Pagamento da taxa de coleta e da diferença
+      description: "Estado da última tentativa (PIX copia e cola, 3DS). Somente leitura."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pagamento
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePayment' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [exchanges]
+      operationId: payExchange
+      summary: Pagar a taxa de coleta e a diferença de preço
+      description: "Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayExchangeRequest' }
+      responses:
+        '200':
+          description: Pagamento criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePayment' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/exchanges:
+    get:
+      tags: [exchanges]
+      operationId: listStoreExchanges
+      summary: Fila de trocas da loja (WB-172)
+      description: "Permissão da loja `exchanges`. `scope`: pending (aguardando resposta), in_progress, history."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 200 } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: scope, in: query, schema: { type: string, enum: [pending, in_progress, history] } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePage' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/exchanges/{id}:
+    get:
+      tags: [exchanges]
+      operationId: getStoreExchange
+      summary: Detalhe da troca para a loja
+      description: "Troca de outra loja: 404."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Troca
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/stores/{storeId}/exchanges/{id}/accept:
+    post:
+      tags: [exchanges]
+      operationId: acceptExchange
+      summary: Loja aprova a troca
+      description: "Congela taxa e diferença, reserva o tamanho novo. Com taxa a pagar vai a `awaiting_fee`; sem nada a pagar, libera a coleta na fila da logística (ou o código do balcão). Sem estoque do tamanho pedido: 409 `EXCHANGE_NO_STOCK`. Repetir é idempotente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Aprovada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/exchanges/{id}/refuse:
+    post:
+      tags: [exchanges]
+      operationId: refuseExchange
+      summary: Loja recusa a troca
+      description: "Motivo obrigatório. Tamanho/cor vira `rejected`; defeito vai à mediação; arrependimento não pode ser recusado (409 `EXCHANGE_CANNOT_REJECT`). Recusa nunca gera cobrança."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefuseExchangeRequest' }
+      responses:
+        '200':
+          description: Recusada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/exchanges/{id}/receive:
+    post:
+      tags: [exchanges]
+      operationId: receiveExchange
+      summary: Loja confere o item recebido (WB-173)
+      description: "`ok: true` segue a resolução: reembolso (item e, no arrependimento, a taxa de entrega paga; cupom proporcional), troca no balcão ou liberação da reentrega pela logística (a peça nova só sai depois da antiga conferida). `ok: false` (com `reason`) vai à mediação. Troca na loja exige o `code` do cliente (5 tentativas, depois 429 `EXCHANGE_CODE_LOCKED`); coleta em casa exige a coleta confirmada (409 `ITEM_NOT_COLLECTED`)."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReceiveExchangeRequest' }
+      responses:
+        '200':
+          description: Conferida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -6480,7 +6769,7 @@ components:
         storeId:
           type: string
           format: uuid
-          description: Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`)
+          description: Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`) e `exchange_photo` (foto de troca do cliente, privada, até 5 MB, re-codificada sem EXIF; também proíbe `storeId`)
         purpose:
           type: string
           enum:
@@ -6489,6 +6778,7 @@ components:
           - product_image
           - store_document
           - banner
+          - exchange_photo
         contentType:
           type: string
           example: image/jpeg
@@ -6539,6 +6829,7 @@ components:
           - product_image
           - store_document
           - banner
+          - exchange_photo
         status:
           type: string
           enum:
@@ -8931,3 +9222,199 @@ components:
       additionalProperties: false
       properties:
         reason: { type: string, maxLength: 200 }
+    ExchangeType:
+      type: string
+      enum: [withdrawal, defect, size_color]
+    ExchangeStatus:
+      type: string
+      enum: [requested, awaiting_fee, approved, item_received, completed, rejected, cancelled, expired, in_mediation]
+    CreateExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [orderItemId, type, method]
+      properties:
+        orderItemId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/ExchangeType' }
+        reasonCode: { type: string, enum: [size, color], description: 'Obrigatório em `size_color`.' }
+        description: { type: string, maxLength: 500 }
+        method: { type: string, enum: [pickup_at_home, drop_at_store] }
+        resolution: { type: string, enum: [replace, refund], description: 'Padrão: `refund` no arrependimento, `replace` nos demais.' }
+        newVariantId: { type: string, format: uuid, description: 'Variação desejada (com `replace`); em defeito, omitido = a mesma peça.' }
+        photoIds: { type: array, maxItems: 5, items: { type: string, format: uuid } }
+    CancelExchangeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 200 }
+    RefuseExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    ReceiveExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        reason: { type: string, minLength: 3, maxLength: 200, description: 'Obrigatório com `ok=false`.' }
+        returnToStock: { type: boolean, description: 'Padrão: sim, exceto em defeito.' }
+        code: { type: string, minLength: 6, maxLength: 6, description: 'Troca na loja: código do cliente.' }
+    PayExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [paymentMethod]
+      properties:
+        paymentMethod: { type: string, enum: [pix, card] }
+        card:
+          type: object
+          additionalProperties: false
+          required: [token, installments]
+          properties:
+            token: { type: string }
+            installments: { type: integer, minimum: 1, maximum: 3 }
+            paymentMethodId: { type: string }
+            issuerId: { type: string }
+        payerDocument: { type: string, pattern: '^[0-9]{11}$' }
+    ExchangePayment:
+      type: object
+      required: [exchangeId, method, status, amount, fee, difference, updatedAt]
+      properties:
+        exchangeId: { type: string, format: uuid }
+        method: { type: string, enum: [pix, card] }
+        status: { type: string, enum: [pending, pending_3ds, approved, declined, expired, cancelled, refunded] }
+        amount: { $ref: '#/components/schemas/Money' }
+        fee: { $ref: '#/components/schemas/Money' }
+        difference: { $ref: '#/components/schemas/Money' }
+        pix:
+          oneOf:
+            - type: object
+              required: [copyPaste, expiresAt]
+              properties:
+                copyPaste: { type: string }
+                qrCodeBase64: { type: [string, 'null'] }
+                expiresAt: { type: string, format: date-time }
+            - type: 'null'
+        installments: { type: integer }
+        threeDsUrl: { type: [string, 'null'] }
+        updatedAt: { type: string, format: date-time }
+    Exchange:
+      type: object
+      required: [id, number, orderId, orderNumber, status, type, method, resolution, quantity, fee, difference, totalDue, refund, answerDeadlineAt, windowEndsAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, description: 'Protocolo (TR-XXXXX).' }
+        orderId: { type: string, format: uuid }
+        orderNumber: { type: string }
+        status: { $ref: '#/components/schemas/ExchangeStatus' }
+        type: { $ref: '#/components/schemas/ExchangeType' }
+        reasonCode: { type: [string, 'null'], enum: [size, color, null] }
+        description: { type: [string, 'null'] }
+        method: { type: string, enum: [pickup_at_home, drop_at_store] }
+        resolution: { type: string, enum: [replace, refund] }
+        quantity: { type: integer }
+        item:
+          type: [object, 'null']
+          properties:
+            orderItemId: { type: string, format: uuid }
+            name: { type: string }
+            attributes: { type: object, additionalProperties: { type: string } }
+            image: { $ref: '#/components/schemas/ImageUrls' }
+            unitPrice: { $ref: '#/components/schemas/Money' }
+        newVariant:
+          type: [object, 'null']
+          properties:
+            variantId: { type: string, format: uuid }
+            attributes: { type: object, additionalProperties: { type: string } }
+        fee: { $ref: '#/components/schemas/Money' }
+        difference: { $ref: '#/components/schemas/Money' }
+        totalDue: { $ref: '#/components/schemas/Money' }
+        feeDueAt: { type: [string, 'null'], format: date-time }
+        feePaid: { type: boolean }
+        refund: { $ref: '#/components/schemas/Money' }
+        answerDeadlineAt: { type: string, format: date-time }
+        windowEndsAt: { type: string, format: date-time }
+        itemDueAt: { type: [string, 'null'], format: date-time }
+        autoApproved: { type: boolean }
+        decidedBy: { type: [string, 'null'], enum: [customer, store, system, admin, null] }
+        decisionReason: { type: [string, 'null'] }
+        photoCount: { type: integer }
+        storeCode: { type: [string, 'null'], description: 'Só ao cliente, na troca na loja já aprovada.' }
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              url: { type: [string, 'null'], description: 'URL assinada de curta duração.' }
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              from: { type: [string, 'null'] }
+              to: { type: string }
+              actor: { type: string }
+              reason: { type: [string, 'null'] }
+              at: { type: string, format: date-time }
+        runs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              kind: { type: string, enum: [exchange_pickup, exchange_return] }
+              status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ExchangePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Exchange' } }
+        nextCursor: { type: [string, 'null'] }
+    ExchangeOptions:
+      type: object
+      required: [orderId, deliveredAt, pickupAvailable, items]
+      properties:
+        orderId: { type: string, format: uuid }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        pickupAvailable: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              orderItemId: { type: string, format: uuid }
+              name: { type: string }
+              attributes: { type: object, additionalProperties: { type: string } }
+              quantity: { type: integer }
+              openExchange:
+                type: [object, 'null']
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { $ref: '#/components/schemas/ExchangeStatus' }
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type: { $ref: '#/components/schemas/ExchangeType' }
+                    eligible: { type: boolean }
+                    reason:
+                      type: [object, 'null']
+                      properties:
+                        code: { type: string }
+                        message: { type: string }
+                    deadline: { type: [string, 'null'], format: date-time }
+                    pickupFee: { $ref: '#/components/schemas/Money' }
+              variants:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    variantId: { type: string, format: uuid }
+                    attributes: { type: object, additionalProperties: { type: string } }
+                    available: { type: boolean }
+                    current: { type: boolean }

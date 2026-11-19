@@ -122,7 +122,7 @@ export class StoreExchangesController {
   @StorePermission('exchanges')
   @HttpCode(200)
   @RateLimit({ name: 'store-exchange-write', limit: 600, windowSeconds: 3600 })
-  @Post(':id/approve')
+  @Post(':id/accept')
   async approve(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('id') id: string) {
     await this.exchanges.approve(uuidParam(storeId), idParam(id), p.userId);
     return this.exchanges.getForStore(storeId, id);
@@ -131,7 +131,7 @@ export class StoreExchangesController {
   @StorePermission('exchanges')
   @HttpCode(200)
   @RateLimit({ name: 'store-exchange-write', limit: 600, windowSeconds: 3600 })
-  @Post(':id/reject')
+  @Post(':id/refuse')
   async reject(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('id') id: string, @Body(new ZodPipe(rejectSchema)) body: z.infer<typeof rejectSchema>) {
     await this.exchanges.reject(uuidParam(storeId), idParam(id), p.userId, body.reason);
     return this.exchanges.getForStore(storeId, id);
