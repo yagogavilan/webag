@@ -2,7 +2,9 @@
 
 > Mantido pelo `project-manager`. Fonte única do status. Plano: `plano-execucao.md`. Visão para o fundador: `../status.md`. Escopo: `docs/produto/backlog.md`. Fila técnica detalhada: `fila-backend-dev.md`. Retomada após reinício/limite de uso: primeira tarefa não `Aceito` da onda atual.
 
-**Onda atual:** Onda 6 (verificação e correções), Onda 7 e preparação da Onda 8   **Meta:** G4 (release candidate)   **Atualizado:** 2026-11-19
+**Onda atual:** Onda 8 (fechamento); mobile-dev integra o contrato W/Y em app e web   **Meta:** G4 final e decisão do G5   **Atualizado:** 2026-11-19 (HEAD `0029e53`)
+
+**Bugs/SEC abertos (2026-11-19):** BUG-010 (Média, sem reteste); BUG-019 a 025 corrigidos no código, **sem reteste do QA**; SEC-180 corrigido no backend, falta Security; SEC-176 (app feito), SEC-178/169 parciais, SEC-179 corrigido no app, falta Security; Baixas 146, 149, 150, 161 a 163, 174. Nenhum Crítico/Alto aberto (Security).
 
 Status: `A fazer` · `Em andamento` · `Em revisão` · `Em QA` · `Aceito` · `Bloqueado`.
 
@@ -16,9 +18,9 @@ Status: `A fazer` · `Em andamento` · `Em revisão` · `Em QA` · `Aceito` · `
 | 3 | Descoberta do cliente | Concluída com ressalvas | `qa/relatorios/onda-3-5.md` |
 | 4 | Pagamento, ledger, checkout, pedido, tempo real | Concluída com ressalvas | DEC-043 (Security), DEC-047 (TL), DEC-048 (QA) |
 | 5 | Logística da Webag, trocas, financeiro, painéis | Concluída com ressalvas | DEC-036/037/045; QA reprova G4 até BUG-016 |
-| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Em andamento (entregue, falta reverificar) | DEC-049/050; commits `a6eb5bb`, `a7a4ce7`, `f8c8bc5`, `972ca19` |
-| 7 | Seed, carga, docs técnicas | Em andamento | Seed existe; carga não executada |
-| 8 | Revisão final e G4 | A fazer | |
+| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Entregue; Security reverificou (SEC-166 fechado); falta reteste QA | `seguranca/revisoes/onda-7-pos-dec-059.md` |
+| 7 | Seed, carga, docs técnicas | Quase concluída: seed ok, k6 escrito, execução local indicativa; staging é do fundador | `qa/carga/README.md`, `qa/relatorios/setup-do-zero.md` |
+| 8 | Fechamento: retestes, revisões, capturas, G4/G5, tag | A fazer (plano em `plano-execucao.md` §3) | G4 Security: aprovado com ressalvas; G4 QA: preliminar reprovado (evidência) |
 
 Direção visual v3 (DEC-051/052) e entrega em até 2 h (DEC-053) cruzam as ondas 6 a 8.
 

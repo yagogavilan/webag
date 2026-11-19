@@ -1,105 +1,73 @@
 # Status da missão v1.0 — Webag
 
-> Mantido pelo PM a partir dos documentos e do `git log` (312 commits). Atualizado em 2026-11-19. Detalhe por tarefa: `gestao/board.md`. Plano: `gestao/plano-execucao.md`.
+> Mantido pelo PM a partir dos documentos e do `git log` (428 commits). Atualizado em 2026-11-19 (HEAD `0029e53`). Detalhe: `gestao/board.md`. Plano: `gestao/plano-execucao.md` (Onda 8 em §3).
 
-## Resumo em 5 linhas
-- Back-end, painéis web e app cliente existem e rodam de ponta a ponta (pedido, pagamento PIX/cartão, logística da Webag, trocas, financeiro, LGPD).
-- **G0 a G3 aprovados. G4 (release candidate) ainda NÃO**: faltam correções de bugs/segurança, nova rodada de QA e Security e validação em aparelho.
-- **G5 (lojas) depende de você**: contas, credenciais, textos jurídicos e autorização. Lista única no fim deste arquivo.
-- Em andamento agora: bugs de logística do QA (BUG-016, BUG-012) e a direção visual v3 nas telas restantes do app.
-- Nada foi mesclado em `main`; tudo está no branch `claude/admiring-lamport-62tq1a` (depende da sua autorização, item 18).
+## Resumo
+- Back-end, painéis web e app cliente rodam de ponta a ponta (pedido, PIX/cartão, logística, trocas, financeiro, LGPD). Provedor de pagamento é simulado: **Mercado Pago real nunca foi testado**.
+- **G0 a G3 aprovados. G4 ainda não decidido.** Security: G4 **aprovado com ressalvas** (`seguranca/revisoes/onda-7-pos-dec-059.md`). QA: parecer preliminar **reprovado por falta de evidência** (`qa/relatorios/onda-7-reverificacao.md`); depois disso o backend corrigiu BUG-019 a 025 e entregou 3 e2e completos seguidos, 763/763. O QA ainda não retestou: é a 1ª tarefa da Onda 8.
+- **G5 (lojas) depende de você** (lista abaixo). Play e App Store: "com ressalvas" do Security.
+- Em andamento: o mobile-dev integra o contrato novo (W.1 a W.8, Y.2) em app e web.
+- Nada foi mesclado em `main`; tudo está em `claude/admiring-lamport-62tq1a` (precisa da sua autorização).
 
 ## Situação por onda
 
-| Onda | Escopo | Veredicto | Observação |
-|---|---|---|---|
-| 0 | Fundação (monorepo, CI, compose, auth base, shells) | Concluída | `arquitetura/reviews/review-onda0-api.md` |
-| 1 | Identidade, configuração, base de pagamento | Concluída com ressalvas | Security e TL aprovaram com ressalvas (DEC-029). Pendentes: adendo do TL (A-08), SEC-129 (proxy/BFF obrigatórios em produção), DT-021 |
-| 2 | Lojista, aprovação de lojas, catálogo | Concluída com ressalvas | QA aprovou com ressalvas (`qa/relatorios/onda-2.md`); BUG-001 a 008 corrigidos; BUG-009 (limite de loja nova) feito como SEC-132; BUG-010 (concorrência do sharp) aberto, Média |
-| 3 | Descoberta do cliente (endereços, PostGIS, home, busca, loja, produto, sacola) | Concluída com ressalvas | QA aprovou com ressalvas; BUG-018 ("Mais vendidos") aberto; GPS, acessibilidade, desempenho e offline não testados (sem aparelho) |
-| 4 | Pagamento, ledger, checkout, pedido, tempo real | Concluída com ressalvas | Dinheiro sólido (20.000 cenários contra oráculo, ledger soma zero, concorrência). Security reverificou: aprovado com ressalvas (DEC-043). Mercado Pago real nunca testado (sem credencial) |
-| 5 | Logística da Webag (DEC-036), trocas (DEC-037), financeiro, painéis | Concluída com ressalvas | QA: jornada completa passou; reprovada para G4 até BUG-011 e BUG-016. BUG-011 corrigido no código (`2cf034b`), sem reteste do QA |
-| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Em andamento (código entregue, falta verificação) | API e painéis web entregues; app com excluir conta (72 h de arrependimento), exportar dados, consentimentos (`a6eb5bb`). Security havia reprovado o G5 (DEC-049/050); correções SEC-152 a 160 e SEC-155 commitadas (`a7a4ce7`), **sem reverificação do Security nem do QA** |
-| 7 | Seed completo, carga, docs técnicas | Em andamento | Seed por onda e de pedidos de demo existe (`apps/api/seed`); plano de carga escrito (`qa/plano-carga.md`), **teste de carga não executado**; seed/compose nunca rodados com Docker no sandbox |
-| 8 | Revisão final, capturas, G4, tag | Não iniciada | README e guia de deploy existem (`docs/deploy/`); falta funcional final, Nielsen, usabilidade, capturas, parecer G4, tag `v1.0.0` |
-
-## Gates
-
-| Gate | Situação | Falta / quem bloqueia |
+| Onda | Escopo | Estado |
 |---|---|---|
-| G0 a G3 | Aprovados | — |
-| G4 Release candidate | **Não aprovado** | (1) Corrigir e retestar BUG-012, 014, 015, 016, 017 (QA); (2) Security reverificar Onda 6 e liberar SEC-155 e SEC-156 (G4); (3) SEC-129 e DT-021 (retenção) antes do G4; (4) QA re-executar ondas 3 a 6 com BUG-011 e SEC-166 fechados; (5) onda 8 (funcional, Nielsen, usabilidade simulada); (6) aparelho real (fundador). Bloqueiam: backend-dev, mobile-dev, QA, Security; fundador no aparelho |
-| G5 Publicação | **Não aprovado** | G4 + SEC-166 (telas excluir/exportar no app: feitas, falta QA/Security validar); decisão SEC-154/159 (72 h, IP truncado); contas Apple/Google; textos jurídicos; checklist `deploy/checklist-publicacao-lojas.md`; autorização escrita do fundador. Bloqueia: fundador |
+| 0 a 5 | Fundação, identidade, loja/catálogo, descoberta, pagamento/ledger, logística/trocas/financeiro | Concluídas com ressalvas (QA e Security) |
+| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Entregue e reverificada pelo Security (SEC-166 fechado). Falta reteste de QA |
+| 7 | Seed, carga, docs técnicas | Seed e docs prontos; carga: k6 escrito e só execução curta indicativa local. Execução em staging é sua |
+| 8 | Fechamento (retestes, revisões, capturas, G4/G5, tag) | Não iniciada. Plano em `gestao/plano-execucao.md` §3 |
 
-## Rodando agora (2026-11-19)
-
-| Frente | Dono | O quê |
-|---|---|---|
-| Back-end | backend-dev | Entrega em até 2 h (DEC-053): ETA por distância, teto 120 min, alerta de atraso e lote de corrida **commitados** (`a7a4ce7`); em curso (working tree): horário e pausa da logística (BUG-016) |
-| Back-end, fila | backend-dev | Q.2/Q.3 (BUG-012, 014, 015, 017, 018, 019), R.6 (N+1 em listas), DT-059 a 064, SEC-161 a 167 (Baixas) |
-| App | mobile-dev | Direção v3 (DEC-051/052): base, Home, Loja, Produto e Sacola entregues; faltam checkout, pedido, trocas, conta e restantes; telas de excluir conta e exportar dados entregues; PIX por relógio do servidor e socket único feitos (I11) |
-| Painéis web | mobile-dev | Onda 6 entregue (ETA, lotes, contato, parâmetros, disputas, avaliações, ajuda, exportação e exclusão); página `/pagar/cartao` entregue |
-| Revisões | QA, Security, TL | Aguardando as correções para reverificar |
-
-Obs.: o ETA de 2 h só funciona na operação se alguém despachar motoboy manualmente (R-18).
-
-## Bugs e SEC abertos que bloqueiam o G4
+## Bugs e SEC em aberto
 
 | ID | Sev. | Situação |
 |---|---|---|
-| BUG-016 | Média (bloqueia piloto) | Horário/pausa da logística: em curso |
-| BUG-012 | Média | Cancelar corrida deixa pedido parado: aberto |
-| BUG-014 | Média | Retirada não cancela em 48 h: aberto (bloqueia G4 se retirada entrar no piloto) |
-| BUG-015 | Média | "Não recebi" e "pedir cancelamento": rotas feitas na Onda 6 (B.1); QA precisa retestar |
-| BUG-017 | Média | Parâmetros do admin sem efeito: aberto |
-| SEC-155 | Alta | Cupom primeira compra: corrigido em `a7a4ce7`, falta reverificar |
-| SEC-166 | Alta | Excluir/exportar no app: entregue em `a6eb5bb` e nos painéis, falta reverificar |
-| SEC-129 | Média | Proxy/BFF obrigatórios em produção: aberto |
-| SEC-156, 152, 153, 157, 158, 160 | Média | Corrigidos em `a7a4ce7`, falta reverificar |
-| BUG-011 | Alta | Corrigido (`2cf034b`), falta reteste |
+| BUG-010 | Média | Teto de imagens em paralelo (sharp): não retestado; depende de carga |
+| BUG-019 a 025 | Baixa a Média | Corrigidos pelo backend/mobile (commits `5792b34`, `70964ce`, `aa41a2a`, `c35695e`, `b57dcea`); **falta o reteste do QA** (arquivos `qa/bugs/` ainda dizem ABERTO) |
+| SEC-180 | Média | Corrigido no backend (`c62bb3b`); falta Security reverificar |
+| SEC-176 | Média | API e web fechados; app feito (M.2), falta reverificar |
+| SEC-178, 169 | Baixa | Parciais (W.1 feito no backend; falta o web ler; SEC-169 residual aceito, DEC-067) |
+| SEC-179 | Baixa | Corrigido no app (M.5), falta Security confirmar para o App Privacy |
+| SEC-129, DT-021, DT-031 | Média/Dívida | Boot de produção exige proxy/BFF: parecer final do Security confirma |
+| SEC-146, 149, 150, 161 a 163, 174 | Baixa | Abertos, não bloqueiam |
 
-Não bloqueiam (Média/Baixa): BUG-010, 013, 018, 019; SEC-154 (decisão sua), 159, 161 a 165, 167. Os arquivos `qa/bugs/BUG-0xx.md` ainda dizem "ABERTO" para os já corrigidos: o QA atualiza no reteste.
+Nenhum Crítico ou Alto aberto segundo o Security (2026-11-19).
 
-## Números reais
+## Números (fonte e data)
 
 | Item | Valor | Fonte |
 |---|---|---|
-| API e2e (banco real) | 563 passaram, 8 esperados (`it.fails`), 3 falhas de teste frágil/Onda 6 em andamento | `qa/relatorios/onda-3-5.md` (03:31 UTC; antes das correções R e S) |
-| API unitários | 257 (34 arquivos hoje) | DEC-046 |
-| Web (Vitest) | 430 testes | DEC-045 |
-| Playwright | 19 contra API falsa (8 arquivos) + 4 jornadas contra API real (cadastrar loja, aprovar, moderar, pedido-entrega-troca) | DEC-045, `apps/web/e2e-real` |
-| Mobile | 30 arquivos de teste, 2 fluxos Maestro | repositório |
-| Histórias | 164 no backlog (DEC-039) + extras; ondas 0 a 6 cobertas no código; contagem história a história **não verificada** | `produto/backlog.md` |
-| Bugs QA | 19 registrados: 8 corrigidos e verificados, 11 abertos no arquivo (alguns já corrigidos) | `qa/bugs/` |
-| Incidentes de uso | Limites de 5 h repetidos; o commitado sobreviveu | R-04 |
-
-Números pós-correções não foram reexecutados nesta atualização [HIPÓTESE: o CI atual está verde].
+| API e2e (banco e Redis reais) | **763/763, 0 pulados**, 3 execuções seguidas em `12b3f68` | `gestao/fila-backend-dev.md` (backend-dev, 2026-11-19). QA ainda não repetiu |
+| API unitários | 308 (41 arquivos) | idem |
+| Web Vitest / app Jest | 535 (QA, `98764b2`) / 350 (QA, HEAD `b550088`) | `qa/relatorios/onda-7-reverificacao.md` |
+| Playwright | 38 com API falsa; 8 contra API real (só com ajustes de ambiente na época; BUG-025 corrigido depois) | idem |
+| Subida do zero | `pnpm run setup` em 31 s | `qa/relatorios/setup-do-zero.md` |
+| Carga | Local, indicativo: p95 abaixo das metas (home 63 ms, busca 96 ms), sem 5xx | `qa/carga/README.md`; não representa produção |
 
 ## Depende do fundador (lista única, por urgência)
 
-Contas e credenciais
-1. Conta Mercado Pago: Access Token e Public Key de **sandbox** (teste real do PIX/cartão), depois produção, Client ID/Secret do OAuth e segredo do webhook.
-2. Conta Apple Developer e Google Play Console (G5; pago, exige sua autorização).
-3. Credenciais de push: FCM (Google) e APNs (Apple), e conta/token do EAS.
-4. Domínio, servidor, e-mail transacional (deploy).
-5. Identificador `br.com.webag.app`: confirmar (não muda depois de publicado).
-6. Número de WhatsApp de suporte (configurável no admin).
+Para o G4 (antes de decidir o release candidate)
+1. **Aparelho real** (Android de entrada e iPhone): roteiro em `qa/relatorios/onda-7-reverificacao.md` §10 (push, câmera, GPS, teclado, PIX/cartão/3DS, 3G, fontes).
+2. **Mercado Pago sandbox** (Access Token e Public Key): teste real de PIX, cartão, webhook assinado e estorno.
+3. **Teste de carga em staging** (k6, script pronto em `qa/carga/`): só você pode executar; precisa de servidor de staging.
 
-Jurídico e fiscal (você ou advogado/contador)
-7. Textos de termos, privacidade e minuta de exclusão/exportação (CC4/CC5) antes do G5.
-8. Parecer sobre motoboys (vínculo, Lei 12.009): nenhum motoboy deve ser contratado antes.
-9. Arrependimento: prazo de reembolso e frete (J1 a J6, J9, J13).
-10. IP em aceites e consentimentos: truncar (adotado) ou apagar (SEC-159/DT-063).
-11. Cláusula de ressarcimento do lojista e aprovação automática de troca nos Termos do Lojista (J5, J12).
-12. NFS-e e tributos sobre comissão e taxas da Webag (J11).
-13. Prazo de arrependimento da exclusão de conta: 72 h adotado, confirmar (SEC-154).
+Para o G5 (lojas)
+4. Contas **Apple Developer** e **Google Play Console** (pago).
+5. **Domínio**, servidor e e-mail transacional (a página `/excluir-conta` precisa estar no ar para o Play).
+6. **FCM/APNs e conta EAS**.
+7. **Razão social, CNPJ e endereço** da Webag (Decreto 7.962/2013; tela "Sobre") e identificador `br.com.webag.app` (não muda depois).
+8. **Jurídico J1 a J16** (`decisoes.md`): termos, privacidade, arrependimento e frete, exclusão (72 h, IP truncado, 5 anos, J15), promessa "até 2 h" e compensação (J14), textos de estorno (J16), motoboys (J8; nenhum contratado antes), NFS-e (J11), ressarcimento do lojista (J5, J12).
+9. **Número de WhatsApp de suporte** (configurável no admin).
+10. **Mercado Pago de produção** (Client ID/Secret OAuth, segredo do webhook); split e KYC dos lojistas só no piloto (R-01).
 
-Conteúdo
-14. Ilustrador e fotos reais de produto: sem eles a v3 não chega ao nível do iFood.
-15. Cotar 3 a 5 motoboys locais (custo muda a tabela de frete, HIP-L02).
+Decisões
+11. **Horário real da logística** (HIP-E08: hoje seg a sáb 09h às 20h) e quem despacha motoboy para cumprir "até 2 h" (R-18).
+12. **WAF/CAPTCHA** na frente de login e envio de código: decidir (custo; Security recomenda para o piloto).
+13. Geocodificador (opcional, custo; DEC-067: sem ele o resíduo do SEC-169 fica aceito).
+14. **Revisar as hipóteses** (HIP-*; destaque HIP-C01 comissão 15%, HIP-L01 frete, HIP-T05 troca, HIP-E08, HIP-P06 a P10) e se a Webag absorve a tarifa do provedor na recusa da loja.
+15. Ilustrador/fotos reais e cotação de 3 a 5 motoboys (qualidade e custo do piloto, não bloqueiam o código).
+16. **Autorização do merge em `main` e da tag `v1.0.0`**; publicar nas lojas só com G4 e G5 e sua autorização escrita.
 
-Operação e decisões
-16. Validação em aparelho real (push, câmera, teclado, desempenho em 3G, fontes).
-17. Operação de despacho: quem despacha motoboy manualmente para cumprir "até 2 h" (DEC-053).
-18. Autorização do merge para `main` e da tag `v1.0.0`; publicar nas lojas só com G4 e G5.
-19. Revisar as hipóteses em `decisoes.md` (HIP-*, destaque: HIP-C01 comissão 15%, HIP-L01 tabela de frete, HIP-T05 taxa de troca) e decidir se a Webag absorve a tarifa do provedor quando a loja recusa pedido (QA onda 3-5, §176).
+## Caminho até a v1.0 (estimativa do PM, não é medição)
+
+Premissas: peso por onda definido por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 12, O4 15, O5 15, O6 12, O7 5, O8 18; soma 100); onda concluída com ressalvas conta 100%; O6 90% (falta reteste); O7 80%; O8 5% (roteiros e k6 prontos, nada executado). Resultado: 65 + 10,8 + 4 + 0,9 = **cerca de 80% do trabalho dos agentes**. Os 20% restantes são a Onda 8 inteira. Esse número **não inclui** o fundador: dos 16 itens acima, nenhum está feito, e os itens 1 a 3 e 16 travam o G4 e a tag. Sem prazos em calendário (o gargalo é o seu tempo e terceiros).
