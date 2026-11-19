@@ -6,6 +6,7 @@ import { S3ObjectStorage } from '../src/platform/storage/s3.storage.js';
 import { seedOnda1 } from './onda1.js';
 import { seedOnda2 } from './onda2.js';
 import { seedLogistics } from './logistics.js';
+import { seedDemoOrders } from './orders-demo.js';
 import { seedOnda3 } from './onda3.js';
 
 /**
@@ -44,6 +45,8 @@ async function main(): Promise<void> {
       await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
       // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners.
       await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
+      // Pedidos de demonstração em vários estados (painel da loja, financeiro, logística e trocas). Só dev/staging.
+      await seedDemoOrders(db, (message) => console.log(`[seed] ${message}`));
     }
     console.log('[seed] concluído');
   } finally {
