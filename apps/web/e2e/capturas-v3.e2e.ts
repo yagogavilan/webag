@@ -29,15 +29,22 @@ test.describe('capturas v3', () => {
   mkdirSync(OUT, { recursive: true });
 
   test('lojista', async ({ page }) => {
-    const merchant = await seedMerchant('Moda Morato');
-    await post('/__test/seed-order', { storeId: merchant.storeId });
-    await post('/__test/seed-review', { storeId: merchant.storeId, rating: 5, comment: 'Chegou bem embalado e a camiseta veste muito bem.' });
-    await post('/__test/seed-review', { storeId: merchant.storeId, rating: 4, comment: 'Gostei do atendimento.' });
-    await post('/__test/seed-exchange', { storeId: merchant.storeId });
+    const merchant = (await post('/__test/seed-merchant', { name: 'Moda Morato', status: 'live' })) as unknown as { email: string; password: string; storeId: string };
     await loginLojista(page, merchant.email, merchant.password);
     for (const viewport of ['desk', 'mob'] as const) {
       await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
       await page.goto('/lojista');
+      await shot(page, 'lojista-inicio-sem-pedido', viewport);
+    }
+    await post('/__test/seed-order', { storeId: merchant.storeId });
+    await post('/__test/seed-review', { storeId: merchant.storeId, rating: 5, comment: 'Chegou bem embalado e a camiseta veste muito bem.' });
+    await post('/__test/seed-review', { storeId: merchant.storeId, rating: 4, comment: 'Gostei do atendimento.' });
+    await post('/__test/seed-exchange', { storeId: merchant.storeId });
+    await page.reload();
+    for (const viewport of ['desk', 'mob'] as const) {
+      await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
+      await page.goto('/lojista');
+      await page.getByTestId('lojista.alert.accept').click({ timeout: 4000 }).catch(() => undefined);
       await shot(page, 'lojista-inicio', viewport);
       await page.goto('/lojista/pedidos');
       await page.getByTestId('lojista.alert.accept').click({ timeout: 5000 }).catch(() => undefined);
