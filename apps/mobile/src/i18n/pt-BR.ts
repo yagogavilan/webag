@@ -228,6 +228,7 @@ export const ptBR = {
     blockerStoreOrder: 'Pedido da loja #{n} · {status}',
     blockerStoreExchange: 'Troca da loja {n} · {status}',
     blockerStoreRefund: 'Estorno da loja · {status}',
+    blockerRefundProcessing: 'em andamento',
     undoTitle: 'Cancelar a exclusão da conta',
     undoText: 'Digite o e-mail e a senha da conta para reativá-la. Só vale dentro do prazo de arrependimento.',
     undoEmail: 'E-mail',

@@ -16,6 +16,7 @@ import { Skeleton } from '../../src/components/Skeleton';
 import { ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
 import { cartActions } from '../../src/features/cart/store';
+import { presentStatus } from '../../src/features/orders/model';
 import { CancelDeletionForm } from '../../src/features/privacy/CancelDeletionForm';
 import { toPasswordActionError } from '../../src/features/privacy/errors';
 import { t } from '../../src/i18n';
@@ -24,9 +25,20 @@ import { haptic } from '../../src/lib/haptics';
 import { useOnline } from '../../src/lib/useOnline';
 import { theme } from '../../src/theme';
 
+const ORDER_STATUSES = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'] as const;
+const EXCHANGE_STATUS_KEY = { requested: 'exchange.status.requested', awaiting_fee: 'exchange.status.awaiting_fee', approved: 'exchange.status.approved', item_received: 'exchange.status.item_received', in_mediation: 'exchange.status.in_mediation' } as const;
+
+/** O servidor manda o estado em código (`out_for_delivery`); a tela mostra o rótulo em português, igual ao resto do app. */
+const blockerStatus = (b: DeletionBlocker): string => {
+  if ((ORDER_STATUSES as readonly string[]).includes(b.status)) return presentStatus(b.status as (typeof ORDER_STATUSES)[number]).label;
+  if (b.status in EXCHANGE_STATUS_KEY) return t(EXCHANGE_STATUS_KEY[b.status as keyof typeof EXCHANGE_STATUS_KEY]);
+  if (b.status === 'processing') return t('privacy.blockerRefundProcessing');
+  return b.status;
+};
+
 const blockerText = (b: DeletionBlocker): string => {
   const key = { order: 'privacy.blockerOrder', exchange: 'privacy.blockerExchange', store_order: 'privacy.blockerStoreOrder', store_exchange: 'privacy.blockerStoreExchange', store_refund: 'privacy.blockerStoreRefund' } as const;
-  return t(key[b.kind], { n: b.number ?? '', status: b.status });
+  return t(key[b.kind], { n: b.number ?? '', status: blockerStatus(b) });
 };
 
 /**

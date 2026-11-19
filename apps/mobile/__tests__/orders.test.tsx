@@ -114,6 +114,13 @@ describe('S7. Pedido: acompanhar', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/review/[orderId]', params: { orderId: '11111111-1111-4111-8111-111111111111' } });
   });
 
+  it('entregue com prazo de troca: o servidor diz em `exchange.canRequest` e o botão aparece mesmo sem `request_exchange` nas ações', async () => {
+    await login();
+    mockOrder.mockResolvedValue(orderFixture({ status: 'delivered', allowedActions: ['contact_store'], exchange: { canRequest: true, withdrawalUntil: null, voluntaryUntil: null, defectUntil: null } }));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByTestId('order.exchange')).toBeOnTheScreen();
+  });
+
   it('pedido de outra conta (404): "Não encontramos esse pedido"', async () => {
     await login();
     mockOrder.mockRejectedValue(new ApiError({ kind: 'problem', status: 404, code: 'NOT_FOUND' }));

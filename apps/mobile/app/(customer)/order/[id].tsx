@@ -102,6 +102,8 @@ export default function OrderScreen() {
   if (!order) return <Screen header={header}>{null}</Screen>;
 
   const allowed = new Set<string>(order.allowedActions);
+  // O servidor também diz, em `exchange.canRequest`, se ainda há prazo de troca (a API pode omitir `request_exchange` de `allowedActions`).
+  if (order.exchange?.canRequest) allowed.add('request_exchange');
   const onNotReceived = async () => {
     setNotReceivedOpen(false);
     try {

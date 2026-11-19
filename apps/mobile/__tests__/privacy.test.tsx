@@ -76,10 +76,12 @@ describe('Excluir minha conta (CC4, SEC-166)', () => {
   });
 
   it('com pedido em aberto bloqueia e lista o que falta; o botão de excluir não aparece', async () => {
-    mockOverview.mockResolvedValue(overview({ canDelete: true, blockers: [{ kind: 'order', id: 'o1', number: '4821', status: 'out_for_delivery' }] }));
+    mockOverview.mockResolvedValue(overview({ canDelete: true, blockers: [{ kind: 'order', id: 'o1', number: '4821', status: 'out_for_delivery' }, { kind: 'exchange', id: 'x1', number: 'T-12', status: 'awaiting_fee' }] }));
     await renderScreen(<DeleteAccountScreen />);
     expect(await screen.findByText('Conclua antes de excluir')).toBeOnTheScreen();
-    expect(screen.getByText('Pedido #4821 · out_for_delivery')).toBeOnTheScreen();
+    // o estado vem do servidor em código e a tela o mostra em português
+    expect(screen.getByText('Pedido #4821 · Saiu para entrega')).toBeOnTheScreen();
+    expect(screen.getByText('Troca T-12 · Aprovada, falta pagar')).toBeOnTheScreen();
     expect(screen.queryByTestId('account.delete-submit')).toBeNull();
   });
 
