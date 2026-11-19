@@ -28,4 +28,25 @@ describe('desistir da exclusão', () => {
     expect(await screen.findByTestId('lojista.desistir.done')).toBeInTheDocument();
     expect(JSON.parse(String(calls.at(-1)!.init.body))).toEqual({ email: 'marcos@casabela.com.br', password: 'errada' });
   });
+
+  it('SEC-176: com a conta sob ataque a API pede o código; a tela mostra o campo e reenvia e-mail, senha e código', async () => {
+    let step = 0;
+    const { impl, calls } = mockFetch((url, init) => {
+      if (url.pathname.endsWith('/auth/account-deletion/cancel') && init.method === 'POST') {
+        step += 1;
+        return step === 1 ? json({ type: 'x', title: 'x', status: 403, code: 'LOGIN_CODE_REQUIRED' }, 403) : json(null, 204);
+      }
+      return undefined;
+    });
+    vi.stubGlobal('fetch', impl);
+    render(<CancelDeletionForm />);
+    await userEvent.type(screen.getByTestId('lojista.desistir.email'), 'marcos@casabela.com.br');
+    await userEvent.type(screen.getByTestId('lojista.desistir.password'), 'senha-certa');
+    await userEvent.click(screen.getByTestId('lojista.desistir.submit'));
+    expect(await screen.findByTestId('lojista.desistir.code-step')).toHaveTextContent('Enviamos um código de 6 dígitos ao seu e-mail');
+    expect(screen.queryByTestId('lojista.desistir.error')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Dígito 1 de 6'), '482913');
+    expect(await screen.findByTestId('lojista.desistir.done')).toBeInTheDocument();
+    expect(JSON.parse(String(calls.at(-1)!.init.body))).toEqual({ email: 'marcos@casabela.com.br', password: 'senha-certa', code: '482913' });
+  });
 });

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Logo } from '@/components/ui/logo';
+import { companyIdentity } from '@/lib/company';
 import s from './public.module.css';
 
 /** Páginas que o rodapé lista (as mesmas que as lojas pedem como URL pública). */
@@ -18,6 +19,7 @@ export const FOOTER_LINKS = [
  * logo oficial no topo e o mesmo rodapé em todas as páginas.
  */
 export function PublicShell({ children }: { children: ReactNode }) {
+  const company = companyIdentity();
   return (
     <div className={s.page}>
       <a href="#conteudo" className={s.skip}>Ir para o conteúdo</a>
@@ -37,7 +39,9 @@ export function PublicShell({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </nav>
-        <p className={`wb-text-caption ${s.copy}`}>Webag. Todos os direitos reservados.</p>
+        <p className={`wb-text-caption ${s.copy}`} data-testid="public.footer.company">
+          {company ? `${company.legalName} · CNPJ ${company.cnpj}` : 'Webag'}. Todos os direitos reservados.
+        </p>
       </footer>
     </div>
   );

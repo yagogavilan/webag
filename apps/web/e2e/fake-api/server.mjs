@@ -97,7 +97,7 @@ legal.privacy.push({ id: randomUUID(), type: 'privacy', version: 1, title: 'Pol�
 // ---------------------------------------------------------------- utilitários
 const problem = (res, status, code, title, detail, extra = {}) => {
   res.writeHead(status, { 'content-type': 'application/problem+json', ...(extra.headers ?? {}) });
-  res.end(JSON.stringify({ type: `https://api.webag.com.br/errors/${code.toLowerCase()}`, title, status, code, ...(detail ? { detail } : {}), ...(extra.errors ? { errors: extra.errors } : {}) }));
+  res.end(JSON.stringify({ type: `https://api.webag.com.br/errors/${code.toLowerCase()}`, title, status, code, ...(detail ? { detail } : {}), ...(extra.errors ? { errors: extra.errors } : {}), ...(extra.extra ?? {}) }));
 };
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -1172,9 +1172,73 @@ route('POST', '/v1/admin/exchanges/mediations/:id/decision', { perm: 'exchanges:
   mediations.delete(m.id);
   json(res, 200, { status: 'decided' });
 });
+// Exclusão sem o app (WB-214, SEC-166, SEC-168/176). Contas de teste: `excluir@` (normal), `cuidado@` (conta sob ataque: a senha certa
+// exige o código do e-mail), `bloqueado@` (pedido em andamento). O código `delete_web` fake é sempre 482913.
+const DELETE_CODE = '482913';
+for (const [key, email, extra] of [
+  ['del-normal', 'excluir@webag.local', {}],
+  ['del-stepup', 'cuidado@webag.local', { stepUp: true }],
+  ['del-blocked', 'bloqueado@webag.local', { blocked: true }],
+]) users.set(key, { id: randomUUID(), email, name: 'Cliente', password: 'Excluir-Dev-2026', profile: null, active: true, emailVerified: true, ...extra });
+const deleteTickets = new Map();
+const deletionLog = [];
+const findByEmail = (email) => [...users.values()].find((u) => u.email === String(email).toLowerCase());
+const deletableUser = (email) => {
+  const user = findByEmail(email);
+  return user && !user.profile && !deletions.get(user.id) ? user : null;
+};
+const ticketFor = (user) => {
+  const deleteTicket = randomBytes(32).toString('base64url');
+  deleteTickets.set(deleteTicket, { userId: user.id, until: Date.now() + 600_000 });
+  return { deleteTicket, expiresIn: 600 };
+};
+route('POST', '/v1/auth/account-deletion/start', { public: true }, (req, res, ctx) => {
+  const email = String(ctx.body.email).toLowerCase();
+  if (email.startsWith('limite@')) return problem(res, 429, 'TOO_MANY_REQUESTS', 'Muitas tentativas', 'Muitas tentativas.', { headers: { 'retry-after': '3600' } });
+  const user = deletableUser(email);
+  if (ctx.body.password === undefined) {
+    deletionLog.push({ via: 'A-send', exists: Boolean(user) });
+    return json(res, 200, { sent: true }); // igual exista ou não a conta
+  }
+  if (!user || user.password !== ctx.body.password) return problem(res, 401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', 'E-mail ou senha incorretos.');
+  if (user.stepUp) return problem(res, 403, 'LOGIN_CODE_REQUIRED', 'Código necessário', 'Para sua segurança, confirme a exclusão pelo código enviado ao seu e-mail.');
+  json(res, 200, ticketFor(user));
+});
+route('POST', '/v1/auth/account-deletion/verify-code', { public: true }, (req, res, ctx) => {
+  const user = deletableUser(ctx.body.email);
+  if (!user || ctx.body.code !== DELETE_CODE) return problem(res, 400, 'CODE_INVALID', 'Código incorreto', 'Confira o código ou peça um novo.');
+  json(res, 200, ticketFor(user));
+});
+const liveTicket = (raw) => {
+  const entry = deleteTickets.get(raw);
+  return entry && entry.until > Date.now() ? entry : null;
+};
+route('POST', '/v1/auth/account-deletion/review', { public: true }, (req, res, ctx) => {
+  const entry = liveTicket(ctx.body.deleteTicket);
+  if (!entry) return problem(res, 410, 'DELETE_TICKET_INVALID', 'Pedido vencido ou já usado', 'Comece de novo.');
+  const user = [...users.values()].find((u) => u.id === entry.userId);
+  const blockers = user.blocked ? [{ kind: 'order', id: randomUUID(), number: '4821', status: 'saiu para entrega' }] : [];
+  json(res, 200, { canDelete: blockers.length === 0, blockers, hasPassword: true, ownsStore: false, anonymizationDays: 30, fiscalRetentionYears: 5, regretHours: 72, internal: 'nao-deve-sair' });
+});
+route('POST', '/v1/auth/account-deletion/finish', { public: true }, (req, res, ctx) => {
+  const entry = liveTicket(ctx.body.deleteTicket);
+  if (!entry) return problem(res, 410, 'DELETE_TICKET_INVALID', 'Pedido vencido ou já usado', 'Comece de novo.');
+  const user = [...users.values()].find((u) => u.id === entry.userId);
+  if (user.blocked) return problem(res, 409, 'DELETION_BLOCKED', 'Conclua antes de excluir', 'Você tem pedidos ou trocas em andamento.', { extra: { blockers: [{ kind: 'order', id: randomUUID(), number: '4821', status: 'saiu para entrega' }] } });
+  deleteTickets.delete(ctx.body.deleteTicket);
+  deletions.set(user.id, true);
+  deletionLog.push({ via: 'web', email: user.email });
+  const until = new Date(Date.now() + 72 * 3_600_000).toISOString();
+  json(res, 200, { status: 'pending', effectiveAt: until, cancelableUntil: until });
+});
+route('POST', '/__test/account-deletions', { public: true }, (req, res) => json(res, 200, { data: deletionLog, closed: [...deletions.keys()].length }));
 route('POST', '/v1/auth/account-deletion/cancel', { public: true }, (req, res, ctx) => {
-  const user = [...users.values()].find((u) => u.email === String(ctx.body.email).toLowerCase());
+  const user = findByEmail(ctx.body.email);
   if (!user || user.password !== ctx.body.password || !deletions.get(user.id)) return problem(res, 401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos');
+  if (user.stepUp) {
+    if (!ctx.body.code) return problem(res, 403, 'LOGIN_CODE_REQUIRED', 'Código necessário', 'Para sua segurança, confirme com o código enviado ao seu e-mail.');
+    if (ctx.body.code !== DELETE_CODE) return problem(res, 400, 'CODE_INVALID', 'Código incorreto', 'Confira o código.');
+  }
   deletions.delete(user.id);
   empty(res);
 });

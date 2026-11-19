@@ -60,13 +60,13 @@ export function PrivacyRequestForm({ officerEmail }: { officerEmail: string | nu
   if (receipt) {
     const due = new Date(receipt.dueAt);
     return (
-      <Banner tone="success" testId="public.excluir.done">
+      <Banner tone="success" testId="public.excluir.officer-done">
         <strong>Recebemos o seu pedido.</strong> Protocolo {receipt.protocol}. Se existir uma conta com esse e-mail, vamos tratar o pedido e responder até {Number.isNaN(due.getTime()) ? 'o prazo combinado' : DATE.format(due)}. Enviamos uma confirmação para o seu e-mail.
       </Banner>
     );
   }
   return (
-    <form onSubmit={submit} className={ui.stack} noValidate data-testid="public.excluir.form">
+    <form onSubmit={submit} className={ui.stack} noValidate data-testid="public.excluir.officer-form">
       <TextField
         label="E-mail da conta"
         type="email"
@@ -78,7 +78,7 @@ export function PrivacyRequestForm({ officerEmail }: { officerEmail: string | nu
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         error={emailError}
-        data-testid="public.excluir.email"
+        data-testid="public.excluir.officer-email"
       />
       <TextArea
         label="Mensagem (opcional)"
@@ -89,10 +89,10 @@ export function PrivacyRequestForm({ officerEmail }: { officerEmail: string | nu
         onChange={(e) => setMessage(e.target.value)}
         hint="Não envie senha nem dados de cartão."
         counter={{ value: message.length, max: MAX_MESSAGE }}
-        data-testid="public.excluir.message"
+        data-testid="public.excluir.officer-message"
       />
-      {error ? <Banner tone="danger" offline={error.startsWith('Sem conexão')} testId="public.excluir.error">{error}</Banner> : null}
-      <Button type="submit" size="lg" loading={busy} loadingLabel="Enviando…" data-testid="public.excluir.submit">Pedir exclusão da conta</Button>
+      {error ? <Banner tone="danger" offline={error.startsWith('Sem conexão')} testId="public.excluir.officer-error">{error}</Banner> : null}
+      <Button type="submit" size="lg" loading={busy} loadingLabel="Enviando…" data-testid="public.excluir.officer-submit">Pedir exclusão da conta</Button>
       <noscript>
         <p>Este formulário precisa de JavaScript.{officerEmail ? ` Escreva para ${officerEmail}.` : ' Escreva para o canal de privacidade indicado na Política de privacidade.'}</p>
       </noscript>

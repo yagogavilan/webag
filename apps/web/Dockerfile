@@ -14,6 +14,8 @@ ARG NEXT_PUBLIC_SUPPORT_WHATSAPP=""
 ENV NEXT_PUBLIC_SUPPORT_WHATSAPP=$NEXT_PUBLIC_SUPPORT_WHATSAPP
 COPY . .
 RUN pnpm install --frozen-lockfile --filter "@webag/web..."
+# SEC-172: URL http/localhost em variável NEXT_PUBLIC_* falha o build em vez de ir para o navegador.
+RUN node apps/web/scripts/check-build-env.mjs
 RUN pnpm --filter "@webag/web..." run build
 
 FROM node:24-alpine AS runtime

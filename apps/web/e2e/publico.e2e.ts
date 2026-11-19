@@ -76,18 +76,18 @@ test.describe('Excluir conta (WB-214, SEC-166)', () => {
   test('explica o processo e o pedido ao encarregado responde igual para conta que existe e que não existe', async ({ page, request }) => {
     await page.goto('/excluir-conta');
     await expect(page.getByRole('heading', { level: 1, name: 'Excluir conta Webag' })).toBeVisible();
-    await expect(page.getByText('72 horas')).toBeVisible();
+    await expect(page.getByText('72 horas (3 dias)').first()).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'O que a lei nos obriga a guardar' })).toBeVisible();
 
-    await page.getByTestId('public.excluir.email').fill('admin@webag.local');
-    await page.getByTestId('public.excluir.submit').click();
-    const first = await page.getByTestId('public.excluir.done').innerText();
+    await page.getByTestId('public.excluir.officer-email').fill('admin@webag.local');
+    await page.getByTestId('public.excluir.officer-submit').click();
+    const first = await page.getByTestId('public.excluir.officer-done').innerText();
     expect(first).toContain('Se existir uma conta com esse e-mail');
 
     await page.reload();
-    await page.getByTestId('public.excluir.email').fill('ninguem-existe@exemplo.com');
-    await page.getByTestId('public.excluir.submit').click();
-    const second = await page.getByTestId('public.excluir.done').innerText();
+    await page.getByTestId('public.excluir.officer-email').fill('ninguem-existe@exemplo.com');
+    await page.getByTestId('public.excluir.officer-submit').click();
+    const second = await page.getByTestId('public.excluir.officer-done').innerText();
     // Mesmo texto, salvo o número do protocolo.
     expect(second.replace(/PV-\d+/, 'PV')).toBe(first.replace(/PV-\d+/, 'PV'));
 
@@ -97,10 +97,98 @@ test.describe('Excluir conta (WB-214, SEC-166)', () => {
 
   test('limite de tentativas aparece como mensagem e o formulário rejeita POST de outro site', async ({ page, request }) => {
     await page.goto('/excluir-conta');
-    await page.getByTestId('public.excluir.email').fill('limite@exemplo.com');
-    await page.getByTestId('public.excluir.submit').click();
-    await expect(page.getByTestId('public.excluir.error')).toContainText('Muitas tentativas');
+    await page.getByTestId('public.excluir.officer-email').fill('limite@exemplo.com');
+    await page.getByTestId('public.excluir.officer-submit').click();
+    await expect(page.getByTestId('public.excluir.officer-error')).toContainText('Muitas tentativas');
     const forged = await request.post('/api/public/privacy-request', { data: { type: 'deletion', email: 'a@b.co' }, headers: { 'content-type': 'application/json' } });
     expect(forged.status()).toBe(403);
+  });
+});
+
+test.describe('Excluir conta sem o app (SEC-166, SEC-176)', () => {
+  const tid = (page: import('@playwright/test').Page, id: string) => page.getByTestId(`public.excluir.${id}`);
+
+  test('via A: código do e-mail, revisão, confirmação e desistência, sem sessão nem cookie', async ({ page, context }) => {
+    await page.goto('/excluir-conta');
+    await tid(page, 'email-input').fill('excluir@webag.local');
+    await tid(page, 'send-code').click();
+    await expect(tid(page, 'notice')).toContainText('Se existir uma conta com esse e-mail');
+    await page.getByLabel('Dígito 1 de 6').pressSequentially('482913');
+    await expect(tid(page, 'delete-submit')).toBeVisible();
+    await tid(page, 'delete-submit').click();
+    await expect(page.getByRole('alertdialog')).toContainText('Excluir sua conta?');
+    await tid(page, 'delete-confirm').click();
+    await expect(tid(page, 'done')).toContainText('Sua conta foi fechada');
+    expect(await context.cookies()).toEqual([]);
+
+    // Desistir (arrependimento) com e-mail e senha
+    await tid(page, 'cancel-email').fill('excluir@webag.local');
+    await tid(page, 'cancel-password').fill('Excluir-Dev-2026');
+    await tid(page, 'cancel-submit').click();
+    await expect(tid(page, 'cancel-done')).toContainText('A exclusão foi cancelada');
+  });
+
+  test('a resposta do primeiro passo é igual para e-mail que existe e que não existe', async ({ page }) => {
+    const texts: string[] = [];
+    for (const email of ['excluir@webag.local', 'ninguem-existe@exemplo.com']) {
+      await page.goto('/excluir-conta');
+      await tid(page, 'email-input').fill(email);
+      await tid(page, 'send-code').click();
+      await expect(tid(page, 'notice')).toBeVisible();
+      texts.push(await tid(page, 'notice').innerText());
+    }
+    expect(texts[0]).toBe(texts[1]);
+    // Código errado para conta inexistente: a mesma mensagem de código incorreto.
+    await page.getByLabel('Dígito 1 de 6').pressSequentially('000000');
+    await expect(tid(page, 'error')).toContainText('Código incorreto');
+  });
+
+  test('via B com a conta sob ataque pede o código do e-mail; senha errada tem mensagem única', async ({ page }) => {
+    await page.goto('/excluir-conta');
+    await tid(page, 'use-password').click();
+    await tid(page, 'email-input').fill('cuidado@webag.local');
+    await tid(page, 'password-input').fill('senha-errada');
+    await tid(page, 'password-submit').click();
+    await expect(tid(page, 'error')).toHaveText('E-mail ou senha incorretos.');
+    await tid(page, 'password-input').fill('Excluir-Dev-2026');
+    await tid(page, 'password-submit').click();
+    await expect(tid(page, 'notice')).toContainText('Por segurança, enviamos um código');
+    await page.getByLabel('Dígito 1 de 6').pressSequentially('482913');
+    await expect(tid(page, 'delete-submit')).toBeVisible();
+  });
+
+  test('desistir com a conta sob ataque abre o campo do código (SEC-176) e a exclusão com pedido em andamento é bloqueada', async ({ page }) => {
+    // fecha a conta `cuidado@` pela via A para poder desistir depois
+    await page.goto('/excluir-conta');
+    await tid(page, 'email-input').fill('cuidado@webag.local');
+    await tid(page, 'send-code').click();
+    await page.getByLabel('Dígito 1 de 6').pressSequentially('482913');
+    await tid(page, 'delete-submit').click();
+    await tid(page, 'delete-confirm').click();
+    await expect(tid(page, 'done')).toBeVisible();
+    await tid(page, 'cancel-email').fill('cuidado@webag.local');
+    await tid(page, 'cancel-password').fill('Excluir-Dev-2026');
+    await tid(page, 'cancel-submit').click();
+    await expect(tid(page, 'cancel-code-step')).toContainText('enviamos um código');
+    await page.getByLabel('Dígito 1 de 6').last().pressSequentially('482913');
+    await expect(tid(page, 'cancel-done')).toBeVisible();
+
+    await page.goto('/excluir-conta');
+    await tid(page, 'email-input').fill('bloqueado@webag.local');
+    await tid(page, 'send-code').click();
+    await page.getByLabel('Dígito 1 de 6').pressSequentially('482913');
+    await expect(tid(page, 'blockers')).toContainText('Pedido #4821');
+    await expect(tid(page, 'delete-submit')).toHaveCount(0);
+  });
+
+  test('limite de tentativas, POST de outro site e host de painel são recusados', async ({ page, request }) => {
+    await page.goto('/excluir-conta');
+    await tid(page, 'email-input').fill('limite@exemplo.com');
+    await tid(page, 'send-code').click();
+    await expect(tid(page, 'error')).toContainText('Muitas tentativas');
+    const forged = await request.post('/api/public/account-deletion/start', { data: { email: 'a@b.co' }, headers: { 'content-type': 'application/json' } });
+    expect(forged.status()).toBe(403);
+    const unknown = await request.post('/api/public/account-deletion/apagar-tudo', { data: {}, headers: { 'content-type': 'application/json', 'x-webag-client': 'web' } });
+    expect(unknown.status()).toBe(404);
   });
 });

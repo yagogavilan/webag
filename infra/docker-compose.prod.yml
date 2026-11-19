@@ -234,6 +234,14 @@ services:
       APP_STORE_URL: ${APP_STORE_URL:-}
       # Origem pública do tempo real (Socket.IO) que o navegador do painel alcança.
       REALTIME_URL: https://${API_HOST}
+      # Identificação da empresa no rodapé do site (razão social e CNPJ; vazios = o rodapé mostra só "Webag").
+      COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
+      COMPANY_CNPJ: ${COMPANY_CNPJ:-}
+      # SEC-178: prazos citados em /excluir-conta. Ajuste junto com os parâmetros do admin (vazio = padrão 72 h, 5 anos, 6 meses, 15 dias).
+      PUBLIC_DELETION_REGRET_HOURS: ${PUBLIC_DELETION_REGRET_HOURS:-}
+      PUBLIC_DELETION_FISCAL_YEARS: ${PUBLIC_DELETION_FISCAL_YEARS:-}
+      PUBLIC_DELETION_ACCESS_LOG_MONTHS: ${PUBLIC_DELETION_ACCESS_LOG_MONTHS:-}
+      PUBLIC_DELETION_ANSWER_DAYS: ${PUBLIC_DELETION_ANSWER_DAYS:-}
       # SEC-114/SEC-129: IP do cliente vem do cabeçalho que o nginx SOBRESCREVE (proxy_set_header X-Real-IP $remote_addr).
       WEB_CLIENT_IP_HEADER: x-real-ip
       BFF_SHARED_SECRET: ${BFF_SHARED_SECRET}
