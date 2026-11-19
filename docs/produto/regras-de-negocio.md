@@ -31,7 +31,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `entrega_rota_fator_pct` (fator de rota sobre a linha reta; 130 = 1,30) | 130 | 100-250 | HIP-E01, DEC-053 |
 | `entrega_min_por_km` (minutos por km de rota, aceita decimal) | 6 | 1-30 | HIP-E01, DEC-053 |
 | `entrega_faixa_min` (folga para cada lado da estimativa; no PRD "folga") | 15 | 0-60 | HIP-E02, DEC-053 |
-| `entrega_max_min` (teto da promessa, contado do pagamento) | 120 | 30-240 | DEC-053 |
+| `entrega_max_min` (teto da promessa, contado do pagamento; vale para o FIM da faixa: estimativa + `entrega_faixa_min` <= teto) | 120 | 30-240 | DEC-053, DEC-054 |
 | `entrega_lote_max` (corridas da mesma cidade por lote) | 4 | 2-10 | HIP-E07, DEC-053 |
 | `entrega_atraso_tolerancia_min` (depois do fim da faixa, antes de compensar e de liberar o cancelamento sem custo) | 15 | 0-60 | HIP-E04 (novo) |
 | `entrega_compensacao_tipo` / `entrega_compensacao_cents` (usado só no tipo `cupom_valor`) | `frete_gratis_proximo` / 1000 | `frete_gratis_proximo`, `cupom_valor`, `nenhuma` / 0-5000 | HIP-E05 (novo) |

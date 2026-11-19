@@ -9709,7 +9709,7 @@ components:
           type: [integer, 'null']
           minimum: 5
           maximum: 120
-          description: 'DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho passa do teto `entrega_max_min`.'
+          description: 'DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho + folga da faixa passa do teto `entrega_max_min` (DEC-054).'
         etaMinMinutes:
           type: integer
           minimum: 1
@@ -10845,7 +10845,7 @@ components:
       type: object
       additionalProperties: false
       required: [minMinutes, maxMinutes, fromAt, toAt]
-      description: "DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área')."
+      description: "DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área')."
       properties:
         minMinutes: { type: integer }
         maxMinutes: { type: integer }

@@ -13,16 +13,30 @@ describe('ETA (DEC-053)', () => {
     expect(computeEta(config, { distanceM: 5000, prepMin: 40 }).estimateMin).toBe(94);
   });
 
-  it('o teto de 120 min é inclusivo: 120 entrega, 121 não', () => {
-    const maxM = maxDistanceForCeilingM(config, null); // room = 85 min; 7,8 min/km => 10,897 km
+  it('DEC-054: o teto vale para o FIM da faixa e é inclusivo (fim em 119 e 120 entrega; 121 não)', () => {
+    // 5 min/km sem fator de rota: fim da faixa = 20 + 15 + km x 5 + 15 = 50 + km x 5
+    const flat = { ...config, minPerKm: 5, routeFactorPct: 100 };
+    const at119 = computeEta(flat, { distanceM: 13_800 }); // 69 min de deslocamento
+    expect(at119).toMatchObject({ estimateMin: 104, toMin: 119, withinCeiling: true });
+    const at120 = computeEta(flat, { distanceM: 14_000 }); // 70
+    expect(at120).toMatchObject({ estimateMin: 105, toMin: 120, withinCeiling: true });
+    const at121 = computeEta(flat, { distanceM: 14_001 }); // 71 (arredonda para cima)
+    expect(at121).toMatchObject({ estimateMin: 106, toMin: 121, withinCeiling: false });
+  });
+
+  it('DEC-054: alcance padrão cai para ~9 km; a loja a 10,5 km não mostra mais faixa de 102 a 132 min', () => {
+    const maxM = maxDistanceForCeilingM(config, null); // sobra 120 - 15 - 20 - 15 = 70 min; 7,8 min/km => 8,97 km
+    expect(maxM).toBeGreaterThan(8_900);
+    expect(maxM).toBeLessThan(9_000);
     expect(computeEta(config, { distanceM: maxM }).withinCeiling).toBe(true);
-    expect(computeEta(config, { distanceM: maxM }).estimateMin).toBeLessThanOrEqual(120);
+    expect(computeEta(config, { distanceM: maxM }).toMin).toBeLessThanOrEqual(120);
     expect(computeEta(config, { distanceM: maxM + 200 }).withinCeiling).toBe(false);
-    // exatamente 120: 20 + 15 + 85 (10,8974 km) => use 85 min de deslocamento
-    const edge = computeEta({ ...config, minPerKm: 5, routeFactorPct: 100 }, { distanceM: 17000 });
-    expect(edge.estimateMin).toBe(120);
-    expect(edge.withinCeiling).toBe(true);
-    expect(computeEta({ ...config, minPerKm: 5, routeFactorPct: 100 }, { distanceM: 17001 }).withinCeiling).toBe(false);
+    const far = computeEta(config, { distanceM: 10_500 }); // 82 min de deslocamento: faixa 102 a 132
+    expect(far).toMatchObject({ fromMin: 102, toMin: 132, withinCeiling: false });
+  });
+
+  it('a folga da faixa entra no alcance: folga maior, alcance menor', () => {
+    expect(maxDistanceForCeilingM({ ...config, bandMin: 30 }, null)).toBeLessThan(maxDistanceForCeilingM(config, null));
   });
 
   it('a faixa nunca começa antes de 5 min', () => {
@@ -31,6 +45,7 @@ describe('ETA (DEC-053)', () => {
 
   it('preparo que já estoura o teto não tem distância possível', () => {
     expect(maxDistanceForCeilingM(config, 110)).toBe(0);
+    expect(maxDistanceForCeilingM(config, 90)).toBe(0); // 90 + 15 + 15 = 120: sem folga para rodar
   });
 
   it('janela em horário de relógio', () => {

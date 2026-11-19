@@ -189,8 +189,10 @@ export class StoreSettingsService {
     const fieldErrors: { field: string; message: string }[] = [];
     if (input.prepMinutes != null) {
       // Preparo que sozinho estoura o teto de entrega deixaria a loja sem nenhum endereço alcançável (DEC-053).
-      const [maxMin, dispatchMin] = await Promise.all([this.params.getNumber('entrega_max_min'), this.params.getNumber('entrega_despacho_min')]);
-      if (input.prepMinutes + dispatchMin >= maxMin) fieldErrors.push({ field: 'prepMinutes', message: `O preparo precisa ser menor que ${maxMin - dispatchMin} min para a loja entregar em até ${maxMin} min.` });
+      // DEC-054: o teto vale para o FIM da faixa (estimativa + folga).
+      const [maxMin, dispatchMin, bandMin] = await Promise.all([this.params.getNumber('entrega_max_min'), this.params.getNumber('entrega_despacho_min'), this.params.getNumber('entrega_faixa_min')]);
+      const room = maxMin - dispatchMin - bandMin;
+      if (input.prepMinutes >= room) fieldErrors.push({ field: 'prepMinutes', message: `O preparo precisa ser menor que ${room} min para a loja entregar em até ${maxMin} min.` });
     }
     // Sempre sobra uma forma de receber pedido: entrega ou retirada (WB-057 C6).
     if (!input.acceptsDelivery && !settings.pickupEnabled) fieldErrors.push({ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' });

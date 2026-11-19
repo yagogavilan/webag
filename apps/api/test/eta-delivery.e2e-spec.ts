@@ -41,25 +41,30 @@ describe('ETA de entrega em até 2 h (DEC-053)', () => {
     expect(new Date(store.delivery.eta.toAt).getTime() - new Date(store.delivery.eta.fromAt).getTime()).toBe(30 * 60_000);
   });
 
-  it('teto de 120 min: 10,85 km ainda entrega (estimativa 119), 10,95 km some da descoberta, da busca e da loja diz "fora da área"', async () => {
+  it('DEC-054, teto no FIM da faixa: 8,9 km entrega (fim 120), 9,05 km some da descoberta, da busca e da loja diz "fora da área"; 10,5 km não mostra faixa de 102 a 132', async () => {
     const origin = isolatedPoint();
-    await makeStore(ctx, { name: 'Dentro do Teto', at: await northOf(ctx, origin, 10_850), products: [{ name: 'Pao Dentro' }] });
-    const outAt = await northOf(ctx, origin, 10_950);
+    await makeStore(ctx, { name: 'Dentro do Teto', at: await northOf(ctx, origin, 8_900), products: [{ name: 'Pao Dentro' }] });
+    const outAt = await northOf(ctx, origin, 9_050);
     const out = await makeStore(ctx, { name: 'Acima do Teto', at: outAt, products: [{ name: 'Pao Acima' }] });
-    expect(names((await home(origin)).nearbyStores)).toEqual(['Dentro do Teto']);
+    const far = await makeStore(ctx, { name: 'Longe 10km', at: await northOf(ctx, origin, 10_500), products: [{ name: 'Pao Longe' }] });
+    const inside = (await home(origin)).nearbyStores as { name: string; delivery: { etaMaxMinutes: number } }[];
+    expect(names(inside)).toEqual(['Dentro do Teto']);
+    expect(inside[0]!.delivery.etaMaxMinutes).toBeLessThanOrEqual(120);
     expect(names((await ctx.http.get(`/v1/search/stores?${q(origin)}`).expect(200)).body.data)).toEqual(['Dentro do Teto']);
     expect(names((await ctx.http.get(`/v1/search/products?${q(origin, '&q=pao')}`).expect(200)).body.data)).toEqual(['Pao Dentro']);
-    const page = (await ctx.http.get(`/v1/browse/stores/${out.id}?${q(origin)}`).expect(200)).body;
-    expect(page.delivery).toMatchObject({ available: false, eta: null });
+    for (const store of [out, far]) {
+      const page = (await ctx.http.get(`/v1/browse/stores/${store.id}?${q(origin)}`).expect(200)).body;
+      expect(page.delivery).toMatchObject({ available: false, eta: null });
+    }
     const [row] = await ctx.db.select().from(storeSettings).where(eq(storeSettings.storeId, out.id));
     expect(row?.prepMinutes).toBeNull();
   });
 
   it('o preparo da loja entra na conta: preparo alto empurra a mesma distância para fora do teto', async () => {
     const origin = isolatedPoint();
-    const at = await northOf(ctx, origin, 9_000); // 9 km: 70,2 -> 71 min de deslocamento
-    await makeStore(ctx, { name: 'Preparo Padrão', at, prepMinutes: 20 });
-    await makeStore(ctx, { name: 'Preparo Longo', at, prepMinutes: 40 }); // 40 + 15 + 71 = 126 > 120
+    const at = await northOf(ctx, origin, 8_000); // 8 km: 62,4 -> 63 min de deslocamento
+    await makeStore(ctx, { name: 'Preparo Padrão', at, prepMinutes: 20 }); // fim da faixa: 20 + 15 + 63 + 15 = 113
+    await makeStore(ctx, { name: 'Preparo Longo', at, prepMinutes: 40 }); // 40 + 15 + 63 + 15 = 133 > 120
     await makeStore(ctx, { name: 'Preparo Curto', at, prepMinutes: 5 });
     const list = (await home(origin)).nearbyStores as { name: string; delivery: { etaMinMinutes: number } }[];
     expect(names(list)).toEqual(['Preparo Curto', 'Preparo Padrão']); // ordenado pelo ETA, não só pela distância
@@ -80,7 +85,7 @@ describe('ETA de entrega em até 2 h (DEC-053)', () => {
     await makeStore(ctx, { name: 'Loja 6 km', at: await northOf(ctx, origin, 6000) });
     try {
       const before = (await home(origin)).nearbyStores[0].delivery.etaMinMinutes as number;
-      await useParam(ctx, 'entrega_min_por_km', 10);
+      await useParam(ctx, 'entrega_min_por_km', 8);
       await ctx.redis.flushdb();
       const after = (await home(origin)).nearbyStores[0].delivery.etaMinMinutes as number;
       expect(after).toBeGreaterThan(before);

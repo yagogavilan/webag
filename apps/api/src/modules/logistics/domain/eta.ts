@@ -14,7 +14,7 @@ export interface EtaConfig {
   minPerKm: number;
   /** Folga da faixa: +- min em torno da estimativa. */
   bandMin: number;
-  /** Teto: acima disso a loja não entrega para o endereço. */
+  /** Teto (DEC-054): vale para o FIM da faixa (estimativa + folga); acima disso a loja não entrega para o endereço. */
   maxMin: number;
 }
 
@@ -28,7 +28,7 @@ export interface EtaEstimate {
   prepMin: number;
   dispatchMin: number;
   travelMin: number;
-  /** `false` quando a estimativa passa do teto: a loja não entrega para esse endereço. */
+  /** `false` quando o FIM da faixa passa do teto (DEC-054): a loja não entrega para esse endereço. */
   withinCeiling: boolean;
 }
 
@@ -46,13 +46,13 @@ export function computeEta(config: EtaConfig, input: { distanceM: number; prepMi
     prepMin,
     dispatchMin: config.dispatchMin,
     travelMin,
-    withinCeiling: estimateMin <= config.maxMin,
+    withinCeiling: estimateMin + config.bandMin <= config.maxMin,
   };
 }
 
-/** Distância máxima (m) que ainda cabe no teto para uma loja com este preparo; `0` se nem o preparo cabe. */
+/** Distância máxima (m) cujo FIM da faixa ainda cabe no teto (DEC-054) para uma loja com este preparo; `0` se nem o preparo cabe. */
 export function maxDistanceForCeilingM(config: EtaConfig, prepMin: number | null): number {
-  const room = config.maxMin - (prepMin ?? config.defaultPrepMin) - config.dispatchMin;
+  const room = config.maxMin - config.bandMin - (prepMin ?? config.defaultPrepMin) - config.dispatchMin;
   const perKm = (config.routeFactorPct / 100) * config.minPerKm;
   if (room <= 0 || perKm <= 0) return 0;
   return Math.floor((room / perKm) * 1000);

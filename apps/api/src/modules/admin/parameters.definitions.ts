@@ -44,7 +44,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('entrega_rota_fator_pct', 130, 100, 250, 'ETA: fator de rota sobre a distância em linha reta (130 = 1,30)', 'DEC-053'),
   { key: 'entrega_min_por_km', type: 'decimal', default: 6, min: 1, max: 30, description: 'ETA: minutos de deslocamento por km de rota', ref: 'DEC-053' },
   int('entrega_faixa_min', 15, 0, 60, 'ETA: folga da faixa para cada lado da estimativa (min)', 'DEC-053'),
-  int('entrega_max_min', 120, 30, 240, 'ETA: teto da estimativa; acima disso a loja não entrega para o endereço ("fora da área")', 'DEC-053'),
+  int('entrega_max_min', 120, 30, 240, 'ETA: teto do FIM da faixa (estimativa + folga); acima disso a loja não entrega para o endereço ("fora da área")', 'DEC-054'),
   { key: 'logistica_horario', type: 'window', default: '09:00-20:00', description: 'Horário em que a Webag despacha entregas (Brasília); fora dele só retirada, com "Entrega volta às HH:MM" (DEC-039c)', ref: 'DEC-039c' },
   { key: 'logistica_dias', type: 'enum', default: 'seg_sab', values: ['seg_sab', 'seg_sex', 'seg_dom'], description: 'Dias em que a logística abre (seg_sab = segunda a sábado)', ref: 'DEC-039c' },
   int('entrega_lote_max', 4, 2, 10, 'Corridas da mesma área que a Logística atribui de uma vez ao mesmo motoboy (lote, DEC-053)', 'DEC-053'),
