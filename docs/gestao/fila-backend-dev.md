@@ -46,3 +46,7 @@ P.3 [ ] Corrigir o teste de cupom em `orders.e2e` (2º pedido sai sem cupom e ma
 ## Estado após a rodada 2026-11-19 (CEO)
 - [x] T.2/T.3 (trocas), T.4, tempo real Socket.IO, push Expo, API do painel de pedidos e financeiro do lojista, seed (15%, frete, pedidos de demo): FEITOS (commit a3c17ec).
 - Abertos: P.1 a P.3 (segurança, antes do 1º cliente real/G4), DT-049 (taxa de troca e custo da coleta no ledger), DT-050 (lembretes 12 h e 4 h, mediação e contestação), relatório WB-240, revisão do Security sobre os guards HTTP que passaram a ignorar WebSocket.
+
+## Lacunas de contrato apontadas pelo app real (2026-11-19, mobile-dev) — próxima rodada do backend
+B.1 [ ] Troca: expor a diferença de preço (pagar/receber), o prazo final "até DD/MM" já na entrada de troca do pedido, ação "levar à loja" depois de aprovada, contestação de recusa e "não recebi meu pedido" (contrato hoje não oferece).
+B.2 [ ] Cartão em produção: o app só oferece PIX porque a página segura do Mercado Pago (Bricks/3DS) não existe. Backend: endpoint de criação de intenção de cartão para a página segura; web: rota pública `/pagar/cartao` (apps/web, sem login do painel, SEC-106). Ver pendencias-contrato-mobile.md itens 9 a 16.

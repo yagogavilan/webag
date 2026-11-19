@@ -1,6 +1,6 @@
 'use client';
 
-import { ClipboardText, FileText, Motorcycle, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ClipboardText, CurrencyCircleDollar, FileText, MapTrifold, Motorcycle, Percent, Flag, List, MapPin, ShieldCheck, SidebarSimple, Storefront, SlidersHorizontal, Tag, UsersThree, X } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -22,6 +22,10 @@ type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'du
 const ICONS: Record<AdminSection, IconType> = {
   lojas: Storefront,
   logistica: Motorcycle,
+  estornos: CurrencyCircleDollar,
+  frete: MapTrifold,
+  comissoes: Percent,
+  trocas: ArrowsClockwise,
   moderacao: ShieldCheck,
   regioes: MapPin,
   categorias: Tag,
