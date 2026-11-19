@@ -181,8 +181,9 @@ export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise
     await db
       .insert(coupons)
       .values({ ...c, storeId: 'storeId' in c ? c.storeId : null, startsAt: new Date(Date.now() - 86_400_000), endsAt: new Date(Date.now() + 90 * 86_400_000) })
-      // BUG-023 (SEC-170d): cupom de primeira compra sempre com teto de usos; a semeadura repetida completa o que ficou sem teto, sem mexer em outro campo.
-      .onConflictDoUpdate({ target: sql`upper(${coupons.code})`, set: { maxUses: sql`coalesce(${coupons.maxUses}, ${c.maxUses})` } });
+      .onConflictDoNothing();
+    // BUG-023 (SEC-170d): cupom de primeira compra sempre com teto de usos; a semeadura repetida completa o que ficou sem teto, sem mexer em outro campo.
+    if (c.maxUses !== null) await db.update(coupons).set({ maxUses: sql`coalesce(${coupons.maxUses}, ${c.maxUses})` }).where(sql`upper(${coupons.code}) = ${c.code}`);
   }
 
   // 5. Favoritos das duas primeiras clientes.
