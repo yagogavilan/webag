@@ -208,3 +208,26 @@ describe('deliveryNotice (puro)', () => {
     expect(deliveryNotice(order({ status: 'cancelled', cancellation: { by: 'store', reason: 'Sem estoque', at: iso(0) } as never }), now)).toBeNull();
   });
 });
+
+describe('Compensação por atraso na tela do pedido (F2, WB-254)', () => {
+  const compensation = (over: Record<string, unknown> = {}) => ({ kind: 'free_shipping', valueCents: null, code: 'ATRASOK7M2QXW9', validUntil: iso(60 * 24 * 30), status: 'available', ...over });
+
+  it('pedido entregue com compensação mostra o bilhete e abre Meus cupons', async () => {
+    mockOrder.mockResolvedValue(order({ status: 'delivered', compensation: compensation() } as Partial<Order>));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByTestId('tracking.compensation')).toBeOnTheScreen();
+    expect(screen.getByText('Entrega grátis no próximo pedido')).toBeOnTheScreen();
+    expect(everyText()).not.toMatch(/\b2 ?h\b|30 dias/i);
+    await fireEvent.press(screen.getByTestId('tracking.compensation-open'));
+    const router = (jest.requireMock('expo-router') as { __router: { push: jest.Mock } }).__router;
+    expect(router.push).toHaveBeenCalledWith('/coupons');
+  });
+
+  it('sem compensação (no prazo, dentro da tolerância, cancelado ou atrasado ainda a caminho) não promete nada', async () => {
+    mockOrder.mockResolvedValue(order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -30)), delay: delay() } as Partial<Order>));
+    await renderScreen(<OrderScreen />);
+    await screen.findByTestId('tracking.late-banner');
+    expect(screen.queryByTestId('tracking.compensation')).toBeNull();
+    expect(everyText()).not.toMatch(/entrega grátis/i);
+  });
+});

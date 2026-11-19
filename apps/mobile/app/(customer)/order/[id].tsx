@@ -20,6 +20,7 @@ import { useOrder } from '../../../src/features/checkout/hooks';
 import { getPushStatus, openNotificationSettings, type PushStatus } from '../../../src/features/notifications/push';
 import { useCancelForDelay, useCancelOrder, useRequestCancel } from '../../../src/features/orders/hooks';
 import { deliveryNotice } from '../../../src/features/orders/delivery-state';
+import { CompensationTicket } from '../../../src/features/coupons/CompensationTicket';
 import { OrderNotice } from '../../../src/features/orders/OrderNotice';
 import { SUPPORT_WHATSAPP } from '../../../src/features/checkout/config';
 import { TextField } from '../../../src/components/TextField';
@@ -230,6 +231,8 @@ export default function OrderScreen() {
           waiting={waiting}
         />
       ) : null}
+
+      <CompensationTicket compensation={order.compensation ?? null} onOpen={() => router.push('/coupons' as never)} />
 
       <StatusTimeline order={order} />
 

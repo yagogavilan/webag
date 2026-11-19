@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { signOut } from '../../../src/api/auth-api';
 import { useSession } from '../../../src/api/session';
 import { Button } from '../../../src/components/Button';
-import { ArrowsClockwise, Bell, Heart, Info, MapPin, User, Question, Receipt, ShieldUser, Document } from '../../../src/components/icons';
+import { ArrowsClockwise, Bell, Heart, Info, MapPin, User, Question, Receipt, ShieldUser, Document, Tag } from '../../../src/components/icons';
 import { ListItem } from '../../../src/components/ListItem';
 import { Screen } from '../../../src/components/Screen';
 import { Text } from '../../../src/components/Text';
@@ -63,6 +63,7 @@ export default function AccountScreen() {
           <ListItem icon={User} onPress={() => router.push('/profile' as never)} testID="account.item-data" title={t('account.dataItem')} />
           <ListItem icon={MapPin} onPress={() => router.push('/addresses')} testID="account.addresses" title={t('account.addresses')} />
           <ListItem icon={Heart} onPress={() => router.push('/favorites')} testID="account.favorites" title={t('account.favorites')} />
+          <ListItem icon={Tag} onPress={() => router.push('/coupons' as never)} testID="account.coupons" title={t('account.couponsItem')} />
           <ListItem icon={ArrowsClockwise} onPress={() => router.push('/exchanges' as never)} testID="account.exchanges" title={t('exchange.listTitle')} />
         </View>
       ) : (
