@@ -65,7 +65,63 @@ beforeEach(async () => {
   await login();
 });
 
+const secondItem = (over: Record<string, unknown> = {}) => ({
+  orderItemId: 'oi2',
+  name: 'Calça Jeans',
+  attributes: { Tamanho: '42' },
+  quantity: 1,
+  openExchange: null,
+  options: [
+    { type: 'size_color', eligible: true, deadline: '2026-11-25T12:00:00Z', pickupFee: { amount: 500, currency: 'BRL' } },
+    { type: 'defect', eligible: true, deadline: '2026-12-18T12:00:00Z' },
+  ],
+  variants: [
+    { variantId: 'v42', attributes: { Tamanho: '42' }, available: true, current: true },
+    { variantId: 'v44', attributes: { Tamanho: '44' }, available: true, current: false },
+  ],
+  ...over,
+});
+
 describe('X1b. Pedir troca', () => {
+  it('U8.4: pedido de 2 itens mostra os dois; escolher o 2º envia o orderItemId do 2º e zera motivo e novo tamanho', async () => {
+    const base = options();
+    mockOptions.mockResolvedValue({ ...base, items: [...base.items, secondItem()] });
+    mockPlace.mockResolvedValue(exchangeFixture());
+    await renderScreen(<NewExchangeScreen />);
+    expect(await screen.findByTestId('exchange.item-oi1')).toBeOnTheScreen();
+    expect(screen.getByTestId('exchange.item-oi2')).toBeOnTheScreen();
+    // o 1º vem marcado
+    expect(screen.getByTestId('exchange.item-oi1').props.accessibilityState).toMatchObject({ checked: true });
+    await fireEvent.press(screen.getByTestId('exchange.reason-size'));
+    await fireEvent.press(screen.getByTestId('exchange.swap-vG'));
+    await fireEvent.press(screen.getByTestId('exchange.item-oi2'));
+    // trocou de item: sem motivo escolhido e sem seção de novo tamanho
+    expect(screen.queryByTestId('exchange.swap')).toBeNull();
+    expect(screen.getByTestId('exchange.reason-size').props.accessibilityState).toMatchObject({ checked: false });
+    await fireEvent.press(screen.getByTestId('exchange.reason-size'));
+    await fireEvent.press(screen.getByTestId('exchange.swap-v44'));
+    await fireEvent.press(screen.getByTestId('exchange.submit'));
+    await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(1));
+    expect(mockPlace.mock.calls[0]?.[1]).toMatchObject({ orderItemId: 'oi2', newVariantId: 'v44' });
+  });
+
+  it('U8.4: item sem opção de troca aparece cinza com o motivo e não é escolhido', async () => {
+    const base = options();
+    mockOptions.mockResolvedValue({ ...base, items: [...base.items, secondItem({ options: [{ type: 'size_color', eligible: false, reason: { code: 'EXCHANGE_WINDOW_EXPIRED' }, deadline: '2026-11-12T12:00:00Z' }] })] });
+    await renderScreen(<NewExchangeScreen />);
+    await fireEvent.press(await screen.findByTestId('exchange.item-oi2'));
+    expect(await screen.findByTestId('exchange.reason-info')).toHaveTextContent('Prazo encerrado em 12 nov.');
+    expect(screen.getByTestId('exchange.item-oi1').props.accessibilityState).toMatchObject({ checked: true });
+  });
+
+  it('U8.4: pedido de 1 item não ganha a seção de escolha', async () => {
+    mockOptions.mockResolvedValue(options());
+    await renderScreen(<NewExchangeScreen />);
+    await screen.findByTestId('exchange.item-oi1');
+    expect(screen.queryByTestId('exchange.items')).toBeNull();
+    expect(screen.getByText('O que você quer trocar?')).toBeOnTheScreen();
+  });
+
   it('motivo fora do prazo fica inerte e tocar explica, sem erro', async () => {
     mockOptions.mockResolvedValue(options());
     await renderScreen(<NewExchangeScreen />);

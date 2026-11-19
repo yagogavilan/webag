@@ -1169,6 +1169,7 @@ export const ptBR = {
     context: 'Pedido {number} · {store}',
     deadlineBanner: 'Você tem até {date} para trocar por tamanho ou cor.',
     item: 'O que você quer trocar?',
+    itemPick: 'Qual item você quer trocar?',
     reason: 'O que aconteceu?',
     reasonSize: 'Tamanho errado',
     reasonSizeHint: 'Troque por outro tamanho · até {date}',

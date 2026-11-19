@@ -52,6 +52,7 @@ export default function NewExchangeScreen() {
   const online = useOnline();
   const options = useExchangeOptions(id);
   const order = useOrder(id, { poll: false });
+  const [itemId, setItemId] = useState<string | null>(null);
   const [reason, setReason] = useState<ReasonId | null>(null);
   const [newVariantId, setNewVariantId] = useState<string | null>(null);
   const [prefer, setPrefer] = useState<'replace' | 'refund'>('replace');
@@ -66,7 +67,10 @@ export default function NewExchangeScreen() {
   const key = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const header = <Header title={t('exchange.title')} />;
-  const item = options.data?.items[0];
+  // U8.4: o pedido pode ter vários itens. O 1º que aceita troca vem marcado; sem nenhum elegível, o 1º (a tela de prazo explica).
+  const items = options.data?.items ?? [];
+  const eligibleOf = (it: (typeof items)[number]) => REASON_ORDER.some((r) => reasonState(it, r).eligible);
+  const item = items.find((it) => it.orderItemId === itemId) ?? items.find(eligibleOf) ?? items[0];
 
   if (options.isLoading || order.isLoading) {
     return (
@@ -94,7 +98,7 @@ export default function NewExchangeScreen() {
   }
 
   const states = Object.fromEntries(REASON_ORDER.map((r) => [r, reasonState(item, r)])) as Record<ReasonId, ReturnType<typeof reasonState>>;
-  const anyEligible = REASON_ORDER.some((r) => states[r].eligible);
+  const anyEligible = items.some(eligibleOf);
   if (!anyEligible) {
     const phone = order.data?.store.whatsapp ?? null;
     return (
@@ -129,7 +133,26 @@ export default function NewExchangeScreen() {
   const needsSwap = reason === 'size' || reason === 'color';
   const state = reason ? states[reason] : null;
   const feeCents = state?.pickupFeeCents ?? 0;
-  const itemLabel = `${item.name ?? ''}${Object.values(item.attributes ?? {}).length ? ` · ${Object.values(item.attributes ?? {}).join(' · ')}` : ''}`;
+  const labelOf = (it: (typeof items)[number]) => `${it.name ?? ''}${Object.values(it.attributes ?? {}).length ? ` · ${Object.values(it.attributes ?? {}).join(' · ')}` : ''}`;
+  const itemLabel = labelOf(item);
+  /** Por que o item não aceita troca: o motivo mais útil do servidor (o 1º bloqueio). */
+  const whyBlocked = (it: (typeof items)[number]) => REASON_ORDER.map((r) => reasonState(it, r).blocked).find(Boolean) ?? t('exchange.blockedGeneric');
+  const onPickItem = (next: (typeof items)[number]) => {
+    if (!eligibleOf(next)) {
+      setExplain(whyBlocked(next));
+      return;
+    }
+    if (next.orderItemId === item.orderItemId) return;
+    // outro item: motivo, peça nova, fotos e observação do anterior não valem mais
+    setItemId(next.orderItemId ?? null);
+    setReason(null);
+    setNewVariantId(null);
+    setPrefer('replace');
+    setPhotos([]);
+    setNote('');
+    setExplain(null);
+    setSectionError(null);
+  };
   const target = variants.find((v) => v.variantId === newVariantId);
   const from = Object.values(item.attributes ?? {})[0] ?? '';
   const to = Object.values(target?.attributes ?? {})[0] ?? '';
@@ -190,10 +213,23 @@ export default function NewExchangeScreen() {
       <Text color="secondary" variant="caption">{t('exchange.context', { number: order.data?.number ?? '', store: order.data?.store.name ?? '' })}</Text>
       {states.size.deadline ? <Banner testID="exchange.deadline-banner" text={t('exchange.deadlineBanner', { date: formatDay(states.size.deadline) })} tone="info" /> : null}
 
-      <Text accessibilityRole="header" variant="title2">{t('exchange.item')}</Text>
-      <View style={styles.card} testID={`exchange.item-${item.orderItemId}`}>
-        <Text variant="bodyStrong">{itemLabel}</Text>
-      </View>
+      <Text accessibilityRole="header" variant="title2">{items.length > 1 ? t('exchange.itemPick') : t('exchange.item')}</Text>
+      {items.length > 1 ? (
+        <View accessibilityRole="radiogroup" style={styles.group} testID="exchange.items">
+          {items.map((it) => {
+            const ok = eligibleOf(it);
+            return (
+              <View key={it.orderItemId} style={!ok && styles.inert}>
+                <RadioListItem onPress={() => onPickItem(it)} selected={it.orderItemId === item.orderItemId} subtitle={ok ? '' : whyBlocked(it)} testID={`exchange.item-${it.orderItemId}`} title={labelOf(it)} />
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.card} testID={`exchange.item-${item.orderItemId}`}>
+          <Text variant="bodyStrong">{itemLabel}</Text>
+        </View>
+      )}
 
       <Text accessibilityRole="header" variant="title2">{t('exchange.reason')}</Text>
       <View accessibilityRole="radiogroup" style={styles.group}>
