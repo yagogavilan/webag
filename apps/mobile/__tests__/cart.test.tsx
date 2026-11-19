@@ -53,14 +53,14 @@ describe('Sacola de visitante (S1)', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('mostra só o subtotal que o visitante viu e leva a criar conta ao pagar, voltando para a sacola', async () => {
+  it('mostra só o subtotal que o visitante viu e leva a criar conta ao pagar, voltando direto ao checkout (U8.2)', async () => {
     await addLocal();
     await renderScreen(<CartScreen />);
     expect(screen.getByText('Tênis Corrida Veloz')).toBeOnTheScreen();
     expect(screen.getByTestId('cart.visitor-summary')).toBeOnTheScreen();
     expect(screen.getByTestId('cart.total')).toHaveTextContent('R$ 179,80');
     await fireEvent.press(screen.getByTestId('cart.submit'));
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/signup', params: { returnTo: '/cart', context: 'checkout' } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/signup', params: { returnTo: '/checkout', context: 'checkout' } });
   });
 
   it('muda a quantidade no aparelho (sem rede) e remove com "Desfazer"', async () => {
@@ -213,6 +213,22 @@ describe('Sacola da conta (S1)', () => {
     expect(await screen.findByText('A loja não entrega no seu endereço.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('cart.submit'));
     expect(router.push).toHaveBeenCalledWith('/addresses');
+  });
+
+  it('sacola pagável: "Ir para o pagamento" abre o checkout (U8.1)', async () => {
+    mockFetch.mockResolvedValue(serverCart());
+    await renderScreen(<CartScreen />);
+    await screen.findByTestId('cart.item-v40');
+    await fireEvent.press(screen.getByTestId('cart.submit'));
+    expect(router.push).toHaveBeenCalledWith('/checkout');
+  });
+
+  it('com mudança pendente o checkout continua barrado (U8.1)', async () => {
+    mockFetch.mockResolvedValue(serverCart({ items: [serverCartItem({ warnings: [{ code: 'PRICE_CHANGED', message: 'x', fromCents: 8990, toCents: 9490 }] })] }));
+    await renderScreen(<CartScreen />);
+    await screen.findByText('O preço mudou de R$ 89,90 para R$ 94,90.');
+    await fireEvent.press(screen.getByTestId('cart.submit'));
+    expect(router.push).not.toHaveBeenCalledWith('/checkout');
   });
 
   it('sem internet: pagar não segue e diz que a sacola está salva', async () => {

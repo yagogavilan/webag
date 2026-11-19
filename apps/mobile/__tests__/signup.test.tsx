@@ -3,10 +3,11 @@ import SignupScreen from '../app/(auth)/signup';
 import { ApiError } from '../src/api/problem';
 import { renderScreen } from '../src/test/render';
 
+let mockParams: Record<string, string> = {};
 const mockRouter = { replace: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
 }));
 const mockSignUp = jest.fn();
 jest.mock('../src/api/auth-api', () => ({ signUp: (...args: unknown[]) => mockSignUp(...args) }));
@@ -20,7 +21,10 @@ async function fillValid() {
   await fireEvent.press(screen.getByTestId('auth.terms-checkbox'));
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockParams = {};
+});
 
 describe('Criar conta (E1)', () => {
   it('botão ativo: ao tocar vazio mostra os erros do design e não envia', async () => {
@@ -66,6 +70,22 @@ describe('Criar conta (E1)', () => {
     await waitFor(() => expect(mockSignUp).toHaveBeenCalledTimes(1));
     expect(mockSignUp.mock.calls[0]?.[0]).toEqual({ name: 'Maria Souza', email: 'maria@gmail.com', phone: '(11) 99999-8888', password: 'Cachorro2024' });
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/'));
+  });
+
+  it('veio da Sacola (returnTo=/checkout): depois de criar a conta vai direto ao checkout (U8.2)', async () => {
+    mockParams = { returnTo: '/checkout', context: 'checkout' };
+    mockSignUp.mockResolvedValue(undefined);
+    await renderScreen(<SignupScreen />);
+    await fillValid();
+    await fireEvent.press(screen.getByTestId('auth.signup-submit'));
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/checkout'));
+  });
+
+  it('veio da Sacola: "Entrar" leva o destino para o login', async () => {
+    mockParams = { returnTo: '/checkout', context: 'checkout' };
+    await renderScreen(<SignupScreen />);
+    await fireEvent.press(screen.getByTestId('auth.go-login'));
+    expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/login', params: { returnTo: '/checkout' } });
   });
 
   it('e-mail já cadastrado: mensagem única e atalho para Entrar', async () => {

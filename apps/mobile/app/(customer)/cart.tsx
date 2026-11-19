@@ -108,7 +108,7 @@ export default function CartScreen() {
     }
   }, [actions, toast]);
 
-  const goLogin = () => router.push({ pathname: '/signup', params: { returnTo: '/cart', context: 'checkout' } });
+  const goLogin = () => router.push({ pathname: '/signup', params: { returnTo: '/checkout', context: 'checkout' } });
 
   const header = <Header large title={t('cart.title')} />;
 
@@ -177,8 +177,8 @@ export default function CartScreen() {
           toast.show(t('cart.changed'));
           return;
         }
-        // O checkout (PIX e cartão) é a próxima etapa: a sacola e o total já são os do servidor.
-        toast.show(t('cart.payPending'));
+        // Sacola pagável e sem mudança pendente: o checkout confirma o total no servidor (PIX, cartão e retirada).
+        return router.push('/checkout');
     }
   };
 

@@ -32,6 +32,9 @@ export default function SignupScreen() {
   const online = useOnline();
   const { returnTo, context } = useLocalSearchParams<{ returnTo?: string; context?: string }>();
 
+  /** "Já tenho conta" leva o destino junto: quem veio da Sacola entra e cai no checkout, não no Início. */
+  const goLogin = () => router.replace((returnTo ? { pathname: '/login', params: { returnTo } } : '/login') as never);
+
   const form = useForm<SignupForm>({
     resolver: zodResolver(signupSchema),
     mode: 'onTouched',
@@ -125,7 +128,7 @@ export default function SignupScreen() {
       }
       header={
         <Header
-          right={<Button label={t('signup.haveAccount')} onPress={() => router.replace('/login')} testID="auth.go-login" variant="text" />}
+          right={<Button label={t('signup.haveAccount')} onPress={goLogin} testID="auth.go-login" variant="text" />}
           title={t('signup.title')}
         />
       }
@@ -188,7 +191,7 @@ export default function SignupScreen() {
             label={t('signup.goLogin')}
             onPress={() => {
               setEmailPrefill(getValues('email'));
-              router.replace('/login');
+              goLogin();
             }}
             testID="auth.go-login-email-taken"
             variant="secondary"

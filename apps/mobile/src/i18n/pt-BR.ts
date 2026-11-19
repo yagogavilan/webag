@@ -719,7 +719,6 @@ export const ptBR = {
     warnSoldOut: 'Esse item esgotou. Remova para continuar.',
     warnGone: 'Esse item não está mais disponível. Remova para continuar.',
     payOffline: 'Conecte-se para pagar. Sua sacola está salva.',
-    payPending: 'O pagamento fica disponível na próxima etapa do app.',
     switchTitle: 'Esvaziar a sacola?',
     switchText: 'Sua sacola tem {count} {noun} da {store}. Cada pedido é de uma loja só.',
     switchKeep: 'Manter minha sacola',
