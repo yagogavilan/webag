@@ -76,6 +76,12 @@ const id = (testId) => `[data-testid="${testId}"]`;
     await page.waitForSelector(id('cart.total'), { timeout: 60000 });
     step(`sacola com total: ${(await page.innerText(id('cart.total'))).trim()}`);
 
+    // U8.1: "Ir para o pagamento" abre o Checkout (antes só mostrava um aviso e a compra nunca terminava)
+    step(`ir para o pagamento (botão: "${(await page.locator(`${id('cart.submit')}:visible`).first().innerText()).trim()}")`);
+    await click(id('cart.submit'));
+    await page.waitForSelector(`${id('checkout.screen')}`, { timeout: 60000 });
+    step('checkout aberto');
+
     if (shot) await page.screenshot({ path: shot });
     if (problems.length) throw new Error(`avisos do navegador:\n${problems.join('\n')}`);
     step('ok');

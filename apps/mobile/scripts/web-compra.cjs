@@ -6,7 +6,7 @@
 //   cartao        login > checkout > cartão (página segura do site, cartão de teste aprovado) > espera > acompanhar
 // Uso (API :3000, Metro web :8081 e site :3001 no ar; ver docs/qa/relatorios/setup-do-zero.md):
 //   NODE_PATH=$(npm root -g) node apps/mobile/scripts/web-compra.cjs [entrega-pix|retirada-pix|cartao ...]
-// Variáveis: APP_URL, WEB_URL, API_URL, SMOKE_EMAIL, SMOKE_PASSWORD, SHOTS_DIR, VIEWPORT (390x844 padrão).
+// Variáveis: APP_URL, SMOKE_EMAIL, SMOKE_PASSWORD, SHOTS_DIR (padrão docs/qa/relatorios/compra-e2e, relativo à raiz do repositório), VIEWPORT (390x844 padrão).
 // A confirmação do pagamento vem do servidor (rota de simulação da API, só dev); o app nunca marca como pago.
 const path = require('node:path');
 const fs = require('node:fs');
@@ -16,7 +16,7 @@ const APP = (process.env.APP_URL || 'http://localhost:8081').replace(/\/+$/, '')
 const EMAIL = process.env.SMOKE_EMAIL || 'cliente.ana@seed.webag.local';
 const PASSWORD = process.env.SMOKE_PASSWORD || 'webag-seed-lojista-2026';
 const [W, H] = (process.env.VIEWPORT || '390x844').split('x').map(Number);
-const SHOTS = process.env.SHOTS_DIR || path.resolve(__dirname, '../../../docs/qa/relatorios/compra-e2e');
+const SHOTS = process.env.SHOTS_DIR || path.resolve('docs/qa/relatorios/compra-e2e');
 const wanted = process.argv.slice(2);
 
 const id = (testId) => `[data-testid="${testId}"]`;
@@ -69,7 +69,15 @@ async function fillCart(page, { pickup = false } = {}) {
     await page.locator(`[data-testid="${testId}"]:visible`).first().click();
   }
   await click(page, 'product.add');
-  await page.waitForFunction(() => /adicionado/i.test(document.querySelector('[data-testid="product.add"]')?.textContent ?? ''), null, { timeout: 30000 });
+  // a conta já tinha sacola de outra loja (corridas anteriores): uma loja por pedido, o app pergunta; aqui esvazia e continua
+  const switchClear = page.locator(`${id('cart.switch-clear')}:visible`);
+  if (await switchClear.first().waitFor({ timeout: 4000 }).then(() => true, () => false)) {
+    await switchClear.first().click();
+    // depois de esvaziar o app adiciona o item; se o selo "Adicionado" já passou, a conferência abaixo usa a sacola
+    await page.waitForTimeout(2500);
+  }
+  // o selo "Adicionado" é transitório; quem confirma é a barra da sacola na loja (abaixo)
+  await page.waitForFunction(() => /adicionado/i.test(document.querySelector('[data-testid="product.add"]')?.textContent ?? ''), null, { timeout: 8000 }).catch(() => undefined);
   await click(page, 'product.back');
   await page.locator(`${id('store.cart-bar')}:visible`).first().click({ timeout: 30000 });
   await visible(page, 'cart.total');
@@ -134,6 +142,12 @@ async function payPixAndTrack(page, shot, { pickup }) {
   await shot('06-acompanhamento');
 }
 
+/** A logística do Webag tem horário (BUG-016): fora dele a Sacola oferece só "Escolha como receber". Não é falha do app: o caminho de entrega é pulado e o de retirada segue. */
+class Skip extends Error {}
+async function skipIfLogisticsClosed(page) {
+  if (await page.locator(`${id('cart.logistics-banner')}:visible`).count()) throw new Skip('entregas fechadas ou pausadas agora (BUG-016); rode no horário da logística ou use retirada');
+}
+
 const flows = {
   async 'entrega-pix'(page, shot) {
     await chooseCity(page);
@@ -142,6 +156,7 @@ const flows = {
     await login(page);
     await fillCart(page);
     await shot('01-sacola');
+    await skipIfLogisticsClosed(page);
     await click(page, 'cart.submit');
     await visible(page, 'checkout.screen');
     // prova do U8.1: a Sacola abriu o checkout; o aviso antigo não existe mais
@@ -173,14 +188,16 @@ const flows = {
   },
 
   async cartao(page, shot, ctx) {
+    // Retirada: o cartão não depende de endereço nem do horário da logística; o meio de pagamento é o mesmo na entrega
     await chooseCity(page);
     await click(page, 'tabs.account', 60000);
     await click(page, 'home.login');
     await login(page);
-    await fillCart(page);
+    await click(page, 'tabs.home', 60000).catch(() => undefined);
+    await fillCart(page, { pickup: true });
     await click(page, 'cart.submit');
     await visible(page, 'checkout.screen');
-    await pickMode(page, 'delivery');
+    await pickMode(page, 'pickup');
     await click(page, 'checkout.pay-card');
     await visible(page, 'checkout.card-secure-note');
     const cpf = page.locator(`${id('checkout.cpf-input')}:visible`);
@@ -190,10 +207,6 @@ const flows = {
     const popup = ctx.waitForEvent('page', { timeout: 120000 });
     popup.catch(() => undefined);
     await click(page, 'checkout.submit');
-    if (await ensureAddress(page)) {
-      await click(page, 'checkout.pay-card');
-      await click(page, 'checkout.submit');
-    }
     const secure = await popup;
     await secure.waitForLoadState('domcontentloaded');
     await secure.locator(id('public.cartao.fake-banner')).waitFor({ timeout: 60000 });
@@ -234,6 +247,11 @@ const flows = {
       if (problems.length) log(`avisos do navegador (não falham o caminho):\n  ${problems.slice(0, 5).join('\n  ')}`);
       log(`OK ${name}`);
     } catch (e) {
+      if (e instanceof Skip) {
+        console.log(`[compra] PULADO ${name}: ${e.message}`);
+        await context.close();
+        continue;
+      }
       failed += 1;
       await shot('FALHA').catch(() => undefined);
       console.error(`[compra] FALHA ${name}: ${e.message}`);
