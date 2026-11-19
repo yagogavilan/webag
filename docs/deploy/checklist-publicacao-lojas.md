@@ -146,25 +146,13 @@ Os PNGs saíram de `docs/design/assets/webag-icone-app.svg` (rascunho vetorial: 
 
 ### Formulários de privacidade (devem bater com o app real)
 
-Conferir com o `security-engineer` antes de marcar. Inventário conferido contra o código em `docs/seguranca/revisao-onda6-frontends.md` (tabela "Inventário para os formulários"); resumo em 2026-11-19:
+**Fonte única: `docs/seguranca/inventario-lojas.md`**. É o inventário conferido contra o código pelo `security-engineer`, em 2026-11-19 (`dad9c96`). Lá estão os dados (§1), as respostas do Data Safety (§2), o que conta como "compartilhado" (§3) e o App Privacy (§4). A tabela resumida que ficava aqui foi removida para não divergir. Antes de enviar, confira com o `security-engineer` se o app ou a API mudaram depois dessa data. Pontos que mudam a resposta enquanto estiverem abertos:
 
-| Dado | Google (categoria) | Apple (tipo) | Obrigatório? | Vinculado | Compartilhado com terceiros | Finalidade |
-|---|---|---|---|---|---|---|
-| Nome, e-mail, celular | Informações pessoais | Contact Info | Sim | Sim | Lojista do pedido | Conta, pedido, suporte |
-| Endereço e ponto no mapa | Informações pessoais: endereço | Contact Info: Physical Address | Para entrega | Sim | Lojista e logística do pedido; **ViaCEP recebe o CEP e o IP direto do app** | Entrega |
-| Localização aproximada (só em uso) | Local aproximado | Coarse Location | Não | Não precisa | Não | Lojas perto |
-| CPF (só se o Mercado Pago exigir) | Informações pessoais: outras | Other Data | Condicional | Sim | Mercado Pago | Pagamento |
-| Histórico de compras | Informações financeiras: histórico de compras | Purchases | Sim | Sim | Lojista (o próprio pedido) | Funcionamento, trocas, fiscal |
-| Fotos (defeito na troca) | Fotos e vídeos | Photos or Videos | Não | Sim | Lojista da troca | Troca |
-| Avaliações, "como vestiu", denúncias | Atividade no app: conteúdo gerado | User Content: Other | Não | Sim | Público (avaliação, sem o nome completo) | Reputação e moderação |
-| Busca no app | Atividade no app: histórico de pesquisa | Search History | Não | Sim | Não | Últimas buscas |
-| Abertura de push de campanha | Atividade no app: interações | Product Interaction | Não | Sim | Não | Medir campanha (com consentimento) |
-| Token de push e id aleatório do aparelho | IDs do dispositivo ou outros | Device ID | Sim | Sim | Expo/FCM/APNs (operadores) | Notificação e segurança da sessão |
-| Dados de cartão | **Não coletados pelo app** (página segura do Mercado Pago no navegador) | Não | | | Mercado Pago direto | |
-| Diagnóstico/crash | **Não declarar no app**: o Sentry só roda na API (servidor); o app não tem Sentry (DT-039). Revisar se o app ganhar Sentry | Não | | | | |
-| Rastreamento entre apps / publicidade | Não | Não (sem ATT) | | | | |
+- **Localização no iOS:** declarar **Precise Location** até o SEC-179 ser corrigido (depois, Coarse).
+- **ViaCEP:** o app ainda envia o CEP e o IP direto ao ViaCEP (M.6). Declarar e citar na política até a consulta passar pela API.
+- **Exclusão de conta:** a URL `https://<domínio>/excluir-conta` já exclui sem o app (SEC-166 fechado). Só marque depois que ela estiver no ar com o domínio real.
 
-- **Google Play, Data Safety**: preencher conforme a tabela; marcar "dados criptografados em trânsito" (HTTPS) e "usuários podem pedir a exclusão" (no app e em `https://<domínio>/excluir-conta`).
+- **Google Play, Data Safety**: preencher conforme o inventário (§2); marcar "dados criptografados em trânsito" (HTTPS) e "usuários podem pedir a exclusão" (no app e em `https://<domínio>/excluir-conta`).
 - **App Store, App Privacy ("nutrition labels")**: idem; "não rastreamos" (não precisa do prompt de ATT).
 - Apple: confira também o **Privacy Manifest** (`PrivacyInfo.xcprivacy`); o Expo traz o dos módulos oficiais, e o `expo-doctor`/build avisam sobre APIs de "motivo obrigatório" `[HIPÓTESE]`.
 

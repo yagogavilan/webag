@@ -145,3 +145,16 @@ W.8 [ ] Lojista, Pedidos (§2.1): campo `readyByAt` no pedido em preparo ("Marqu
 | Coleta atrasada | Parâmetro `coleta_atrasada_dias_uteis` = 1 (backend usou 3 dias). |
 | Privacidade V.6 | Anonimização apaga cupom pessoal não usado e `push_campaign_recipients`. |
 | DT-059/060/062 | Conforme DEC-060/062 (teto de usos obrigatório no cupom global; 2 CSVs; limite 10.000 linhas = 422). |
+
+## Y. Do Security em 2026-11-19 (reverificação pós-DEC-059: `docs/seguranca/revisoes/onda-7-pos-dec-059.md`)
+
+Y.1 [ ] **SEC-180 (Média; recomendado antes do G5, obrigatório antes do piloto com lojistas):** quem só sabe o e-mail esgota os limites de envio de código (`code:h` 5/h, `code:dest` 10/dia) pela via A e por "esqueci a senha". Depois disso, o dono, com a senha certa e o step-up ligado, recebe 429 e **não consegue desistir da exclusão** (D2 provado). Correção:
+- (1) orçamento de envio próprio para quem já provou a senha (`ownerKey = userId`, finalidade `delete_cancel`, destino em outra chave), que as chamadas anônimas não consomem; vale também para o step-up do login (`auth.service.ts:197`);
+- (2) não emitir outro código se houver um válido;
+- (3) comando `privacy:cancel-deletion <email>` para o super admin, auditado e com a identidade conferida pelo `runbook-dsr.md` (resolve também a conta com e-mail não confirmado);
+- (4) alerta quando uma conta `pending` passar do limite.
+
+O D2 vira E2E (roteiro no achado).
+Y.2 [ ] SEC-169 (resíduo, Baixa): depende da decisão do fundador sobre o geocodificador. Se não for contratado, expor `pinVerified=false` à Logística (mobile-dev) é o mínimo. A cotação não usa o indicador hoje.
+Y.3 [x] Resposta à dúvida da V.2: o oráculo 403/401 só depois da senha certa é o mesmo do login com step-up. **Aceito** pelo Security.
+
