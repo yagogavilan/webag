@@ -59,6 +59,7 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'help:write': null,
   'marketing:push': { method: 'get', path: '/v1/admin/push/campaigns' },
   'reports:operations': { method: 'get', path: '/v1/admin/reports/operations?from=2026-01-01&to=2026-01-31' },
+  'reports:finance': { method: 'get', path: '/v1/admin/reports/finance/revenue.csv?from=2026-01-01&to=2026-01-31' },
   'coupons:read': { method: 'get', path: '/v1/admin/coupons' },
   'coupons:write': null,
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },

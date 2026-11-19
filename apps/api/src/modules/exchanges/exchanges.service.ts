@@ -1124,8 +1124,9 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     let event: ExchangeEvent | null = null;
     const result = await this.db.transaction(async (tx) => {
       const { ex, order } = await this.lockFor(tx, exchangeId);
+      // DEC-062 / DT-062: taxa JÁ PAGA não é isentada nem convertida (estorno parcial com ledger é fase 2): 409, e a saída é cancelar a troca (a taxa volta integral) e pedir de novo.
+      if (ex.feePaidAt) throw errors.conflict('EXCHANGE_FEE_ALREADY_PAID', 'A taxa já foi paga', 'A taxa paga não é isentada. Cancele a troca (a taxa volta integral) e peça de novo.');
       if (ex.status !== 'awaiting_fee') throw errors.conflict('EXCHANGE_NOT_AWAITING_FEE', 'Não há taxa a isentar', `A troca está em "${ex.status}".`);
-      if (ex.feePaidAt) throw errors.conflict('EXCHANGE_FEE_ALREADY_PAID', 'A taxa já foi paga', 'A devolução da taxa paga é feita pelo financeiro, pelo estorno do pedido.');
       if (ex.feeCents <= 0) throw errors.conflict('EXCHANGE_NO_FEE', 'Esta troca não tem taxa de coleta');
       const [open] = await tx.select({ id: paymentAttempts.id }).from(paymentAttempts).where(and(eq(paymentAttempts.externalReference, `exchange:${ex.id}`), inArray(paymentAttempts.status, ['creating', 'pending', 'pending_3ds'])));
       if (open) throw errors.conflict('EXCHANGE_PAYMENT_IN_PROGRESS', 'Há um pagamento em andamento', 'Espere o pagamento vencer ou ser concluído antes de isentar a taxa.');

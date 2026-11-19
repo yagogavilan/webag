@@ -68,6 +68,8 @@ export const ADMIN_PERMISSIONS = {
   'marketing:push': [SUPER, OPS],
   /** WB-122: relatórios operacionais (suporte não vê). */
   'reports:operations': [SUPER, OPS, FIN],
+  /** WB-114 (DT-060): os 2 CSV financeiros do piloto (Receita por pedido e Estornos): comissão, taxa do provedor e líquido da loja; só financeiro e super admin. */
+  'reports:finance': [SUPER, FIN],
   /** WB-116: cupons da plataforma. Financeiro lê (relatório de uso e custo); só operação e super admin criam e pausam. */
   'coupons:read': [SUPER, OPS, FIN],
   'coupons:write': [SUPER, OPS],

@@ -23,7 +23,7 @@ describe('Marketing do admin: cupons da plataforma, destaques e métricas de ban
   afterAll(() => ctx.close());
 
   const code = () => `PL${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-  const body = (over: Record<string, unknown> = {}) => ({ code: code(), kind: 'percent', value: 10, minOrderCents: 0, startsAt: new Date(Date.now() - 1000).toISOString(), endsAt: new Date(Date.now() + 7 * DAY).toISOString(), ...over });
+  const body = (over: Record<string, unknown> = {}) => ({ code: code(), kind: 'percent', value: 10, minOrderCents: 0, maxUses: 1_000, startsAt: new Date(Date.now() - 1000).toISOString(), endsAt: new Date(Date.now() + 7 * DAY).toISOString(), ...over });
   const create = (payload: Record<string, unknown>, token = ops.accessToken) => ctx.http.post('/v1/admin/coupons').set(bearer(token)).send(payload);
 
   describe('cupons da plataforma', () => {
@@ -51,6 +51,19 @@ describe('Marketing do admin: cupons da plataforma, destaques e métricas de ban
       await create(body({ kind: 'fixed', value: 500, percentCapCents: 100 })).expect(400);
       await create(body({ endsAt: new Date(Date.now() - DAY).toISOString() })).expect(400);
       await create(body({ extra: 1 })).expect(400);
+      // DT-059 / DEC-060: TODO cupom da plataforma exige teto de usos
+      const { maxUses: _omitted, ...noCap } = body();
+      void _omitted;
+      const missing = await create(noCap);
+      expect(missing.status).toBe(400);
+      expect(JSON.stringify(missing.body)).toContain('maxUses');
+      expect((await create(body({ maxUses: null }))).status).toBe(400);
+      expect((await create(body({ maxUses: 0 }))).status).toBe(400);
+      const fixedCost = (await create(body({ kind: 'fixed', value: 700, maxUses: 40 })).expect(201)).body;
+      expect(fixedCost.maxCost).toEqual({ amount: 28_000, currency: 'BRL' }); // 40 usos x R$ 7,00
+      expect((await create(body({ kind: 'percent', value: 10, percentCapCents: 1_500, maxUses: 10 })).expect(201)).body.maxCost).toEqual({ amount: 15_000, currency: 'BRL' });
+      expect((await create(body({ kind: 'percent', value: 10, maxUses: 10 })).expect(201)).body.maxCost).toBeNull(); // sem teto por uso: não há custo máximo calculável
+      expect((await ctx.http.patch(`/v1/admin/coupons/${fixedCost.id}`).set(bearer(ops.accessToken)).send({ maxUses: null })).status).toBe(400); // tirar o teto também é recusado
       expect((await create(body({ kind: 'free_shipping', value: 0 })).expect(201)).body).toMatchObject({ kind: 'free_shipping', value: 0 });
       expect((await create(body({ startsAt: new Date(Date.now() + DAY).toISOString(), endsAt: new Date(Date.now() + 3 * DAY).toISOString() })).expect(201)).body.status).toBe('scheduled');
 

@@ -88,6 +88,13 @@ describe('Lacunas B.1 (troca e pedido) e B.2 (cartão na página segura)', () =>
       const [attempt] = (await ctx.db.execute<{ id: string }>(`select id from payment_attempts where external_reference = 'exchange:${ex2.id}' limit 1` as never)).rows;
       await approve(ctx, paid.buyer.user, attempt!.id);
       expect((await drop(paid.buyer.user.accessToken, ex2.id)).body.code).toBe('EXCHANGE_FEE_ALREADY_PAID');
+      // DT-062 / DEC-062: a admin também não isenta a taxa já paga (409; a saída é cancelar a troca e pedir de novo)
+      const { createAdmin } = await import('./helpers/fixtures.js');
+      const opsAdmin = await createAdmin(ctx, 'operations');
+      const waived = await ctx.http.post(`/v1/admin/exchange-requests/${ex2.id}/waive-fee`).set(bearer(opsAdmin.accessToken)).send({ reason: 'Cliente ligou pedindo para isentar a taxa' });
+      expect(waived.status).toBe(409);
+      expect(waived.body.code).toBe('EXCHANGE_FEE_ALREADY_PAID');
+      expect(waived.body.detail).toContain('Cancele a troca');
       // Coleta já em andamento: o motoboy não pode ser desfeito.
       await ctx.db.update(deliveries).set({ status: 'out_for_delivery' }).where(eq(deliveries.exchangeId, ex2.id));
       expect((await drop(paid.buyer.user.accessToken, ex2.id)).status).toBe(409);

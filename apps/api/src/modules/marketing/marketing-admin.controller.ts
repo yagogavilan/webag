@@ -22,7 +22,8 @@ const couponCreate = z.strictObject({
   minOrderCents: z.number().int().min(0).default(0),
   startsAt: date,
   endsAt: date,
-  maxUses: z.number().int().min(1).nullish(),
+  /** DT-059/DEC-060: obrigatório em todo cupom da plataforma. */
+  maxUses: z.number().int().min(1),
   perCustomerLimit: z.number().int().min(1).max(100).default(1),
   firstPurchaseOnly: z.boolean().default(false),
 });

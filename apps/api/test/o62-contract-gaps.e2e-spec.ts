@@ -259,13 +259,13 @@ describe('Lacunas de contrato da Onda 6 (O6.2)', () => {
       expect((await waive(ops.accessToken, d.exchangeId)).body.code).toBe('EXCHANGE_NOT_AWAITING_FEE');
       expect((await waive(ops.accessToken, randomUUID())).status).toBe(404);
 
-      // Taxa já paga: 409 com a orientação (devolução é do financeiro).
+      // Taxa já paga: 409 com a orientação (cancelar a troca e pedir de novo; DEC-062).
       const paid = await awaitingFee();
       await ctx.http.post(`/v1/exchanges/${paid.exchangeId}/payment`).set(bearer(paid.buyer.user.accessToken)).send({ paymentMethod: 'pix' }).expect(200);
       expect((await waive(ops.accessToken, paid.exchangeId)).body.code).toBe('EXCHANGE_PAYMENT_IN_PROGRESS'); // PIX gerado e ainda não pago
       const [attempt] = await ctx.db.execute<{ id: string }>(`select id from payment_attempts where external_reference = 'exchange:${paid.exchangeId}' limit 1` as never).then((r) => r.rows);
       await approve(ctx, paid.buyer.user, attempt!.id);
-      expect((await waive(ops.accessToken, paid.exchangeId)).body.code).toBe('EXCHANGE_NOT_AWAITING_FEE'); // já aprovada pelo pagamento
+      expect((await waive(ops.accessToken, paid.exchangeId)).body.code).toBe('EXCHANGE_FEE_ALREADY_PAID'); // DT-062/DEC-062: taxa paga não isenta (antes caía em NOT_AWAITING_FEE)
     });
   });
 });

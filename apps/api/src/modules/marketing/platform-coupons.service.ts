@@ -65,6 +65,8 @@ export class PlatformCouponsService {
       uses: stats.uses,
       discountTotal: { amount: stats.discountCents, currency: 'BRL' as const },
       orders: stats.orders,
+      /** DEC-060: custo máximo da campanha (teto de usos x desconto máximo por uso); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). */
+      maxCost: row.maxUses !== null && (row.kind === 'fixed' || (row.kind === 'percent' && row.percentCapCents !== null)) ? { amount: row.maxUses * (row.kind === 'fixed' ? row.value : row.percentCapCents!), currency: 'BRL' as const } : null,
       notice: PLATFORM_COUPON_NOTICE,
       createdAt: row.createdAt.toISOString(),
     };
@@ -81,7 +83,8 @@ export class PlatformCouponsService {
     return map;
   }
 
-  private validate(input: CouponInput): void {
+  /** `requireCap`: DEC-060/DT-059: criar (ou tirar o teto de) cupom da plataforma exige teto de usos; cupom legado sem teto continua podendo ser pausado. */
+  private validate(input: CouponInput, requireCap = false): void {
     const problems: { field: string; message: string }[] = [];
     if (!/^[A-Z0-9]{4,20}$/.test(input.code)) problems.push({ field: 'code', message: 'Use de 4 a 20 letras e números, sem espaços.' });
     if (input.kind === 'percent' && (input.value < 1 || input.value > 100)) problems.push({ field: 'value', message: 'O percentual vai de 1 a 100.' });
@@ -90,12 +93,13 @@ export class PlatformCouponsService {
     if (input.kind !== 'percent' && input.percentCapCents != null) problems.push({ field: 'percentCapCents', message: 'O teto só vale para cupom percentual.' });
     // SEC-170 (DEC-050): cupom de primeira compra só com teto de orçamento por campanha (usos totais), porque a multiconta nunca fecha 100%.
     if (input.firstPurchaseOnly && (input.maxUses === null || input.maxUses === undefined)) problems.push({ field: 'maxUses', message: 'Cupom de primeira compra precisa de um limite total de usos (teto da campanha).' });
+    if (requireCap && (input.maxUses === null || input.maxUses === undefined)) problems.push({ field: 'maxUses', message: 'Todo cupom da plataforma precisa de um limite total de usos (teto da campanha).' });
     if (input.endsAt <= input.startsAt) problems.push({ field: 'endsAt', message: 'O fim precisa ser depois do início.' });
     if (problems.length > 0) throw errors.validation(problems);
   }
 
   async create(ctx: RequestContext, input: CouponInput) {
-    this.validate(input);
+    this.validate(input, true);
     try {
       return await this.db.transaction(async (tx) => {
         const [row] = await tx
@@ -120,7 +124,18 @@ export class PlatformCouponsService {
 
   async get(id: string) {
     const row = await this.load(id);
-    return this.present(row, (await this.stats([id])).get(id) ?? { uses: 0, discountCents: 0, orders: 0 });
+    return { ...this.present(row, (await this.stats([id])).get(id) ?? { uses: 0, discountCents: 0, orders: 0 }), usesByStore: await this.usesByStore(id) };
+  }
+
+  /** WB-116 C5 (DEC-060): usos (não devolvidos) por loja, com a participação de cada uma; é como o admin confere autoconsumo na 1.0. */
+  private async usesByStore(id: string) {
+    const res = await this.db.execute<{ store_id: string; store_name: string | null; uses: number; discount: number }>(sql`
+      select o.store_id, s.name as store_name, count(*)::int as uses, coalesce(sum(r.discount_cents), 0)::int as discount
+      from coupon_redemptions r join orders o on o.id = r.order_id left join stores s on s.id = o.store_id
+      where r.coupon_id = ${id}::uuid and r.released_at is null
+      group by o.store_id, s.name order by uses desc, s.name limit 100`);
+    const total = res.rows.reduce((sum, r) => sum + r.uses, 0);
+    return res.rows.map((r) => ({ storeId: r.store_id, storeName: r.store_name, uses: r.uses, discount: { amount: r.discount, currency: 'BRL' as const }, sharePct: total === 0 ? 0 : Math.round((r.uses / total) * 1000) / 10 }));
   }
 
   async list(query: { status?: CouponStatus | undefined; q?: string | undefined; cursor?: string | undefined; limit?: unknown }) {
@@ -147,7 +162,7 @@ export class PlatformCouponsService {
       const changesMoney = patch.value !== undefined || patch.percentCapCents !== undefined;
       if (changesMoney && stats.uses > 0) throw errors.conflict('COUPON_IN_USE', 'O cupom já foi usado', 'Depois do primeiro uso o valor não muda. Pause e crie outro.');
       const next: CouponInput = { code: before.code, kind: before.kind, value: patch.value ?? before.value, percentCapCents: patch.percentCapCents === undefined ? before.percentCapCents : patch.percentCapCents, minOrderCents: patch.minOrderCents ?? before.minOrderCents, startsAt: before.startsAt, endsAt: patch.endsAt ?? before.endsAt, maxUses: patch.maxUses === undefined ? before.maxUses : patch.maxUses, perCustomerLimit: patch.perCustomerLimit ?? before.perCustomerLimit, firstPurchaseOnly: patch.firstPurchaseOnly ?? before.firstPurchaseOnly };
-      this.validate(next);
+      this.validate(next, patch.maxUses === null);
       if (next.maxUses !== null && next.maxUses !== undefined && next.maxUses < stats.uses) throw errors.validation([{ field: 'maxUses', message: `O cupom já teve ${stats.uses} usos.` }]);
       const [row] = await tx
         .update(t.coupons)

@@ -282,4 +282,82 @@ export class ReportsService {
     // SEC-156: o motivo de cancelamento é texto livre do cliente; toda célula passa pelo `csvCell`.
     return `${CSV_BOM}${lines.map((l) => csvLine(l)).join('\r\n')}\r\n`;
   }
+
+  // ------------------------------------------------------------------ CSV financeiros do piloto (WB-114, DT-060, DEC-060)
+
+  /** Mais de `CSV_MAX_ROWS` linhas: 422 com a contagem encontrada (sem e-mail assíncrono na 1.0). */
+  private tooLarge(found: number): never {
+    throw errors.unprocessable('EXPORT_TOO_LARGE', 'Período grande demais', { detail: `Período grande demais. Reduza o intervalo (máximo ${CSV_MAX_ROWS} linhas). Encontradas: ${found}.`, extensions: { rows: found, maxRows: CSV_MAX_ROWS } });
+  }
+
+  private financeFilter(f: ReportFilters): SQL {
+    const parts: SQL[] = [];
+    if (f.storeId) parts.push(sql`and s.id = ${f.storeId}::uuid`);
+    if (f.cityId) parts.push(sql`and s.address_city_id = ${f.cityId}::uuid`);
+    return sql.join(parts, sql` `);
+  }
+
+  /**
+   * R1 "Receita por pedido": uma linha por pedido PAGO no período (data do pagamento, dia de Brasília): bruto, cupom da loja, cupom da plataforma,
+   * comissão, taxa de entrega, taxa de serviço, `application_fee`, taxa do provedor, líquido da loja, estornos e status. Os valores do pedido
+   * vêm do snapshot do pedido; taxa do provedor, líquido e estornos vêm do LEDGER (fonte da verdade, RN-10). Valores em reais (vírgula).
+   */
+  async revenueCsv(f: ReportFilters): Promise<{ csv: string; rows: number }> {
+    this.validate(f);
+    const range = this.range(f);
+    const filter = this.financeFilter(f);
+    const where = sql`o.paid_at >= ${range.start.toISOString()}::timestamptz and o.paid_at < ${range.end.toISOString()}::timestamptz ${filter}`;
+    const [counted] = (await this.db.execute<{ n: number }>(sql`select count(*)::int as n from orders o join stores s on s.id = o.store_id where ${where}`)).rows;
+    if ((counted?.n ?? 0) > CSV_MAX_ROWS) this.tooLarge(counted!.n);
+    const res = await this.db.execute<{
+      number: string; store_name: string | null; status: string; paid_at: Date | string; subtotal: number; store_coupon: number; platform_discount: number; commission: number; delivery_fee: number; service_fee: number; application_fee: number; total: number;
+      provider_fee: number; merchant_net: number; refunded: number;
+    }>(sql`
+      select o.number, s.name as store_name, o.status, o.paid_at, o.subtotal_cents as subtotal, o.store_coupon_cents as store_coupon, o.platform_discount_cents as platform_discount, o.commission_cents as commission,
+             o.delivery_fee_cents as delivery_fee, o.service_fee_cents as service_fee, o.application_fee_cents as application_fee, o.total_cents as total,
+             l.provider_fee, l.merchant_net, l.refunded
+      from orders o
+      join stores s on s.id = o.store_id
+      left join lateral (
+        select coalesce(sum(case when t.kind = 'provider_fee' and e.account = 'provider_clearing' and e.direction = 'credit' then e.amount_cents end), 0)::int as provider_fee,
+               coalesce(sum(case when t.kind in ('sale', 'provider_fee', 'refund', 'coverage', 'adjustment') and e.account = 'merchant_payable' then (case e.direction when 'credit' then e.amount_cents else -e.amount_cents end) end), 0)::int as merchant_net,
+               coalesce(sum(case when t.kind in ('refund', 'coverage', 'adjustment') and e.account in ('provider_clearing', 'webag_coverage_cash') and e.direction = 'credit' then e.amount_cents end), 0)::int as refunded
+        from ledger_transactions t join ledger_entries e on e.transaction_id = t.id where t.order_id = o.id
+      ) l on true
+      where ${where}
+      order by o.paid_at, o.id limit ${CSV_MAX_ROWS}`);
+    const reais = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
+    const header = ['pedido', 'loja', 'pago_em', 'status', 'bruto', 'cupom_loja', 'cupom_plataforma', 'comissao', 'taxa_entrega', 'taxa_servico', 'application_fee', 'taxa_provedor', 'liquido_lojista', 'estornos', 'total_pago'];
+    const lines = res.rows.map((r) =>
+      [csvCell(r.number), csvCell(r.store_name ?? ''), new Date(r.paid_at).toISOString(), csvCell(r.status), reais(r.subtotal), reais(r.store_coupon), reais(r.platform_discount), reais(r.commission), reais(r.delivery_fee), reais(r.service_fee), reais(r.application_fee), reais(r.provider_fee), reais(r.merchant_net), reais(r.refunded), reais(r.total)].join(';'),
+    );
+    return { csv: `${CSV_BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`, rows: res.rows.length };
+  }
+
+  /**
+   * R2 "Estornos": uma linha por estorno (intenção de estorno que não falhou) pedido no período, com o valor, o meio, o motivo, o ator e o andamento
+   * (`pending`, `done`, `exhausted`, `covered`). Inclui os da troca (referência `exchange:...`). Valores em reais (vírgula).
+   */
+  async refundsCsv(f: ReportFilters): Promise<{ csv: string; rows: number }> {
+    this.validate(f);
+    const range = this.range(f);
+    const filter = this.financeFilter(f);
+    const from = sql`
+      from payment_refund_intents i
+      join payment_attempts a on a.id = i.attempt_id
+      left join orders o on o.id::text = a.external_reference
+      left join exchange_requests ex on ('exchange:' || ex.id::text) = a.external_reference
+      left join orders xo on xo.id = ex.order_id
+      left join stores s on s.id = coalesce(a.store_id, o.store_id, ex.store_id)
+      where i.status <> 'failed' and i.created_at >= ${range.start.toISOString()}::timestamptz and i.created_at < ${range.end.toISOString()}::timestamptz ${filter}`;
+    const [counted] = (await this.db.execute<{ n: number }>(sql`select count(*)::int as n ${from}`)).rows;
+    if ((counted?.n ?? 0) > CSV_MAX_ROWS) this.tooLarge(counted!.n);
+    const res = await this.db.execute<{ order_number: string | null; exchange_number: string | null; store_name: string | null; created_at: Date | string; amount: number; method: string; reason: string; status: string; actor_role: string | null; actor_id: string | null }>(sql`
+      select coalesce(o.number, xo.number) as order_number, ex.number as exchange_number, s.name as store_name, i.created_at, i.amount_cents as amount, a.method, i.reason, i.status, i.actor_role, i.actor_id
+      ${from} order by i.created_at, i.id limit ${CSV_MAX_ROWS}`);
+    const reais = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
+    const header = ['pedido', 'troca', 'loja', 'estornado_em', 'valor', 'meio', 'motivo', 'situacao', 'ator', 'ator_id'];
+    const lines = res.rows.map((r) => [csvCell(r.order_number ?? ''), csvCell(r.exchange_number ?? ''), csvCell(r.store_name ?? ''), new Date(r.created_at).toISOString(), reais(r.amount), csvCell(r.method), csvCell(r.reason), csvCell(r.status), csvCell(r.actor_role ?? 'system'), csvCell(r.actor_id ?? '')].join(';'));
+    return { csv: `${CSV_BOM}${[header.join(';'), ...lines].join('\r\n')}\r\n`, rows: res.rows.length };
+  }
 }

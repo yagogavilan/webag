@@ -361,9 +361,11 @@ describe('SEC-170: cupom de primeira compra contra multiconta', () => {
     expect(made.status, JSON.stringify(made.body)).toBe(201);
     const removeCap = await ctx.http.patch(`/v1/admin/coupons/${made.body.id}`).set(bearer(ops.accessToken)).send({ maxUses: null });
     expect(removeCap.status).toBe(400);
-    const turnOn = await create({ code: code(), firstPurchaseOnly: false });
-    expect(turnOn.status).toBe(201);
-    expect((await ctx.http.patch(`/v1/admin/coupons/${turnOn.body.id}`).set(bearer(ops.accessToken)).send({ firstPurchaseOnly: true })).status).toBe(400); // liga sem teto
+    // DT-059: hoje nenhum cupom da plataforma nasce sem teto; um cupom LEGADO (sem teto) não pode virar "primeira compra" sem ganhar o teto.
+    const { coupons } = await import('../src/platform/database/schema.js');
+    const [legacy] = await ctx.db.insert(coupons).values({ code: code(), kind: 'fixed', scope: 'platform', value: 1_000, startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 86_400_000) }).returning();
+    expect((await ctx.http.patch(`/v1/admin/coupons/${legacy!.id}`).set(bearer(ops.accessToken)).send({ firstPurchaseOnly: true })).status).toBe(400); // liga sem teto
+    expect((await ctx.http.patch(`/v1/admin/coupons/${legacy!.id}`).set(bearer(ops.accessToken)).send({ active: false })).status).toBe(200); // pausar o legado segue possível
     void customerAt;
   });
 });

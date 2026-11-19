@@ -27,14 +27,14 @@ describe('Privacidade V.6: cupom pessoal, destinatários de push e tokens do Mer
     const common = await makeCoupon(ctx, { kind: 'fixed', value: 500 });
     const otherPersonal = await makeCoupon(ctx, { ownerUserId: other.userId, kind: 'free_shipping', value: 0, maxUses: 1, perCustomerLimit: 1 });
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 5 }]);
-    const orderRow = async () => (await ctx.db.insert(orders).values({ userId: user.userId, storeId: shop.store.id, number: `WB-${randomUUID().slice(0, 6).toUpperCase()}`, status: 'delivered', mode: 'pickup', pickup: { name: 'Loja' }, cartRevision: 1, etaMinMinutes: 30, etaMaxMinutes: 60, commissionCents: 0, applicationFeeCents: 0, finance: {}, subtotalCents: 3_000, deliveryFeeCents: 0, serviceFeeCents: 0, discountCents: 0, totalCents: 3_000, paymentMethod: 'pix' } as never).returning())[0]!;
+    const orderRow = async () => (await ctx.db.insert(orders).values({ userId: user.userId, storeId: shop.store.id, number: `WB-${randomUUID().slice(0, 6).toUpperCase()}`, status: 'delivered', mode: 'pickup', pickup: { address: 'Rua A, 1', instructions: null, prepMinMinutes: 10, prepMaxMinutes: 20 }, cartRevision: 1, etaMinMinutes: 30, etaMaxMinutes: 60, commissionCents: 0, applicationFeeCents: 0, finance: {}, subtotalCents: 3_000, deliveryFeeCents: 0, serviceFeeCents: 0, discountCents: 0, totalCents: 3_000, paymentMethod: 'pix' }).returning())[0]!;
     const usedOrder = await orderRow();
     const releasedOrder = await orderRow();
     await ctx.db.insert(couponRedemptions).values({ couponId: personalUsed.id, userId: user.userId, orderId: usedOrder.id, discountCents: 800 });
     await ctx.db.insert(couponRedemptions).values({ couponId: personalReleased.id, userId: user.userId, orderId: releasedOrder.id, discountCents: 800, releasedAt: new Date() });
 
     const admin = await createAdmin(ctx, 'operations');
-    const [campaign] = await ctx.db.insert(pushCampaigns).values({ title: 'Oferta', body: 'Corpo', status: 'sent', segment: { kind: 'all' }, destination: { type: 'home' }, estimatedCount: 2, recipientsCount: 2, deliveredCount: 2, sendAt: new Date(), createdBy: admin.userId } as never).returning();
+    const [campaign] = await ctx.db.insert(pushCampaigns).values({ title: 'Oferta', body: 'Corpo', status: 'sent', segment: { kind: 'all' }, destination: { type: 'home' }, estimatedCount: 2, recipientsCount: 2, deliveredCount: 2, sendAt: new Date(), createdBy: admin.userId }).returning();
     await ctx.db.insert(pushCampaignRecipients).values([{ campaignId: campaign!.id, userId: user.userId }, { campaignId: campaign!.id, userId: other.userId }]);
 
     const res = await del(user.accessToken);

@@ -13192,6 +13192,10 @@ export const ListPlatformCouponsResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
   "orders": zod.int(),
+  "maxCost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).optional().describe('DT-059/DEC-060: custo máximo da campanha (`maxUses` x desconto máximo por uso: valor fixo, ou o teto do percentual); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). Campo novo opcional.'),
   "notice": zod.string(),
   "createdAt": zod.iso.datetime({"offset":true})
 })),
@@ -13200,7 +13204,7 @@ export const ListPlatformCouponsResponse = zod.object({
 
 
 /**
- * `coupons:write` (super admin e operação). SEC-170: com `firstPurchaseOnly` o `maxUses` (teto de usos da campanha) é obrigatório (400; vale também no PATCH). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCouponBodyCodeMin = 4;
@@ -13224,7 +13228,7 @@ export const CreatePlatformCouponBody = zod.object({
   "minOrderCents": zod.int().min(createPlatformCouponBodyMinOrderCentsMin).optional(),
   "startsAt": zod.iso.datetime({"offset":true}),
   "endsAt": zod.iso.datetime({"offset":true}),
-  "maxUses": zod.int().min(1).nullish(),
+  "maxUses": zod.int().min(1).describe('DT-059/DEC-060: OBRIGATÓRIO em todo cupom da plataforma (teto de usos da campanha); sem ele, 400.'),
   "perCustomerLimit": zod.int().min(1).max(createPlatformCouponBodyPerCustomerLimitMax).optional(),
   "firstPurchaseOnly": zod.boolean().optional()
 })
@@ -13249,6 +13253,10 @@ export const CreatePlatformCouponResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
   "orders": zod.int(),
+  "maxCost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).optional().describe('DT-059/DEC-060: custo máximo da campanha (`maxUses` x desconto máximo por uso: valor fixo, ou o teto do percentual); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). Campo novo opcional.'),
   "notice": zod.string(),
   "createdAt": zod.iso.datetime({"offset":true})
 })
@@ -13281,9 +13289,24 @@ export const GetPlatformCouponResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
   "orders": zod.int(),
+  "maxCost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).optional().describe('DT-059/DEC-060: custo máximo da campanha (`maxUses` x desconto máximo por uso: valor fixo, ou o teto do percentual); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). Campo novo opcional.'),
   "notice": zod.string(),
   "createdAt": zod.iso.datetime({"offset":true})
-})
+}).and(zod.object({
+  "usesByStore": zod.array(zod.object({
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullable(),
+  "uses": zod.int(),
+  "discount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "sharePct": zod.number().describe('Percentual dos usos do cupom (1 casa decimal).')
+})).describe('WB-116 C5 (DEC-060): usos (não devolvidos) por loja e a participação de cada uma no total (até 100 lojas): é como o admin detecta autoconsumo na 1.0.')
+}))
 
 
 /**
@@ -13309,7 +13332,7 @@ export const UpdatePlatformCouponBody = zod.object({
   "percentCapCents": zod.int().min(1).nullish(),
   "minOrderCents": zod.int().min(updatePlatformCouponBodyMinOrderCentsMin).optional(),
   "endsAt": zod.iso.datetime({"offset":true}).optional(),
-  "maxUses": zod.int().min(1).nullish(),
+  "maxUses": zod.int().min(1).nullish().describe('DT-059: `null` (tirar o teto) é recusado (400); cupom legado sem teto continua podendo ser pausado.'),
   "perCustomerLimit": zod.int().min(1).max(updatePlatformCouponBodyPerCustomerLimitMax).optional(),
   "firstPurchaseOnly": zod.boolean().optional(),
   "active": zod.boolean().optional()
@@ -13335,6 +13358,10 @@ export const UpdatePlatformCouponResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
   "orders": zod.int(),
+  "maxCost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).optional().describe('DT-059/DEC-060: custo máximo da campanha (`maxUses` x desconto máximo por uso: valor fixo, ou o teto do percentual); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). Campo novo opcional.'),
   "notice": zod.string(),
   "createdAt": zod.iso.datetime({"offset":true})
 })
@@ -13644,6 +13671,34 @@ export const ExportReportOrdersCsvQueryParams = zod.object({
 })
 
 export const ExportReportOrdersCsvResponse = zod.unknown()
+
+
+/**
+ * Uma linha por pedido PAGO no período (data do pagamento). Valores do pedido (snapshot) e do ledger (taxa do provedor, líquido da loja e estornos). Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, loja, pago_em, status, bruto, cupom_loja, cupom_plataforma, comissao, taxa_entrega, taxa_servico, application_fee, taxa_provedor, liquido_lojista, estornos, total_pago. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`).
+ * @summary R1 Receita por pedido em CSV (DT-060)
+ */
+export const ExportFinanceRevenueCsvQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date(),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional()
+})
+
+export const ExportFinanceRevenueCsvResponse = zod.unknown()
+
+
+/**
+ * Uma linha por estorno (intenção de estorno que não falhou) pedido no período, inclusive os da troca. Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, troca, loja, estornado_em, valor, meio, motivo, situacao (pending, done, exhausted, covered), ator, ator_id. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`).
+ * @summary R2 Estornos em CSV (DT-060)
+ */
+export const ExportFinanceRefundsCsvQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date(),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional()
+})
+
+export const ExportFinanceRefundsCsvResponse = zod.unknown()
 
 
 /**

@@ -5691,9 +5691,26 @@ export interface PlatformCoupon {
   uses: number;
   discountTotal: Money;
   orders: number;
+  /** DT-059/DEC-060: custo máximo da campanha (`maxUses` x desconto máximo por uso: valor fixo, ou o teto do percentual); nulo quando o desconto por uso não tem limite (percentual sem teto, frete grátis). Campo novo opcional. */
+  maxCost?: Money | null;
   notice: string;
   createdAt: string;
 }
+
+export type PlatformCouponDetailUsesByStoreItem = {
+  storeId: string;
+  /** @nullable */
+  storeName: string | null;
+  uses: number;
+  discount: Money;
+  /** Percentual dos usos do cupom (1 casa decimal). */
+  sharePct: number;
+};
+
+export type PlatformCouponDetail = PlatformCoupon & {
+  /** WB-116 C5 (DEC-060): usos (não devolvidos) por loja e a participação de cada uma no total (até 100 lojas): é como o admin detecta autoconsumo na 1.0. */
+  usesByStore: PlatformCouponDetailUsesByStoreItem[];
+};
 
 export interface PlatformCouponPage {
   data: PlatformCoupon[];
@@ -5730,10 +5747,10 @@ export interface PlatformCouponCreate {
   startsAt: string;
   endsAt: string;
   /**
+     * DT-059/DEC-060: OBRIGATÓRIO em todo cupom da plataforma (teto de usos da campanha); sem ele, 400.
      * @minimum 1
-     * @nullable
      */
-  maxUses?: number | null;
+  maxUses: number;
   /**
      * @minimum 1
      * @maximum 100
@@ -5754,6 +5771,7 @@ export interface PlatformCouponPatch {
   minOrderCents?: number;
   endsAt?: string;
   /**
+     * DT-059: `null` (tirar o teto) é recusado (400); cupom legado sem teto continua podendo ser pausado.
      * @minimum 1
      * @nullable
      */
@@ -7955,6 +7973,22 @@ export type ExportReportOrdersCsvParams = {
   /** Pedidos com item da categoria (ou de uma filha) */
   categoryId?: string;
   status?: string;
+};
+
+export type ExportFinanceRevenueCsvParams = {
+  from: string;
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
+};
+
+export type ExportFinanceRefundsCsvParams = {
+  from: string;
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
 };
 
 export type ReportOrderNotReceived202 = {
@@ -24565,7 +24599,7 @@ export const getCreatePlatformCouponUrl = () => {
 }
 
 /**
- * `coupons:write` (super admin e operação). SEC-170: com `firstPurchaseOnly` o `maxUses` (teto de usos da campanha) é obrigatório (400; vale também no PATCH). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCoupon = async (platformCouponCreate: PlatformCouponCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createPlatformCouponResponse> => {
@@ -24582,7 +24616,7 @@ export const createPlatformCoupon = async (platformCouponCreate: PlatformCouponC
 
 
 export type getPlatformCouponResponse200 = {
-  data: PlatformCoupon
+  data: PlatformCouponDetail
   status: 200
 }
 
@@ -25227,6 +25261,148 @@ export const getExportReportOrdersCsvUrl = (params: ExportReportOrdersCsvParams,
 export const exportReportOrdersCsv = async (params: ExportReportOrdersCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportReportOrdersCsvResponse> => {
 
   return apiFetch<exportReportOrdersCsvResponse>(getExportReportOrdersCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportFinanceRevenueCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportFinanceRevenueCsvResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportFinanceRevenueCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportFinanceRevenueCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportFinanceRevenueCsvResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type exportFinanceRevenueCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportFinanceRevenueCsvResponseSuccess = (exportFinanceRevenueCsvResponse200) & {
+  headers: Headers;
+};
+export type exportFinanceRevenueCsvResponseError = (exportFinanceRevenueCsvResponse400 | exportFinanceRevenueCsvResponse401 | exportFinanceRevenueCsvResponse403 | exportFinanceRevenueCsvResponse422 | exportFinanceRevenueCsvResponse429) & {
+  headers: Headers;
+};
+
+export type exportFinanceRevenueCsvResponse = (exportFinanceRevenueCsvResponseSuccess | exportFinanceRevenueCsvResponseError)
+
+export const getExportFinanceRevenueCsvUrl = (params: ExportFinanceRevenueCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/finance/revenue.csv?${stringifiedParams}` : `/v1/admin/reports/finance/revenue.csv`
+}
+
+/**
+ * Uma linha por pedido PAGO no período (data do pagamento). Valores do pedido (snapshot) e do ledger (taxa do provedor, líquido da loja e estornos). Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, loja, pago_em, status, bruto, cupom_loja, cupom_plataforma, comissao, taxa_entrega, taxa_servico, application_fee, taxa_provedor, liquido_lojista, estornos, total_pago. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`).
+ * @summary R1 Receita por pedido em CSV (DT-060)
+ */
+export const exportFinanceRevenueCsv = async (params: ExportFinanceRevenueCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportFinanceRevenueCsvResponse> => {
+
+  return apiFetch<exportFinanceRevenueCsvResponse>(getExportFinanceRevenueCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportFinanceRefundsCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportFinanceRefundsCsvResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportFinanceRefundsCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportFinanceRefundsCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportFinanceRefundsCsvResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type exportFinanceRefundsCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportFinanceRefundsCsvResponseSuccess = (exportFinanceRefundsCsvResponse200) & {
+  headers: Headers;
+};
+export type exportFinanceRefundsCsvResponseError = (exportFinanceRefundsCsvResponse400 | exportFinanceRefundsCsvResponse401 | exportFinanceRefundsCsvResponse403 | exportFinanceRefundsCsvResponse422 | exportFinanceRefundsCsvResponse429) & {
+  headers: Headers;
+};
+
+export type exportFinanceRefundsCsvResponse = (exportFinanceRefundsCsvResponseSuccess | exportFinanceRefundsCsvResponseError)
+
+export const getExportFinanceRefundsCsvUrl = (params: ExportFinanceRefundsCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/finance/refunds.csv?${stringifiedParams}` : `/v1/admin/reports/finance/refunds.csv`
+}
+
+/**
+ * Uma linha por estorno (intenção de estorno que não falhou) pedido no período, inclusive os da troca. Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, troca, loja, estornado_em, valor, meio, motivo, situacao (pending, done, exhausted, covered), ator, ator_id. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`).
+ * @summary R2 Estornos em CSV (DT-060)
+ */
+export const exportFinanceRefundsCsv = async (params: ExportFinanceRefundsCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportFinanceRefundsCsvResponse> => {
+
+  return apiFetch<exportFinanceRefundsCsvResponse>(getExportFinanceRefundsCsvUrl(params),
   {
     ...options,
     method: 'GET'
