@@ -10,7 +10,7 @@ import { AuditService } from '../admin/index.js';
 import { LogisticsReportService } from './logistics-report.service.js';
 import { couriers } from './db/schema.js';
 import { CouriersService } from './couriers.service.js';
-import { DELIVERED_AT_REASONS, DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras } from './deliveries.service.js';
+import { DELIVERED_AT_REASONS, DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras, type LateCancelRequestView } from './deliveries.service.js';
 import { ACTIVE_STATUSES, DELIVERY_KINDS, DELIVERY_STATUSES, NOT_DELIVERED_REASONS } from './domain/state.js';
 import type { DeliveryMessageData } from './domain/whatsapp.js';
 
@@ -72,7 +72,7 @@ function presentDelivery(d: Delivery & Partial<DeliveryListExtras>, detail: bool
     /** SEC-144: telefone mascarado (ativa) para a lista; o número inteiro e o endereço só por `contact-reveal` (motivo + auditoria). */
     customerPhoneMasked: active ? maskPhone(contact.customerPhone) : null,
     /** SEC-169 / DEC-067: `false` = o pino do endereço NÃO foi conferido (sem geocodificador): a Logística confirma o endereço com o cliente. Nulo = não se sabe (pedido antigo, troca ou contato já apagado). Sem dado pessoal. */
-    dropoffPinVerified: active && typeof contact.dropoffPinVerified === 'boolean' ? contact.dropoffPinVerified : null,
+    dropoffPinVerified: active ? (d.dropoffPinVerified ?? null) : null,
     contactRevealable: active && d.contact !== null && d.piiClearedAt === null,
     fee: money(d.feeCents),
     expectedCost: money(d.expectedCostCents),
@@ -199,9 +199,11 @@ export class DeliveriesAdminController {
     return id ? (await this.couriers.get(id)).name : null;
   }
 
-  /** W.3: o pedido de cancelamento por atraso da corrida de entrega (nulo nas demais). */
-  private async lateRequestOf(delivery: Delivery) {
-    return delivery.kind === 'delivery' ? ((await this.deliveries.lateCancelRequestsFor([delivery.orderId])).get(delivery.orderId) ?? null) : null;
+  /** W.3 e Y.2: o pedido de cancelamento por atraso e o indicador do pino da corrida de entrega (nulos nas demais). */
+  private async extrasOf(delivery: Delivery): Promise<{ lateCancelRequest: LateCancelRequestView | null; dropoffPinVerified: boolean | null }> {
+    if (delivery.kind !== 'delivery') return { lateCancelRequest: null, dropoffPinVerified: null };
+    const [late, pins] = await Promise.all([this.deliveries.lateCancelRequestsFor([delivery.orderId]), this.deliveries.pinVerifiedFor([delivery.orderId])]);
+    return { lateCancelRequest: late.get(delivery.orderId) ?? null, dropoffPinVerified: pins.get(delivery.orderId) ?? null };
   }
 
   @AdminOnly('logistics:read')
@@ -221,7 +223,7 @@ export class DeliveriesAdminController {
     const delivery = await this.deliveries.get(uuid(deliveryId));
     const profile = ctx.principal?.adminProfile;
     const showContact = !!profile && adminHasPermission(profile, 'logistics:write');
-    return { ...presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, showContact, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
+    return { ...presentDelivery({ ...delivery, ...(await this.extrasOf(delivery)) }, showContact, await this.courierName(delivery.courierId)), timeline: (await this.deliveries.events(delivery.id)).map(presentEvent) };
   }
 
   /** "Revelar" o contato do cliente: motivo obrigatório, leitura auditada, 409 depois da retenção (SEC-144). */
@@ -242,8 +244,9 @@ export class DeliveriesAdminController {
   async assignBatch(@Body(new ZodPipe(assignBatchBody)) body: z.infer<typeof assignBatchBody>, @Ctx() ctx: RequestContext) {
     const result = await this.deliveries.assignBatch(body.deliveryIds, body.courierId, { addressConfirmed: body.addressConfirmed === true }, ctx);
     const name = await this.courierName(body.courierId);
-    const late = await this.deliveries.lateCancelRequestsFor(result.assigned.filter((d) => d.kind === 'delivery').map((d) => d.orderId));
-    return { assigned: result.assigned.map((d) => presentDelivery({ ...d, lateCancelRequest: late.get(d.orderId) ?? null }, true, name)), failed: result.failed };
+    const assignedIds = result.assigned.filter((d) => d.kind === 'delivery').map((d) => d.orderId);
+    const [late, pins] = await Promise.all([this.deliveries.lateCancelRequestsFor(assignedIds), this.deliveries.pinVerifiedFor(assignedIds)]);
+    return { assigned: result.assigned.map((d) => presentDelivery({ ...d, lateCancelRequest: late.get(d.orderId) ?? null, dropoffPinVerified: pins.get(d.orderId) ?? null }, true, name)), failed: result.failed };
   }
 
   /** Atribuir: PRONTA -> AGUARDANDO. 409 `DELIVERY_ALREADY_ASSIGNED` se outra pessoa chegou primeiro. */
@@ -252,7 +255,7 @@ export class DeliveriesAdminController {
   @Post(':deliveryId/assign')
   async assign(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(assignBody)) body: z.infer<typeof assignBody>, @Ctx() ctx: RequestContext) {
     const delivery = await this.deliveries.assign(uuid(deliveryId), body.courierId, { addressConfirmed: body.addressConfirmed === true }, ctx);
-    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, true, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, ...(await this.extrasOf(delivery)) }, true, await this.courierName(delivery.courierId));
   }
 
   /** SEC-144: a mensagem leva telefone e endereço do cliente; só quem despacha. */
@@ -276,7 +279,7 @@ export class DeliveriesAdminController {
   async status(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(actionBody)) body: z.infer<typeof actionBody>, @Ctx() ctx: RequestContext) {
     const { action, ...input } = body;
     const delivery = await this.deliveries.act(uuid(deliveryId), action, input, ctx);
-    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, true, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, ...(await this.extrasOf(delivery)) }, true, await this.courierName(delivery.courierId));
   }
 
   /** Custo pago ao motoboy (WB-239); correção exige motivo e preserva o valor anterior no histórico. */
@@ -284,7 +287,7 @@ export class DeliveriesAdminController {
   @Put(':deliveryId/cost')
   async cost(@Param('deliveryId') deliveryId: string, @Body(new ZodPipe(costBody)) body: z.infer<typeof costBody>, @Ctx() ctx: RequestContext) {
     const delivery = await this.deliveries.setCost(uuid(deliveryId), body.costCents, body.reason, ctx);
-    return presentDelivery({ ...delivery, lateCancelRequest: await this.lateRequestOf(delivery) }, false, await this.courierName(delivery.courierId));
+    return presentDelivery({ ...delivery, ...(await this.extrasOf(delivery)) }, false, await this.courierName(delivery.courierId));
   }
 
   /** SEC-145: financeiro e super admin; quem lançou o custo não marca como pago (403 `SEGREGATION_OF_DUTIES`; super admin com `overrideReason`). */

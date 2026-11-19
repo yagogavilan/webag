@@ -229,6 +229,8 @@ describe('SEC-180: o orçamento de envio de código do dono não é esgotável p
       await ctx.db.execute(sql`update account_deletions set effective_at = now() - interval '1 minute' where user_id = ${user.userId}::uuid`);
       await expect(run({ email: user.email })).rejects.toMatchObject({ code: 'DELETION_DUE' });
       expect((await ctx.db.select().from(users).where(eq(users.id, user.userId)))[0]!.status).toBe('deleted');
+      // não deixa uma exclusão "vencida" no banco compartilhado: outro teste (`processDue`) a anonimizaria
+      await ctx.db.execute(sql`update account_deletions set effective_at = now() + interval '72 hours' where user_id = ${user.userId}::uuid`);
     });
   });
 });

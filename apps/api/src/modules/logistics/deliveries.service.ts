@@ -27,6 +27,8 @@ export interface DeliveryListExtras {
   area: { key: string | null; readyCount: number };
   /** W.3: o pedido de cancelamento por atraso mais recente do pedido (só entrega); nulo se nunca houve. */
   lateCancelRequest: LateCancelRequestView | null;
+  /** SEC-169 / DEC-067 (Y.2): `false` = o pino do endereço de entrega NÃO foi conferido; nulo = não se sabe. Lido do endereço do pedido (o contato da corrida segue mínimo). */
+  dropoffPinVerified: boolean | null;
 }
 /** Mesma forma de `CancelRequest` do pedido (`respondBy` = pedido + `entrega_cancel_resposta_min`); lida direto da tabela do pedido (sem depender do módulo de pedidos). */
 export interface LateCancelRequestView {
@@ -324,7 +326,8 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
     const collectionDays = await this.params.getNumber('coleta_agendamento_dias_uteis');
     const areaCounts = tab === 'active' ? await this.readyByArea() : new Map<string, number>();
-    const lateRequests = await this.lateCancelRequestsFor(page.filter((d) => d.kind === 'delivery').map((d) => d.orderId));
+    const deliveryOrderIds = page.filter((d) => d.kind === 'delivery').map((d) => d.orderId);
+    const [lateRequests, pins] = await Promise.all([this.lateCancelRequestsFor(deliveryOrderIds), this.pinVerifiedFor(deliveryOrderIds)]);
     return {
       data: page.map((d) => {
         const waiting = d.status === 'ready_for_collection' ? Math.floor((now - d.readyAt.getTime()) / 60_000) : null;
@@ -338,6 +341,7 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
           overdueMinutes,
           area: { key: areaKey, readyCount: areaKey ? (areaCounts.get(areaKey) ?? 0) : 0 },
           lateCancelRequest: d.kind === 'delivery' ? (lateRequests.get(d.orderId) ?? null) : null,
+          dropoffPinVerified: d.kind === 'delivery' ? (pins.get(d.orderId) ?? null) : null,
         };
       }),
       nextCursor: rows.length > limit && last ? encodeCursor({ at: (tab === 'active' ? last.readyAt : last.updatedAt).toISOString(), id: last.id }) : null,
@@ -361,6 +365,15 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
       const requestedAt = new Date(r.requested_at);
       map.set(r.order_id, { id: r.id, status: r.status, reason: r.reason, requestedAt: requestedAt.toISOString(), respondBy: new Date(requestedAt.getTime() + timeoutMin * 60_000).toISOString(), decidedAt: r.decided_at ? new Date(r.decided_at).toISOString() : null, decidedBy: r.decided_by, decisionNote: r.decision_note });
     }
+    return map;
+  }
+
+  /** Y.2: o indicador `pinVerified` do endereço de entrega (snapshot do pedido), por pedido; só o booleano, sem dado pessoal. */
+  async pinVerifiedFor(orderIds: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>();
+    if (orderIds.length === 0) return map;
+    const res = await this.db.execute<{ id: string; pin: boolean | null }>(sql`select id, (address ->> 'pinVerified')::boolean as pin from orders where id in (${sql.join(orderIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+    for (const r of res.rows) if (typeof r.pin === 'boolean') map.set(r.id, r.pin);
     return map;
   }
 
