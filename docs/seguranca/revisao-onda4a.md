@@ -3,9 +3,13 @@
 - **Data:** 2026-11-18 a 2026-11-19 | **Revisor:** security-engineer | **Base:** branch de trabalho `claude/admiring-lamport-62tq1a` em `6bbdb2f` (commits `d0054ea`, `1cb99f6`, `fa06951`, `0893f16` "onda 4" e os checkpoints `264a32a`/`6bbdb2f` do painel do lojista). Trabalho do backend-dev não commitado (ledger, tempo real) ficou **fora**; o `6f3113c` (staging, DT-038), que entrou durante a revisão, foi lido só no que afeta o SEC-135.
 - **Escopo:** `apps/api/src/modules/payments/*` (adaptador Mercado Pago real com SDK oficial `mercadopago@3.6.2`, fake, webhook, conciliação, estorno), `orders/*` (criação, máquina de estados, painel da loja), `cart` (cotação), `catalog/inventory.service.ts` (reserva), `stores/payment-account.service.ts` (OAuth do lojista), `finance/domain/commission.ts` (split), `platform/config/env.ts`, `platform/crypto/crypto.ts`, redação de log em `app.module.ts`.
 - **Referências:** `requisitos-seguranca.md` (SEC-030..048, SEC-060..067, SEC-072), `threat-model-auth-pagamento.md`, `revisao-adrs.md` (SEC-104/105), ADR-002, ADR-010, DEC-014/016/020/032.
-- **Status do documento:** completo (parte 1: leitura de código; parte 2: testes e ataques executados; parecer).
+- **Status do documento:** completo (parte 1: leitura de código; parte 2: testes e ataques; **parte 3: reverificação de 2026-11-19 em `17559a3`/`685b21a`**, ver fim do documento).
 
-## Parecer: REPROVADO para liberar o checkout do app em produção (G4)
+## Parecer atualizado (2026-11-19, reverificação): APROVADO COM RESSALVAS para liberar o checkout do app em produção
+
+Os 3 Altos (SEC-130, 131, 132) e o SEC-134 estão **corrigidos e confirmados por teste de ataque**; SEC-133, 136, 137, 139 e 140 também. Não restou Alta nem Crítica no pagamento. A reverificação achou 1 Média nova no fluxo de cobertura (SEC-141, pagamento em dobro) e outras na logística, todas em `revisao-logistica.md`. Ressalvas e prazos: ver Parte 3. DEC-033 fechada.
+
+## Parecer original (2026-11-19, parte 2): REPROVADO (substituído pelo de cima)
 
 Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some em silêncio; o cliente fica sem o dinheiro e o admin sem alerta), SEC-131 (sem teto de pedidos pendentes; 1 conta reservou 180 de 200 unidades em segundos) e SEC-132 (teto da loja nova do DEC-020b inexistente, mesmo item do BUG-009). O núcleo do pagamento está **bem feito**: assinatura, antirreplay, re-consulta, conferência de valor/recebedor/comissão, idempotência, IDOR e reserva atômica resistiram a todos os ataques abaixo.
 
@@ -17,17 +21,18 @@ Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some e
 
 | ID | Sev. | Tema | Dono | Status |
 |---|---|---|---|---|
-| SEC-130 | Alta | Estorno que falha de vez fica `failed` sem alerta nem retentativa; pedido já aparece cancelado | backend-dev | Aberto |
-| SEC-131 | Alta | SEC-064 ausente: sem teto de pedidos aguardando pagamento nem de PIX/hora (trava de estoque do concorrente) | backend-dev | Aberto |
-| SEC-132 | Alta | SEC-062/DEC-020b ausente: limite de exposição da loja nova não é aplicado (= BUG-009) | backend-dev | Aberto |
-| SEC-133 | Média | Cartão aprovado na resposta da criação entra como pago sem a conferência do SEC-034 | backend-dev | Aberto |
-| SEC-134 | Média | O gancho do pedido aceita qualquer tentativa com `external_reference` = pedido, sem conferir valor, loja e vínculo | backend-dev | Aberto |
-| SEC-135 | Média → Baixa | Rotas `/v1/dev/payments` sem dono nem papel, registradas no staging do DT-038 | backend-dev | Parcialmente corrigido (`7d370c2`) |
-| SEC-136 | Média | Cartão com timeout na criação: cobrança pode existir no MP, o webhook é descartado e não há estorno automático | backend-dev | Aberto |
-| SEC-137 | Baixa | Validação de assinatura própria em vez do `WebhookSignatureValidator` do SDK (SEC-032) | backend-dev | Aberto |
-| SEC-138 | Baixa | Código de retirada de 4 dígitos sem limite de erros por pedido | backend-dev | Aberto |
-| SEC-139 | Baixa | `decryptSecret` não fixa o tamanho da tag GCM | backend-dev | Aberto |
-| SEC-140 | Baixa | OAuth sem PKCE; erro de renovação de token logado sem máscara; CPF fora do `maskPii` | backend-dev | Aberto |
+| SEC-130 | Alta | Estorno que falha de vez fica `failed` sem alerta nem retentativa; pedido já aparece cancelado | backend-dev | **CORRIGIDO** (2026-11-19; residual: item 4 Baixa e SEC-141) |
+| SEC-131 | Alta | SEC-064 ausente: sem teto de pedidos aguardando pagamento nem de PIX/hora (trava de estoque do concorrente) | backend-dev | **CORRIGIDO** (2026-11-19) |
+| SEC-132 | Alta | SEC-062/DEC-020b ausente: limite de exposição da loja nova não é aplicado (= BUG-009) | backend-dev | **CORRIGIDO** (2026-11-19; residual Baixa SEC-149) |
+| SEC-133 | Média | Cartão aprovado na resposta da criação entra como pago sem a conferência do SEC-034 | backend-dev | **CORRIGIDO** |
+| SEC-134 | Média | O gancho do pedido aceita qualquer tentativa com `external_reference` = pedido, sem conferir valor, loja e vínculo | backend-dev | **CORRIGIDO** |
+| SEC-135 | Média → Baixa | Rotas `/v1/dev/payments` sem dono nem papel, registradas no staging do DT-038 | backend-dev | **PARCIAL** (Baixa: itens 2 a 4) |
+| SEC-136 | Média | Cartão com timeout na criação: cobrança pode existir no MP, o webhook é descartado e não há estorno automático | backend-dev | **CORRIGIDO** (confirmar busca por referência no sandbox) |
+| SEC-137 | Baixa | Validação de assinatura própria em vez do `WebhookSignatureValidator` do SDK (SEC-032) | backend-dev | **CORRIGIDO** (teste diferencial) |
+| SEC-138 | Baixa | Código de retirada de 4 dígitos sem limite de erros por pedido | backend-dev | **CORRIGIDO** (residual SEC-150) |
+| SEC-139 | Baixa | `decryptSecret` não fixa o tamanho da tag GCM | backend-dev | **CORRIGIDO** |
+| SEC-140 | Baixa | OAuth sem PKCE; erro de renovação de token logado sem máscara; CPF fora do `maskPii` | backend-dev | **CORRIGIDO** (PKCE: confirmar no painel do MP) |
+| SEC-039 | (pendência) | Estorno manual do admin e cobertura do DEC-020a | backend-dev | **IMPLEMENTADO** (residual: SEC-141 e SEC-142) |
 
 ### SEC-130 | Severidade: Alta | Status: Aberto
 - **Onde:** `payments/payments.service.ts:515-523` (erro não-timeout marca a intenção `failed`), `:568-574` (`recoverRefundIntents` só reprocessa `pending`), `orders/orders.service.ts:382-389` (`finishRefund` só faz `logger.warn`), `payments/providers/mercadopago.provider.ts:50-55` e `stores/payment-account.service.ts:152-154` (token resolvido pela conta **ativa atual** da loja, não pela que recebeu).
@@ -142,3 +147,33 @@ Postgres e Redis reais, provedor `fake` (mesmo caminho de assinatura e re-consul
 | Reserva de estoque atômica (`UPDATE ... WHERE stock - reserved >= q`), `CHECK (stock >= reserved)`, cupom com `FOR UPDATE` | `catalog/inventory.service.ts:29-69`, `orders.service.ts:313-324` | OK |
 | OAuth: só dono (`payment_account` é owner-only) com reautenticação para iniciar/desconectar; `state` de uso único ligado a sessão e loja; `redirect_uri` de configuração; tokens AES-256-GCM com AAD = loja + versão; renovação com lock por loja; titular divergente → `under_review` | `stores.controllers.ts:258-293`, `payment-account.service.ts:152-253`, `permissions.ts:56` | OK (ver SEC-139/140) |
 | Produção: boot falha com `fake`, `TEST-`, segredo `DEV_*`, chave de token ausente; dev module não registrado | `env.ts:139-186`, `payments.dev.ts:67-70` | OK em produção real (staging: SEC-135) |
+
+## Parte 3: reverificação das correções (2026-11-19)
+
+- **Base:** `17559a3` (commit de referência) e os checkpoints até `685b21a`. Commits de correção lidos: `f05e258` (SEC-131/132/133/134), `7d370c2` (SEC-135) e os checkpoints da onda (`payments.service.ts`, `payment-account.service.ts`, `orders.service.ts`, `admin-orders.controller.ts`, `env.ts`, `crypto.ts`, `mask.ts`). Trocas (`exchanges/*`) e tempo real ainda em andamento: fora.
+- **Testes executados:** unitários de `payments`, `orders`, `logistics`, `stores`, `finance` e `platform`: 20 arquivos, 164 OK. E2E `payments`, `payments-hardening`, `orders`, `order-limits`, `refund-queue`, `admin-refund`, `logistics`, `order-logistics`, `delivery-fees`, `production-boot`, `oauth-pkce`, `store-orders`, `rbac`, `finance`, `stores-team-payment`: 148 de 149 OK. A falha (`orders.e2e` "limite de usos sob concorrência") é **teste desatualizado**, não quebra do limite: o cupom continua com 1 resgate só, mas o 2º pedido sai **sem o cupom e com outro total**, sem erro (ver SEC-147 em `revisao-logistica.md`). Avisar backend-dev e QA.
+- **Ataques:** spec temporário com Postgres/Redis reais e provedor `fake`. Resultados na tabela abaixo e em `revisao-logistica.md` §Ataques.
+
+| Achado | Resultado | Evidência |
+|---|---|---|
+| SEC-130 | **CORRIGIDO.** Itens 1, 2, 3 e 5 feitos: a tentativa grava `receiver_account_id` e estorno/re-consulta usam os tokens dessa conta mesmo `disconnected` (`payment-account.service.ts:156-163`); recusa vira backoff 5 min a 24 h, alerta `refund_failed`, depois `exhausted` + `refund_exhausted`; fila do admin (`GET/POST /v1/admin/payments/refund-queue`, retry com reautenticação) e cobertura da Webag só por super admin, com motivo, teto e ledger. **Item 4 não feito** (desconectar a conta com pedido pago na janela de estorno continua livre): fica Baixa, porque a falha agora não é silenciosa. **Novo: SEC-141** (Média), a cobertura pode ser feita com um estorno ainda em andamento no provedor e o cliente recebe 2 vezes | `refund-queue.e2e` (5 casos) OK; ataque B em `revisao-logistica.md` |
+| SEC-131 | **CORRIGIDO.** Trava por conta (`pg_advisory_xact_lock`) na transação do pedido; `pedidos_pendentes_max` 2, `pix_hora_max` 5; DEC-014 conta pagos + pendentes. O limite por dispositivo não existe (aceitável no MVP) | 6 criações simultâneas da mesma conta: 2 x 201 e 4 x 429 `TOO_MANY_PENDING_ORDERS`; `order-limits.e2e` OK |
+| SEC-132 | **CORRIGIDO.** Bloqueio `NEW_STORE_LIMIT` na sacola e no pedido, prazo pela data de aprovação, encerra com 20 pedidos entregues; admin libera ou ajusta com motivo e auditoria. Residual Baixo: teto é por pedido (não agregado) e os 20 "entregues" podem ser fabricados pela loja (SEC-149) | `order-limits.e2e` OK |
+| SEC-133 | **CORRIGIDO.** `completeCreation` roda `mismatches()` quando o cartão volta aprovado; divergente fica `divergent` + alerta, sem pagar o pedido | `order-limits.e2e` SEC-133 OK |
+| SEC-134 | **CORRIGIDO.** O gancho confere vínculo, valor e loja; divergente não paga, alerta `order_attempt_mismatch` e estorna se aprovada | Valor menor (teste do dev) e **loja diferente com o mesmo valor** (ataque K): pedido segue `awaiting_payment`, alerta, 1 estorno total. Observação: a decisão fica num `Set` em memória entre o commit e o `afterTransition`; queda do processo nesse intervalo perde o alerta e o estorno (Baixa, só com chamador futuro) |
+| SEC-135 | **PARCIAL (Baixa).** Staging sem rotas dev (`production-boot.e2e` OK). Faltam: recusar no staging credencial `APP_USR-` de produção e o `FAKE_PAYMENT_WEBHOOK_SECRET` padrão, prefixo "[TESTE]" e checklist de isolamento | `env.ts:101,174-188` |
+| SEC-136 | **CORRIGIDO.** `recoverCardCreation` busca por `external_reference` com o token da conta recebedora, adota cobrança não vinculada de mesmo valor e segue a conferência; webhook desconhecido espera 10 min (`deferred`). Confirmar no sandbox que `search` por referência funciona com o token do lojista | `refund-queue.e2e` SEC-136 (2 casos) OK |
+| SEC-137 | **CORRIGIDO.** Teste diferencial de 100 entradas contra `WebhookSignatureValidator` do SDK; diferenças conhecidas (ts em ms, minúsculas) documentadas | `webhook-signature.spec.ts` OK |
+| SEC-138 | **CORRIGIDO.** 5 erros por pedido bloqueiam 30 min e alertam. Residual: contador no Redis falha aberto (SEC-150) | `store-orders.e2e` OK |
+| SEC-139 | **CORRIGIDO.** Tag de 16 bytes exigida e `authTagLength: 16` | `crypto.spec.ts` OK |
+| SEC-140 | **CORRIGIDO.** PKCE S256 com verifier cifrado e ligado ao `state` (`MP_OAUTH_PKCE`, padrão ligado); `safeErrorMessage` na renovação; CPF/CNPJ no `maskPii`. Confirmar no painel do MP se a aplicação aceita PKCE | `oauth-pkce.e2e`, `mask.spec.ts` OK |
+| SEC-039 / DEC-020a | **IMPLEMENTADO.** `POST /v1/admin/orders/:id/refunds`: financeiro e super admin, reautenticação, motivo, `Idempotency-Key` obrigatória, auditoria na transação que confirma, soma <= pago sob lock. Residuais: SEC-141 e SEC-142 (o limite do financeiro é contornado fracionando) | `admin-refund.e2e` OK; 3 estornos simultâneos de 70%: 1 passa, 2 x 422; acima do pago: 422 |
+
+**Regressão dos ataques da parte 2:** webhook repetido e fora de ordem (estorno total e depois a mesma notificação 2x: tentativa segue `refunded`, sem alerta nem novo estado), pagamento de valor menor, pedido de outra loja (IDOR do painel e tentativa de outra loja) e corrida de estoque continuam resistindo (suítes `payments*`, `orders`, `store-orders` e ataque K).
+
+**Ressalvas do APROVADO COM RESSALVAS (checkout em produção):**
+1. **Antes do 1º cliente real:** SEC-141 (cobrir só intenção `exhausted` e sem estorno em voo) e SEC-142 (limite do financeiro por soma). São pequenos.
+2. **Antes do G4:** os Médios da logística (SEC-143, 144, 145 em `revisao-logistica.md`), a Baixa SEC-147 (tornar `expectedTotalCents` obrigatório; o app já envia) e atualizar o teste de cupom do `orders.e2e`.
+3. **Sempre:** pendências `[confirmar no sandbox]` do adaptador do MP (agora inclui PKCE e `search` por referência); pentest externo antes de escalar.
+
+**Incidente de processo (transparência):** o spec temporário de ataque (`apps/api/test/zz-sec-tmp.e2e-spec.ts`) foi capturado pelos commits automáticos de checkpoint de outra sessão (`34c134d`, `4a08959`, `685b21a`) enquanto eu rodava os testes, e já está no remoto. Não contém segredo (só cenários e um caminho do scratchpad). Apaguei o arquivo do disco; a remoção não foi commitada por mim porque meu limite é `docs/seguranca` e `docs/decisoes.md`. O próximo checkpoint ou o backend-dev deve commitar a remoção.
