@@ -5,10 +5,21 @@ const MODES: OrderMode[] = ['delivery', 'pickup'];
 
 describe('máquina de estados do pedido (RN-07)', () => {
   it('caminho feliz de entrega e de retirada', () => {
-    const delivery: [string, string, OrderActor][] = [['awaiting_payment', 'received', 'system'], ['received', 'accepted', 'store'], ['accepted', 'in_preparation', 'store'], ['in_preparation', 'out_for_delivery', 'store'], ['out_for_delivery', 'delivered', 'store']];
+    // DEC-036: a loja só chega a "pronto para coleta"; saída e entrega são da logística (admin) e do sistema.
+    const delivery: [string, string, OrderActor][] = [['awaiting_payment', 'received', 'system'], ['received', 'accepted', 'store'], ['accepted', 'in_preparation', 'store'], ['in_preparation', 'ready_for_collection', 'store'], ['ready_for_collection', 'out_for_delivery', 'admin'], ['out_for_delivery', 'delivered', 'admin']];
     for (const [from, to, actor] of delivery) expect(canTransition(from as never, to as never, actor, 'delivery'), `${from}->${to}`).toBe(true);
     expect(canTransition('accepted', 'ready_for_pickup', 'store', 'pickup')).toBe(true);
     expect(canTransition('ready_for_pickup', 'delivered', 'store', 'pickup')).toBe(true);
+  });
+
+  it('na entrega Webag a loja NÃO marca "saiu" nem "entregue"; só a logística (admin) e o sistema', () => {
+    for (const from of ['accepted', 'in_preparation', 'ready_for_collection'] as const) expect(canTransition(from, 'out_for_delivery', 'store', 'delivery'), from).toBe(false);
+    expect(canTransition('out_for_delivery', 'delivered', 'store', 'delivery')).toBe(false);
+    expect(canTransition('ready_for_collection', 'out_for_delivery', 'system', 'delivery')).toBe(true);
+    expect(canTransition('out_for_delivery', 'delivered', 'system', 'delivery')).toBe(true);
+    expect(canTransition('accepted', 'ready_for_collection', 'store', 'pickup')).toBe(false); // pronto para coleta é só da entrega
+    expect(canTransition('ready_for_collection', 'in_preparation', 'store', 'delivery')).toBe(true); // desfazer (o serviço confere que ainda não há motoboy)
+    expect(canTransition('ready_for_collection', 'cancelled', 'customer', 'delivery')).toBe(false);
   });
 
   it('retirada não sai para entrega e entrega não fica pronta para retirada', () => {
@@ -29,7 +40,7 @@ describe('máquina de estados do pedido (RN-07)', () => {
 
   it('cliente cancela até o aceite; depois da separação só por solicitação (RN-08)', () => {
     for (const from of ['awaiting_payment', 'received', 'accepted'] as const) expect(canTransition(from, 'cancelled', 'customer', 'delivery')).toBe(true);
-    for (const from of ['in_preparation', 'out_for_delivery', 'ready_for_pickup'] as const) expect(canTransition(from, 'cancelled', 'customer', 'delivery')).toBe(false);
+    for (const from of ['in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'] as const) expect(canTransition(from, 'cancelled', 'customer', 'delivery')).toBe(false);
   });
 
   it('recusa é da loja e só enquanto recebido; o timeout de aceite cancela como sistema', () => {

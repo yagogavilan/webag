@@ -17,8 +17,12 @@ const listSchema = z.strictObject({
 });
 const reasonSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) });
 const statusSchema = z.strictObject({
-  status: z.enum(['in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered']),
+  // DEC-036: na entrega Webag a loja só chega a `ready_for_collection`; saída e entrega são da logística.
+  status: z.enum(['in_preparation', 'ready_for_collection', 'ready_for_pickup', 'delivered']),
   pickupCode: z.string().regex(/^\d{4}$/).optional(),
+  /** Só em `ready_for_collection` (WB-229 C2). */
+  volumes: z.number().int().min(1).max(99).optional(),
+  note: z.string().trim().max(100).optional(),
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -97,7 +101,7 @@ export class StoreOrdersController {
   @Post(':orderId/status')
   async status(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Body(new ZodPipe(statusSchema)) body: z.infer<typeof statusSchema>) {
     const id = uuidParam(storeId);
-    await this.orders.advance(id, orderIdParam(orderId), p.userId, body.status, body.pickupCode);
+    await this.orders.advance(id, orderIdParam(orderId), p.userId, body.status, body.pickupCode, { volumes: body.volumes, note: body.note });
     return this.orders.get(id, orderId, await this.showValues(p.userId, id));
   }
 

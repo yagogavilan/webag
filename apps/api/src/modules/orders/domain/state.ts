@@ -2,16 +2,16 @@
  * Máquina de estados do pedido (RN-07), explícita e validada no servidor. Toda transição grava evento (de, para, ator,
  * motivo). Não há retrocesso; correção administrativa é cancelamento com motivo (auditado).
  */
-export const ORDER_STATUSES = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired'] as const;
+export const ORDER_STATUSES = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type OrderActor = 'customer' | 'store' | 'system' | 'admin';
 export type OrderMode = 'delivery' | 'pickup';
 
 export const TERMINAL_STATUSES: readonly OrderStatus[] = ['delivered', 'cancelled', 'refused', 'expired'];
 /** `scope=active` da lista do cliente: de `awaiting_payment` a `ready_for_pickup`. */
-export const ACTIVE_STATUSES: readonly OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup'];
+export const ACTIVE_STATUSES: readonly OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
 /** Estados em que há dinheiro pago a devolver se o pedido for encerrado sem entrega. */
-export const PAID_STATUSES: readonly OrderStatus[] = ['received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup', 'delivered'];
+export const PAID_STATUSES: readonly OrderStatus[] = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered'];
 
 interface Rule {
   to: OrderStatus;
@@ -33,18 +33,24 @@ const RULES: Record<OrderStatus, readonly Rule[]> = {
   ],
   accepted: [
     { to: 'in_preparation', actors: ['store', 'admin'] },
-    { to: 'out_for_delivery', actors: ['store', 'admin'], mode: 'delivery' },
+    // DEC-036: na entrega Webag o papel da loja termina em "pronto para coleta"; o resto é da logística.
+    { to: 'ready_for_collection', actors: ['store', 'admin'], mode: 'delivery' },
     { to: 'ready_for_pickup', actors: ['store', 'admin'], mode: 'pickup' },
     { to: 'cancelled', actors: ['customer', 'store', 'admin'] },
   ],
   in_preparation: [
-    { to: 'out_for_delivery', actors: ['store', 'admin'], mode: 'delivery' },
+    { to: 'ready_for_collection', actors: ['store', 'admin'], mode: 'delivery' },
     { to: 'ready_for_pickup', actors: ['store', 'admin'], mode: 'pickup' },
     { to: 'cancelled', actors: ['store', 'admin'] }, // cliente só por solicitação aprovada (RN-08)
   ],
+  ready_for_collection: [
+    { to: 'out_for_delivery', actors: ['admin', 'system'], mode: 'delivery' }, // motoboy coletou (logística)
+    { to: 'in_preparation', actors: ['store', 'admin'], mode: 'delivery' }, // "voltar para separação": a loja só enquanto não há motoboy (o serviço confere)
+    { to: 'cancelled', actors: ['admin'] },
+  ],
   out_for_delivery: [
-    { to: 'delivered', actors: ['store', 'system', 'admin'] },
-    { to: 'cancelled', actors: ['admin', 'store'] }, // loja: "entrega não realizada"
+    { to: 'delivered', actors: ['admin', 'system'] }, // a loja NÃO marca entregue na entrega Webag
+    { to: 'cancelled', actors: ['admin'] },
   ],
   ready_for_pickup: [
     { to: 'delivered', actors: ['store', 'system', 'admin'] },
@@ -78,6 +84,8 @@ export function customerActions(status: OrderStatus): CustomerAction[] {
       return ['cancel', 'contact_store'];
     case 'in_preparation':
       return ['request_cancel', 'contact_store'];
+    case 'ready_for_collection':
+      return ['contact_store'];
     case 'out_for_delivery':
       return ['contact_store', 'report_not_received'];
     case 'ready_for_pickup':

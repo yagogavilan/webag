@@ -61,7 +61,7 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 30 }]);
     const { id } = await paidOrder(shop);
     const first = await ctx.http.post(`${base(shop)}/${id}/accept`).set(owner(shop)).expect(200);
-    expect(first.body).toMatchObject({ status: 'accepted', allowedActions: ['prepare', 'dispatch', 'cancel'] });
+    expect(first.body).toMatchObject({ status: 'accepted', allowedActions: ['prepare', 'ready', 'cancel'] });
     expect(first.body.timeline.map((t: { status: string; actor: string }) => `${t.status}:${t.actor}`)).toEqual(['awaiting_payment:customer', 'received:system', 'accepted:store']);
     await ctx.http.post(`${base(shop)}/${id}/accept`).set(owner(shop)).expect(200); // repetir não erra nem duplica
     expect((await orderRow(ctx, id)).acceptDeadlineAt).toBeNull();
@@ -72,7 +72,7 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     expect(timeline.filter((t: { status: string }) => t.status === 'accepted')).toHaveLength(1);
   });
 
-  it('fluxo de entrega até o fim: separação, saiu para entrega, entregue; transições inválidas dão 409', async () => {
+  it('entrega Webag (DEC-036): a loja vai até "pronto para coleta"; "saiu" e "entregue" não são dela; sem retrocesso', async () => {
     const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 30 }]);
     const { id } = await paidOrder(shop);
     const status = (to: string, body: Record<string, unknown> = {}) => ctx.http.post(`${base(shop)}/${id}/status`).set(owner(shop)).send({ status: to, ...body });
@@ -80,13 +80,14 @@ describe('Painel de pedidos da loja: lista, detalhe, comanda e transições (WB-
     await ctx.http.post(`${base(shop)}/${id}/accept`).set(owner(shop)).expect(200);
     expect((await status('delivered')).status).toBe(409); // pulou etapas
     expect((await status('ready_for_pickup')).status).toBe(409); // pedido é de entrega
+    expect((await status('out_for_delivery')).status).toBe(400); // a loja não marca "saiu para entrega": é da logística
     expect((await status('in_preparation')).body).toMatchObject({ status: 'in_preparation' });
-    expect((await status('out_for_delivery')).body).toMatchObject({ status: 'out_for_delivery', allowedActions: ['complete', 'cancel'] });
-    const done = (await status('delivered')).body;
-    expect(done).toMatchObject({ status: 'delivered', allowedActions: [] });
-    expect((await orderRow(ctx, id)).deliveredAt).not.toBeNull();
-    expect((await status('in_preparation')).status).toBe(409); // sem retrocesso
-    expect((await ctx.http.get(`${base(shop)}?scope=history`).set(owner(shop)).expect(200)).body.data.map((o: { id: string }) => o.id)).toContain(id);
+    const ready = (await status('ready_for_collection', { volumes: 2, note: 'tocar a campainha' })).body;
+    expect(ready).toMatchObject({ status: 'ready_for_collection', allowedActions: ['prepare'], logistics: { status: 'ready_for_collection', courierFirstName: null, volumes: 2 } });
+    expect((await status('delivered')).status).toBe(409); // a loja não marca "entregue" na entrega Webag
+    expect((await ctx.http.post(`${base(shop)}/${id}/cancel`).set(owner(shop)).send({ reason: 'desisti da venda' })).status).toBe(409); // depois do pronto, só o admin cancela
+    expect((await status('ready_for_collection')).body.status).toBe('ready_for_collection'); // toque duplo: idempotente
+    expect((await ctx.http.get(`${base(shop)}?scope=in_progress`).set(owner(shop)).expect(200)).body.data.map((o: { id: string }) => o.id)).toContain(id);
   });
 
   it('retirada: só conclui com o código de 4 dígitos que o CLIENTE informa; a loja nunca vê o código', async () => {

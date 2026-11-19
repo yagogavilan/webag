@@ -12,6 +12,8 @@ export interface OrderEvent {
   actor: OrderActor;
   reason: string | null;
   at: Date;
+  /** Mudança da corrida de entrega que acompanha o pedido (L.3): o cliente é avisado mesmo com o mesmo estado do pedido. */
+  delivery?: { id: string; status: string };
 }
 
 type Handler = (event: OrderEvent) => Promise<void> | void;

@@ -6,6 +6,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
 import { users } from '../identity/db/schema.js';
+import { couriers, DeliveriesService } from '../logistics/index.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 import { nextStatuses, type OrderStatus } from './domain/state.js';
 import type { OrderEvent } from './order-events.bus.js';
@@ -17,7 +18,7 @@ const PICKUP_CODE_LOCK_SECONDS = 1800;
 export type StoreScope = 'new' | 'in_progress' | 'history';
 const SCOPES: Record<StoreScope, OrderStatus[]> = {
   new: ['received'],
-  in_progress: ['accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup'],
+  in_progress: ['accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'],
   history: ['delivered', 'cancelled', 'refused'],
 };
 
@@ -26,14 +27,16 @@ type Money = { amount: number; currency: 'BRL' };
 const money = (amount: number): Money => ({ amount, currency: 'BRL' });
 
 /** Ações da loja por estado (RN-07/RN-08): é o que o painel mostra como botões. */
-export function storeActions(order: Pick<OrderRow, 'status' | 'mode'>): StoreAction[] {
+export function storeActions(order: Pick<OrderRow, 'status' | 'mode'>, deliveryStatus: string | null = null): StoreAction[] {
   const next = new Set(nextStatuses(order.status, 'store', order.mode));
+  // WB-229 C6: "voltar para separação" só enquanto a corrida está sem motoboy.
+  if (order.status === 'ready_for_collection' && deliveryStatus !== null && deliveryStatus !== 'ready_for_collection') next.delete('in_preparation');
   const actions: StoreAction[] = [];
   if (next.has('accepted')) actions.push('accept');
   if (next.has('refused')) actions.push('refuse');
   if (next.has('in_preparation')) actions.push('prepare');
   if (next.has('out_for_delivery')) actions.push('dispatch');
-  if (next.has('ready_for_pickup')) actions.push('ready');
+  if (next.has('ready_for_pickup') || next.has('ready_for_collection')) actions.push('ready'); // pronto para retirada ou para coleta da Webag
   if (next.has('delivered')) actions.push('complete');
   if (next.has('cancelled')) actions.push('cancel');
   return actions;
@@ -49,6 +52,7 @@ export class StoreOrdersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly orders: OrdersService,
+    private readonly deliveries: DeliveriesService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -134,7 +138,9 @@ export class StoreOrdersService {
       this.db.select().from(orderEvents).where(eq(orderEvents.orderId, order.id)).orderBy(asc(orderEvents.id)),
       this.db.select({ name: users.name, phone: users.phone }).from(users).where(eq(users.id, order.userId)),
     ]);
-    const active = ['received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup'].includes(order.status);
+    const active = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'].includes(order.status);
+    const delivery = order.mode === 'delivery' ? await this.deliveries.forOrder(order.id) : null;
+    const [courier] = delivery?.courierId ? await this.db.select({ name: couriers.name }).from(couriers).where(eq(couriers.id, delivery.courierId)) : [];
     const finance = order.finance as { merchantNetBeforeProviderFeeCents?: number };
     return {
       id: order.id,
@@ -156,7 +162,9 @@ export class StoreOrdersService {
       couponCode: order.couponCode,
       timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor, reason: e.reason })),
       cancellation: order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
-      allowedActions: storeActions(order),
+      allowedActions: storeActions(order, delivery?.status ?? null),
+      // DEC-036: a loja só vê o estado da corrida e o primeiro nome do motoboy (sem telefone) enquanto espera a coleta.
+      logistics: delivery ? { status: delivery.status, courierFirstName: courier ? (courier.name.trim().split(/\s+/)[0] ?? null) : null, volumes: delivery.volumes } : null,
     };
   }
 
@@ -205,14 +213,28 @@ export class StoreOrdersService {
     });
   }
 
-  async advance(storeId: string, orderId: string, userId: string, to: 'in_preparation' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered', pickupCode?: string): Promise<void> {
+  async advance(storeId: string, orderId: string, userId: string, to: 'in_preparation' | 'ready_for_collection' | 'ready_for_pickup' | 'delivered', pickupCode?: string, extra: { volumes?: number | undefined; note?: string | undefined } = {}): Promise<void> {
+    let ready: OrderRow | null = null;
     await this.act(storeId, orderId, userId, async (tx, order) => {
+      if (to === 'ready_for_collection') {
+        // Entrega Webag (DEC-036): "pronto para coleta" cria a corrida na mesma transação; o resto é da logística.
+        const created = await this.orders.readyForCollection(tx, order, userId, extra);
+        if (created) ready = order;
+        return { event: created };
+      }
+      if (to === 'in_preparation' && order.status === 'ready_for_collection') {
+        // Desfazer o "pronto": só sem motoboy atribuído; com motoboy, só o admin (avisa o motoboy).
+        const delivery = await this.deliveries.forOrder(order.id, tx);
+        if (delivery && delivery.status !== 'ready_for_collection') throw errors.conflict('DELIVERY_ALREADY_ASSIGNED', 'Já há motoboy a caminho', 'Já há motoboy atribuído. Peça à Webag para desfazer.');
+        if (delivery) await this.deliveries.cancelForOrderInTx(tx, order.id, 'Loja voltou o pedido para a separação', { id: userId, role: 'store' }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      }
       if (to === 'delivered' && order.mode === 'pickup' && order.status !== 'delivered') {
         // Retirada se conclui com o código que o CLIENTE informa no balcão (RN-07, SEC-067).
         await this.assertPickupCode(order.id, order.pickupCode, pickupCode);
       }
       return { event: await this.orders.advance(tx, order, to, 'store', userId) };
     });
+    if (ready) await this.orders.afterReadyForCollection(ready);
   }
 
   /** Loja cancela depois do aceite ("entrega não realizada" inclusa): motivo obrigatório, estorno total, conta no índice da loja (RN-08). */

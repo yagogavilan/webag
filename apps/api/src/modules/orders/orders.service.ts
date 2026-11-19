@@ -11,6 +11,7 @@ import { CartService } from '../cart/index.js';
 import { carts, cartItems, couponRedemptions, coupons } from '../cart/db/schema.js';
 import { InventoryService } from '../catalog/index.js';
 import { ExposureLimitService } from '../stores/index.js';
+import { couriers, DeliveriesService, type Delivery, type DeliveryActor, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
 import { computeOrderFinance, LedgerService, type OrderFinance } from '../finance/index.js';
 import { IdempotencyService } from '../idempotency/index.js';
 import { MediaService } from '../media/index.js';
@@ -19,6 +20,7 @@ import { PaymentsService, type PaymentAttempt, type PaymentListener } from '../p
 import type { PaymentStatus } from '../payments/db/schema.js';
 import type { ProviderPayment } from '../payments/payment-provider.js';
 import { stores } from '../stores/db/schema.js';
+import { users } from '../identity/db/schema.js';
 import { paymentAttempts } from '../payments/db/schema.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 import { canTransition, customerActions, PAID_STATUSES, refundDueOnCancel, type CustomerAction, type OrderActor, type OrderStatus } from './domain/state.js';
@@ -72,7 +74,7 @@ interface PendingRefund {
  * ou com o cliente (estorno, push) roda depois do commit e é recuperável (intenção de estorno + conciliação).
  */
 @Injectable()
-export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown, PaymentListener {
+export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown, PaymentListener, DeliveryListener {
   private readonly logger = new Logger(OrdersService.name);
   private timers: NodeJS.Timeout[] = [];
   /** Eventos do pedido gerados dentro da transação do pagamento; saem no `afterTransition` (depois do commit). */
@@ -91,11 +93,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     private readonly flags: FeatureFlagsService,
     private readonly media: MediaService,
     private readonly exposure: ExposureLimitService,
+    private readonly deliveries: DeliveriesService,
     readonly bus: OrderEventBus,
   ) {}
 
   onModuleInit(): void {
     this.payments.registerListener(this);
+    this.deliveries.registerListener(this);
   }
 
   /** Varredura de PIX vencido e de timeout de aceite. Desligada em teste e na CLI (os testes chamam `sweep`). */
@@ -394,6 +398,11 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       }
     }
 
+    // L.4: pedido encerrado com a corrida em aberto (admin cancelando): a corrida acaba junto, na mesma transação.
+    if (order.mode === 'delivery' && (order.status === 'ready_for_collection' || order.status === 'out_for_delivery')) {
+      await this.deliveries.cancelForOrderInTx(tx, order.id, reason ?? 'Pedido cancelado', { id: actorUserId, role: actor }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+    }
+
     const now = new Date();
     await tx
       .update(orders)
@@ -543,6 +552,95 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return { status, refundedCents: pending, remainingCents: attempt.amountCents - pending };
   }
 
+  // =================================================================== logística (L.4)
+
+  /**
+   * A loja marca "pronto para coleta" (DEC-036): o pedido vai a `ready_for_collection` e nasce a corrida na MESMA transação
+   * (idempotente: toque duplo não cria duas). O admin é avisado depois do commit (`afterReadyForCollection`).
+   */
+  async readyForCollection(tx: Tx, order: OrderRow, actorUserId: string, input: { volumes?: number | undefined; note?: string | undefined }): Promise<OrderEvent | null> {
+    if (order.mode !== 'delivery') throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', 'Pedido de retirada não vai para a coleta da Webag.');
+    const event = await this.advance(tx, order, 'ready_for_collection', 'store', actorUserId);
+    const [store] = await tx.select().from(stores).where(eq(stores.id, order.storeId));
+    const [customer] = await tx.select({ name: users.name, phone: users.phone }).from(users).where(eq(users.id, order.userId));
+    const address = (order.address ?? {}) as { street?: string; number?: string; complement?: string | null; neighborhood?: string; city?: string; cityId?: string | null; neighborhoodId?: string | null };
+    const snapshot = (order.deliverySnapshot ?? {}) as { expectedCostCents?: number };
+    await this.deliveries.createInTx(
+      tx,
+      {
+        orderId: order.id,
+        storeId: order.storeId,
+        volumes: input.volumes ?? 1,
+        note: input.note ?? null,
+        cityId: address.cityId ?? null,
+        neighborhoodId: address.neighborhoodId ?? null,
+        feeCents: order.deliveryFeeCents,
+        expectedCostCents: snapshot.expectedCostCents ?? 0,
+        actor: { id: actorUserId, role: 'store' },
+        contact: {
+          number: order.number,
+          kind: 'delivery',
+          storeName: store?.name ?? '',
+          storePhone: store?.whatsapp ?? store?.phone ?? null,
+          pickupAddress: storeAddressLine(store ?? {}),
+          dropoffAddress: [address.street, address.number, address.complement, address.neighborhood, address.city].filter(Boolean).join(', '),
+          customerFirstName: (customer?.name ?? '').trim().split(/\s+/)[0] ?? '',
+          customerPhone: customer?.phone ?? null,
+          volumes: input.volumes ?? 1,
+          note: input.note ?? null,
+        },
+      },
+      { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null },
+    );
+    return event;
+  }
+
+  /** Depois do commit: o admin vê o pedido pronto no painel (alerta durável; o tempo real entra com o Socket.IO). */
+  async afterReadyForCollection(order: OrderRow): Promise<void> {
+    await this.payments.raiseAlert(null, 'delivery_ready', { orderId: order.id, orderNumber: order.number, storeId: order.storeId }).catch(() => undefined);
+  }
+
+  private readonly pendingDeliveryEvents = new Map<string, { events: OrderEvent[]; refund: PendingRefund | null }>();
+
+  /**
+   * A logística mudou a corrida (mesma transação): a entrega Webag leva o pedido junto. Coletou -> SAIU; entregou -> ENTREGUE;
+   * devolvida à loja -> CANCELADO com estorno total. As demais mudanças (atribuir, confirmar, não entregue) não mudam o
+   * estado do pedido; o cliente é avisado em `afterDeliveryChange`.
+   */
+  async onDeliveryChange(tx: Tx, delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void> {
+    if (delivery.kind !== 'delivery') return; // coleta e reentrega de troca mudam a troca, não o pedido
+    const [order] = await tx.select().from(orders).where(eq(orders.id, delivery.orderId)).for('update');
+    if (!order) return;
+    const who: OrderActor = actor.role === 'system' ? 'system' : 'admin';
+    const events: OrderEvent[] = [];
+    let refund: PendingRefund | null = null;
+    if (to === 'out_for_delivery' && order.status === 'ready_for_collection') {
+      const event = await this.advance(tx, order, 'out_for_delivery', who, actor.id, 'Motoboy coletou o pedido');
+      if (event) events.push(event);
+    } else if (to === 'delivered' && order.status === 'out_for_delivery') {
+      const event = await this.advance(tx, order, 'delivered', who, actor.id, 'Entrega concluída');
+      if (event) events.push(event);
+    } else if (to === 'returned_to_store' && PAID_STATUSES.includes(order.status) && order.status !== 'delivered') {
+      const closed = await this.closeOrder(tx, order, 'cancelled', who, 'Entrega não realizada: pedido devolvido à loja', actor.id);
+      events.push(closed.event);
+      refund = closed.refund;
+    }
+    this.pendingDeliveryEvents.set(delivery.id, { events, refund });
+    void reason;
+  }
+
+  async afterDeliveryChange(delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void> {
+    if (delivery.kind !== 'delivery') return;
+    const pending = this.pendingDeliveryEvents.get(delivery.id);
+    this.pendingDeliveryEvents.delete(delivery.id);
+    if (pending?.refund) await this.finishRefund(pending.refund);
+    const [order] = await this.db.select().from(orders).where(eq(orders.id, delivery.orderId));
+    if (!order) return;
+    for (const event of pending?.events ?? []) await this.bus.emit(event);
+    // Aviso ao cliente a CADA mudança da corrida (L.3): o pedido pode manter o mesmo estado (ex.: motoboy a caminho).
+    await this.bus.emit({ ...this.eventOf(order, order.status, actor.role === 'system' ? 'system' : 'admin', reason, new Date()), from: order.status, delivery: { id: delivery.id, status: to } });
+  }
+
   /** Alerta para o painel do admin/financeiro (ex.: tentativa de adivinhar o código de retirada). */
   async raiseAlert(kind: string, details: Record<string, unknown>): Promise<void> {
     await this.payments.raiseAlert(null, kind, details);
@@ -661,6 +759,27 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor, reason: e.reason })),
       allowedActions: customerActions(order.status).filter((a) => IMPLEMENTED_ACTIONS.includes(a)),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
+      tracking: order.mode === 'delivery' ? await this.trackingOf(order) : null,
+    };
+  }
+
+  /**
+   * Acompanhamento da entrega Webag para o cliente (WB-235): estado da corrida, SÓ o primeiro nome do motoboy (sem telefone nem
+   * foto) e o código de entrega a partir de "saiu para entrega". Nunca o contato do motoboy nem dado de outro cliente.
+   */
+  private async trackingOf(order: OrderRow) {
+    const delivery = await this.deliveries.forOrder(order.id);
+    if (!delivery) return null;
+    const [courier] = delivery.courierId ? await this.db.select({ name: couriers.name }).from(couriers).where(eq(couriers.id, delivery.courierId)) : [];
+    const events = await this.deliveries.events(delivery.id);
+    const showCode = delivery.deliveryCode !== null && (delivery.status === 'out_for_delivery' || delivery.status === 'not_delivered');
+    return {
+      status: delivery.status,
+      courierFirstName: courier ? (courier.name.trim().split(/\s+/)[0] ?? null) : null,
+      attempts: delivery.attempts,
+      failReason: delivery.status === 'not_delivered' ? delivery.failReason : null,
+      deliveryCode: showCode ? delivery.deliveryCode : null,
+      timeline: events.filter((e) => e.action !== 'whatsapp_sent' && !e.action.startsWith('cost')).map((e) => ({ status: e.toStatus, at: e.createdAt.toISOString() })),
     };
   }
 
@@ -684,7 +803,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   async listForCustomer(userId: string, query: { scope?: 'active' | 'past' | undefined; cursor?: string | undefined; limit?: unknown }): Promise<Page<Awaited<ReturnType<OrdersService['summaryOf']>>>> {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
-    const active: OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup'];
+    const active: OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
     const rows = await this.db
       .select()
       .from(orders)

@@ -36,6 +36,8 @@ export interface CreateDeliveryInput {
   expectedCostCents: number;
   /** Foto mínima para o despacho (ver `DeliveryMessageData`). */
   contact: DeliveryMessageData;
+  /** Quem criou (a loja, por exemplo); por padrão vem do contexto da requisição. */
+  actor?: DeliveryActor;
 }
 
 export type DeliveryAction = 'confirm' | 'picked_up' | 'delivered' | 'not_delivered' | 'reattempt' | 'return_confirmed' | 'reassign' | 'cancel';
@@ -117,11 +119,28 @@ export class DeliveriesService {
       if (!existing) throw new Error('corrida duplicada sem original');
       return { delivery: existing, created: false };
     }
-    const actor = this.actorOf(ctx);
+    const actor = input.actor ?? this.actorOf(ctx);
     await tx.insert(deliveryEvents).values({ deliveryId: created.id, fromStatus: null, toStatus: 'ready_for_collection', action: 'create', actorId: actor.id, actorRole: actor.role, meta: { kind, volumes: created.volumes } });
-    await this.audit.record(tx, ctx, { action: 'delivery.create', targetType: 'delivery', targetId: created.id, after: { kind, orderId: input.orderId, status: 'ready_for_collection' } });
+    await this.audit.record(tx, ctx, { action: 'delivery.create', targetType: 'delivery', targetId: created.id, after: { kind, orderId: input.orderId, status: 'ready_for_collection' }, actorId: actor.id, actorRole: actor.role });
     for (const listener of this.listeners) await listener.onDeliveryChange?.(tx, created, null, 'ready_for_collection', actor, null);
     return { delivery: created, created: true };
+  }
+
+  /** Corrida de entrega do pedido (ou `null`). Para o pedido mostrar o acompanhamento ao cliente. */
+  async forOrder(orderId: string, exec: Db | Tx = this.db): Promise<Delivery | null> {
+    const [row] = await exec.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery')));
+    return row ?? null;
+  }
+
+  /**
+   * O pedido foi cancelado (admin) com a corrida em aberto: encerra a corrida na mesma transação, em qualquer estado ativo
+   * (o motoboy pode já estar com o pacote; o custo do deslocamento é lançado depois pela operação).
+   */
+  async cancelForOrderInTx(tx: Tx, orderId: string, reason: string, actor: DeliveryActor, ctx: RequestContext): Promise<void> {
+    const [current] = await tx.select().from(deliveries).where(and(eq(deliveries.orderId, orderId), eq(deliveries.kind, 'delivery'))).for('update');
+    if (!current || TERMINAL_STATUSES.includes(current.status)) return;
+    const [updated] = await tx.update(deliveries).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(deliveries.id, current.id)).returning();
+    await this.record(tx, ctx, actor, current, updated!, 'cancel', reason, { source: 'order_cancelled' });
   }
 
   // ------------------------------------------------------------------ leitura
