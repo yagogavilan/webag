@@ -14,7 +14,7 @@ import s from './admin-home.module.css';
 const ICONS: Record<string, SolarName> = {
   lojas: 'shield', logistica: 'scooter', estornos: 'wallet', frete: 'tag', comissoes: 'percent', trocas: 'exchange', moderacao: 'eye', regioes: 'map', categorias: 'layers',
   parametros: 'sliders', parametros_entrega: 'settings', flags: 'flag', termos: 'document', auditoria: 'clipboard', admins: 'team', banners: 'gallery', push: 'bell', cupons: 'ticket', relatorios: 'chart',
-  denuncias: 'warning', ajuda: 'info', titulares: 'user', disputas: 'exchange',
+  denuncias: 'warning', ajuda: 'info', titulares: 'user', disputas: 'exchange', alertas: 'alert', pedidos: 'orders', usuarios: 'account', manutencao: 'settings',
 };
 
 /** Início do admin (RL2): atalhos para as áreas do perfil e, para quem despacha, o aviso das entregas esperando motoboy. As contagens por área vêm de `GET /v1/admin/overview/pending` (W.7); área sem permissão vem nula e não aparece. */
@@ -73,6 +73,10 @@ type PendingCard = { id: string; label: string; value: number; href: string; ton
 function pendingCards(pending: PendingCounts | null, canView: (section: AdminSection) => boolean): PendingCard[] {
   if (!pending) return [];
   const cards: PendingCard[] = [];
+  if (pending.alerts && canView('alertas')) {
+    const critical = pending.alerts.critical;
+    cards.push({ id: 'alertas', label: 'Alertas abertos', value: pending.alerts.open, href: '/admin/alertas', tone: critical > 0 ? 'warning' : 'neutral', ...(critical > 0 ? { hint: `${critical} ${critical === 1 ? 'crítico' : 'críticos'}: agir hoje` } : {}) });
+  }
   if (pending.stores && canView('lojas')) cards.push({ id: 'lojas', label: 'Lojas em análise', value: pending.stores.inReview, href: '/admin/lojas', tone: 'neutral' });
   if (pending.disputes && canView('disputas')) cards.push({ id: 'disputas', label: 'Disputas em mediação', value: pending.disputes.inMediation, href: '/admin/disputas', tone: 'neutral' });
   if (pending.refunds && canView('estornos')) cards.push({ id: 'estornos', label: 'Estornos que pedem ação', value: pending.refunds.needingAction, href: '/admin/estornos', tone: pending.refunds.needingAction > 0 ? 'warning' : 'neutral' });

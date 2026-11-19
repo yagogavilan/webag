@@ -12,8 +12,8 @@ export const REASON_MIN = 10;
 export const REASON_MAX = 200;
 const REASON_HARD_MAX = 500;
 
-export function reasonError(reason: string, min: number = REASON_MIN): string | undefined {
-  return reason.trim().length < min ? `Escreva o motivo (mínimo ${min} caracteres).` : undefined;
+export function reasonError(reason: string, min: number = REASON_MIN, noun = 'o motivo'): string | undefined {
+  return reason.trim().length < min ? `Escreva ${noun} (mínimo ${min} caracteres).` : undefined;
 }
 
 interface Props {
@@ -31,6 +31,9 @@ interface Props {
   minReason?: number;
   /** Limite do contador (padrão 200). */
   maxReason?: number;
+  /** Rótulo do campo (padrão "Motivo"; "Nota" ao encerrar um alerta) e o trecho da mensagem de erro ("a nota"). */
+  fieldLabel?: string;
+  fieldNoun?: string;
   /** Valida o que o `extra` pede; devolve a mensagem de erro (o botão continua ativo e o erro aparece ao tocar, DEC-024d). */
   precheck?: () => string | null;
   /** "[Verbo] [alvo]": "Fechar cidade", "Salvar parâmetro". */
@@ -46,12 +49,12 @@ interface Props {
 }
 
 /** Padrão "Motivo" do admin (onda-1b §AD0). Falha fechada: se a auditoria não gravar, a ação não acontece e o erro aparece aqui. */
-export function ReasonDialog({ title, description, diff, withReason = true, quickReasons, minReason = REASON_MIN, maxReason = REASON_MAX, precheck, confirmLabel, destructive, extra, onConfirm, onClose, testIds, warning }: Props) {
+export function ReasonDialog({ title, description, diff, withReason = true, quickReasons, minReason = REASON_MIN, maxReason = REASON_MAX, fieldLabel = 'Motivo', fieldNoun = 'o motivo', precheck, confirmLabel, destructive, extra, onConfirm, onClose, testIds, warning }: Props) {
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const invalid = withReason ? reasonError(reason, minReason) : undefined;
+  const invalid = withReason ? reasonError(reason, minReason, fieldNoun) : undefined;
 
   async function confirm() {
     setTouched(true);
@@ -103,7 +106,7 @@ export function ReasonDialog({ title, description, diff, withReason = true, quic
               ))}
             </div>
           ) : null}
-          <TextArea label="Motivo" value={reason} onChange={(event) => setReason(event.target.value.slice(0, Math.min(maxReason, REASON_HARD_MAX)))} counter={{ value: reason.length, max: maxReason }} error={touched ? invalid : undefined} rows={3} data-testid={testIds?.reason ?? 'reason-input'} />
+          <TextArea label={fieldLabel} value={reason} onChange={(event) => setReason(event.target.value.slice(0, Math.min(maxReason, REASON_HARD_MAX)))} counter={{ value: reason.length, max: maxReason }} error={touched ? invalid : undefined} rows={3} data-testid={testIds?.reason ?? 'reason-input'} />
         </>
       ) : null}
       {error ? <Banner tone="danger" testId="reason-error">{error}</Banner> : null}

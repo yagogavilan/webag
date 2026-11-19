@@ -42,6 +42,10 @@ const ICONS: Record<AdminSection, SolarName> = {
   ajuda: 'info',
   titulares: 'user',
   disputas: 'exchange',
+  alertas: 'alert',
+  pedidos: 'orders',
+  usuarios: 'account',
+  manutencao: 'settings',
 };
 
 const TEST_IDS: FrameTestIds = {
@@ -53,6 +57,8 @@ const TEST_IDS: FrameTestIds = {
   moreSearch: 'nav-more-search',
   account: (key) => `nav-more-${key}`,
 };
+
+const alertsCountLabel = (critical: number) => (n: number) => `${n} abertos${critical > 0 ? `, ${critical} críticos` : ''}`;
 
 const GROUP_ORDER: NavGroupId[] = ['operation', 'money', 'marketing', 'area', 'system'];
 
@@ -109,6 +115,7 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
           href: item.href,
           icon: ICONS[item.section],
           ...(item.section === 'logistica' ? { count: waiting.length, countLabel: (n: number) => `${n} esperando motoboy`, countTestId: 'admin.logistica.nav-count' } : {}),
+          ...(item.section === 'alertas' && pending?.alerts ? { count: pending.alerts.open, countLabel: alertsCountLabel(pending.alerts.critical), countTestId: 'admin.alertas.nav-count' } : {}),
           ...(item.section === 'lojas' && pending?.stores ? { count: pending.stores.inReview, countLabel: (n: number) => `${n} em análise`, countTestId: 'admin.lojas.nav-count' } : {}),
           ...(item.section === 'disputas' && pending?.disputes ? { count: pending.disputes.inMediation, countLabel: (n: number) => `${n} em mediação`, countTestId: 'admin.disputas.nav-count' } : {}),
           ...(item.section === 'estornos' && pending?.refunds ? { count: pending.refunds.needingAction, countLabel: (n: number) => `${n} pedem ação`, countTestId: 'admin.estornos.nav-count' } : {}),

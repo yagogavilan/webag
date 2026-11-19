@@ -4,7 +4,7 @@ import type { AdminProfile } from './session-types';
  * Matriz de menu e edição do admin (onda-1b-contas.md §AD0, alinhada a `permissions.ts` da API).
  * Só decide o que desenhar; quem barra de verdade é a API (403).
  */
-export type AdminSection = 'inicio' | 'lojas' | 'logistica' | 'estornos' | 'frete' | 'comissoes' | 'trocas' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'parametros_entrega' | 'flags' | 'termos' | 'auditoria' | 'admins' | 'banners' | 'push' | 'cupons' | 'relatorios' | 'denuncias' | 'ajuda' | 'titulares' | 'disputas';
+export type AdminSection = 'inicio' | 'lojas' | 'logistica' | 'estornos' | 'frete' | 'comissoes' | 'trocas' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'parametros_entrega' | 'flags' | 'termos' | 'auditoria' | 'admins' | 'banners' | 'push' | 'cupons' | 'relatorios' | 'denuncias' | 'ajuda' | 'titulares' | 'disputas' | 'alertas' | 'pedidos' | 'usuarios' | 'manutencao';
 
 const ALL_PROFILES: readonly AdminProfile[] = ['super_admin', 'operations', 'finance', 'support'];
 
@@ -34,6 +34,11 @@ const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
   ajuda: ['super_admin', 'operations'],
   titulares: ['super_admin'],
   disputas: ['super_admin', 'operations'],
+  // B3, B4, B5, WB-121 (DEC-073/074). Alertas: todo perfil lê, mas a API só devolve os TIPOS do público do perfil. Usuários: suporte lê sem bloquear.
+  alertas: ALL_PROFILES,
+  pedidos: ALL_PROFILES,
+  usuarios: ['super_admin', 'operations', 'support'],
+  manutencao: ['super_admin'],
 };
 
 const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
@@ -61,6 +66,11 @@ const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
   ajuda: ['super_admin', 'operations'],
   titulares: ['super_admin'],
   disputas: ['super_admin', 'operations'],
+  // Encerrar alerta: `alerts:resolve`. Pedidos: cancelar e estornar são do financeiro e do super admin (DEC-074c); operação e suporte só leem.
+  alertas: ['super_admin', 'operations', 'finance'],
+  pedidos: ['super_admin', 'finance'],
+  usuarios: ['super_admin', 'operations'],
+  manutencao: ['super_admin'],
 };
 
 export function canView(profile: AdminProfile | null, section: AdminSection): boolean {
@@ -112,8 +122,11 @@ export interface NavItem {
 /** Ordem = ordem da barra lateral (`onda-7-navegacao-paineis.md` §3.2 e protótipo). */
 export const NAV_ITEMS: readonly NavItem[] = [
   { section: 'inicio', label: 'Início', href: '/admin', group: 'operation' },
+  { section: 'alertas', label: 'Alertas', href: '/admin/alertas', group: 'operation' },
   { section: 'logistica', label: 'Logística', href: '/admin/logistica', group: 'operation' },
+  { section: 'pedidos', label: 'Pedidos', href: '/admin/pedidos', group: 'operation' },
   { section: 'lojas', label: 'Lojas', href: '/admin/lojas', group: 'operation' },
+  { section: 'usuarios', label: 'Usuários', href: '/admin/usuarios', group: 'operation' },
   { section: 'disputas', label: 'Disputas de troca', shortLabel: 'Disputas', href: '/admin/disputas', group: 'operation' },
   { section: 'estornos', label: 'Estornos', href: '/admin/estornos', group: 'operation' },
   { section: 'moderacao', label: 'Moderação', href: '/admin/moderacao', group: 'operation' },
@@ -130,6 +143,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { section: 'categorias', label: 'Categorias', href: '/admin/categorias', group: 'area' },
   { section: 'parametros_entrega', label: 'Parâmetros de entrega', shortLabel: 'Parâmetros', href: '/admin/parametros/entrega', group: 'system' },
   { section: 'parametros', label: 'Todos os parâmetros', href: '/admin/parametros', group: 'system' },
+  { section: 'manutencao', label: 'Modo manutenção', shortLabel: 'Manutenção', href: '/admin/manutencao', group: 'system' },
   { section: 'flags', label: 'Feature flags', href: '/admin/flags', group: 'system' },
   { section: 'termos', label: 'Termos e privacidade', href: '/admin/termos', group: 'system' },
   { section: 'titulares', label: 'Pedidos de titulares', href: '/admin/titulares', group: 'system' },

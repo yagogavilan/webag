@@ -21,6 +21,18 @@ describe('Início do admin (W.7)', () => {
     expect(screen.getByTestId('admin.home.pending-lojas')).toHaveAttribute('href', '/admin/lojas');
   });
 
+  it('B3: card de alertas abertos com os críticos em texto; sem críticos, sem aviso extra', async () => {
+    vi.stubGlobal('fetch', server(pending({ alerts: { open: 5, critical: 2 } })).impl);
+    const first = renderPanel(<AdminHome />);
+    expect(await screen.findByTestId('admin.home.pending-alertas')).toHaveTextContent('Alertas abertos');
+    expect(screen.getByTestId('admin.home.pending-alertas')).toHaveTextContent('2 críticos: agir hoje');
+    expect(screen.getByTestId('admin.home.pending-alertas')).toHaveAttribute('href', '/admin/alertas');
+    first.unmount();
+    vi.stubGlobal('fetch', server(pending({ alerts: { open: 0, critical: 0 } })).impl);
+    renderPanel(<AdminHome />);
+    expect(await screen.findByTestId('admin.home.pending-alertas')).not.toHaveTextContent('críticos');
+  });
+
   it('área nula (sem permissão) ou fora do menu do perfil não aparece; erro da API deixa só os atalhos', async () => {
     vi.stubGlobal('fetch', server(pending({ refunds: null, dataRequests: null })).impl);
     const first = renderPanel(<AdminHome />, 'operations');
