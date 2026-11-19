@@ -37,10 +37,16 @@ function originOf(token) {
   return `10.${h[0]}.${h[1]}.${h[2] || 1}`;
 }
 export async function api(method, path, { body, token, headers = {} } = {}) {
-  const response = await fetch(API + path, {
-    method,
-    headers: { 'content-type': 'application/json', 'x-forwarded-for': originOf(token), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
+  const send = () =>
+    fetch(API + path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': originOf(token), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  // Falha de transporte (ex.: o servidor fechou o socket ocioso do pool, `fetch failed`): UMA nova tentativa só para GET (idempotente); POST nunca é repetido.
+  const response = await send().catch((error) => {
+    if (method !== 'GET') throw error;
+    return send();
   });
   const text = await response.text();
   let data = text;

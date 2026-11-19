@@ -5,13 +5,16 @@ import { newCustomer, place, pay, sql, setParam, resetParam } from '../retestes/
 const n = Number(process.argv[2] ?? 20);
 await setParam('pix_hora_max', 30, 'Preparo S5 (restaurado no fim)');
 const ids = [];
-for (let i = 0; i < n; i++) {
+try {
+  for (let i = 0; i < n; i++) {
   const c = await newCustomer();
-  const o = await place(c, 'delivery');
+  const o = await place(c, 'pickup'); // retirada: não depende do horário da logística (RN-19)
   if (!o.order) throw new Error(`pedido recusado ${o.res.status} ${JSON.stringify(o.res.data).slice(0, 120)}`);
   await pay(c, o.order.id);
   ids.push(sql(`select provider_payment_id from payment_attempts where external_reference = '${o.order.id}' order by created_at limit 1`));
+  }
+} finally {
+  await resetParam('pix_hora_max');
 }
-await resetParam('pix_hora_max');
 console.log(`LEDGER_ANTES=${sql('select count(*) from ledger_entries')}`);
 console.log(`IDS=${ids.join(',')}`);

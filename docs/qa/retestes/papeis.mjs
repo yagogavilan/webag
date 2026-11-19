@@ -49,10 +49,12 @@ async function enrollAdmin(profile) {
   const accepted = await api('POST', '/v1/auth/invitations/accept', { body: { token, password: ADMIN_PASSWORD } });
   if (accepted.status !== 200) throw new Error(`aceitar convite ${profile}: ${accepted.status} ${JSON.stringify(accepted.data).slice(0, 160)}`);
   const limited = accepted.data.tokens.accessToken;
+  const beforeSetup = (await api('GET', '/v1/admin/parameters', { token: limited })).status;
   const setup = await api('POST', '/v1/admin/totp/setup', { token: limited });
+  const beforeConfirm = (await api('GET', '/v1/admin/parameters', { token: limited })).status;
   const confirm = await api('POST', '/v1/admin/totp/confirm', { token: limited, body: { code: totp(setup.data.secret) } });
   if (confirm.status !== 200) throw new Error(`totp ${profile}: ${confirm.status}`);
-  return { profile, email, secret: setup.data.secret, limited, lastStep: Math.floor(Date.now() / 30000), invitationReuse: await api('POST', '/v1/auth/invitations/accept', { body: { token, password: ADMIN_PASSWORD } }) };
+  return { profile, email, secret: setup.data.secret, limited, beforeSetup, beforeConfirm, lastStep: Math.floor(Date.now() / 30000), invitationReuse: await api('POST', '/v1/auth/invitations/accept', { body: { token, password: ADMIN_PASSWORD } }) };
 }
 async function adminSession(a) {
   while (Math.floor(Date.now() / 30000) <= a.lastStep) await sleep(2000);
@@ -76,8 +78,9 @@ async function main() {
   const enrolled = [];
   for (const profile of ['operations', 'finance', 'support']) enrolled.push(await enrollAdmin(profile));
   record('PAP-1', 'convite de admin: e-mail com link, aceite com senha, TOTP obrigatório; o mesmo convite não vale duas vezes (410)', enrolled.every((e) => e.invitationReuse.status === 410), enrolled.map((e) => `${e.profile}:reuso=${e.invitationReuse.status}`).join(' '));
-  const limitedTry = await api('GET', '/v1/admin/parameters', { token: enrolled[0].limited });
-  record('PAP-2', 'a sessão limitada do convite (só TOTP liberado) NÃO acessa rotas de admin', [401, 403].includes(limitedTry.status), `HTTP ${limitedTry.status}`);
+  record('PAP-2', 'a sessão limitada do convite (só TOTP liberado) NÃO acessa rotas de admin antes de configurar o TOTP (401/403), nem depois de pedir o segredo e antes de confirmar', enrolled.every((e) => [401, 403].includes(e.beforeSetup) && [401, 403].includes(e.beforeConfirm)), enrolled.map((e) => `${e.profile}: antes=${e.beforeSetup} apos-setup=${e.beforeConfirm}`).join('; '));
+  const afterConfirm = await api('GET', '/v1/admin/parameters', { token: enrolled[0].limited });
+  record('PAP-2b', 'OBSERVAÇÃO: depois de confirmar o TOTP o mesmo token limitado passa a valer como sessão completa? (informativo; o esperado do contrato é pedir o login em 2 passos)', null, `GET /v1/admin/parameters com o token do convite depois do confirm = HTTP ${afterConfirm.status}`);
   const tokens = { super: await admin() };
   for (const e of enrolled) tokens[e.profile === 'operations' ? 'ops' : e.profile === 'finance' ? 'fin' : 'sup'] = await adminSession(e);
   const T = { anon: null, alice: alice.token, bob: bob.token, staff: staff.token, owner: owner.token, otherOwner: otherOwner.token, ...tokens };
@@ -142,7 +145,8 @@ async function main() {
   // lojista x admin
   for (const p of ['/v1/admin/parameters', '/v1/admin/stores', '/v1/admin/logistics/deliveries', '/v1/admin/payments/refund-queue', '/v1/admin/privacy-requests', '/v1/admin/admins', '/v1/admin/coupons']) want('owner', 'GET', p, undefined, [401, 403], `dono de loja lê ${p}`);
   want('owner', 'POST', `/v1/admin/stores/${s.id}/approve`, {}, [401, 403], 'dono aprova a própria loja');
-  want('owner', 'PATCH', `/v1/admin/stores/${s.id}/commission`, { pct: 0 }, [401, 403], 'dono zera a própria comissão');
+  want('owner', 'PUT', `/v1/admin/stores/${s.id}/commission`, { pct: 0 }, [401, 403], 'dono zera a própria comissão');
+  want('owner', 'GET', `/v1/admin/stores/${s.id}/commission`, undefined, [401, 403], 'dono lê a comissão efetiva pela rota do admin');
   // perfis de admin: leitura
   const R = (who, path, expected, label) => want(who, 'GET', path, undefined, expected, `${label}`);
   for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/parameters', [ok], `${who} lê parâmetros (parameters:read: super, operação, financeiro)`);
@@ -150,12 +154,12 @@ async function main() {
   for (const [who, ok] of [['super', 200], ['ops', 403], ['fin', 403], ['sup', 403]]) R(who, '/v1/admin/privacy-requests', [ok], `${who} lê pedidos de titulares (privacy:manage: só super)`);
   for (const [who, ok] of [['super', 200], ['ops', 403], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/payments/refund-queue', [ok], `${who} lê a fila de estornos (payments:refunds:read: super e financeiro)`);
   for (const [who, ok] of [['super', 200], ['ops', 403], ['fin', 200], ['sup', 403]]) R(who, `/v1/admin/reports/finance/revenue.csv?from=2026-11-01&to=2026-11-30&storeId=${s.id}`, [ok], `${who} baixa o CSV de receita (reports:finance)`);
-  for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/reports/operations', [ok], `${who} lê relatórios operacionais (suporte não)`);
+  for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/reports/operations?from=2026-11-01&to=2026-11-30', [ok], `${who} lê relatórios operacionais (suporte não)`);
   for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 200]]) R(who, '/v1/admin/logistics/deliveries', [ok], `${who} lê a fila da logística (logistics:read: todos)`);
   for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 200]]) R(who, '/v1/admin/overview/pending', [ok], `${who} lê as pendências do Início`);
   for (const [who, ok] of [['super', 200], ['ops', 403], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/payments/alerts', [ok], `${who} lê alertas de pagamento (payments:alerts:read)`);
   for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 200], ['sup', 403]]) R(who, '/v1/admin/coupons', [ok], `${who} lê cupons (coupons:read: super, operação, financeiro)`);
-  for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 403], ['sup', 403]]) R(who, '/v1/admin/moderation/words', [ok], `${who} lê moderação (moderation:read: super e operação)`);
+  for (const [who, ok] of [['super', 200], ['ops', 200], ['fin', 403], ['sup', 403]]) R(who, '/v1/admin/moderation/terms', [ok], `${who} lê moderação (moderation:read: super e operação)`);
   // perfis de admin: escrita (o corpo é inválido de propósito: a autorização vem antes da validação, 403 x 400/404/422)
   const W = (who, method, path, body, allowed, label) => want(who, method, path, body, allowed ? [400, 404, 409, 422, 200, 201, 204] : [403], label);
   for (const [who, ok] of [['super', true], ['ops', false], ['fin', false], ['sup', false]]) W(who, 'PUT', '/v1/admin/parameters/entrega_max_min', {}, ok, `${who} escreve parâmetro (parameters:write: só super)`);

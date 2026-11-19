@@ -326,6 +326,15 @@ const haversineKm = (a, b) => {
   return 2 * 6371.0088 * Math.asin(Math.sqrt(h));
 };
 async function teto() {
+  // BUG-021 (RN-19 §2): perto do fechamento (20 h) a entrega de 119/120 min NÃO é oferecida; o teste do teto roda com a logística aberta o dia todo.
+  await setParam('logistica_horario', '00:00-23:59', 'Reteste QA TETO: logística aberta o dia todo (restaurado no fim)');
+  try {
+    await tetoInner();
+  } finally {
+    await resetParam('logistica_horario').catch(() => undefined);
+  }
+}
+async function tetoInner() {
   const s = await store();
   const [slat, slng] = sql(`select lat||'|'||lng from stores where id = '${s.id}'`).split('|').map(Number);
   const wanted = { 119: null, 120: null, 121: null };

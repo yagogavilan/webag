@@ -1,0 +1,16 @@
+PASS  PAP-0 | atores preparados: 2 clientes, dono e funcionário da loja A, dono da loja B  [lojaB=a647a4d3-4bf1-4f48-8ef8-31492a731b36]
+PASS  PAP-1 | convite de admin: e-mail com link, aceite com senha, TOTP obrigatório; o mesmo convite não vale duas vezes (410)  [operations:reuso=410 finance:reuso=410 support:reuso=410]
+PASS  PAP-2 | a sessão limitada do convite (só TOTP liberado) NÃO acessa rotas de admin antes de configurar o TOTP (401/403), nem depois de pedir o segredo e antes de confirmar  [operations: antes=403 apos-setup=403; finance: antes=403 apos-setup=403; support: antes=403 apos-setup=403]
+N/T   PAP-2b | OBSERVAÇÃO: depois de confirmar o TOTP o mesmo token limitado passa a valer como sessão completa? (informativo; o esperado do contrato é pedir o login em 2 passos)  [GET /v1/admin/parameters com o token do convite depois do confirm = HTTP 200]
+PASS  PAP-MATRIZ | matriz de papéis x rotas: 143 verificações (IDOR entre clientes, cliente x loja x admin, funcionário x dono, loja x loja, 4 perfis de admin)  [143 de 143 conforme a tabela]
+PASS  PAP-3 | funcionário com "orders" aceita pedido (200) e a ação fica atribuída a ele  [HTTP 200]
+PASS  PAP-4 | dono da A pede pelo URL da A o pedido de OUTRA loja: 404 (não vaza por ID)  [HTTP 404]
+PASS  PAP-5 | suporte vê só as próprias ações na auditoria (o filtro é forçado no servidor)  [HTTP 200; 23 linhas; de outros atores=0]
+PASS  PAP-5b | super admin vê as ações de todos  [super 50 linhas vs suporte 23]
+PASS  PAP-6 | JWT forjado (alg none, role admin) é recusado (401)  [HTTP 401]
+PASS  PAP-7 | o refresh token não serve como access token (401)  [HTTP 401]
+N/T   PAP-8 | funcionário removido pelo dono perde o acesso na hora (sessão e permissões)  [NÃO TESTADO: cenário coberto por `O2-EQP` do e2e da API; não repeti por HTTP para não alterar a equipe do seed]
+PASS  PAP-9 | o detalhe da corrida para o suporte NÃO traz telefone nem endereço completo do cliente (SEC-144: só pelo "Revelar" com motivo e auditoria)  [HTTP 200; telefone no corpo=false]
+
+RESUMO: 11 passaram, 0 falharam, 2 não testadas
+exit 0

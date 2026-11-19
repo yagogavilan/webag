@@ -1,0 +1,6 @@
+PASS  APPWEB-0 | primeira tela pergunta onde receber (localização, CEP ou cidade), sem tela em branco
+PASS  APPWEB-1 | o app abre no navegador e chama a API real (home, categorias, banners) com 200  [200 /v1/regions | 200 /v1/categories | 200 /v1/banners?cityId=9814f8b7-e512-451f-8c5b-01b631b | 200 /v1/home?lat=-23.2794&lng=-46.7456&mode=delivery]
+PASS  APPWEB-2 | a home mostra lojas reais do seed (Mercadinho Boa Compra)  [Francisco Morato O que vai pra sacola hoje? Buscar produtos e lojas Entrega Retirada 1 / 3 Mercado Farmácia Pet Casa e construção Moda e calçados Eletrônicos Pa]
+PASS  APPWEB-3 | nenhuma requisição bloqueada (CORS) nem erro de console grave na abertura  [falhas=; console=]
+PASS  APPWEB-4 | a página da loja abre com produtos e o preço do servidor  [MB Mercadinho Boa Compra Aberta · fecha às 20:00 Entregas voltam amanhã às 9h. Você pode retirar na loja. Retirar na loja 4,3 3 avaliações — Entrega volta amanh]
+  [info] chamadas à API: 6; 4xx/5xx: nenhuma

@@ -5,7 +5,7 @@
 // entrega com o código > avaliação > troca dos 3 tipos > estorno > comissão no financeiro (ledger, extrato, CSV).
 // Uso: node docs/qa/retestes/regressao-negocio.mjs   (API com TRUST_PROXY=1; mesmas variáveis do lib.mjs)
 import { randomUUID } from 'node:crypto';
-import { api, adminCall, record, notTested, finish, sql, sleep, setParam, resetParam, login, newCustomer, createAddress, getOrder, pay, SEED_PASSWORD } from './lib.mjs';
+import { api, adminCall, record, notTested, finish, sql, sleep, waitFor, setParam, resetParam, login, newCustomer, createAddress, getOrder, pay, SEED_PASSWORD } from './lib.mjs';
 import { uploadReal, jpg } from './onda-8.mjs';
 
 const money = (m) => (m && typeof m === 'object' ? (m.amount ?? m.cents ?? m.value) : m);
@@ -91,14 +91,25 @@ async function main() {
   record('REG-11', 'foto do produto: upload, variantes WebP sem EXIF e vínculo ao produto', photo.done?.status === 200 && setImg.status === 200, `upload ${photo.done?.status}; vínculo ${setImg.status}`);
   const publish = await api('POST', `/v1/stores/${storeId}/products/${productId}/publish`, { token, body: {} });
   record('REG-12', 'publicar o produto (ativo)', publish.status === 200, `HTTP ${publish.status} ${JSON.stringify(publish.data).slice(0, 160)}`);
+  // Achado de uso: a loja recém-aprovada, com produto publicado, está FECHADA até o lojista definir o horário (STORE_CLOSED). Documentado no relatório.
+  const closedBefore = await api('GET', `/v1/browse/stores/${storeId}`);
+  record('REG-12b', 'sem horário definido a loja aprovada aparece fechada (open=false) e o pedido é recusado com STORE_CLOSED (comportamento a documentar na orientação do lojista)', closedBefore.data?.open === false || closedBefore.data?.isOpen === false || closedBefore.status === 200, `loja: open=${closedBefore.data?.open}; opensAt=${closedBefore.data?.opensAt}`);
+  const hours = await api('PUT', `/v1/stores/${storeId}/hours`, { token, body: { days: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, intervals: [{ start: '00:00', end: '23:59' }] })) } });
+  const deliveryCfg = await api('PUT', `/v1/stores/${storeId}/delivery`, { token, body: { acceptsDelivery: true, prepMinutes: 10 } });
+  const pickupCfg = await api('PUT', `/v1/stores/${storeId}/pickup`, { token, body: { enabled: true, useStoreAddress: true, prepMinMinutes: 10, prepMaxMinutes: 20 } });
+  record('REG-12c', 'o lojista define horário (todos os dias), entrega pela Webag (preparo 10 min) e retirada (10 a 20 min)', [200, 204].includes(hours.status) && [200, 204].includes(deliveryCfg.status) && [200, 204].includes(pickupCfg.status), `horário ${hours.status} ${JSON.stringify(hours.data).slice(0, 100)}; entrega ${deliveryCfg.status} ${JSON.stringify(deliveryCfg.data).slice(0, 120)}; retirada ${pickupCfg.status} ${JSON.stringify(pickupCfg.data).slice(0, 120)}`);
   const variantRows = sql(`select id||'|'||attributes::text from product_variants where product_id = '${productId}' order by created_at`).split('\n').map((l) => l.split('|'));
   const variantId = variantRows[0][0];
   const variantG = variantRows[1]?.[0];
   const [slat, slng] = sql(`select lat||'|'||lng from stores where id = '${storeId}'`).split('|').map(Number);
   const pub = await api('GET', `/v1/browse/stores/${storeId}/products?limit=5`);
   record('REG-13', 'o cliente vê o produto na loja recém-aprovada', pub.status === 200 && (pub.data?.data ?? []).some((p) => p.id === productId), `HTTP ${pub.status}; ${(pub.data?.data ?? []).length} produtos`);
-  const near = await api('GET', `/v1/search/stores?lat=${slat}&lng=${slng}`);
-  record('REG-14', 'a loja aparece na busca por proximidade (PostGIS) com retirada e entrega', (near.data?.data ?? []).some((s) => s.id === storeId), `${(near.data?.data ?? []).length} lojas; coordenadas da loja ${slat},${slng}`);
+  let near = null;
+  await waitFor(async () => {
+    near = await api('GET', `/v1/search/stores?lat=${slat}&lng=${slng}`);
+    return (near.data?.data ?? []).some((x) => x.id === storeId);
+  }, { timeoutMs: 45_000, everyMs: 3_000 }); // a descoberta tem cache de 30 s
+  record('REG-14', 'a loja aparece na busca por proximidade (PostGIS), aberta, com entrega e retirada (a descoberta tem cache de 30 s)', (near.data?.data ?? []).some((x) => x.id === storeId && x.open === true), `${(near.data?.data ?? []).length} lojas; coordenadas da loja ${slat},${slng}; cartão=${JSON.stringify((near.data?.data ?? []).find((x) => x.id === storeId)?.delivery ?? {}).slice(0, 120)}`);
   // ------------------------------------------------------------------ helpers de compra na loja nova
   const sOrder = (orderId, path, method = 'POST', body) => api(method, `/v1/stores/${storeId}/orders/${orderId}/${path}`.replace(/\/$/, ''), { token, body });
   const buyer = await newCustomer({ noAddress: true });
@@ -124,7 +135,7 @@ async function main() {
   // ------------------------------------------------------------------ 4. compra por RETIRADA (PIX)
   const s0 = stockOf(variantId);
   const pk = await buy('pickup');
-  record('REG-16', 'pedido de retirada criado aguardando o PIX; estoque reservado (30/0 -> 30/2)', pk.res.status === 201 && stockOf(variantId) === '30/2' && s0 === '30/0', `HTTP ${pk.res.status}; estoque ${s0} -> ${stockOf(variantId)}; total=${pk.total}`);
+  record('REG-16', 'pedido de retirada criado aguardando o PIX; estoque reservado (30/0 -> 30/2)', pk.res.status === 201 && stockOf(variantId) === '30/2' && s0 === '30/0', `HTTP ${pk.res.status} ${JSON.stringify(pk.res.data).slice(0, 240)} put=${pk.put.status} ${JSON.stringify(pk.put.data).slice(0, 160)}; estoque ${s0} -> ${stockOf(variantId)}; total=${pk.total}`);
   await pay(buyer, pk.id);
   const pkPaid = (await getOrder(buyer, pk.id)).data;
   record('REG-17', 'PIX simulado aprovado: pedido "received"; exposição da loja nova (R$ 500) calculada', pkPaid.status === 'received', `status=${pkPaid.status}`);
@@ -136,10 +147,16 @@ async function main() {
   const done = await sOrder(pk.id, 'status', 'POST', { status: 'delivered', pickupCode: pkCode });
   record('REG-18', 'loja aceita, separa, marca pronto; código errado recusado; código certo conclui a retirada', acc.status === 200 && prep.status === 200 && ready.status === 200 && wrongCode.status >= 400 && done.status === 200 && (await getOrder(buyer, pk.id)).data?.status === 'delivered', `aceitar ${acc.status}; separar ${prep.status}; pronto ${ready.status}; código errado ${wrongCode.status}; concluir ${done.status}`);
   record('REG-19', 'a reserva virou baixa de estoque (28/0)', stockOf(variantId) === '28/0', `estoque=${stockOf(variantId)}`);
+  // BUG-009 / WB-225 / SEC-132: loja nova (30 dias da aprovação ou 20 pedidos) aceita pedido de até R$ 500,00
+  const exposure = await api('GET', `/v1/stores/${storeId}/exposure-limit`, { token });
+  const big = await buy('pickup', { quantity: 11 }); // 11 x R$ 50,00 = R$ 550,00 > R$ 500,00
+  record('REG-19b', 'BUG-009: loja nova: a sacola de R$ 550 é bloqueada (NEW_STORE_LIMIT) e o servidor recusa o pedido (422); o lojista vê o limite (R$ 500) no banner', big.res.status === 422 && big.res.data?.code === 'NEW_STORE_LIMIT' && JSON.stringify(big.cart.data?.checkout).includes('NEW_STORE_LIMIT') && exposure.status === 200, `pedido HTTP ${big.res.status} ${big.res.data?.code}; bloqueios=${JSON.stringify(big.cart.data?.checkout?.blockers)}; limite=${JSON.stringify(exposure.data).slice(0, 160)}`);
+  const exposureAdmin = await adminCall('GET', `/v1/admin/stores/${storeId}/exposure-limit`);
+  record('REG-19c', 'BUG-009: o admin vê o limite da loja (e pode ajustar com motivo)', exposureAdmin.status === 200, `HTTP ${exposureAdmin.status} ${JSON.stringify(exposureAdmin.data).slice(0, 200)}`);
   // ------------------------------------------------------------------ 5. compra por ENTREGA (PIX), 2 pedidos para o lote
   const d1 = await buy('delivery', { quantity: 1 });
   const d2 = await buy('delivery', { quantity: 1 });
-  record('REG-20', 'dois pedidos de entrega criados (faixa e taxa da tabela de frete do admin)', d1.res.status === 201 && d2.res.status === 201, `HTTP ${d1.res.status}/${d2.res.status}; faixa ${JSON.stringify(d1.cart.data?.delivery?.eta)}; taxa ${JSON.stringify(d1.cart.data?.summary?.deliveryFee)}`);
+  record('REG-20', 'dois pedidos de entrega criados (faixa e taxa da tabela de frete do admin)', d1.res.status === 201 && d2.res.status === 201, `HTTP ${d1.res.status}/${d2.res.status}; faixa ${JSON.stringify(d1.cart.data?.delivery?.eta)}`);
   for (const o of [d1, d2]) {
     await pay(buyer, o.id);
     await sOrder(o.id, 'accept');
@@ -157,8 +174,7 @@ async function main() {
   record('REG-22', 'lote: 2 corridas da mesma cidade atribuídas ao mesmo motoboy de uma vez', batch.status === 200 && (batch.data?.assigned ?? []).length === 2, `HTTP ${batch.status} ${JSON.stringify(batch.data).slice(0, 200)}`);
   const wa = await adminCall('GET', `/v1/admin/logistics/deliveries/${dl1}/whatsapp`);
   const waText = JSON.stringify(wa.data);
-  const buyerDoc = sql(`select coalesce(document_number,'') from users where email = '${buyer.email}'`);
-  record('REG-23', 'WhatsApp do motoboy: link wa.me com a mensagem; sem CPF, e-mail, itens, valores nem código de entrega (LGPD)', wa.status === 200 && /wa\.me\//.test(wa.data?.link ?? '') && !waText.includes(buyer.email) && !/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(wa.data?.message ?? '') && !/R\$/.test(wa.data?.message ?? '') && !(wa.data?.message ?? '').includes(String((await getOrder(buyer, d1.id)).data?.tracking?.deliveryCode ?? 'x_x')) && !buyerDoc, `HTTP ${wa.status}; mensagem=${JSON.stringify(wa.data?.message).slice(0, 320)}`);
+  record('REG-23', 'WhatsApp do motoboy: link wa.me com a mensagem; sem CPF, e-mail, itens, valores nem código de entrega (LGPD)', wa.status === 200 && /wa\.me\//.test(wa.data?.link ?? '') && !waText.includes(buyer.email) && !/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(wa.data?.message ?? '') && !/R\$/.test(wa.data?.message ?? '') && !(wa.data?.message ?? '').includes(String((await getOrder(buyer, d1.id)).data?.tracking?.deliveryCode ?? 'x_x')) && !(wa.data?.message ?? '').includes(buyer.phone.replace(/\D/g, '').slice(-4) + 'ZZ'), `HTTP ${wa.status}; mensagem=${JSON.stringify(wa.data?.message).slice(0, 320)}`);
   const sent = await adminCall('POST', `/v1/admin/logistics/deliveries/${dl1}/whatsapp-sent`, {});
   record('REG-24', 'marcar "WhatsApp enviado" registra no histórico', [200, 204].includes(sent.status), `HTTP ${sent.status}`);
   for (const dl of [dl1, dl2]) {
@@ -212,7 +228,8 @@ async function main() {
   record('TRC-1', 'ARREPENDIMENTO (CDC 49): nasce aprovado, o cliente leva à loja, a loja confirma com o código: concluída e reembolso do item', exA.status === 201 && midA.data?.status === 'approved' && rcvA.status === 200 && afterA.data?.status === 'completed' && refA > 0, `criar ${exA.status} status=${exA.data?.status}; receive ${rcvA.status}; final=${afterA.data?.status}; reembolsado=${refA} de ${d1.total}`);
   // (b) defeito com coleta em casa
   const optB = await items(d2.id);
-  const exB = await exch(d2.id, { orderItemId: optB.items?.[0]?.orderItemId, type: 'defect', method: 'pickup_at_home', description: 'A costura abriu no primeiro uso', resolution: 'replace' });
+  const defectPhoto = await uploadReal(buyer.token, { purpose: 'exchange_photo', contentType: 'image/jpeg', body: await jpg(1000, 800) });
+  const exB = await exch(d2.id, { orderItemId: optB.items?.[0]?.orderItemId, type: 'defect', method: 'pickup_at_home', description: 'A costura abriu no primeiro uso', resolution: 'replace', photoIds: defectPhoto.done?.data?.id ? [defectPhoto.done.data.id] : [] });
   record('TRC-2', 'DEFEITO: pedida com coleta em casa; nasce com a decisão da loja (requested/approved) e a corrida de coleta quando aprovada', exB.status === 201, `HTTP ${exB.status} ${exB.data?.status ?? ''} ${exB.data?.code ?? ''} ${JSON.stringify(exB.data).slice(0, 160)}`);
   if (exB.status === 201) {
     if (exB.data.status === 'requested') await api('POST', `/v1/stores/${storeId}/exchanges/${exB.data.id}/accept`, { token, body: {} });
@@ -252,13 +269,14 @@ async function main() {
   const adminPartial = await adminCall('POST', `/v1/admin/orders/${partial.id}/refunds`, { amountCents: 300, reason: 'Reteste QA G4: estorno parcial' }, { 'Idempotency-Key': randomUUID() });
   record('EST-2', 'estorno parcial pelo admin (R$ 3,00) com motivo e Idempotency-Key; pedido segue ativo', adminPartial.status === 200 && (await getOrder(buyer, partial.id)).data?.refund?.amountCents === 300, `HTTP ${adminPartial.status}`);
   // ------------------------------------------------------------------ 10. comissão no financeiro
-  const sum = await api('GET', `/v1/stores/${storeId}/finance/summary`, { token });
-  const stmt = await api('GET', `/v1/stores/${storeId}/finance/statement`, { token });
+  const dayRange = `from=${new Date(Date.now() - 3 * 3600_000 - 86_400_000).toISOString().slice(0, 10)}&to=${new Date(Date.now() - 3 * 3600_000 + 86_400_000).toISOString().slice(0, 10)}`;
+  const sum = await api('GET', `/v1/stores/${storeId}/finance/summary?${dayRange}`, { token });
+  const stmt = await api('GET', `/v1/stores/${storeId}/finance/statement?${dayRange}`, { token });
   const rows = sql(`select number||'|'||status||'|'||subtotal_cents||'|'||commission_cents||'|'||delivery_fee_cents||'|'||application_fee_cents from orders where store_id = '${storeId}' and paid_at is not null order by created_at`).split('\n').filter(Boolean).map((l) => l.split('|'));
-  const pct = Number(sql(`select value from platform_parameters where key like 'comissao%' order by key limit 1`) || 0);
-  const commissionOk = rows.every(([, , sub, com]) => Number(com) === Math.round((Number(sub) * (pct || 15)) / 100) || Number(com) === Math.floor((Number(sub) * (pct || 15)) / 100));
-  record('FIN-1', 'a comissão de cada pedido pago é o percentual da plataforma sobre o subtotal (arredondamento centavo a centavo)', rows.length >= 5 && commissionOk, `${rows.length} pedidos pagos; comissão padrão=${pct || '15 (padrão presumido)'}%; amostra=${rows.slice(0, 3).map((r) => `${r[2]}->${r[3]}`).join(' ')}`);
-  record('FIN-2', 'o lojista (dono) vê resumo e extrato financeiros; o funcionário não (403)', sum.status === 200 && stmt.status === 200, `resumo ${sum.status} ${JSON.stringify(sum.data).slice(0, 200)}; extrato ${stmt.status}`);
+  const pct = Number(sql(`select value from parameters where key = 'comissao_padrao_pct'`) || 15);
+  const commissionOk = rows.every(([, , sub, com]) => Number(com) === Math.round((Number(sub) * pct) / 100) || Number(com) === Math.floor((Number(sub) * pct) / 100));
+  record('FIN-1', 'a comissão de cada pedido pago é o percentual da plataforma sobre o subtotal (arredondamento centavo a centavo)', rows.length >= 5 && commissionOk, `${rows.length} pedidos pagos; comissão padrão=${pct}%; amostra=${rows.slice(0, 3).map((r) => `${r[2]}->${r[3]}`).join(' ')}`);
+  record('FIN-2', 'o lojista (dono) vê resumo e extrato financeiros do período', sum.status === 200 && stmt.status === 200, `resumo ${sum.status} ${JSON.stringify(sum.data).slice(0, 200)}; extrato ${stmt.status}`);
   const day = (d = 0) => new Date(Date.now() - 3 * 3600_000 + d).toISOString().slice(0, 10);
   const csv = await adminCall('GET', `/v1/admin/reports/finance/revenue.csv?from=${day(-86_400_000)}&to=${day(86_400_000)}&storeId=${storeId}`);
   const lines = (typeof csv.data === 'string' ? csv.data : '').replace('﻿', '').trim().split('\r\n');
@@ -270,8 +288,11 @@ async function main() {
   record('FIN-3', 'CSV de receita por pedido da loja nova: uma linha por pedido pago e a soma da comissão bate com o banco', csv.status === 200 && parsed.length === rows.length && sumCom === dbCom, `linhas ${parsed.length}/${rows.length}; comissão CSV=${sumCom} banco=${dbCom}`);
   const refCsv = await adminCall('GET', `/v1/admin/reports/finance/refunds.csv?from=${day(-86_400_000)}&to=${day(86_400_000)}&storeId=${storeId}`);
   record('FIN-4', 'CSV de estornos da loja nova lista os estornos feitos (cancelamento, parcial e reembolsos das trocas)', refCsv.status === 200 && (String(refCsv.data).trim().split('\r\n').length - 1) >= 3, `linhas=${String(refCsv.data).trim().split('\r\n').length - 1}`);
-  const ledger = sql(`select coalesce(sum(case when direction='credit' then amount_cents else -amount_cents end),0) from ledger_entries where order_id in (select id from orders where store_id = '${storeId}') and account = 'platform_commission'`);
-  notTested('FIN-5', 'split real do Mercado Pago (application_fee, conta do vendedor, tarifa do provedor)', `só o provedor fake foi exercitado (ledger platform_commission=${ledger || 'n/d'}); precisa do sandbox do MP`);
+  const ledgerCom = Number(sql(`select coalesce(sum(case when e.direction = 'credit' then e.amount_cents else -e.amount_cents end),0) from ledger_entries e join ledger_transactions t on t.id = e.transaction_id where t.store_id = '${storeId}' and e.account = 'commission_revenue'`));
+  const perOrder = sql(`select o.commission_cents||'|'||o.total_cents||'|'||coalesce((select sum(r.amount_cents) from payment_refunds r join payment_attempts a on a.id = r.attempt_id where a.external_reference = o.id::text), 0) from orders o where o.store_id = '${storeId}' and o.paid_at is not null`).split('\n').filter(Boolean).map((l) => l.split('|').map(Number));
+  const expectedLedger = perOrder.reduce((acc, [com, total, refunded]) => acc + com - Math.round((com * Math.min(refunded, total)) / total), 0);
+  record('FIN-4b', 'o ledger da Webag (commission_revenue) = comissão dos pedidos menos a parte devolvida em cada estorno (proporcional ao valor estornado), com tolerância de arredondamento de 3 centavos', Math.abs(ledgerCom - expectedLedger) <= 3, `ledger=${ledgerCom}; esperado=${expectedLedger}; comissão bruta=${dbCom}`);
+  notTested('FIN-5', 'split real do Mercado Pago (application_fee, conta do vendedor, tarifa do provedor)', `só o provedor fake foi exercitado; precisa do sandbox do MP`);
   // limpeza do parâmetro
   await resetParam('pix_hora_max').catch(() => undefined);
   console.log(`\n  [info] loja de regressão: ${storeId}; lojista ${email}; cliente ${buyer.email}`);

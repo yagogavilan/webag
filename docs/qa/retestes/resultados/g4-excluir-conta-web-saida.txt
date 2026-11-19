@@ -1,0 +1,6 @@
+PASS  EXCLWEB-0 | a página pública abre sem login, com o formulário de e-mail e os prazos  [Ir para o conteúdo Excluir conta Webag Você pode excluir a sua conta e os seus dados pessoais quando quiser, com ou sem ]
+PASS  EXCLWEB-1 | a resposta do 1º passo não revela se a conta existe  [Se existir uma conta com esse e-mail, enviamos um código de 6 dígitos. Ele vale 10 minutos. Confira também o spam.]
+PASS  EXCLWEB-2 | o código de 6 dígitos chega ao e-mail do dono
+PASS  EXCLWEB-3 | com o código certo a revisão aparece (o que será apagado, o que a lei obriga reter, prazos)  [Ir para o conteúdo Excluir conta Webag Você pode excluir a sua conta e os seus dados pessoais quando quiser, com ou sem o app instalado. Esta página explica como fazer, o que acontece depois e o que p]
+PASS  EXCLWEB-4 | a exclusão fecha a conta (users.status = deleted, pendente 72 h) e a página não cria sessão nem cookie  [status=deleted; cookies=0; Sua conta foi fechada. Os seus dados serão apagados depois de 22 de novembro às 19:21. Até lá, você pode desistir usando o formulário "Mudou de ideia?", logo abaixo. Enviamos um aviso para o seu e-mail.]
+PASS  EXCLWEB-5 | arrependimento pela mesma página: com a senha certa a exclusão é cancelada e a conta volta a active  [A exclusão foi cancelada. A sua conta voltou a funcionar. Entre normalmente no app com o seu e-mail e a sua senha.]

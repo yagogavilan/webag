@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Retestes do G4 final (Onda 8, HEAD congelado 0d902ab) contra a API REAL (provedor `fake`, seed completo). Sem dependências além do Node 22
 // e do `sharp` do próprio repositório (para fabricar imagens). Uso: node docs/qa/retestes/onda-8.mjs <seção> [<seção>...]
-// Seções: bugs imagens wb259 wb261 wb262 coleta sec180 cupom csv exclusao v6 regressao papeis limpeza
+// Seções: bug020 bugs imagens wb259 wb261 wb262 coleta sec180 cupom csv exclusao v6 regressao papeis limpeza
 // Pré-requisitos: `pnpm run setup`, API rodando com TRUST_PROXY=1 (limite de taxa por IP; o gerador usa um IP fictício por conta),
 // docker (o relógio é recuado só pelo banco; a varredura é a do próprio servidor). Variáveis: as de lib.mjs + REPO (raiz do clone).
 import { createHash, randomUUID } from 'node:crypto';
@@ -15,7 +15,6 @@ const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025';
 const ORIGIN = 'http://localhost:3101';
 const png = (w, h) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 200, g: 30, b: 60 } } }).png({ compressionLevel: 9 }).toBuffer();
 const jpg = (w, h, q = 70) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 30, g: 120, b: 200 } } }).jpeg({ quality: q }).toBuffer();
-const rss = () => Number(sql('select 1') && 0); // placeholder substituído em `apiRssMb`
 
 /** Memória residente (MB) do processo da API que escuta em API_URL (lê /proc; só Linux). */
 async function apiRssMb() {
@@ -27,7 +26,6 @@ async function apiRssMb() {
   const status = spawnSync('sh', ['-c', `grep VmRSS /proc/${pid}/status`], { encoding: 'utf8' }).stdout;
   return Math.round(Number(status.replace(/\D/g, '')) / 1024);
 }
-void rss;
 
 /** Upload pelo fluxo real: POST pré-assinado ao bucket (com Origin, como o navegador) + complete. */
 async function uploadReal(token, { storeId, purpose, contentType, body }) {
@@ -68,7 +66,10 @@ const lastMailCode = async (email) => {
 async function freshCode(email, before) {
   for (let i = 0; i < 40; i++) {
     const found = await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json();
-    if ((found.messages ?? []).length > before) return (found.messages[0].Subject.match(/\b(\d{6})\b/) ?? [])[1];
+    if ((found.messages ?? []).length > before) {
+      const withCode = found.messages.find((m) => /\b\d{6}\b/.test(m.Subject));
+      if (withCode) return withCode.Subject.match(/\b(\d{6})\b/)[1];
+    }
     await sleep(300);
   }
   return undefined;
@@ -447,6 +448,7 @@ async function sec180() {
   // a exclusão precisa do arrependimento (72 h) ligado: parâmetro de produção é 72
   const del = await api('POST', '/v1/me/deletion', { token: c.token, body: { password: SEED_PASSWORD } });
   record('SEC180-0', 'o cliente pede a exclusão da conta (arrependimento ativo): 200', del.status === 200, `HTTP ${del.status} ${JSON.stringify(del.data).slice(0, 140)}`);
+  await sleep(2500); // o aviso "recebemos o pedido de exclusão" sai logo depois da resposta: deixa chegar antes de contar
   const before = await mailCount(c.email);
   const attackerIp = ipOf();
   let requests = 0;
@@ -669,7 +671,32 @@ async function v6Inner() {
   notTested('V6-5', 'SEC-162: conta de recebimento do dono excluído é desconectada e `tokens_enc` apagado 120 dias depois', 'depende de 120 dias de relógio e do job diário; coberto por `v6-privacy-coupons-tokens.e2e-spec.ts` (relógio injetado)');
 }
 
-const sections = { bugs, imagens, wb259, wb261, wb262, coleta, sec180, cupom, csv, exclusao, v6 };
+// ====================================================================================================================== BUG-020 ("não recebi" x auto-conclusão de 24 h)
+async function bug020() {
+  await seedStoreOf();
+  const a = await newCustomer();
+  const b = await newCustomer();
+  const A = await outForDelivery(a); // com "não recebi"
+  const B = await outForDelivery(b); // controle: sem aviso
+  const nr = await api('POST', `/v1/orders/${A.order.id}/not-received`, { token: a.token, body: {} });
+  record('BUG020-1', '"não recebi" registrado com a corrida em "saiu para entrega" (202)', nr.status === 202, `HTTP ${nr.status}`);
+  const noticed = sql(`select not_received_at is not null from orders where id = '${A.order.id}'`);
+  record('BUG020-2', 'o aviso fica gravado no pedido (orders.not_received_at)', noticed === 't', `not_received_at preenchido=${noticed}`);
+  backdateDeparture(A.deliveryId, 25 * 60);
+  backdateDeparture(B.deliveryId, 25 * 60);
+  // a varredura de auto-conclusão roda a cada 5 min no servidor
+  const controlDone = await waitFor(async () => (await getOrder(b, B.order.id)).data?.status === 'delivered', { timeoutMs: 400_000, everyMs: 10_000 });
+  record('BUG020-3', 'controle: sem "não recebi", a corrida de 25 h é concluída pelo sistema (pedido delivered)', controlDone, `status=${(await getOrder(b, B.order.id)).data?.status}`);
+  const held = (await getOrder(a, A.order.id)).data?.status;
+  record('BUG020-4', 'com "não recebi": a corrida NÃO é concluída sozinha (pedido segue out_for_delivery)', held === 'out_for_delivery' && (await deliveryStatus(A.order.id)) === 'out_for_delivery', `pedido=${held}; corrida=${await deliveryStatus(A.order.id)}`);
+  const alerts = sql(`select count(*) from payment_alerts where kind = 'delivery_auto_conclude_held' and details->>'deliveryId' = '${A.deliveryId}'`);
+  record('BUG020-5', 'a operação recebe UM alerta delivery_auto_conclude_held (idempotente)', alerts === '1', `alertas=${alerts}`);
+  const code = (await getOrder(a, A.order.id)).data?.tracking?.deliveryCode;
+  const manual = await adminCall('POST', `/v1/admin/logistics/deliveries/${A.deliveryId}/status`, { action: 'delivered', code, reason: 'Reteste QA BUG-020: operação decide' });
+  record('BUG020-6', 'a operação ainda decide à mão (fechar a corrida depois do aviso funciona)', manual.status === 200, `HTTP ${manual.status} ${JSON.stringify(manual.data).slice(0, 100)}`);
+}
+
+const sections = { bug020, bugs, imagens, wb259, wb261, wb262, coleta, sec180, cupom, csv, exclusao, v6 };
 export { sections, uploadReal, png, jpg };
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

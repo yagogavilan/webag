@@ -1,7 +1,6 @@
 // k6 — S1 Navegação (plano-carga.md §4): home, busca por proximidade, página da loja e do produto.
-// ESBOÇO NÃO EXECUTADO: o k6 não rodou no ambiente desta rodada (binário baixado do release oficial, sha256 conferido contra o
-// arquivo de checksums do mesmo release, mas a execução foi negada pela política do sandbox). A carga indicativa da Onda 7
-// foi feita com o gerador Node `carga-curta.mjs` (mesmos endpoints e mesmos limites). Rodar o k6 num staging igual à produção.
+// EXECUTADO no G4 final em versão curta (indicativo, sandbox; ver docs/qa/carga/README.md). A versão completa (rampa 5 min, platô 10 min) é para o
+// staging igual à produção. Variáveis: API_URL, VUS (padrão 200), RAMPA/PLATO/DESCIDA (padrão 5m/10m/3m), PAUSA_MIN/PAUSA_MAX (s, padrão 5/15).
 //
 // Uso:  k6 run -e API_URL=http://localhost:3000 -e VUS=200 docs/qa/carga/s1-navegacao.k6.js
 // Pré: seed completo (`pnpm run setup`) e API com TRUST_PROXY=1 (o limite de taxa é por IP; cada VU manda o próprio X-Forwarded-For).
@@ -23,9 +22,9 @@ export const options = {
     navegacao: {
       executor: 'ramping-vus',
       stages: [
-        { duration: '5m', target: VUS }, // rampa
-        { duration: '10m', target: VUS }, // platô
-        { duration: '3m', target: 0 }, // descida
+        { duration: __ENV.RAMPA || '5m', target: VUS }, // rampa
+        { duration: __ENV.PLATO || '10m', target: VUS }, // platô
+        { duration: __ENV.DESCIDA || '3m', target: 0 }, // descida
       ],
     },
   },
@@ -50,26 +49,29 @@ export function setup() {
 }
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const PAUSA_MIN = Number(__ENV.PAUSA_MIN || 5);
+const PAUSA_MAX = Number(__ENV.PAUSA_MAX || 15);
+const pausa = () => sleep(PAUSA_MIN + Math.random() * (PAUSA_MAX - PAUSA_MIN));
 
 export default function (data) {
   const headers = { 'X-Forwarded-For': `10.${__VU % 250}.${Math.floor(__VU / 250) % 250}.${1 + (__ITER % 250)}` };
   let r = http.get(`${API}/v1/home?lat=${LAT}&lng=${LNG}`, { headers });
   home.add(r.timings.duration);
   check(r, { 'home 200': (x) => x.status === 200 });
-  sleep(5 + Math.random() * 10);
+  pausa();
 
   r = http.get(`${API}/v1/search/stores?lat=${LAT}&lng=${LNG}&q=pao`, { headers });
   search.add(r.timings.duration);
   check(r, { 'busca 200': (x) => x.status === 200 });
-  sleep(5 + Math.random() * 10);
+  pausa();
 
   r = http.get(`${API}/v1/browse/stores/${pick(data.stores)}/products?limit=20`, { headers });
   store.add(r.timings.duration);
   check(r, { 'loja 200': (x) => x.status === 200 });
-  sleep(5 + Math.random() * 10);
+  pausa();
 
   r = http.get(`${API}/v1/browse/products/${pick(data.products)}`, { headers });
   product.add(r.timings.duration);
   check(r, { 'produto 200': (x) => x.status === 200 });
-  sleep(5 + Math.random() * 10);
+  pausa();
 }
