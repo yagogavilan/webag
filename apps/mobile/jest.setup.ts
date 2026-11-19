@@ -1,3 +1,9 @@
+// Em máquina carregada (CI com web, API e app em paralelo) o padrão de 1 s do findBy*/waitFor estoura e gera falha intermitente
+// (visto em __tests__/home.test.tsx na validação do zero, 2026-11-19). 5 s não deixa o teste mais lento quando tudo está bem.
+import { configure } from '@testing-library/react-native';
+
+configure({ asyncUtilTimeout: 5000 });
+
 // Mocks de módulos nativos usados pelo app. Os testes cobrem comportamento, não o módulo nativo.
 jest.mock('expo-haptics', () => ({
   selectionAsync: jest.fn(async () => undefined),
