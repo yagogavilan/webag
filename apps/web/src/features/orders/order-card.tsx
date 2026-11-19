@@ -1,9 +1,8 @@
 'use client';
 
-import { CheckCircle, Warning, WarningCircle } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Badge, Button, cx } from '@/components/ui';
+import { Badge, Button, SolarIcon, cx } from '@/components/ui';
 import type { StoreOrderSummary } from '@/lib/api/orders';
 import { formatCents, formatClock } from '@/lib/format';
 import { arrivedAt, elapsedTone, formatElapsed, nextStep } from '@/lib/orders/status';
@@ -24,8 +23,8 @@ export function Elapsed({ order, now }: { order: Pick<StoreOrderSummary, 'paidAt
   const tone = elapsedTone(Math.floor(ms / 60_000));
   return (
     <span className={cx('wb-text-caption-strong', s.elapsed, tone === 'warning' && s.elapsedWarning, tone === 'danger' && s.elapsedDanger)}>
-      {tone === 'warning' ? <Warning size={16} weight="fill" aria-hidden="true" /> : null}
-      {tone === 'danger' ? <WarningCircle size={16} weight="fill" aria-hidden="true" /> : null}
+      {tone === 'warning' ? <SolarIcon name="warning" size={16} duotone /> : null}
+      {tone === 'danger' ? <SolarIcon name="alert" size={16} duotone /> : null}
       {formatElapsed(ms)}
     </span>
   );
@@ -50,6 +49,7 @@ export function OrderCard({ order, now, online }: Props) {
   const canAccept = order.allowedActions.includes('accept');
   const canRefuse = order.allowedActions.includes('refuse');
   const offlineHintId = `${order.id}-offline`;
+  const left = isNew && order.acceptDeadlineAt ? Math.max(0, Date.parse(order.acceptDeadlineAt) - now) : null;
 
   async function accept() {
     setError(null);
@@ -87,8 +87,8 @@ export function OrderCard({ order, now, online }: Props) {
         <div className={s.meta}>
           <ModeBadge mode={order.mode} />
           {isNew ? null : <OrderStatusBadge status={order.status} />}
-          <Badge tone="success" icon={<CheckCircle size={16} weight="fill" aria-hidden="true" />}>
-            Pago
+          <Badge tone="success" icon={<SolarIcon name="check" size={16} duotone />}>
+            Pago no app
           </Badge>
         </div>
         <p className={cx('wb-text-body', s.items)}>
@@ -96,6 +96,12 @@ export function OrderCard({ order, now, online }: Props) {
           {order.itemCount > 1 ? ` +${order.itemCount - 1}` : ''}
         </p>
         {order.total ? <p className={cx('wb-text-title2', s.total)}>{formatCents(order.total.amount)}</p> : null}
+        {left !== null ? (
+          <p className={s.countdown} data-testid={T(`card-${order.id}-countdown`)}>
+            <span className={s.countdownValue}>{`${String(Math.floor(left / 60_000)).padStart(2, '0')}:${String(Math.floor((left % 60_000) / 1000)).padStart(2, '0')}`}</span>
+            <span className={cx('wb-text-caption', s.countdownText)}>para responder. Sem resposta, o pedido é cancelado.</span>
+          </p>
+        ) : null}
         {error ? (
           <p className="wb-text-caption" role="alert" style={{ margin: 0, color: 'var(--wb-color-text-danger)' }}>
             {error}
@@ -105,12 +111,12 @@ export function OrderCard({ order, now, online }: Props) {
           <>
             <div className={s.actions}>
               {canAccept ? (
-                <Button size="lg" onClick={() => void accept()} loading={busy} loadingLabel="Aceitando…" disabled={!online} aria-label={`Aceitar pedido ${order.number}`} aria-describedby={online ? undefined : offlineHintId} data-testid={T(`card-${order.id}-accept`)}>
-                  Aceitar
-                </Button>
+                <button type="button" className={s.accept} onClick={() => void accept()} disabled={busy || !online} aria-busy={busy || undefined} aria-label={`Aceitar pedido ${order.number}`} aria-describedby={online ? undefined : offlineHintId} data-testid={T(`card-${order.id}-accept`)}>
+                  {busy ? 'Aceitando…' : 'Aceitar pedido'}
+                </button>
               ) : null}
               {canRefuse ? (
-                <Button size="lg" variant="secondary" onClick={() => setRejecting(true)} disabled={busy || !online} aria-label={`Recusar pedido ${order.number}`} aria-describedby={online ? undefined : offlineHintId} data-testid={T(`card-${order.id}-reject`)}>
+                <Button size="lg" variant="secondary" className={s.refuse} onClick={() => setRejecting(true)} disabled={busy || !online} aria-label={`Recusar pedido ${order.number}`} aria-describedby={online ? undefined : offlineHintId} data-testid={T(`card-${order.id}-reject`)}>
                   Recusar
                 </Button>
               ) : null}

@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/panel/page-header';
 import { REASON_MAX, ReasonDialog, reasonError } from '@/components/panel/reason-dialog';
 import { useSession } from '@/components/panel/session-context';
 import { SplitLayout } from '@/components/panel/split-layout';
-import { Badge, Banner, Button, EmptyState, NoAccessState, QueryBoundary, SelectField, TextArea, TextField, cx, ui, useToast } from '@/components/ui';
+import { Badge, Banner, Button, ButtonLink, EmptyState, NoAccessState, QueryBoundary, SelectField, TextArea, TextField, cx, ui, useToast } from '@/components/ui';
 import { adminApi, keys, type Parameter } from '@/lib/api/admin';
 import { asRoute } from '@/lib/routes';
 import { formatClock } from '@/lib/format';
@@ -170,7 +170,7 @@ export function ParametersPage() {
   const term = search.trim().toLowerCase();
   return (
     <>
-      <PageHeader title="Parâmetros do negócio" description="Ajuste uma regra sem pedir deploy. Toda mudança fica na auditoria." />
+      <PageHeader title="Parâmetros do negócio" description="Ajuste uma regra sem pedir deploy. Toda mudança fica na auditoria." action={canView('parametros_entrega') ? <ButtonLink href={asRoute('/admin/parametros/entrega')} variant="secondary" data-testid={T('delivery-link')}>Parâmetros de entrega</ButtonLink> : undefined} />
       <QueryBoundary query={query} skeletonLabel="Carregando parâmetros" skeleton={<div data-testid="skeleton"><span className={ui.srOnly} role="status">Carregando parâmetros</span><div className={ui.skeletonList}>{Array.from({ length: 8 }, (_, i) => <span key={i} className={ui.skeleton} style={{ height: 72 }} aria-hidden="true" />)}</div></div>}>
         {(page) => {
           const filtered = page.data.filter((p) => !term || p.description.toLowerCase().includes(term) || p.key.toLowerCase().includes(term));

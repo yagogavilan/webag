@@ -1,14 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import type { MerchantStore } from './api/lojista';
-import { isOnboarding, onboardingPath, resumeStep, safeLojistaNext, visibleLojistaNav } from './lojista-access';
+import { bottomLojistaNav, isOnboarding, onboardingPath, resumeStep, safeLojistaNext, visibleLojistaNav } from './lojista-access';
 
 const store = (over: Partial<MerchantStore> = {}) => ({ status: 'draft', role: 'owner', step: 0, ...over }) as MerchantStore;
 
 describe('navegação do lojista', () => {
   it('o dono vê Equipe; o funcionário, não (RN-13)', () => {
-    expect(visibleLojistaNav(store()).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'trocas', 'produtos', 'avaliacoes', 'financeiro', 'loja', 'equipe']);
-    expect(visibleLojistaNav(store({ role: 'staff', permissions: ['orders'] })).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'trocas', 'produtos']);
+    expect(visibleLojistaNav(store()).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'produtos', 'trocas', 'avaliacoes', 'financeiro', 'loja', 'equipe']);
+    expect(visibleLojistaNav(store({ role: 'staff', permissions: ['orders'] })).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'produtos', 'trocas']);
     expect(visibleLojistaNav(store({ role: 'staff', permissions: ['orders', 'reviews'] })).map((i) => i.section)).toContain('avaliacoes');
+  });
+});
+
+describe('barra de baixo do celular: 4 destinos + Mais (onda-7-navegacao §3.1)', () => {
+  const bottom = (over: Partial<MerchantStore> = {}) => bottomLojistaNav(store(over)).map((i) => i.section);
+  const more = (over: Partial<MerchantStore> = {}) => visibleLojistaNav(store(over)).map((i) => i.section).filter((section) => !bottom(over).includes(section));
+
+  it('dono: Início, Pedidos, Produtos e Trocas na barra; o resto em "Mais", sem repetir nenhum', () => {
+    expect(bottom()).toEqual(['inicio', 'pedidos', 'produtos', 'trocas']);
+    expect(more()).toEqual(['avaliacoes', 'financeiro', 'loja', 'equipe']);
+  });
+
+  it('funcionário com Pedidos e Avaliações: Avaliações é alcançável pelo "Mais" no celular (WB-195)', () => {
+    expect(bottom({ role: 'staff', permissions: ['orders', 'reviews'] })).toEqual(['inicio', 'pedidos', 'produtos', 'trocas']);
+    expect(more({ role: 'staff', permissions: ['orders', 'reviews'] })).toEqual(['avaliacoes']);
+  });
+
+  it('funcionário sem Avaliações não a vê em lugar nenhum', () => {
+    const staff = { role: 'staff', permissions: ['orders'] } as Partial<MerchantStore>;
+    expect([...bottom(staff), ...more(staff)]).not.toContain('avaliacoes');
   });
 });
 

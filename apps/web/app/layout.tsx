@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import '@fontsource/figtree/latin-400.css';
 import '@fontsource/figtree/latin-600.css';
 import '@fontsource/figtree/latin-700.css';
+import '@fontsource/bricolage-grotesque/latin-700.css';
+import '@fontsource/bricolage-grotesque/latin-800.css';
 import '@webag/tokens/css';
 import './globals.css';
 

@@ -2,8 +2,6 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
-import '@fontsource/bricolage-grotesque/latin-700.css';
-import '@fontsource/bricolage-grotesque/latin-800.css';
 import { PublicShell } from '@/components/public/public-shell';
 import { publicOrigin } from '@/server/config';
 import { publicAllowedOnHost } from '@/server/hosts';

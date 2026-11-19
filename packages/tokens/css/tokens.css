@@ -199,6 +199,9 @@
   --wb-layout-gutter: 16px;
   --wb-layout-content-max-width: 1200px;
   --wb-layout-form-max-width: 480px;
+  --wb-layout-side-width: 248px;
+  --wb-layout-header-overlap: 64px;
+  --wb-layout-header-overlap-mobile: 36px;
   --wb-z-index-base: 0;
   --wb-z-index-sticky: 10;
   --wb-z-index-sheet: 20;

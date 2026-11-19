@@ -40,9 +40,44 @@ describe('LojistaShell', () => {
     expect(await screen.findByText('Casa Bela')).toBeInTheDocument();
     expect(screen.getByTestId('lojista.shell.status-chip')).toHaveTextContent('Em análise');
     expect(screen.getByTestId('lojista.nav.inicio')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByTestId('lojista.nav.equipe-bottom')).toBeInTheDocument();
+    // celular: 4 destinos fixos + Mais (onda-7-navegacao §3.1); Equipe vai para o Mais
+    for (const key of ['inicio', 'pedidos', 'produtos', 'trocas']) expect(screen.getByTestId(`lojista.nav.${key}-bottom`)).toBeInTheDocument();
+    expect(screen.queryByTestId('lojista.nav.equipe-bottom')).toBeNull();
+    expect(screen.queryByTestId('lojista.nav.avaliacoes-bottom')).toBeNull();
+    expect(screen.getByTestId('lojista.nav.more')).toHaveAttribute('aria-haspopup', 'dialog');
     expect(screen.getByRole('heading', { name: 'Conteúdo' })).toBeInTheDocument();
     expect(screen.getByText('Pular para o conteúdo')).toBeInTheDocument();
+  });
+
+  it('"Mais" abre a folha com as áreas que ficaram de fora (Avaliações alcançável no celular), sem duplicar a barra, e fecha ao escolher', async () => {
+    setup();
+    await screen.findByText('Casa Bela');
+    await userEvent.click(screen.getByTestId('lojista.nav.more'));
+    const sheet = await screen.findByTestId('lojista.nav.more-sheet');
+    for (const key of ['avaliacoes', 'financeiro', 'loja', 'equipe']) expect(sheet.querySelector(`[data-testid="lojista.nav.more.${key}"]`)).not.toBeNull();
+    for (const key of ['inicio', 'pedidos', 'produtos', 'trocas']) expect(sheet.querySelector(`[data-testid="lojista.nav.more.${key}"]`)).toBeNull();
+    expect(sheet.querySelector('[data-testid="lojista.nav.more.ajuda"]')).not.toBeNull();
+    expect(sheet.querySelector('[data-testid="lojista.nav.more.conta"]')).not.toBeNull();
+    expect(sheet.querySelector('[data-testid="lojista.nav.more.sair"]')).not.toBeNull();
+    await userEvent.click(sheet.querySelector('[data-testid="lojista.nav.more.avaliacoes"]')!);
+    await waitFor(() => expect(screen.queryByTestId('lojista.nav.more-sheet')).toBeNull());
+  });
+
+  it('página dentro do "Mais" marca o botão como atual; página da barra não', async () => {
+    pathname = '/lojista/avaliacoes';
+    setup();
+    await screen.findByText('Casa Bela');
+    expect(screen.getByTestId('lojista.nav.more')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('lojista.nav.inicio-bottom')).not.toHaveAttribute('aria-current');
+  });
+
+  it('Sair pelo "Mais" encerra a sessão', async () => {
+    const calls = setup();
+    await screen.findByText('Casa Bela');
+    await userEvent.click(screen.getByTestId('lojista.nav.more'));
+    await userEvent.click(await screen.findByTestId('lojista.nav.more.sair'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/lojista/entrar'));
+    expect(calls.some((c) => c.url.pathname === '/api/session/lojista/logout')).toBe(true);
   });
 
   it('funcionário não vê Equipe', async () => {

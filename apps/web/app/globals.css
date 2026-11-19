@@ -1,19 +1,5 @@
 /* Base global. Cores, espaços e tipografia vêm só de @webag/tokens (variáveis --wb-*). */
-/* Outfit (títulos e logotipo da identidade v2) é servida do próprio app; Figtree vem do @fontsource. */
-@font-face {
-  font-family: 'Outfit';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/outfit-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Outfit';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/outfit-latin-700-normal.woff2') format('woff2');
-}
+/* Fontes da v3: Bricolage Grotesque (títulos e números grandes) e Figtree (texto), ambas do @fontsource, servidas pelo próprio app. */
 
 *,
 *::before,

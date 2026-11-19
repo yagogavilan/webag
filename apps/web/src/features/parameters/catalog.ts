@@ -127,7 +127,7 @@ export function toInput(p: Parameter): string {
 }
 
 // ---- Prazo de entrega (DEC-053) ----------------------------------------------------------------------------------------------
-// A MESMA conta da API (`apps/api/.../logistics/domain/eta.ts`): preparo + despacho + deslocamento, faixa com folga, teto.
+// A MESMA conta da API (`apps/api/.../logistics/domain/eta.ts`): preparo + despacho + deslocamento, faixa com folga, teto do FIM da faixa (DEC-054).
 // Aqui serve só para o admin ver o efeito de uma mudança antes de salvar; quem manda é o servidor.
 
 export interface EtaParams {
@@ -171,11 +171,11 @@ export function estimateEta(cfg: EtaParams, km: number, prepMin?: number): EtaRe
   const prep = prepMin ?? cfg.prepMin;
   const travelMin = Math.ceil((km * (cfg.routeFactorPct / 100) * cfg.minPerKm) - 1e-9);
   const estimateMin = prep + cfg.dispatchMin + travelMin;
-  return { prepMin: prep, dispatchMin: cfg.dispatchMin, travelMin, estimateMin, fromMin: Math.max(5, estimateMin - cfg.bandMin), toMin: estimateMin + cfg.bandMin, withinCeiling: estimateMin <= cfg.maxMin };
+  return { prepMin: prep, dispatchMin: cfg.dispatchMin, travelMin, estimateMin, fromMin: Math.max(5, estimateMin - cfg.bandMin), toMin: estimateMin + cfg.bandMin, withinCeiling: estimateMin + cfg.bandMin <= cfg.maxMin };
 }
-/** Distância máxima (km, 1 casa) que ainda cabe no teto, para uma loja com este preparo; 0 se nem o preparo cabe. */
+/** Distância máxima (km, 1 casa, para baixo) cujo FIM da faixa ainda cabe no teto (DEC-054), para uma loja com este preparo; 0 se nem o preparo cabe. */
 export function maxReachKm(cfg: EtaParams, prepMin?: number): number {
-  const room = cfg.maxMin - (prepMin ?? cfg.prepMin) - cfg.dispatchMin;
+  const room = cfg.maxMin - cfg.bandMin - (prepMin ?? cfg.prepMin) - cfg.dispatchMin;
   const perKm = (cfg.routeFactorPct / 100) * cfg.minPerKm;
   if (room <= 0 || perKm <= 0) return 0;
   return Math.floor((room / perKm) * 10) / 10;

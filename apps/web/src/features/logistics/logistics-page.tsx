@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowsClockwise, Motorcycle, Package, SpeakerHigh, SpeakerSlash, Warning, WarningCircle, Clock } from '@phosphor-icons/react';
+import { Motorcycle, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { DeadlineBlock, Kpi, KpiRow, LimaAction, NightBlock, type DeadlineState } from '@/components/panel/blocks';
 import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
-import { Banner, Button, EmptyState, ErrorState, NoAccessState, SkeletonRows, Switch, Tabs, cx, useToast } from '@/components/ui';
+import { Banner, Button, EmptyState, ErrorState, NoAccessState, SkeletonRows, SolarIcon, Switch, Tabs, cx, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { KIND_LABEL, STATUS_LABEL, batchesOf, etaBandText, etaLevel, etaLevelText, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
 import { formatCents } from '@/lib/format';
@@ -28,7 +29,7 @@ export function WaitChip({ delivery }: { delivery: Pick<Delivery, 'sla' | 'waiti
   const level = waitLevel(delivery);
   return (
     <span className={cx('wb-text-caption-strong', s.wait, level === 'warning' && s.waitWarning, level === 'late' && s.waitLate)} data-testid={T('wait')}>
-      {level === 'warning' ? <Warning size={16} weight="fill" aria-hidden="true" /> : level === 'late' ? <WarningCircle size={16} weight="fill" aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
+      <SolarIcon name={level === 'late' ? 'alert' : level === 'warning' ? 'warning' : 'clock'} size={16} duotone={level !== 'normal'} />
       {waitText(delivery)}
     </span>
   );
@@ -42,7 +43,7 @@ export function EtaChip({ delivery, now }: { delivery: Delivery; now: number }) 
   const text = etaLevelText(delivery, now);
   return (
     <span className={cx('wb-text-caption-strong', s.wait, level === 'ending' && s.waitWarning, level === 'late' && s.waitLate)} data-testid={T('eta')} data-level={level ?? undefined}>
-      {level === 'late' ? <WarningCircle size={16} weight="fill" aria-hidden="true" /> : level === 'ending' ? <Warning size={16} weight="fill" aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
+      <SolarIcon name={level === 'late' ? 'alert' : level === 'ending' ? 'warning' : 'clock'} size={16} duotone={level === 'late' || level === 'ending'} />
       {band}
       {level && level !== 'on_time' && text ? ` · ${text}` : ''}
     </span>
@@ -50,10 +51,9 @@ export function EtaChip({ delivery, now }: { delivery: Delivery; now: number }) 
 }
 
 export function KindBadge({ kind }: { kind: DeliveryKind }) {
-  const Icon = kind === 'delivery' ? Package : ArrowsClockwise;
   return (
     <span className={cx('wb-text-caption-strong', s.wait)}>
-      <Icon size={16} aria-hidden="true" />
+      <SolarIcon name={kind === 'delivery' ? 'box' : 'exchange'} size={16} />
       {KIND_LABEL[kind]}
     </span>
   );
@@ -143,9 +143,30 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
       );
   }
 
+  const riskCount = useMemo(() => rows.filter((row) => etaLevel(row, now) === 'ending').length, [rows, now]);
+  const lateRows = useMemo(() => rows.filter((row) => etaLevel(row, now) === 'late'), [rows, now]);
+  const lateInQueue = lateRows.some((row) => row.status === 'ready_for_collection');
+
   return (
     <div className={s.page}>
-      <PageHeader title="Logística" description="Despache os pedidos prontos para coleta." />
+      <PageHeader title="Logística" eyebrow="Entrega pela Webag" description="Despache os pedidos prontos para coleta." />
+      {lateByEta > 0 ? (
+        <NightBlock
+          icon="alert"
+          role="alert"
+          title={`${lateByEta} ${lateByEta === 1 ? 'corrida atrasada' : 'corridas atrasadas'}`}
+          testId={T('late-alert')}
+          action={<LimaAction onClick={() => setTab(lateInQueue ? 'queue' : 'progress')} testId={T('late-alert-open')}>{lateInQueue ? 'Ver na fila' : 'Ver em andamento'}</LimaAction>}
+        >
+          Passaram do fim da faixa prometida ao cliente. A mais urgente fica no topo.
+        </NightBlock>
+      ) : null}
+      <KpiRow>
+        <Kpi label="Esperando motoboy" value={waiting.length} tone="night" testId={T('summary-waiting')} />
+        <Kpi label="Em risco" value={riskCount} tone={riskCount > 0 ? 'warning' : 'neutral'} hint={riskCount > 0 ? 'Perto do fim da faixa' : undefined} testId={T('summary-risk')} />
+        <Kpi label="Atrasadas" value={lateByEta} tone={lateByEta > 0 ? 'danger' : 'neutral'} hint={hasEta ? undefined : 'Sem faixa nas corridas'} testId={T('summary-late')} />
+        <Kpi label="Maior espera" value={`${longest} min`} testId={T('summary-longest')} />
+      </KpiRow>
       <div className={s.bar} data-testid={T('status-bar')}>
         <div className={s.barGroup}>
           <Switch checked={soundOn} onChange={(on) => (on ? void enableSound() : undefined)} label="Avisar com som" onText="Ligado" offText="Desligado" testId={T('sound-switch')} />
@@ -159,26 +180,6 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
         </span>
       </div>
       {!canWrite ? <Banner tone="info">Você pode ver, mas não despachar.</Banner> : null}
-      <ul className={s.summary} aria-label="Resumo">
-        <li className={s.kpi} data-testid={T('summary-waiting')}>
-          <p className={s.kpiValue}>{waiting.length}</p>
-          <p className={cx('wb-text-caption', s.kpiLabel)}>{waiting.length === 1 ? 'esperando' : 'esperando'}</p>
-        </li>
-        <li className={s.kpi} data-testid={T('summary-longest')}>
-          <p className={s.kpiValue}>{longest} min</p>
-          <p className={cx('wb-text-caption', s.kpiLabel)}>maior espera</p>
-        </li>
-        <li className={s.kpi}>
-          <p className={s.kpiValue}>{progress.length}</p>
-          <p className={cx('wb-text-caption', s.kpiLabel)}>em andamento</p>
-        </li>
-        {hasEta ? (
-          <li className={s.kpi} data-testid={T('summary-late')}>
-            <p className={s.kpiValue}>{lateByEta}</p>
-            <p className={cx('wb-text-caption', s.kpiLabel)}>{lateByEta === 1 ? 'passou do fim da faixa' : 'passaram do fim da faixa'}</p>
-          </li>
-        ) : null}
-      </ul>
       <Tabs
         label="Logística"
         value={tab}
@@ -222,25 +223,44 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
   );
 }
 
+/** Estado do bloco de prazo (v3): atrasada, em risco, no prazo ou sem faixa (troca e corrida sem promessa). */
+function deadlineOf(row: Delivery, now: number): { state: DeadlineState; label: string; value: string; sub: string | undefined } {
+  const level = etaLevel(row, now);
+  const to = row.etaToAt ? Date.parse(row.etaToAt) : null;
+  const clockText = row.etaToAt ? etaBandText({ etaToAt: row.etaToAt }) : null;
+  if (level === 'late') {
+    const minutes = to ? Math.max(1, Math.round((now - to) / 60_000)) : (row.overdueMinutes ?? 1);
+    return { state: 'late', label: 'Atrasada', value: `+${minutes} min`, sub: clockText ?? undefined };
+  }
+  if (level === 'ending' || level === 'on_time') {
+    const minutes = to ? Math.max(0, Math.round((to - now) / 60_000)) : 0;
+    return { state: level === 'ending' ? 'risk' : 'ontime', label: level === 'ending' ? 'Em risco' : 'No prazo', value: `${minutes} min`, sub: clockText ?? undefined };
+  }
+  return { state: 'none', label: row.kind === 'delivery' ? 'Sem faixa' : 'Coleta de troca', value: '—', sub: row.kind === 'delivery' ? undefined : 'Coletar hoje' };
+}
+
 function Row({ row, now, tab, primary, canWrite, online, onAssign, onOpen }: { row: Delivery; now: number; tab: Tab; primary: boolean; canWrite: boolean; online: boolean; onAssign: () => void; onOpen: () => void }) {
   const queueRow = tab === 'queue';
+  const deadline = deadlineOf(row, now);
+  const late = deadline.state === 'late';
   return (
     <li>
-      <div className={s.row} data-testid={T(queueRow ? `fila.row-${row.id}` : `andamento.row-${row.id}`)}>
+      <div className={cx(s.row, late && s.rowLate, deadline.state === 'risk' && s.rowRisk)} data-testid={T(queueRow ? `fila.row-${row.id}` : `andamento.row-${row.id}`)}>
+        <DeadlineBlock {...deadline} testId={T(`row-${row.id}-deadline`)} />
         <button type="button" className={s.rowMain} onClick={onOpen} aria-label={`${KIND_LABEL[row.kind as DeliveryKind]}, ${queueRow ? waitText(row) : STATUS_LABEL[row.status]}, ${row.storeName ?? 'loja'}, pedido ${row.orderNumber ?? ''}`}>
           <span className={s.rowTop}>
-            {queueRow ? <WaitChip delivery={row} /> : <span className={cx('wb-text-caption-strong', s.wait)}>{STATUS_LABEL[row.status]}{row.courier?.name ? ` · ${row.courier.name}` : ''}</span>}
             <KindBadge kind={row.kind as DeliveryKind} />
+            {queueRow ? <WaitChip delivery={row} /> : <span className={cx('wb-text-caption-strong', s.wait)}>{STATUS_LABEL[row.status]}{row.courier?.name ? ` · ${row.courier.name}` : ''}</span>}
           </span>
+          <span className={s.route}>{row.storeName ?? 'Loja'}{row.destination ? ` \u2192 ${row.destination}` : ''}</span>
           <EtaChip delivery={row} now={now} />
-          <span className="wb-text-body-strong">{row.storeName ?? 'Loja'}{row.destination ? ` > ${row.destination}` : ''}</span>
           <span className={cx('wb-text-caption', s.muted)}>
             {row.orderNumber ? `#${row.orderNumber} · ` : ''}
             {row.volumes} {row.volumes === 1 ? 'volume' : 'volumes'} · taxa {formatCents(row.fee.amount)}
           </span>
         </button>
         {canWrite && queueRow ? (
-          <Button className={s.rowAction} variant={primary ? 'primary' : 'secondary'} onClick={onAssign} disabled={!online} aria-label={`Atribuir motoboy ao pedido ${row.orderNumber ?? ''}`} data-testid={T(`fila.row-${row.id}-assign`)}>
+          <Button className={cx(s.rowAction, !primary && s.rowActionNight)} variant="primary" onClick={onAssign} disabled={!online} aria-label={`Atribuir motoboy ao pedido ${row.orderNumber ?? ''}`} data-testid={T(`fila.row-${row.id}-assign`)}>
             Atribuir
           </Button>
         ) : null}

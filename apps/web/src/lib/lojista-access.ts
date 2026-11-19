@@ -19,22 +19,34 @@ export interface LojistaNavItem {
   href: string;
   /** Só o dono vê (RN-13). */
   ownerOnly?: boolean;
-  /** Fora da barra de baixo do celular (cabem 5 a 7 itens): vira atalho no painel inicial e fica no menu lateral. */
-  sideOnly?: boolean;
+  /**
+   * Prioridade na barra de baixo do celular (1 a 8, `onda-7-navegacao-paineis.md` §3.1): os 4 primeiros que o perfil enxerga ficam na
+   * barra; o resto vai para "Mais". Posição fixa por perfil, não muda com uso nem contagem.
+   */
+  bottomPriority: number;
+  /** Grupo na barra lateral do desktop. */
+  group: 'day' | 'store';
   /** Só o dono ou o funcionário com esta permissão (lista vazia = desconhecida, a tela abre e a API decide). */
   permission?: string;
 }
 
+export const LOJISTA_NAV_GROUP_LABEL: Record<LojistaNavItem['group'], string> = { day: 'Dia a dia', store: 'Minha loja' };
+
 export const LOJISTA_NAV: readonly LojistaNavItem[] = [
-  { section: 'inicio', label: 'Início', href: '/lojista' },
-  { section: 'pedidos', label: 'Pedidos', href: '/lojista/pedidos' },
-  { section: 'trocas', label: 'Trocas', href: '/lojista/trocas' },
-  { section: 'produtos', label: 'Produtos', href: '/lojista/produtos' },
-  { section: 'avaliacoes', label: 'Avaliações', href: '/lojista/avaliacoes', sideOnly: true, permission: 'reviews' },
-  { section: 'financeiro', label: 'Financeiro', href: '/lojista/financeiro', ownerOnly: true },
-  { section: 'loja', label: 'Minha loja', href: '/lojista/loja', ownerOnly: true },
-  { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', ownerOnly: true },
+  { section: 'inicio', label: 'Início', href: '/lojista', bottomPriority: 1, group: 'day' },
+  { section: 'pedidos', label: 'Pedidos', href: '/lojista/pedidos', bottomPriority: 2, group: 'day' },
+  { section: 'produtos', label: 'Produtos', href: '/lojista/produtos', bottomPriority: 3, group: 'day' },
+  { section: 'trocas', label: 'Trocas', href: '/lojista/trocas', bottomPriority: 4, group: 'day' },
+  { section: 'avaliacoes', label: 'Avaliações', href: '/lojista/avaliacoes', bottomPriority: 5, group: 'day', permission: 'reviews' },
+  { section: 'financeiro', label: 'Financeiro', href: '/lojista/financeiro', bottomPriority: 6, group: 'store', ownerOnly: true },
+  { section: 'loja', label: 'Minha loja', href: '/lojista/loja', bottomPriority: 7, group: 'store', ownerOnly: true },
+  { section: 'equipe', label: 'Equipe', href: '/lojista/equipe', bottomPriority: 8, group: 'store', ownerOnly: true },
 ];
+
+/** Os destinos da barra de baixo: os 4 de maior prioridade que o perfil enxerga (menos de 4 = os que existem). */
+export function bottomLojistaNav(store: MerchantStore | null | undefined): LojistaNavItem[] {
+  return [...visibleLojistaNav(store)].sort((a, b) => a.bottomPriority - b.bottomPriority).slice(0, 4);
+}
 
 export function isOwner(store: MerchantStore | null | undefined): boolean {
   return store?.role === 'owner';

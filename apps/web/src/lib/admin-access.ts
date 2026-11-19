@@ -4,9 +4,12 @@ import type { AdminProfile } from './session-types';
  * Matriz de menu e edição do admin (onda-1b-contas.md §AD0, alinhada a `permissions.ts` da API).
  * Só decide o que desenhar; quem barra de verdade é a API (403).
  */
-export type AdminSection = 'lojas' | 'logistica' | 'estornos' | 'frete' | 'comissoes' | 'trocas' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'flags' | 'termos' | 'auditoria' | 'admins' | 'banners' | 'push' | 'cupons' | 'relatorios' | 'denuncias' | 'ajuda' | 'titulares' | 'disputas';
+export type AdminSection = 'inicio' | 'lojas' | 'logistica' | 'estornos' | 'frete' | 'comissoes' | 'trocas' | 'moderacao' | 'regioes' | 'categorias' | 'parametros' | 'parametros_entrega' | 'flags' | 'termos' | 'auditoria' | 'admins' | 'banners' | 'push' | 'cupons' | 'relatorios' | 'denuncias' | 'ajuda' | 'titulares' | 'disputas';
+
+const ALL_PROFILES: readonly AdminProfile[] = ['super_admin', 'operations', 'finance', 'support'];
 
 const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
+  inicio: ALL_PROFILES,
   lojas: ['super_admin', 'operations', 'support'],
   logistica: ['super_admin', 'operations', 'finance', 'support'],
   estornos: ['super_admin', 'finance'],
@@ -17,6 +20,7 @@ const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
   parametros: ['super_admin'],
+  parametros_entrega: ['super_admin'],
   flags: ['super_admin'],
   termos: ['super_admin', 'operations'],
   auditoria: ['super_admin'],
@@ -33,6 +37,7 @@ const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
 };
 
 const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
+  inicio: [],
   lojas: ['super_admin', 'operations'],
   logistica: ['super_admin', 'operations'],
   estornos: ['super_admin', 'finance'],
@@ -43,6 +48,7 @@ const EDIT: Record<AdminSection, readonly AdminProfile[]> = {
   regioes: ['super_admin', 'operations'],
   categorias: ['super_admin', 'operations'],
   parametros: ['super_admin'],
+  parametros_entrega: ['super_admin'],
   flags: ['super_admin'],
   termos: ['super_admin'],
   auditoria: [],
@@ -84,36 +90,68 @@ export const PROFILE_DESCRIPTION: Record<AdminProfile, string> = {
   support: 'Consulta pedidos, lojas e usuários e abre trocas',
 };
 
+export type NavGroupId = 'operation' | 'money' | 'marketing' | 'area' | 'system';
+
+export const NAV_GROUP_LABEL: Record<NavGroupId, string> = {
+  operation: 'Operação',
+  money: 'Dinheiro e dados',
+  marketing: 'Marketing',
+  area: 'Área e catálogo',
+  system: 'Sistema',
+};
+
 export interface NavItem {
   section: AdminSection;
   label: string;
+  /** Rótulo curto na barra de baixo do celular. */
+  shortLabel?: string;
   href: string;
+  group: NavGroupId;
 }
 
+/** Ordem = ordem da barra lateral (`onda-7-navegacao-paineis.md` §3.2 e protótipo). */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { section: 'lojas', label: 'Lojas', href: '/admin/lojas' },
-  { section: 'logistica', label: 'Logística', href: '/admin/logistica' },
-  { section: 'estornos', label: 'Estornos', href: '/admin/estornos' },
-  { section: 'frete', label: 'Frete por região', href: '/admin/frete' },
-  { section: 'comissoes', label: 'Comissões', href: '/admin/comissoes' },
-  { section: 'trocas', label: 'Relatório de trocas', href: '/admin/trocas' },
-  { section: 'disputas', label: 'Disputas de troca', href: '/admin/disputas' },
-  { section: 'relatorios', label: 'Relatórios', href: '/admin/relatorios' },
-  { section: 'banners', label: 'Banners e destaques', href: '/admin/banners' },
-  { section: 'push', label: 'Push segmentado', href: '/admin/push' },
-  { section: 'cupons', label: 'Cupons da plataforma', href: '/admin/cupons' },
-  { section: 'moderacao', label: 'Moderação', href: '/admin/moderacao' },
-  { section: 'denuncias', label: 'Denúncias', href: '/admin/denuncias' },
-  { section: 'ajuda', label: 'Ajuda', href: '/admin/ajuda' },
-  { section: 'regioes', label: 'Regiões', href: '/admin/regioes' },
-  { section: 'categorias', label: 'Categorias', href: '/admin/categorias' },
-  { section: 'parametros', label: 'Parâmetros', href: '/admin/parametros' },
-  { section: 'flags', label: 'Feature flags', href: '/admin/flags' },
-  { section: 'termos', label: 'Termos e privacidade', href: '/admin/termos' },
-  { section: 'titulares', label: 'Pedidos de titulares', href: '/admin/titulares' },
-  { section: 'auditoria', label: 'Auditoria', href: '/admin/auditoria' },
-  { section: 'admins', label: 'Admins e perfis', href: '/admin/admins' },
+  { section: 'inicio', label: 'Início', href: '/admin', group: 'operation' },
+  { section: 'logistica', label: 'Logística', href: '/admin/logistica', group: 'operation' },
+  { section: 'lojas', label: 'Lojas', href: '/admin/lojas', group: 'operation' },
+  { section: 'disputas', label: 'Disputas de troca', shortLabel: 'Disputas', href: '/admin/disputas', group: 'operation' },
+  { section: 'estornos', label: 'Estornos', href: '/admin/estornos', group: 'operation' },
+  { section: 'moderacao', label: 'Moderação', href: '/admin/moderacao', group: 'operation' },
+  { section: 'denuncias', label: 'Denúncias', href: '/admin/denuncias', group: 'operation' },
+  { section: 'ajuda', label: 'Ajuda', href: '/admin/ajuda', group: 'operation' },
+  { section: 'comissoes', label: 'Comissões', href: '/admin/comissoes', group: 'money' },
+  { section: 'frete', label: 'Frete por região', href: '/admin/frete', group: 'money' },
+  { section: 'relatorios', label: 'Relatórios', href: '/admin/relatorios', group: 'money' },
+  { section: 'trocas', label: 'Relatório de trocas', href: '/admin/trocas', group: 'money' },
+  { section: 'banners', label: 'Banners e destaques', href: '/admin/banners', group: 'marketing' },
+  { section: 'cupons', label: 'Cupons da plataforma', href: '/admin/cupons', group: 'marketing' },
+  { section: 'push', label: 'Push segmentado', href: '/admin/push', group: 'marketing' },
+  { section: 'regioes', label: 'Regiões', href: '/admin/regioes', group: 'area' },
+  { section: 'categorias', label: 'Categorias', href: '/admin/categorias', group: 'area' },
+  { section: 'parametros_entrega', label: 'Parâmetros de entrega', shortLabel: 'Parâmetros', href: '/admin/parametros/entrega', group: 'system' },
+  { section: 'parametros', label: 'Todos os parâmetros', href: '/admin/parametros', group: 'system' },
+  { section: 'flags', label: 'Feature flags', href: '/admin/flags', group: 'system' },
+  { section: 'termos', label: 'Termos e privacidade', href: '/admin/termos', group: 'system' },
+  { section: 'titulares', label: 'Pedidos de titulares', href: '/admin/titulares', group: 'system' },
+  { section: 'auditoria', label: 'Auditoria', href: '/admin/auditoria', group: 'system' },
+  { section: 'admins', label: 'Admins e perfis', href: '/admin/admins', group: 'system' },
 ];
+
+/**
+ * Destinos fixos da barra de baixo do celular por perfil (`onda-7-navegacao-paineis.md` §3.2). Posição estável, não muda com uso nem
+ * contagem; o que o perfil não enxerga é ignorado (a barra mostra os que existem + "Mais").
+ */
+export const BOTTOM_BAR: Record<AdminProfile, readonly AdminSection[]> = {
+  super_admin: ['inicio', 'logistica', 'lojas', 'disputas'],
+  operations: ['inicio', 'logistica', 'lojas', 'disputas'],
+  finance: ['inicio', 'estornos', 'comissoes', 'relatorios'],
+  support: ['inicio', 'lojas', 'logistica', 'moderacao'],
+};
+
+export function bottomNav(profile: AdminProfile | null): NavItem[] {
+  if (!profile) return [];
+  return BOTTOM_BAR[profile].map((section) => NAV_ITEMS.find((item) => item.section === section)).filter((item): item is NavItem => Boolean(item && canView(profile, item.section)));
+}
 
 export function visibleNav(profile: AdminProfile | null): NavItem[] {
   return NAV_ITEMS.filter((item) => canView(profile, item.section));

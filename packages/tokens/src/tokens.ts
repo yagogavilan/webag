@@ -399,7 +399,10 @@ export const tokens = {
     "screenPaddingX": 16,
     "gutter": 16,
     "contentMaxWidth": 1200,
-    "formMaxWidth": 480
+    "formMaxWidth": 480,
+    "sideWidth": 248,
+    "headerOverlap": 64,
+    "headerOverlapMobile": 36
   },
   "zIndex": {
     "base": 0,

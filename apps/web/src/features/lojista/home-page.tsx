@@ -1,12 +1,14 @@
 'use client';
 
-import { ArrowsClockwise, CheckCircle, Circle, Clock, Hourglass, Receipt, Wallet, XCircle } from '@phosphor-icons/react';
+import { CheckCircle, Circle, Hourglass, XCircle } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, ButtonLink, Hero, QueryBoundary, SkeletonRows, cx, ui, useToast } from '@/components/ui';
+import { Lima, LimaAction, NightBlock } from '@/components/panel/blocks';
+import { Banner, Button, ButtonLink, QueryBoundary, SkeletonRows, SolarIcon, cx, ui, useToast } from '@/components/ui';
+import { useNow } from '@/lib/use-now';
 import { useOptionalOrdersRuntime } from '@/features/orders/orders-runtime';
 import { exchangesApi, exchangesKeys } from '@/lib/api/exchanges';
 import { financeApi, financeKeys, periodOf } from '@/lib/api/finance';
@@ -259,28 +261,63 @@ function Approved({ store }: { store: MerchantStore }) {
   );
 }
 
+const dateLabel = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' });
+const hourOfDay = new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' });
+
+/** "Bom dia, Fátima" (primeiro nome de quem está no painel). */
+function greeting(name: string, at: Date): string {
+  const hour = Number(hourOfDay.format(at));
+  const first = name.trim().split(/\s+/)[0] ?? '';
+  const hello = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  return first ? `${hello}, ${first}` : hello;
+}
+
+function mmss(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function Live({ store }: { store: MerchantStore }) {
+  const { user } = useMerchant();
+  const now = useNow(1000);
   const pending = useOptionalOrdersRuntime()?.pending ?? [];
   const showValues = canSeeSalesValues(store);
   const todos: { id: string; icon: ReactNode; label: string; href: string; urgent?: boolean }[] = [];
-  if (pending.length > 0) todos.push({ id: 'orders', icon: <Receipt size={24} aria-hidden="true" />, label: `${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'} · responda agora`, href: '/lojista/pedidos', urgent: true });
-  if (!store.hasHours) todos.push({ id: 'hours', icon: <Clock size={24} aria-hidden="true" />, label: 'Sem horário definido', href: '/lojista/loja/horarios' });
-  if (store.payout.status !== 'connected' && isOwner(store)) todos.push({ id: 'payout', icon: <Wallet size={24} aria-hidden="true" />, label: 'Falta conectar o Mercado Pago', href: '/lojista/onboarding/4' });
+  if (!store.hasHours) todos.push({ id: 'hours', icon: <SolarIcon name="clock" size={24} />, label: 'Sem horário definido', href: '/lojista/loja/horarios' });
+  if (store.payout.status !== 'connected' && isOwner(store)) todos.push({ id: 'payout', icon: <SolarIcon name="wallet" size={24} />, label: 'Falta conectar o Mercado Pago', href: '/lojista/onboarding/4' });
   const exchanges = useExchangeTodo(store.id);
   if (exchanges) todos.push(exchanges);
 
+  const deadlines = pending.map((order) => (order.acceptDeadlineAt ? Date.parse(order.acceptDeadlineAt) : null)).filter((value): value is number => value !== null);
+  const urgent = deadlines.length > 0 ? Math.min(...deadlines) - now : null;
+
   return (
     <div className={cx(ui.stack, 'wb-enter')} data-testid={T('status-card')}>
-      <Hero title={store.name ? `Olá, ${store.name}` : 'Início'} chip={store.status === 'live' ? 'Loja aberta no app' : 'Loja no ar'} testId={T('hero')}>
-        <p className="wb-text-body" style={{ margin: 0, color: '#fff' }}>
-          {pending.length > 0 ? 'Tem pedido esperando você.' : 'Mantenha o painel aberto para ouvir os pedidos.'}
-        </p>
-      </Hero>
+      <PageHeader title={greeting(user.name, new Date(now))} eyebrow={dateLabel.format(new Date(now)).replace(/^./, (c) => c.toUpperCase())} />
+      <div className={f.openRow} data-testid={T('hero')}>
+        <span className={f.openIcon}><SolarIcon name="store" size={26} /></span>
+        <span className={f.openText}>
+          <span className="wb-text-body-strong">{store.status === 'live' ? 'Loja aberta' : 'Loja no ar'}</span>
+          <span className={cx('wb-text-caption', f.openHint)}>{pending.length > 0 ? 'Tem pedido esperando você.' : 'Mantenha o painel aberto para ouvir os pedidos.'}</span>
+        </span>
+        <Link href={'/lojista/loja' as never} className={f.openLink} data-testid="lojista.home.open">Pausar ou ajustar</Link>
+      </div>
+      {pending.length > 0 ? (
+        <NightBlock icon="bell" title={`${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'}`} testId="lojista.home.new-orders" role="status" action={<LimaAction href="/lojista/pedidos" testId={T('todo-orders')}>Ver pedidos</LimaAction>}>
+          {urgent !== null ? (
+            <>
+              O mais urgente vence em <Lima>{mmss(urgent)}</Lima>. Sem resposta, o pedido é cancelado.
+            </>
+          ) : (
+            'Responda agora para o cliente não esperar.'
+          )}
+        </NightBlock>
+      ) : null}
       <section aria-labelledby="para-fazer">
         <h2 id="para-fazer" className="wb-text-title2" style={{ margin: '0 0 12px' }}>
           Para fazer agora
         </h2>
-        {todos.length === 0 ? (
+        {todos.length === 0 && pending.length === 0 ? (
           <Banner tone="success" testId={T('all-clear')}>
             Tudo em dia.
           </Banner>
@@ -306,7 +343,7 @@ function useExchangeTodo(storeId: string): { id: string; icon: ReactNode; label:
   const query = useQuery({ queryKey: exchangesKeys.pending(storeId), queryFn: () => exchangesApi.list(storeId, { scope: 'pending', limit: 50 }), staleTime: 30_000, refetchInterval: 60_000 });
   const count = query.data?.data.length ?? 0;
   if (count === 0) return null;
-  return { id: 'exchanges', icon: <ArrowsClockwise size={24} aria-hidden="true" />, label: `${count} ${count === 1 ? 'troca para responder' : 'trocas para responder'}`, href: '/lojista/trocas', urgent: true };
+  return { id: 'exchanges', icon: <SolarIcon name="exchange" size={24} />, label: `${count} ${count === 1 ? 'troca para responder' : 'trocas para responder'}`, href: '/lojista/trocas', urgent: true };
 }
 
 /** "Hoje" e "Últimos 7 dias": só com `vendas_valores` (o funcionário sem a permissão não vê dinheiro). Um bloco que falha não derruba o painel. */

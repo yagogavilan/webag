@@ -119,7 +119,10 @@ describe('prazo de entrega (DEC-053)', () => {
     expect(r).toMatchObject({ travelMin: 39, estimateMin: 74, fromMin: 59, toMin: 89, withinCeiling: true });
     expect(estimateEta(cfg, 12).withinCeiling).toBe(false);
     expect(estimateEta(cfg, 5, 40).estimateMin).toBe(94);
-    expect(maxReachKm(cfg)).toBe(10.8);
+    // DEC-054: o teto vale para o FIM da faixa, então o alcance cai de 10,8 para 8,9 km (a API calcula igual, em metros)
+    expect(maxReachKm(cfg)).toBe(8.9);
+    expect(estimateEta(cfg, 9).withinCeiling).toBe(false);
+    expect(estimateEta(cfg, 8.9).withinCeiling).toBe(true);
     expect(etaParamsFrom(eta.slice(0, 3) as never)).toBeNull();
   });
   it('o simulador mostra a faixa, o fora da área e avisa quando o raio passa do alcance do teto', async () => {

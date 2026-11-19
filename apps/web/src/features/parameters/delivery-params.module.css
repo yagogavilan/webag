@@ -1,0 +1,38 @@
+/* Parâmetros de entrega (WB-258, onda-7-paineis-v3 §4): coluna principal com 4 grupos e lateral com Alcance (noite) e Prévia. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--wb-space-6); align-items: start; }
+.main { display: flex; flex-direction: column; gap: var(--wb-space-5); }
+.group { display: flex; flex-direction: column; gap: var(--wb-space-3); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); }
+.groupTitle { margin: 0; }
+.fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--wb-space-4); }
+.fieldRow { display: flex; align-items: flex-start; gap: var(--wb-space-2); }
+.fieldRow > :first-child { flex: 1; min-width: 0; }
+.suffix { margin-top: 30px; min-width: 44px; color: var(--wb-color-text-secondary); }
+.side { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.reach { display: flex; flex-direction: column; gap: var(--wb-space-1); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink); }
+.reachLabel { margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wb-color-text-on-ink-muted); }
+.reachValue { margin: 0; font-family: var(--wb-font-family-display); font-size: 52px; line-height: 56px; font-weight: 800; letter-spacing: -0.03em; }
+.reachText { margin: 0; color: var(--wb-color-text-on-ink-muted); }
+.reachWarn { margin: var(--wb-space-2) 0 0; color: var(--wb-color-accent-base); }
+.preview { display: flex; flex-direction: column; gap: var(--wb-space-4); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); background: var(--wb-color-surface-card); }
+.previewInputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--wb-space-3); }
+.equation { display: flex; flex-direction: column; gap: var(--wb-space-3); }
+.bars { display: flex; height: 28px; border-radius: 8px; overflow: hidden; gap: 2px; }
+.barPrep { background: var(--wb-color-surface-ink); }
+.barDispatch { background: var(--wb-color-neutral-700); }
+.barTravel { background: var(--wb-color-brand-700); }
+.legend { margin: 0; display: flex; flex-wrap: wrap; gap: var(--wb-space-1) var(--wb-space-3); color: var(--wb-color-text-secondary); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.dotPrep { background: var(--wb-color-surface-ink); }
+.dotDispatch { background: var(--wb-color-neutral-700); }
+.dotTravel { background: var(--wb-color-brand-700); }
+.ruler { position: relative; height: 40px; border-radius: 8px; background: var(--wb-color-neutral-100); overflow: hidden; }
+.band { position: absolute; top: 8px; height: 24px; border-radius: 6px; background: var(--wb-color-action-primary); transform: skewX(-8deg); }
+.ceiling { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--wb-color-feedback-danger-base); }
+.ceilingLabel { position: absolute; top: 2px; transform: translateX(-100%); padding-right: 6px; color: var(--wb-color-feedback-danger-base); font-weight: 800; }
+.verdict { display: flex; flex-direction: column; gap: 2px; padding: var(--wb-space-3) var(--wb-space-4); border-radius: var(--wb-radius-lg); background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink); }
+.verdict p { color: inherit; }
+.verdict :global(.wb-text-caption) { color: var(--wb-color-text-on-ink-muted); }
+.verdictOut { background: var(--wb-color-feedback-warning-subtle); color: var(--wb-color-feedback-warning-base); border: var(--wb-border-width-hairline) solid var(--wb-color-feedback-warning-border); }
+.verdictValue { margin: 0; font-family: var(--wb-font-family-display); font-size: 26px; line-height: 32px; font-weight: 800; }
+@media (min-width: 640px) { .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .layout { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); } .side { position: sticky; top: var(--wb-space-4); } }

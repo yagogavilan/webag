@@ -21,13 +21,15 @@ interface Props {
   describedBy?: string;
   /** Celular: ocupa a tela inteira (alerta de pedido novo). */
   fullOnMobile?: boolean;
+  /** Folha inferior (v3: "Mais" da barra de navegação): sobe da base, raio 30 em cima. */
+  sheet?: boolean;
 }
 
 /**
  * Dialog acessível: foco preso, vai ao título ao abrir e volta ao gatilho ao fechar, Esc fecha,
  * fundo inerte para o leitor de tela. `alert` usa `role="alertdialog"` (aviso de inatividade).
  */
-export function Dialog({ title, children, actions, onClose, wide, alert, testId, locked, describedBy, fullOnMobile }: Props) {
+export function Dialog({ title, children, actions, onClose, wide, alert, testId, locked, describedBy, fullOnMobile, sheet }: Props) {
   const titleId = useId();
   const bodyId = useId();
   const panel = useRef<HTMLDivElement>(null);
@@ -67,8 +69,8 @@ export function Dialog({ title, children, actions, onClose, wide, alert, testId,
   }
 
   return createPortal(
-    <div data-dialog-root className={cx(s.backdrop, fullOnMobile && s.backdropFull)} onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()} onKeyDown={onKeyDown}>
-      <div ref={panel} role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} aria-describedby={describedBy ?? bodyId} className={cx(s.dialog, wide && s.dialogWide, fullOnMobile && s.dialogFull)} data-testid={testId}>
+    <div data-dialog-root className={cx(s.backdrop, fullOnMobile && s.backdropFull, sheet && s.backdropSheet)} onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()} onKeyDown={onKeyDown}>
+      <div ref={panel} role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} aria-describedby={describedBy ?? bodyId} className={cx(s.dialog, wide && s.dialogWide, fullOnMobile && s.dialogFull, sheet && s.dialogSheet)} data-testid={testId}>
         <h2 ref={heading} id={titleId} tabIndex={-1} className={cx('wb-text-title2', s.dialogTitle)}>
           {title}
         </h2>

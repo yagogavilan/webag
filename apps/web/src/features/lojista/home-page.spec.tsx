@@ -99,7 +99,8 @@ describe('L8: acompanhar a aprovação', () => {
 
   it('no ar: faixa de destaque com "Para fazer agora" e as vendas só para quem vê valores', async () => {
     setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }));
-    expect(await screen.findByTestId('lojista.inicio.hero')).toHaveTextContent('Olá, Casa Bela');
+    expect(await screen.findByTestId('lojista.inicio.hero')).toHaveTextContent('Loja aberta');
+    expect(await screen.findByRole('heading', { level: 1, name: /^(Bom dia|Boa tarde|Boa noite), Marcos$/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Para fazer agora' })).toBeInTheDocument();
     expect(await screen.findByTestId('lojista.inicio.all-clear')).toHaveTextContent('Tudo em dia.');
   });

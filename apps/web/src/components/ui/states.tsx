@@ -4,7 +4,6 @@ import { Lock, WarningCircle, WifiSlash } from '@phosphor-icons/react';
 import { useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { Button } from './button';
 import { cx } from './cx';
-import { SpeedLines } from './logo';
 import s from './ui.module.css';
 
 type IconType = ComponentType<{ size?: number; weight?: 'duotone' | 'regular' | 'fill'; 'aria-hidden'?: boolean | 'true' }>;
@@ -17,9 +16,11 @@ export function MessageState({ icon: Icon, title, text, children, testId, role, 
   return (
     <div className={s.state} data-testid={testId} role={role}>
       <span className={s.stateIcon} aria-hidden="true">
-        <SpeedLines className={s.stateLines} tone="onLight" />
-        <span className={s.stateBag}>
-          <Icon size={48} weight="duotone" aria-hidden="true" />
+        {/* sacola da marca, sem rosto (v3); o ícone do contexto vai no selo noite */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- SVG estático da marca */}
+        <img className={s.stateBagImg} src="/brand/webag-simbolo.svg" width={64} height={42} alt="" />
+        <span className={s.stateBadge}>
+          <Icon size={22} weight="duotone" aria-hidden="true" />
         </span>
       </span>
       <h2 ref={ref} tabIndex={-1} className={cx('wb-text-title2', s.stateTitle)} style={{ outline: 'none' }}>

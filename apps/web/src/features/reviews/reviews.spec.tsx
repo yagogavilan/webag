@@ -20,7 +20,7 @@ describe('permissão e menu', () => {
     expect(canReplyReviews(fakeStore({ role: 'staff', permissions: ['orders'] }))).toBe(false);
     expect(canReplyReviews(fakeStore({ role: 'staff', permissions: ['orders', 'reviews'] }))).toBe(true);
     expect(visibleLojistaNav(fakeStore({ role: 'staff', permissions: ['orders'] })).some((i) => i.section === 'avaliacoes')).toBe(false);
-    expect(visibleLojistaNav(fakeStore({ role: 'owner' })).find((i) => i.section === 'avaliacoes')?.sideOnly).toBe(true);
+    expect(visibleLojistaNav(fakeStore({ role: 'owner' })).find((i) => i.section === 'avaliacoes')?.bottomPriority).toBe(5);
   });
   it('estrelas em texto e erros por código', () => {
     expect(stars(4)).toBe('4 de 5 estrelas');

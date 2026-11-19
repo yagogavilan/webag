@@ -1,25 +1,34 @@
 'use client';
 
-import { ArrowsClockwise, CurrencyCircleDollar, House, Package, Question, Receipt, SignOut, Star, Storefront, UserCircle, UsersThree } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { OrderAlertHost } from '@/features/orders/order-alert';
 import { SoundBanner } from '@/features/orders/orders-chrome';
 import { OrdersRuntimeProvider, useOrdersRuntime } from '@/features/orders/orders-runtime';
 import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
 import { ReauthProvider } from './reauth';
-import { Badge, Banner, Logo, SpeedLines, ToastProvider, cx, useToast } from '@/components/ui';
+import { PanelFrame, type AccountEntry, type FrameTestIds, type NavGroup } from './frame';
+import { Banner, SolarIcon, ToastProvider, cx, useToast } from '@/components/ui';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
-import { STORE_STATUS_LABEL, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
+import { LOJISTA_NAV_GROUP_LABEL, STORE_STATUS_LABEL, bottomLojistaNav, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
 import { createPanelQueryClient } from '@/lib/query-client';
 import type { Me } from '@/lib/session-types';
 import { useOnline } from '@/lib/use-online';
-import s from './lojista-shell.module.css';
+import f from './frame.module.css';
 
-type IconType = ComponentType<{ size?: number; weight?: 'regular' | 'fill' | 'duotone'; 'aria-hidden'?: boolean | 'true' }>;
-const ICONS: Record<LojistaSection, IconType> = { inicio: House, pedidos: Receipt, trocas: ArrowsClockwise, produtos: Package, financeiro: CurrencyCircleDollar, loja: Storefront, equipe: UsersThree, avaliacoes: Star };
+const ICONS = { inicio: 'home', pedidos: 'orders', trocas: 'exchange', produtos: 'box', financeiro: 'wallet', loja: 'store', equipe: 'team', avaliacoes: 'star' } as const satisfies Record<LojistaSection, string>;
+
+const TEST_IDS: FrameTestIds = {
+  side: (key) => `lojista.nav.${key}`,
+  bottom: (key) => `lojista.nav.${key}-bottom`,
+  more: (key) => `lojista.nav.more.${key}`,
+  moreButton: 'lojista.nav.more',
+  moreSheet: 'lojista.nav.more-sheet',
+  moreSearch: 'lojista.nav.more-search',
+  account: (key) => `lojista.nav.more.${key}`,
+};
 
 /** Sessão perdida, sair e aviso de volta à rede: comportamento comum ao painel e ao fluxo de cadastro. */
 function useShellBehavior() {
@@ -53,18 +62,22 @@ function useShellBehavior() {
     wasOnline.current = online;
   }, [online, toast]);
 
-  return { logout, online };
+  return { logout, online, pathname };
 }
 
-function StatusChip() {
+/** Pastilha noite do cabeçalho: ponto de estado + nome da loja + estado ("Moda Morato · Aberta"). */
+function StorePill() {
   const { store } = useMerchant();
   const data = store.data;
   if (!data) return null;
-  const tone = data.status === 'live' ? 'success' : data.status === 'suspended' || data.status === 'rejected' ? 'danger' : data.status === 'correction_requested' ? 'warning' : 'neutral';
+  const label = data.status === 'live' ? 'Aberta' : STORE_STATUS_LABEL[data.status];
+  const tone = data.status === 'live' ? 'var(--wb-color-accent-base)' : data.status === 'suspended' || data.status === 'rejected' ? 'var(--wb-color-feedback-danger-border)' : 'var(--wb-color-border-default)';
   return (
-    <Badge tone={tone} testId="lojista.shell.status-chip">
-      {data.status === 'live' ? 'Aberta' : STORE_STATUS_LABEL[data.status]}
-    </Badge>
+    <span className={f.pill}>
+      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: tone, flex: 'none' }} />
+      <span className={cx('wb-text-body-strong', f.pillText)}>{data.name}</span>
+      <span className={f.pillMeta} data-testid="lojista.shell.status-chip">{label}</span>
+    </span>
   );
 }
 
@@ -88,125 +101,81 @@ function GlobalBanner({ online }: { online: boolean }) {
   return null;
 }
 
-function HeaderActions({ onLogout }: { onLogout: () => void }) {
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join('') || 'W';
+
+function HeaderActions({ user, onLogout }: { user: Me; onLogout: () => void }) {
   return (
     <>
-      <Link href={'/lojista/ajuda' as never} className={s.headerLink} aria-label="Ajuda" data-testid="lojista.shell.help">
-        <Question size={24} aria-hidden="true" />
-        <span className={cx('wb-text-label', s.headerLabel)}>Ajuda</span>
+      <Link href={'/lojista/ajuda' as never} className={f.heroButton} aria-label="Ajuda" data-testid="lojista.shell.help">
+        <SolarIcon name="help" size={24} />
       </Link>
-      <Link href={'/lojista/conta' as never} className={s.headerLink} aria-label="Minha conta" data-testid="lojista.shell.account">
-        <UserCircle size={24} aria-hidden="true" />
-        <span className={cx('wb-text-label', s.headerLabel)}>Conta</span>
-      </Link>
-      <button type="button" className={s.headerLink} onClick={onLogout} data-testid="lojista.shell.logout">
-        <SignOut size={24} aria-hidden="true" />
-        <span className={cx('wb-text-label', s.headerLabel)}>Sair</span>
+      <button type="button" className={f.heroButton} onClick={onLogout} data-testid="lojista.shell.logout">
+        <SolarIcon name="signOut" size={22} />
+        <span className="wb-text-label">Sair</span>
       </button>
+      <Link href={'/lojista/conta' as never} className={f.heroAvatar} aria-label="Minha conta" data-testid="lojista.shell.account">
+        {initials(user.name)}
+      </Link>
     </>
   );
 }
 
-function Nav({ variant }: { variant: 'side' | 'bottom' }) {
-  const pathname = usePathname();
+function PanelShell({ user, flow, pendingCount, children }: { user: Me; flow?: boolean; pendingCount: number; children: ReactNode }) {
+  const { logout, online, pathname } = useShellBehavior();
   const { store } = useMerchant();
-  const items = visibleLojistaNav(store.data).filter((item) => variant === 'side' || !item.sideOnly);
+
+  const groups = useMemo<NavGroup[]>(() => {
+    const visible = visibleLojistaNav(store.data);
+    return (['day', 'store'] as const)
+      .map((group) => ({
+        label: LOJISTA_NAV_GROUP_LABEL[group],
+        items: visible
+          .filter((item) => item.group === group)
+          .map((item) => ({
+            key: item.section,
+            label: item.label,
+            href: item.href,
+            icon: ICONS[item.section],
+            ...(item.section === 'pedidos' ? { count: pendingCount, countLabel: (n: number) => `${n} ${n === 1 ? 'pedido novo' : 'pedidos novos'}`, countTestId: 'lojista.nav.pedidos-count' } : {}),
+          })),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [store.data, pendingCount]);
+
+  const account: AccountEntry[] = [
+    { key: 'ajuda', label: 'Ajuda', icon: 'help', href: '/lojista/ajuda', testId: TEST_IDS.account('ajuda') },
+    { key: 'conta', label: 'Minha conta', hint: user.name, icon: 'account', href: '/lojista/conta', testId: TEST_IDS.account('conta') },
+    { key: 'sair', label: 'Sair', icon: 'signOut', danger: true, onSelect: () => void logout(), testId: TEST_IDS.account('sair') },
+  ];
+
+  return (
+    <PanelFrame
+      root="/lojista"
+      homeAriaLabel="Webag, início do painel da loja"
+      pathname={pathname}
+      flow={flow}
+      pill={<StorePill />}
+      actions={<HeaderActions user={user} onLogout={() => void logout()} />}
+      groups={flow ? [] : groups}
+      bottomKeys={bottomLojistaNav(store.data).map((item) => item.section)}
+      account={account}
+      testIds={TEST_IDS}
+      banners={
+        <>
+          <GlobalBanner online={online} />
+          {flow ? null : <SoundBanner />}
+        </>
+      }
+      overlay={flow ? null : <OrderAlertHost />}
+    >
+      {children}
+    </PanelFrame>
+  );
+}
+
+function RuntimeShell({ user, children }: { user: Me; children: ReactNode }) {
   const { pending } = useOrdersRuntime();
-  return (
-    <nav className={variant === 'side' ? s.nav : undefined} style={variant === 'bottom' ? { display: 'flex', width: '100%' } : undefined} aria-label={variant === 'side' ? 'Menu do painel' : 'Menu principal'}>
-      {items.map((item) => {
-        const Icon = ICONS[item.section];
-        const active = item.href === '/lojista' ? pathname === '/lojista' : pathname.startsWith(item.href);
-        return (
-          <Link key={item.href} href={item.href as never} className={cx(variant === 'side' ? s.navItem : s.bottomItem, variant === 'side' ? 'wb-text-body-strong' : 'wb-text-caption-strong', active && (variant === 'side' ? s.navItemActive : s.bottomItemActive))} aria-current={active ? 'page' : undefined} data-testid={`lojista.nav.${item.section}${variant === 'bottom' ? '-bottom' : ''}`}>
-            <Icon size={24} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
-            {item.label}
-            {item.section === 'pedidos' && pending.length > 0 ? (
-              <span className={s.navCount} aria-label={`${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'}`} data-testid="lojista.nav.pedidos-count">
-                {pending.length}
-              </span>
-            ) : null}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function Header({ onLogout }: { onLogout: () => void }) {
-  const { store } = useMerchant();
-  return (
-    <header className={s.header} data-chrome>
-      <SpeedLines className={s.headerLines} />
-      <Link href="/lojista" className={s.brand} aria-label="Webag, início do painel da loja">
-        <span className={s.logoFull}>
-          <Logo size={36} tone="white" />
-        </span>
-        <span className={s.logoSym}>
-          <Logo size={30} tone="white" compact />
-        </span>
-      </Link>
-      {store.data?.name ? (
-        <span className={s.storePill}>
-          <span className={cx('wb-text-body-strong', s.storeName)}>{store.data.name}</span>
-          <StatusChip />
-        </span>
-      ) : (
-        <StatusChip />
-      )}
-      <span className={s.spacer} />
-      <HeaderActions onLogout={onLogout} />
-    </header>
-  );
-}
-
-function PanelFrame({ children }: { children: ReactNode }) {
-  const { logout, online } = useShellBehavior();
-  return (
-    <div className={s.shell}>
-      <a href="#conteudo" className={cx(s.skip, 'wb-text-label')}>
-        Pular para o conteúdo
-      </a>
-      <Header onLogout={() => void logout()} />
-      <div className={s.banners} data-chrome>
-        <GlobalBanner online={online} />
-        <SoundBanner />
-      </div>
-      <OrderAlertHost />
-      <div className={s.body}>
-        <aside className={s.sidebar} data-chrome>
-          <Nav variant="side" />
-          <div className={s.sideLines}>
-            <SpeedLines />
-          </div>
-        </aside>
-        <main id="conteudo" className={s.main} tabIndex={-1}>
-          <div className={s.content}>{children}</div>
-        </main>
-      </div>
-      <div className={s.bottomBar} data-chrome>
-        <Nav variant="bottom" />
-      </div>
-    </div>
-  );
-}
-
-function FlowFrame({ children }: { children: ReactNode }) {
-  const { logout, online } = useShellBehavior();
-  return (
-    <div className={s.shell}>
-      <a href="#conteudo" className={cx(s.skip, 'wb-text-label')}>
-        Pular para o conteúdo
-      </a>
-      <Header onLogout={() => void logout()} />
-      <div className={s.banners}>
-        <GlobalBanner online={online} />
-      </div>
-      <main id="conteudo" className={s.flowMain} tabIndex={-1}>
-        {children}
-      </main>
-    </div>
-  );
+  return <PanelShell user={user} pendingCount={pending.length}>{children}</PanelShell>;
 }
 
 function Providers({ user, children }: { user: Me; children: ReactNode }) {
@@ -222,12 +191,12 @@ function Providers({ user, children }: { user: Me; children: ReactNode }) {
   );
 }
 
-/** Painel completo (barra lateral no balcão, barra inferior no celular). */
+/** Painel completo (barra lateral no balcão, barra inferior de 4 + "Mais" no celular). */
 export function LojistaShell({ user, children }: { user: Me; children: ReactNode }) {
   return (
     <Providers user={user}>
       <OrdersRuntimeProvider>
-        <PanelFrame>{children}</PanelFrame>
+        <RuntimeShell user={user}>{children}</RuntimeShell>
       </OrdersRuntimeProvider>
     </Providers>
   );
@@ -237,7 +206,7 @@ export function LojistaShell({ user, children }: { user: Me; children: ReactNode
 export function LojistaFlowShell({ user, children }: { user: Me; children: ReactNode }) {
   return (
     <Providers user={user}>
-      <FlowFrame>{children}</FlowFrame>
+      <PanelShell user={user} flow pendingCount={0}>{children}</PanelShell>
     </Providers>
   );
 }
