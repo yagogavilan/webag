@@ -206,8 +206,7 @@ describe('SEC tmp: ataques', () => {
     const other = await shopWith(ctx, [{ name: 'X', priceCents: 1_000, stock: 1 }]);
     const r1 = await (async () => { const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 5 }]); const buyer = await customerAt(ctx, shop.origin); await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200); const res = await placeOrder(ctx, buyer.user, buyer.addressId); return { orderId: res.body.id as string, total: (await attemptOf(ctx, res.body.id)).amountCents }; })();
     const forged = await payments.createPayment({ externalReference: r1.orderId, storeId: other.store.id, amountCents: r1.total, applicationFeeCents: 0, method: 'pix' });
-    const sim = await fake.simulate(forged.providerPaymentId!, { outcome: 'approved' });
-    await ctx.http.post('/v1/webhooks/fake').query(sim.query).set(sim.headers).send(sim.body);
+    await ctx.http.post(`/v1/dev/payments/${forged.id}/approve`).set(bearer(r.buyer.user.accessToken)).send({}).expect(200);
     await payments.reconcile(new Date());
     const fRow = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.id, forged.id)))[0]!;
     log('K> intents', (await ctx.db.select().from(paymentRefundIntents).where(eq(paymentRefundIntents.attemptId, forged.id))).map((i) => [i.status, i.lastErrorCode, i.failures]), 'provedor refunded', (await fake.getPayment(forged.providerPaymentId!))?.refundedCents);

@@ -14,6 +14,7 @@ import { StoresModule } from './modules/stores/index.js';
 import { AddressesModule } from './modules/addresses/index.js';
 import { CartModule } from './modules/cart/index.js';
 import { OrdersModule } from './modules/orders/index.js';
+import { ExchangesModule } from './modules/exchanges/index.js';
 import { LogisticsModule } from './modules/logistics/index.js';
 import { FinanceModule } from './modules/finance/index.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
@@ -102,6 +103,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     DiscoveryModule,
     CartModule,
     OrdersModule,
+    ExchangesModule,
     LogisticsModule,
     FinanceModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).

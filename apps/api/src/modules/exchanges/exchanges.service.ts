@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, asc, count, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, lte, ne } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -522,7 +522,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   }
 
   /** Roda na transação do pagamento: taxa aprovada libera a troca (reserva já existe desde a aprovação). */
-  async onAttemptTransition(tx: Tx, attempt: PaymentAttempt, _from: PaymentStatus, _remote: ProviderPayment | null): Promise<void> {
+  async onAttemptTransition(tx: Tx, attempt: PaymentAttempt): Promise<void> {
     if (!attempt.externalReference.startsWith('exchange:')) return;
     const id = attempt.externalReference.slice('exchange:'.length);
     if (!UUID_RE.test(id) || attempt.status !== 'approved') return;
@@ -554,7 +554,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
   // =================================================================== corridas (coleta e reentrega)
 
-  async onDeliveryChange(tx: Tx, delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus, _actor: DeliveryActor, _reason: string | null): Promise<void> {
+  async onDeliveryChange(tx: Tx, delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
     if (!delivery.exchangeId || to !== 'delivered') return;
     const { ex } = await this.lockFor(tx, delivery.exchangeId);
     const now = new Date();

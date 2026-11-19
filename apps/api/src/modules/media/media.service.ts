@@ -68,7 +68,7 @@ export class MediaService {
       const member = await this.principals.storeMembership(principal.userId, owner);
       // 404 também para quem não é membro (SEC-020): não revela que a loja existe.
       if (!member) throw errors.notFound();
-      if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose as Exclude<MediaPurpose, 'banner' | 'exchange_photo'>])) throw errors.forbidden();
+      if (!memberHasStorePermission(member, PURPOSE_PERMISSION[input.purpose])) throw errors.forbidden();
     }
 
     const allowed = input.purpose === 'store_document' ? [...IMAGE_TYPES, 'application/pdf'] : IMAGE_TYPES;
@@ -129,7 +129,7 @@ export class MediaService {
         // LGPD: foto de troca fica PRIVADA e sai re-codificada (WebP, sem EXIF/GPS); o original é substituído.
         const clean = await renderVariant(body, 1600);
         await this.storage.putObject('private', asset.objectKey, clean, 'image/webp');
-        return this.ready(asset, 'image/webp' as DetectedType, clean.length, info, null);
+        return this.ready(asset, 'image/webp', clean.length, info, null);
       }
       let variants: Record<string, string> | null = null;
       if (PUBLIC_PURPOSES.includes(asset.purpose)) {
