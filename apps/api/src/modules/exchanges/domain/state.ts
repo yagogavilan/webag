@@ -10,7 +10,7 @@ const RULES: Record<ExchangeStatus, readonly { to: ExchangeStatus; actors: reado
     { to: 'cancelled', actors: ['customer', 'admin'] },
   ],
   awaiting_fee: [
-    { to: 'approved', actors: ['system', 'admin'] }, // pagamento confirmado; admin: isenção da taxa sem diferença a pagar (AT3)
+    { to: 'approved', actors: ['system', 'admin', 'customer'] }, // pagamento confirmado; admin: isenção da taxa (AT3); cliente: leva à loja sem diferença a pagar (B.1)
     { to: 'cancelled', actors: ['customer', 'system', 'admin'] }, // desistiu ou taxa não paga no prazo
   ],
   approved: [

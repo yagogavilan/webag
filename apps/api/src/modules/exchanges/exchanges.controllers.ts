@@ -104,6 +104,15 @@ export class ExchangesController {
     return this.exchanges.getForCustomer(p.userId, id);
   }
 
+  /** B.1: depois de aprovada, trocar a coleta em casa por levar o item à loja (só com a taxa ainda não paga e antes do motoboy sair). */
+  @Post('exchanges/:id/drop-at-store')
+  @HttpCode(200)
+  @RateLimit({ name: 'exchange-switch', limit: 30, windowSeconds: 3600 })
+  async dropAtStore(@CurrentPrincipal() principal: Principal, @Param('id') id: string) {
+    await this.exchanges.switchToStore(principal.userId, idParam(id));
+    return this.exchanges.getForCustomer(principal.userId, idParam(id));
+  }
+
   @Get('exchanges/:id/payment')
   payment(@CurrentPrincipal() p: Principal, @Param('id') id: string) {
     return this.exchanges.paymentForCustomer(p.userId, idParam(id));

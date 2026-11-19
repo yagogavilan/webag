@@ -6,7 +6,7 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { presentAddress } from '../addresses/index.js';
-import { FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
 import { CartService } from '../cart/index.js';
 import { carts, cartItems, couponRedemptions, coupons } from '../cart/db/schema.js';
 import { InventoryService } from '../catalog/index.js';
@@ -23,6 +23,7 @@ import { stores } from '../stores/db/schema.js';
 import { users } from '../identity/db/schema.js';
 import { paymentAttempts } from '../payments/db/schema.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
+import { DAY_MS, windowDays } from '../exchanges/domain/eligibility.js';
 import { canTransition, customerActions, PAID_STATUSES, refundDueOnCancel, type CustomerAction, type OrderActor, type OrderStatus } from './domain/state.js';
 import { OrderEventBus, type OrderEvent } from './order-events.bus.js';
 import { generateOrderNumber, generatePickupCode } from './order-number.js';
@@ -46,7 +47,9 @@ const money = (amount: number): Money => ({ amount, currency: 'BRL' });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Ações que já existem na API; o contrato lista as demais (troca, avaliação...) para ondas futuras. */
-const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'contact_store'];
+const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'contact_store', 'report_not_received'];
+/** B.1: "não recebi meu pedido" também vale por 48 h depois de marcado como entregue. */
+const NOT_RECEIVED_WINDOW_MS = 48 * 3_600_000;
 
 /** Texto seguro por motivo de recusa (nunca o texto cru do provedor). */
 const DECLINE_TEXT: Record<string, string> = {
@@ -94,6 +97,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     private readonly media: MediaService,
     private readonly exposure: ExposureLimitService,
     private readonly deliveries: DeliveriesService,
+    private readonly audit: AuditService,
     readonly bus: OrderEventBus,
   ) {}
 
@@ -785,10 +789,42 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       payment: { method: order.paymentMethod, status: publicPaymentStatus(attempt?.status) },
       exchangePolicy: { voluntaryDays: order.exchangeVoluntaryDays, collectionFeeCents: order.exchangeCollectionFeeCents, version: order.exchangePolicyVersion },
       timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor, reason: e.reason })),
-      allowedActions: customerActions(order.status).filter((a) => IMPLEMENTED_ACTIONS.includes(a)),
+      allowedActions: this.actionsOf(order),
+      /** B.1: prazos finais da troca já na entrada do pedido ("Troca até 25/11"); nulos fora do prazo ou sem entrega. */
+      exchange: this.exchangeWindowOf(order),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
       tracking: order.mode === 'delivery' ? await this.trackingOf(order) : null,
     };
+  }
+
+  private actionsOf(order: OrderRow) {
+    const actions = customerActions(order.status).filter((a) => IMPLEMENTED_ACTIONS.includes(a));
+    const recentlyDelivered = order.status === 'delivered' && order.deliveredAt !== null && Date.now() - order.deliveredAt.getTime() <= NOT_RECEIVED_WINDOW_MS;
+    return recentlyDelivered && !actions.includes('report_not_received') ? [...actions, 'report_not_received' as const] : actions;
+  }
+
+  /** Prazos finais (a mais longa de cada tipo): arrependimento (7 dias), troca voluntária da loja e defeito. Pedido não entregue: tudo nulo. */
+  private exchangeWindowOf(order: OrderRow) {
+    if (order.status !== 'delivered' || !order.deliveredAt) return { canRequest: false, withdrawalUntil: null, voluntaryUntil: null, defectUntil: null };
+    const at = (days: number) => new Date(order.deliveredAt!.getTime() + days * DAY_MS);
+    const withdrawal = at(windowDays({ type: 'withdrawal', productDurable: true, storeVoluntaryDays: order.exchangeVoluntaryDays }));
+    const voluntary = order.exchangeVoluntaryDays > 0 ? at(order.exchangeVoluntaryDays) : null;
+    const defect = at(windowDays({ type: 'defect', productDurable: true, storeVoluntaryDays: order.exchangeVoluntaryDays }));
+    const now = Date.now();
+    return { canRequest: [withdrawal, voluntary, defect].some((d) => d !== null && d.getTime() > now), withdrawalUntil: withdrawal.toISOString(), voluntaryUntil: voluntary?.toISOString() ?? null, defectUntil: defect.toISOString() };
+  }
+
+  /**
+   * B.1 "Não recebi meu pedido": avisa a operação (alerta `order_not_received`) e grava na auditoria; vale com o pedido a caminho ou
+   * até 48 h depois de "entregue". Repetir é idempotente (um alerta por pedido). Não estorna nem muda o estado: a operação decide.
+   */
+  async reportNotReceived(principal: Principal, orderId: string, ctx: RequestContext): Promise<{ reported: true }> {
+    const [order] = await this.db.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, principal.userId)));
+    if (!order) throw errors.notFound('Pedido não encontrado.');
+    if (!this.actionsOf(order).includes('report_not_received')) throw errors.conflict('ORDER_NOT_REPORTABLE', 'Não dá para avisar agora', 'Só vale com o pedido a caminho ou até 48 h depois de entregue.');
+    await this.payments.raiseAlert(null, 'order_not_received', { orderId: order.id, orderNumber: order.number, storeId: order.storeId });
+    await this.audit.recordStandalone(ctx, { action: 'order.not_received_reported', targetType: 'order', targetId: order.id, actorId: principal.userId, actorRole: 'customer' });
+    return { reported: true };
   }
 
   /**

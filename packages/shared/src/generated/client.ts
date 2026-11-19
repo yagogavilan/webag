@@ -4160,6 +4160,19 @@ export type OrderExchangePolicy = {
   version: number;
 };
 
+/**
+ * Prazos finais da troca já na entrada do pedido (B.1: 'Troca até 25/11'); tudo nulo se não foi entregue
+ */
+export type OrderExchange = {
+  canRequest?: boolean;
+  /** @nullable */
+  withdrawalUntil?: string | null;
+  /** @nullable */
+  voluntaryUntil?: string | null;
+  /** @nullable */
+  defectUntil?: string | null;
+};
+
 export type OrderAllowedActionsItem = typeof OrderAllowedActionsItem[keyof typeof OrderAllowedActionsItem];
 
 
@@ -4209,6 +4222,8 @@ export interface Order {
   payment: OrderPaymentProperty;
   /** Política vigente no pedido (snapshot, WB-059 C3) */
   exchangePolicy: OrderExchangePolicy;
+  /** Prazos finais da troca já na entrada do pedido (B.1: 'Troca até 25/11'); tudo nulo se não foi entregue */
+  exchange?: OrderExchange;
   timeline: OrderTimelineEntry[];
   allowedActions: OrderAllowedActionsItem[];
   cancellation: OrderCancellation;
@@ -4613,6 +4628,9 @@ export type ExchangeOptionsItemsItemVariantsItem = {
   attributes?: ExchangeOptionsItemsItemVariantsItemAttributes;
   available?: boolean;
   current?: boolean;
+  price?: Money;
+  /** Positivo = o cliente paga a diferença; negativo = recebe de volta (B.1). A mesma conta que a aprovação congela */
+  priceDifference?: Money;
 };
 
 export type ExchangeOptionsItemsItem = {
@@ -5564,6 +5582,77 @@ export interface ReportOrderPage {
   data: ReportOrder[];
   /** @nullable */
   nextCursor: string | null;
+}
+
+export type CardIntentRequestMode = typeof CardIntentRequestMode[keyof typeof CardIntentRequestMode];
+
+
+export const CardIntentRequestMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export interface CardIntentRequest {
+  mode: CardIntentRequestMode;
+  addressId?: string;
+  /** @minimum 0 */
+  cartRevision: number;
+  /** @minimum 0 */
+  expectedTotalCents: number;
+  /** @pattern ^[0-9]{11}$ */
+  payerDocument?: string;
+}
+
+export interface CardIntent {
+  token: string;
+  /** Abrir no navegador do sistema */
+  url: string;
+  expiresAt: string;
+  amount: Money;
+}
+
+export type CardIntentViewProvider = typeof CardIntentViewProvider[keyof typeof CardIntentViewProvider];
+
+
+export const CardIntentViewProvider = {
+  fake: 'fake',
+  mercadopago: 'mercadopago',
+} as const;
+
+export interface CardIntentView {
+  amount: Money;
+  provider: CardIntentViewProvider;
+  /** @nullable */
+  publicKey: string | null;
+  installmentsMax: number;
+  expiresAt: string;
+}
+
+export type CardIntentPayRequestCard = {
+  /**
+     * @minLength 8
+     * @maxLength 200
+     */
+  token: string;
+  /**
+     * @minimum 1
+     * @maximum 3
+     */
+  installments: number;
+  paymentMethodId?: string;
+  issuerId?: string;
+};
+
+export interface CardIntentPayRequest {
+  card: CardIntentPayRequestCard;
+}
+
+export interface CardIntentResult {
+  orderId: string;
+  status: OrderStatus;
+  payment: OrderPayment;
+  /** @nullable */
+  threeDsUrl: string | null;
 }
 
 /**
@@ -7004,6 +7093,10 @@ export type ExportReportOrdersCsvParams = {
   /** Pedidos com item da categoria (ou de uma filha) */
   categoryId?: string;
   status?: string;
+};
+
+export type ReportOrderNotReceived202 = {
+  reported: true;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -23433,5 +23526,291 @@ export const exportReportOrdersCsv = async (params: ExportReportOrdersCsvParams,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type reportOrderNotReceivedResponse202 = {
+  data: ReportOrderNotReceived202
+  status: 202
+}
+
+export type reportOrderNotReceivedResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type reportOrderNotReceivedResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type reportOrderNotReceivedResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type reportOrderNotReceivedResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type reportOrderNotReceivedResponseSuccess = (reportOrderNotReceivedResponse202) & {
+  headers: Headers;
+};
+export type reportOrderNotReceivedResponseError = (reportOrderNotReceivedResponse401 | reportOrderNotReceivedResponse404 | reportOrderNotReceivedResponse409 | reportOrderNotReceivedResponse429) & {
+  headers: Headers;
+};
+
+export type reportOrderNotReceivedResponse = (reportOrderNotReceivedResponseSuccess | reportOrderNotReceivedResponseError)
+
+export const getReportOrderNotReceivedUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/not-received`
+}
+
+/**
+ * Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado. Repetir é idempotente. Pedido de outra conta: 404.
+ * @summary Não recebi meu pedido (B.1)
+ */
+export const reportOrderNotReceived = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<reportOrderNotReceivedResponse> => {
+
+  return apiFetch<reportOrderNotReceivedResponse>(getReportOrderNotReceivedUrl(orderId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type switchExchangeToStoreResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type switchExchangeToStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type switchExchangeToStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type switchExchangeToStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type switchExchangeToStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type switchExchangeToStoreResponseSuccess = (switchExchangeToStoreResponse200) & {
+  headers: Headers;
+};
+export type switchExchangeToStoreResponseError = (switchExchangeToStoreResponse401 | switchExchangeToStoreResponse404 | switchExchangeToStoreResponse409 | switchExchangeToStoreResponse429) & {
+  headers: Headers;
+};
+
+export type switchExchangeToStoreResponse = (switchExchangeToStoreResponseSuccess | switchExchangeToStoreResponseError)
+
+export const getSwitchExchangeToStoreUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}/drop-at-store`
+}
+
+/**
+ * Depois de aprovada (`awaiting_fee` ou `approved`) e com a taxa de coleta AINDA NÃO paga: cancela a corrida de coleta, zera a taxa e gera o código do balcão (`storeCode`); se sobra só a diferença de preço, continua `awaiting_fee`. 409 `EXCHANGE_NOT_SWITCHABLE`, `EXCHANGE_FEE_ALREADY_PAID` (cancele a troca: a taxa volta integral) ou `EXCHANGE_PICKUP_STARTED` (motoboy já a caminho). Repetir é idempotente.
+ * @summary Levar o item à loja em vez da coleta (B.1)
+ */
+export const switchExchangeToStore = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<switchExchangeToStoreResponse> => {
+
+  return apiFetch<switchExchangeToStoreResponse>(getSwitchExchangeToStoreUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type createCardIntentResponse201 = {
+  data: CardIntent
+  status: 201
+}
+
+export type createCardIntentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createCardIntentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createCardIntentResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createCardIntentResponseSuccess = (createCardIntentResponse201) & {
+  headers: Headers;
+};
+export type createCardIntentResponseError = (createCardIntentResponse400 | createCardIntentResponse401 | createCardIntentResponse429) & {
+  headers: Headers;
+};
+
+export type createCardIntentResponse = (createCardIntentResponseSuccess | createCardIntentResponseError)
+
+export const getCreateCardIntentUrl = () => {
+
+
+
+
+  return `/v1/card-intents`
+}
+
+/**
+ * O app NUNCA toca em dado de cartão: pede a intenção (o que quer comprar e o total que viu, SEC-147) e abre `url` no navegador do sistema (`/pagar/cartao?i=<token>`, MP.js/Bricks/3DS). Uso único, 15 min, ligada a usuário e sessão. Depois o app acompanha o pedido por REST (`GET /v1/orders`). Cartão recusado: o app pede uma intenção nova.
+ * @summary Intenção de cartão para a página segura do Mercado Pago (B.2)
+ */
+export const createCardIntent = async (cardIntentRequest: CardIntentRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createCardIntentResponse> => {
+
+  return apiFetch<createCardIntentResponse>(getCreateCardIntentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cardIntentRequest)
+  }
+);}
+
+
+
+export type getCardIntentResponse200 = {
+  data: CardIntentView
+  status: 200
+}
+
+export type getCardIntentResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type getCardIntentResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getCardIntentResponseSuccess = (getCardIntentResponse200) & {
+  headers: Headers;
+};
+export type getCardIntentResponseError = (getCardIntentResponse410 | getCardIntentResponse429) & {
+  headers: Headers;
+};
+
+export type getCardIntentResponse = (getCardIntentResponseSuccess | getCardIntentResponseError)
+
+export const getGetCardIntentUrl = (token: string,) => {
+
+
+
+
+  return `/v1/card-intents/${token}`
+}
+
+/**
+ * A credencial é o token. Não consome a intenção e só devolve o total, o provedor e a chave PÚBLICA do Mercado Pago (`publicKey`; nula no provedor fake). Inválido ou usado: 410 `CARD_INTENT_INVALID`.
+ * @summary Página segura: valor e provedor da intenção (sem login)
+ */
+export const getCardIntent = async (token: string, options?: Parameters<typeof apiFetch>[1]): Promise<getCardIntentResponse> => {
+
+  return apiFetch<getCardIntentResponse>(getGetCardIntentUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type payCardIntentResponse200 = {
+  data: CardIntentResult
+  status: 200
+}
+
+export type payCardIntentResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type payCardIntentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type payCardIntentResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type payCardIntentResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type payCardIntentResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type payCardIntentResponseSuccess = (payCardIntentResponse200) & {
+  headers: Headers;
+};
+export type payCardIntentResponseError = (payCardIntentResponse400 | payCardIntentResponse409 | payCardIntentResponse410 | payCardIntentResponse422 | payCardIntentResponse429) & {
+  headers: Headers;
+};
+
+export type payCardIntentResponse = (payCardIntentResponseSuccess | payCardIntentResponseError)
+
+export const getPayCardIntentUrl = (token: string,) => {
+
+
+
+
+  return `/v1/card-intents/${token}/pay`
+}
+
+/**
+ * O navegador manda o TOKEN gerado pelo MP.js (nunca o número). Consome a intenção (uso único; duas chamadas simultâneas: só uma vence) e cria o pedido da conta dona da intenção. 422 `PAYMENT_DECLINED` (texto seguro), 410 se a intenção foi usada, venceu ou a sessão do app foi encerrada, 409 `CART_CHANGED` se a sacola ou o total mudaram. 3DS: devolve `threeDsUrl`.
+ * @summary Página segura: concluir com o token do cartão (sem login)
+ */
+export const payCardIntent = async (token: string,
+    cardIntentPayRequest: CardIntentPayRequest, options?: Parameters<typeof apiFetch>[1]): Promise<payCardIntentResponse> => {
+
+  return apiFetch<payCardIntentResponse>(getPayCardIntentUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cardIntentPayRequest)
   }
 );}

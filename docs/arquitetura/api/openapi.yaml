@@ -7317,6 +7317,125 @@ paths:
           $ref: '#/components/responses/Unprocessable'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/orders/{orderId}/not-received:
+    post:
+      tags: [orders]
+      operationId: reportOrderNotReceived
+      summary: "Não recebi meu pedido (B.1)"
+      description: "Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado. Repetir é idempotente. Pedido de outra conta: 404."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '202':
+          description: Aviso registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reported]
+                properties: { reported: { type: boolean, enum: [true] } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/exchanges/{id}/drop-at-store:
+    post:
+      tags: [exchanges]
+      operationId: switchExchangeToStore
+      summary: "Levar o item à loja em vez da coleta (B.1)"
+      description: "Depois de aprovada (`awaiting_fee` ou `approved`) e com a taxa de coleta AINDA NÃO paga: cancela a corrida de coleta, zera a taxa e gera o código do balcão (`storeCode`); se sobra só a diferença de preço, continua `awaiting_fee`. 409 `EXCHANGE_NOT_SWITCHABLE`, `EXCHANGE_FEE_ALREADY_PAID` (cancele a troca: a taxa volta integral) ou `EXCHANGE_PICKUP_STARTED` (motoboy já a caminho). Repetir é idempotente."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Troca atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/card-intents:
+    post:
+      tags: [orders]
+      operationId: createCardIntent
+      summary: "Intenção de cartão para a página segura do Mercado Pago (B.2)"
+      description: "O app NUNCA toca em dado de cartão: pede a intenção (o que quer comprar e o total que viu, SEC-147) e abre `url` no navegador do sistema (`/pagar/cartao?i=<token>`, MP.js/Bricks/3DS). Uso único, 15 min, ligada a usuário e sessão. Depois o app acompanha o pedido por REST (`GET /v1/orders`). Cartão recusado: o app pede uma intenção nova."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardIntentRequest' }
+      responses:
+        '201':
+          description: Intenção criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardIntent' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/card-intents/{token}:
+    get:
+      tags: [orders]
+      operationId: getCardIntent
+      summary: "Página segura: valor e provedor da intenção (sem login)"
+      description: "A credencial é o token. Não consome a intenção e só devolve o total, o provedor e a chave PÚBLICA do Mercado Pago (`publicKey`; nula no provedor fake). Inválido ou usado: 410 `CARD_INTENT_INVALID`."
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dados para montar o formulário
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardIntentView' }
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/card-intents/{token}/pay:
+    post:
+      tags: [orders]
+      operationId: payCardIntent
+      summary: "Página segura: concluir com o token do cartão (sem login)"
+      description: "O navegador manda o TOKEN gerado pelo MP.js (nunca o número). Consome a intenção (uso único; duas chamadas simultâneas: só uma vence) e cria o pedido da conta dona da intenção. 422 `PAYMENT_DECLINED` (texto seguro), 410 se a intenção foi usada, venceu ou a sessão do app foi encerrada, 409 `CART_CHANGED` se a sacola ou o total mudaram. 3DS: devolve `threeDsUrl`."
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardIntentPayRequest' }
+      responses:
+        '200':
+          description: Pedido criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardIntentResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -10773,6 +10892,14 @@ components:
             voluntaryDays: { type: integer }
             collectionFeeCents: { type: integer }
             version: { type: integer }
+        exchange:
+          type: object
+          description: "Prazos finais da troca já na entrada do pedido (B.1: 'Troca até 25/11'); tudo nulo se não foi entregue"
+          properties:
+            canRequest: { type: boolean }
+            withdrawalUntil: { type: [string, 'null'], format: date-time }
+            voluntaryUntil: { type: [string, 'null'], format: date-time }
+            defectUntil: { type: [string, 'null'], format: date-time }
         timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' } }
         allowedActions:
           type: array
@@ -11016,6 +11143,8 @@ components:
                     attributes: { type: object, additionalProperties: { type: string } }
                     available: { type: boolean }
                     current: { type: boolean }
+                    price: { $ref: '#/components/schemas/Money' }
+                    priceDifference: { $ref: '#/components/schemas/Money', description: 'Positivo = o cliente paga a diferença; negativo = recebe de volta (B.1). A mesma conta que a aprovação congela' }
     CreateReviewRequest:
       type: object
       additionalProperties: false
@@ -11662,3 +11791,52 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/ReportOrder' } }
         nextCursor: { type: [string, 'null'] }
+    CardIntentRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, cartRevision, expectedTotalCents]
+      properties:
+        mode: { type: string, enum: [delivery, pickup] }
+        addressId: { type: string, format: uuid }
+        cartRevision: { type: integer, minimum: 0 }
+        expectedTotalCents: { type: integer, minimum: 0 }
+        payerDocument: { type: string, pattern: '^[0-9]{11}$' }
+    CardIntent:
+      type: object
+      required: [token, url, expiresAt, amount]
+      properties:
+        token: { type: string }
+        url: { type: string, format: uri, description: "Abrir no navegador do sistema" }
+        expiresAt: { type: string, format: date-time }
+        amount: { $ref: '#/components/schemas/Money' }
+    CardIntentView:
+      type: object
+      required: [amount, provider, publicKey, installmentsMax, expiresAt]
+      properties:
+        amount: { $ref: '#/components/schemas/Money' }
+        provider: { type: string, enum: [fake, mercadopago] }
+        publicKey: { type: [string, 'null'] }
+        installmentsMax: { type: integer }
+        expiresAt: { type: string, format: date-time }
+    CardIntentPayRequest:
+      type: object
+      additionalProperties: false
+      required: [card]
+      properties:
+        card:
+          type: object
+          additionalProperties: false
+          required: [token, installments]
+          properties:
+            token: { type: string, minLength: 8, maxLength: 200 }
+            installments: { type: integer, minimum: 1, maximum: 3 }
+            paymentMethodId: { type: string }
+            issuerId: { type: string }
+    CardIntentResult:
+      type: object
+      required: [orderId, status, payment, threeDsUrl]
+      properties:
+        orderId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        payment: { $ref: '#/components/schemas/OrderPayment' }
+        threeDsUrl: { type: [string, 'null'] }

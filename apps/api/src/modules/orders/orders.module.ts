@@ -11,15 +11,16 @@ import { IdentityModule } from '../identity/index.js';
 import { StoresModule } from '../stores/index.js';
 import { AdminOrdersController } from './admin-orders.controller.js';
 import { OrderEventBus } from './order-events.bus.js';
-import { OrdersController } from './orders.controller.js';
+import { CardIntentService } from './card-intent.service.js';
+import { CardIntentController, OrdersController } from './orders.controller.js';
 import { StoreOrdersController } from './store-orders.controller.js';
 import { StoreOrdersService } from './store-orders.service.js';
 import { OrdersService } from './orders.service.js';
 
 @Module({
   imports: [AdminModule, IdentityModule, CartModule, CatalogModule, FinanceModule, IdempotencyModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
-  controllers: [OrdersController, StoreOrdersController, AdminOrdersController],
-  providers: [OrdersService, StoreOrdersService, OrderEventBus],
+  controllers: [OrdersController, CardIntentController, StoreOrdersController, AdminOrdersController],
+  providers: [OrdersService, StoreOrdersService, OrderEventBus, CardIntentService],
   exports: [OrdersService, StoreOrdersService, OrderEventBus],
 })
 export class OrdersModule {}

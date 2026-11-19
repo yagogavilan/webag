@@ -92,6 +92,10 @@ export const envSchema = z
     API_PUBLIC_URL: z.url().default('http://localhost:3000'),
     /** Prefixo de links enviados por e-mail (convite de admin, etc.). */
     ADMIN_WEB_URL: z.url().default('http://localhost:3001'),
+    /** Base das páginas públicas da web (ex.: `/pagar/cartao`, B.2). */
+    WEB_PUBLIC_URL: z.url().default('http://localhost:3001'),
+    /** Chave PÚBLICA do Mercado Pago (MP.js/Bricks na página segura de cartão); não é segredo. Sem ela o provedor `fake` não precisa. */
+    MP_PUBLIC_KEY: z.string().optional(),
 
     // --- E-mail (Mailpit no dev) ---
     SMTP_HOST: z.string().default('localhost'),

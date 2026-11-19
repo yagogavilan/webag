@@ -174,7 +174,23 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
         quantity: item.quantity,
         openExchange: inputs.open ? { id: inputs.open.id, status: inputs.open.status } : null,
         options: kinds,
-        variants: variants.map((v) => ({ variantId: v.id, attributes: v.attributes, available: v.stock - v.reserved >= item.quantity, current: v.id === item.variantId })),
+        variants: await Promise.all(
+          variants.map(async (v) => {
+            // B.1: o cliente vê "paga R$ X" ou "recebe R$ Y" ANTES de pedir (mesma conta da aprovação: preço vigente da peça nova menos o da original).
+            const [original] = variants.filter((o) => o.id === item.variantId);
+            const [oldNow, newNow] = await Promise.all([this.variantPrice(this.db, item.productId, original?.priceCents ?? null, now), this.variantPrice(this.db, item.productId, v.priceCents ?? null, now)]);
+            const difference = v.id === item.variantId ? 0 : priceDifferenceCents(newNow, oldNow) * item.quantity;
+            return {
+              variantId: v.id,
+              attributes: v.attributes,
+              available: v.stock - v.reserved >= item.quantity,
+              current: v.id === item.variantId,
+              price: money(newNow),
+              /** Positivo = o cliente paga a diferença; negativo = recebe de volta; zero = igual. */
+              priceDifference: money(difference),
+            };
+          }),
+        ),
       });
     }
     return { orderId: order.id, deliveredAt: order.deliveredAt?.toISOString() ?? null, pickupAvailable: order.mode === 'delivery', items: result };
@@ -280,7 +296,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     return { exchangeId: ex.id, number: ex.number, orderId: ex.orderId, userId: ex.userId, storeId: ex.storeId, type: ex.type, from, to, actor, reason, at };
   }
 
-  private async variantPrice(tx: Tx, productId: string, variantPriceCents: number | null, now: Date): Promise<number> {
+  private async variantPrice(tx: Tx | Db, productId: string, variantPriceCents: number | null, now: Date): Promise<number> {
     const [product] = await tx.select().from(products).where(eq(products.id, productId));
     return effectivePrice(product?.basePriceCents ?? 0, variantPriceCents, { promoPriceCents: product?.promoPriceCents ?? null, promoStartsAt: product?.promoStartsAt ?? null, promoEndsAt: product?.promoEndsAt ?? null }, now).priceCents;
   }
@@ -450,6 +466,42 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     } catch (error) {
       this.logger.warn(`estorno da troca (tentativa ${refund.attemptId}) pendente: ${safeErrorMessage(error)}`);
     }
+  }
+
+  /**
+   * B.1 "levar à loja" depois de aprovada: troca a coleta em casa pela entrega no balcão. Só com a taxa de coleta ainda NÃO paga
+   * (a taxa paga volta pelo cancelamento da troca, que devolve integral) e antes de o motoboy sair. Cancela a corrida de coleta,
+   * zera a taxa e gera o código do balcão; se sobra só a diferença de preço, continua aguardando o pagamento dela.
+   */
+  async switchToStore(userId: string, exchangeId: string): Promise<void> {
+    let event: ExchangeEvent | null = null;
+    await this.db.transaction(async (tx) => {
+      const [probe] = await tx.select({ id: exchangeRequests.id }).from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, userId)));
+      if (!probe) throw errors.notFound('Troca não encontrada.');
+      const { ex, order } = await this.lockFor(tx, exchangeId);
+      if (ex.method === 'drop_at_store') return; // repetir é idempotente
+      if (ex.status !== 'awaiting_fee' && ex.status !== 'approved') throw errors.conflict('EXCHANGE_NOT_SWITCHABLE', 'A troca não pode mais mudar para a loja', `A troca está em "${ex.status}".`);
+      if (ex.feePaidAt) throw errors.conflict('EXCHANGE_FEE_ALREADY_PAID', 'A taxa de coleta já foi paga', 'Cancele a troca (a taxa volta integral) e peça de novo levando à loja.');
+      const runs = await this.deliveries.forExchange(ex.id, tx);
+      if (runs.some((r) => r.kind === 'exchange_pickup' && !['ready_for_collection', 'awaiting_courier', 'cancelled'].includes(r.status))) {
+        throw errors.conflict('EXCHANGE_PICKUP_STARTED', 'O motoboy já está a caminho', 'Entregue o item ao motoboy ou cancele a troca.');
+      }
+      await this.deliveries.cancelForExchangeInTx(tx, ex.id, 'Cliente vai levar o item à loja', { id: userId, role: 'customer' }, SYSTEM_CTX);
+      const now = new Date();
+      const due = Math.max(ex.differenceCents, 0);
+      const to: ExchangeStatus = due > 0 ? 'awaiting_fee' : 'approved';
+      const code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+      const [updated] = await tx
+        .update(exchangeRequests)
+        .set({ method: 'drop_at_store', feeCents: 0, status: to, feeDueAt: due > 0 ? ex.feeDueAt : null, storeCode: to === 'approved' ? code : null, itemDueAt: to === 'approved' ? (ex.itemDueAt ?? new Date(now.getTime() + (await this.params.getNumber('coleta_entrega_item_dias')) * DAY_MS)) : ex.itemDueAt, updatedAt: now })
+        .where(eq(exchangeRequests.id, ex.id))
+        .returning();
+      if (!updated) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', 'A troca mudou enquanto você agia.');
+      await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: ex.status, toStatus: to, actor: 'customer', actorUserId: userId, reason: 'Cliente vai levar o item à loja' });
+      if (to !== ex.status) event = this.eventOf(updated, ex.status, to, 'customer', 'Cliente vai levar o item à loja', now);
+      void order;
+    });
+    if (event) await this.bus.emit(event);
   }
 
   /** Cliente cancela antes da coleta: a taxa já paga volta integral e a reserva é liberada (WB-171 C5). */

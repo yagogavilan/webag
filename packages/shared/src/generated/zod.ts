@@ -9028,6 +9028,12 @@ export const CreateOrderResponse = zod.object({
   "collectionFeeCents": zod.int(),
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "exchange": zod.object({
+  "canRequest": zod.boolean().optional(),
+  "withdrawalUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "voluntaryUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "defectUntil": zod.iso.datetime({"offset":true}).nullish()
+}).optional().describe('Prazos finais da troca já na entrada do pedido (B.1: \'Troca até 25/11\'); tudo nulo se não foi entregue'),
   "timeline": zod.array(zod.object({
   "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
@@ -9208,6 +9214,12 @@ export const GetOrderResponse = zod.object({
   "collectionFeeCents": zod.int(),
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "exchange": zod.object({
+  "canRequest": zod.boolean().optional(),
+  "withdrawalUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "voluntaryUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "defectUntil": zod.iso.datetime({"offset":true}).nullish()
+}).optional().describe('Prazos finais da troca já na entrada do pedido (B.1: \'Troca até 25/11\'); tudo nulo se não foi entregue'),
   "timeline": zod.array(zod.object({
   "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
@@ -9351,6 +9363,12 @@ export const CancelOrderResponse = zod.object({
   "collectionFeeCents": zod.int(),
   "version": zod.int()
 }).describe('Política vigente no pedido (snapshot, WB-059 C3)'),
+  "exchange": zod.object({
+  "canRequest": zod.boolean().optional(),
+  "withdrawalUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "voluntaryUntil": zod.iso.datetime({"offset":true}).nullish(),
+  "defectUntil": zod.iso.datetime({"offset":true}).nullish()
+}).optional().describe('Prazos finais da troca já na entrada do pedido (B.1: \'Troca até 25/11\'); tudo nulo se não foi entregue'),
   "timeline": zod.array(zod.object({
   "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
   "at": zod.iso.datetime({"offset":true}),
@@ -9431,7 +9449,15 @@ export const GetExchangeOptionsResponse = zod.object({
   "variantId": zod.uuid().optional(),
   "attributes": zod.record(zod.string(), zod.string()).optional(),
   "available": zod.boolean().optional(),
-  "current": zod.boolean().optional()
+  "current": zod.boolean().optional(),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "priceDifference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Positivo = o cliente paga a diferença; negativo = recebe de volta (B.1). A mesma conta que a aprovação congela')
 })).optional()
 }))
 })
@@ -12385,3 +12411,200 @@ export const ExportReportOrdersCsvQueryParams = zod.object({
 })
 
 export const ExportReportOrdersCsvResponse = zod.unknown()
+
+
+/**
+ * Vale com o pedido a caminho ou até 48 h depois de marcado como entregue (`allowedActions` traz `report_not_received`); fora disso 409 `ORDER_NOT_REPORTABLE`. Avisa a operação (alerta `order_not_received`) e grava na auditoria; não estorna nem muda o estado. Repetir é idempotente. Pedido de outra conta: 404.
+ * @summary Não recebi meu pedido (B.1)
+ */
+export const ReportOrderNotReceivedParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const ReportOrderNotReceivedResponse = zod.object({
+  "reported": zod.literal(true)
+})
+
+
+/**
+ * Depois de aprovada (`awaiting_fee` ou `approved`) e com a taxa de coleta AINDA NÃO paga: cancela a corrida de coleta, zera a taxa e gera o código do balcão (`storeCode`); se sobra só a diferença de preço, continua `awaiting_fee`. 409 `EXCHANGE_NOT_SWITCHABLE`, `EXCHANGE_FEE_ALREADY_PAID` (cancele a troca: a taxa volta integral) ou `EXCHANGE_PICKUP_STARTED` (motoboy já a caminho). Repetir é idempotente.
+ * @summary Levar o item à loja em vez da coleta (B.1)
+ */
+export const SwitchExchangeToStoreParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const SwitchExchangeToStoreResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * O app NUNCA toca em dado de cartão: pede a intenção (o que quer comprar e o total que viu, SEC-147) e abre `url` no navegador do sistema (`/pagar/cartao?i=<token>`, MP.js/Bricks/3DS). Uso único, 15 min, ligada a usuário e sessão. Depois o app acompanha o pedido por REST (`GET /v1/orders`). Cartão recusado: o app pede uma intenção nova.
+ * @summary Intenção de cartão para a página segura do Mercado Pago (B.2)
+ */
+export const createCardIntentBodyCartRevisionMin = 0;
+
+export const createCardIntentBodyExpectedTotalCentsMin = 0;
+
+export const createCardIntentBodyPayerDocumentRegExp = new RegExp('^[0-9]{11}$');
+
+
+export const CreateCardIntentBody = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']),
+  "addressId": zod.uuid().optional(),
+  "cartRevision": zod.int().min(createCardIntentBodyCartRevisionMin),
+  "expectedTotalCents": zod.int().min(createCardIntentBodyExpectedTotalCentsMin),
+  "payerDocument": zod.string().regex(createCardIntentBodyPayerDocumentRegExp).optional()
+})
+
+export const CreateCardIntentResponse = zod.object({
+  "token": zod.string(),
+  "url": zod.url().describe('Abrir no navegador do sistema'),
+  "expiresAt": zod.iso.datetime({"offset":true}),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})
+
+
+/**
+ * A credencial é o token. Não consome a intenção e só devolve o total, o provedor e a chave PÚBLICA do Mercado Pago (`publicKey`; nula no provedor fake). Inválido ou usado: 410 `CARD_INTENT_INVALID`.
+ * @summary Página segura: valor e provedor da intenção (sem login)
+ */
+export const GetCardIntentParams = zod.object({
+  "token": zod.string()
+})
+
+export const GetCardIntentResponse = zod.object({
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "provider": zod.enum(['fake', 'mercadopago']),
+  "publicKey": zod.string().nullable(),
+  "installmentsMax": zod.int(),
+  "expiresAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * O navegador manda o TOKEN gerado pelo MP.js (nunca o número). Consome a intenção (uso único; duas chamadas simultâneas: só uma vence) e cria o pedido da conta dona da intenção. 422 `PAYMENT_DECLINED` (texto seguro), 410 se a intenção foi usada, venceu ou a sessão do app foi encerrada, 409 `CART_CHANGED` se a sacola ou o total mudaram. 3DS: devolve `threeDsUrl`.
+ * @summary Página segura: concluir com o token do cartão (sem login)
+ */
+export const PayCardIntentParams = zod.object({
+  "token": zod.string()
+})
+
+export const payCardIntentBodyCardTokenMin = 8;
+export const payCardIntentBodyCardTokenMax = 200;
+
+export const payCardIntentBodyCardInstallmentsMax = 3;
+
+
+
+export const PayCardIntentBody = zod.object({
+  "card": zod.object({
+  "token": zod.string().min(payCardIntentBodyCardTokenMin).max(payCardIntentBodyCardTokenMax),
+  "installments": zod.int().min(1).max(payCardIntentBodyCardInstallmentsMax),
+  "paymentMethodId": zod.string().optional(),
+  "issuerId": zod.string().optional()
+})
+})
+
+export const PayCardIntentResponse = zod.object({
+  "orderId": zod.uuid(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "payment": zod.object({
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded']).describe('Estados do provedor expostos ao cliente; os internos (`creating`, `divergent`) aparecem como `pending`'),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "pix": zod.union([zod.object({
+  "copyPaste": zod.string().describe('PIX copia e cola'),
+  "qrCodeBase64": zod.string().nullable().describe('Imagem PNG em base64; nulo se o provedor não devolveu'),
+  "expiresAt": zod.iso.datetime({"offset":true})
+}),zod.null()]),
+  "installments": zod.int(),
+  "threeDsUrl": zod.url().nullish(),
+  "declineReason": zod.string().nullable().describe('Texto pt-BR seguro para mostrar'),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}),
+  "threeDsUrl": zod.string().nullable()
+})
