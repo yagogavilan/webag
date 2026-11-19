@@ -22,7 +22,11 @@ const id = (testId) => `[data-testid="${testId}"]`;
     // Qualquer console.error (ex.: prop desconhecida no DOM, o defeito do DT-067) acende o aviso vermelho que cobre a tela no modo dev.
     if (m.type() === 'error') problems.push(`console: ${m.text().slice(0, 400)}`);
   });
-  page.on('requestfailed', (r) => problems.push(`rede: ${r.method()} ${r.url()} ${r.failure()?.errorText}`));
+  page.on('requestfailed', (r) => {
+    // imagens do armazenamento local (porta 9000) bloqueadas pelo ORB do Chromium em alguns ambientes: não é falha do app
+    if (/ERR_BLOCKED_BY_ORB/.test(r.failure()?.errorText ?? '') && r.resourceType() === 'image') return;
+    problems.push(`rede: ${r.method()} ${r.url()} ${r.failure()?.errorText}`);
+  });
   page.on('response', (r) => { if (r.status() >= 400 && r.url().includes('/v1/')) problems.push(`http ${r.status()}: ${r.request().method()} ${r.url()}`); });
   const click = async (selector, timeout = 30000) => {
     await page.waitForSelector(selector, { timeout });
@@ -77,6 +81,13 @@ const id = (testId) => `[data-testid="${testId}"]`;
     step(`sacola com total: ${(await page.innerText(id('cart.total'))).trim()}`);
 
     // U8.1: "Ir para o pagamento" abre o Checkout (antes só mostrava um aviso e a compra nunca terminava)
+    // A logística do Webag tem horário (BUG-016): fora dele a Sacola só oferece "Escolha como receber" e não abre o checkout
+    if (await page.locator(`${id('cart.logistics-banner')}:visible`).count()) {
+      step('entregas fechadas agora (BUG-016): checkout não testado neste horário; use pnpm --filter @webag/mobile web:compra retirada-pix');
+      if (shot) await page.screenshot({ path: shot });
+      if (problems.length) throw new Error(`avisos do navegador:\n${problems.join('\n')}`);
+      return;
+    }
     step(`ir para o pagamento (botão: "${(await page.locator(`${id('cart.submit')}:visible`).first().innerText()).trim()}")`);
     await click(id('cart.submit'));
     await page.waitForSelector(`${id('checkout.screen')}`, { timeout: 60000 });
