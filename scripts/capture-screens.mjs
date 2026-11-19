@@ -6,14 +6,14 @@
 //   ONLY=app,site node scripts/capture-screens.mjs   # só algumas áreas (não reescreve o README)
 //
 // Pré-requisitos (README da raiz): `pnpm run setup` (infra, migrações e seed) e a API no ar (`pnpm dev` ou `pnpm --filter @webag/api start`).
-// O script sobe sozinho o que faltar: o site/painéis (`next start`, constrói se não houver build) e o app em versão web (`expo export`,
+// O script sobe sozinho o que faltar: o site/painéis (`next build` + `next start`) e o app em versão web (`expo export`,
 // servido por um servidor estático local), e encerra o que subiu. Para usar o que já está rodando, informe APP_URL e/ou WEB_URL.
 //
 // Variáveis: API_URL (http://localhost:3000), WEB_URL (sobe em :3101), APP_URL (sobe em :8081), REAL_DB_URL (ajuste dos pedidos de
 // demonstração: atrasado e dentro do prazo; só em banco local), SEED_PASSWORD, ADMIN_EMAIL/ADMIN_PASSWORD, OUT_DIR (docs/telas),
-// ONLY (app,lojista,admin,site), PW_CHANNEL=chrome (usa o Chrome instalado se o Chromium do Playwright não existir), REUSE_APP_BUILD=1 (não reexporta o app web).
+// ONLY (app,lojista,admin,site), PW_CHANNEL=chrome (usa o Chrome instalado se o Chromium do Playwright não existir), REUSE_APP_BUILD=1 e REUSE_WEB_BUILD=1 (não refazem o build do app web e do site).
 // Efeito colateral temporário (banco local, dados fictícios; desfeito ao terminar): faixa de entrega de 2 pedidos do seed, data de entrega de 1 pedido,
-// 1 cupom pessoal, o estado de 1 loja e o horário de outra. O script também cria 1 cliente novo por execução (como o `pnpm smoke`).
+// 1 cupom pessoal, o estado de 1 loja e o horário de outra. O script cria (uma vez) 2 clientes de demonstração `telas.compra@` e `telas.exclusao@` (como o `pnpm smoke`).
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -104,6 +104,7 @@ const taken = new Map(); // arquivo -> viewport
 let lastPage = null;
 const failed = []; // { key, why }
 const problems = [];
+const suspects = new Map(); // tela -> texto de erro que apareceu na captura
 
 // ------------------------------------------------------------------------------------------------ playwright e servidores
 
@@ -165,7 +166,7 @@ async function ensureWeb() {
     log(`site já no ar em ${WEB}`);
     return;
   }
-  if (!existsSync(join(WEB_DIR, '.next/BUILD_ID'))) {
+  if (!process.env.REUSE_WEB_BUILD || !existsSync(join(WEB_DIR, '.next/BUILD_ID'))) {
     log('construindo o site (next build, alguns minutos)');
     run('pnpm', ['build'], { cwd: WEB_DIR, env: { ...process.env, API_URL: API } });
   }
@@ -215,13 +216,13 @@ function sql(query) {
 }
 const DEMO_STORE = 'Farmácia Saúde Já'; // loja usada na compra (vende o dia todo depois do ajuste de horário abaixo)
 const REVIEW_STORE = { name: 'Papelaria Ponto Certo', email: 'lojista.papelaria-ponto-certo@seed.webag.local' }; // loja que vira rascunho (revisão do cadastro) e depois "em análise" (aprovação no admin)
-const demo = { storeId: null, reviewStoreId: null, restore: [] };
+const demo = { hasAddress: false, storeId: null, reviewStoreId: null, restore: [] };
 const setReviewStore = (status) => demo.reviewStoreId && sql(`update stores set status = '${status}', submitted_at = ${status === 'draft' ? 'null' : 'now()'}, decision_reason = null where id = '${demo.reviewStoreId}'`);
 
 /**
  * Ajusta só dados fictícios do seed, no banco local, e desfaz tudo ao terminar (mesmo com erro):
  * 1 pedido a caminho do cliente Ana dentro do prazo e 1 do cliente Carla atrasado há 40 min, a data de entrega de 1 pedido (troca dentro do prazo),
- * 1 cupom pessoal para a Ana ("Meus cupons"), o estado de 1 loja (rascunho, depois "em análise", para a revisão do cadastro e a aprovação no admin) e o horário da loja da compra (aberta o dia todo, para a captura não depender da hora em que o script roda).
+ * 1 cupom pessoal para a Ana ("Meus cupons"), o estado de 1 loja com 3 documentos fictícios (rascunho, depois "em análise", para a revisão do cadastro e a aprovação no admin) e o horário da loja da compra (aberta o dia todo, para a captura não depender da hora em que o script roda).
  */
 function prepareDemoData() {
   if (!/@(localhost|127\.0\.0\.1)[:/]/.test(DB)) {
@@ -259,6 +260,18 @@ function prepareDemoData() {
     if (demo.reviewStoreId) {
       const [status, submitted, reason] = sql(`select status, coalesce(submitted_at::text, ''), coalesce(decision_reason, '') from stores where id = '${demo.reviewStoreId}'`).split('|');
       demo.restore.push(`update stores set status = '${status}', submitted_at = ${submitted ? `'${submitted}'` : 'null'}, decision_reason = ${reason ? `'${reason.replace(/'/g, "''")}'` : 'null'} where id = '${demo.reviewStoreId}'`);
+    }
+    if (demo.reviewStoreId) {
+      // 3 documentos fictícios (sem arquivo no armazenamento) para a revisão do cadastro ficar completa; removidos ao terminar
+      const owner = sql(`select id from users where email = '${REVIEW_STORE.email}'`);
+      if (owner && !sql(`select 1 from store_documents where store_id = '${demo.reviewStoreId}' limit 1`)) {
+        for (const kind of ['id_front', 'id_back', 'address_proof']) {
+          sql(`with asset as (insert into media_assets (owner_user_id, store_id, purpose, status, object_key, declared_content_type, declared_size_bytes, content_type, size_bytes, completed_at, expires_at)
+               values ('${owner}', '${demo.reviewStoreId}', 'store_document', 'ready', 'telas-demo/${kind}.png', 'image/png', 1000, 'image/png', 1000, now(), now() + interval '1 day') returning id)
+               insert into store_documents (store_id, kind, asset_id, uploaded_by) select '${demo.reviewStoreId}', '${kind}', id, '${owner}' from asset`);
+        }
+        demo.restore.unshift(`delete from store_documents where store_id = '${demo.reviewStoreId}' and asset_id in (select id from media_assets where object_key like 'telas-demo/%')`, `delete from media_assets where object_key like 'telas-demo/%'`);
+      }
     }
     log('dados de demonstração ajustados (serão restaurados ao terminar)');
   } catch (e) {
@@ -329,8 +342,10 @@ async function attempt(page, key, fn) {
 
 function watch(page, label) {
   page.on('pageerror', (e) => problems.push(`${label} pageerror: ${e.message.slice(0, 200)}`));
-  page.on('response', (r) => {
-    if (r.status() >= 500) problems.push(`${label} http ${r.status()}: ${r.request().method()} ${r.url().slice(0, 140)}`);
+  page.on('response', async (r) => {
+    if (r.status() < 500) return;
+    const body = (await r.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
+    problems.push(`${label} http ${r.status()}: ${r.request().method()} ${r.url().slice(0, 140)} ${body}`);
   });
 }
 
@@ -407,23 +422,38 @@ async function appAddAddress(page) {
   await page.waitForTimeout(2500);
 }
 
-/** Cliente novo pela API (como o `pnpm smoke`): fica sem pedidos em andamento e sem o limite de PIX dos clientes do seed. */
-async function freshCustomer() {
-  const call = async (method, path, body) => {
-    const res = await fetch(`${API}${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+/**
+ * Clientes de demonstração fixos (um por finalidade, criados na primeira execução como o `pnpm smoke` faz): evitam encher a base de contas a
+ * cada captura. `compra` faz o pedido; `exclusao` nunca pede nada, então a tela de exclusão sai sem impedimentos.
+ */
+async function demoCustomer(kind) {
+  const email = `telas.${kind}@seed.webag.local`;
+  const call = async (method, path, body, token) => {
+    const res = await fetch(`${API}${path}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
     return { status: res.status, data: await res.json().catch(() => null) };
   };
-  const documents = await Promise.all(['customer_terms', 'privacy'].map(async (type) => ({ type, version: (await call('GET', `/v1/legal/${type}`)).data?.version })));
-  const email = `telas.${Date.now()}@seed.webag.local`;
-  const phone = `1199${String(Math.floor(Math.random() * 9_000_000) + 1_000_000)}`;
-  const registered = await call('POST', '/v1/auth/register', { name: 'Cliente Demonstração', email, phone, password: SEED_PASSWORD, adultDeclaration: true, acceptedDocuments: documents });
-  if (registered.status !== 201 && registered.status !== 200) throw new Error(`cadastro do cliente novo: HTTP ${registered.status}`);
+  let login = await call('POST', '/v1/auth/login', { email, password: SEED_PASSWORD });
+  if (!login.data?.tokens) {
+    const documents = await Promise.all(['customer_terms', 'privacy'].map(async (type) => ({ type, version: (await call('GET', `/v1/legal/${type}`)).data?.version })));
+    const phone = `1199${String(Math.floor(Math.random() * 9_000_000) + 1_000_000)}`;
+    const registered = await call('POST', '/v1/auth/register', { name: 'Cliente Demonstração', email, phone, password: SEED_PASSWORD, adultDeclaration: true, acceptedDocuments: documents });
+    if (registered.status !== 201 && registered.status !== 200) throw new Error(`cadastro do cliente ${email}: HTTP ${registered.status}`);
+    login = await call('POST', '/v1/auth/login', { email, password: SEED_PASSWORD });
+  }
   // O código de e-mail (Mailpit) não é necessário para fotografar: marca o e-mail como confirmado direto no banco local, se possível.
   try {
-    sql(`update users set email_verified_at = now() where email = '${email}'`);
+    sql(`update users set email_verified_at = coalesce(email_verified_at, now()) where email = '${email}'`);
   } catch {
-    log('sem acesso ao banco: o checkout do cliente novo pode pedir a confirmação do e-mail');
+    log('sem acesso ao banco: o checkout do cliente de demonstração pode pedir a confirmação do e-mail');
   }
+  // Pedidos de execuções anteriores: cancela o que ainda estiver aberto (limites de PIX e impedimentos de exclusão).
+  const token = login.data?.tokens?.accessToken;
+  const open = await call('GET', '/v1/orders?limit=50', null, token);
+  for (const order of open.data?.data ?? []) {
+    if (['awaiting_payment', 'received', 'accepted'].includes(order.status)) await call('POST', `/v1/orders/${order.id}/cancel`, {}, token);
+  }
+  const addresses = await call('GET', '/v1/me/addresses', null, token);
+  demo.hasAddress = (addresses.data?.data?.length ?? 0) > 0;
   return email;
 }
 
@@ -510,18 +540,25 @@ async function captureApp(browser) {
     await context.close();
   }
 
-  // 2) cliente novo: exclusão de conta (sem pedidos em andamento) e a compra inteira, do produto ao pedido confirmado
-  const email = await freshCustomer();
+  // 2) cliente que nunca pede: exclusão de conta sem impedimentos
+  {
+    const { context, page } = await appSession(browser);
+    await appLogin(page, await demoCustomer('exclusao'), SEED_PASSWORD);
+    await attempt(page, 'app/exclusao-de-conta', async () => {
+      await appGo(page, '/privacy/delete');
+      await vis(page, 'account.delete-screen');
+      await page.locator(tid('account.delete-skeleton')).waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => undefined);
+      await page.waitForTimeout(1500);
+      await snap(page, 'app/exclusao-de-conta', 'phone');
+    });
+    await context.close();
+  }
+
+  // 3) cliente da compra: endereço, loja, produto, sacola, checkout (PIX e cartão), PIX e pedido confirmado
+  const email = await demoCustomer('compra');
   const { context, page } = await appSession(browser);
   await appLogin(page, email, SEED_PASSWORD);
-  await attempt(page, 'app/exclusao-de-conta', async () => {
-    await appGo(page, '/privacy/delete');
-    await vis(page, 'account.delete-screen');
-    await page.locator(tid('account.delete-skeleton')).waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => undefined);
-    await page.waitForTimeout(1500);
-    await snap(page, 'app/exclusao-de-conta', 'phone');
-  });
-  await appAddAddress(page).catch((e) => log(`sem endereço salvo: ${String(e.message).split('\n')[0]}`));
+  if (!demo.hasAddress) await appAddAddress(page).catch((e) => log(`sem endereço salvo: ${String(e.message).split('\n')[0]}`));
   await appGo(page, '/');
   await tap(page, 'tabs.home');
   let pickup = false;
@@ -607,6 +644,7 @@ async function webScreen(page, key, path, prepare) {
       await page.goto(`${WEB}${path}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.locator('main, [role="main"], body').first().waitFor({ timeout: 30_000 });
       await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+      await page.locator('[data-testid="skeleton"]').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined); // carregando termina (ou vira erro, que vai para o relatório)
       // O alerta de pedido novo é modal e travado; para fotografar o que há atrás dele, esconde-o só na captura.
       await page.addStyleTag({ content: '[data-dialog-root]:has([data-testid="lojista.alert.modal"]) { display: none !important; }' }).catch(() => undefined);
       await page.evaluate(() => document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'))).catch(() => undefined);
@@ -620,8 +658,11 @@ async function webScreen(page, key, path, prepare) {
 /** Tela com cara de erro (aviso de falha, 404): não derruba a captura, mas entra no relatório para correção. */
 async function suspect(page, label) {
   const text = (await page.locator('main, body').first().innerText({ timeout: 5000 }).catch(() => '')).slice(0, 4000);
-  const hit = /Não foi possível carregar|Algo deu errado|Página não encontrada|Tente novamente|Sem conexão|This page could not be found/i.exec(text);
-  if (hit) problems.push(`${label}: texto de erro na tela ("${hit[0]}")`);
+  const hit = /Não conseguimos carregar|Não foi possível carregar|Algo deu errado|Página não encontrada|Sem conexão|This page could not be found/i.exec(text);
+  if (hit) {
+    problems.push(`${label}: texto de erro na tela ("${hit[0]}")`);
+    suspects.set(label.split(' ')[0], hit[0]);
+  }
 }
 
 async function newWebContext(browser) {
@@ -773,10 +814,75 @@ async function captureAdmin(browser) {
   await context.close();
 }
 
+// ------------------------------------------------------------------------------------------------ índice (docs/telas/README.md)
+
+function writeReadme() {
+  const files = readdirSync(OUT).filter((f) => f.endsWith('.png')).sort();
+  const rows = [];
+  for (const spec of SPEC.values()) {
+    const base = `${spec.n}-${spec.area}-${spec.slug}`;
+    for (const file of [`${base}.png`, `${base}-desktop.png`, `${base}-mobile.png`].filter((f) => files.includes(f))) {
+      const viewport = file.endsWith('-desktop.png') ? '1440x900' : '390x844';
+      rows.push(`| [${file}](${file}) | ${spec.screen} | ${spec.profile} | ${viewport} | ${spec.shows} |`);
+    }
+  }
+  const missing = [...SPEC.entries()].filter(([, spec]) => !files.some((f) => f.startsWith(`${spec.n}-${spec.area}-${spec.slug}`))).map(([key]) => key);
+  const text = `# Capturas de tela
+
+Capturas das telas principais do Webag, feitas em viewport (não fullPage) com a **API real local** e os dados de demonstração do seed
+(\`pnpm run setup\`). Tudo é fictício. Geradas por \`scripts/capture-screens.mjs\`; não edite à mão, rode o script de novo.
+
+- **App do cliente**: 390x844 (celular), app Expo exportado para web e aberto no Chrome. A aparência segue o app nativo; o que muda é o
+  que só existe no aparelho (barra do sistema, teclado, permissões do sistema).
+- **Painel do lojista, painel admin e site**: 1440x900 (\`-desktop\`) e 390x844 (\`-mobile\`).
+- Numeração = ordem do catálogo no script; o número é estável quando só algumas áreas são regeradas.
+
+## Como gerar
+
+\`\`\`bash
+pnpm run setup                         # infraestrutura, migrações e seed (uma vez)
+pnpm dev                               # API (e o resto) no ar; ou só a API em :3000
+node scripts/capture-screens.mjs       # tudo (cerca de 10 min, com os builds do site e do app)
+ONLY=app,site node scripts/capture-screens.mjs   # só algumas áreas (não reescreve este índice)
+\`\`\`
+
+O script faz o build e sobe sozinho o site/painéis (\`next build\` e \`next start\`) e o app em versão web (\`expo export\` servido por um
+servidor estático local) e encerra tudo no fim. Para usar o que já roda: \`WEB_URL\`, \`APP_URL\`. Outras variáveis (API_URL, REAL_DB_URL,
+SEED_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_TOTP_SECRET, OUT_DIR, PW_CHANNEL=chrome, REUSE_APP_BUILD=1, REUSE_WEB_BUILD=1) estão no cabeçalho do script.
+
+Ajustes **temporários** de dados fictícios no banco local (desfeitos ao terminar): faixa de entrega de 2 pedidos do seed (um dentro do
+prazo, um atrasado), data de entrega de 1 pedido (troca dentro do prazo), 1 cupom pessoal, o estado de 1 loja (rascunho e depois
+"em análise") e o horário de 1 loja. Cria 2 clientes de demonstração fixos (\`telas.compra@\`, \`telas.exclusao@seed.webag.local\`) e 1 pedido
+por execução. Só roda contra banco local (\`REAL_DB_URL\` em localhost).
+
+## Limites conhecidos destas capturas
+
+| Limite | Efeito |
+|---|---|
+| Sem armazenamento de objetos (S3) no ambiente da captura | Produtos, lojas e capas aparecem com a ilustração padrão, não com foto |
+| Logística da entrega fora do horário | Quando a entrega está fechada, sacola e checkout seguem por **Retirada** (o app avisa e oferece retirar) |
+| Horário comercial das lojas | Textos como "Loja fechada agora" e "Entrega volta amanhã" dependem da hora da captura |
+| Sem Mailpit (e-mail) | O e-mail dos clientes de demonstração é marcado como confirmado direto no banco |
+| Cartão | O cartão é digitado na página segura do Mercado Pago; o app só mostra o checkout com cartão escolhido |
+
+## Índice
+
+| Arquivo | Tela | Perfil | Viewport | O que mostra |
+|---|---|---|---|---|
+${rows.join('\n')}
+${suspects.size ? `\n## Telas que mostraram erro nesta execução\n\nA captura registra o estado real: nestas telas apareceu uma mensagem de erro (normalmente a API devolveu falha ou faltou o arquivo no armazenamento de objetos). Corrija a causa e capture de novo.\n\n${[...suspects].map(([key, text]) => `- \`${key}\`: "${text}"`).join('\n')}\n` : ''}${missing.length ? `\n## Não capturadas nesta execução\n\n${missing.map((key) => `- \`${key}\`: ${failed.find((f) => f.key === key)?.why ?? 'não executada'}`).join('\n')}\n` : ''}`;
+  writeFileSync(join(OUT, 'README.md'), text);
+  log(`índice escrito em ${join(OUT, 'README.md')}`);
+}
+
 // ------------------------------------------------------------------------------------------------ principal
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
+  if (process.argv.includes('--readme')) {
+    writeReadme(); // só reescreve o índice a partir das imagens que já estão na pasta
+    return;
+  }
   await ensureApi();
   if (ONLY.has('lojista') || ONLY.has('admin') || ONLY.has('site') || ONLY.has('app')) await ensureWeb();
   if (ONLY.has('app')) await ensureApp();
@@ -797,6 +903,7 @@ async function main() {
   }
   await browser.close();
   if (problems.length) log(`avisos do navegador (5xx e erros de página):\n  ${[...new Set(problems)].slice(0, 12).join('\n  ')}`);
+  if (['app', 'lojista', 'admin', 'site'].every((area) => ONLY.has(area))) writeReadme();
   log(`${taken.size} capturas em ${OUT}; ${failed.length} falha(s)`);
   for (const f of failed) log(`  falhou: ${f.key}: ${f.why}`);
   process.exit(failed.length ? 1 : 0);

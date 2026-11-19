@@ -383,6 +383,8 @@ fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; 
 .table th { color: var(--wb-color-text-secondary); font-weight: var(--wb-font-weight-semibold); }
 @media (max-width: 1023px) {
   .table, .table tbody, .table tr, .table td { display: block; }
+  /* a legenda da tabela vira bloco de largura total (senão encolhe e quebra palavra por linha) */
+  .table caption { display: block; width: 100%; }
   .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .table tr { padding: var(--wb-space-3) 0; border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); }
   .table td { border: 0; padding: var(--wb-space-1) 0; }

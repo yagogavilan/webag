@@ -124,6 +124,7 @@ Passo a passo: https://www.mercadopago.com.br/developers > **Suas integrações*
 | `pnpm web` | Só o app no navegador (Metro com `--web`, http://localhost:8081; precisa da API no ar) |
 | `pnpm smoke` | Teste de fumaça ponta a ponta contra a API rodando (login de todos os perfis, pedido de retirada e de entrega com PIX simulado) |
 | `pnpm pagar [recusar\|expirar]` | Aprova (ou recusa, ou expira) o PIX simulado do pedido mais recente |
+| `pnpm telas` | Gera os screenshots de todas as telas em `docs/telas/` (app 390x844; lojista, admin e site em 1440x900 e 390x844) com a API real e o seed; ver `docs/telas/README.md` |
 | `pnpm totp <segredo>` | Código TOTP do admin sem celular (só desenvolvimento) |
 | `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` | Qualidade, como no CI |
 | `pnpm generate` / `pnpm generate:check` | Regera `packages/shared` a partir do `openapi.yaml` / falha se estiver desatualizado |
