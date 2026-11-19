@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { and, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
+import { capOldest } from '../../platform/bounded.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
@@ -243,6 +244,7 @@ export class LateDeliveryService implements DeliveryListener, OnModuleInit, OnAp
       .returning({ id: coupons.id });
     if (!created) return; // já concedido (reprocesso): um cupom por pedido
     this.granted.set(order.id, { orderId: order.id, number: order.number, userId: order.userId, storeId: order.storeId, from: order.status, to: order.status, actor: 'system', reason: null, at: now, notice: 'late_compensation', compensation: { kind: spec.kind, valueCents: spec.value } });
+    capOldest(this.granted);
   }
 
   async afterDeliveryChange(delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {

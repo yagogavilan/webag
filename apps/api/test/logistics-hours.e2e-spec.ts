@@ -59,9 +59,9 @@ describe('Horário e pausa da logística da Webag (BUG-016)', () => {
     expect(refused.body.code).toBe('LOGISTICS_CLOSED');
 
     const home = (await ctx.http.get(`/v1/home?lat=${shop.origin.lat}&lng=${shop.origin.lng}`).expect(200)).body as { nearbyStores: { id: string; delivery: { available: boolean; logisticsOpensAt: string | null } }[] };
-    expect(home.nearbyStores.find((s) => s.id === shop.store.id)!.delivery).toMatchObject({ available: false, logisticsOpensAt: expect.any(String) });
+    expect(home.nearbyStores.find((s) => s.id === shop.store.id)!.delivery).toMatchObject({ available: false, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: expect.any(String) });
     const page = (await ctx.http.get(`/v1/browse/stores/${shop.store.id}?lat=${shop.origin.lat}&lng=${shop.origin.lng}`).expect(200)).body;
-    expect(page.delivery).toMatchObject({ available: false, logisticsClosed: true, logisticsOpensAt: expect.any(String) });
+    expect(page.delivery).toMatchObject({ available: false, logisticsClosed: true, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: expect.any(String) }); // F4
 
     // Retirada continua: o pedido de retirada não passa pela logística.
     const { revision, totalCents } = await cartView(ctx, buyer.user);
@@ -100,6 +100,11 @@ describe('Horário e pausa da logística da Webag (BUG-016)', () => {
     expect(state.pauses.some((p: { cityId: string }) => p.cityId === city!.id)).toBe(true);
     const cart = (await ctx.http.get(`/v1/cart?addressId=${buyer.addressId}`).set(bearer(buyer.user.accessToken)).expect(200)).body;
     expect(cart.delivery.logisticsOpensAt).toBeNull(); // pausa não tem previsão
+    // F4: o cartão e a página da loja dizem que é PAUSA (sem "volta às 9h") e, fora do alcance, que é distância
+    const pausedPage = (await ctx.http.get(`/v1/browse/stores/${shop.store.id}?lat=${shop.origin.lat}&lng=${shop.origin.lng}`).expect(200)).body;
+    expect(pausedPage.delivery).toMatchObject({ available: false, unavailableReason: 'LOGISTICS_PAUSED', logisticsOpensAt: null });
+    const farAway = (await ctx.http.get(`/v1/browse/stores/${shop.store.id}?lat=${shop.origin.lat + 0.5}&lng=${shop.origin.lng}`).expect(200)).body;
+    expect(farAway.delivery).toMatchObject({ available: false, unavailableReason: 'OUT_OF_RANGE' });
 
     // repetir a pausa é idempotente
     expect((await ctx.http.post('/v1/admin/logistics/pause').set(bearer(ops.accessToken)).send({ cityId: city!.id, reason: 'sem motoboy hoje' }).expect(200)).body.id).toBe(paused.body.id);

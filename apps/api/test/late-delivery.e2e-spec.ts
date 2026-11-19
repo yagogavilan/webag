@@ -77,7 +77,7 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
 
   it('dentro da faixa não há atraso; passou do fim, só o aviso; depois da tolerância libera o cancelamento sem custo', async () => {
     const r = await readyOrder();
-    expect((await view(r)).delay).toMatchObject({ late: false, canCancelWithoutCost: false, cancelMode: null });
+    expect((await view(r)).delay).toMatchObject({ late: false, canCancelWithoutCost: false, cancelMode: null, respondWithinMin: 10 }); // F5: prazo da resposta da operação (entrega_cancel_resposta_min)
     expect((await cancelLate(r)).status).toBe(409);
     await late(r.orderId, 5);
     expect((await view(r)).delay).toMatchObject({ late: true, canCancelWithoutCost: false });

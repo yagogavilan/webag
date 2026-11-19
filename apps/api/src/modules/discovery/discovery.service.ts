@@ -26,8 +26,8 @@ export const presentStoreCard = (store: FeedStore) => ({
   distanceM: store.distanceM,
   rating: { average: store.ratingAverage, count: store.ratingCount, isNew: store.isNew },
   delivery: store.deliversHere
-    ? { available: store.logisticsOpen, logisticsOpensAt: store.logisticsOpen ? null : store.logisticsOpensAt, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: presentEta({ minMinutes: store.etaMinMinutes, maxMinutes: store.etaMaxMinutes }, new Date()) }
-    : { available: false, feeCents: null, freeShipping: false, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: null },
+    ? { available: store.logisticsOpen, unavailableReason: store.logisticsOpen ? null : store.logisticsOpensAt ? ('LOGISTICS_CLOSED' as const) : ('LOGISTICS_PAUSED' as const), logisticsOpensAt: store.logisticsOpen ? null : store.logisticsOpensAt, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: presentEta({ minMinutes: store.etaMinMinutes, maxMinutes: store.etaMaxMinutes }, new Date()) }
+    : { available: false, unavailableReason: 'OUT_OF_RANGE' as const, feeCents: null, freeShipping: false, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: null },
   pickupEnabled: store.pickupEnabled,
   acceptsExchange: store.acceptsExchange,
 });

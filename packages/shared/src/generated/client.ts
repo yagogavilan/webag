@@ -3057,6 +3057,19 @@ export interface EtaRange {
   toAt: string;
 }
 
+/**
+ * F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.
+ * @nullable
+ */
+export type StoreDeliveryUnavailableReason = typeof StoreDeliveryUnavailableReason[keyof typeof StoreDeliveryUnavailableReason] | null;
+
+
+export const StoreDeliveryUnavailableReason = {
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  LOGISTICS_CLOSED: 'LOGISTICS_CLOSED',
+  LOGISTICS_PAUSED: 'LOGISTICS_PAUSED',
+} as const;
+
 export interface StoreDelivery {
   /** DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí. */
   eta?: EtaRange | null;
@@ -3079,6 +3092,11 @@ export interface StoreDelivery {
   minOrderCents: number;
   etaMinMinutes: number;
   etaMaxMinutes: number;
+  /**
+     * F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.
+     * @nullable
+     */
+  unavailableReason?: StoreDeliveryUnavailableReason;
 }
 
 export type StoreCardLogoUrls = {[key: string]: string};
@@ -3205,6 +3223,19 @@ export type BrowseStoreHoursTodayItem = {
   end: string;
 };
 
+/**
+ * F4: mesmo significado de `StoreDelivery.unavailableReason`; nulo quando entrega ou sem posição.
+ * @nullable
+ */
+export type BrowseStoreDeliveryUnavailableReason = typeof BrowseStoreDeliveryUnavailableReason[keyof typeof BrowseStoreDeliveryUnavailableReason] | null;
+
+
+export const BrowseStoreDeliveryUnavailableReason = {
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  LOGISTICS_CLOSED: 'LOGISTICS_CLOSED',
+  LOGISTICS_PAUSED: 'LOGISTICS_PAUSED',
+} as const;
+
 export type BrowseStoreDelivery = {
   /**
      * Nulo sem posição
@@ -3225,6 +3256,11 @@ export type BrowseStoreDelivery = {
   eta?: EtaRange | null;
   /** BUG-016: logística fora do horário ou pausada para esta posição (só retirada) */
   logisticsClosed?: boolean;
+  /**
+     * F4: mesmo significado de `StoreDelivery.unavailableReason`; nulo quando entrega ou sem posição.
+     * @nullable
+     */
+  unavailableReason?: BrowseStoreDeliveryUnavailableReason;
   /** @nullable */
   logisticsOpensAt?: string | null;
   acceptsDelivery: boolean;
@@ -4290,6 +4326,8 @@ export const OrderDelayCancelMode = {
  * WB-253: atraso da entrega, calculado no servidor (aparece ao reconectar). Nulo na retirada, sem faixa gravada ou fora da entrega ativa. `late`: passou do fim da faixa (aviso neutro + 1 push). `canCancelWithoutCost`: passou do fim + `entrega_atraso_tolerancia_min` (botão "Cancelar sem custo"; em saída "Pedir cancelamento"). `cancelMode`: immediate | request. `cancelRequest`: o pedido à operação com o pedido em saída (a loja não participa).
  */
 export type OrderDelay = {
+  /** F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional. */
+  respondWithinMin?: number;
   late: boolean;
   canCancelWithoutCost: boolean;
   cancelAvailableAt: string;

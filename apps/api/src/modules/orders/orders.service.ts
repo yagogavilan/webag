@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { and, asc, count, desc, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import { capOldest } from '../../platform/bounded.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -568,6 +569,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     // SEC-134: a tentativa precisa ser a do pedido (vínculo, valor e loja); senão não paga, alerta e (se aprovada) estorna.
     if ((order.paymentAttemptId && order.paymentAttemptId !== attempt.id) || attempt.amountCents !== order.totalCents || attempt.storeId !== order.storeId) {
       this.rejectedAttempts.add(attempt.id);
+      capOldest(this.rejectedAttempts);
       return;
     }
     if (!order.paymentAttemptId) await tx.update(orders).set({ paymentAttemptId: attempt.id }).where(eq(orders.id, order.id));
@@ -579,7 +581,10 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     } else if (attempt.status === 'declined' || attempt.status === 'expired' || attempt.status === 'cancelled') {
       events.push((await this.closeOrder(tx, order, 'expired', 'system', attempt.status === 'declined' ? 'Pagamento recusado' : 'Pagamento não realizado a tempo', null)).event);
     }
-    if (events.length > 0) this.pendingEvents.set(attempt.id, events);
+    if (events.length > 0) {
+      this.pendingEvents.set(attempt.id, events);
+      capOldest(this.pendingEvents);
+    }
   }
 
   private async markPaid(tx: Tx, order: OrderRow, attempt: PaymentAttempt, remote: ProviderPayment | null): Promise<OrderEvent> {
@@ -833,6 +838,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     // SEC-143: "devolvida à loja" é declarada pela operação; cancelar e estornar só depois que a loja confirma o recebimento
     // (`confirmStoreReturnInTx`). Até lá o pedido segue ativo e o admin é alertado em `afterDeliveryChange`.
     this.pendingDeliveryEvents.set(delivery.id, { events, refund });
+    capOldest(this.pendingDeliveryEvents);
     void reason;
   }
 
@@ -1153,7 +1159,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (order.mode !== 'delivery') return null;
     const state = lateStateOf(order, await this.params.getNumber('entrega_atraso_tolerancia_min'), new Date());
     if (state.cancelAvailableAt === null) return null;
-    return { late: state.late, canCancelWithoutCost: state.canCancelWithoutCost, cancelAvailableAt: state.cancelAvailableAt.toISOString(), cancelMode: state.cancelMode, cancelRequest: await this.lateCancelRequestOf(order.id) };
+    return { late: state.late, canCancelWithoutCost: state.canCancelWithoutCost, cancelAvailableAt: state.cancelAvailableAt.toISOString(), cancelMode: state.cancelMode, respondWithinMin: await this.params.getNumber('entrega_cancel_resposta_min'), cancelRequest: await this.lateCancelRequestOf(order.id) };
   }
 
   private actionsOf(order: OrderRow) {

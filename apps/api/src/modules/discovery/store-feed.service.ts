@@ -126,15 +126,17 @@ export class StoreFeedService {
     const tableCache = new Map<string | null, Promise<Awaited<ReturnType<DeliveryFeesService['resolve']>>>>();
     const feeTables = { get: (cityId: string | null) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId)! };
     const feed: FeedStore[] = [];
-    const logisticsByCity = new Map<string | null, Awaited<ReturnType<LogisticsAvailabilityService['status']>>>();
+    const logisticsByCity = new Map<string, Awaited<ReturnType<LogisticsAvailabilityService['status']>>>();
     for (const row of rows) {
-      if (!logisticsByCity.has(row.address_city_id)) logisticsByCity.set(row.address_city_id, await this.availability.status(row.address_city_id, now));
-      const logistics = logisticsByCity.get(row.address_city_id)!;
       const distanceM = Number(row.distance_m);
       // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
       const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
       // DEC-053: o ETA (preparo da loja + despacho + deslocamento) acima do teto tira a loja da descoberta ("fora da área").
       const eta = computeEta(etaConfig, { distanceM, prepMin: row.prep_minutes });
+      // RN-19 item 2 (BUG-021): a mesma conta do checkout (o fim da faixa precisa cair antes do fechamento), em cache por cidade + fim da faixa.
+      const logisticsKey = `${row.address_city_id ?? ''}:${eta.toMin}`;
+      if (!logisticsByCity.has(logisticsKey)) logisticsByCity.set(logisticsKey, await this.availability.status(row.address_city_id, now, eta.toMin));
+      const logistics = logisticsByCity.get(logisticsKey)!;
       const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && eta.withinCeiling && table ? pickTier(table.tiers, distanceM) : null;
       const fee = picked ? picked.tier.feeCents : null;
       const deliversHere = fee !== null;

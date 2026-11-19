@@ -6727,7 +6727,8 @@ export const GetHomeResponse = zod.object({
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
   "etaMinMinutes": zod.int(),
-  "etaMaxMinutes": zod.int()
+  "etaMaxMinutes": zod.int(),
+  "unavailableReason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('LOGISTICS_CLOSED'),zod.literal('LOGISTICS_PAUSED'),zod.literal(null)]).nullish().describe('F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.')
 }),
   "pickupEnabled": zod.boolean(),
   "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
@@ -6793,7 +6794,8 @@ export const GetHomeResponse = zod.object({
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
   "etaMinMinutes": zod.int(),
-  "etaMaxMinutes": zod.int()
+  "etaMaxMinutes": zod.int(),
+  "unavailableReason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('LOGISTICS_CLOSED'),zod.literal('LOGISTICS_PAUSED'),zod.literal(null)]).nullish().describe('F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.')
 }),
   "pickupEnabled": zod.boolean(),
   "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
@@ -6827,7 +6829,8 @@ export const GetHomeResponse = zod.object({
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
   "etaMinMinutes": zod.int(),
-  "etaMaxMinutes": zod.int()
+  "etaMaxMinutes": zod.int(),
+  "unavailableReason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('LOGISTICS_CLOSED'),zod.literal('LOGISTICS_PAUSED'),zod.literal(null)]).nullish().describe('F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.')
 }),
   "pickupEnabled": zod.boolean(),
   "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
@@ -6969,7 +6972,8 @@ export const SearchStoresResponse = zod.object({
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
   "etaMinMinutes": zod.int(),
-  "etaMaxMinutes": zod.int()
+  "etaMaxMinutes": zod.int(),
+  "unavailableReason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('LOGISTICS_CLOSED'),zod.literal('LOGISTICS_PAUSED'),zod.literal(null)]).nullish().describe('F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.')
 }),
   "pickupEnabled": zod.boolean(),
   "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
@@ -7157,6 +7161,7 @@ export const GetBrowseStoreResponse = zod.object({
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: com posição e dentro do teto; senão nulo.'),
   "logisticsClosed": zod.boolean().optional().describe('BUG-016: logística fora do horário ou pausada para esta posição (só retirada)'),
+  "unavailableReason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('LOGISTICS_CLOSED'),zod.literal('LOGISTICS_PAUSED'),zod.literal(null)]).nullish().describe('F4: mesmo significado de `StoreDelivery.unavailableReason`; nulo quando entrega ou sem posição.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish(),
   "acceptsDelivery": zod.boolean()
 }),
@@ -9504,6 +9509,7 @@ export const CreateOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "delay": zod.union([zod.object({
+  "respondWithinMin": zod.int().optional().describe('F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional.'),
   "late": zod.boolean(),
   "canCancelWithoutCost": zod.boolean(),
   "cancelAvailableAt": zod.iso.datetime({"offset":true}),
@@ -9729,6 +9735,7 @@ export const GetOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "delay": zod.union([zod.object({
+  "respondWithinMin": zod.int().optional().describe('F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional.'),
   "late": zod.boolean(),
   "canCancelWithoutCost": zod.boolean(),
   "cancelAvailableAt": zod.iso.datetime({"offset":true}),
@@ -9941,6 +9948,7 @@ export const CancelOrderLateResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "delay": zod.union([zod.object({
+  "respondWithinMin": zod.int().optional().describe('F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional.'),
   "late": zod.boolean(),
   "canCancelWithoutCost": zod.boolean(),
   "cancelAvailableAt": zod.iso.datetime({"offset":true}),
@@ -10362,6 +10370,7 @@ export const CancelOrderResponse = zod.object({
   "decisionNote": zod.string().nullable()
 }).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "delay": zod.union([zod.object({
+  "respondWithinMin": zod.int().optional().describe('F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional.'),
   "late": zod.boolean(),
   "canCancelWithoutCost": zod.boolean(),
   "cancelAvailableAt": zod.iso.datetime({"offset":true}),

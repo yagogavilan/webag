@@ -11012,6 +11012,7 @@ components:
         minOrderCents: { type: integer }
         etaMinMinutes: { type: integer }
         etaMaxMinutes: { type: integer }
+        unavailableReason: { type: [string, 'null'], enum: [OUT_OF_RANGE, LOGISTICS_CLOSED, LOGISTICS_PAUSED, null], description: 'F4: por que não entrega agora, com `available=false`. `LOGISTICS_CLOSED`: fora do horário ou o fim da faixa passa do fechamento (`logisticsOpensAt` traz a volta); `LOGISTICS_PAUSED`: entregas pausadas pelo admin (sem previsão); `OUT_OF_RANGE`: fora do raio/alcance ou a loja não faz entrega. Nulo quando entrega. Campo novo opcional.' }
     StoreCard:
       type: object
       required: [id, name, logo, mainCategoryId, open, opensAt, distanceM, rating, delivery, pickupEnabled, acceptsExchange]
@@ -11136,6 +11137,7 @@ components:
             etaMaxMinutes: { type: integer }
             eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: com posição e dentro do teto; senão nulo.' }
             logisticsClosed: { type: boolean, description: 'BUG-016: logística fora do horário ou pausada para esta posição (só retirada)' }
+            unavailableReason: { type: [string, 'null'], enum: [OUT_OF_RANGE, LOGISTICS_CLOSED, LOGISTICS_PAUSED, null], description: 'F4: mesmo significado de `StoreDelivery.unavailableReason`; nulo quando entrega ou sem posição.' }
             logisticsOpensAt: { type: [string, 'null'], format: date-time }
             acceptsDelivery: { type: boolean }
         pickup:
@@ -11752,6 +11754,7 @@ components:
               additionalProperties: false
               required: [late, canCancelWithoutCost, cancelAvailableAt, cancelMode, cancelRequest]
               properties:
+                respondWithinMin: { type: integer, description: 'F5: prazo (min) em que a operação responde ao pedido de cancelamento em saída (`entrega_cancel_resposta_min`); sem resposta, aceita. Para a copy antes de pedir ("responde em até N min"). Campo novo opcional.' }
                 late: { type: boolean }
                 canCancelWithoutCost: { type: boolean }
                 cancelAvailableAt: { type: string, format: date-time }
