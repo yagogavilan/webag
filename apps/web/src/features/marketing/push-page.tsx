@@ -14,6 +14,7 @@ import { marketingApi, marketingKeys, type PushCampaign, type PushCampaignCreate
 import { saveErrorMessage } from '@/lib/api/messages';
 import { formatDateTime, fromLocalInput } from '@/lib/format';
 import { tid } from '@/lib/testid';
+import { useNow } from '@/lib/use-now';
 
 const T = (id: string) => tid('push', id);
 type SegmentKind = PushSegment['kind'];
@@ -124,7 +125,8 @@ function NewCampaign({ onSent }: { onSent: () => void }) {
     }
   }
 
-  const sendLabel = est?.nextSendAt && !later && Date.parse(est.nextSendAt) - Date.now() > 60_000;
+  const now = useNow(30_000);
+  const sendLabel = est?.nextSendAt && !later && Date.parse(est.nextSendAt) - now > 60_000;
 
   return (
     <div className={k.split}>

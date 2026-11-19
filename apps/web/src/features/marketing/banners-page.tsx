@@ -44,6 +44,12 @@ export function StatusBadge({ status, testId }: { status: BannerStatus; testId?:
   );
 }
 
+function Thumb({ url }: { url: string | null }) {
+  if (!url) return <span className={k.thumb} aria-hidden="true" />;
+  // eslint-disable-next-line @next/next/no-img-element -- imagem pública do banner (variante WebP já dimensionada pelo servidor)
+  return <img className={k.thumb} src={url} alt="" />;
+}
+
 export function BannersPage() {
   const { canView, canEdit } = useSession();
   const [tab, setTab] = useState<'banners' | 'highlights'>('banners');
@@ -138,7 +144,7 @@ function BannerList({ cities, editable, onEdit, onNew }: { cities: City[]; edita
                       <tr key={b.id} data-testid={T(`row-${b.id}`)}>
                         <td data-primary>
                           <span className={k.start}>
-                            {thumb ? /* eslint-disable-next-line @next/next/no-img-element -- imagem pública do banner */ <img className={k.thumb} src={thumb} alt="" /> : <span className={k.thumb} aria-hidden="true" />}
+                            <Thumb url={thumb} />
                             <span className="wb-text-body-strong">{b.title}</span>
                           </span>
                         </td>
