@@ -1,6 +1,7 @@
 import { REFRESH_SKEW_MS, REQUEST_TIMEOUT_MS } from './config';
 import { ApiError, toApiError } from './problem';
 import { getDeviceId } from './session-storage';
+import { observeServerDate } from '../lib/server-clock';
 import { sessionStore } from './session';
 import { refreshSession } from '@webag/shared';
 
@@ -119,11 +120,13 @@ export async function request<R extends ApiResponse>(
 
       const timeout = timeoutSignal(timeoutMs, signal);
       let response: R;
+      const sentAt = Date.now();
       try {
         response = await call({ headers, signal: timeout.signal });
       } finally {
         timeout.done();
       }
+      observeServerDate(response.headers?.get?.('date'), sentAt, Date.now());
 
       if (response.status === 401 && auth === 'required' && !renewedOnce && sessionStore.getTokens()) {
         renewedOnce = true;
