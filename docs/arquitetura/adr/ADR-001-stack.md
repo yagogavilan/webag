@@ -29,7 +29,7 @@ Brief §6 fixa a direção (monorepo pnpm + Turborepo, Expo, Next.js, NestJS, Po
 | Estilo mobile | **StyleSheet + tema tipado gerado dos tokens** | Zero plugin de build; melhor em Android de 2–3 GB | Menos açúcar sintático |
 | | NativeWind 4.2 (Tailwind 3) / 5.0 RC | Mesma linguagem do web | v4 preso ao Tailwind 3; v5 ainda RC [V] |
 | | Unistyles 3.8 | Rápido, temas | Dependência nativa a mais |
-| Estilo web | **Tailwind CSS 4 com variáveis CSS geradas dos tokens** | Produtivo para painéis | Mapeamento `@theme` → `--wb-*` a fazer pelo mobile-dev (esqueleto usa só as variáveis) |
+| Estilo web | **CSS Modules com variáveis `--wb-*` geradas dos tokens** (Tailwind 4 não foi adotado; decisão do mobile-dev, aceita pelo tech-lead em 2026-11-19, DT-011) | Zero dependência, tokens como única fonte; o painel já está inteiro assim | Sem utilitários prontos; só reavaliar se o time crescer e pedir Tailwind |
 | | CSS Modules + variáveis `--wb-*` puras | Zero dependência | Mais CSS manual em telas densas (tabelas, filtros) |
 | Painéis web | **Um app `apps/web` com áreas `/lojista` e `/admin`** (DEC-005) | Um deploy, um design system web, uma sessão | Bundle de uma área não pode vazar dados da outra: guarda por área + autorização na API |
 | | Dois apps (`apps/admin` + `apps/merchant`) | Isolamento total | Dobra build, deploy e configuração; rejeitado pelo fundador (DEC-005) |
@@ -46,7 +46,7 @@ Brief §6 fixa a direção (monorepo pnpm + Turborepo, Expo, Next.js, NestJS, Po
 | Cache/filas | Redis 8 (BullMQ 6, ioredis 5, adapter Socket.IO, rate limit). Valkey 8 é substituto drop-in se a licença AGPL do Redis 8 virar problema |
 | Objetos | API S3 (AWS SDK v3). Local: **RustFS** (ver ADR-005: imagem do MinIO não está mais disponível) |
 | E-mail | SMTP via nodemailer; Mailpit no dev |
-| Web | Next.js **16.4** (App Router), React **19.3.0**, Tailwind 4 |
+| Web | Next.js **16.4** (App Router), React **19.3.0**, CSS Modules + variáveis `--wb-*` |
 | Mobile | Expo **SDK 58** (React Native 0.88.1, React 19.3.0), Expo Router 58, TanStack Query, Zustand, React Hook Form + Zod, expo-image, FlashList 2, expo-secure-store |
 | Contrato | `docs/arquitetura/api/openapi.yaml` (OpenAPI 3.1) → Orval gera em `packages/shared` |
 | Testes | Vitest 4 (api, web, shared), jest-expo + RNTL 14 (mobile), Testcontainers, Playwright, Maestro, k6 (ADR-006) |

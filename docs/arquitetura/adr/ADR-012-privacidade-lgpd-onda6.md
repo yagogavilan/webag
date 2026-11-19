@@ -1,6 +1,6 @@
 # ADR-012: Privacidade e LGPD (Onda 6, O6.1): exclusão de conta, exportação, pedidos de titulares e retenção
 
-- **Status:** Proposta (pendente revisão do tech-lead; o `security-engineer` revisa exclusão, exportação e retenção antes do G4; texto jurídico pendente do fundador)
+- **Status:** Aceita (tech-lead: `reviews/onda-8.md`; segurança: `docs/seguranca/revisao-onda6.md` e `revisoes/`; prazos e bases legais seguem `[HIPÓTESE]` até o jurídico, J15)
 - **Data:** 2026-11-19
 - **Autor:** backend-dev
 - **Custo mensal:** sem serviço novo (arquivos de exportação no bucket privado já contratado; ~KB por conta). Sem fila nova: varredura idempotente no mesmo padrão de `OrdersService.sweep`.

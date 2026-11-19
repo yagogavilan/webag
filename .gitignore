@@ -38,9 +38,13 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 dump.rdb
+*.rdb
 
 # temporary build output from profiling
 apps/api/.tmp-*/
 
 # QA: imagens geradas pelo S9 (docs/qa/carga/s9-gerar-imagens.mjs)
 docs/qa/carga/imagens-s9/
+
+# relatórios de teste (Playwright)
+playwright-report/

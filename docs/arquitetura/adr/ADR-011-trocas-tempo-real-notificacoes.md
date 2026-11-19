@@ -1,6 +1,6 @@
 # ADR-011: Trocas, tempo real e notificações (Ondas 4C e 5)
 
-- **Status:** Proposta (pendente revisão do tech-lead; segurança revisa a taxa de troca em conta da Webag e o handshake do socket)
+- **Status:** Aceita (tech-lead: `reviews/review-ondas-3-5.md` e `reviews/onda-8.md`; a ordem global de locks pedido -> troca -> corrida, I7, está no código e em `DT-058`)
 - **Data:** 2026-11-19
 - **Autor:** backend-dev
 - **Custo mensal:** sem serviço novo. Expo Push Service é gratuito; FCM v1 e APNs dependem das credenciais do fundador no EAS.

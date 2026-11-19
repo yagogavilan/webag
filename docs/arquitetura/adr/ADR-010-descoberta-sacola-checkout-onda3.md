@@ -1,6 +1,6 @@
 # ADR-010: Descoberta, sacola no servidor e contrato de checkout (Onda 3)
 
-- **Status:** Proposta (pendente revisão do tech-lead; segurança revisa localização na T3A-09)
+- **Status:** Aceita (tech-lead: `reviews/review-ondas-3-5.md`; segurança revisou a localização na T3A-09)
 - **Data:** 2026-11-18
 - **Autor:** backend-dev
 - **Revisores:** tech-lead, security-engineer
