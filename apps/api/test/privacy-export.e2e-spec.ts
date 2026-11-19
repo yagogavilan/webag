@@ -77,7 +77,7 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
     const file = await ctx.http.get(new URL(url).pathname).expect(200);
     expect(file.headers['content-disposition']).toMatch(/attachment; filename="webag-meus-dados-/);
     expect(file.headers['cache-control']).toBe('no-store');
-    const doc = JSON.parse(file.text) as Record<string, any>;
+    const doc = JSON.parse(file.text) as { profile: object; addresses: object[]; orders: { items: object[] }[]; consents: object[]; pushDevices: object[] };
     expect(doc.profile).toMatchObject({ email: user.email, emailVerified: true });
     expect(doc.addresses[0]).toMatchObject({ street: 'Rua Teste', city: 'Francisco Morato' });
     expect(doc.orders[0]).toMatchObject({ number: orderNumber, status: 'delivered', store: shop.store.id ? 'Loja Pedidos' : '' });
