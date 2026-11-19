@@ -79,7 +79,7 @@ export class StoreOrdersService {
 
   // =================================================================== leitura
 
-  async list(storeId: string, query: { scope?: StoreScope | undefined; number?: string | undefined; cursor?: string | undefined; limit?: unknown }, showValues: boolean): Promise<Page<Awaited<ReturnType<StoreOrdersService['summary']>>>> {
+  async list(storeId: string, query: { scope?: StoreScope | undefined; number?: string | undefined; cursor?: string | undefined; limit?: unknown }, showValues: boolean): Promise<Page<Awaited<ReturnType<StoreOrdersService['summaries']>>[number]>> {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const statuses = query.scope ? SCOPES[query.scope] : [...SCOPES.new, ...SCOPES.in_progress, ...SCOPES.history];
@@ -90,7 +90,7 @@ export class StoreOrdersService {
       .orderBy(...timestampOrderDesc(orders.createdAt, orders.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
-    const data = await Promise.all(page.map((o) => this.summary(o, showValues)));
+    const data = await this.summaries(page, showValues);
     const last = page.at(-1);
     return { data, nextCursor: rows.length > limit && last ? encodeCursor({ at: last.createdAt.toISOString(), id: last.id }) : null };
   }
@@ -103,25 +103,33 @@ export class StoreOrdersService {
     return { new: sum(SCOPES.new), in_progress: sum(SCOPES.in_progress), history: sum(SCOPES.history) };
   }
 
-  private async summary(order: OrderRow, showValues: boolean) {
-    const [items, [customer]] = await Promise.all([
-      this.db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
-      this.db.select({ name: users.name }).from(users).where(eq(users.id, order.userId)),
+  /** I9: 2 consultas por página (itens e clientes) em vez de 2 por pedido. */
+  private async summaries(page: OrderRow[], showValues: boolean) {
+    if (page.length === 0) return [];
+    const [items, customers] = await Promise.all([
+      this.db.select().from(orderItems).where(inArray(orderItems.orderId, page.map((o) => o.id))).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
+      this.db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [...new Set(page.map((o) => o.userId))])),
     ]);
-    return {
-      id: order.id,
-      number: order.number,
-      status: order.status,
-      mode: order.mode,
-      createdAt: order.createdAt.toISOString(),
-      paidAt: order.paidAt?.toISOString() ?? null,
-      acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
-      customerFirstName: firstName(customer?.name),
-      itemCount: items.reduce((n, i) => n + i.quantity, 0),
-      firstItemName: items[0]?.name ?? '',
-      total: showValues ? money(order.totalCents) : null,
-      allowedActions: storeActions(order),
-    };
+    const itemsByOrder = new Map<string, (typeof items)[number][]>();
+    for (const item of items) itemsByOrder.set(item.orderId, [...(itemsByOrder.get(item.orderId) ?? []), item]);
+    const customerById = new Map(customers.map((c) => [c.id, c]));
+    return page.map((order) => {
+      const rows = itemsByOrder.get(order.id) ?? [];
+      return {
+        id: order.id,
+        number: order.number,
+        status: order.status,
+        mode: order.mode,
+        createdAt: order.createdAt.toISOString(),
+        paidAt: order.paidAt?.toISOString() ?? null,
+        acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
+        customerFirstName: firstName(customerById.get(order.userId)?.name),
+        itemCount: rows.reduce((n, i) => n + i.quantity, 0),
+        firstItemName: rows[0]?.name ?? '',
+        total: showValues ? money(order.totalCents) : null,
+        allowedActions: storeActions(order),
+      };
+    });
   }
 
   private async load(storeId: string, orderId: string, exec: Db | Tx = this.db, lock = false): Promise<OrderRow> {

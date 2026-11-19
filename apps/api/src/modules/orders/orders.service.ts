@@ -966,7 +966,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     };
   }
 
-  async listForCustomer(userId: string, query: { scope?: 'active' | 'past' | undefined; cursor?: string | undefined; limit?: unknown }): Promise<Page<Awaited<ReturnType<OrdersService['summaryOf']>>>> {
+  async listForCustomer(userId: string, query: { scope?: 'active' | 'past' | undefined; cursor?: string | undefined; limit?: unknown }): Promise<Page<Awaited<ReturnType<OrdersService['summariesOf']>>[number]>> {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const active: OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
@@ -977,29 +977,43 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       .orderBy(...timestampOrderDesc(orders.createdAt, orders.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
-    const data = await Promise.all(page.map((o) => this.summaryOf(o)));
+    const data = await this.summariesOf(page);
     const last = page.at(-1);
     return { data, nextCursor: rows.length > limit && last ? encodeCursor({ at: last.createdAt.toISOString(), id: last.id }) : null };
   }
 
-  private async summaryOf(order: OrderRow) {
-    const [items, [store]] = await Promise.all([
-      this.db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
-      this.db.select({ name: stores.name, logoAssetId: stores.logoAssetId }).from(stores).where(eq(stores.id, order.storeId)),
+  /** I9: 3 consultas por página (itens, lojas, logos) em vez de 3 por pedido; a ordem e o conteúdo são os mesmos de antes. */
+  private async summariesOf(page: OrderRow[]) {
+    if (page.length === 0) return [];
+    const orderIds = page.map((o) => o.id);
+    const storeIds = [...new Set(page.map((o) => o.storeId))];
+    const [items, storeRows] = await Promise.all([
+      this.db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
+      this.db.select({ id: stores.id, name: stores.name, logoAssetId: stores.logoAssetId }).from(stores).where(inArray(stores.id, storeIds)),
     ]);
-    const [logo] = store?.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
-    return {
-      id: order.id,
-      number: order.number,
-      status: order.status,
-      mode: order.mode,
-      store: { id: order.storeId, name: store?.name ?? '', logo: { urls: (logo ? this.media.publicVariants(logo) : null) ?? {} } },
-      itemCount: items.reduce((n, i) => n + i.quantity, 0),
-      firstItemName: items[0]?.name ?? '',
-      firstItemImage: { urls: items[0]?.image ?? {} },
-      total: money(order.totalCents),
-      createdAt: order.createdAt.toISOString(),
-    };
+    const logoIds = [...new Set(storeRows.map((s) => s.logoAssetId).filter((id): id is string => id !== null))];
+    const logos = logoIds.length > 0 ? await this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, logoIds)) : [];
+    const itemsByOrder = new Map<string, OrderItemRow[]>();
+    for (const item of items) itemsByOrder.set(item.orderId, [...(itemsByOrder.get(item.orderId) ?? []), item]);
+    const storeById = new Map(storeRows.map((s) => [s.id, s]));
+    const logoById = new Map(logos.map((l) => [l.id, l]));
+    return page.map((order) => {
+      const orderItemRows = itemsByOrder.get(order.id) ?? [];
+      const store = storeById.get(order.storeId);
+      const logo = store?.logoAssetId ? logoById.get(store.logoAssetId) : undefined;
+      return {
+        id: order.id,
+        number: order.number,
+        status: order.status,
+        mode: order.mode,
+        store: { id: order.storeId, name: store?.name ?? '', logo: { urls: (logo ? this.media.publicVariants(logo) : null) ?? {} } },
+        itemCount: orderItemRows.reduce((n, i) => n + i.quantity, 0),
+        firstItemName: orderItemRows[0]?.name ?? '',
+        firstItemImage: { urls: orderItemRows[0]?.image ?? {} },
+        total: money(order.totalCents),
+        createdAt: order.createdAt.toISOString(),
+      };
+    });
   }
 }
 
