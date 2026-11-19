@@ -66,6 +66,17 @@ export function ordersAvailable(store: MerchantStore | null | undefined): boolea
   return Boolean(store) && (store?.status === 'approved' || store?.status === 'live' || store?.status === 'suspended') && canManageOrders(store);
 }
 
+/**
+ * Loja "no ar": o painel do dia (vendas, ranking, avaliações) ocupa o lugar do passo a passo. A API não manda `live` (o estado dela é
+ * `approved`): a loja está no ar quando os três itens do aviso "Falta pouco para aparecer no app" estão feitos (aprovada, ao menos um
+ * produto ativo e conta de recebimento conectada). `[HIPÓTESE]` do web, ver `docs/gestao/fila-backend-dev.md`: se a API passar a mandar
+ * `live`, ele vale primeiro.
+ */
+export function isStoreLive(store: Pick<MerchantStore, 'status' | 'hasActiveProduct' | 'payout'>): boolean {
+  if (store.status === 'live') return true;
+  return store.status === 'approved' && store.hasActiveProduct && store.payout.status === 'connected';
+}
+
 /** Financeiro só do dono (RN-13). */
 export const canSeeFinance = (store: MerchantStore | null | undefined): boolean => store?.role === 'owner';
 

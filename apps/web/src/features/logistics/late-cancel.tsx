@@ -35,7 +35,6 @@ export function LateCancelStrip({ delivery, canWrite }: { delivery: Delivery; ca
   const client = useQueryClient();
   const toast = useToast();
   const online = useOnline();
-  const now = useNow(1000);
   const [busy, setBusy] = useState<'arrive_soon' | 'accept' | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +64,7 @@ export function LateCancelStrip({ delivery, canWrite }: { delivery: Delivery; ca
       <div className={s.stripText}>
         <p className="wb-text-body-strong" style={{ margin: 0 }}>O cliente pediu cancelamento por atraso</p>
         <p className="wb-text-body" style={{ margin: 0 }}>
-          {label(delivery)}: responda em <strong data-testid={T(`cancel-request-${delivery.id}-countdown`)}>{countdownText(request.respondBy, now)}</strong>. Sem resposta, o sistema aceita e o pacote volta à loja.
+          {label(delivery)}: responda em <Countdown respondBy={request.respondBy} testId={T(`cancel-request-${delivery.id}-countdown`)} />. Sem resposta, o sistema aceita e o pacote volta à loja.
         </p>
         {error ? <Banner tone="danger" testId={T(`cancel-request-${delivery.id}-error`)}>{error}</Banner> : null}
       </div>
@@ -93,4 +92,10 @@ export function LateCancelStrip({ delivery, canWrite }: { delivery: Delivery; ca
       ) : null}
     </div>
   );
+}
+
+/** Contagem regressiva (mm:ss) que anda de segundo em segundo; usada no alerta do topo e na faixa da linha, para os dois mostrarem o mesmo tempo. */
+export function Countdown({ respondBy, testId }: { respondBy: string; testId?: string }) {
+  const now = useNow(1000);
+  return <strong data-testid={testId}>{countdownText(respondBy, now)}</strong>;
 }

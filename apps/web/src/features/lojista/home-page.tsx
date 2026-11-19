@@ -18,7 +18,7 @@ import { pickImage } from '@/lib/catalog/helpers';
 import f from '@/features/finance/finance.module.css';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { formatClock, formatDateTime } from '@/lib/format';
-import { NEW_PRODUCT_PATH, canReplyReviews, canSeeSalesValues, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
+import { NEW_PRODUCT_PATH, canReplyReviews, canSeeSalesValues, isOnboarding, isOwner, isStoreLive, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import s from './lojista.module.css';
 import { draftErrorMessage } from './onboarding/use-draft';
@@ -107,7 +107,7 @@ function StatusBody({ store }: { store: MerchantStore }) {
         </div>
       );
     case 'approved':
-      return <Approved store={store} />;
+      return isStoreLive(store) ? <Live store={store} /> : <Approved store={store} />;
     case 'live':
       return <Live store={store} />;
     default:

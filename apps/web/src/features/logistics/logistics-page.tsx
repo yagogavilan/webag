@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
 import { Banner, Button, EmptyState, ErrorState, NoAccessState, SkeletonRows, SolarIcon, Switch, Tabs, cx, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
-import { KIND_LABEL, STATUS_LABEL, batchesOf, brasiliaToday, countdownText, etaBandText, etaLevel, etaLevelText, lateAlertsSince, logisticsApi, logisticsKeys, pendingLateCancel, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
+import { KIND_LABEL, STATUS_LABEL, batchesOf, brasiliaToday, etaBandText, etaLevel, etaLevelText, lateAlertsSince, logisticsApi, logisticsKeys, pendingLateCancel, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
 import { formatCents } from '@/lib/format';
 import { createAlertSound } from '@/lib/orders/alert-sound';
 import { tid } from '@/lib/testid';
@@ -19,7 +19,7 @@ import { BatchAssignDialog } from './batch-dialog';
 import { CouriersTab } from './couriers-tab';
 import { DeliveryDialog } from './delivery-dialog';
 import { HistoryTab } from './history-tab';
-import { LateCancelStrip } from './late-cancel';
+import { Countdown, LateCancelStrip } from './late-cancel';
 import { useWaitingForCourier } from './nav-count';
 import s from './logistics.module.css';
 
@@ -175,7 +175,7 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
           action={<LimaAction onClick={() => setTab(lateCancels.length > 0 || !lateInQueue ? 'progress' : 'queue')} testId={T('late-alert-open')}>{lateCancels.length > 0 || !lateInQueue ? 'Ver em andamento' : 'Ver na fila'}</LimaAction>}
         >
           {lateByEta > 0 ? 'Passaram do fim da faixa prometida ao cliente. A mais urgente fica no topo.' : null}
-          {lateCancels[0] ? <> {lateCancels[0].orderNumber ? `#${lateCancels[0].orderNumber}` : 'Um cliente'} pediu cancelamento. Responda em <strong>{countdownText(lateCancels[0].lateCancelRequest!.respondBy, now)}</strong>, senão o sistema aceita.</> : null}
+          {lateCancels[0] ? <> {lateCancels[0].orderNumber ? `#${lateCancels[0].orderNumber}` : 'Um cliente'} pediu cancelamento. Responda em <Countdown respondBy={lateCancels[0].lateCancelRequest!.respondBy} testId={T('late-alert-countdown')} />, senão o sistema aceita.</> : null}
         </NightBlock>
       ) : null}
       <KpiRow>

@@ -50,3 +50,5 @@
 .openText { flex: 1 1 200px; display: flex; flex-direction: column; min-width: 0; }
 .openHint { color: var(--wb-color-text-secondary); }
 .openLink { color: var(--wb-color-text-link); font-weight: 700; min-height: var(--wb-size-touch-min); display: inline-flex; align-items: center; }
+/* Os números menores (7 dias, ticket médio) cabem sem quebrar o valor em duas linhas ("R$ 53,\n91"). */
+@media (min-width: 640px) { .kpis > :not(:first-child) .kpiValue { font-size: 28px; line-height: 32px; overflow-wrap: normal; white-space: nowrap; } }

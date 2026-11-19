@@ -182,3 +182,16 @@ Y.3 [x] Resposta à dúvida da V.2: o oráculo 403/401 só depois da senha certa
 
 | ETA_CHANGED (decisão do CEO) | O app envia `acceptedEtaToAt` (fim da faixa que o cliente viu) na criação do pedido; o servidor devolve 409 `ETA_CHANGED` com `eta {fromAt,toAt}` só se o fim novo for pior que o aceito; reenviar com o novo `acceptedEtaToAt` aceita. |
 | Contrato | Declarar `Address.pinVerified` no schema do openapi.yaml; `Order.refund{amountCents,method,status}` e `StoreDelivery.unavailableReason` (WB-259/260); considerar abrir `GET /v1/cep/{cep}` sem login só se o limite de taxa por IP aguentar (senão manter ViaCEP no visitante). |
+
+## Retorno do web e do app ao contrato das seções W, X e Y (mobile-dev, 2026-11-19, `claude/admiring-lamport-62tq1a`)
+Ligado e verificado contra a API local do HEAD (capturas `docs/qa/relatorios/capturas-v3/real-*.png`). O que ficou sem API ou pede decisão:
+
+| # | Falta / dúvida | Efeito hoje | Dono |
+|---|---|---|---|
+| Z.1 | **`StoreStatus` não tem `live`**: a API manda `approved`, e o Início do lojista só mostrava o painel do dia (vendas, ranking, avaliação) com `live`. O web agora trata `approved` + produto ativo + conta de recebimento conectada como "no ar" (`isStoreLive`, `[HIPÓTESE]` do web). | Sem isso o dono nunca via o painel. Se a API passar a mandar `live`, ele vale primeiro | backend-dev + PO (definir "no ar") |
+| Z.2 | W.4 "atrasos por causa" (WB-255 C5): sem registro da causa na API; a folha "Qual foi a causa principal?" ao marcar entregue uma corrida atrasada NÃO foi feita | Concluídas não mostra "Causa: ..." | CEO/PO decide; backend-dev |
+| Z.3 | W.4 bloco "Prazo no piloto" (Parâmetros de entrega) e aviso C6 "Seu preparo real está em N min" no lojista: os dados estão em `GET /admin/logistics/stats` (só admin); o lojista não tem endpoint de preparo real | O web usou só o 4º número da Logística; bloco do piloto e aviso C6 não foram feitos | backend-dev (endpoint do lojista), depois mobile-dev |
+| Z.4 | `POST /stores/{id}/delivery-preview` não aceita CEP (DEC-067): a prévia do lojista escolhe a distância em km (2, 5, 8 ou digitada), não "3 endereços da região" da spec | Prévia por distância; a prévia antiga por CEP saiu da tela | PO/designer (aceitar a variação) |
+| Z.5 | `POST /orders/card-intent` não confere `acceptedEtaToAt`: o cartão pela página segura nunca mostra "O horário mudou" | Só PIX tem a folha | backend-dev se o PO quiser |
+| Z.6 | `CancelRequest.arrivesBy` (já registrado) e `cancelamento_resposta_min` do pedido em preparo: a copy do pedido em separação segue "em poucos minutos" | Só a copy do pedido em saída usa `Order.delay.respondWithinMin` | PO |
+| Z.7 | O botão "Chego em até 10 min" da Logística tem o 10 da spec; a API usa o padrão "Chegamos em até 10 minutos" e aceita `note`: o prazo não vem de parâmetro | Se o parâmetro mudar, o botão mente | backend-dev expor o número, ou PO travar |

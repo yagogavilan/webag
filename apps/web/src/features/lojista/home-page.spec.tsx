@@ -135,6 +135,18 @@ describe('L8: acompanhar a aprovação', () => {
     expect(calls.some((c) => c.includes('top-products') || c.includes('reviews/summary'))).toBe(false);
   });
 
+  it('a API manda `approved`: com produto e conta de recebimento conectada o painel do dia ocupa o lugar do passo a passo', async () => {
+    setup(fakeStore({ status: 'approved', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }), [(url) => (url.pathname.endsWith('/stores/s1/products') ? json({ data: [{ id: 'p1', name: 'Camiseta' }], nextCursor: null }) : undefined)]);
+    expect(await screen.findByTestId('lojista.inicio.hero')).toHaveTextContent('Loja no ar');
+    expect(screen.queryByText('Falta pouco para aparecer no app')).toBeNull();
+  });
+
+  it('aprovada sem produto ou sem conta de recebimento segue no passo a passo', async () => {
+    setup(fakeStore({ status: 'approved', step: 4, name: 'Casa Bela', payout: { status: 'not_connected', maskedAccount: null, simulated: true } }), [(url) => (url.pathname.endsWith('/stores/s1/products') ? json({ data: [{ id: 'p1', name: 'Camiseta' }], nextCursor: null }) : undefined)]);
+    expect(await screen.findByText('Falta pouco para aparecer no app')).toBeInTheDocument();
+    expect(screen.queryByTestId('lojista.inicio.hero')).toBeNull();
+  });
+
   it('suspensa: banner de erro com o motivo e suporte', async () => {
     setup(fakeStore({ status: 'suspended', step: 4, decisionReason: 'Muitas reclamações.' }));
     expect(await screen.findByText('Sua loja foi suspensa.')).toBeInTheDocument();
