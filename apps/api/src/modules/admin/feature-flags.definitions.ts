@@ -15,7 +15,7 @@ export const FEATURE_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   { key: 'trocas_voluntarias', default: true, description: 'Trocas voluntárias (tamanho/cor)' },
   { key: 'push_marketing', default: true, description: 'Push de marketing (com opt-in)' },
   { key: 'confirmacao_email_bloqueia_compra', default: false, description: 'Exige e-mail confirmado já na 1ª compra (variante B do HIP-D07; DEC-014 permite 1 pedido antes)' },
-  { key: 'codigo_entrega', default: false, description: 'Código de entrega de 4 dígitos (SEC-067)' },
+  { key: 'codigo_entrega', default: true, description: 'Código de entrega de 4 dígitos (SEC-067)' },
 ];
 
 export const FLAG_KEYS: ReadonlySet<string> = new Set(FEATURE_FLAG_DEFINITIONS.map((flag) => flag.key));

@@ -43,6 +43,9 @@ export const ADMIN_PERMISSIONS = {
   /** WB-236: tabela de taxa de entrega; só super admin e financeiro editam, os demais perfis leem. */
   'delivery-fees:read': [SUPER, OPS, FIN, SUP],
   'delivery-fees:write': [SUPER, FIN],
+  /** L.3: logística da Webag. Operação e super admin despacham e registram custo; financeiro e suporte só leem. */
+  'logistics:read': [SUPER, OPS, FIN, SUP],
+  'logistics:write': [SUPER, OPS],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */

@@ -892,6 +892,186 @@ export interface PaymentAlert {
   resolvedAt: string | null;
 }
 
+export type DeliveryStatus = typeof DeliveryStatus[keyof typeof DeliveryStatus];
+
+
+export const DeliveryStatus = {
+  ready_for_collection: 'ready_for_collection',
+  awaiting_courier: 'awaiting_courier',
+  courier_en_route: 'courier_en_route',
+  out_for_delivery: 'out_for_delivery',
+  delivered: 'delivered',
+  not_delivered: 'not_delivered',
+  returned_to_store: 'returned_to_store',
+  cancelled: 'cancelled',
+} as const;
+
+export interface Courier {
+  id: string;
+  name: string;
+  /** Formato internacional sem +, pronto para wa.me. */
+  phone: string;
+  /** @nullable */
+  note: string | null;
+  active: boolean;
+  documentsCheckedAt: string;
+  deliveriesLast7Days?: number;
+  busyNow?: boolean;
+  createdAt: string;
+}
+
+export interface CourierRequest {
+  /**
+     * @minLength 2
+     * @maxLength 60
+     */
+  name: string;
+  /** WhatsApp com DDD. */
+  phone: string;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  note?: string | null;
+  /** Aceite interno: documentos conferidos fora do app. */
+  documentsChecked: boolean;
+}
+
+export interface CourierPatchRequest {
+  /**
+     * @minLength 2
+     * @maxLength 60
+     */
+  name?: string;
+  phone?: string;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  note?: string | null;
+  active?: boolean;
+}
+
+export type DeliveryKind = typeof DeliveryKind[keyof typeof DeliveryKind];
+
+
+export const DeliveryKind = {
+  delivery: 'delivery',
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DeliverySla = typeof DeliverySla[keyof typeof DeliverySla] | null;
+
+
+export const DeliverySla = {
+  ok: 'ok',
+  long: 'long',
+  late: 'late',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DeliveryCourier = {
+  id?: string;
+  /** @nullable */
+  name?: string | null;
+} | null;
+
+export type DeliveryAllowedActionsItem = typeof DeliveryAllowedActionsItem[keyof typeof DeliveryAllowedActionsItem];
+
+
+export const DeliveryAllowedActionsItem = {
+  assign: 'assign',
+  confirm: 'confirm',
+  picked_up: 'picked_up',
+  delivered: 'delivered',
+  not_delivered: 'not_delivered',
+  reattempt: 'reattempt',
+  return_confirmed: 'return_confirmed',
+  reassign: 'reassign',
+  cancel: 'cancel',
+} as const;
+
+export interface Delivery {
+  id: string;
+  kind: DeliveryKind;
+  orderId: string;
+  /** @nullable */
+  orderNumber?: string | null;
+  storeId: string;
+  /** @nullable */
+  storeName?: string | null;
+  status: DeliveryStatus;
+  readyAt: string;
+  /** @nullable */
+  waitingMinutes?: number | null;
+  /** @nullable */
+  sla?: DeliverySla;
+  /** @nullable */
+  courier: DeliveryCourier;
+  volumes: number;
+  /** @nullable */
+  note?: string | null;
+  /**
+     * Bairro e cidade.
+     * @nullable
+     */
+  destination?: string | null;
+  fee: Money;
+  expectedCost: Money;
+  cost: Money | null;
+  /** @nullable */
+  costPaidAt?: string | null;
+  attempts: number;
+  /** @nullable */
+  failReason?: string | null;
+  /** @nullable */
+  whatsappSentAt?: string | null;
+  codeRequired?: boolean;
+  allowedActions: DeliveryAllowedActionsItem[];
+  updatedAt: string;
+}
+
+/**
+ * Só com a corrida ativa (LGPD).
+ */
+export type DeliveryDetailContact = {
+  /** @nullable */
+  pickupAddress?: string | null;
+  /** @nullable */
+  storePhone?: string | null;
+  /** @nullable */
+  dropoffAddress?: string | null;
+  /** @nullable */
+  customerFirstName?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+};
+
+export type DeliveryDetailTimelineItem = {
+  id?: string;
+  /** @nullable */
+  from?: string | null;
+  to?: string;
+  action?: string;
+  /** @nullable */
+  actorRole?: string | null;
+  /** @nullable */
+  reason?: string | null;
+  at?: string;
+};
+
+export type DeliveryDetail = Delivery & {
+  /** Só com a corrida ativa (LGPD). */
+  contact?: DeliveryDetailContact;
+  timeline?: DeliveryDetailTimelineItem[];
+};
+
 export interface DeliveryFeeTier {
   /** @minimum 0 */
   fromM: number;
@@ -4076,6 +4256,146 @@ export type PreviewDeliveryFeeParams = {
   neighborhoodId?: string;
   /** @minimum 0 */
   subtotalCents?: number;
+};
+
+export type ListCouriersParams = {
+  /** @maxLength 60 */
+  q?: string;
+  active?: boolean;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCouriers200 = {
+  data: Courier[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListDeliveriesParams = {
+  tab?: ListDeliveriesTab;
+  status?: DeliveryStatus;
+  kind?: ListDeliveriesKind;
+  courierId?: string;
+  storeId?: string;
+  cityId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListDeliveriesTab = typeof ListDeliveriesTab[keyof typeof ListDeliveriesTab];
+
+
+export const ListDeliveriesTab = {
+  active: 'active',
+  done: 'done',
+} as const;
+
+export type ListDeliveriesKind = typeof ListDeliveriesKind[keyof typeof ListDeliveriesKind];
+
+
+export const ListDeliveriesKind = {
+  delivery: 'delivery',
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type ListDeliveries200 = {
+  data: Delivery[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type AssignDeliveryBody = {
+  courierId: string;
+  addressConfirmed?: boolean;
+};
+
+export type GetDeliveryWhatsapp200 = {
+  courierPhone: string;
+  message: string;
+  link: string;
+  /** Corridas ativas do motoboy (aviso "Já tem 2 corridas ativas"). */
+  courierActiveDeliveries: number;
+};
+
+export type UpdateDeliveryStatusBodyAction = typeof UpdateDeliveryStatusBodyAction[keyof typeof UpdateDeliveryStatusBodyAction];
+
+
+export const UpdateDeliveryStatusBodyAction = {
+  confirm: 'confirm',
+  picked_up: 'picked_up',
+  delivered: 'delivered',
+  not_delivered: 'not_delivered',
+  reattempt: 'reattempt',
+  return_confirmed: 'return_confirmed',
+  reassign: 'reassign',
+  cancel: 'cancel',
+} as const;
+
+export type UpdateDeliveryStatusBodyFailReason = typeof UpdateDeliveryStatusBodyFailReason[keyof typeof UpdateDeliveryStatusBodyFailReason];
+
+
+export const UpdateDeliveryStatusBodyFailReason = {
+  customer_absent: 'customer_absent',
+  address_not_found: 'address_not_found',
+  customer_refused: 'customer_refused',
+  safety_risk: 'safety_risk',
+  store_fault: 'store_fault',
+  other: 'other',
+} as const;
+
+export type UpdateDeliveryStatusBody = {
+  action: UpdateDeliveryStatusBodyAction;
+  /** @maxLength 200 */
+  reason?: string;
+  /** @pattern ^\d{4}$ */
+  code?: string;
+  failReason?: UpdateDeliveryStatusBodyFailReason;
+  /**
+     * @minLength 10
+     * @maxLength 200
+     */
+  overrideReason?: string;
+};
+
+export type SetDeliveryCostBody = {
+  /** @minimum 0 */
+  costCents: number;
+  /** @maxLength 200 */
+  reason?: string;
+};
+
+export type MarkDeliveryPayoutsBody = {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  deliveryIds: string[];
+  paidOn: string;
+};
+
+export type MarkDeliveryPayouts200 = {
+  count: number;
+  total: Money;
 };
 
 export type AdminRefundOrderBody = {
@@ -8508,6 +8828,708 @@ export const previewDeliveryFee = async (params: PreviewDeliveryFeeParams, optio
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listCouriersResponse200 = {
+  data: ListCouriers200
+  status: 200
+}
+
+export type listCouriersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listCouriersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCouriersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCouriersResponseSuccess = (listCouriersResponse200) & {
+  headers: Headers;
+};
+export type listCouriersResponseError = (listCouriersResponse400 | listCouriersResponse401 | listCouriersResponse403) & {
+  headers: Headers;
+};
+
+export type listCouriersResponse = (listCouriersResponseSuccess | listCouriersResponseError)
+
+export const getListCouriersUrl = (params?: ListCouriersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/logistics/couriers?${stringifiedParams}` : `/v1/admin/logistics/couriers`
+}
+
+/**
+ * Operação e super admin cadastram; financeiro e suporte leem. Permissão de admin: `logistics:read`.
+ * @summary Motoboys (WB-231)
+ */
+export const listCouriers = async (params?: ListCouriersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCouriersResponse> => {
+
+  return apiFetch<listCouriersResponse>(getListCouriersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createCourierResponse201 = {
+  data: Courier
+  status: 201
+}
+
+export type createCourierResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createCourierResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createCourierResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createCourierResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createCourierResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createCourierResponseSuccess = (createCourierResponse201) & {
+  headers: Headers;
+};
+export type createCourierResponseError = (createCourierResponse400 | createCourierResponse401 | createCourierResponse403 | createCourierResponse409 | createCourierResponse422) & {
+  headers: Headers;
+};
+
+export type createCourierResponse = (createCourierResponseSuccess | createCourierResponseError)
+
+export const getCreateCourierUrl = () => {
+
+
+
+
+  return `/v1/admin/logistics/couriers`
+}
+
+/**
+ * Só nome, WhatsApp, observação e o aceite "documentos conferidos fora do app" (sem CPF nem upload). Telefone duplicado entre ativos: 409 `COURIER_PHONE_IN_USE`. Permissão: `logistics:write`. Auditado.
+ * @summary Cadastrar motoboy
+ */
+export const createCourier = async (courierRequest: CourierRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createCourierResponse> => {
+
+  return apiFetch<createCourierResponse>(getCreateCourierUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(courierRequest)
+  }
+);}
+
+
+
+export type updateCourierResponse200 = {
+  data: Courier
+  status: 200
+}
+
+export type updateCourierResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateCourierResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateCourierResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateCourierResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateCourierResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateCourierResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateCourierResponseSuccess = (updateCourierResponse200) & {
+  headers: Headers;
+};
+export type updateCourierResponseError = (updateCourierResponse400 | updateCourierResponse401 | updateCourierResponse403 | updateCourierResponse404 | updateCourierResponse409 | updateCourierResponse422) & {
+  headers: Headers;
+};
+
+export type updateCourierResponse = (updateCourierResponseSuccess | updateCourierResponseError)
+
+export const getUpdateCourierUrl = (courierId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/couriers/${courierId}`
+}
+
+/**
+ * Não há exclusão: só inativar. Inativar com corrida ativa: 409 `COURIER_HAS_ACTIVE_DELIVERIES` (reatribua primeiro). Antes e depois na auditoria. Permissão: `logistics:write`.
+ * @summary Editar ou inativar motoboy
+ */
+export const updateCourier = async (courierId: string,
+    courierPatchRequest: CourierPatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<updateCourierResponse> => {
+
+  return apiFetch<updateCourierResponse>(getUpdateCourierUrl(courierId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(courierPatchRequest)
+  }
+);}
+
+
+
+export type listDeliveriesResponse200 = {
+  data: ListDeliveries200
+  status: 200
+}
+
+export type listDeliveriesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listDeliveriesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listDeliveriesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listDeliveriesResponseSuccess = (listDeliveriesResponse200) & {
+  headers: Headers;
+};
+export type listDeliveriesResponseError = (listDeliveriesResponse400 | listDeliveriesResponse401 | listDeliveriesResponse403) & {
+  headers: Headers;
+};
+
+export type listDeliveriesResponse = (listDeliveriesResponseSuccess | listDeliveriesResponseError)
+
+export const getListDeliveriesUrl = (params?: ListDeliveriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/logistics/deliveries?${stringifiedParams}` : `/v1/admin/logistics/deliveries`
+}
+
+/**
+ * `tab=active` (padrão): mais antiga primeiro, a partir do horário de "pronto" (que não muda ao reatribuir), com `waitingMinutes` e `sla` (ok, long, late) pelos parâmetros `logistica_sla_atribuir_min` e `logistica_sla_atribuir_critico_min`. `tab=done`: concluídas hoje. Filtros no servidor. Permissão: `logistics:read`.
+ * @summary Fila de corridas (WB-230)
+ */
+export const listDeliveries = async (params?: ListDeliveriesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listDeliveriesResponse> => {
+
+  return apiFetch<listDeliveriesResponse>(getListDeliveriesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDeliveryResponse200 = {
+  data: DeliveryDetail
+  status: 200
+}
+
+export type getDeliveryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getDeliveryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getDeliveryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getDeliveryResponseSuccess = (getDeliveryResponse200) & {
+  headers: Headers;
+};
+export type getDeliveryResponseError = (getDeliveryResponse401 | getDeliveryResponse403 | getDeliveryResponse404) & {
+  headers: Headers;
+};
+
+export type getDeliveryResponse = (getDeliveryResponseSuccess | getDeliveryResponseError)
+
+export const getGetDeliveryUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}`
+}
+
+/**
+ * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD). Nunca devolve o código de entrega. Permissão: `logistics:read`.
+ * @summary Detalhe da corrida com a linha do tempo
+ */
+export const getDelivery = async (deliveryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getDeliveryResponse> => {
+
+  return apiFetch<getDeliveryResponse>(getGetDeliveryUrl(deliveryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type assignDeliveryResponse200 = {
+  data: DeliveryDetail
+  status: 200
+}
+
+export type assignDeliveryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type assignDeliveryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type assignDeliveryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type assignDeliveryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type assignDeliveryResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type assignDeliveryResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type assignDeliveryResponseSuccess = (assignDeliveryResponse200) & {
+  headers: Headers;
+};
+export type assignDeliveryResponseError = (assignDeliveryResponse400 | assignDeliveryResponse401 | assignDeliveryResponse403 | assignDeliveryResponse404 | assignDeliveryResponse409 | assignDeliveryResponse422) & {
+  headers: Headers;
+};
+
+export type assignDeliveryResponse = (assignDeliveryResponseSuccess | assignDeliveryResponseError)
+
+export const getAssignDeliveryUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/assign`
+}
+
+/**
+ * Dois operadores: vale o primeiro, o outro recebe 409 `DELIVERY_ALREADY_ASSIGNED`. Motoboy inativo: 422 `COURIER_INACTIVE`. Endereço incompleto: 422 `ADDRESS_INCOMPLETE` até enviar `addressConfirmed: true`. Permissão: `logistics:write`. Auditado.
+ * @summary Atribuir motoboy (PRONTA -> AGUARDANDO)
+ */
+export const assignDelivery = async (deliveryId: string,
+    assignDeliveryBody: AssignDeliveryBody, options?: Parameters<typeof apiFetch>[1]): Promise<assignDeliveryResponse> => {
+
+  return apiFetch<assignDeliveryResponse>(getAssignDeliveryUrl(deliveryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(assignDeliveryBody)
+  }
+);}
+
+
+
+export type getDeliveryWhatsappResponse200 = {
+  data: GetDeliveryWhatsapp200
+  status: 200
+}
+
+export type getDeliveryWhatsappResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getDeliveryWhatsappResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getDeliveryWhatsappResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getDeliveryWhatsappResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type getDeliveryWhatsappResponseSuccess = (getDeliveryWhatsappResponse200) & {
+  headers: Headers;
+};
+export type getDeliveryWhatsappResponseError = (getDeliveryWhatsappResponse401 | getDeliveryWhatsappResponse403 | getDeliveryWhatsappResponse404 | getDeliveryWhatsappResponse409) & {
+  headers: Headers;
+};
+
+export type getDeliveryWhatsappResponse = (getDeliveryWhatsappResponseSuccess | getDeliveryWhatsappResponseError)
+
+export const getGetDeliveryWhatsappUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/whatsapp`
+}
+
+/**
+ * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:read`.
+ * @summary Mensagem pronta e link wa.me para o motoboy
+ */
+export const getDeliveryWhatsapp = async (deliveryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getDeliveryWhatsappResponse> => {
+
+  return apiFetch<getDeliveryWhatsappResponse>(getGetDeliveryWhatsappUrl(deliveryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type markDeliveryWhatsappSentResponse204 = {
+  data: void
+  status: 204
+}
+
+export type markDeliveryWhatsappSentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type markDeliveryWhatsappSentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type markDeliveryWhatsappSentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type markDeliveryWhatsappSentResponseSuccess = (markDeliveryWhatsappSentResponse204) & {
+  headers: Headers;
+};
+export type markDeliveryWhatsappSentResponseError = (markDeliveryWhatsappSentResponse401 | markDeliveryWhatsappSentResponse403 | markDeliveryWhatsappSentResponse404) & {
+  headers: Headers;
+};
+
+export type markDeliveryWhatsappSentResponse = (markDeliveryWhatsappSentResponseSuccess | markDeliveryWhatsappSentResponseError)
+
+export const getMarkDeliveryWhatsappSentUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/whatsapp-sent`
+}
+
+/**
+ * Permissão: `logistics:write`.
+ * @summary Registrar que a mensagem foi enviada
+ */
+export const markDeliveryWhatsappSent = async (deliveryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<markDeliveryWhatsappSentResponse> => {
+
+  return apiFetch<markDeliveryWhatsappSentResponse>(getMarkDeliveryWhatsappSentUrl(deliveryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type updateDeliveryStatusResponse200 = {
+  data: DeliveryDetail
+  status: 200
+}
+
+export type updateDeliveryStatusResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateDeliveryStatusResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateDeliveryStatusResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateDeliveryStatusResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateDeliveryStatusResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateDeliveryStatusResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateDeliveryStatusResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type updateDeliveryStatusResponseSuccess = (updateDeliveryStatusResponse200) & {
+  headers: Headers;
+};
+export type updateDeliveryStatusResponseError = (updateDeliveryStatusResponse400 | updateDeliveryStatusResponse401 | updateDeliveryStatusResponse403 | updateDeliveryStatusResponse404 | updateDeliveryStatusResponse409 | updateDeliveryStatusResponse422 | updateDeliveryStatusResponse429) & {
+  headers: Headers;
+};
+
+export type updateDeliveryStatusResponse = (updateDeliveryStatusResponseSuccess | updateDeliveryStatusResponseError)
+
+export const getUpdateDeliveryStatusUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/status`
+}
+
+/**
+ * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. Permissão: `logistics:write`.
+ * @summary Avançar a corrida (RN-18)
+ */
+export const updateDeliveryStatus = async (deliveryId: string,
+    updateDeliveryStatusBody: UpdateDeliveryStatusBody, options?: Parameters<typeof apiFetch>[1]): Promise<updateDeliveryStatusResponse> => {
+
+  return apiFetch<updateDeliveryStatusResponse>(getUpdateDeliveryStatusUrl(deliveryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateDeliveryStatusBody)
+  }
+);}
+
+
+
+export type setDeliveryCostResponse200 = {
+  data: Delivery
+  status: 200
+}
+
+export type setDeliveryCostResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setDeliveryCostResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setDeliveryCostResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setDeliveryCostResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setDeliveryCostResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type setDeliveryCostResponseSuccess = (setDeliveryCostResponse200) & {
+  headers: Headers;
+};
+export type setDeliveryCostResponseError = (setDeliveryCostResponse400 | setDeliveryCostResponse401 | setDeliveryCostResponse403 | setDeliveryCostResponse404 | setDeliveryCostResponse409) & {
+  headers: Headers;
+};
+
+export type setDeliveryCostResponse = (setDeliveryCostResponseSuccess | setDeliveryCostResponseError)
+
+export const getSetDeliveryCostUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/cost`
+}
+
+/**
+ * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Permissão: `logistics:write`.
+ * @summary Custo pago ao motoboy (WB-239)
+ */
+export const setDeliveryCost = async (deliveryId: string,
+    setDeliveryCostBody: SetDeliveryCostBody, options?: Parameters<typeof apiFetch>[1]): Promise<setDeliveryCostResponse> => {
+
+  return apiFetch<setDeliveryCostResponse>(getSetDeliveryCostUrl(deliveryId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setDeliveryCostBody)
+  }
+);}
+
+
+
+export type markDeliveryPayoutsResponse200 = {
+  data: MarkDeliveryPayouts200
+  status: 200
+}
+
+export type markDeliveryPayoutsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type markDeliveryPayoutsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type markDeliveryPayoutsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type markDeliveryPayoutsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type markDeliveryPayoutsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type markDeliveryPayoutsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type markDeliveryPayoutsResponseSuccess = (markDeliveryPayoutsResponse200) & {
+  headers: Headers;
+};
+export type markDeliveryPayoutsResponseError = (markDeliveryPayoutsResponse400 | markDeliveryPayoutsResponse401 | markDeliveryPayoutsResponse403 | markDeliveryPayoutsResponse404 | markDeliveryPayoutsResponse409 | markDeliveryPayoutsResponse422) & {
+  headers: Headers;
+};
+
+export type markDeliveryPayoutsResponse = (markDeliveryPayoutsResponseSuccess | markDeliveryPayoutsResponseError)
+
+export const getMarkDeliveryPayoutsUrl = () => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/payouts`
+}
+
+/**
+ * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:write`.
+ * @summary Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
+ */
+export const markDeliveryPayouts = async (markDeliveryPayoutsBody: MarkDeliveryPayoutsBody, options?: Parameters<typeof apiFetch>[1]): Promise<markDeliveryPayoutsResponse> => {
+
+  return apiFetch<markDeliveryPayoutsResponse>(getMarkDeliveryPayoutsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(markDeliveryPayoutsBody)
   }
 );}
 

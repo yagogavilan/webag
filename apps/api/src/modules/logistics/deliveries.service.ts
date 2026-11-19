@@ -1,0 +1,347 @@
+import { randomInt } from 'node:crypto';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import type { RequestContext } from '../../platform/auth/decorators.js';
+import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
+import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
+import { safeErrorMessage } from '../../platform/logging/mask.js';
+import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { couriers, deliveries, deliveryEvents } from './db/schema.js';
+import { ACTIVE_STATUSES, canMove, isStoreFault, nextStatuses, TERMINAL_STATUSES, type DeliveryKind, type DeliveryStatus, type NotDeliveredReason } from './domain/state.js';
+import { buildCourierMessage, whatsappLink, type DeliveryMessageData } from './domain/whatsapp.js';
+
+export type Delivery = typeof deliveries.$inferSelect;
+export type DeliveryEvent = typeof deliveryEvents.$inferSelect;
+export type DeliveryActor = { id: string | null; role: string };
+
+/** Quem reage à corrida (o pedido, a troca) se registra aqui, sem o módulo de logística importar os deles (sem ciclo). */
+export interface DeliveryListener {
+  /** Mesma transação da mudança: falha aqui desfaz a transição. */
+  onDeliveryChange?(tx: Tx, delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void>;
+  /** Depois do commit (aviso ao cliente, tempo real): falha aqui não desfaz nada. */
+  afterDeliveryChange?(delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void>;
+}
+
+export interface CreateDeliveryInput {
+  kind?: DeliveryKind;
+  orderId: string;
+  exchangeId?: string | null;
+  storeId: string;
+  volumes?: number;
+  note?: string | null;
+  cityId?: string | null;
+  neighborhoodId?: string | null;
+  feeCents: number;
+  expectedCostCents: number;
+  /** Foto mínima para o despacho (ver `DeliveryMessageData`). */
+  contact: DeliveryMessageData;
+}
+
+export type DeliveryAction = 'confirm' | 'picked_up' | 'delivered' | 'not_delivered' | 'reattempt' | 'return_confirmed' | 'reassign' | 'cancel';
+const ACTION_TARGET: Record<DeliveryAction, DeliveryStatus> = {
+  confirm: 'courier_en_route',
+  picked_up: 'out_for_delivery',
+  delivered: 'delivered',
+  not_delivered: 'not_delivered',
+  reattempt: 'out_for_delivery',
+  return_confirmed: 'returned_to_store',
+  reassign: 'ready_for_collection',
+  cancel: 'cancelled',
+};
+const CODE_MAX_FAILS = 5;
+
+/**
+ * Corridas da Webag (L.3, DEC-036): fila, atribuição, estados, custo, WhatsApp e auditoria. Toda mudança grava evento
+ * (append-only) e auditoria na MESMA transação; quem depende da corrida (pedido, troca) reage por `DeliveryListener`.
+ */
+@Injectable()
+export class DeliveriesService {
+  private readonly logger = new Logger(DeliveriesService.name);
+  private readonly listeners: DeliveryListener[] = [];
+
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Db,
+    private readonly audit: AuditService,
+    private readonly flags: FeatureFlagsService,
+    private readonly params: ParametersService,
+  ) {}
+
+  registerListener(listener: DeliveryListener): void {
+    this.listeners.push(listener);
+  }
+
+  private actorOf(ctx: RequestContext): DeliveryActor {
+    return { id: ctx.principal?.userId ?? null, role: ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? 'system' };
+  }
+
+  private async notifyAfter(delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus, actor: DeliveryActor, reason: string | null): Promise<void> {
+    for (const listener of this.listeners) {
+      try {
+        await listener.afterDeliveryChange?.(delivery, from, to, actor, reason);
+      } catch (error) {
+        this.logger.warn(`gancho pós-commit da corrida ${delivery.id}: ${safeErrorMessage(error)}`);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ criação
+
+  /**
+   * Cria a corrida na transação de quem chama (o pedido ficando pronto). Idempotente por pedido (toque duplo em "pronto para
+   * coleta" não cria duas). O código de entrega nasce aqui quando a flag `codigo_entrega` está ligada.
+   */
+  async createInTx(tx: Tx, input: CreateDeliveryInput, ctx: RequestContext): Promise<{ delivery: Delivery; created: boolean }> {
+    const kind = input.kind ?? 'delivery';
+    const code = kind === 'delivery' && (await this.flags.isEnabled('codigo_entrega')) ? String(randomInt(0, 10_000)).padStart(4, '0') : null;
+    const [created] = await tx
+      .insert(deliveries)
+      .values({
+        kind,
+        orderId: input.orderId,
+        exchangeId: input.exchangeId ?? null,
+        storeId: input.storeId,
+        volumes: Math.max(1, Math.min(input.volumes ?? 1, 99)),
+        note: input.note?.slice(0, 100) ?? null,
+        cityId: input.cityId ?? null,
+        neighborhoodId: input.neighborhoodId ?? null,
+        feeCents: input.feeCents,
+        expectedCostCents: input.expectedCostCents,
+        contact: input.contact as unknown as Record<string, unknown>,
+        deliveryCode: code,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!created) {
+      const [existing] = await tx.select().from(deliveries).where(and(eq(deliveries.orderId, input.orderId), eq(deliveries.kind, kind), input.exchangeId ? eq(deliveries.exchangeId, input.exchangeId) : isNull(deliveries.exchangeId)));
+      if (!existing) throw new Error('corrida duplicada sem original');
+      return { delivery: existing, created: false };
+    }
+    const actor = this.actorOf(ctx);
+    await tx.insert(deliveryEvents).values({ deliveryId: created.id, fromStatus: null, toStatus: 'ready_for_collection', action: 'create', actorId: actor.id, actorRole: actor.role, meta: { kind, volumes: created.volumes } });
+    await this.audit.record(tx, ctx, { action: 'delivery.create', targetType: 'delivery', targetId: created.id, after: { kind, orderId: input.orderId, status: 'ready_for_collection' } });
+    for (const listener of this.listeners) await listener.onDeliveryChange?.(tx, created, null, 'ready_for_collection', actor, null);
+    return { delivery: created, created: true };
+  }
+
+  // ------------------------------------------------------------------ leitura
+
+  async get(id: string): Promise<Delivery> {
+    const [row] = await this.db.select().from(deliveries).where(eq(deliveries.id, id));
+    if (!row) throw errors.notFound('Corrida não encontrada.');
+    return row;
+  }
+
+  async events(id: string): Promise<DeliveryEvent[]> {
+    return this.db.select().from(deliveryEvents).where(eq(deliveryEvents.deliveryId, id)).orderBy(asc(deliveryEvents.createdAt), asc(deliveryEvents.id));
+  }
+
+  /**
+   * Fila (WB-230): `active` = mais antiga primeiro (do horário de "pronto", que NÃO muda ao reatribuir); `done` = concluídas
+   * hoje, mais novas primeiro. Filtros no servidor; paginada por cursor.
+   */
+  async list(query: { tab?: 'active' | 'done'; status?: DeliveryStatus; kind?: DeliveryKind; courierId?: string; storeId?: string; cityId?: string; cursor?: string; limit?: unknown }): Promise<Page<Delivery & { waitingMinutes: number | null; sla: 'ok' | 'long' | 'late' | null }>> {
+    const limit = parseLimit(query.limit);
+    const tab = query.tab ?? 'active';
+    const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
+    const startOfDay = new Date(Date.now() - 3 * 3_600_000);
+    startOfDay.setUTCHours(3, 0, 0, 0); // meia-noite de Brasília (UTC-3)
+    const [slaWarn, slaCritical] = await Promise.all([this.params.getNumber('logistica_sla_atribuir_min'), this.params.getNumber('logistica_sla_atribuir_critico_min')]);
+    const base = and(
+      tab === 'active' ? inArray(deliveries.status, [...ACTIVE_STATUSES]) : and(inArray(deliveries.status, [...TERMINAL_STATUSES]), gte(deliveries.updatedAt, startOfDay)),
+      query.status ? eq(deliveries.status, query.status) : undefined,
+      query.kind ? eq(deliveries.kind, query.kind) : undefined,
+      query.courierId ? eq(deliveries.courierId, query.courierId) : undefined,
+      query.storeId ? eq(deliveries.storeId, query.storeId) : undefined,
+      query.cityId ? eq(deliveries.cityId, query.cityId) : undefined,
+    );
+    const column = tab === 'active' ? deliveries.readyAt : deliveries.updatedAt;
+    const after = cursor ? (tab === 'active' ? sql`(date_trunc('milliseconds', ${column}), ${deliveries.id}) > (${new Date(cursor.at).toISOString()}::timestamptz, ${cursor.id}::uuid)` : sql`(date_trunc('milliseconds', ${column}), ${deliveries.id}) < (${new Date(cursor.at).toISOString()}::timestamptz, ${cursor.id}::uuid)`) : undefined;
+    const rows = await this.db
+      .select()
+      .from(deliveries)
+      .where(and(base, after))
+      .orderBy(...(tab === 'active' ? [sql`date_trunc('milliseconds', ${column}) asc`, asc(deliveries.id)] : [sql`date_trunc('milliseconds', ${column}) desc`, desc(deliveries.id)]))
+      .limit(limit + 1);
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    const now = Date.now();
+    return {
+      data: page.map((d) => {
+        const waiting = d.status === 'ready_for_collection' ? Math.floor((now - d.readyAt.getTime()) / 60_000) : null;
+        return { ...d, waitingMinutes: waiting, sla: waiting === null ? null : waiting >= slaCritical ? 'late' : waiting >= slaWarn ? 'long' : 'ok' };
+      }),
+      nextCursor: rows.length > limit && last ? encodeCursor({ at: (tab === 'active' ? last.readyAt : last.updatedAt).toISOString(), id: last.id }) : null,
+    };
+  }
+
+  // ------------------------------------------------------------------ atribuição
+
+  /** Atribui o motoboy: PRONTA -> AGUARDANDO. Dois operadores: vale o primeiro, o outro recebe 409 com quem atribuiu (WB-232 C8). */
+  async assign(id: string, courierId: string, input: { addressConfirmed?: boolean }, ctx: RequestContext): Promise<Delivery> {
+    const actor = this.actorOf(ctx);
+    const result = await this.db.transaction(async (tx) => {
+      const [courier] = await tx.select().from(couriers).where(eq(couriers.id, courierId));
+      if (!courier || !courier.active) throw errors.unprocessable('COURIER_INACTIVE', 'Motoboy indisponível', { detail: 'Escolha um motoboy ativo.' });
+      const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
+      if (!current) throw errors.notFound('Corrida não encontrada.');
+      if (current.status !== 'ready_for_collection') {
+        if (current.courierId && WITH_COURIER_STATUSES.has(current.status)) {
+          const [who] = await tx.select({ name: couriers.name }).from(couriers).where(eq(couriers.id, current.courierId));
+          const [by] = await tx.select({ actorRole: deliveryEvents.actorRole, actorId: deliveryEvents.actorId }).from(deliveryEvents).where(and(eq(deliveryEvents.deliveryId, id), eq(deliveryEvents.action, 'assign'))).orderBy(desc(deliveryEvents.createdAt)).limit(1);
+          throw errors.conflict('DELIVERY_ALREADY_ASSIGNED', 'Corrida já atribuída', `Já atribuído a ${who?.name ?? 'outro motoboy'}${by?.actorRole ? ` por ${by.actorRole}` : ''}.`);
+        }
+        throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', `A corrida está em ${current.status}.`);
+      }
+      // Endereço incompleto: o operador confirma com o cliente antes de enviar (WB-232 C6).
+      const contact = current.contact as unknown as DeliveryMessageData | null;
+      if (contact && !addressLooksComplete(contact.dropoffAddress) && !input.addressConfirmed) {
+        throw errors.unprocessable('ADDRESS_INCOMPLETE', 'Endereço incompleto', { detail: 'Endereço incompleto. Confirme com o cliente e marque "Já confirmei".' });
+      }
+      const [busy] = await tx.select({ n: sql<number>`count(*)::int` }).from(deliveries).where(and(eq(deliveries.courierId, courierId), inArray(deliveries.status, ['awaiting_courier', 'courier_en_route', 'out_for_delivery', 'not_delivered'])));
+      const [updated] = await tx.update(deliveries).set({ status: 'awaiting_courier', courierId, whatsappSentAt: null, updatedAt: new Date() }).where(and(eq(deliveries.id, id), eq(deliveries.status, 'ready_for_collection'))).returning();
+      if (!updated) throw errors.conflict('DELIVERY_ALREADY_ASSIGNED', 'Corrida já atribuída', 'Esta corrida acabou de ser atribuída por outra pessoa.');
+      await this.record(tx, ctx, actor, current, updated, 'assign', null, { courierId, courierName: courier.name, courierActiveDeliveries: busy?.n ?? 0, addressConfirmed: input.addressConfirmed === true });
+      return { updated, busy: busy?.n ?? 0 };
+    });
+    await this.notifyAfter(result.updated, 'ready_for_collection', 'awaiting_courier', actor, null);
+    return result.updated;
+  }
+
+  /** Texto e link do WhatsApp (só dados mínimos). O telefone do cliente só sai com a corrida atribuída e ativa. */
+  async whatsapp(id: string): Promise<{ courierPhone: string; message: string; link: string; courierActiveDeliveries: number }> {
+    const delivery = await this.get(id);
+    if (!delivery.courierId || !ACTIVE_STATUSES.includes(delivery.status) || !delivery.contact) throw errors.conflict('DELIVERY_NOT_ASSIGNED', 'Corrida sem motoboy', 'Atribua um motoboy antes de enviar a mensagem.');
+    const [courier] = await this.db.select().from(couriers).where(eq(couriers.id, delivery.courierId));
+    if (!courier) throw errors.notFound('Motoboy não encontrado.');
+    const [busy] = await this.db.select({ n: sql<number>`count(*)::int` }).from(deliveries).where(and(eq(deliveries.courierId, courier.id), inArray(deliveries.status, ['awaiting_courier', 'courier_en_route', 'out_for_delivery', 'not_delivered'])));
+    const message = buildCourierMessage({ ...(delivery.contact as unknown as DeliveryMessageData), volumes: delivery.volumes, note: delivery.note, kind: delivery.kind });
+    return { courierPhone: courier.phone, message, link: whatsappLink(courier.phone, message), courierActiveDeliveries: busy?.n ?? 0 };
+  }
+
+  /** Registra que a mensagem foi enviada (`delivery_whatsapp_sent`, WB-232 C2). */
+  async markWhatsappSent(id: string, ctx: RequestContext): Promise<void> {
+    const actor = this.actorOf(ctx);
+    await this.db.transaction(async (tx) => {
+      const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
+      if (!current) throw errors.notFound('Corrida não encontrada.');
+      await tx.update(deliveries).set({ whatsappSentAt: new Date() }).where(eq(deliveries.id, id));
+      await tx.insert(deliveryEvents).values({ deliveryId: id, fromStatus: current.status, toStatus: current.status, action: 'whatsapp_sent', actorId: actor.id, actorRole: actor.role });
+      await this.audit.record(tx, ctx, { action: 'delivery.whatsapp_sent', targetType: 'delivery', targetId: id });
+    });
+  }
+
+  // ------------------------------------------------------------------ estados
+
+  /**
+   * Avança a corrida (WB-233). Só as transições válidas de RN-18; voltar (reatribuir, cancelar) exige motivo. "Entregue" confere o
+   * código de entrega quando a flag está ligada (5 erros bloqueiam; super admin conclui com motivo, auditado).
+   */
+  async act(id: string, action: DeliveryAction, input: { reason?: string | undefined; code?: string | undefined; failReason?: NotDeliveredReason | undefined; overrideReason?: string | undefined }, ctx: RequestContext): Promise<Delivery> {
+    const actor = this.actorOf(ctx);
+    const to = ACTION_TARGET[action];
+    if ((action === 'reassign' || action === 'cancel') && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Informe o motivo.' }]);
+    if (action === 'not_delivered' && !input.failReason) throw errors.validation([{ field: 'failReason', message: 'Informe o motivo da falha.' }]);
+    if (action === 'not_delivered' && input.failReason === 'other' && !input.reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Descreva o motivo.' }]);
+
+    const before = await this.get(id);
+    if (!canMove(before.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', `A corrida não pode ir de ${before.status} para ${to}.`);
+    if (action === 'delivered') await this.checkCode(before, input, actor);
+    if (action === 'reattempt') {
+      const max = await this.params.getNumber('entrega_reentrega_max');
+      if (before.attempts > max) throw errors.conflict('REATTEMPT_LIMIT', 'Limite de reentregas', 'O limite de reentregas sem custo foi atingido. Ofereça nova tentativa paga ou devolva à loja.');
+    }
+
+    const result = await this.db.transaction(async (tx) => {
+      const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
+      if (!current || !canMove(current.status, to)) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
+      const set: Partial<typeof deliveries.$inferInsert> = { status: to, updatedAt: new Date() };
+      if (action === 'reassign') {
+        set.courierId = null;
+        set.whatsappSentAt = null;
+      }
+      if (action === 'not_delivered') {
+        set.failReason = input.failReason!;
+        set.failNote = input.reason?.slice(0, 200) ?? null;
+      }
+      if (action === 'reattempt') set.attempts = current.attempts + 1;
+      if (action === 'delivered') set.deliveryCode = null; // o código de uso único não vale depois da entrega
+      const [updated] = await tx.update(deliveries).set(set).where(and(eq(deliveries.id, id), eq(deliveries.status, current.status))).returning();
+      if (!updated) throw errors.conflict('INVALID_DELIVERY_TRANSITION', 'Transição não permitida', 'A corrida mudou enquanto você agia. Recarregue.');
+      const meta: Record<string, unknown> = {
+        ...(action === 'not_delivered' ? { failReason: input.failReason, storeFault: isStoreFault(input.failReason!) } : {}),
+        ...(action === 'reassign' ? { previousCourierId: current.courierId, keepsReadyAt: current.readyAt.toISOString() } : {}),
+        ...(action === 'delivered' && input.overrideReason ? { codeOverrideReason: input.overrideReason } : {}),
+      };
+      await this.record(tx, ctx, actor, current, updated, action, input.reason ?? null, meta);
+      return updated;
+    });
+    await this.notifyAfter(result, before.status, to, actor, input.reason ?? null);
+    return result;
+  }
+
+  private async checkCode(delivery: Delivery, input: { code?: string | undefined; overrideReason?: string | undefined }, actor: DeliveryActor): Promise<void> {
+    if (!delivery.deliveryCode || delivery.kind !== 'delivery') return; // flag desligada ou corrida sem código
+    if (input.overrideReason?.trim()) {
+      if (actor.role !== 'super_admin') throw new AppError(403, 'SUPER_ADMIN_REQUIRED', 'Só o super admin conclui sem o código', { detail: 'Peça ao super admin para concluir sem o código.' });
+      return;
+    }
+    if (delivery.codeFailures >= CODE_MAX_FAILS) throw new AppError(429, 'DELIVERY_CODE_LOCKED', 'Código bloqueado', { detail: 'Muitos códigos errados. Só o super admin conclui esta entrega.' });
+    if (input.code && input.code === delivery.deliveryCode) return;
+    const [bumped] = await this.db.update(deliveries).set({ codeFailures: sql`${deliveries.codeFailures} + 1` }).where(eq(deliveries.id, delivery.id)).returning({ fails: deliveries.codeFailures });
+    throw errors.unprocessable('DELIVERY_CODE_INVALID', 'Código incorreto', { detail: `Código incorreto (${bumped?.fails ?? 0} de ${CODE_MAX_FAILS}).` });
+  }
+
+  private async record(tx: Tx, ctx: RequestContext, actor: DeliveryActor, before: Delivery, after: Delivery, action: string, reason: string | null, meta: Record<string, unknown>): Promise<void> {
+    await tx.insert(deliveryEvents).values({ deliveryId: after.id, fromStatus: before.status, toStatus: after.status, action, actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta });
+    await this.audit.record(tx, ctx, { action: `delivery.${action}`, targetType: 'delivery', targetId: after.id, before: { status: before.status, courierId: before.courierId }, after: { status: after.status, courierId: after.courierId }, ...(reason ? { reason } : {}) });
+    for (const listener of this.listeners) await listener.onDeliveryChange?.(tx, after, before.status, after.status, actor, reason);
+  }
+
+  nextActions(delivery: Pick<Delivery, 'status'>): readonly DeliveryStatus[] {
+    return nextStatuses(delivery.status);
+  }
+
+  // ------------------------------------------------------------------ custo (WB-239)
+
+  /** Custo pago ao motoboy: a correção exige motivo e preserva o valor anterior (evento + auditoria). */
+  async setCost(id: string, costCents: number, reason: string | undefined, ctx: RequestContext): Promise<Delivery> {
+    const actor = this.actorOf(ctx);
+    return this.db.transaction(async (tx) => {
+      const [current] = await tx.select().from(deliveries).where(eq(deliveries.id, id)).for('update');
+      if (!current) throw errors.notFound('Corrida não encontrada.');
+      if (!['delivered', 'not_delivered', 'returned_to_store', 'cancelled'].includes(current.status)) throw errors.conflict('DELIVERY_NOT_FINISHED', 'Corrida ainda em andamento', 'O custo é lançado quando a corrida termina.');
+      if (current.costCents !== null && !reason?.trim()) throw errors.validation([{ field: 'reason', message: 'Informe o motivo da correção.' }]);
+      if (current.costPaidAt) throw errors.conflict('COST_ALREADY_PAID', 'Custo já pago', 'Este custo já foi marcado como pago.');
+      const [updated] = await tx.update(deliveries).set({ costCents, costRegisteredBy: actor.id, costRegisteredAt: new Date(), updatedAt: new Date() }).where(eq(deliveries.id, id)).returning();
+      await tx.insert(deliveryEvents).values({ deliveryId: id, fromStatus: current.status, toStatus: current.status, action: current.costCents === null ? 'cost_set' : 'cost_corrected', actorId: actor.id, actorRole: actor.role, reason: reason?.slice(0, 300) ?? null, meta: { previousCostCents: current.costCents, costCents } });
+      await this.audit.record(tx, ctx, { action: 'delivery.cost', targetType: 'delivery', targetId: id, before: { costCents: current.costCents }, after: { costCents }, ...(reason ? { reason } : {}) });
+      return updated!;
+    });
+  }
+
+  /** "Marcar como pago": controle do PIX feito fora do app para um lote de corridas de UM motoboy (WB-239 C4). */
+  async markPaid(deliveryIds: string[], paidOn: Date, ctx: RequestContext): Promise<{ count: number; totalCents: number }> {
+    const actor = this.actorOf(ctx);
+    return this.db.transaction(async (tx) => {
+      const rows = await tx.select().from(deliveries).where(inArray(deliveries.id, deliveryIds)).for('update');
+      if (rows.length !== deliveryIds.length) throw errors.notFound('Corrida não encontrada.');
+      if (new Set(rows.map((r) => r.courierId)).size !== 1 || rows.some((r) => !r.courierId)) throw errors.unprocessable('PAYOUT_MIXED_COURIERS', 'Lote de motoboys diferentes', { detail: 'Marque como pago um lote de corridas de um único motoboy.' });
+      if (rows.some((r) => r.costCents === null)) throw errors.unprocessable('PAYOUT_COST_MISSING', 'Corrida sem custo', { detail: 'Registre o custo de todas as corridas antes de marcar como pago.' });
+      if (rows.some((r) => r.costPaidAt)) throw errors.conflict('COST_ALREADY_PAID', 'Custo já pago', 'Há corrida deste lote já marcada como paga.');
+      await tx.update(deliveries).set({ costPaidAt: paidOn, updatedAt: new Date() }).where(inArray(deliveries.id, deliveryIds));
+      const totalCents = rows.reduce((sum, r) => sum + (r.costCents ?? 0), 0);
+      for (const row of rows) await tx.insert(deliveryEvents).values({ deliveryId: row.id, fromStatus: row.status, toStatus: row.status, action: 'cost_paid', actorId: actor.id, actorRole: actor.role, meta: { paidOn: paidOn.toISOString(), costCents: row.costCents } });
+      await this.audit.record(tx, ctx, { action: 'delivery.cost_paid', targetType: 'courier', targetId: rows[0]!.courierId!, after: { deliveryIds, paidOn: paidOn.toISOString(), totalCents } });
+      return { count: rows.length, totalCents };
+    });
+  }
+}
+
+const WITH_COURIER_STATUSES: ReadonlySet<DeliveryStatus> = new Set(['awaiting_courier', 'courier_en_route', 'out_for_delivery', 'not_delivered']);
+
+/** "Rua, nº, ..., bairro, cidade": precisa de ao menos rua, número e bairro (3 partes com o número). */
+export function addressLooksComplete(address: string): boolean {
+  const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 4 && parts.some((p) => /\d/.test(p));
+}

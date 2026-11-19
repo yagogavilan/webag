@@ -1653,6 +1653,351 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/couriers:
+    get:
+      tags: [logistics]
+      operationId: listCouriers
+      summary: Motoboys (WB-231)
+      description: "Operação e super admin cadastram; financeiro e suporte leem. Permissão de admin: `logistics:read`."
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 60 } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Motoboys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Courier' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [logistics]
+      operationId: createCourier
+      summary: Cadastrar motoboy
+      description: "Só nome, WhatsApp, observação e o aceite \"documentos conferidos fora do app\" (sem CPF nem upload). Telefone duplicado entre ativos: 409 `COURIER_PHONE_IN_USE`. Permissão: `logistics:write`. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourierRequest'
+      responses:
+        '201':
+          description: Motoboy criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Courier'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/couriers/{courierId}:
+    patch:
+      tags: [logistics]
+      operationId: updateCourier
+      summary: Editar ou inativar motoboy
+      description: "Não há exclusão: só inativar. Inativar com corrida ativa: 409 `COURIER_HAS_ACTIVE_DELIVERIES` (reatribua primeiro). Antes e depois na auditoria. Permissão: `logistics:write`."
+      parameters:
+        - { name: courierId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourierPatchRequest'
+      responses:
+        '200':
+          description: Motoboy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Courier'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries:
+    get:
+      tags: [logistics]
+      operationId: listDeliveries
+      summary: Fila de corridas (WB-230)
+      description: "`tab=active` (padrão): mais antiga primeiro, a partir do horário de \"pronto\" (que não muda ao reatribuir), com `waitingMinutes` e `sla` (ok, long, late) pelos parâmetros `logistica_sla_atribuir_min` e `logistica_sla_atribuir_critico_min`. `tab=done`: concluídas hoje. Filtros no servidor. Permissão: `logistics:read`."
+      parameters:
+        - { name: tab, in: query, schema: { type: string, enum: [active, done] } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/DeliveryStatus' } }
+        - { name: kind, in: query, schema: { type: string, enum: [delivery, exchange_pickup, exchange_return] } }
+        - { name: courierId, in: query, schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Corridas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Delivery' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}:
+    get:
+      tags: [logistics]
+      operationId: getDelivery
+      summary: Detalhe da corrida com a linha do tempo
+      description: "Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD). Nunca devolve o código de entrega. Permissão: `logistics:read`."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}/assign:
+    post:
+      tags: [logistics]
+      operationId: assignDelivery
+      summary: Atribuir motoboy (PRONTA -> AGUARDANDO)
+      description: "Dois operadores: vale o primeiro, o outro recebe 409 `DELIVERY_ALREADY_ASSIGNED`. Motoboy inativo: 422 `COURIER_INACTIVE`. Endereço incompleto: 422 `ADDRESS_INCOMPLETE` até enviar `addressConfirmed: true`. Permissão: `logistics:write`. Auditado."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [courierId]
+              properties:
+                courierId: { type: string, format: uuid }
+                addressConfirmed: { type: boolean }
+      responses:
+        '200':
+          description: Corrida atribuída
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}/whatsapp:
+    get:
+      tags: [logistics]
+      operationId: getDeliveryWhatsapp
+      summary: Mensagem pronta e link wa.me para o motoboy
+      description: "Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:read`."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Mensagem
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [courierPhone, message, link, courierActiveDeliveries]
+                properties:
+                  courierPhone: { type: string }
+                  message: { type: string }
+                  link: { type: string }
+                  courierActiveDeliveries: { type: integer, description: 'Corridas ativas do motoboy (aviso "Já tem 2 corridas ativas").' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}/whatsapp-sent:
+    post:
+      tags: [logistics]
+      operationId: markDeliveryWhatsappSent
+      summary: Registrar que a mensagem foi enviada
+      description: "Permissão: `logistics:write`."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Registrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}/status:
+    post:
+      tags: [logistics]
+      operationId: updateDeliveryStatus
+      summary: Avançar a corrida (RN-18)
+      description: "`action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. Permissão: `logistics:write`."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action: { type: string, enum: [confirm, picked_up, delivered, not_delivered, reattempt, return_confirmed, reassign, cancel] }
+                reason: { type: string, maxLength: 200 }
+                code: { type: string, pattern: '^\d{4}$' }
+                failReason: { type: string, enum: [customer_absent, address_not_found, customer_refused, safety_risk, store_fault, other] }
+                overrideReason: { type: string, minLength: 10, maxLength: 200 }
+      responses:
+        '200':
+          description: Corrida atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/{deliveryId}/cost:
+    put:
+      tags: [logistics]
+      operationId: setDeliveryCost
+      summary: Custo pago ao motoboy (WB-239)
+      description: "Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Permissão: `logistics:write`."
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [costCents]
+              properties:
+                costCents: { type: integer, minimum: 0 }
+                reason: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/deliveries/payouts:
+    post:
+      tags: [logistics]
+      operationId: markDeliveryPayouts
+      summary: Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
+      description: "O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:write`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deliveryIds, paidOn]
+              properties:
+                deliveryIds: { type: array, minItems: 1, maxItems: 100, items: { type: string, format: uuid } }
+                paidOn: { type: string, format: date }
+      responses:
+        '200':
+          description: Lote pago
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, total]
+                properties:
+                  count: { type: integer }
+                  total: { $ref: '#/components/schemas/Money' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/orders/{orderId}/refunds:
     post:
       tags: [orders]
@@ -5920,6 +6265,93 @@ components:
         details: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
+    DeliveryStatus:
+      type: string
+      enum: [ready_for_collection, awaiting_courier, courier_en_route, out_for_delivery, delivered, not_delivered, returned_to_store, cancelled]
+    Courier:
+      type: object
+      required: [id, name, phone, note, active, documentsCheckedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string, description: 'Formato internacional sem +, pronto para wa.me.' }
+        note: { type: [string, 'null'] }
+        active: { type: boolean }
+        documentsCheckedAt: { type: string, format: date-time }
+        deliveriesLast7Days: { type: integer }
+        busyNow: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    CourierRequest:
+      type: object
+      additionalProperties: false
+      required: [name, phone, documentsChecked]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        phone: { type: string, description: 'WhatsApp com DDD.' }
+        note: { type: [string, 'null'], maxLength: 100 }
+        documentsChecked: { type: boolean, description: 'Aceite interno: documentos conferidos fora do app.' }
+    CourierPatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        phone: { type: string }
+        note: { type: [string, 'null'], maxLength: 100 }
+        active: { type: boolean }
+    Delivery:
+      type: object
+      required: [id, kind, orderId, storeId, status, readyAt, courier, volumes, fee, expectedCost, cost, attempts, allowedActions, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [delivery, exchange_pickup, exchange_return] }
+        orderId: { type: string, format: uuid }
+        orderNumber: { type: [string, 'null'] }
+        storeId: { type: string, format: uuid }
+        storeName: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/DeliveryStatus' }
+        readyAt: { type: string, format: date-time }
+        waitingMinutes: { type: [integer, 'null'] }
+        sla: { type: [string, 'null'], enum: [ok, long, late, null] }
+        courier: { type: [object, 'null'], properties: { id: { type: string, format: uuid }, name: { type: [string, 'null'] } } }
+        volumes: { type: integer }
+        note: { type: [string, 'null'] }
+        destination: { type: [string, 'null'], description: 'Bairro e cidade.' }
+        fee: { $ref: '#/components/schemas/Money' }
+        expectedCost: { $ref: '#/components/schemas/Money' }
+        cost: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        costPaidAt: { type: [string, 'null'], format: date-time }
+        attempts: { type: integer }
+        failReason: { type: [string, 'null'] }
+        whatsappSentAt: { type: [string, 'null'], format: date-time }
+        codeRequired: { type: boolean }
+        allowedActions: { type: array, items: { type: string, enum: [assign, confirm, picked_up, delivered, not_delivered, reattempt, return_confirmed, reassign, cancel] } }
+        updatedAt: { type: string, format: date-time }
+    DeliveryDetail:
+      allOf:
+        - $ref: '#/components/schemas/Delivery'
+        - type: object
+          properties:
+            contact:
+              type: object
+              description: 'Só com a corrida ativa (LGPD).'
+              properties:
+                pickupAddress: { type: [string, 'null'] }
+                storePhone: { type: [string, 'null'] }
+                dropoffAddress: { type: [string, 'null'] }
+                customerFirstName: { type: [string, 'null'] }
+                customerPhone: { type: [string, 'null'] }
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  from: { type: [string, 'null'] }
+                  to: { type: string }
+                  action: { type: string }
+                  actorRole: { type: [string, 'null'] }
+                  reason: { type: [string, 'null'] }
+                  at: { type: string, format: date-time }
     DeliveryFeeTier:
       type: object
       required: [fromM, toM, feeCents, exchangeFeeCents, expectedCostCents, etaMinutes]

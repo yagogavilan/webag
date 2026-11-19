@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { users } from '../../identity/db/schema.js';
+import { DELIVERY_KINDS, DELIVERY_STATUSES, NOT_DELIVERED_REASONS } from '../domain/state.js';
 
 export const FEE_SCOPE_TYPES = ['default', 'city', 'neighborhood'] as const;
 
@@ -40,4 +41,96 @@ export const deliveryFeeTiers = pgTable(
     etaMinutes: integer().notNull().default(0),
   },
   (t) => [uniqueIndex('delivery_fee_tiers_position_uq').on(t.tableId, t.position)],
+);
+
+/**
+ * Motoboy (DEC-036, WB-231): terceiro autônomo que age por WhatsApp. Minimização (LGPD): só nome, telefone (WhatsApp), observação e
+ * o aceite interno de "documentos conferidos fora do app" com a data. Sem CPF, sem upload de documento. Não há exclusão: só
+ * inativar (histórico e auditoria ficam).
+ */
+export const couriers = pgTable(
+  'couriers',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    name: text().notNull(),
+    /** Formato internacional sem `+` (`5511988887777`), pronto para `wa.me`. */
+    phone: text().notNull(),
+    note: text(),
+    active: boolean().notNull().default(true),
+    documentsCheckedAt: timestamp({ withTimezone: true }).notNull(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('couriers_phone_active_uq').on(t.phone).where(sql`${t.active}`)],
+);
+
+/**
+ * Corrida (L.3): uma por pedido de entrega (`kind = delivery`, único por pedido) e uma por coleta/reentrega de troca.
+ * O `contact` é a FOTO mínima para o despacho (loja, endereços, 1º nome e telefone do cliente); some do painel depois de
+ * concluída (`pii_cleared_at`, retenção).
+ */
+export const deliveries = pgTable(
+  'deliveries',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    kind: text({ enum: DELIVERY_KINDS }).notNull().default('delivery'),
+    /** Pedido da corrida (`delivery`) ou da troca (`exchange_*`, com `exchange_id`). */
+    orderId: uuid().notNull(),
+    exchangeId: uuid(),
+    storeId: uuid().notNull(),
+    status: text({ enum: DELIVERY_STATUSES }).notNull().default('ready_for_collection'),
+    /** Horário em que ficou pronta: base da fila e do SLA, e continua o mesmo ao reatribuir. */
+    readyAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    courierId: uuid().references(() => couriers.id),
+    volumes: integer().notNull().default(1),
+    note: text(),
+    cityId: uuid(),
+    neighborhoodId: uuid(),
+    /** Taxa cobrada do cliente e custo previsto da faixa (snapshot); o custo real é lançado pela operação. */
+    feeCents: integer().notNull().default(0),
+    expectedCostCents: integer().notNull().default(0),
+    costCents: integer(),
+    costRegisteredBy: uuid().references(() => users.id),
+    costRegisteredAt: timestamp({ withTimezone: true }),
+    costPaidAt: timestamp({ withTimezone: true }),
+    contact: jsonb().$type<Record<string, unknown>>(),
+    piiClearedAt: timestamp({ withTimezone: true }),
+    /** Código de entrega de 4 dígitos (WB-226): o cliente informa ao motoboy; o admin digita para concluir. */
+    deliveryCode: text(),
+    codeFailures: integer().notNull().default(0),
+    attempts: integer().notNull().default(1),
+    whatsappSentAt: timestamp({ withTimezone: true }),
+    failReason: text({ enum: NOT_DELIVERED_REASONS }),
+    failNote: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Uma entrega por pedido (toque duplo em "pronto para coleta" não cria duas, WB-229 C4).
+    uniqueIndex('deliveries_order_delivery_uq').on(t.orderId).where(sql`${t.kind} = 'delivery'`),
+    index('deliveries_queue_idx').on(t.status, t.readyAt),
+    index('deliveries_courier_idx').on(t.courierId, t.status),
+    index('deliveries_store_idx').on(t.storeId),
+  ],
+);
+
+/** Histórico append-only da corrida: estado, ator, motivo e valores anteriores (WB-233 C5, WB-239 C3). */
+export const deliveryEvents = pgTable(
+  'delivery_events',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    deliveryId: uuid()
+      .notNull()
+      .references(() => deliveries.id),
+    fromStatus: text({ enum: DELIVERY_STATUSES }),
+    toStatus: text({ enum: DELIVERY_STATUSES }).notNull(),
+    action: text().notNull(),
+    actorId: uuid(),
+    actorRole: text(),
+    reason: text(),
+    meta: jsonb().$type<Record<string, unknown>>(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('delivery_events_delivery_idx').on(t.deliveryId, t.createdAt)],
 );

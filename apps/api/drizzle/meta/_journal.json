@@ -162,6 +162,13 @@
       "when": 1795048778212,
       "tag": "0022_l1_order_delivery_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795050733561,
+      "tag": "0023_l3_logistics",
+      "breakpoints": true
     }
   ]
 }

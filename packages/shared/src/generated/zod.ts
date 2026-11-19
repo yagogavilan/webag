@@ -1725,6 +1725,497 @@ export const PreviewDeliveryFeeResponse = zod.object({
 
 
 /**
+ * Operação e super admin cadastram; financeiro e suporte leem. Permissão de admin: `logistics:read`.
+ * @summary Motoboys (WB-231)
+ */
+export const listCouriersQueryQMax = 60;
+
+export const listCouriersQueryCursorMax = 200;
+
+export const listCouriersQueryLimitDefault = 20;
+export const listCouriersQueryLimitMax = 50;
+
+
+
+export const ListCouriersQueryParams = zod.object({
+  "q": zod.string().max(listCouriersQueryQMax).optional(),
+  "active": zod.boolean().optional(),
+  "cursor": zod.string().max(listCouriersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listCouriersQueryLimitMax).default(listCouriersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListCouriersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "phone": zod.string().describe('Formato internacional sem +, pronto para wa.me.'),
+  "note": zod.string().nullable(),
+  "active": zod.boolean(),
+  "documentsCheckedAt": zod.iso.datetime({"offset":true}),
+  "deliveriesLast7Days": zod.int().optional(),
+  "busyNow": zod.boolean().optional(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Só nome, WhatsApp, observação e o aceite "documentos conferidos fora do app" (sem CPF nem upload). Telefone duplicado entre ativos: 409 `COURIER_PHONE_IN_USE`. Permissão: `logistics:write`. Auditado.
+ * @summary Cadastrar motoboy
+ */
+export const createCourierBodyNameMin = 2;
+export const createCourierBodyNameMax = 60;
+
+export const createCourierBodyNoteMax = 100;
+
+
+
+export const CreateCourierBody = zod.object({
+  "name": zod.string().min(createCourierBodyNameMin).max(createCourierBodyNameMax),
+  "phone": zod.string().describe('WhatsApp com DDD.'),
+  "note": zod.string().max(createCourierBodyNoteMax).nullish(),
+  "documentsChecked": zod.boolean().describe('Aceite interno: documentos conferidos fora do app.')
+})
+
+export const CreateCourierResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "phone": zod.string().describe('Formato internacional sem +, pronto para wa.me.'),
+  "note": zod.string().nullable(),
+  "active": zod.boolean(),
+  "documentsCheckedAt": zod.iso.datetime({"offset":true}),
+  "deliveriesLast7Days": zod.int().optional(),
+  "busyNow": zod.boolean().optional(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Não há exclusão: só inativar. Inativar com corrida ativa: 409 `COURIER_HAS_ACTIVE_DELIVERIES` (reatribua primeiro). Antes e depois na auditoria. Permissão: `logistics:write`.
+ * @summary Editar ou inativar motoboy
+ */
+export const UpdateCourierParams = zod.object({
+  "courierId": zod.uuid()
+})
+
+export const updateCourierBodyNameMin = 2;
+export const updateCourierBodyNameMax = 60;
+
+export const updateCourierBodyNoteMax = 100;
+
+
+
+export const UpdateCourierBody = zod.object({
+  "name": zod.string().min(updateCourierBodyNameMin).max(updateCourierBodyNameMax).optional(),
+  "phone": zod.string().optional(),
+  "note": zod.string().max(updateCourierBodyNoteMax).nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateCourierResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "phone": zod.string().describe('Formato internacional sem +, pronto para wa.me.'),
+  "note": zod.string().nullable(),
+  "active": zod.boolean(),
+  "documentsCheckedAt": zod.iso.datetime({"offset":true}),
+  "deliveriesLast7Days": zod.int().optional(),
+  "busyNow": zod.boolean().optional(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * `tab=active` (padrão): mais antiga primeiro, a partir do horário de "pronto" (que não muda ao reatribuir), com `waitingMinutes` e `sla` (ok, long, late) pelos parâmetros `logistica_sla_atribuir_min` e `logistica_sla_atribuir_critico_min`. `tab=done`: concluídas hoje. Filtros no servidor. Permissão: `logistics:read`.
+ * @summary Fila de corridas (WB-230)
+ */
+export const listDeliveriesQueryCursorMax = 200;
+
+export const listDeliveriesQueryLimitDefault = 20;
+export const listDeliveriesQueryLimitMax = 50;
+
+
+
+export const ListDeliveriesQueryParams = zod.object({
+  "tab": zod.enum(['active', 'done']).optional(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']).optional(),
+  "courierId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional(),
+  "cityId": zod.uuid().optional(),
+  "cursor": zod.string().max(listDeliveriesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listDeliveriesQueryLimitMax).default(listDeliveriesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListDeliveriesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string().nullish(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullish(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "readyAt": zod.iso.datetime({"offset":true}),
+  "waitingMinutes": zod.int().nullish(),
+  "sla": zod.union([zod.literal('ok'),zod.literal('long'),zod.literal('late'),zod.literal(null)]).nullish(),
+  "courier": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}).nullable(),
+  "volumes": zod.int(),
+  "note": zod.string().nullish(),
+  "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "expectedCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullish(),
+  "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "codeRequired": zod.boolean().optional(),
+  "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD). Nunca devolve o código de entrega. Permissão: `logistics:read`.
+ * @summary Detalhe da corrida com a linha do tempo
+ */
+export const GetDeliveryParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const GetDeliveryResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string().nullish(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullish(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "readyAt": zod.iso.datetime({"offset":true}),
+  "waitingMinutes": zod.int().nullish(),
+  "sla": zod.union([zod.literal('ok'),zod.literal('long'),zod.literal('late'),zod.literal(null)]).nullish(),
+  "courier": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}).nullable(),
+  "volumes": zod.int(),
+  "note": zod.string().nullish(),
+  "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "expectedCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullish(),
+  "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "codeRequired": zod.boolean().optional(),
+  "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "contact": zod.object({
+  "pickupAddress": zod.string().nullish(),
+  "storePhone": zod.string().nullish(),
+  "dropoffAddress": zod.string().nullish(),
+  "customerFirstName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish()
+}).optional().describe('Só com a corrida ativa (LGPD).'),
+  "timeline": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "action": zod.string().optional(),
+  "actorRole": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional()
+}))
+
+
+/**
+ * Dois operadores: vale o primeiro, o outro recebe 409 `DELIVERY_ALREADY_ASSIGNED`. Motoboy inativo: 422 `COURIER_INACTIVE`. Endereço incompleto: 422 `ADDRESS_INCOMPLETE` até enviar `addressConfirmed: true`. Permissão: `logistics:write`. Auditado.
+ * @summary Atribuir motoboy (PRONTA -> AGUARDANDO)
+ */
+export const AssignDeliveryParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const AssignDeliveryBody = zod.object({
+  "courierId": zod.uuid(),
+  "addressConfirmed": zod.boolean().optional()
+})
+
+export const AssignDeliveryResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string().nullish(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullish(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "readyAt": zod.iso.datetime({"offset":true}),
+  "waitingMinutes": zod.int().nullish(),
+  "sla": zod.union([zod.literal('ok'),zod.literal('long'),zod.literal('late'),zod.literal(null)]).nullish(),
+  "courier": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}).nullable(),
+  "volumes": zod.int(),
+  "note": zod.string().nullish(),
+  "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "expectedCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullish(),
+  "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "codeRequired": zod.boolean().optional(),
+  "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "contact": zod.object({
+  "pickupAddress": zod.string().nullish(),
+  "storePhone": zod.string().nullish(),
+  "dropoffAddress": zod.string().nullish(),
+  "customerFirstName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish()
+}).optional().describe('Só com a corrida ativa (LGPD).'),
+  "timeline": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "action": zod.string().optional(),
+  "actorRole": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional()
+}))
+
+
+/**
+ * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:read`.
+ * @summary Mensagem pronta e link wa.me para o motoboy
+ */
+export const GetDeliveryWhatsappParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const GetDeliveryWhatsappResponse = zod.object({
+  "courierPhone": zod.string(),
+  "message": zod.string(),
+  "link": zod.string(),
+  "courierActiveDeliveries": zod.int().describe('Corridas ativas do motoboy (aviso "Já tem 2 corridas ativas").')
+})
+
+
+/**
+ * Permissão: `logistics:write`.
+ * @summary Registrar que a mensagem foi enviada
+ */
+export const MarkDeliveryWhatsappSentParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const MarkDeliveryWhatsappSentResponse = zod.void()
+
+
+/**
+ * `action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. Permissão: `logistics:write`.
+ * @summary Avançar a corrida (RN-18)
+ */
+export const UpdateDeliveryStatusParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const updateDeliveryStatusBodyReasonMax = 200;
+
+export const updateDeliveryStatusBodyCodeRegExp = new RegExp('^\\d{4}$');
+export const updateDeliveryStatusBodyOverrideReasonMin = 10;
+export const updateDeliveryStatusBodyOverrideReasonMax = 200;
+
+
+
+export const UpdateDeliveryStatusBody = zod.object({
+  "action": zod.enum(['confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel']),
+  "reason": zod.string().max(updateDeliveryStatusBodyReasonMax).optional(),
+  "code": zod.string().regex(updateDeliveryStatusBodyCodeRegExp).optional(),
+  "failReason": zod.enum(['customer_absent', 'address_not_found', 'customer_refused', 'safety_risk', 'store_fault', 'other']).optional(),
+  "overrideReason": zod.string().min(updateDeliveryStatusBodyOverrideReasonMin).max(updateDeliveryStatusBodyOverrideReasonMax).optional()
+})
+
+export const UpdateDeliveryStatusResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string().nullish(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullish(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "readyAt": zod.iso.datetime({"offset":true}),
+  "waitingMinutes": zod.int().nullish(),
+  "sla": zod.union([zod.literal('ok'),zod.literal('long'),zod.literal('late'),zod.literal(null)]).nullish(),
+  "courier": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}).nullable(),
+  "volumes": zod.int(),
+  "note": zod.string().nullish(),
+  "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "expectedCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullish(),
+  "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "codeRequired": zod.boolean().optional(),
+  "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "contact": zod.object({
+  "pickupAddress": zod.string().nullish(),
+  "storePhone": zod.string().nullish(),
+  "dropoffAddress": zod.string().nullish(),
+  "customerFirstName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish()
+}).optional().describe('Só com a corrida ativa (LGPD).'),
+  "timeline": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "action": zod.string().optional(),
+  "actorRole": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional()
+}))
+
+
+/**
+ * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Permissão: `logistics:write`.
+ * @summary Custo pago ao motoboy (WB-239)
+ */
+export const SetDeliveryCostParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const setDeliveryCostBodyCostCentsMin = 0;
+
+export const setDeliveryCostBodyReasonMax = 200;
+
+
+
+export const SetDeliveryCostBody = zod.object({
+  "costCents": zod.int().min(setDeliveryCostBodyCostCentsMin),
+  "reason": zod.string().max(setDeliveryCostBodyReasonMax).optional()
+})
+
+export const SetDeliveryCostResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string().nullish(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullish(),
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
+  "readyAt": zod.iso.datetime({"offset":true}),
+  "waitingMinutes": zod.int().nullish(),
+  "sla": zod.union([zod.literal('ok'),zod.literal('long'),zod.literal('late'),zod.literal(null)]).nullish(),
+  "courier": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}).nullable(),
+  "volumes": zod.int(),
+  "note": zod.string().nullish(),
+  "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "expectedCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "attempts": zod.int(),
+  "failReason": zod.string().nullish(),
+  "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
+  "codeRequired": zod.boolean().optional(),
+  "allowedActions": zod.array(zod.enum(['assign', 'confirm', 'picked_up', 'delivered', 'not_delivered', 'reattempt', 'return_confirmed', 'reassign', 'cancel'])),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:write`.
+ * @summary Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
+ */
+export const markDeliveryPayoutsBodyDeliveryIdsMax = 100;
+
+
+
+export const MarkDeliveryPayoutsBody = zod.object({
+  "deliveryIds": zod.array(zod.uuid()).min(1).max(markDeliveryPayoutsBodyDeliveryIdsMax),
+  "paidOn": zod.iso.date()
+})
+
+export const MarkDeliveryPayoutsResponse = zod.object({
+  "count": zod.int(),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})
+
+
+/**
  * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
