@@ -19,7 +19,7 @@ const reasonSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) 
 const statusSchema = z.strictObject({
   // DEC-036: na entrega Webag a loja só chega a `ready_for_collection`; saída e entrega são da logística.
   status: z.enum(['in_preparation', 'ready_for_collection', 'ready_for_pickup', 'delivered']),
-  pickupCode: z.string().regex(/^\d{4}$/).optional(),
+  pickupCode: z.string().regex(/^\d{4,6}$/).optional(),
   /** Só em `ready_for_collection` (WB-229 C2). */
   volumes: z.number().int().min(1).max(99).optional(),
   note: z.string().trim().max(100).optional(),

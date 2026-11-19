@@ -115,7 +115,9 @@ export class StoreSettingsService {
         collectionFeeCents: settings.collectionFeeCents,
         version: settings.exchangePolicyVersion,
         // O piso legal não é configurável por ninguém (DEC-011): só informativo.
-        legalFloor: { withdrawalDays: await this.params.getNumber('troca_arrependimento_dias'), defectDays: await this.params.getNumber('troca_defeito_dias') },
+        // BUG-017 / WB-059 C2: ao religar a troca voluntária o painel propõe este prazo (`troca_voluntaria_dias_padrao`) para a loja confirmar.
+        defaultVoluntaryDays: await this.params.getNumber('troca_voluntaria_dias_padrao'),
+        legalFloor: { withdrawalDays: await this.params.getNumber('troca_arrependimento_dias'), defectDays: await this.params.getNumber('troca_defeito_dias'), defectDurableDays: await this.params.getNumber('troca_defeito_duravel_dias') },
       },
       lowStockThreshold: settings.lowStockThreshold ?? lowDefault,
     };

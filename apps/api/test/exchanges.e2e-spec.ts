@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { ParametersService } from '../src/modules/admin/index.js';
 import { ExchangesService } from '../src/modules/exchanges/index.js';
-import { deliveries, exchangeRequests, orderItems, orders, paymentAttempts, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
+import { deliveries, exchangeRequests, orderItems, orders, paymentAlerts, paymentAttempts, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, jpegBuffer, memoryStorage, type RegisteredUser } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, placeOrder, shopWith, type Shop } from './helpers/orders.js';
@@ -383,5 +384,50 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     const open = await delivered();
     await ctx.db.update(orders).set({ status: 'received' }).where(eq(orders.id, open.orderId));
     expect((await ctx.http.post(`/v1/orders/${open.orderId}/reviews`).set(bearer(open.buyer.user.accessToken)).send({ rating: 5 })).body.code).toBe('ORDER_NOT_DELIVERED');
+  });
+
+  /** Troca de tamanho/cor aprovada e com a taxa paga: a coleta entra na fila. Devolve o necessário para os testes de prazo. */
+  async function paidPickup() {
+    const d = await delivered();
+    const id = (await request(d, sizeRequest(d)).then((r) => r.body)).id as string;
+    await store(d, id, 'accept').expect(200);
+    await ctx.http.post(`/v1/exchanges/${id}/payment`).set(bearer(d.buyer.user.accessToken)).send({ paymentMethod: 'pix' }).expect(200);
+    await approve(ctx, d.buyer.user, (await exchangeAttempts(id))[0]!.id);
+    const [run] = await runsOf(id);
+    return { d, id, run: run! };
+  }
+
+  it('BUG-017 / WB-241 C7: coleta sem motoboy depois de `coleta_agendamento_dias_uteis` dias úteis fica "Atrasada" e alerta o admin uma vez', async () => {
+    const { run } = await paidPickup();
+    const listed = async () => ((await ctx.http.get(`${base}/deliveries`).query({ kind: 'exchange_pickup', limit: '100' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; overdue: boolean }[]).find((x) => x.id === run.id)!;
+    expect(await listed()).toMatchObject({ overdue: false });
+    await ctx.db.update(deliveries).set({ readyAt: new Date(Date.now() - 8 * 86_400_000) }).where(eq(deliveries.id, run.id)); // 8 dias corridos = pelo menos 5 úteis
+    expect(await listed()).toMatchObject({ overdue: true });
+    const { DeliveriesService } = await import('../src/modules/logistics/index.js');
+    await ctx.app.get(DeliveriesService).alertLateDue();
+    await ctx.app.get(DeliveriesService).alertLateDue();
+    const alerts = (await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'collection_late'))).filter((a) => (a.details as { deliveryId?: string }).deliveryId === run.id);
+    expect(alerts).toHaveLength(1);
+    // o prazo é parâmetro: com 10 dias úteis a mesma coleta deixa de estar atrasada
+    await ctx.app.get(ParametersService).update('coleta_agendamento_dias_uteis', 10, 'teste', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+    try {
+      expect(await listed()).toMatchObject({ overdue: false });
+    } finally {
+      await ctx.app.get(ParametersService).update('coleta_agendamento_dias_uteis', 3, 'teste', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+    }
+  });
+
+  it('BUG-017 / RN-11: troca com o item recebido sem desfecho depois de `reembolso_dias_uteis` dias úteis gera UM alerta ao financeiro', async () => {
+    const { d, id, run } = await paidPickup();
+    await courierWalk(run.id, 'delivered');
+    await store(d, id, 'receive', { ok: true }).expect(200);
+    expect((await exRow(id)).status).toBe('item_received');
+    expect(await service().alertRefundLate()).toBeGreaterThanOrEqual(0);
+    const mine = async () => (await ctx.db.select().from(paymentAlerts).where(eq(paymentAlerts.kind, 'exchange_refund_late'))).filter((a) => (a.details as { exchangeId?: string }).exchangeId === id);
+    expect(await mine()).toHaveLength(0); // acabou de receber: dentro do prazo
+    await ctx.db.update(exchangeRequests).set({ receivedAt: new Date(Date.now() - 8 * 86_400_000) }).where(eq(exchangeRequests.id, id));
+    await service().alertRefundLate();
+    await service().alertRefundLate();
+    expect(await mine()).toHaveLength(1);
   });
 });

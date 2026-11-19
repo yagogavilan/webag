@@ -35,7 +35,7 @@ export const orders = pgTable(
     etaToAt: timestamp({ withTimezone: true }),
     pickup: jsonb().$type<{ address: string; instructions: string | null; prepMinMinutes: number; prepMaxMinutes: number } | null>(),
     /** Código de retirada (4 dígitos), só mostrado depois de pago. */
-    pickupCode: varchar({ length: 4 }),
+    pickupCode: varchar({ length: 6 }),
     couponId: uuid().references(() => coupons.id, { onDelete: 'set null' }),
     couponCode: varchar({ length: 20 }),
     subtotalCents: integer().notNull(),
@@ -71,6 +71,8 @@ export const orders = pgTable(
     cancelledAt: timestamp({ withTimezone: true }),
     /** WB-253 C1: quando o aviso de atraso (1 push por pedido) saiu; nulo = ainda não avisou. */
     lateNotifiedAt: timestamp({ withTimezone: true }),
+    /** BUG-017: lembrete à loja de pedido sem aceite (`loja_aceite_lembrete_min`); nulo = ainda não lembrou. */
+    acceptRemindedAt: timestamp({ withTimezone: true }),
     /** SEC-170: HMAC do CPF do pagador (nunca o CPF), chave do cupom de primeira compra contra multiconta. */
     payerDocumentHash: varchar({ length: 64 }),
     cancelledBy: text({ enum: ['customer', 'store', 'system', 'admin'] }),

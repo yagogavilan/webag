@@ -15,7 +15,7 @@ export interface OrderEvent {
   /** Mudança da corrida de entrega que acompanha o pedido (L.3): o cliente é avisado mesmo com o mesmo estado do pedido. */
   delivery?: { id: string; status: string };
   /** Aviso avulso ao cliente (RN-19): atraso (1 push por pedido) e compensação concedida. */
-  notice?: 'late' | 'late_compensation';
+  notice?: 'late' | 'late_compensation' | 'accept_reminder';
   /** Dados do aviso de compensação (tipo e valor do cupom). */
   compensation?: { kind: 'free_shipping' | 'fixed'; valueCents: number };
 }

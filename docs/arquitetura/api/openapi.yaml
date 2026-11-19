@@ -5759,9 +5759,10 @@ paths:
         **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
 
         **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016: fora do horário da logística ou pausada; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+
+        SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
       parameters:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
-        SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
       requestBody:
         required: true
         content:
@@ -10029,6 +10030,9 @@ components:
               type: integer
             version:
               type: integer
+            defaultVoluntaryDays:
+              type: integer
+              description: "BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2)."
             legalFloor:
               type: object
               required:
@@ -10039,6 +10043,9 @@ components:
                   type: integer
                 defectDays:
                   type: integer
+                defectDurableDays:
+                  type: integer
+                  description: "BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável)."
         lowStockThreshold:
           type: integer
     CepResult:

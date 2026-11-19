@@ -9,5 +9,5 @@ export function generateOrderNumber(): string {
   return `WB-${code}`;
 }
 
-/** 4 dígitos para a retirada (só mostrado depois de pago). */
-export const generatePickupCode = (): string => String(randomInt(10_000)).padStart(4, '0');
+/** Código de retirada (`codigo_retirada_digitos`, 4 a 6 dígitos; só mostrado depois de pago). */
+export const generatePickupCode = (digits = 4): string => String(randomInt(10 ** digits)).padStart(digits, '0');

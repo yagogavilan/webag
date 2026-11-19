@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, asc, count, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, isNull, lte, ne, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -802,6 +802,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   /** Aprovação automática após o SLA da loja, cancelamento por taxa não paga e expiração por item não entregue. Idempotente. */
   async sweep(now = new Date()): Promise<{ autoApproved: number; feeExpired: number; itemExpired: number; reminders: number }> {
     const reminders = await this.remindStoreDeadlines(now);
+    await this.alertRefundLate(now);
     const pending = await this.db.select({ id: exchangeRequests.id, at: exchangeRequests.createdAt }).from(exchangeRequests).where(and(eq(exchangeRequests.status, 'requested'), lte(exchangeRequests.answerDeadlineAt, now))).limit(100);
     let autoApproved = 0;
     for (const row of pending) {
@@ -858,6 +859,28 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
    * reivindicação é um UPDATE condicional, então duas instâncias ou duas varreduras não duplicam. Se o SLA já nasce com menos de
    * 12 h (parâmetro baixo), só o lembrete de 4 h sai.
    */
+  /**
+   * BUG-017 / RN-11: troca com o item JÁ recebido e ainda sem desfecho (reembolso ou envio do novo) depois de
+   * `reembolso_dias_uteis` dias úteis: UM alerta ao financeiro por troca. A operação decide; nada é pago sozinho.
+   */
+  async alertRefundLate(now = new Date()): Promise<number> {
+    const days = await this.params.getNumber('reembolso_dias_uteis');
+    const open = await this.db
+      .select({ id: exchangeRequests.id, number: exchangeRequests.number, orderId: exchangeRequests.orderId, receivedAt: exchangeRequests.receivedAt })
+      .from(exchangeRequests)
+      .where(and(inArray(exchangeRequests.status, ['item_received', 'in_mediation']), isNotNull(exchangeRequests.receivedAt), isNull(exchangeRequests.refundLateAlertedAt)))
+      .limit(100);
+    let alerted = 0;
+    for (const row of open) {
+      if (now.getTime() <= businessDeadline(row.receivedAt!, days).getTime()) continue;
+      const [claimed] = await this.db.update(exchangeRequests).set({ refundLateAlertedAt: now }).where(and(eq(exchangeRequests.id, row.id), isNull(exchangeRequests.refundLateAlertedAt))).returning({ id: exchangeRequests.id });
+      if (!claimed) continue;
+      await this.payments.raiseAlert(null, 'exchange_refund_late', { exchangeId: row.id, number: row.number, orderId: row.orderId }).catch(() => undefined);
+      alerted += 1;
+    }
+    return alerted;
+  }
+
   async remindStoreDeadlines(now = new Date()): Promise<number> {
     const within = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
     const due = await this.db

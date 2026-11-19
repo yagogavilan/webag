@@ -14,6 +14,7 @@ const closing = (e: OrderEvent): string => (e.reason ? ` Motivo: ${e.reason}.` :
 
 export function customerOrderNotice(e: OrderEvent, storeName: string): Notice | null {
   const data = { type: 'order', orderId: e.orderId };
+  if (e.notice === 'accept_reminder') return null; // lembrete de aceite é só da loja
   // RN-19 4b/4c: textos neutros (não culpam loja nem motoboy, não admitem culpa jurídica); sem dado pessoal no push.
   if (e.notice === 'late') return { push: { title: 'Seu pedido está demorando mais que o previsto', body: 'Já estamos cuidando disso. Se precisar, fale com a gente.', data } };
   if (e.notice === 'late_compensation') {
@@ -57,6 +58,8 @@ export function customerOrderNotice(e: OrderEvent, storeName: string): Notice | 
 
 /** Alerta ao lojista de pedido novo (a venda se perde se ninguém vê em 10 min). */
 export function storeOrderNotice(e: OrderEvent): Notice | null {
+  // BUG-017 / HIP-008: lembrete de pedido pago sem aceite (`loja_aceite_lembrete_min`).
+  if (e.notice === 'accept_reminder') return { push: { title: 'Pedido esperando aceite', body: `O pedido ${e.number} ainda não foi aceito. Aceite ou recuse antes que ele seja cancelado.`, data: { type: 'store_order', orderId: e.orderId, storeId: e.storeId } } };
   if (e.to !== 'received' || e.from !== 'awaiting_payment') return null;
   return { push: { title: 'Novo pedido', body: `Pedido ${e.number} pago. Aceite em poucos minutos.`, data: { type: 'store_order', orderId: e.orderId, storeId: e.storeId } } };
 }

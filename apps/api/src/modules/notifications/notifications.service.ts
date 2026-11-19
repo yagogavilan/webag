@@ -37,7 +37,7 @@ export class NotificationsService implements OnModuleInit {
   private async onOrder(e: OrderEvent): Promise<void> {
     const [store] = await this.db.select({ name: stores.name }).from(stores).where(eq(stores.id, e.storeId));
     await this.deliver([e.userId], customerOrderNotice(e, store?.name ?? 'A loja'));
-    const notice = e.notice ? null : storeOrderNotice(e); // avisos de atraso e compensação são só do cliente
+    const notice = e.notice && e.notice !== 'accept_reminder' ? null : storeOrderNotice(e); // atraso e compensação são só do cliente; o lembrete de aceite é só da loja
     if (notice) await this.deliver(await this.storeUserIds(e.storeId), notice);
   }
 

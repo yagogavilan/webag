@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
+import { businessDeadline } from '../stores/index.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
@@ -279,12 +280,13 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
     const last = page.at(-1);
     const now = Date.now();
     const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
+    const collectionDays = await this.params.getNumber('coleta_agendamento_dias_uteis');
     const areaCounts = tab === 'active' ? await this.readyByArea() : new Map<string, number>();
     return {
       data: page.map((d) => {
         const waiting = d.status === 'ready_for_collection' ? Math.floor((now - d.readyAt.getTime()) / 60_000) : null;
         const areaKey = d.neighborhoodId ?? d.cityId;
-        const { overdue, overdueMinutes } = overdueOf(d, now, legacyAlertMin);
+        const { overdue, overdueMinutes } = overdueOf(d, now, legacyAlertMin, collectionDays);
         return {
           ...d,
           waitingMinutes: waiting,
@@ -314,17 +316,18 @@ export class DeliveriesService implements OnApplicationBootstrap, OnApplicationS
    */
   async alertLateDue(now = new Date()): Promise<number> {
     const legacyAlertMin = await this.params.getNumber('logistica_alerta_entrega_min');
+    const collectionDays = await this.params.getNumber('coleta_agendamento_dias_uteis');
     const candidates = await this.db
       .select()
       .from(deliveries)
-      .where(and(eq(deliveries.kind, 'delivery'), inArray(deliveries.status, [...ACTIVE_STATUSES]), isNull(deliveries.lateAlertedAt)));
+      .where(and(inArray(deliveries.kind, ['delivery', 'exchange_pickup']), inArray(deliveries.status, [...ACTIVE_STATUSES]), isNull(deliveries.lateAlertedAt)));
     let alerted = 0;
     for (const d of candidates) {
-      const { overdue, overdueMinutes } = overdueOf(d, now.getTime(), legacyAlertMin);
+      const { overdue, overdueMinutes } = overdueOf(d, now.getTime(), legacyAlertMin, collectionDays);
       if (!overdue) continue;
       const [claimed] = await this.db.update(deliveries).set({ lateAlertedAt: now }).where(and(eq(deliveries.id, d.id), isNull(deliveries.lateAlertedAt))).returning({ id: deliveries.id });
       if (!claimed) continue;
-      await this.payments.raiseAlert(null, 'delivery_late', { deliveryId: d.id, orderId: d.orderId, status: d.status, overdueMinutes }).catch((e: Error) => this.logger.error(e.message));
+      await this.payments.raiseAlert(null, d.kind === 'exchange_pickup' ? 'collection_late' : 'delivery_late', { deliveryId: d.id, orderId: d.orderId, status: d.status, overdueMinutes }).catch((e: Error) => this.logger.error(e.message));
       alerted += 1;
     }
     return alerted;
@@ -618,7 +621,12 @@ export function addressLooksComplete(address: string): boolean {
 }
 
 /** Atraso sobre a faixa prometida (DEC-053); sem ETA gravado, usa o limite antigo a partir do "pronto" (`logistica_alerta_entrega_min`). */
-function overdueOf(d: Pick<Delivery, 'kind' | 'status' | 'etaToAt' | 'readyAt'>, nowMs: number, legacyAlertMin: number): { overdue: boolean; overdueMinutes: number | null } {
+function overdueOf(d: Pick<Delivery, 'kind' | 'status' | 'etaToAt' | 'readyAt'>, nowMs: number, legacyAlertMin: number, collectionDays = 3): { overdue: boolean; overdueMinutes: number | null } {
+  // BUG-017 / WB-241 C7: a coleta de troca sem motoboy atribuído depois de `coleta_agendamento_dias_uteis` dias úteis está "Atrasada".
+  if (d.kind === 'exchange_pickup' && d.status === 'ready_for_collection') {
+    const limit = businessDeadline(d.readyAt, collectionDays).getTime();
+    return nowMs <= limit ? { overdue: false, overdueMinutes: null } : { overdue: true, overdueMinutes: Math.floor((nowMs - limit) / 60_000) };
+  }
   if (d.kind !== 'delivery' || !ACTIVE_STATUSES.includes(d.status)) return { overdue: false, overdueMinutes: null };
   const limit = d.etaToAt ? d.etaToAt.getTime() : d.readyAt.getTime() + legacyAlertMin * 60_000;
   if (nowMs <= limit) return { overdue: false, overdueMinutes: null };

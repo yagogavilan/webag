@@ -127,7 +127,10 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 ## Compensação por atraso e cancelamento por atraso (E.3, migração 0042)
 `coupons.owner_user_id` (cupom pessoal: só o dono usa) e `coupons.source_order_id` (índice único parcial: no máximo um cupom de compensação por pedido atrasado); `order_cancel_requests.kind` (`preparation` padrão, ou `late`); `orders.late_notified_at` (um aviso de atraso por pedido).
 
-## Mapa das migrações (0000 a 0042)
+## SEC-170 e BUG-017 (migrações 0043 e 0044)
+`orders.payer_document_hash` (HMAC do CPF do pagador, nunca o CPF; chave do cupom de primeira compra contra multiconta). `orders.pickup_code` passa a `varchar(6)` (`codigo_retirada_digitos`, 4 a 6); `orders.accept_reminded_at` (um lembrete de aceite por pedido); `exchange_requests.refund_late_alerted_at` (um alerta de reembolso fora do prazo por troca). Parâmetros sem uso na 1.0 saíram do painel: ver `DISABLED_PARAMETERS` em `parameters.definitions.ts`.
+
+## Mapa das migrações (0000 a 0044)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
 | Migração | O que muda |
@@ -175,3 +178,5 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0040 q2_logistics_pauses | `logistics_pauses` |
 | 0041 q3_order_cancel_requests | `order_cancel_requests` |
 | 0042 e3_late_compensation | Cupom de compensação por atraso; cancelamento por atraso |
+| 0043 sec170_payer_document_hash | `orders.payer_document_hash` |
+| 0044 bug017_parameters_wiring | Código de retirada de até 6 dígitos; lembrete de aceite; alerta de reembolso da troca |

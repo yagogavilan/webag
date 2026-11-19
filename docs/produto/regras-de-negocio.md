@@ -21,7 +21,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `loja_aceite_timeout_min` / `loja_aceite_lembrete_min` | 10 / 5 | 3-30 | HIP-008 |
 | `parcelas_max` / `parcela_min_cents` | 3 / 3000 | 1-12 / 1000+ | HIP-011 |
 | `pedido_max_cents` | 200000 | 10000+ | HIP-012 |
-| `raio_max_km` (global; **a loja não tem raio próprio**, DEC-036b; `raio_padrao_km` deixou de existir) | 15 | 1-50 | HIP-013, HIP-L04 |
+| `raio_max_km` (global; **a loja não tem raio próprio**, DEC-036b; `raio_padrao_km` deixou de existir e saiu do painel, BUG-017) | 15 | 1-50 | HIP-013, HIP-L04 |
 | `taxa_entrega_tabela` (tabela, não escalar): escopo padrão/cidade/bairro x até 6 faixas `[de,ate)` km com taxa de entrega, taxa de troca, custo previsto e deslocamento (min) | padrão `[HIPÓTESE]`: 0-2 km R$ 8,00; 2-5 km R$ 10,00; 5-10 km R$ 14,00; 10-15 km R$ 18,00 | taxa R$ 0 a R$ 50 | HIP-L01, WB-236 |
 | `pedido_minimo_cents` / `frete_gratis_acima_cents` (globais; opcional por cidade) | 2000 / 0 (desligado) | 0-20000 / 0 ou > mínimo | HIP-L12, DEC-036b |
 | `logistica_horario` (por cidade) | seg a sáb 09:00-20:00 | n/a | HIP-L10 |
@@ -33,7 +33,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `entrega_faixa_min` (folga para cada lado da estimativa; no PRD "folga") | 15 | 0-60 | HIP-E02, DEC-053 |
 | `entrega_max_min` (teto da promessa, contado do pagamento; vale para o FIM da faixa: estimativa + `entrega_faixa_min` <= teto) | 120 | 30-240 | DEC-053, DEC-054 |
 | `entrega_lote_max` (corridas da mesma cidade por lote) | 4 | 2-10 | HIP-E07, DEC-053 |
-| `entrega_atraso_tolerancia_min` (depois do fim da faixa, antes de compensar e de liberar o cancelamento sem custo) | 15 | 0-60 | HIP-E04 (novo) |
+| `entrega_atraso_tolerancia_min` (depois do fim da faixa, antes de compensar e de liberar o cancelamento sem custo) | 15 | 0-60 | HIP-E04 (implementado, WB-253 a 255) |
 | `entrega_compensacao_tipo` / `entrega_compensacao_cents` (usado só no tipo `cupom_valor`) | `frete_gratis_proximo` / 1000 | `frete_gratis_proximo`, `cupom_valor`, `nenhuma` / 0-5000 | HIP-E05 (novo) |
 | `entrega_cancel_resposta_min` (pedido já em SAIU: prazo da operação responder ao "cancelar por atraso"; sem resposta, aceita) | 10 | 3-30 | HIP-E06 (novo) |
 | `entrega_reentrega_max` | 1 | 0-3 | HIP-L07 |
@@ -42,10 +42,11 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `retirada_distancia_max_km` | 10 | 1-30 | HIP-013 |
 | `retirada_prazo_horas` | 48 | 12-168 | HIP-038 |
 | `auto_conclusao_entrega_h` (a DEC-038c a chama de `entrega_auto_h`: **uma só chave**, esta) | 24 | 6-72 | HIP-038 |
-| `repasse_periodicidade` / `repasse_carencia_dias` | semanal (segunda) / 7 | semanal, quinzenal / 0-30 | HIP-015 |
+| `repasse_carencia_dias` (rótulo do extrato) | 7 | 0-30 | HIP-015 |
+| ~~`repasse_periodicidade`~~ **desativado na 1.0** | — | — | DEC-016: o repasse é o split do Mercado Pago; a Webag não agenda repasse. Fora do painel (BUG-017) |
 | `troca_arrependimento_dias` | 7 | **fixo 7, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
 | `troca_defeito_dias` | 30 | **fixo 30, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
-| `troca_defeito_duravel_dias` | 90 (categoria "durável", padrão do app `[HIPÓTESE; jurídico]`) | **fixo 90, somente leitura** | HIP-T01 |
+| `troca_defeito_duravel_dias` (aparece em `exchangePolicy.legalFloor.defectDurableDays`; o código usa a constante legal, e um teste garante que as duas batem) | 90 (categoria "durável", padrão do app `[HIPÓTESE; jurídico]`) | **fixo 90, somente leitura** | HIP-T01 |
 | `troca_voluntaria_dias_padrao` / `troca_voluntaria_dias_min` / `troca_voluntaria_dias_max` (a loja escolhe dentro de min e máx; 0 = não aceita) | 7 / 3 / 30 | 0-30 | HIP-T01 (DEC-037) |
 | `troca_voluntaria_max_por_pedido` | 1 | 1-3 | HIP-T02 |
 | `taxa_coleta_max_cents` (teto da taxa de troca da tabela; a loja **não** define taxa) | 3000 | 0-10000 | HIP-T05 (substitui HIP-018) |
@@ -56,8 +57,8 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `disputa_comprovante_h` | 48 `[HIPÓTESE]` | 12-120 | WB-110 C4 |
 | `estorno_cobertura_teto_cents` | 30000 `[HIPÓTESE]` | 0-100000 | DEC-020a, WB-109 C9 |
 | `push_mkt_min_segmento` | 20 `[HIPÓTESE]` | 10-1000 | WB-197 C2 |
-| `coleta_agendamento_dias_uteis` / `coleta_entrega_item_dias` | 3 / 7 | 1-10 | HIP-019 |
-| `reembolso_dias_uteis` | 3 | 1-10 | HIP-019 |
+| `coleta_agendamento_dias_uteis` (coleta sem motoboy depois disso: "Atrasada" e alerta ao admin) / `coleta_entrega_item_dias` | 3 / 7 | 1-10 | HIP-019 |
+| `reembolso_dias_uteis` (alerta ao financeiro quando o item recebido segue sem desfecho; nada é pago sozinho) | 3 | 1-10 | HIP-019 |
 | `mediacao_dias_uteis` / `contestacao_dias` | 5 / 7 | 1-15 | HIP-020 |
 | `avaliacao_janela_dias` / `avaliacao_min_exibicao` | 30 / 3 | 7-90 / 1-10 | HIP-021 |
 | `otp_validade_min` / `otp_tentativas` / `otp_reenvio_s` | 10 / 5 / 60 | 5-30 / 3-10 / 30-120 | HIP-022 |
@@ -72,12 +73,12 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `aprovacao_loja_sla_dias_uteis` | 2 | 1-10 | HIP-030 |
 | `estoque_baixo_un` (padrão da loja) | 3 | 0-100 | HIP-033 |
 | `foto_max_produto` / `upload_max_mb` / `variacoes_max` / `import_max_linhas` | 8 / 5 / 100 / 500 | n/a | HIP-034 |
-| `dados_cliente_visivel_dias` | 30 | 0-90 | HIP-036 |
+| ~~`dados_cliente_visivel_dias`~~ **desativado na 1.0** | — | — | HIP-036: o código mostra o dado do cliente à loja só com o pedido em andamento (mais restritivo, LGPD); ligar o parâmetro afrouxaria a proteção. Fora do painel (BUG-017) |
 | `cupom_total_minimo_cents` | 100 | 0-1000 | HIP-037 |
 | `estorno_super_admin_cents` | 50000 | 1000+ | HIP-039 |
-| `codigo_retirada_digitos` | 4 | 4-6 | HIP-040 |
+| `codigo_retirada_digitos` (vale para os pedidos novos) | 4 | 4-6 | HIP-040 |
 | `carrinho_validade_dias` / `item_qtd_max` / `enderecos_max` | 7 / 50 / 8 | n/a | HIP-041 |
-| `cancelamento_loja_alerta_pct` (30 dias) | 10 | 1-50 | HIP-008 |
+| `cancelamento_loja_alerta_pct` (30 dias; culpa da loja: cancelou, recusou ou deixou vencer o aceite; amostra mínima de 10 pedidos pagos; alerta ao admin, sem penalidade) | 10 | 1-50 | HIP-008 |
 
 ## RN-03 Visibilidade
 - **Região:** cidade precisa estar ativa. Se o bairro do endereço estiver cadastrado, precisa estar ativo; bairro não cadastrado segue a regra da cidade.

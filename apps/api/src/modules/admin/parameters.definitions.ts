@@ -22,6 +22,16 @@ const int = (key: string, def: number, min: number | undefined, max: number | un
   key, type: 'int', default: def, min, max, description, ref, ...(legalFloor ? { legalFloor } : {}),
 });
 
+/**
+ * BUG-017: parâmetros que NÃO existem na 1.0 e por isso não aparecem no painel (mexer neles não faria nada). Cada um diz por quê;
+ * a RN-02 espelha esta lista. O teste `parameters-wired` garante que nenhum fica sem leitura ou sem justificativa aqui.
+ */
+export const DISABLED_PARAMETERS: Readonly<Record<string, string>> = {
+  raio_padrao_km: 'DEC-036b: a loja não tem raio próprio; o raio é global (`raio_max_km`) e o alcance real vem do teto do ETA (DEC-054).',
+  repasse_periodicidade: 'DEC-016: o repasse é o split do Mercado Pago no pagamento; a Webag não retém nem agenda repasse. A carência (`repasse_carencia_dias`) é só o rótulo do extrato.',
+  dados_cliente_visivel_dias: 'RN-14 pede N dias de visibilidade depois da conclusão; o código mostra o dado do cliente à loja só com o pedido em andamento (regra mais restritiva, LGPD: minimização). Ligar o parâmetro AFROUXARIA a proteção; fica fora da 1.0 até o jurídico pedir.',
+};
+
 export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   { key: 'comissao_padrao_pct', type: 'decimal', default: 10, min: 0, max: 30, description: 'Comissão padrão sobre o subtotal de produtos (%)', ref: 'HIP-001' },
   { key: 'taxa_servico_tipo', type: 'enum', default: 'nenhuma', values: ['nenhuma', 'fixa', 'percentual'], description: 'Tipo da taxa de serviço ao cliente', ref: 'HIP-003' },
@@ -56,11 +66,9 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('entrega_custo_alerta_cents', 5000, 500, 100000, 'Custo por corrida acima do qual exige motivo e alerta o financeiro (centavos; também acima de 1,5x o previsto da faixa, SEC-145)', 'SEC-145'),
   int('pii_corrida_retencao_dias', 7, 1, 30, 'Dias após a corrida terminar para apagar telefone e endereço do cliente da corrida (LGPD, SEC-144)', 'SEC-144'),
   int('entrega_reentrega_max', 1, 0, 3, 'Reentregas sem custo ao cliente depois de entrega frustrada', 'HIP-L07'),
-  int('raio_padrao_km', 5, 1, 50, 'Raio padrão ao criar a loja (km)', 'HIP-013'),
   int('retirada_distancia_max_km', 10, 1, 30, 'Distância máxima para retirada (km)', 'HIP-013'),
   int('retirada_prazo_horas', 48, 12, 168, 'Prazo para retirar o pedido (h)', 'HIP-038'),
   int('auto_conclusao_entrega_h', 24, 6, 72, 'Conclusão automática da entrega sem reclamação (h)', 'HIP-038'),
-  { key: 'repasse_periodicidade', type: 'enum', default: 'semanal', values: ['semanal', 'quinzenal'], description: 'Periodicidade do repasse', ref: 'HIP-015' },
   int('repasse_carencia_dias', 7, 0, 30, 'Carência do repasse após a entrega (dias)', 'HIP-015'),
   int('troca_arrependimento_dias', 7, 7, 7, 'Prazo de arrependimento (piso legal CDC art. 49, fixo)', 'DEC-011', true),
   int('troca_defeito_dias', 30, 30, 30, 'Prazo para troca por defeito (piso legal, fixo)', 'DEC-011', true),
@@ -112,7 +120,6 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('upload_max_mb', 5, 1, 20, 'Tamanho máximo de upload (MB)', 'HIP-034'),
   int('variacoes_max', 100, 1, 200, 'Variações por produto', 'HIP-034'),
   int('import_max_linhas', 500, 1, 500, 'Linhas por importação (teto de segurança SEC-052)', 'HIP-034'),
-  int('dados_cliente_visivel_dias', 30, 0, 90, 'Dias em que o lojista vê dados do cliente após a conclusão', 'HIP-036'),
   int('cupom_total_minimo_cents', 100, 0, 1000, 'Total mínimo cobrado com cupom (centavos)', 'HIP-037'),
   int('estorno_super_admin_cents', 50000, 1000, undefined, 'Acima disto o estorno manual exige super admin (centavos)', 'HIP-039'),
   int('estorno_financeiro_dia_cents', 200000, 1000, undefined, 'Total que um operador do financeiro estorna por dia, em todos os pedidos; acima disto só o super admin (centavos)', 'SEC-142'),

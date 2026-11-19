@@ -83,6 +83,8 @@ export const exchangeRequests = pgTable(
     itemDueAt: timestamp({ withTimezone: true }),
     collectedAt: timestamp({ withTimezone: true }),
     receivedAt: timestamp({ withTimezone: true }),
+    /** BUG-017: alerta de reembolso fora do prazo (`reembolso_dias_uteis` depois do item recebido), uma vez por troca. */
+    refundLateAlertedAt: timestamp({ withTimezone: true }),
     completedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

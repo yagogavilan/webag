@@ -1599,12 +1599,16 @@ export type StoreSettingsPickup = {
 export type StoreSettingsExchangePolicyLegalFloor = {
   withdrawalDays: number;
   defectDays: number;
+  /** BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável). */
+  defectDurableDays?: number;
 };
 
 export type StoreSettingsExchangePolicy = {
   voluntaryDays: number;
   collectionFeeCents: number;
   version: number;
+  /** BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2). */
+  defaultVoluntaryDays?: number;
   legalFloor: StoreSettingsExchangePolicyLegalFloor;
 };
 
@@ -5063,6 +5067,11 @@ export interface DeleteAccountResponse {
 export interface CancelAccountDeletionRequest {
   email: string;
   password: string;
+  /**
+     * SEC-168: código de 6 dígitos enviado ao e-mail depois do 403 `LOGIN_CODE_REQUIRED` (uso único).
+     * @pattern ^[0-9]{6}$
+     */
+  code?: string;
 }
 
 export type DataExportStatusStatus = typeof DataExportStatusStatus[keyof typeof DataExportStatusStatus];
@@ -17901,7 +17910,7 @@ export const getCreateAddressUrl = () => {
 }
 
 /**
- * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
+ * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
  * @summary Salvar endereço
  */
 export const createAddress = async (createAddressRequest: CreateAddressRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createAddressResponse> => {
@@ -18019,7 +18028,7 @@ export const getUpdateAddressUrl = (id: string,) => {
 }
 
 /**
- * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu.
+ * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito.
  * @summary Editar endereço
  */
 export const updateAddress = async (id: string,
@@ -20503,6 +20512,8 @@ export const getCreateOrderUrl = () => {
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
  * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016: fora do horário da logística ou pausada; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ *
+ * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrder = async (createOrderRequest: CreateOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createOrderResponse> => {
@@ -22579,6 +22590,11 @@ export type cancelAccountDeletionResponse401 = {
   status: 401
 }
 
+export type cancelAccountDeletionResponse403 = {
+  data: Problem
+  status: 403
+}
+
 export type cancelAccountDeletionResponse429 = {
   data: TooManyRequestsResponse
   status: 429
@@ -22587,7 +22603,7 @@ export type cancelAccountDeletionResponse429 = {
 export type cancelAccountDeletionResponseSuccess = (cancelAccountDeletionResponse204) & {
   headers: Headers;
 };
-export type cancelAccountDeletionResponseError = (cancelAccountDeletionResponse400 | cancelAccountDeletionResponse401 | cancelAccountDeletionResponse429) & {
+export type cancelAccountDeletionResponseError = (cancelAccountDeletionResponse400 | cancelAccountDeletionResponse401 | cancelAccountDeletionResponse403 | cancelAccountDeletionResponse429) & {
   headers: Headers;
 };
 
@@ -22602,7 +22618,7 @@ export const getCancelAccountDeletionUrl = () => {
 }
 
 /**
- * Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP.
+ * SEC-168: limite de 5 por hora por e-mail e IP e 10 por hora por e-mail (sem o IP). Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP.
  * @summary Arrependimento - cancelar a exclusão da conta
  */
 export const cancelAccountDeletion = async (cancelAccountDeletionRequest: CancelAccountDeletionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelAccountDeletionResponse> => {
@@ -24221,7 +24237,7 @@ export const getCreatePlatformCouponUrl = () => {
 }
 
 /**
- * `coupons:write` (super admin e operação). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * `coupons:write` (super admin e operação). SEC-170: com `firstPurchaseOnly` o `maxUses` (teto de usos da campanha) é obrigatório (400; vale também no PATCH). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCoupon = async (platformCouponCreate: PlatformCouponCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createPlatformCouponResponse> => {

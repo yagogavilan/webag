@@ -65,6 +65,10 @@ const declineText = (reason: string | null): string => DECLINE_TEXT[reason ?? ''
 const CARD_PAYMENT_WINDOW_MIN = 30;
 /** Folga antes de a varredura expirar pedido cuja tentativa de pagamento ficou sem resposta. */
 const ORPHAN_GRACE_MS = 2 * 60_000;
+/** Cancelamento por culpa da loja no índice de cancelamento (RN-08); o texto sai do timeout de aceite. */
+const STORE_TIMEOUT_REASON = 'A loja não respondeu a tempo';
+/** Amostra mínima (pedidos pagos em 30 dias) para o alerta de índice de cancelamento da loja. */
+export const MIN_ORDERS_FOR_CANCEL_ALERT = 10;
 
 interface CloseOrderOptions {
   /** `false`: encerra sem agendar estorno (o admin já estornou tudo ou escolheu não estornar). */
@@ -291,6 +295,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           // I5 / SEC-148: a revisão é "consumida" na mesma transação do pedido; a criação concorrente (outra chave, outro aparelho)
           // enxerga a revisão nova sob a trava e recebe CART_CHANGED, em vez de gerar 2 pedidos e 2 cobranças.
           await tx.update(carts).set({ revision: sql`${carts.revision} + 1`, updatedAt: new Date() }).where(eq(carts.id, quote.cartId));
+          const pickupDigits = input.mode === 'pickup' ? await this.params.getNumber('codigo_retirada_digitos') : 4;
           const payerDocumentHash = input.payerDocument ? this.cart.payerDocumentHash(input.payerDocument) : null;
           if (quote.coupon) {
             await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
@@ -329,7 +334,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               etaFromAt: input.mode === 'delivery' && quote.eta ? new Date(Date.now() + quote.eta.fromMin * 60_000) : null,
               etaToAt: input.mode === 'delivery' && quote.eta ? new Date(Date.now() + quote.eta.toMin * 60_000) : null,
               pickup: input.mode === 'pickup' ? { address: settings.pickupUseStoreAddress ? storeAddressLine(store) : (settings.pickupAddress ?? storeAddressLine(store)), instructions: settings.pickupInstructions, prepMinMinutes: settings.pickupPrepMinMinutes, prepMaxMinutes: settings.pickupPrepMaxMinutes } : null,
-              pickupCode: input.mode === 'pickup' ? generatePickupCode() : null,
+              pickupCode: input.mode === 'pickup' ? generatePickupCode(pickupDigits) : null,
               payerDocumentHash,
               couponId: quote.coupon?.id ?? null,
               couponCode: quote.coupon?.code ?? null,
@@ -889,7 +894,61 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const acceptTimeouts = await this.timeoutAccept(now);
     const pickupExpired = await this.expirePickups(now);
     await this.alertStaleCancelRequests(now);
+    await this.remindAccept(now);
+    await this.alertStoreCancelRate(now);
     return { expiredPix, orphans, acceptTimeouts, pickupExpired };
+  }
+
+  /**
+   * BUG-017 / HIP-008: pedido pago há `loja_aceite_lembrete_min` sem aceite recebe UM lembrete ao dono e à equipe da loja (push),
+   * antes do cancelamento por `loja_aceite_timeout_min`. A reivindicação é atômica: repetir a varredura não repete o aviso.
+   */
+  private async remindAccept(now: Date): Promise<number> {
+    const minutes = await this.params.getNumber('loja_aceite_lembrete_min');
+    const due = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.status, 'received'), isNull(orders.acceptRemindedAt), lte(orders.paidAt, new Date(now.getTime() - minutes * 60_000))))
+      .orderBy(asc(orders.paidAt))
+      .limit(100);
+    let n = 0;
+    for (const order of due) {
+      const [claimed] = await this.db.update(orders).set({ acceptRemindedAt: now }).where(and(eq(orders.id, order.id), eq(orders.status, 'received'), isNull(orders.acceptRemindedAt))).returning({ id: orders.id });
+      if (!claimed) continue;
+      n += 1;
+      await this.bus.emit({ ...this.eventOf(order, order.status, 'system', null, now), notice: 'accept_reminder' });
+    }
+    return n;
+  }
+
+  private lastCancelRateCheck = 0;
+
+  /**
+   * BUG-017 / RN-08: loja com índice de cancelamento por culpa dela (cancelou, recusou ou deixou vencer o aceite) acima de
+   * `cancelamento_loja_alerta_pct` nos últimos 30 dias gera alerta ao admin (sem penalidade automática na 1.0). Só com amostra mínima
+   * de `MIN_ORDERS_FOR_CANCEL_ALERT` pedidos pagos, para uma loja com 2 pedidos não alertar por 1 cancelamento. Roda a cada 6 h.
+   */
+  async alertStoreCancelRate(now: Date, force = false): Promise<number> {
+    if (!force && now.getTime() - this.lastCancelRateCheck < 6 * 3_600_000) return 0;
+    this.lastCancelRateCheck = now.getTime();
+    const threshold = await this.params.getNumber('cancelamento_loja_alerta_pct');
+    const since = new Date(now.getTime() - 30 * 86_400_000);
+    const res = await this.db.execute<{ store_id: string; total: number; by_store: number }>(sql`
+      select o.store_id, count(*)::int as total,
+             count(*) filter (where o.status = 'refused' or (o.status = 'cancelled' and (o.cancelled_by = 'store' or (o.cancelled_by = 'system' and o.cancel_reason = ${STORE_TIMEOUT_REASON}))))::int as by_store
+        from orders o
+       where o.created_at >= ${since.toISOString()}::timestamptz and (o.paid_at is not null or o.status in ('refused'))
+         and not (o.status = 'cancelled' and o.cancelled_by = 'customer')
+       group by o.store_id
+      having count(*) >= ${MIN_ORDERS_FOR_CANCEL_ALERT}
+    `);
+    let alerted = 0;
+    for (const row of res.rows) {
+      if ((row.by_store * 100) / row.total <= threshold) continue;
+      await this.payments.raiseAlert(null, 'store_cancel_rate', { storeId: row.store_id });
+      alerted += 1;
+    }
+    return alerted;
   }
 
   /**
@@ -976,7 +1035,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       await this.db.transaction(async (tx) => {
         const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for('update');
         if (!order || order.status !== 'received') return;
-        done = await this.closeOrder(tx, order, 'cancelled', 'system', 'A loja não respondeu a tempo', null);
+        done = await this.closeOrder(tx, order, 'cancelled', 'system', STORE_TIMEOUT_REASON, null);
       });
       if (!done) continue;
       const result = done as { event: OrderEvent; refund: PendingRefund | null };
