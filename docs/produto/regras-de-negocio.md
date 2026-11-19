@@ -25,10 +25,11 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | `logistica_horario` (por cidade) | seg a sáb 09:00-20:00 | n/a | HIP-L10 |
 | `logistica_sla_atribuir_min` / `logistica_sla_atribuir_critico_min` / `logistica_alerta_entrega_min` | 10 / 20 / 60 | 1-120 | HIP-L06 |
 | `entrega_reentrega_max` | 1 | 0-3 | HIP-L07 |
+| `taxa_provedor_pix_pct` / `taxa_provedor_cartao_pct` (só para a **estimativa** "Você recebe cerca de R$ X" no cadastro de produto; o ledger usa a tarifa real do provedor) | 0,99 / 4,98 `[HIPÓTESE; conferir no contrato do MP]` | 0-10 | DEC-038a, HIP-C02 |
 | `codigo_entrega` (flag, WB-226): recomendado **ligado** para entrega Webag | ligado `[HIPÓTESE]` | flag | HIP-L05 |
 | `retirada_distancia_max_km` | 10 | 1-30 | HIP-013 |
 | `retirada_prazo_horas` | 48 | 12-168 | HIP-038 |
-| `auto_conclusao_entrega_h` | 24 | 6-72 | HIP-038 |
+| `auto_conclusao_entrega_h` (a DEC-038c a chama de `entrega_auto_h`: **uma só chave**, esta) | 24 | 6-72 | HIP-038 |
 | `repasse_periodicidade` / `repasse_carencia_dias` | semanal (segunda) / 7 | semanal, quinzenal / 0-30 | HIP-015 |
 | `troca_arrependimento_dias` | 7 | **fixo 7, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
 | `troca_defeito_dias` | 30 | **fixo 30, somente leitura para todos os perfis** (DEC-011, DEC-023b) | HIP-017 |
@@ -242,7 +243,7 @@ Qualquer outra transição (inclusive RECUSADA ou SUSPENSA direto para APROVADA,
 ## RN-18 Entrega Webag: papéis, estados da entrega e custo (DEC-036; `prd/logistica.md`)
 **Papéis.** Loja: prepara e marca "pronto para coleta". Webag (admin, perfil operação): despacha, acompanha e fecha. Motoboy: terceiro autônomo que age por WhatsApp (sem app na 1.0). Cliente: acompanha e informa o código de entrega.
 
-**Tipos de corrida:** `ENTREGA` (loja para cliente), `COLETA_TROCA` (cliente para loja), `TROCA_COMBINADA` (loja leva a peça nova ao cliente e traz a antiga de volta). Só a entrega altera o estado do pedido (RN-07); as de troca alteram o estado da troca (RN-11).
+**Tipos de corrida:** `ENTREGA` (loja para cliente), `COLETA_TROCA` (cliente para loja), `REENTREGA_TROCA` (loja para cliente com a peça nova; **só nasce depois que a loja conferiu a peça antiga**, DEC-038f; não existe na troca feita na loja nem em reembolso). Só a entrega altera o estado do pedido (RN-07); as de troca alteram o estado da troca (RN-11).
 
 **Estados da entrega** (interpretação do PO da lista da DEC-036d; o backend usa estes nomes, L.3; extras marcados com `+`):
 
@@ -264,7 +265,7 @@ Atribuir, reatribuir e desfazer exigem motivo e auditoria; todo estado grava ato
 **Horário e pausa:** entrega Webag só é oferecida dentro de `logistica_horario` da cidade e sem pausa (RN-04); o admin pode pausar por cidade ou geral com motivo.
 **Custo:** o admin registra o custo pago ao motoboy por corrida (sugestão = custo previsto da faixa); sem registro em 48 h gera alerta; edição preserva o valor anterior e audita. **O pagamento ao motoboy é feito fora do app** (DEC-036c); o sistema só controla "pago em DD/MM" por lote.
 **Dinheiro na entrega:** nenhum; o motoboy não cobra nada na 1.0 (a mensagem diz "Pago no app. Não cobrar").
-**Falha de entrega:** 1 reentrega sem custo ao cliente; depois, devolução à loja e estorno total (inclui taxa de entrega) `[HIPÓTESE; cobrar a taxa só com parecer jurídico]`.
+**Falha de entrega (DEC-038d):** o custo da entrega frustrada por cliente ausente é da Webag na 1.0; 1 reentrega sem custo ao cliente; se repetir, o cliente pode pagar uma nova tentativa (taxa de entrega da tabela, cobrança separada) ou o pacote volta à loja com estorno total (inclui taxa de entrega) `[HIPÓTESE; reter a taxa só com parecer jurídico]`.
 **Dados:** mensagem de WhatsApp só com loja, endereços, 1º nome e telefone do cliente, volumes e observação (nunca CPF, e-mail, itens, valores nem o código de entrega); telefone do cliente visível ao operador só em corrida ativa.
 
 ## RN-17 Formulários: botão de envio sempre ativo (DEC-024d, WB-006 C2/C4, WB-020 C5)

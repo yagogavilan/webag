@@ -10,7 +10,7 @@ Quem sofre: Carla (medo de comprar roupa ou calçado local e não poder trocar) 
 Trocar sem atrito para o cliente, sem prejuízo para a Webag e sem violar o CDC.
 | Métrica | Meta `[HIPÓTESE; HIP-043]` |
 |---|---|
-| Trocas por tamanho/cor pedidas em <= 3 telas e <= 5 toques (1 item, sem fotos) | 100% (teste de usabilidade) |
+| Troca por tamanho/cor pedida em **4 toques** (3 decisões: novo tamanho, como devolver, revisar; mais "Enviar"; 1 item, sem fotos; DEC-038b) | 100% (teste de usabilidade) |
 | Loja responde dentro de 24 h (sem aprovação automática) | >= 70% |
 | Trocas resolvidas em <= 7 dias da solicitação | >= 80% |
 | Trocas que vão à mediação | < 15% |
@@ -25,7 +25,7 @@ Trocar sem atrito para o cliente, sem prejuízo para a Webag e sem violar o CDC.
 Frete reverso por Correios/transportadora e etiqueta; crédito na loja ou vale-troca; troca entre lojas; garantia estendida ou contratual; peritagem técnica; chat na troca (usa WhatsApp); troca de produto por **outro produto** (só a mesma peça em outra variação, com diferença de preço quando houver, ou reembolso); reparo do produto pela loja (a loja pode oferecer por fora, a Webag oferece troca ou reembolso); app do motoboy (fase 2).
 
 ## Usuários e cenários
-1. Carla pediu 38, cabe 37. Em "Meus pedidos" toca "Trocar" no item, escolhe o 37 e "Levar à loja (grátis)" ou "Coleta em casa (R$ 9,00, só se a loja aprovar)". A loja aprova em horas (ou o sistema aprova em 24 h). O motoboy leva o 37 e traz o 38 na mesma viagem.
+1. Carla pediu 38, cabe 37. Em "Meus pedidos" toca "Trocar" no item, escolhe o 37 e "Levar à loja (grátis)" ou "Coleta em casa (R$ 9,00, só se a loja aprovar)". A loja aprova em horas (ou o sistema aprova em 24 h). O motoboy coleta o 38; a loja confere; **só então** o 37 sai em uma segunda corrida (DEC-038f). Levando à loja, o 37 é entregue no balcão na hora.
 2. Carla se arrepende em 3 dias: "Desistir da compra", sem custo, reembolso total com a taxa de entrega.
 3. Produto com defeito: fotos obrigatórias; coleta grátis; troca ou reembolso; a loja contesta na inspeção e o admin media.
 4. Marcos recebe a fila, aprova (ou deixa o prazo correr), confere o item que chega e libera a resolução.
@@ -59,29 +59,31 @@ Fontes: buscas na web em 2026-11-19; as **páginas oficiais não abriram** (dom�
 | Renner | Loja física 30 dias; online 7 dias (guia de terceiros) | Troca em loja (política da empresa) | Não achei | [confirmar] |
 | C&A | 30 dias após o recebimento (site de cupons); troca em loja física ou pelos Correios | Em loja | Não achei coleta em casa | [confirmar] |
 | Zattini | 30 dias; primeira troca grátis; coleta pelos Correios sem custo (Promobit, Consumidor Moderno antigo); 60 dias foi temporário na pandemia | Sim | Grátis na 1ª troca | Reclamações de demora na análise (5 dias úteis). [confirmar] |
-| **Webag (DEC-037)** | Arrependimento 7 dias; defeito 30/90; tamanho/cor 7 (loja, 3 a 30) | **Sim, com a peça nova na mesma viagem** | Arrependimento e defeito: Webag; tamanho/cor: taxa pequena só se a loja aprovar; **na loja, grátis** | Taxa só após aprovação; 1 troca por pedido; reserva do tamanho novo |
+| **Webag (DEC-037)** | Arrependimento 7 dias; defeito 30/90; tamanho/cor 7 (loja, 3 a 30) | **Sim: a Webag coleta e depois entrega a peça nova (2 corridas), com o tamanho reservado; na loja, troca na hora** | Arrependimento e defeito: Webag; tamanho/cor: taxa pequena só se a loja aprovar; **na loja, grátis** | Taxa só após aprovação; 1 troca por pedido; reserva do tamanho novo |
 
-**Leitura crítica:** (1) nenhum concorrente que achei cobra o cliente por uma troca de tamanho por coleta; os grandes usam devolução + recompra (ML) ou 1ª troca grátis (Zattini). Cobrar uma taxa é **risco de conversão**, mitigado pela troca na loja grátis, pela taxa baixa e por só cobrar depois da aprovação. (2) O diferencial real da Webag é "a peça nova vem junto, no mesmo dia", que ML e Shopee não fazem. (3) Cuidado com o Shopee: a regra de "frete só se o vendedor ofereceu frete grátis" é exatamente o que a Webag **não pode** copiar, porque contraria o CDC art. 49 (reembolso "a qualquer título").
+**Leitura crítica:** (1) nenhum concorrente que achei cobra o cliente por uma troca de tamanho por coleta; os grandes usam devolução + recompra (ML) ou 1ª troca grátis (Zattini). Cobrar uma taxa é **risco de conversão**, mitigado pela troca na loja grátis, pela taxa baixa e por só cobrar depois da aprovação. (2) O diferencial real da Webag é "a Webag busca a peça, o tamanho novo fica reservado e entregamos a nova", que ML e Shopee não fazem; a DEC-038f impede a peça nova de sair antes da antiga conferida, então **a troca em casa é mais lenta que desistir e recomprar** (ver §Economia). (3) Cuidado com o Shopee: a regra de "frete só se o vendedor ofereceu frete grátis" é exatamente o que a Webag **não pode** copiar, porque contraria o CDC art. 49 (reembolso "a qualquer título").
 
 ## Economia da troca (hipóteses para decidir a taxa)
-Números `[HIPÓTESE]`: pedido médio R$ 80; comissão 15% = R$ 12,00; taxa de entrega R$ 9,00 (faixa de 2 a 5 km); custo do motoboy R$ 9,00 por corrida simples (apps pagam de R$ 7,50 a R$ 10 de piso e motoboys pedem R$ 10 + R$ 2,50/km em SP, março/2026; fontes na `logistica.md`/`decisoes.md`) e ~R$ 15,00 por troca combinada (ida e volta, 1,7 corrida). Cobra-se a taxa de troca = R$ 9,00.
+Números `[HIPÓTESE]`: pedido médio R$ 80; comissão 15% = R$ 12,00; taxa de entrega R$ 9,00 (faixa de 2 a 5 km); custo do motoboy R$ 9,00 por corrida (apps pagam de R$ 7,50 a R$ 10 de piso e motoboys pedem R$ 10 + R$ 2,50/km em SP, março/2026; fontes em `decisoes.md`). **A troca em casa são 2 corridas** (coleta; depois, com a peça antiga conferida, reentrega: DEC-038f), ou seja R$ 18,00. Cobra-se a taxa de troca = R$ 9,00 (padrão = taxa de entrega).
 
 | Cenário | Receita Webag | Custo motoboy | Resultado Webag | Diferença contra o pedido sem troca (+R$ 12,00) |
 |---|---|---|---|---|
 | Pedido sem troca | 12,00 + 9,00 | 9,00 | **+12,00** | 0 |
-| Troca por tamanho, coleta em casa (combinada) | 21,00 + 9,00 (taxa de troca) | 9,00 + 15,00 | **+6,00** | -6,00 |
+| Troca por tamanho, coleta em casa (2 corridas) | 21,00 + 9,00 (taxa de troca) | 9,00 + 18,00 | **+3,00** | -9,00 |
 | Troca por tamanho, levando à loja | 21,00 | 9,00 | **+12,00** | 0 |
-| Defeito, coleta grátis e troca combinada | 21,00 | 9,00 + 15,00 | **-3,00** | -15,00 |
+| Defeito, coleta grátis e reentrega | 21,00 | 9,00 + 18,00 | **-6,00** | -18,00 |
 | **Arrependimento com coleta** (estorno total devolve comissão e taxa) | 0 | 9,00 + 9,00 | **-18,00** | **-30,00** |
+| Arrependimento e **recompra** de outro tamanho (2 pedidos) | 0 + 21,00 | 18,00 + 9,00 | **-6,00** (2 pedidos) | -18,00 (de +12,00 para -6,00) |
 
-Em 100 pedidos (8 trocas por tamanho com coleta, 4 arrependimentos com coleta, 2 defeitos): margem-base R$ 1.200 menos R$ 48, R$ 120 e R$ 30 = **R$ 1.002**, uma perda de ~16%. Duas conclusões:
-1. A taxa de troca **cobre mais da metade** do custo da troca por tamanho; com taxa zerada (campanha) o resultado da troca vai a -R$ 15,00.
-2. **Um arrependimento custa 5 vezes uma troca por tamanho.** Como o arrependimento é livre por lei nos 7 primeiros dias, o cliente pode escolher desistir (sem pagar nada) em vez de trocar (pagando a taxa) e comprar outro tamanho. A Webag **não pode esconder nem dificultar** o arrependimento (Decreto 7.962/2013). A defesa permitida é tornar a troca **mais atraente** (peça nova na mesma viagem, tamanho reservado, taxa baixa, grátis na loja) e **oferecer a troca como alternativa não obstrutiva** dentro do fluxo de desistência (WB-170 C13). Medir a proporção no piloto (métrica "resolvida como troca").
+Em 100 pedidos (8 trocas por tamanho com coleta, 4 arrependimentos com coleta, 2 defeitos): margem-base R$ 1.200 menos R$ 72, R$ 120 e R$ 36 = **R$ 972**, uma perda de ~19%. Três conclusões:
+1. A taxa de troca **cobre metade** do custo das 2 corridas; com taxa zerada (campanha) o resultado da troca vai a -R$ 18,00.
+2. **Um arrependimento custa mais de 3 vezes uma troca por tamanho.** O arrependimento é livre por lei nos 7 primeiros dias e a Webag **não pode esconder nem dificultar** (Decreto 7.962/2013).
+3. **Para o cliente, trocar e desistir-e-recomprar custam o mesmo** (R$ 9,00: a taxa de troca, ou a nova taxa de entrega da recompra, porque a original é devolvida), e a recompra é **mais rápida** (chega em cerca de 1 h; a troca em casa leva dias por causa da coleta e da conferência). A troca só ganha se tiver vantagem clara: **tamanho reservado**, **grátis na loja** e **taxa menor que a entrega**. Alavancas: a coluna "taxa de troca" da tabela (WB-236) permite cobrar, por exemplo, 50% da taxa de entrega (resultado da troca em casa vai a -R$ 1,50 contra -R$ 18,00 do arrependimento, a Webag ainda perde menos), e o fluxo de desistência traz a troca como alternativa **não obstrutiva** (WB-170 C13). Medir a proporção "resolvida como troca" no piloto.
 
 ## Requisitos funcionais
 | ID | Requisito | Histórias |
 |---|---|---|
-| RF-TRO-01 | Pedir troca pelo app: 3 tipos, prazos "Você tem até DD/MM", <= 3 telas | 170 |
+| RF-TRO-01 | Pedir troca pelo app: 3 tipos, prazos "Você tem até DD/MM", 4 toques no caso simples | 170 |
 | RF-TRO-02 | Acompanhar status | 171 |
 | RF-TRO-03 | Loja: fila, aprovar/recusar em 24 h, recebimento e resolução | 172-174 |
 | RF-TRO-04 | Taxa de coleta e reentrega pela tabela do admin, só após a aprovação | 175 |
@@ -103,7 +105,7 @@ RN-11 (completa e atualizada). Pontos-chave:
 - **1 troca voluntária por pedido** (pode incluir vários itens); arrependimento e defeito não entram nesse limite; item já trocado só volta por defeito.
 - **Taxa de troca só após a aprovação da loja**, valor congelado na aprovação, paga em até `troca_taxa_pagamento_h` (48 h); recusa nunca gera cobrança; troca levando à loja = R$ 0; a taxa é **receita da Webag** (não da loja) e pode ser zerada por região ou campanha no admin.
 - **SLA da loja 24 h** (`troca_resposta_h`), com lembretes em 12 h e em 4 h do fim; sem resposta, aprovação automática (arrependimento é imediato, sem esperar).
-- **Reserva** do novo tamanho ao aprovar (libera se cancelar ou expirar); só aparecem tamanhos com estoque.
+- **Reserva** do novo tamanho ao aprovar (libera se cancelar ou expirar); só aparecem tamanhos com estoque. **A peça nova só sai depois da antiga conferida** pela loja (DEC-038f), exceto na troca na loja; a troca em casa são 2 corridas (coleta e reentrega), cobertas pela taxa de troca.
 - **Diferença de preço** (WB-245): paga ou estornada na hora da aprovação.
 - **Itens sem troca voluntária:** definidos pela categoria (admin) e pela loja no produto; arrependimento e defeito continuam valendo (conservador; ver Perguntas).
 - Reembolso em até 3 dias úteis após ITEM_RECEBIDO `[HIPÓTESE; o art. 49 pede devolução "de imediato": ver Perguntas]`; comissão devolvida proporcionalmente (RN-10); em arrependimento a **taxa de entrega também** volta ao cliente.
@@ -113,7 +115,7 @@ RN-11 (completa e atualizada). Pontos-chave:
 - **Offline:** rascunho no aparelho e envio ao voltar a conexão (a foto pode ser reenviada).
 - **Auditoria:** toda decisão (aprovar, recusar, aprovar automático, mediar) grava ator (inclusive "sistema"), hora e motivo.
 - **Segurança:** só o dono do pedido abre a troca; a loja só vê trocas dos pedidos dela (autorização por objeto); admin e logística veem o mínimo (endereço de coleta só em corrida ativa).
-- **Acessibilidade:** fluxo em <= 3 telas no caso simples, texto curto, alvo >= 56 px, prazo e custo lidos no rótulo.
+- **Acessibilidade:** fluxo em até 4 toques no caso simples, texto curto, alvo >= 56 px, prazo e custo lidos no rótulo.
 - **LGPD:** foto de produto pode conter pessoa ou cenário; aviso "Fotografe só o produto"; retenção das fotos por 6 meses após o encerramento `[HIPÓTESE; security valida]`.
 
 ## Histórias e critérios de aceite
@@ -129,7 +131,7 @@ Como cliente, quero pedir troca ou devolução de um item entregue em poucos toq
 - **C7** Dado enviar, então crio a troca SOLICITADA, notifico a loja (WB-193) e vejo o protocolo e "A loja responde em até 24 h; se não responder, aprovamos".
 - **C8** Dado sem conexão, então salvo como rascunho com aviso e envio depois (prazo conta da data em que o cliente iniciou `[HIPÓTESE]`).
 - **C9** Dado o passo "Como devolver", então vejo "Levar até a loja (grátis)" com endereço e horário, e "Coleta em casa" com o valor da tabela e o texto "cobrada só se a loja aprovar" (só em tamanho/cor; só se o endereço está em região atendida e a logística aberta); em defeito e arrependimento ambas são "sem custo para você". Em "Coleta em casa" escolho uma janela preferida (dia e período), que a logística confirma (WB-241).
-- **C10** Dado o caso simples (1 item, tamanho ou cor, sem fotos), então o fluxo tem no máximo **3 telas** (escolher item e motivo, novo tamanho e devolução, revisar e enviar) e no máximo **5 toques**, sem digitar nada; pedido de 1 item e 1 unidade pula a escolha de item; verificado no teste de usabilidade `[interpretação de "3 toques" da DEC-037; o Designer ajusta as 4 telas da onda 5]`.
+- **C10** Dado o caso simples (1 item de 1 unidade, tamanho ou cor, sem fotos), então o pedido de troca leva **4 toques a partir de "Meus pedidos"**: 3 decisões (novo tamanho, como devolver, conferir a revisão) mais "Enviar pedido de troca", sem digitar nada (DEC-038b aceitou 4 toques); o fluxo tem no máximo 4 telas e o item e o motivo vêm pré-selecionados a partir do botão "Trocar" do item; verificado no teste de usabilidade.
 - **C11** Dado arrependimento, então o texto "Devolva o produto sem sinais de uso além do razoável" aparece antes de enviar (WB-178 C4) e a opção **não é escondida** nem desestimulada.
 - **C12** Dado "tamanho" ou "cor" escolhidos dentro dos 7 dias, então a tela mostra, em texto neutro, "Você também pode desistir da compra sem custo" com link para o fluxo de arrependimento (transparência, Decreto 7.962/2013).
 - **C13** Dado o fluxo de **arrependimento**, então, abaixo da confirmação e sem bloquear nada, há a linha "Era o tamanho? Você pode trocar por outro" com link para o fluxo de troca; o botão de desistir continua sendo a ação principal `[HIPÓTESE; jurídico valida que não obstrui]`.
@@ -164,7 +166,7 @@ Como lojista, quero confirmar o recebimento e a inspeção, para liberar a resol
 
 ### WB-174 Resolução: reposição ou reembolso — Must — dep: WB-173, WB-154
 Como cliente e lojista, quero concluir a troca com a peça nova ou o dinheiro de volta, para encerrar.
-- **C1** Dado troca por variação e estoque disponível, então o sistema **reserva a unidade ao aprovar**; a peça nova segue na mesma corrida da coleta (troca combinada, WB-241) ou, se o item vier à loja, a loja a entrega no balcão/envia pela logística; a troca vira CONCLUIDA (trocada).
+- **C1** Dado troca por variação e estoque disponível, então o sistema **reserva a unidade ao aprovar**; a peça nova **só sai depois da antiga conferida** pela loja (inspeção OK, DEC-038f): na troca na loja, a loja a entrega no balcão na hora; na coleta em casa, a loja marca "Pronto para reentrega" e nasce a corrida REENTREGA_TROCA (WB-241); a troca vira CONCLUIDA (trocada) quando a peça nova é entregue.
 - **C2** Dado arrependimento ou ausência de estoque da variação, então a resolução é reembolso: após ITEM_RECEBIDO o sistema estorna o valor do item **e a taxa de entrega paga** (arrependimento) em até 3 dias úteis, e a troca vira CONCLUIDA (reembolsada). Em tamanho/cor sem estoque: reembolso do item, **sem devolver a taxa de entrega original** (o serviço foi prestado) `[HIPÓTESE; jurídico]`.
 - **C3** Dado reembolso, então comissão e taxa de entrega devolvidas proporcionalmente (RN-10) e o ledger é atualizado; o custo da coleta vira custo de logística da Webag (WB-238 C4).
 - **C4** Dado falha do estorno, então a troca fica "Reembolso pendente" com retentativa e alerta ao financeiro (WB-154 C5).
@@ -271,7 +273,7 @@ Como admin, quero ver trocas por loja e categoria, para ajustar a taxa, pedir ta
 | Cliente fraudando (item usado, outro item) | Risco financeiro | Fotos, inspeção, mediação, 1 troca por pedido, relatório por cliente |
 | Taxa de troca é receita da Webag, não da loja, mas o split é por loja | Risco técnico | Backend decide a cobrança na conta da Webag (ADR); sem isso, fallback: taxa dentro da `application_fee` de um pedido de troca |
 | Troca consome estoque e a peça nova pode esgotar | Risco de estoque | Reserva ao aprovar; só tamanhos com estoque |
-| Coleta depende da logística aberta e de motoboy (WB-241) | Dependência | Janela confirmada; "Levar à loja" sempre disponível |
+| Coleta depende da logística aberta e de motoboy (WB-241); a peça nova só sai depois da conferência (DEC-038f), então a troca em casa leva dias | Dependência e risco de experiência | Janela confirmada; SLA de conferência da loja de 24 h `[HIPÓTESE]`; "Levar à loja" (na hora) sempre disponível |
 | Falta de dado de custo real do motoboy | Hipótese | Taxa editável; relatório WB-248 |
 
 ## Perguntas em aberto (revisão jurídica do fundador)
@@ -285,5 +287,4 @@ Como admin, quero ver trocas por loja e categoria, para ajustar a taxa, pedir ta
 | Itens personalizados, lacrados e íntimos podem excluir o **arrependimento**? Hoje nenhum exclui | fundador/advogado |
 | Responsabilidade da Webag como marketplace e por ato do motoboy (CDC art. 7º pu, 25 §1º, 34) | fundador/advogado |
 | Quem arca com o custo da coleta em defeito e arrependimento: na 1.0 a Webag absorve (DEC-016: sem desconto da loja); cobrar da loja só por cláusula | fundador |
-| "3 toques" da DEC-037 = 3 telas e 5 toques no caso simples (WB-170 C10)? | CEO/Designer |
 | Retenção das fotos (6 meses) e do histórico | security-engineer |

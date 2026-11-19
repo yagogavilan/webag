@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webag · Painéis (protótipo)</title>
+<style>
+/* Tokens inlinados de packages/tokens/css/tokens.css (fonte única: tokens.json) */
+:root{color-scheme:light;
+--wb-color-brand-50:#E6F3F3;--wb-color-brand-100:#CBE6E6;--wb-color-brand-200:#9FD0D1;--wb-color-brand-400:#3A9DA2;--wb-color-brand-600:#00696F;--wb-color-brand-700:#005A5F;--wb-color-brand-800:#004A4F;
+--wb-color-neutral-0:#FFFFFF;--wb-color-neutral-50:#F7F5F2;--wb-color-neutral-100:#EFEBE6;--wb-color-neutral-200:#E2DDD6;--wb-color-neutral-300:#CFC9C0;--wb-color-neutral-400:#A8A199;--wb-color-neutral-500:#7D766E;--wb-color-neutral-600:#5E5851;--wb-color-neutral-700:#433E39;--wb-color-neutral-900:#1A1816;
+--wb-color-success:#1B6E3C;--wb-color-success-subtle:#E5F4EA;--wb-color-success-border:#9ED1AE;
+--wb-color-warning:#7A4E00;--wb-color-warning-subtle:#FFF3D6;--wb-color-warning-border:#E9B949;
+--wb-color-danger:#B3261E;--wb-color-danger-subtle:#FCEAE8;--wb-color-danger-border:#E8A29D;--wb-color-danger-pressed:#8C1D18;
+--wb-color-info:#28569E;--wb-color-info-subtle:#E8F0FB;--wb-color-info-border:#9DB8E3;
+--wb-color-star:#B76E00;--wb-color-inverse-action:#9FD0D1;
+--wb-color-scrim:rgba(26,24,22,.48);
+--wb-font-family-web:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--wb-radius-sm:4px;--wb-radius-md:8px;--wb-radius-lg:16px;--wb-radius-xl:24px;--wb-radius-full:999px;
+--wb-shadow-sm:0 1px 2px rgba(26,24,22,.08);--wb-shadow-md:0 4px 12px rgba(26,24,22,.10);--wb-shadow-lg:0 8px 24px rgba(26,24,22,.14);
+--wb-motion-fast:150ms;--wb-motion-base:250ms;--wb-ease:cubic-bezier(.2,0,0,1);
+}
+@media (prefers-reduced-motion:reduce){:root{--wb-motion-fast:0ms;--wb-motion-base:0ms}.pulse{animation:none!important}.spin{animation:none!important}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:var(--wb-font-family-web);font-size:16px;line-height:24px;color:var(--wb-color-neutral-900);background:var(--wb-color-neutral-50);font-variant-numeric:tabular-nums}
+h1,h2,h3,h4,p,ul,ol{margin:0}ul,ol{padding:0;list-style:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--wb-color-brand-600);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;left:8px;top:-60px;background:#fff;padding:8px 16px;border-radius:8px;z-index:100;border:2px solid var(--wb-color-brand-600)}.skip:focus{top:8px}
+.ic{flex:none;vertical-align:middle}
+a{color:var(--wb-color-brand-700)}
+/* tipografia */
+.t-num{font-size:40px;line-height:48px;font-weight:700}
+.t-disp{font-size:32px;line-height:40px;font-weight:700}
+.t1{font-size:24px;line-height:32px;font-weight:700}
+.t2{font-size:20px;line-height:28px;font-weight:600}
+.cap{font-size:14px;line-height:20px}.capb{font-size:14px;line-height:20px;font-weight:600}
+.mut{color:var(--wb-color-neutral-600)}.b{font-weight:600}.bb{font-weight:700}
+.ok-t{color:var(--wb-color-success)}.bad-t{color:var(--wb-color-danger)}.warn-t{color:var(--wb-color-warning)}.brand-t{color:var(--wb-color-brand-700)}
+.strike{text-decoration:line-through;color:var(--wb-color-neutral-600)}
+.right{text-align:right}.nowrap{white-space:nowrap}
+/* estrutura */
+.proto{background:var(--wb-color-neutral-900);color:#fff;font-size:14px;line-height:20px;padding:6px 16px;display:flex;gap:12px;align-items:center;justify-content:center;text-align:center}
+.proto button{background:none;border:0;color:var(--wb-color-inverse-action);text-decoration:underline;min-height:32px;padding:0 4px}
+.top{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--wb-color-neutral-200);display:flex;align-items:center;gap:12px;padding:0 16px;height:56px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:22px;color:var(--wb-color-brand-600);text-decoration:none}
+.seg{display:inline-flex;background:var(--wb-color-neutral-100);border-radius:8px;padding:4px;gap:4px}
+.seg button{border:1px solid transparent;background:none;border-radius:6px;min-height:40px;padding:0 16px;font-weight:600;color:var(--wb-color-neutral-700);display:inline-flex;align-items:center;gap:8px;transition:background var(--wb-motion-fast) var(--wb-ease)}
+.seg button[aria-pressed=true]{background:#fff;border-color:var(--wb-color-neutral-300);color:var(--wb-color-brand-700)}
+.spacer{flex:1}
+.avatar{width:40px;height:40px;border-radius:999px;background:var(--wb-color-neutral-100);display:grid;place-items:center;font-weight:700;color:var(--wb-color-neutral-700);font-size:14px;border:1px solid var(--wb-color-neutral-200)}
+.who{line-height:18px;text-align:right}.who small{display:block;color:var(--wb-color-neutral-600);font-size:12px}
+.shell{display:flex;align-items:flex-start;min-height:calc(100vh - 100px)}
+.side{position:sticky;top:56px;width:248px;flex:none;height:calc(100vh - 56px);overflow:auto;padding:16px 12px;background:#fff;border-right:1px solid var(--wb-color-neutral-200)}
+.side h2{font-size:12px;line-height:16px;font-weight:600;color:var(--wb-color-neutral-600);padding:16px 12px 4px;letter-spacing:.02em}
+.side h2:first-child{padding-top:0}
+.nav a,.nav button{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 12px;border-radius:8px;text-decoration:none;color:var(--wb-color-neutral-700);font-weight:500;border:0;background:none;text-align:left;transition:background var(--wb-motion-fast) var(--wb-ease)}
+.nav a:hover,.nav button:hover{background:var(--wb-color-neutral-100)}
+.nav a[aria-current=page]{background:var(--wb-color-brand-50);color:var(--wb-color-brand-700);font-weight:600;box-shadow:inset 3px 0 0 var(--wb-color-brand-600)}
+.nav .n{margin-left:auto;background:var(--wb-color-brand-600);color:#fff;border-radius:999px;font-size:12px;line-height:16px;font-weight:700;min-width:22px;text-align:center;padding:2px 6px}
+.nav .n.w{background:var(--wb-color-warning)}
+.side .demo{margin:16px 4px 0;padding:12px;border:1px dashed var(--wb-color-neutral-400);border-radius:8px;font-size:14px;line-height:20px;color:var(--wb-color-neutral-600)}
+main{flex:1;min-width:0;padding:24px 32px 64px;max-width:1240px;margin:0 auto;outline:none}
+.bnav{display:none}
+@media (max-width:900px){
+ .side{display:none}
+ main{padding:16px 16px 96px}
+ .bnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;height:64px;background:#fff;border-top:1px solid var(--wb-color-neutral-200);z-index:20;box-shadow:var(--wb-shadow-sm)}
+ .bnav a,.bnav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;line-height:16px;font-weight:600;color:var(--wb-color-neutral-700);text-decoration:none;border:0;background:none;position:relative;min-height:48px}
+ .bnav [aria-current=page]{color:var(--wb-color-brand-700);box-shadow:inset 0 3px 0 var(--wb-color-brand-600)}
+ .bnav .n{position:absolute;top:4px;left:calc(50% + 6px);background:var(--wb-color-danger);color:#fff;border-radius:999px;font-size:11px;line-height:14px;padding:1px 5px;font-weight:700}
+ .top .who,.top .hide-m{display:none}
+ .logo span{display:none}
+}
+@media (max-width:420px){.seg button{padding:0 10px}.proto{font-size:12px}}
+/* componentes */
+.card{background:#fff;border:1px solid var(--wb-color-neutral-200);border-radius:8px;padding:16px}
+.card.pad0{padding:0;overflow:hidden}
+.card.sunk{background:var(--wb-color-neutral-100);border-color:transparent}
+.card h2,.sect h2{font-size:20px;line-height:28px;font-weight:600}
+.sect{margin-top:32px}.sect>h2{margin-bottom:12px}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.row.sb{justify-content:space-between}
+.stack>*+*{margin-top:12px}.stack8>*+*{margin-top:8px}.stack16>*+*{margin-top:16px}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}
+.g3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px}
+.dash{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:start}
+.dash2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
+@media (max-width:1000px){.dash,.dash2,.split{grid-template-columns:minmax(0,1fr)}}
+.phead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.phead h1{font-size:28px;line-height:36px;font-weight:700}
+.phead p{color:var(--wb-color-neutral-600);margin-top:4px}
+.back{display:inline-flex;align-items:center;gap:4px;min-height:44px;color:var(--wb-color-brand-700);text-decoration:none;font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid transparent;font-weight:600;text-decoration:none;white-space:nowrap;transition:background var(--wb-motion-fast) var(--wb-ease),transform var(--wb-motion-fast) var(--wb-ease)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--wb-color-brand-600);color:#fff}.btn.primary:hover{background:var(--wb-color-brand-700)}.btn.primary:active{background:var(--wb-color-brand-800)}
+.btn.secondary{background:#fff;border-color:var(--wb-color-brand-600);color:var(--wb-color-brand-700)}.btn.secondary:hover{background:var(--wb-color-brand-50)}
+.btn.ghost{background:none;color:var(--wb-color-brand-700)}.btn.ghost:hover{background:var(--wb-color-brand-50)}
+.btn.danger{background:#fff;border-color:var(--wb-color-danger);color:var(--wb-color-danger)}.btn.danger:hover{background:var(--wb-color-danger-subtle)}
+.btn.dangerfill{background:var(--wb-color-danger);color:#fff}.btn.dangerfill:hover{background:var(--wb-color-danger-pressed)}
+.btn.lg{min-height:52px;padding:0 24px;font-size:16px}
+.btn.sm{min-height:40px;padding:0 12px;font-size:14px}
+.btn.block{width:100%}
+.btn[disabled]{background:var(--wb-color-neutral-200);color:var(--wb-color-neutral-500);border-color:transparent;cursor:not-allowed}
+.btn.load{pointer-events:none;opacity:.85}
+.spin{width:18px;height:18px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:12px;line-height:16px;font-weight:600;min-height:22px;white-space:nowrap}
+.t-ok{background:var(--wb-color-success-subtle);color:var(--wb-color-success)}
+.t-warn{background:var(--wb-color-warning-subtle);color:var(--wb-color-warning)}
+.t-bad{background:var(--wb-color-danger-subtle);color:var(--wb-color-danger)}
+.t-info{background:var(--wb-color-info-subtle);color:var(--wb-color-info)}
+.t-neu{background:var(--wb-color-neutral-100);color:var(--wb-color-neutral-700)}
+.t-brand{background:var(--wb-color-brand-50);color:var(--wb-color-brand-700)}
+.note{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-radius:8px;border:1px solid;font-size:14px;line-height:20px}
+.note .ic{margin-top:1px}
+.note.ok{background:var(--wb-color-success-subtle);border-color:var(--wb-color-success-border);color:#12532b}
+.note.warn{background:var(--wb-color-warning-subtle);border-color:var(--wb-color-warning-border);color:var(--wb-color-warning)}
+.note.bad{background:var(--wb-color-danger-subtle);border-color:var(--wb-color-danger-border);color:var(--wb-color-danger)}
+.note.info{background:var(--wb-color-info-subtle);border-color:var(--wb-color-info-border);color:var(--wb-color-info)}
+.note.brand{background:var(--wb-color-brand-50);border-color:var(--wb-color-brand-200);color:var(--wb-color-brand-800)}
+.note .grow{flex:1}.note p+p{margin-top:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--wb-color-neutral-200);margin-bottom:16px;overflow-x:auto}
+.tabs button{border:0;background:none;min-height:48px;padding:0 16px;font-weight:600;color:var(--wb-color-neutral-700);border-bottom:3px solid transparent;white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.tabs button[aria-selected=true]{color:var(--wb-color-brand-700);border-bottom-color:var(--wb-color-brand-600)}
+.tabs .c{background:var(--wb-color-neutral-100);color:var(--wb-color-neutral-700);border-radius:999px;font-size:12px;line-height:16px;padding:2px 8px;font-weight:700}
+.tabs [aria-selected=true] .c{background:var(--wb-color-brand-600);color:#fff}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--wb-color-neutral-300);background:#fff;border-radius:999px;min-height:40px;padding:0 16px;font-weight:600;color:var(--wb-color-neutral-700);display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed=true]{background:var(--wb-color-brand-50);border-color:var(--wb-color-brand-600);color:var(--wb-color-brand-700)}
+/* formulários */
+.fld{display:grid;gap:4px;align-content:start}
+.fld>label,.lbl{font-weight:600}
+.inp{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--wb-color-neutral-500);border-radius:8px;background:#fff}
+textarea.inp{padding:12px;min-height:96px;resize:vertical}
+.inp:hover{border-color:var(--wb-color-neutral-700)}
+.inp[aria-invalid=true]{border:2px solid var(--wb-color-danger)}
+.inp::placeholder{color:var(--wb-color-neutral-600)}
+.help{font-size:14px;line-height:20px;color:var(--wb-color-neutral-600)}
+.err{font-size:14px;line-height:20px;color:var(--wb-color-danger);display:flex;gap:4px;align-items:flex-start;font-weight:500}
+.err[hidden]{display:none}
+.pre{position:relative}.pre>span{position:absolute;left:12px;top:12px;font-weight:600;color:var(--wb-color-neutral-600)}.pre .inp{padding-left:44px}
+.sw{position:relative;width:52px;height:32px;flex:none;border-radius:999px;border:2px solid var(--wb-color-neutral-500);background:#fff;padding:0;transition:background var(--wb-motion-fast) var(--wb-ease)}
+.sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--wb-color-neutral-500);transition:transform var(--wb-motion-fast) var(--wb-ease)}
+.sw[aria-checked=true]{background:var(--wb-color-brand-600);border-color:var(--wb-color-brand-600)}
+.sw[aria-checked=true] i{background:#fff;transform:translateX(20px)}
+.swrow{display:flex;align-items:center;gap:12px;min-height:44px}
+.chk{display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:8px 0;cursor:pointer}
+.chk input{width:22px;height:22px;margin:1px 0 0;accent-color:var(--wb-color-brand-600);flex:none}
+.radio{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 12px;border:1px solid var(--wb-color-neutral-300);border-radius:8px;cursor:pointer;background:#fff}
+.radio input{width:20px;height:20px;accent-color:var(--wb-color-brand-600)}
+.radio:has(input:checked){border-color:var(--wb-color-brand-600);background:var(--wb-color-brand-50)}
+.step{display:inline-flex;align-items:center;border:1px solid var(--wb-color-neutral-500);border-radius:8px;background:#fff;overflow:hidden}
+.step button{width:40px;height:40px;border:0;background:none;display:grid;place-items:center;color:var(--wb-color-brand-700)}
+.step button:hover{background:var(--wb-color-brand-50)}
+.step input{width:56px;height:40px;border:0;text-align:center;font-weight:600;background:none}
+/* barras e gráficos */
+.bar{height:8px;background:var(--wb-color-neutral-200);border-radius:999px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--wb-color-brand-600);border-radius:999px;transition:width var(--wb-motion-base) var(--wb-ease)}
+.bar.warn>i{background:var(--wb-color-warning)}.bar.bad>i{background:var(--wb-color-danger)}
+.chart{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:8px}
+.chart .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%;min-width:0}
+.chart .col b{font-size:12px;line-height:16px;font-weight:600;color:var(--wb-color-neutral-700);white-space:nowrap}
+.chart .col i{display:block;width:100%;max-width:44px;background:var(--wb-color-brand-400);border-radius:4px 4px 0 0;min-height:4px}
+.chart .col.now i{background:var(--wb-color-brand-700)}
+.chart .col span{font-size:12px;line-height:16px;color:var(--wb-color-neutral-600)}
+.stars{color:var(--wb-color-star);display:inline-flex;gap:2px}
+/* tabelas */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;font-size:14px;line-height:20px;font-weight:600;color:var(--wb-color-neutral-600);padding:10px 12px;border-bottom:1px solid var(--wb-color-neutral-200);background:var(--wb-color-neutral-50);white-space:nowrap}
+.tbl td{padding:12px;border-bottom:1px solid var(--wb-color-neutral-200);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:var(--wb-color-neutral-50)}
+.tbl tr.sel td{background:var(--wb-color-brand-50)}
+.tbl .num{text-align:right;white-space:nowrap}
+.thumb{width:48px;height:48px;border-radius:8px;background:var(--wb-color-neutral-100);display:grid;place-items:center;color:var(--wb-color-neutral-500);flex:none}
+.thumb.lg{width:96px;height:96px}
+.tscroll{overflow-x:auto}
+@media (max-width:760px){
+ .rt thead{display:none}
+ .rt,.rt tbody,.rt tr,.rt td{display:block;width:100%}
+ .rt tr{border-bottom:1px solid var(--wb-color-neutral-200);padding:12px}
+ .rt td{border:0;padding:4px 0;display:flex;justify-content:space-between;gap:12px;align-items:center;text-align:right}
+ .rt td[data-l]::before{content:attr(data-l);font-size:14px;color:var(--wb-color-neutral-600);text-align:left;flex:none}
+ .rt td.first{justify-content:flex-start;text-align:left}.rt td.first::before{display:none}
+ .rt td.chkc{position:absolute;right:8px}
+ .rt tr{position:relative}
+}
+/* pedidos */
+.ord{background:#fff;border:1px solid var(--wb-color-neutral-200);border-radius:8px;padding:16px}
+.ord.novo{border:2px solid var(--wb-color-brand-600);padding:20px}
+.ord.flash{animation:fl 1.6s var(--wb-ease) 2}
+@keyframes fl{0%,100%{box-shadow:0 0 0 0 rgba(0,105,111,0)}50%{box-shadow:0 0 0 6px rgba(0,105,111,.25)}}
+.cdbox{display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;background:var(--wb-color-neutral-100)}
+.cdbox .tm{font-size:28px;line-height:32px;font-weight:700}
+.cdbox.urgent{background:var(--wb-color-danger-subtle);color:var(--wb-color-danger)}
+.cdbox.urgent .bar>i{background:var(--wb-color-danger)}
+.items li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--wb-color-neutral-300)}
+.items li:last-child{border:0}
+.recebe{background:var(--wb-color-success-subtle);border:1px solid var(--wb-color-success-border);border-radius:8px;padding:12px 16px;color:#12532b}
+.recebe b{font-size:24px;line-height:32px;color:var(--wb-color-success)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px}.kv dt{color:var(--wb-color-neutral-600)}.kv dd{margin:0;font-weight:600;text-align:right}
+.tl{position:relative;padding-left:28px}
+.tl li{position:relative;padding-bottom:20px}
+.tl li::before{content:"";position:absolute;left:-20px;top:22px;bottom:-2px;width:2px;background:var(--wb-color-neutral-300)}
+.tl li:last-child::before{display:none}
+.tl .dot{position:absolute;left:-28px;top:0;width:18px;height:18px;border-radius:50%;border:2px solid var(--wb-color-neutral-500);background:#fff;display:grid;place-items:center;color:#fff}
+.tl li.done .dot{background:var(--wb-color-brand-600);border-color:var(--wb-color-brand-600)}
+.tl li.done::before{background:var(--wb-color-brand-600)}
+.tl li.cur .dot{border-color:var(--wb-color-brand-600);border-width:5px}
+.empty{text-align:center;padding:40px 16px;color:var(--wb-color-neutral-600)}
+.empty .ring{width:80px;height:80px;border-radius:50%;background:var(--wb-color-neutral-100);display:grid;place-items:center;margin:0 auto 16px;color:var(--wb-color-neutral-600)}
+.empty h2{color:var(--wb-color-neutral-900);margin-bottom:4px}
+.bulk{position:sticky;bottom:72px;z-index:15;background:var(--wb-color-neutral-900);color:#fff;border-radius:8px;padding:8px 8px 8px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;box-shadow:var(--wb-shadow-md);margin-top:12px}
+.bulk .btn{color:#fff;border-color:rgba(255,255,255,.5);background:none}.bulk .btn:hover{background:rgba(255,255,255,.14)}
+.drop{border:2px dashed var(--wb-color-neutral-400);border-radius:8px;padding:32px 16px;text-align:center;background:#fff}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.ph{aspect-ratio:1;border-radius:8px;background:var(--wb-color-neutral-100);border:1px solid var(--wb-color-neutral-200);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--wb-color-neutral-600);position:relative;font-size:12px;line-height:16px;text-align:center;padding:4px}
+.ph.add{border:2px dashed var(--wb-color-neutral-500);background:#fff;color:var(--wb-color-brand-700);font-weight:600;font-size:14px}
+.ph .x{position:absolute;top:2px;right:2px;width:32px;height:32px;border-radius:50%;border:0;background:#fff;display:grid;place-items:center;box-shadow:var(--wb-shadow-sm)}
+.ph .cv{position:absolute;left:4px;bottom:4px;background:var(--wb-color-brand-600);color:#fff;border-radius:4px;padding:0 6px;font-weight:600}
+.sticky{position:sticky;top:72px}
+.hr{height:1px;background:var(--wb-color-neutral-200);border:0;margin:16px 0}
+.dl{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+.dl.tot{border-top:1px solid var(--wb-color-neutral-300);margin-top:6px;padding-top:12px;font-weight:700}
+/* modal e toast */
+#modal{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px}
+#modal[hidden]{display:none}
+#modal .scrim{position:absolute;inset:0;background:var(--wb-color-scrim)}
+.dlg{position:relative;background:#fff;border-radius:16px;width:min(560px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:24px;box-shadow:var(--wb-shadow-lg);animation:up var(--wb-motion-base) var(--wb-ease)}
+.dlg.wide{width:min(760px,100%)}
+@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.dlg h2{font-size:22px;line-height:30px;font-weight:700;margin-bottom:8px}
+.dlg .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px}
+@media (max-width:720px){#modal{align-items:end;padding:0}.dlg{border-radius:24px 24px 0 0;width:100%;max-height:92vh}.dlg .acts .btn{flex:1}}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:50;display:grid;gap:8px;width:min(480px,calc(100% - 32px));pointer-events:none}
+@media (max-width:900px){#toast{bottom:80px}}
+.toast{pointer-events:auto;background:var(--wb-color-neutral-900);color:#fff;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;box-shadow:var(--wb-shadow-md);animation:up var(--wb-motion-base) var(--wb-ease)}
+.toast button{background:none;border:0;color:var(--wb-color-inverse-action);font-weight:600;min-height:36px;padding:0 8px;margin-left:auto}
+.comanda{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;line-height:20px;background:#fff;border:1px dashed var(--wb-color-neutral-500);padding:16px;max-width:340px;margin:0 auto;color:#000}
+.comanda h3{font-size:18px;text-align:center}.comanda hr{border:0;border-top:1px dashed #000;margin:8px 0}
+.comanda .l{display:flex;justify-content:space-between;gap:8px}
+.wa{white-space:pre-wrap;background:var(--wb-color-neutral-100);border-radius:8px;padding:12px;font-size:14px;line-height:20px;border-left:4px solid var(--wb-color-brand-600)}
+.pulse{animation:fl 1.6s var(--wb-ease) infinite}
+#print{display:none}
+@media print{body>*:not(#print){display:none!important}#print{display:block!important}.comanda{border:0;max-width:none}}
+.skel{background:linear-gradient(90deg,var(--wb-color-neutral-200),var(--wb-color-neutral-100),var(--wb-color-neutral-200));background-size:200% 100%;animation:sk 1.2s linear infinite;border-radius:8px;height:20px}
+@keyframes sk{to{background-position:-200% 0}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Ir para o conteúdo</a>
+<div id="app"></div>
+<div id="modal" hidden></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="print" aria-hidden="true"></div>
+
+<script>
+/* ===== NÚCLEO: ícones, utilitários, estado, roteador ===== */
+const ICONS={
+house:'<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/>',
+receipt:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+package:'<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+swap:'<path d="M20 11a8 8 0 0 0-14-4L4 9M4 4v5h5M4 13a8 8 0 0 0 14 4l2-2M20 20v-5h-5"/>',
+store:'<path d="M4 10v10h16V10"/><path d="M3 10l1.5-6h15L21 10a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/>',
+wallet:'<path d="M4 7a2 2 0 0 1 2-2h11v4"/><path d="M4 7v11a2 2 0 0 0 2 2h14V9H6a2 2 0 0 1-2-2z"/><circle cx="16" cy="14.5" r=".8"/>',
+chart:'<path d="M3 21h18M6 21v-8M11 21V5M16 21v-6M21 21V9"/>',
+truck:'<path d="M2 6h11v10H2zM13 9h4l4 4v3h-8"/><circle cx="6.5" cy="18" r="2"/><circle cx="17.5" cy="18" r="2"/>',
+users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14.5a5.5 5.5 0 0 1 4.5 5.5"/>',
+tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1"/>',
+percent:'<path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.2"/><circle cx="17" cy="17" r="2.2"/>',
+pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+log:'<path d="M6 5h12v16H6zM9 3h6v4H9zM9 12h6M9 16h6"/>',
+image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 4"/>',
+bell:'<path d="M6 17v-6a6 6 0 0 1 12 0v6l2 2H4z"/><path d="M10 21h4"/>',
+sound:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/>',
+mute:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+check:'<path d="M5 12.5l4.5 4.5L19 7"/>',
+checkc:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+x:'<path d="M6 6l12 12M18 6L6 18"/>',
+clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+plus:'<path d="M12 5v14M5 12h14"/>',
+minus:'<path d="M5 12h14"/>',
+search:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>',
+printer:'<path d="M7 9V3h10v6M7 17H4V9h16v8h-3"/><path d="M7 14h10v7H7z"/>',
+chat:'<path d="M4 20l1.3-4.2A8 8 0 1 1 8.2 18.7z"/>',
+upload:'<path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/>',
+download:'<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>',
+right:'<path d="M9 5l7 7-7 7"/>',
+down:'<path d="M5 9l7 7 7-7"/>',
+left:'<path d="M19 12H5M11 6l-6 6 6 6"/>',
+star:'<path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 17l-5.6 3 1.3-6.2L3 9.5l6.3-.7z" fill="currentColor"/>',
+warn:'<path d="M12 4l9.5 16h-19z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6"/>',
+info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6"/>',
+file:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+pause:'<path d="M8 5v14M16 5v14"/>',
+play:'<path d="M7 4l13 8-13 8z"/>',
+trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+bolt:'<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+mega:'<path d="M4 10v4h3l8 4V6L7 10z"/><path d="M18 9a4 4 0 0 1 0 6"/>',
+lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+trend:'<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
+sliders:'<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+ruler:'<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
+box:'<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/>',
+grid:'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+dots:'<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+refresh:'<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>'
+};
+function ic(n,s){s=s||20;return '<svg class="ic" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(ICONS[n]||ICONS.info)+'</svg>';}
+const LOGO='<svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 11h20l-1.6 17.5a1 1 0 0 1-1 .9H8.6a1 1 0 0 1-1-.9z" fill="#00696F"/><path d="M11.5 11V9.5a4.5 4.5 0 0 1 9 0V11" fill="none" stroke="#00696F" stroke-width="2.4" stroke-linecap="round"/><path d="M10.5 16.5l2.3 7.5 3.2-5.2 3.2 5.2 2.3-7.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const $=(s,r)=>(r||document).querySelector(s);
+const $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r2=n=>Math.round(n*100)/100;
+const brl=n=>(n<0?'-':'')+'R$ '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num=s=>{const v=parseFloat(String(s==null?'':s).replace(/\./g,'').replace(',','.'));return isNaN(v)?0:v};
+const mmss=ms=>{ms=Math.max(0,ms);const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const hhmm=ts=>new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+const MIN=60000,HOUR=3600000;
+const NOW0=Date.now();
+function since(ts){const m=Math.floor((Date.now()-ts)/MIN);if(m<1)return 'agora';if(m<60)return m+' min';const h=Math.floor(m/60);return h+' h '+String(m%60).padStart(2,'0')+' min'}
+function left24(ts){const ms=ts+24*HOUR-Date.now();if(ms<=0)return 'vencido';const h=Math.floor(ms/HOUR);return h+' h '+String(Math.floor(ms%HOUR/MIN)).padStart(2,'0')+' min'}
+const tag=(tone,icon,text)=>'<span class="tag t-'+tone+'">'+(icon?ic(icon,14):'')+text+'</span>';
+const btn=(label,a,o)=>{o=o||{};return '<button type="button" class="btn '+(o.k||'primary')+' '+(o.sz||'')+'" data-a="'+a+'"'+(o.d!=null?' data-d="'+esc(o.d)+'"':'')+(o.dis?' disabled':'')+(o.label?' aria-label="'+esc(o.label)+'"':'')+'>'+(o.i?ic(o.i,20):'')+label+'</button>'};
+const sw=(on,a,d,label)=>'<button type="button" role="switch" class="sw" aria-checked="'+(!!on)+'" aria-label="'+esc(label)+'" data-a="'+a+'" data-d="'+esc(d)+'"><i></i></button>';
+const tabs=(items,cur,a)=>'<div class="tabs" role="tablist">'+items.map(i=>'<button type="button" role="tab" aria-selected="'+(i[0]===cur)+'" data-a="'+a+'" data-d="'+i[0]+'">'+i[1]+(i[2]!=null?' <span class="c">'+i[2]+'</span>':'')+'</button>').join('')+'</div>';
+const head=(t,sub,acts)=>'<div class="phead"><div><h1 tabindex="-1">'+t+'</h1>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+(acts?'<div class="row">'+acts+'</div>':'')+'</div>';
+const note=(tone,icon,html)=>'<div class="note '+tone+'">'+ic(icon,20)+'<div class="grow">'+html+'</div></div>';
+const empty=(icon,t,sub,act)=>'<div class="empty"><div class="ring">'+ic(icon,40)+'</div><h2>'+t+'</h2><p>'+sub+'</p>'+(act?'<div style="margin-top:16px">'+act+'</div>':'')+'</div>';
+const stars=n=>'<span class="stars" aria-hidden="true">'+[1,2,3,4,5].map(i=>i<=Math.round(n)?ic('star',16):'<span style="opacity:.3">'+ic('star',16)+'</span>').join('')+'</span>';
+const back=(href,t)=>'<a class="back" href="#/'+href+'">'+ic('left',20)+t+'</a>';
+
+/* caminho em objeto (data-bind) */
+function getP(path){return path.split('.').reduce((o,k)=>o==null?o:o[k],S)}
+function setP(path,v){const k=path.split('.');const last=k.pop();const o=k.reduce((a,b)=>a[b],S);o[last]=v}
+function field(path,label,o){o=o||{};const id='f_'+path.replace(/\W/g,'_');const v=getP(path);const er=S.err[path];
+ let c;
+ if(o.sel)c='<select class="inp" id="'+id+'" data-bind="'+path+'" aria-invalid="'+!!er+'"'+(er?' aria-describedby="e_'+id+'"':'')+'>'+o.sel.map(x=>'<option'+(String(x)===String(v)?' selected':'')+'>'+esc(x)+'</option>').join('')+'</select>';
+ else if(o.ta)c='<textarea class="inp" id="'+id+'" data-bind="'+path+'" rows="3" placeholder="'+esc(o.ph||'')+'" aria-invalid="'+!!er+'"'+(er?' aria-describedby="e_'+id+'"':'')+'>'+esc(v)+'</textarea>';
+ else c='<input class="inp" id="'+id+'" data-bind="'+path+'" type="'+(o.type||'text')+'" inputmode="'+(o.mode||'text')+'" value="'+esc(v)+'" placeholder="'+esc(o.ph||'')+'" autocomplete="off" aria-invalid="'+!!er+'" aria-describedby="'+(er?'e_'+id+' ':'')+(o.help?'h_'+id:'')+'">';
+ if(o.pre)c='<div class="pre"><span aria-hidden="true">'+o.pre+'</span>'+c+'</div>';
+ return '<div class="fld"'+(o.cls?' style="'+o.cls+'"':'')+'><label for="'+id+'">'+label+'</label>'+c+(o.help?'<p class="help" id="h_'+id+'">'+o.help+'</p>':'')+'<p class="err" id="e_'+id+'" '+(er?'':'hidden')+'>'+ic('warn',16)+'<span>'+esc(er||'')+'</span></p></div>'}
+
+/* ===== ESTADO ===== */
+const S={role:'lojista',last:{lojista:'painel',admin:'painel'},sound:false,err:{},ordTab:'novos',ordSeq:1046,entSeq:2031,
+ loja:{nome:'Moda Morato',status:'ativa',aberta:true,comissao:15,aprovada:false},
+ sel:{},filtro:'todos',busca:'',flash:null,hideProto:false,
+ audit:[]};
+function audit(ator,acao,alvo){S.audit.unshift({t:Date.now(),a:ator,ac:acao,al:alvo})}
+function R(){const p=(location.hash||'#/lojista/painel').replace(/^#\/?/,'').split('/');return {role:p[0]==='admin'?'admin':'lojista',page:p[1]||'painel',arg:p[2]||''}}
+function go(path){if(location.hash==='#/'+path)render();else location.hash='#/'+path}
+const V={lojista:{},admin:{}};
+const NAV={
+ lojista:[
+  {g:'Dia a dia',i:[['painel','Início','house'],['pedidos','Pedidos','receipt','nPedidos'],['catalogo','Catálogo','package'],['trocas','Trocas','swap','nTrocas']]},
+  {g:'Minha loja',i:[['financeiro','Financeiro','wallet'],['loja','Configurações da loja','store']]}],
+ admin:[
+  {g:'Operação',i:[['painel','Painel geral','chart'],['aprovacao','Aprovação de lojas','shield','nAprov'],['logistica','Logística','truck','nLog'],['disputas','Trocas e disputas','swap','nDisp']]},
+  {g:'Dinheiro',i:[['comissoes','Comissões','percent'],['frete','Frete e taxas','tag']]},
+  {g:'Conteúdo',i:[['regioes','Regiões atendidas','pin'],['banners','Banners e cupons','mega']]},
+  {g:'Sistema',i:[['usuarios','Usuários e perfis','users'],['flags','Feature flags','flag'],['auditoria','Log de auditoria','log']]}]
+};
+const BN={lojista:['painel','pedidos','catalogo','trocas'],admin:['painel','aprovacao','logistica','disputas']};
+function counts(){return {
+ nPedidos:S.orders.filter(o=>o.st==='novo').length,
+ nTrocas:S.trocas.filter(t=>t.st==='pend').length,
+ nAprov:S.ad.fila.filter(l=>l.st==='pend').length,
+ nLog:S.ad.ent.filter(e=>e.st==='aguardando').length,
+ nDisp:S.ad.disp.filter(d=>d.st==='aberta').length}}
+
+/* ===== RENDER ===== */
+function chrome(r){
+ const c=counts();const nav=NAV[r.role];const lo=r.role==='lojista';
+ const side=nav.map(g=>'<h2>'+g.g+'</h2>'+g.i.map(x=>{const n=x[3]?c[x[3]]:0;return '<a href="#/'+r.role+'/'+x[0]+'" '+(r.page===x[0]?'aria-current="page"':'')+'>'+ic(x[2],22)+'<span>'+x[1]+'</span>'+(n?'<span class="n'+(x[3]==='nLog'?' w':'')+'" aria-label="'+n+' pendentes">'+n+'</span>':'')+'</a>'}).join('')).join('');
+ const demo=lo?'<div class="demo"><p class="capb" style="color:var(--wb-color-neutral-900)">Atalhos do protótipo</p><p style="margin-bottom:8px">Veja o cadastro de uma loja nova.</p><button type="button" class="btn secondary sm block" data-a="verOnb">Ver cadastro guiado</button></div>':'';
+ const first=BN[r.role].map(k=>{const it=nav.flatMap(g=>g.i).find(x=>x[0]===k);const n=it[3]?c[it[3]]:0;return '<a href="#/'+r.role+'/'+k+'" '+(r.page===k?'aria-current="page"':'')+'>'+ic(it[2],24)+'<span>'+it[1].replace('Aprovação de lojas','Lojas').replace('Trocas e disputas','Disputas')+'</span>'+(n?'<span class="n">'+n+'</span>':'')+'</a>'}).join('');
+ const more='<button type="button" data-a="more" aria-haspopup="dialog">'+ic('menu',24)+'<span>Mais</span></button>';
+ const snd=lo?'<button type="button" class="btn '+(S.sound?'secondary':'ghost')+' sm" data-a="sound" aria-pressed="'+S.sound+'" aria-label="'+(S.sound?'Sons ativados. Tocar para desligar':'Ativar sons de pedido novo')+'">'+ic(S.sound?'sound':'mute',20)+'<span class="hide-m">'+(S.sound?'Sons ativados':'Ativar sons')+'</span></button>':'';
+ return (S.hideProto?'':'<div class="proto"><span>Protótipo navegável com dados fictícios. Nada é salvo.</span><button type="button" data-a="hideProto">Dispensar</button></div>')+
+ '<header class="top"><a class="logo" href="#/'+r.role+'/painel" aria-label="Webag, início">'+LOGO+'<span>webag</span></a>'+
+ '<div class="seg" role="group" aria-label="Escolher painel"><button type="button" data-a="role" data-d="lojista" aria-pressed="'+lo+'">'+ic('store',20)+'Lojista</button><button type="button" data-a="role" data-d="admin" aria-pressed="'+!lo+'">'+ic('shield',20)+'Admin</button></div>'+
+ '<div class="spacer"></div>'+snd+
+ '<div class="who hide-m"><span class="b">'+(lo?'Fátima Souza':'Operação Webag')+'</span><small>'+(lo?S.loja.nome+' · Francisco Morato':'Super admin')+'</small></div><div class="avatar" aria-hidden="true">'+(lo?'FS':'OW')+'</div></header>'+
+ '<div class="shell"><nav class="side nav" aria-label="Menu principal">'+side+demo+'</nav><main id="main" tabindex="-1">@@MAIN@@</main></div>'+
+ '<nav class="bnav nav" aria-label="Menu principal">'+first+more+'</nav>';
+}
+let lastKey='';
+function render(top){
+ const r=R();S.role=r.role;let page=r.page;
+ if(r.role==='lojista'&&S.loja.status!=='ativa'){const free=S.loja.status==='analise'?['cadastro','catalogo','loja']:['cadastro'];if(free.indexOf(page)<0){page='cadastro'}}
+ S.page=page;S.arg=r.arg;
+ S.last[r.role]=page;
+ const fn=V[r.role][page];let body;
+ try{body=fn?fn(r.arg):empty('info','Tela fora do ar','Esta área ainda não foi desenhada no protótipo.')}
+ catch(e){console.error(e);body=empty('warn','Não conseguimos montar esta tela','Veja o console do navegador. Seus dados de demonstração continuam salvos.','<button class="btn secondary" data-a="go" data-d="'+r.role+'/painel">Voltar ao início</button>')}
+ const y=window.scrollY;
+ $('#app').innerHTML=chrome(r).replace('@@MAIN@@',function(){return body});
+ const key=r.role+'/'+page+'/'+r.arg;
+ if(top||key!==lastKey){window.scrollTo(0,0);const h=$('#main h1');if(h&&lastKey)h.focus({preventScroll:true})}else window.scrollTo(0,y);
+ lastKey=key;
+ document.title=(counts().nPedidos&&r.role==='lojista'?'('+counts().nPedidos+') ':'')+'Webag · '+(r.role==='admin'?'Admin':'Lojista');
+}
+window.addEventListener('hashchange',()=>render(true));
+
+/* ===== INTERAÇÃO ===== */
+const A={};
+document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled)return;const f=A[el.dataset.a];if(!f)return;if(!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName))e.preventDefault();f(el.dataset.d,el,e)});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&!$('#modal').hidden)closeModal();
+ if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('tr.click')){e.preventDefault();e.target.click()}
+ if(e.key==='Tab'&&!$('#modal').hidden){const f=$$('#modal button:not([disabled]),#modal input,#modal select,#modal textarea,#modal a[href]');if(!f.length)return;const a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}
+});
+function onBind(e){const t=e.target;const p=t.dataset&&t.dataset.bind;if(!p)return;
+ let v=t.type==='checkbox'?t.checked:t.value;setP(p,v);
+ if(S.err[p]){delete S.err[p];const er=$('#e_'+t.id);if(er)er.hidden=true;t.setAttribute('aria-invalid','false')}
+ if(t.dataset.re&&e.type==='change')render();
+ if(typeof A.calc==='function')A.calc(p);}
+document.addEventListener('input',onBind);document.addEventListener('change',onBind);
+A.go=d=>go(d);
+A.role=d=>go(d+'/'+(S.last[d]||'painel'));
+A.hideProto=()=>{S.hideProto=true;render()};
+A.more=()=>{const nav=NAV[S.role].flatMap(g=>g.i).filter(x=>BN[S.role].indexOf(x[0])<0);
+ modal('<h2>Mais áreas</h2><div class="nav">'+nav.map(x=>'<a href="#/'+S.role+'/'+x[0]+'" data-a="closeModal">'+ic(x[2],22)+x[1]+'</a>').join('')+(S.role==='lojista'?'<button type="button" data-a="verOnb">'+ic('flag',22)+'Ver cadastro guiado</button>':'')+'</div>',{label:'Mais áreas'})};
+A.verOnb=()=>{closeModal();S.loja.status='onboarding';S.onb.step=1;go('lojista/cadastro')};
+let lastFocus=null;
+function modal(html,o){o=o||{};lastFocus=document.activeElement;const m=$('#modal');m.innerHTML='<div class="scrim" data-a="closeModal"></div><div class="dlg '+(o.wide?'wide':'')+'" role="dialog" aria-modal="true" aria-label="'+esc(o.label||'Janela')+'">'+html+'</div>';m.hidden=false;const f=$('#modal [autofocus]')||$('#modal input:not([type=hidden]),#modal select,#modal textarea')||$('#modal button,#modal a');if(f)f.focus()}
+function closeModal(){const m=$('#modal');m.hidden=true;m.innerHTML='';if(lastFocus&&document.body.contains(lastFocus))lastFocus.focus()}
+A.closeModal=closeModal;
+function toast(msg,o){o=o||{};const t=document.createElement('div');t.className='toast';t.innerHTML=ic(o.icon||'checkc',20)+'<span>'+msg+'</span>'+(o.undo?'<button type="button">Desfazer</button>':'');$('#toast').appendChild(t);if(o.undo)$('button',t).onclick=()=>{o.undo();t.remove()};setTimeout(()=>t.remove(),o.ms||4500)}
+
+/* som (simulado com Web Audio; precisa de um toque do usuário para liberar) */
+let AC=null;
+function beep(force){if(!S.sound&&!force)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();[0,.3,.6].forEach((t,i)=>{const o=AC.createOscillator(),g=AC.createGain();o.type='square';o.frequency.value=i%2?660:880;g.gain.setValueAtTime(.0001,AC.currentTime+t);g.gain.exponentialRampToValueAtTime(.25,AC.currentTime+t+.02);g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+t+.24);o.connect(g);g.connect(AC.destination);o.start(AC.currentTime+t);o.stop(AC.currentTime+t+.26)})}catch(e){}}
+A.sound=()=>{S.sound=!S.sound;if(S.sound){beep(true);toast('Sons ativados. Você ouvirá este alerta a cada pedido novo.',{icon:'sound'})}else toast('Sons desligados. Você pode perder pedidos.',{icon:'mute'});render()};
+
+/* relógio: contagens, tempos de espera, SLA e alarme */
+setInterval(()=>{const t=Date.now();
+ $$('[data-cd]').forEach(el=>{const l=+el.dataset.cd-t;el.textContent=mmss(l);const b=el.closest('.cdbox');if(b){b.classList.toggle('urgent',l<120000);const br=$('[data-cdbar]',b);if(br)br.style.width=Math.max(0,l/600000*100)+'%'}});
+ $$('[data-since]').forEach(el=>{el.textContent=since(+el.dataset.since)});
+ $$('[data-sla]').forEach(el=>{el.textContent=left24(+el.dataset.sla)});
+ let ch=false;S.orders.forEach(o=>{if(o.st==='novo'&&o.t0+10*MIN<=t){o.st='expirado';ch=true;audit('Sistema','Pedido expirou sem resposta','#'+o.id)}});
+ if(ch&&S.role==='lojista'){render();toast('Um pedido passou de 10 min sem resposta e foi cancelado.',{icon:'warn'})}
+},1000);
+setInterval(()=>{if(S.sound&&S.loja.status==='ativa'&&S.orders.some(o=>o.st==='novo'))beep()},9000);
+</script>
+
+<script>
+/* ===== DADOS FICTÍCIOS ===== */
+const N=NOW0;
+S.prods=[
+ {id:1,n:'Camiseta básica algodão',cat:'Camisetas',p:39.9,promo:0,st:'ativo',fotos:3,vendas:64,med:true,semTroca:false,desc:'Algodão penteado, gola careca, 4 cores.',v:[{t:'P',c:'Branca',e:12},{t:'M',c:'Branca',e:18},{t:'G',c:'Branca',e:9},{t:'M',c:'Preta',e:15},{t:'G',c:'Preta',e:0}]},
+ {id:2,n:'Vestido midi floral',cat:'Vestidos',p:129.9,promo:109.9,st:'ativo',fotos:4,vendas:19,med:true,semTroca:false,desc:'Viscose leve, manga curta, cintura marcada.',v:[{t:'P',c:'Floral azul',e:3},{t:'M',c:'Floral azul',e:5},{t:'G',c:'Floral azul',e:2}]},
+ {id:3,n:'Calça jeans slim',cat:'Calças',p:149.9,promo:0,st:'ativo',fotos:3,vendas:17,med:true,semTroca:false,desc:'Jeans com elastano, cintura média.',v:[{t:'38',c:'Azul',e:4},{t:'40',c:'Azul',e:6},{t:'42',c:'Azul',e:5},{t:'44',c:'Azul',e:1}]},
+ {id:4,n:'Tênis casual branco',cat:'Calçados',p:189.9,promo:0,st:'ativo',fotos:5,vendas:21,med:false,semTroca:false,desc:'Solado de borracha, palmilha macia.',v:[{t:'38',c:'Branco',e:2},{t:'40',c:'Branco',e:4},{t:'41',c:'Branco',e:3},{t:'42',c:'Branco',e:0}]},
+ {id:5,n:'Bermuda moletom',cat:'Bermudas',p:69.9,promo:0,st:'ativo',fotos:2,vendas:9,med:true,semTroca:false,desc:'Moletom leve, cordão e bolsos.',v:[{t:'M',c:'Cinza',e:8},{t:'G',c:'Cinza',e:7}]},
+ {id:6,n:'Jaqueta corta-vento',cat:'Jaquetas',p:179.9,promo:0,st:'pausado',fotos:3,vendas:4,med:true,semTroca:false,desc:'Impermeável leve com capuz.',v:[{t:'M',c:'Preta',e:5},{t:'G',c:'Preta',e:4}]},
+ {id:7,n:'Meia cano médio, kit 3 pares',cat:'Acessórios',p:24.9,promo:0,st:'ativo',fotos:1,vendas:15,med:false,semTroca:true,desc:'Kit com 3 pares. Item de higiene: sem troca voluntária.',v:[{t:'Único',c:'Preta',e:4}]},
+ {id:8,n:'Cinto de couro',cat:'Acessórios',p:59.9,promo:0,st:'ativo',fotos:2,vendas:7,med:false,semTroca:false,desc:'Couro legítimo, fivela metálica.',v:[{t:'M',c:'Marrom',e:0},{t:'G',c:'Marrom',e:0}]}
+];
+const estoque=p=>p.v.reduce((s,x)=>s+(+x.e||0),0);
+const preco=p=>p.promo&&p.promo>0?p.promo:p.p;
+const net=v=>Math.round(v*(100-S.loja.comissao))/100;
+S.orders=[
+ {id:1046,st:'novo',t0:N-2.5*MIN,cli:'Mariana S.',bairro:'Jardim Alegria',ent:'webag',pay:'PIX pago',obs:'Se possível, embalar para presente.',it:[{n:'Vestido midi floral',v:'M · Floral azul',q:1,p:109.9},{n:'Camiseta básica algodão',v:'P · Branca',q:2,p:39.9}]},
+ {id:1045,st:'novo',t0:N-5.8*MIN,cli:'Roberto A.',bairro:'Centro, Franco da Rocha',ent:'webag',pay:'PIX pago',obs:'',it:[{n:'Tênis casual branco',v:'41 · Branco',q:1,p:189.9}]},
+ {id:1044,st:'preparo',t0:N-22*MIN,acc:N-18*MIN,cli:'Camila R.',bairro:'Parque Paulista',ent:'webag',pay:'Cartão aprovado',obs:'',it:[{n:'Calça jeans slim',v:'40 · Azul',q:1,p:149.9},{n:'Cinto de couro',v:'M · Marrom',q:1,p:59.9}]},
+ {id:1043,st:'pronto',t0:N-41*MIN,acc:N-36*MIN,pr:N-9*MIN,cli:'Lucas P.',bairro:'Centro',ent:'webag',pay:'PIX pago',obs:'',entId:'E-2031',it:[{n:'Bermuda moletom',v:'G · Cinza',q:2,p:69.9}]},
+ {id:1042,st:'pronto',t0:N-55*MIN,acc:N-50*MIN,pr:N-20*MIN,cli:'Aline T.',bairro:'Retirada na loja',ent:'retirada',cod:'4821',pay:'PIX pago',obs:'',it:[{n:'Camiseta básica algodão',v:'M · Preta',q:3,p:39.9}]},
+ {id:1041,st:'entregue',t0:N-3*HOUR,acc:N-170*MIN,cli:'Pedro H.',bairro:'Caieiras',ent:'webag',pay:'PIX pago',obs:'',it:[{n:'Tênis casual branco',v:'38 · Branco',q:1,p:189.9}]},
+ {id:1040,st:'recusado',t0:N-4*HOUR,motivo:'Sem estoque no tamanho pedido',cli:'Sueli M.',bairro:'Franco da Rocha',ent:'webag',pay:'PIX pago',obs:'',it:[{n:'Jaqueta corta-vento',v:'M · Preta',q:1,p:179.9}]}
+];
+const tot=o=>r2(o.it.reduce((s,i)=>s+i.p*i.q,0));
+const qtd=o=>o.it.reduce((s,i)=>s+i.q,0);
+S.trocas=[
+ {id:'T-311',st:'pend',tipo:'tam',cli:'Juliana F.',ped:1031,prod:'Calça jeans slim',de:'40 · Azul',para:'42 · Azul',motivo:'Ficou justa na cintura',t0:N-19.5*HOUR,fotos:2,coleta:'casa',estoqueOk:true},
+ {id:'T-312',st:'pend',tipo:'def',cli:'Marcos V.',ped:1027,prod:'Tênis casual branco',de:'41 · Branco',para:'',motivo:'Solado descolando na lateral',t0:N-5*HOUR,fotos:3,coleta:'casa'},
+ {id:'T-313',st:'pend',tipo:'arr',cli:'Débora L.',ped:1033,prod:'Vestido midi floral',de:'P · Floral azul',para:'',motivo:'Desistiu da compra',t0:N-2*HOUR,fotos:0,coleta:'loja'},
+ {id:'T-309',st:'apr',tipo:'tam',cli:'Rogério N.',ped:1022,prod:'Camiseta básica algodão',de:'M · Branca',para:'G · Branca',motivo:'Ficou pequena',t0:N-30*HOUR,fotos:1,coleta:'loja'},
+ {id:'T-305',st:'rec',tipo:'tam',cli:'Priscila O.',ped:1018,prod:'Bermuda moletom',de:'M · Cinza',para:'G · Cinza',motivo:'Peça com marcas de uso',t0:N-3*24*HOUR,fotos:2,coleta:'casa',rm:'Peça usada, sem etiqueta'}
+];
+const TIPO={tam:['info','Tamanho ou cor'],def:['warn','Defeito'],arr:['neu','Arrependimento']};
+S.cfg={desc:'Moda feminina, masculina e calçados em Francisco Morato. Troca fácil na loja.',whats:'(11) 94000-1234',msg:'Olá! Vim pelo Webag e preciso de ajuda com o pedido #',
+ hor:[['Segunda',1,'09:00','18:00'],['Terça',1,'09:00','18:00'],['Quarta',1,'09:00','18:00'],['Quinta',1,'09:00','18:00'],['Sexta',1,'09:00','19:00'],['Sábado',1,'09:00','17:00'],['Domingo',0,'09:00','13:00']],
+ ent:true,ret:true,prep:30,endRet:'Rua Capitão Antônio Ferreira, 120, Centro, Francisco Morato',
+ vol:true,prazo:7,levar:true,cond:true,tab:'perfil'};
+S.sem=[['sex',980,11],['sáb',1420,16],['dom',1105,13],['seg',820,10],['ter',1010,12],['qua',1180,14],['qui',1284.7,15]];
+S.ordFiltro='';
+S.onb={step:1,tipo:'PJ',f:{nome:'',doc:'',email:'',cel:'',loja:'',cat:'Moda e calçados',cep:'',end:'',bairro:'',cidade:'Francisco Morato',wa:'',desc:''},docs:{id:'',end:'',cnpj:''},mp:false,termos:false,env:false};
+S.imp={step:1,file:''};
+S.draft=null;S.mass=null;
+
+/* ===== LOJISTA: INÍCIO ===== */
+V.lojista.painel=function(){
+ const hoje=S.sem[6],tw=r2(S.sem.reduce((s,d)=>s+d[1],0)),pw=S.sem.reduce((s,d)=>s+d[2],0);
+ const max=Math.max.apply(null,S.sem.map(d=>d[1]));
+ const nov=S.orders.filter(o=>o.st==='novo');
+ const menor=nov.length?Math.min.apply(null,nov.map(o=>o.t0+10*MIN)):0;
+ const top=[['Camiseta básica algodão',64,39.9],['Tênis casual branco',21,189.9],['Vestido midi floral',19,109.9],['Calça jeans slim',17,149.9],['Meia cano médio, kit 3 pares',15,24.9]];
+ const mx=top[0][1];
+ const baixo=S.prods.filter(p=>p.st==='ativo'&&estoque(p)<=5);
+ const urg=S.trocas.filter(t=>t.st==='pend'&&(t.t0+24*HOUR-Date.now())<6*HOUR);
+ const dist=[[5,100],[4,20],[3,5],[2,2],[1,1]];
+ return head('Bom dia, Fátima','Quinta, 19 de novembro',
+  '<div class="swrow"><span class="b" id="lbl-aberta">'+(S.loja.aberta?'Loja aberta':'Loja pausada')+'</span>'+sw(S.loja.aberta,'toggleLoja','','Loja aberta para pedidos')+'</div>')+
+ (nov.length?'<div class="note brand" style="margin-bottom:16px;align-items:center">'+ic('bell',22)+'<div class="grow"><p class="b">'+nov.length+(nov.length>1?' pedidos novos esperando resposta':' pedido novo esperando resposta')+'</p><p>O mais urgente vence em <b data-cd="'+menor+'">'+mmss(menor-Date.now())+'</b>. Sem resposta, o pedido é cancelado.</p></div>'+btn('Ver pedidos','go',{d:'lojista/pedidos'})+'</div>':'')+
+ '<div class="dash"><div class="stack16">'+
+  '<section class="card" aria-labelledby="v1"><div class="row sb"><div><h2 id="v1" class="capb mut" style="font-weight:600">Vendas de hoje</h2><p class="t-num">'+brl(hoje[1])+'</p><p class="cap ok-t b">'+ic('trend',16)+' 8,9% a mais que na quinta passada</p></div><div class="right"><p class="capb mut">Últimos 7 dias</p><p class="t2">'+brl(tw)+'</p><p class="cap mut">'+pw+' pedidos</p></div></div>'+
+  '<div class="chart" role="img" aria-label="Vendas por dia, últimos 7 dias">'+S.sem.map((d,i)=>'<div class="col'+(i===6?' now':'')+'"><b>'+Math.round(d[1]).toLocaleString('pt-BR')+'</b><i style="height:'+Math.round(d[1]/max*100)+'px"></i><span>'+d[0]+(i===6?' (hoje)':'')+'</span></div>').join('')+'</div></section>'+
+  '<section class="card" aria-labelledby="v2"><div class="row sb"><h2 id="v2">Mais vendidos da semana</h2><a href="#/lojista/catalogo" class="capb">Ver catálogo</a></div><ol class="stack" style="margin-top:12px">'+top.map((t,i)=>'<li><div class="row sb"><span class="b">'+(i+1)+'. '+t[0]+'</span><span class="cap mut">'+t[1]+' un · você recebe '+brl(net(t[1]*t[2]))+'</span></div><div class="bar" style="margin-top:6px" aria-hidden="true"><i style="width:'+Math.round(t[1]/mx*100)+'%"></i></div></li>').join('')+'</ol></section>'+
+ '</div><div class="stack16">'+
+  '<section class="card"><h2 class="capb mut" style="font-weight:600">Ticket médio</h2><p class="t-disp">'+brl(r2(tw/pw))+'</p><p class="cap mut">Hoje: '+brl(r2(hoje[1]/hoje[2]))+' em '+hoje[2]+' pedidos</p></section>'+
+  '<section class="card"><h2 class="capb mut" style="font-weight:600">Avaliação</h2><div class="row" style="gap:8px"><span class="t-disp">4,7</span>'+stars(4.7)+'</div><p class="cap mut">128 avaliações dos clientes</p><ul class="stack8" style="margin-top:12px">'+dist.map(d=>'<li class="row" style="gap:8px;flex-wrap:nowrap"><span class="cap" style="width:28px">'+d[0]+' '+ic('star',12)+'</span><div class="bar" style="flex:1"><i style="width:'+d[1]/100*100+'%"></i></div><span class="cap mut" style="width:28px;text-align:right">'+d[1]+'</span></li>').join('')+'</ul></section>'+
+  '<section class="card sunk"><h2>Precisa de atenção</h2><ul class="stack" style="margin-top:8px">'+
+   (urg.length?'<li class="row" style="flex-wrap:nowrap;align-items:flex-start">'+ic('clock',20)+'<span><b>'+urg.length+' troca vence em menos de 6 h.</b> <a href="#/lojista/trocas">Responder</a></span></li>':'')+
+   baixo.map(p=>'<li class="row" style="flex-wrap:nowrap;align-items:flex-start">'+ic('warn',20)+'<span><b>'+esc(p.n)+'</b>: '+estoque(p)+' em estoque. <a href="#/lojista/catalogo/'+p.id+'">Ajustar</a></span></li>').join('')+
+   S.prods.filter(p=>p.st==='ativo'&&estoque(p)===0).map(p=>'<li class="row" style="flex-wrap:nowrap;align-items:flex-start">'+ic('x',20)+'<span><b>'+esc(p.n)+'</b> esgotado. '+btn('Pausar produto','pausar',{d:p.id,k:'secondary',sz:'sm'})+'</span></li>').join('')+
+  '</ul></section></div></div>'};
+A.toggleLoja=()=>{S.loja.aberta=!S.loja.aberta;toast(S.loja.aberta?'Loja aberta. Você já pode receber pedidos.':'Loja pausada. Clientes veem "Fechada agora".',{icon:S.loja.aberta?'checkc':'pause'});render()};
+A.pausar=id=>{const p=S.prods.find(x=>x.id==id);p.st='pausado';toast(esc(p.n)+' pausado.',{undo:()=>{p.st='ativo';render()}});render()};
+
+/* ===== LOJISTA: PEDIDOS ===== */
+const POOL=[
+ {cli:'Fernanda C.',bairro:'Jardim Fernanda',obs:'',it:[{n:'Camiseta básica algodão',v:'G · Branca',q:2,p:39.9},{n:'Bermuda moletom',v:'M · Cinza',q:1,p:69.9}]},
+ {cli:'André M.',bairro:'Polvilho, Cajamar',obs:'Deixar com o porteiro.',it:[{n:'Calça jeans slim',v:'42 · Azul',q:1,p:149.9}]},
+ {cli:'Simone B.',bairro:'Centro, Caieiras',obs:'',it:[{n:'Vestido midi floral',v:'P · Floral azul',q:1,p:109.9},{n:'Cinto de couro',v:'G · Marrom',q:1,p:59.9}]}];
+function newOrder(){const t=POOL[S.ordSeq%POOL.length];S.ordSeq++;const o={id:S.ordSeq,st:'novo',t0:Date.now(),cli:t.cli,bairro:t.bairro,ent:'webag',pay:'PIX pago',obs:t.obs,it:JSON.parse(JSON.stringify(t.it))};S.orders.unshift(o);S.flash=o.id;
+ audit('Sistema','Pedido novo recebido','#'+o.id+' · '+brl(tot(o)));
+ beep();toast('Pedido novo #'+o.id+' · '+brl(tot(o))+' · '+qtd(o)+(qtd(o)>1?' itens':' item'),{icon:'bell',ms:6000});
+ if(S.role==='lojista'&&S.loja.status==='ativa'){if(S.page==='pedidos')S.ordTab='novos';render()}}
+A.simular=()=>newOrder();
+setTimeout(()=>{if(S.role==='lojista'&&S.loja.status==='ativa'&&!S.orders.some(o=>o.id>1046))newOrder()},30000);
+A.ordTab=d=>{S.ordTab=d;render()};
+const ORDLBL={novo:['brand','bell','Aguardando resposta'],preparo:['info','box','Em preparo'],pronto:['warn','clock','Pronto para coleta'],entregue:['ok','checkc','Entregue'],recusado:['bad','x','Recusado'],expirado:['bad','clock','Sem resposta']};
+function ordItems(o){return '<ul class="items">'+o.it.map(i=>'<li><span><b>'+i.q+'x</b> '+esc(i.n)+'<br><span class="cap mut">'+esc(i.v)+'</span></span><span class="nowrap">'+brl(i.p*i.q)+'</span></li>').join('')+'</ul>'}
+function ordCard(o){
+ const t=tot(o);const ent=o.entId?S.ad.ent.find(e=>e.id===o.entId):null;
+ const meta=tag(o.ent==='webag'?'info':'neu',o.ent==='webag'?'truck':'store',o.ent==='webag'?'Entrega pela Webag':'Retirada na loja')+' '+tag('ok','checkc',esc(o.pay));
+ const recebe='<div class="recebe row sb" style="margin-top:12px"><span>Você recebe (já sem os '+S.loja.comissao+'% da Webag)</span><b>'+brl(net(t))+'</b></div>';
+ if(o.st==='novo'){const dl=o.t0+10*MIN;
+  return '<article class="ord novo'+(S.flash===o.id?' flash':'')+'" aria-labelledby="o'+o.id+'"><div class="row sb"><h2 id="o'+o.id+'" class="t2">Pedido novo #'+o.id+'</h2><span class="cap mut">'+hhmm(o.t0)+' · '+esc(o.cli)+' · '+esc(o.bairro)+'</span></div>'+
+  '<div class="cdbox" style="margin:12px 0"><div style="flex:1"><p class="capb">Responda em</p><div class="bar" style="margin-top:6px" aria-hidden="true"><i data-cdbar style="width:'+Math.max(0,(dl-Date.now())/6000)+'%"></i></div></div><span class="tm" data-cd="'+dl+'">'+mmss(dl-Date.now())+'</span></div>'+
+  '<div class="row" style="margin-bottom:8px">'+meta+'</div>'+ordItems(o)+(o.obs?'<p class="note info" style="margin-top:8px">'+ic('info',18)+'<span><b>Observação do cliente:</b> '+esc(o.obs)+'</span></p>':'')+recebe+
+  '<div class="row" style="margin-top:16px"><div style="flex:2;min-width:160px">'+btn('Aceitar pedido','aceitar',{d:o.id,sz:'lg',i:'check',k:'primary'}).replace('class="btn','class="btn block')+'</div><div style="flex:1;min-width:120px">'+btn('Recusar','recusar',{d:o.id,sz:'lg',k:'danger'}).replace('class="btn','class="btn block')+'</div></div></article>'}
+ let st=ORDLBL[o.st];let corpo='',acts='';
+ if(o.st==='preparo'){corpo='<p class="cap mut">Aceito às '+hhmm(o.acc)+'. Preparo estimado: '+S.cfg.prep+' min.</p>';acts=btn('Marcar pronto para coleta','pronto',{d:o.id,i:'check'})+btn('Imprimir comanda','comanda',{d:o.id,k:'secondary',i:'printer'})}
+ if(o.st==='pronto'){
+  if(o.ent==='webag'){const s=ent?ent.st:'aguardando';const mb=ent&&ent.mb?S.ad.mb.find(m=>m.id===ent.mb):null;
+   corpo=note('warn','truck','<p class="b">'+(s==='aguardando'?'Aguardando motoboy da Webag':s==='a_caminho'?'Motoboy '+esc(mb?mb.n:'')+' a caminho da loja':'Coletado')+'</p><p>A entrega é da Webag. Entregue o pedido ao motoboy com a comanda.</p>');
+   acts=btn('Imprimir comanda','comanda',{d:o.id,k:'secondary',i:'printer'})}
+  else{corpo=note('info','store','<p class="b">Aguardando o cliente retirar</p><p>Peça o código de retirada: <b>'+o.cod+'</b></p>');acts=btn('Entregar ao cliente','retirou',{d:o.id,i:'check'})}}
+ if(o.st==='recusado')corpo='<p class="cap mut">Motivo informado ao cliente: '+esc(o.motivo)+'. O valor foi estornado.</p>';
+ if(o.st==='expirado')corpo='<p class="cap mut">Passou de 10 min sem resposta. O pedido foi cancelado e o cliente estornado.</p>';
+ return '<article class="ord" aria-labelledby="o'+o.id+'"><div class="row sb"><h2 id="o'+o.id+'" class="t2">#'+o.id+' · '+esc(o.cli)+'</h2>'+tag(st[0],st[1],st[2])+'</div><p class="cap mut">'+esc(o.bairro)+' · '+qtd(o)+(qtd(o)>1?' itens':' item')+' · '+brl(t)+' · você recebe '+brl(net(t))+'</p>'+
+  (o.st==='preparo'||o.st==='pronto'?ordItems(o):'')+(corpo?'<div style="margin-top:8px">'+corpo+'</div>':'')+(acts?'<div class="row" style="margin-top:12px">'+acts+'</div>':'')+'</article>'}
+V.lojista.pedidos=function(){
+ const by=k=>S.orders.filter(o=>o.st===k);
+ const tabsD=[['novos','Novos',by('novo').length],['preparo','Em preparo',by('preparo').length],['prontos','Prontos',by('pronto').length],['hist','Histórico',null]];
+ let list=S.ordTab==='novos'?by('novo'):S.ordTab==='preparo'?by('preparo'):S.ordTab==='prontos'?by('pronto'):S.orders.filter(o=>['entregue','recusado','expirado'].indexOf(o.st)>=0);
+ const vazio={novos:['bell','Nenhum pedido novo','Quando chegar um pedido, você ouve o alerta e ele aparece aqui.'],preparo:['box','Nada em preparo','Os pedidos que você aceitar ficam aqui.'],prontos:['truck','Nada esperando coleta','Marque "pronto para coleta" quando terminar de separar.'],hist:['receipt','Sem pedidos encerrados','Entregues e recusados aparecem aqui.']}[S.ordTab];
+ return head('Pedidos','Atualiza sozinho. Não precisa recarregar a página.',
+  btn(S.sound?'Sons ativados':'Ativar sons','sound',{k:S.sound?'secondary':'primary',i:S.sound?'sound':'mute'})+btn('Simular pedido novo','simular',{k:'ghost',i:'plus'}))+
+  (S.sound?'':note('warn','mute','<p class="b">Sons desligados</p><p>Ative para ouvir o alerta a cada pedido novo. Sem som, você pode deixar um cliente esperando.</p>')+'<div style="height:16px"></div>')+
+  tabs(tabsD,S.ordTab,'ordTab')+
+  '<div class="stack16" role="tabpanel">'+(list.length?list.map(ordCard).join(''):empty(vazio[0],vazio[1],vazio[2]))+'</div>'};
+A.aceitar=id=>{const o=S.orders.find(x=>x.id==id);o.st='preparo';o.acc=Date.now();S.flash=null;audit('Fátima Souza','Aceitou pedido','#'+o.id);toast('Pedido #'+o.id+' aceito. Separe os itens e imprima a comanda.',{icon:'checkc'});S.ordTab='preparo';render()};
+A.recusar=id=>{const o=S.orders.find(x=>x.id==id);S.motivo='';
+ modal('<h2>Recusar pedido #'+o.id+'?</h2><p class="mut">O cliente recebe o motivo e o valor volta para ele. Recusar muito pode baixar a posição da sua loja.</p><fieldset style="border:0;padding:0;margin:16px 0 0" class="stack8"><legend class="lbl" style="margin-bottom:8px">Motivo (o cliente vai ler)</legend>'+
+  ['Sem estoque no tamanho pedido','Item com defeito','Loja vai fechar','Não consigo preparar a tempo'].map(m=>'<label class="radio"><input type="radio" name="mot" value="'+m+'" data-a="motivo" data-d="'+m+'">'+m+'</label>').join('')+'</fieldset><p class="err" id="e-mot" hidden>'+ic('warn',16)+'<span>Escolha um motivo. O cliente vai ler.</span></p>'+
+  '<div class="acts">'+btn('Voltar','closeModal',{k:'ghost'})+btn('Recusar pedido','recusarOk',{d:id,k:'dangerfill'})+'</div>',{label:'Recusar pedido'})};
+A.motivo=d=>{S.motivo=d;const e=$('#e-mot');if(e)e.hidden=true};
+A.recusarOk=id=>{if(!S.motivo){$('#e-mot').hidden=false;return}const o=S.orders.find(x=>x.id==id);o.st='recusado';o.motivo=S.motivo;audit('Fátima Souza','Recusou pedido','#'+o.id+' · '+S.motivo);closeModal();toast('Pedido #'+o.id+' recusado. O cliente foi avisado e o valor volta em até 2 dias úteis.',{icon:'x'});S.ordTab='hist';render()};
+A.pronto=id=>{const o=S.orders.find(x=>x.id==id);o.st='pronto';o.pr=Date.now();
+ if(o.ent==='webag'){o.entId='E-'+(++S.entSeq);S.ad.ent.unshift({id:o.entId,tipo:'entrega',ref:o.id,loja:S.loja.nome,endLoja:S.cfg.endRet,telLoja:S.cfg.whats,cli:o.cli,telCli:'(11) 94000-5588',end:'Rua das Acácias, 45',bairro:o.bairro,ready:o.pr,st:'aguardando',mb:null,custo:null,cobrar:0,pago:'PIX pago'});
+  audit('Fátima Souza','Pedido pronto para coleta','#'+o.id+' → '+o.entId);toast('Pedido #'+o.id+' pronto. A Webag foi avisada e vai enviar o motoboy.',{icon:'truck'})}
+ else toast('Pedido #'+o.id+' pronto. Avise o cliente que já pode retirar.',{icon:'store'});
+ S.ordTab='prontos';render()};
+A.retirou=id=>{const o=S.orders.find(x=>x.id==id);o.st='entregue';toast('Pedido #'+o.id+' entregue ao cliente.',{icon:'checkc'});S.ordTab='hist';render()};
+A.comanda=id=>{const o=S.orders.find(x=>x.id==id);
+ const h='<div class="comanda"><h3>COMANDA #'+o.id+'</h3><p style="text-align:center">'+esc(S.loja.nome)+'</p><hr><div class="l"><span>Data</span><span>19/11/2026 '+hhmm(o.t0)+'</span></div><div class="l"><span>Cliente</span><span>'+esc(o.cli)+'</span></div><div class="l"><span>Tipo</span><span>'+(o.ent==='webag'?'Entrega Webag':'Retirada')+'</span></div><hr>'+o.it.map(i=>'<div class="l"><span>'+i.q+'x '+esc(i.n)+'</span><span>'+brl(i.p*i.q)+'</span></div><div style="padding-left:20px">'+esc(i.v)+'</div>').join('')+'<hr><div class="l"><b>Total dos itens</b><b>'+brl(tot(o))+'</b></div>'+(o.obs?'<hr><div>OBS: '+esc(o.obs)+'</div>':'')+'<hr><p style="text-align:center">'+(o.ent==='webag'?'Entregar ao motoboy da Webag':'Código de retirada: '+o.cod)+'</p></div>';
+ $('#print').innerHTML=h;
+ modal('<h2>Comanda do pedido #'+o.id+'</h2><p class="mut" style="margin-bottom:12px">Prévia da impressão em papel de 80 mm.</p>'+h+'<div class="acts">'+btn('Fechar','closeModal',{k:'ghost'})+btn('Imprimir comanda','imprimir',{i:'printer'})+'</div>',{label:'Comanda'})};
+A.imprimir=()=>{window.print()};
+/* ===== LOJISTA: CATÁLOGO ===== */
+function catRows(){
+ const q=S.busca.trim().toLowerCase();
+ const l=S.prods.filter(p=>(!q||p.n.toLowerCase().indexOf(q)>=0)&&(S.filtro==='todos'||(S.filtro==='baixo'?(estoque(p)<=5):p.st===S.filtro)));
+ if(!l.length)return '<tr><td colspan="6">'+empty('search','Nada encontrado','Tente outra palavra ou limpe o filtro.',btn('Limpar filtro','limpar',{k:'secondary'}))+'</td></tr>';
+ return l.map(p=>{const e=estoque(p);const sel=!!S.sel[p.id];
+  return '<tr class="'+(sel?'sel':'')+'"><td class="chkc" style="width:44px"><label class="chk" style="padding:0;min-height:44px;align-items:center"><input type="checkbox" data-a="selp" data-d="'+p.id+'" '+(sel?'checked':'')+' aria-label="Selecionar '+esc(p.n)+'"></label></td>'+
+  '<td class="first"><div class="row" style="flex-wrap:nowrap"><div class="thumb" aria-hidden="true">'+ic('image',24)+'</div><div><a class="b" href="#/lojista/catalogo/'+p.id+'" style="text-decoration:none;color:inherit">'+esc(p.n)+'</a><p class="cap mut">'+esc(p.cat)+' · '+p.v.length+(p.v.length>1?' variações':' variação')+'</p></div></div></td>'+
+  '<td data-l="Preço" class="num">'+(p.promo?'<span class="strike cap">'+brl(p.p)+'</span> <b>'+brl(p.promo)+'</b> '+tag('brand','tag','Promoção'):'<b>'+brl(p.p)+'</b>')+'</td>'+
+  '<td data-l="Você recebe" class="num ok-t b">'+brl(net(preco(p)))+'</td>'+
+  '<td data-l="Estoque" class="num">'+(e===0?tag('bad','x','Esgotado'):e<=5?tag('warn','warn',e+' un. (baixo)'):e+' un.')+'</td>'+
+  '<td data-l="Na vitrine"><div class="swrow">'+sw(p.st==='ativo','togProd',p.id,'Mostrar '+p.n+' na vitrine')+'<span class="cap">'+(p.st==='ativo'?'Ativo':'Pausado')+'</span></div></td></tr>'}).join('')}
+V.lojista.catalogo=function(arg){
+ if(arg==='importar')return impView();
+ if(arg)return prodForm(arg);
+ const n=Object.keys(S.sel).filter(k=>S.sel[k]).length;
+ return head('Catálogo',S.prods.length+' produtos · '+S.prods.filter(p=>p.st==='ativo').length+' na vitrine',
+  btn('Importar planilha','go',{d:'lojista/catalogo/importar',k:'secondary',i:'upload'})+btn('Novo produto','go',{d:'lojista/catalogo/novo',i:'plus'}))+
+ (S.loja.status==='analise'?note('info','info','<p>Sua loja está em análise. Pode ir cadastrando os produtos: eles aparecem para os clientes quando a loja for aprovada.</p>')+'<div style="height:16px"></div>':'')+
+ '<div class="row" style="margin-bottom:12px"><div class="pre" style="flex:1;min-width:220px"><span aria-hidden="true" style="top:12px">'+ic('search',20)+'</span><input class="inp" id="busca" data-bind="busca" type="search" placeholder="Buscar produto" aria-label="Buscar produto" value="'+esc(S.busca)+'"></div>'+
+ '<div class="chips" role="group" aria-label="Filtrar">'+[['todos','Todos'],['ativo','Ativos'],['pausado','Pausados'],['baixo','Estoque baixo']].map(f=>'<button type="button" class="chip" data-a="filtro" data-d="'+f[0]+'" aria-pressed="'+(S.filtro===f[0])+'">'+f[1]+'</button>').join('')+'</div></div>'+
+ '<div class="card pad0 tscroll"><table class="tbl rt"><thead><tr><th style="width:44px"><label class="chk" style="padding:0;min-height:44px;align-items:center"><input type="checkbox" data-a="selall" aria-label="Selecionar todos"></label></th><th>Produto</th><th class="num">Preço de venda</th><th class="num">Você recebe</th><th class="num">Estoque</th><th>Vitrine</th></tr></thead><tbody id="cat-body">'+catRows()+'</tbody></table></div>'+
+ (n?'<div class="bulk" role="region" aria-label="Ação em massa"><span class="b">'+n+(n>1?' selecionados':' selecionado')+'</span><span class="spacer"></span>'+btn('Pausar','massa',{d:'pausar',sz:'sm',i:'pause'})+btn('Ativar','massa',{d:'ativar',sz:'sm',i:'play'})+btn('Ajustar preço','massa',{d:'preco',sz:'sm',i:'percent'})+btn('Limpar','massa',{d:'limpar',sz:'sm'})+'</div>':'')+
+ '<p class="help" style="margin-top:12px">Preço de venda já inclui a comissão da Webag ('+S.loja.comissao+'%). A coluna "Você recebe" mostra o valor que cai na sua conta.</p>'};
+A.filtro=d=>{S.filtro=d;render()};
+A.limpar=()=>{S.filtro='todos';S.busca='';render()};
+A.togProd=id=>{const p=S.prods.find(x=>x.id==id);p.st=p.st==='ativo'?'pausado':'ativo';toast(esc(p.n)+(p.st==='ativo'?' voltou para a vitrine.':' pausado. Some da vitrine até você ativar.'),{icon:p.st==='ativo'?'play':'pause'});render();const b=$('[data-a="togProd"][data-d="'+id+'"]');if(b)b.focus()};
+A.selp=id=>{S.sel[id]=!S.sel[id];render();const c=$('[data-a="selp"][data-d="'+id+'"]');if(c)c.focus()};
+A.selall=(d,el)=>{S.prods.forEach(p=>S.sel[p.id]=el.checked);render()};
+A.massa=d=>{const ids=S.prods.filter(p=>S.sel[p.id]);
+ if(d==='limpar'){S.sel={};render();return}
+ if(d==='pausar'||d==='ativar'){ids.forEach(p=>p.st=d==='pausar'?'pausado':'ativo');audit('Fátima Souza','Ação em massa: '+d,ids.length+' produtos');toast(ids.length+(ids.length>1?' produtos ':' produto ')+(d==='pausar'?'pausados.':'ativados.'),{icon:d==='pausar'?'pause':'play'});S.sel={};render();return}
+ S.mass={pct:'10'};
+ modal('<h2>Ajustar preço de '+ids.length+(ids.length>1?' produtos':' produto')+'</h2><p class="mut" style="margin-bottom:12px">Use sinal de menos para reduzir. Exemplo: -5 baixa 5%.</p>'+field('mass.pct','Ajuste em %',{mode:'decimal',help:'O valor "Você recebe" também muda, com a comissão de '+S.loja.comissao+'%.'})+'<div id="mass-prev" style="margin-top:12px"></div><div class="acts">'+btn('Cancelar','closeModal',{k:'ghost'})+btn('Aplicar novo preço','massaOk')+'</div>',{label:'Ajustar preço'});A.calc('mass.pct')};
+A.massaOk=()=>{const k=num(S.mass.pct);const ids=S.prods.filter(p=>S.sel[p.id]);ids.forEach(p=>{p.p=r2(p.p*(1+k/100));if(p.promo)p.promo=r2(p.promo*(1+k/100))});audit('Fátima Souza','Ajuste de preço em massa',k+'% em '+ids.length+' produtos');closeModal();S.sel={};toast('Preço de '+ids.length+' produtos ajustado em '+k+'%.');render()};
+A.calc=function(p){
+ if(p==='busca'){const b=$('#cat-body');if(b)b.innerHTML=catRows();return}
+ if(p==='mass.pct'){const k=num(S.mass.pct);const p1=S.prods.find(x=>S.sel[x.id]);const e=$('#mass-prev');if(e&&p1)e.innerHTML='<div class="note info">'+ic('info',18)+'<span>'+esc(p1.n)+': '+brl(p1.p)+' passa a '+brl(r2(p1.p*(1+k/100)))+'. Você recebe '+brl(net(r2(p1.p*(1+k/100))))+'.</span></div>';return}
+ if(p&&p.indexOf('draft.')===0){const w=$('#recebe-wrap');if(w)w.innerHTML=recebeHtml();const t=$('#v-total');if(t)t.textContent=S.draft.v.reduce((s,x)=>s+(parseInt(x.e,10)||0),0);const sr=$('#sum-recebe');if(sr)sr.textContent=brl(net(num(S.draft.p)))}};
+
+/* formulário de produto */
+function initDraft(arg){S.draftFor=arg;S.err={};
+ if(arg==='novo')S.draft={n:'',cat:'Camisetas',desc:'',p:'',promoOn:false,promoP:'',promoAte:'2026-12-31',fotos:[],v:[{t:'',c:'',e:0}],medOn:false,med:[],semTroca:false};
+ else{const p=S.prods.find(x=>x.id==arg);if(!p){S.draft=null;return}S.draft={n:p.n,cat:p.cat,desc:p.desc,p:String(p.p).replace('.',','),promoOn:!!p.promo,promoP:p.promo?String(p.promo).replace('.',','):'',promoAte:'2026-12-31',fotos:Array.from({length:p.fotos},(_,i)=>'foto-'+(i+1)+'.jpg'),v:JSON.parse(JSON.stringify(p.v)),medOn:!!p.med,med:p.med?MODELO.map(x=>x.slice()):[],semTroca:p.semTroca}}}
+const MODELO=[['P','50','68'],['M','53','70'],['G','56','72'],['GG','59','74']].map(x=>({t:x[0],l:x[1],c:x[2]}));
+function recebeHtml(){const d=S.draft,p=num(d.p),pp=d.promoOn?num(d.promoP):0;
+ if(!p)return '<p class="help">Digite o preço de venda para ver quanto você recebe.</p>';
+ const c=r2(p*S.loja.comissao/100);
+ return '<div class="recebe"><p class="cap">Você recebe por venda</p><p><b>'+brl(net(p))+'</b></p><p class="cap">'+brl(p)+' menos comissão da Webag ('+S.loja.comissao+'%): '+brl(c)+'. Frete e taxa de serviço são pagos pelo cliente.</p></div>'+
+ (pp>0&&pp<p?'<div class="recebe" style="margin-top:8px"><p class="cap">Na promoção, você recebe</p><p><b>'+brl(net(pp))+'</b></p><p class="cap">Preço promocional '+brl(pp)+', '+Math.round((1-pp/p)*100)+'% abaixo do normal.</p></div>':'')}
+function prodForm(arg){
+ if(S.draftFor!==arg)initDraft(arg);const d=S.draft;
+ if(!d)return back('lojista/catalogo','Voltar ao catálogo')+empty('search','Produto não encontrado','Ele pode ter sido removido.',btn('Ver catálogo','go',{d:'lojista/catalogo'}));
+ const novo=arg==='novo';
+ const fotos=d.fotos.map((f,i)=>'<div class="ph">'+ic('image',28)+'<span>'+esc(f)+'</span>'+(i===0?'<span class="cv">Capa</span>':'')+'<button type="button" class="x" data-a="fotoDel" data-d="'+i+'" aria-label="Remover '+esc(f)+'">'+ic('x',16)+'</button></div>').join('')+(d.fotos.length<8?'<button type="button" class="ph add" data-a="fotoAdd">'+ic('plus',24)+'Adicionar foto</button>':'');
+ const vrows=d.v.map((x,i)=>'<tr><td data-l="Tamanho" style="width:110px"><input class="inp" data-bind="draft.v.'+i+'.t" value="'+esc(x.t)+'" aria-label="Tamanho da variação '+(i+1)+'" placeholder="M" style="min-height:44px"></td><td data-l="Cor"><input class="inp" data-bind="draft.v.'+i+'.c" value="'+esc(x.c)+'" aria-label="Cor da variação '+(i+1)+'" placeholder="Azul" style="min-height:44px"></td><td data-l="Estoque"><div class="step"><button type="button" data-a="vstep" data-d="'+i+':-1" aria-label="Diminuir estoque">'+ic('minus',18)+'</button><input type="number" min="0" data-bind="draft.v.'+i+'.e" value="'+(parseInt(x.e,10)||0)+'" aria-label="Estoque da variação '+(i+1)+'"><button type="button" data-a="vstep" data-d="'+i+':1" aria-label="Aumentar estoque">'+ic('plus',18)+'</button></div></td><td style="width:52px"><button type="button" class="btn ghost sm" data-a="vdel" data-d="'+i+'" aria-label="Remover variação '+(i+1)+'">'+ic('trash',20)+'</button></td></tr>').join('');
+ const med=d.medOn?'<div class="tscroll" style="margin-top:12px"><table class="tbl"><thead><tr><th>Tamanho</th><th>Largura (cm)</th><th>Comprimento (cm)</th><th></th></tr></thead><tbody>'+d.med.map((m,i)=>'<tr><td><input class="inp" style="min-height:44px;max-width:100px" data-bind="draft.med.'+i+'.t" value="'+esc(m.t)+'" aria-label="Tamanho"></td><td><input class="inp" style="min-height:44px;max-width:120px" inputmode="numeric" data-bind="draft.med.'+i+'.l" value="'+esc(m.l)+'" aria-label="Largura em centímetros"></td><td><input class="inp" style="min-height:44px;max-width:120px" inputmode="numeric" data-bind="draft.med.'+i+'.c" value="'+esc(m.c)+'" aria-label="Comprimento em centímetros"></td><td><button type="button" class="btn ghost sm" data-a="medDel" data-d="'+i+'" aria-label="Remover linha">'+ic('trash',20)+'</button></td></tr>').join('')+'</tbody></table></div><div class="row" style="margin-top:8px">'+btn('Adicionar medida','medAdd',{k:'secondary',sz:'sm',i:'plus'})+btn('Usar modelo de camiseta','medModelo',{k:'ghost',sz:'sm',i:'ruler'})+'</div>':'';
+ const eTot=d.v.reduce((s,x)=>s+(parseInt(x.e,10)||0),0);
+ return back('lojista/catalogo','Voltar ao catálogo')+head(novo?'Novo produto':esc(d.n||'Editar produto'),novo?'Preencha o essencial. Dá para completar depois.':'Última alteração: hoje, 09:12')+
+ '<div class="split"><div class="stack16">'+
+ '<section class="card stack16"><h2>Fotos</h2><div class="photos">'+fotos+'</div>'+(S.err.fotos?'<p class="err">'+ic('warn',16)+'<span>'+S.err.fotos+'</span></p>':'')+'<p class="help">A primeira foto é a capa. Use fundo liso, luz natural e o produto inteiro. Recomendamos 3 fotos ou mais.</p></section>'+
+ '<section class="card stack16"><h2>Informações</h2>'+field('draft.n','Nome do produto',{ph:'Ex.: Camiseta básica algodão'})+'<div class="g2">'+field('draft.cat','Categoria',{sel:['Camisetas','Vestidos','Calças','Bermudas','Jaquetas','Calçados','Acessórios']})+'</div>'+field('draft.desc','Descrição',{ta:1,ph:'Tecido, caimento, cuidados de lavagem'})+'</section>'+
+ '<section class="card stack16"><h2>Preço</h2>'+field('draft.p','Preço de venda',{pre:'R$',mode:'decimal',ph:'0,00',help:'Cadastre o preço já com a comissão da Webag ('+S.loja.comissao+'%) incluída. É o que o cliente paga pelo produto.'})+'<div id="recebe-wrap" aria-live="polite">'+recebeHtml()+'</div>'+
+  '<hr class="hr" style="margin:4px 0"><div class="swrow">'+sw(d.promoOn,'togPromo','','Ativar promoção')+'<span class="b">Promoção</span></div>'+
+  (d.promoOn?'<div class="g2">'+field('draft.promoP','Preço promocional',{pre:'R$',mode:'decimal',ph:'0,00'})+field('draft.promoAte','Vale até',{type:'date'})+'</div>':'')+'</section>'+
+ '<section class="card stack16"><div class="row sb"><h2>Variações e estoque</h2><span class="cap mut">Estoque total: <b id="v-total">'+eTot+'</b> un.</span></div><p class="help">Cada combinação de tamanho e cor tem o seu estoque. Quando chega a 0, aquela variação aparece como esgotada.</p>'+
+  '<div class="tscroll"><table class="tbl rt"><thead><tr><th>Tamanho</th><th>Cor</th><th>Estoque</th><th></th></tr></thead><tbody>'+vrows+'</tbody></table></div>'+(S.err.v?'<p class="err">'+ic('warn',16)+'<span>'+S.err.v+'</span></p>':'')+
+  '<div class="row">'+btn('Adicionar variação','vadd',{k:'secondary',sz:'sm',i:'plus'})+'<span class="cap mut">Atalho:</span>'+btn('P, M, G, GG','vsizes',{d:'roupa',k:'ghost',sz:'sm'})+btn('Nº 36 ao 42','vsizes',{d:'calcado',k:'ghost',sz:'sm'})+'</div></section>'+
+ '<section class="card stack16"><div class="row sb"><h2>Tabela de medidas</h2><div class="swrow"><span class="cap b">'+(d.medOn?'Mostrar':'Não mostrar')+'</span>'+sw(d.medOn,'togMed','','Mostrar tabela de medidas')+'</div></div><p class="help">Quem vê as medidas erra menos o tamanho e pede menos troca.</p>'+med+'</section>'+
+ '<section class="card stack16"><h2>Trocas</h2><label class="chk"><input type="checkbox" data-bind="draft.semTroca" '+(d.semTroca?'checked':'')+'><span><b>Este produto não aceita troca por tamanho ou cor</b><br><span class="help">Use para itens sob medida, íntimos ou de higiene. Defeito e arrependimento continuam garantidos por lei.</span></span></label></section>'+
+ '</div><aside class="sticky stack16" aria-label="Resumo"><div class="card stack"><h2>Resumo</h2><dl class="kv"><dt>Fotos</dt><dd>'+d.fotos.length+'</dd><dt>Variações</dt><dd>'+d.v.length+'</dd><dt>Estoque</dt><dd>'+eTot+' un.</dd><dt>Você recebe</dt><dd class="ok-t" id="sum-recebe">'+brl(net(num(d.p)))+'</dd></dl>'+
+ (Object.keys(S.err).length||S.err.fotos?note('bad','warn','<p class="b">Falta corrigir alguns campos.</p><p>Eles estão marcados em vermelho.</p>'):'')+
+ btn(novo?'Publicar produto':'Salvar alterações','saveProd',{sz:'lg',i:'check'}).replace('class="btn','class="btn block')+btn('Cancelar','go',{d:'lojista/catalogo',k:'ghost'}).replace('class="btn','class="btn block')+'</div></aside></div>'}
+A.fotoAdd=()=>{S.draft.fotos.push('foto-'+(S.draft.fotos.length+1)+'.jpg');delete S.err.fotos;render();const b=$('[data-a="fotoAdd"]');if(b)b.focus()};
+A.fotoDel=i=>{S.draft.fotos.splice(+i,1);render()};
+A.togPromo=()=>{S.draft.promoOn=!S.draft.promoOn;render()};
+A.togMed=()=>{S.draft.medOn=!S.draft.medOn;if(S.draft.medOn&&!S.draft.med.length)S.draft.med=MODELO.map(x=>Object.assign({},x));render()};
+A.medAdd=()=>{S.draft.med.push({t:'',l:'',c:''});render()};
+A.medDel=i=>{S.draft.med.splice(+i,1);render()};
+A.medModelo=()=>{S.draft.med=MODELO.map(x=>Object.assign({},x));render()};
+A.vadd=()=>{S.draft.v.push({t:'',c:S.draft.v.length?S.draft.v[0].c:'',e:0});delete S.err.v;render()};
+A.vdel=i=>{if(S.draft.v.length>1){S.draft.v.splice(+i,1);render()}else toast('O produto precisa de ao menos uma variação.',{icon:'info'})};
+A.vstep=d=>{const p=d.split(':');const x=S.draft.v[+p[0]];x.e=Math.max(0,(parseInt(x.e,10)||0)+(+p[1]));const inp=$('[data-bind="draft.v.'+p[0]+'.e"]');if(inp)inp.value=x.e;A.calc('draft.v')};
+A.vsizes=d=>{const c=S.draft.v.length?S.draft.v[0].c:'';const s=d==='roupa'?['P','M','G','GG']:['36','37','38','39','40','41','42'];S.draft.v=s.map(t=>({t:t,c:c,e:0}));delete S.err.v;render()};
+A.saveProd=()=>{const d=S.draft;S.err={};
+ if(!d.n.trim())S.err['draft.n']='Dê um nome ao produto.';
+ if(!num(d.p))S.err['draft.p']='Informe o preço de venda. Ex.: 89,90.';
+ if(d.promoOn&&!(num(d.promoP)>0&&num(d.promoP)<num(d.p)))S.err['draft.promoP']='O preço promocional precisa ser menor que o preço normal.';
+ if(!d.fotos.length)S.err.fotos='Adicione ao menos 1 foto. A primeira será a capa.';
+ if(d.v.some(x=>!String(x.t).trim()))S.err.v='Preencha o tamanho de todas as variações. Se não tem tamanho, escreva "Único".';
+ if(Object.keys(S.err).length){render();const f=$('[aria-invalid="true"]');if(f)f.focus();toast('Corrija '+Object.keys(S.err).length+(Object.keys(S.err).length>1?' pontos':' ponto')+' para publicar.',{icon:'warn'});return}
+ const obj={n:d.n.trim(),cat:d.cat,desc:d.desc,p:num(d.p),promo:d.promoOn?num(d.promoP):0,st:'ativo',fotos:d.fotos.length,med:d.medOn,semTroca:d.semTroca,v:d.v.map(x=>({t:x.t,c:x.c,e:parseInt(x.e,10)||0}))};
+ if(S.arg==='novo'){obj.id=Date.now();obj.vendas=0;S.prods.unshift(obj)}else{const p=S.prods.find(x=>x.id==S.arg);Object.assign(p,obj)}
+ audit('Fátima Souza',S.arg==='novo'?'Criou produto':'Editou produto',obj.n);S.draftFor=null;toast(S.arg==='novo'?'Produto publicado. Já aparece na vitrine.':'Alterações salvas.');go('lojista/catalogo')};
+
+/* importação por planilha */
+function impView(){const s=S.imp.step;
+ const lin=[[2,'Camiseta regata canelada','Camisetas',34.9,'P/M/G','ok'],[3,'Camiseta oversized','Camisetas',59.9,'M/G','ok'],[4,'Saia plissada midi','Saias',89.9,'P/M/G','ok'],[5,'Legging cintura alta','Calças',49.9,'P/M/G/GG','ok'],[7,'Short jeans','Bermudas','','36/38/40','bad'],[9,'Tênis esportivo','Calçados',229.9,'38 a 43','ok'],[12,'Blusa de tricô','Blusas',99.9,'M/G','warn']];
+ return back('lojista/catalogo','Voltar ao catálogo')+head('Importar produtos por planilha','Cadastre vários produtos de uma vez, sem digitar um por um.')+
+ '<ol class="row" style="gap:8px;margin-bottom:16px">'+['Baixar o modelo','Enviar a planilha','Conferir e importar'].map((t,i)=>'<li>'+tag(i+1===s?'brand':i+1<s?'ok':'neu',i+1<s?'check':'',(i+1)+'. '+t)+'</li>').join('')+'</ol>'+
+ (s===1?'<div class="card stack16"><h2>1. Baixe o modelo</h2><p>A planilha tem uma linha por variação: nome, categoria, preço de venda, tamanho, cor e estoque. O preço é o de venda, com a comissão já incluída.</p><div class="row">'+btn('Baixar modelo (.xlsx)','impModelo',{k:'secondary',i:'download'})+btn('Já tenho a planilha','impStep',{d:'2'})+'</div></div>':'')+
+ (s===2?'<div class="drop"><div style="color:var(--wb-color-brand-700)">'+ic('upload',40)+'</div><h2 class="t2">Envie sua planilha</h2><p class="mut" style="margin-bottom:16px">Arquivos .xlsx ou .csv, até 5 MB.</p>'+btn('Escolher arquivo','impArq',{i:'file'})+'</div>':'')+
+ (s===3?'<div class="stack16">'+note('warn','warn','<p class="b">Lemos 18 produtos de "'+esc(S.imp.file)+'": 16 prontos, 1 com aviso e 1 com erro.</p><p>O produto com erro fica de fora. Corrija na planilha e envie de novo, ou importe os outros agora.</p>')+
+  '<div class="card pad0 tscroll"><table class="tbl rt"><thead><tr><th>Linha</th><th>Produto</th><th>Categoria</th><th class="num">Preço</th><th class="num">Você recebe</th><th>Situação</th></tr></thead><tbody>'+lin.map(l=>'<tr><td data-l="Linha">'+l[0]+'</td><td class="first b">'+l[1]+'<p class="cap mut">'+l[4]+'</p></td><td data-l="Categoria">'+l[2]+'</td><td data-l="Preço" class="num">'+(l[3]?brl(l[3]):'—')+'</td><td data-l="Você recebe" class="num ok-t b">'+(l[3]?brl(net(l[3])):'—')+'</td><td data-l="Situação">'+(l[5]==='ok'?tag('ok','check','Pronto'):l[5]==='warn'?tag('warn','warn','Sem foto: adicione depois'):tag('bad','x','Preço vazio na linha '+l[0]))+'</td></tr>').join('')+'<tr><td colspan="6" class="cap mut">Mostrando 7 de 18 linhas.</td></tr></tbody></table></div>'+
+  '<div class="row">'+btn('Importar 17 produtos','impOk',{sz:'lg',i:'check'})+btn('Trocar arquivo','impStep',{d:'2',k:'secondary'})+'</div></div>':'')};
+A.impStep=d=>{S.imp.step=+d;render()};
+A.impModelo=()=>{toast('modelo-produtos-webag.xlsx baixado.',{icon:'download'});S.imp.step=2;render()};
+A.impArq=()=>{S.imp.file='produtos-novembro.xlsx';S.imp.step=3;render()};
+A.impOk=()=>{['Camiseta regata canelada','Camiseta oversized','Saia plissada midi'].forEach((n,i)=>S.prods.unshift({id:Date.now()+i,n:n,cat:i<2?'Camisetas':'Vestidos',p:[34.9,59.9,89.9][i],promo:0,st:'ativo',fotos:0,vendas:0,med:false,semTroca:false,desc:'',v:[{t:'M',c:'Única',e:10}]}));audit('Fátima Souza','Importou planilha','17 produtos');S.imp={step:1,file:''};toast('17 produtos importados. Os que estão sem foto ficam pausados até você adicionar.');go('lojista/catalogo')};
+
+/* ===== LOJISTA: TROCAS ===== */
+S.trTab='pend';
+A.trTab=d=>{S.trTab=d;render()};
+V.lojista.trocas=function(){
+ const pend=S.trocas.filter(t=>t.st==='pend');const res=S.trocas.filter(t=>t.st!=='pend');
+ const list=S.trTab==='pend'?pend:res;
+ const card=t=>{const tp=TIPO[t.tipo];const urg=t.st==='pend'&&(t.t0+24*HOUR-Date.now())<6*HOUR;
+  const acts=t.st!=='pend'?'<div style="margin-top:12px">'+(t.st==='apr'?tag('ok','checkc','Aprovada'):t.st==='disp'?tag('info','shield','Com a análise da Webag'):tag('bad','x','Recusada: '+esc(t.rm||'')))+'</div>'
+   :'<div class="row" style="margin-top:16px">'+btn('Aprovar troca','trApr',{d:t.id,i:'check',sz:'lg'})+(t.tipo==='tam'?btn('Recusar','trRec',{d:t.id,k:'danger',sz:'lg'}):t.tipo==='def'?btn('Pedir análise da Webag','trDisp',{d:t.id,k:'secondary',sz:'lg'}):'')+'</div>'+(t.tipo==='arr'?'<p class="help" style="margin-top:8px">Direito de arrependimento (Código de Defesa do Consumidor, art. 49): a loja não pode recusar dentro de 7 dias.</p>':t.tipo==='def'?'<p class="help" style="margin-top:8px">Defeito: se você discorda, a Webag analisa as fotos antes de decidir.</p>':'');
+  return '<article class="ord" aria-labelledby="'+t.id+'"><div class="row sb"><h2 class="t2" id="'+t.id+'">'+esc(t.prod)+'</h2>'+tag(tp[0],'swap',tp[1])+'</div><p class="cap mut">'+t.id+' · pedido #'+t.ped+' · '+esc(t.cli)+' · '+(t.coleta==='casa'?'Coleta em casa pela Webag':'Cliente leva à loja')+'</p>'+
+  '<dl class="kv" style="margin-top:12px"><dt>Item comprado</dt><dd>'+esc(t.de)+'</dd>'+(t.para?'<dt>Quer trocar por</dt><dd>'+esc(t.para)+'</dd>':'')+'<dt>Motivo</dt><dd>'+esc(t.motivo)+'</dd></dl>'+
+  (t.fotos?'<div class="row" style="margin-top:12px;gap:8px">'+Array.from({length:t.fotos},(_,i)=>'<div class="thumb" role="img" aria-label="Foto '+(i+1)+' enviada pelo cliente">'+ic('image',22)+'</div>').join('')+'<span class="cap mut">'+t.fotos+' foto'+(t.fotos>1?'s':'')+' do cliente</span></div>':'')+
+  (t.st==='pend'?'<div class="cdbox'+(urg?' urgent':'')+'" style="margin-top:12px">'+ic('clock',22)+'<span class="capb">Responda em <b data-sla="'+t.t0+'">'+left24(t.t0)+'</b>. Depois disso a troca é aprovada sozinha.</span></div>'+(t.tipo==='tam'?'<p class="cap ok-t b" style="margin-top:8px">'+ic('check',16)+' '+esc(t.para)+' tem estoque. Ao aprovar, a peça fica reservada.</p>':''):'')+acts+'</article>'};
+ return head('Trocas','Responda em até 24 horas. Aprovar leva 1 toque.')+
+ note('brand','info','<p><b>Retira Troca:</b> a Webag busca a peça com o cliente e leva a nova. Você só aprova e prepara a peça. A taxa de coleta, quando existe, é paga pelo cliente.</p>')+'<div style="height:16px"></div>'+
+ tabs([['pend','Para responder',pend.length],['res','Resolvidas',res.length]],S.trTab,'trTab')+
+ '<div class="stack16" role="tabpanel">'+(list.length?list.map(card).join(''):empty('swap','Nenhuma troca para responder','Quando um cliente pedir troca, você é avisado aqui.'))+'</div>'};
+A.trApr=id=>{const t=S.trocas.find(x=>x.id===id);t.st='apr';
+ if(t.coleta==='casa'){S.ad.ent.unshift({id:'E-'+(++S.entSeq),tipo:'troca',ref:t.id,loja:S.loja.nome,endLoja:S.cfg.endRet,telLoja:S.cfg.whats,cli:t.cli,telCli:'(11) 94000-7710',end:'Av. Pres. Vargas, 810',bairro:'Franco da Rocha',ready:Date.now(),st:'aguardando',mb:null,custo:null,cobrar:0,pago:'Troca '+t.id})}
+ audit('Fátima Souza','Aprovou troca',t.id);toast('Troca '+t.id+' aprovada. '+(t.coleta==='casa'?'A Webag agenda a coleta.':'O cliente leva a peça à loja.'),{icon:'checkc',undo:()=>{t.st='pend';render()}});render()};
+A.trRec=id=>{modal('<h2>Recusar troca '+id+'</h2><p class="mut" style="margin-bottom:12px">Toque no motivo. O cliente lê o texto e pode pedir ajuda à Webag.</p><div class="stack8">'+['Peça com sinais de uso','Sem etiqueta ou embalagem','Fora do prazo da loja','Item não aceita troca'].map(m=>'<button type="button" class="btn secondary block" data-a="trRecOk" data-d="'+id+'|'+m+'">'+m+'</button>').join('')+'</div><div class="acts">'+btn('Voltar','closeModal',{k:'ghost'})+'</div>',{label:'Recusar troca'})};
+A.trRecOk=d=>{const p=d.split('|');const t=S.trocas.find(x=>x.id===p[0]);t.st='rec';t.rm=p[1];audit('Fátima Souza','Recusou troca',t.id+' · '+p[1]);closeModal();toast('Troca '+t.id+' recusada: '+p[1]+'.',{icon:'x',undo:()=>{t.st='pend';render()}});render()};
+A.trDisp=id=>{const t=S.trocas.find(x=>x.id===id);t.st='disp';S.ad.disp.unshift({id:'D-'+(70+S.ad.disp.length),st:'aberta',loja:S.loja.nome,cli:t.cli,ped:t.ped,valor:189.9,tipo:'Defeito',resumo:'Loja pediu análise: '+t.motivo,t0:Date.now(),fotos:t.fotos});audit('Fátima Souza','Pediu análise da Webag',t.id);toast('Enviado para a Webag analisar. Você será avisado.',{icon:'shield'});render()};
+
+/* ===== LOJISTA: FINANCEIRO ===== */
+S.finP='7';
+A.finP=d=>{S.finP=d;render()};
+V.lojista.financeiro=function(){
+ const P={'1':{n:'Hoje',g:1284.7,rec:0.35},'7':{n:'Últimos 7 dias',g:7799.7,rec:0.78},'30':{n:'Últimos 30 dias',g:29640.2,rec:0.9}};
+ const p=P[S.finP];const com=r2(p.g*S.loja.comissao/100),liq=r2(p.g-com),rec=r2(liq*p.rec),areb=r2(liq-rec);
+ const ex=[['19 nov','#1043','Venda',179.8,'A receber','24 nov'],['19 nov','#1042','Venda',119.7,'A receber','24 nov'],['19 nov','#1041','Venda',189.9,'A receber','24 nov'],['18 nov','#1038','Venda',259.7,'Pago','23 nov'],['18 nov','#1036','Venda',69.9,'Pago','23 nov'],['17 nov','T-309','Estorno de troca',-39.9,'Descontado','—'],['17 nov','#1029','Venda',329.8,'Pago','22 nov'],['16 nov','#1024','Venda',149.9,'Pago','21 nov']];
+ return head('Financeiro','Valores por período. O dinheiro cai direto na sua conta do Mercado Pago.',btn('Baixar extrato (CSV)','csv',{k:'secondary',i:'download'}))+
+ '<div class="chips" role="group" aria-label="Período" style="margin-bottom:16px">'+['1','7','30'].map(k=>'<button type="button" class="chip" data-a="finP" data-d="'+k+'" aria-pressed="'+(S.finP===k)+'">'+P[k].n+'</button>').join('')+'</div>'+
+ '<div class="dash"><section class="card" aria-label="Quanto você recebe"><p class="capb mut">Você recebe ('+p.n.toLowerCase()+')</p><p class="t-num ok-t">'+brl(liq)+'</p>'+
+  '<div class="row" style="gap:0;margin-top:16px;align-items:stretch"><div style="flex:1;min-width:120px;padding-right:12px"><p class="cap mut">Vendas dos itens</p><p class="t2">'+brl(p.g)+'</p></div><div style="flex:1;min-width:120px;padding:0 12px;border-left:1px solid var(--wb-color-neutral-200)"><p class="cap mut">Comissão Webag ('+S.loja.comissao+'%)</p><p class="t2 bad-t">− '+brl(com)+'</p></div><div style="flex:1;min-width:120px;padding-left:12px;border-left:1px solid var(--wb-color-neutral-200)"><p class="cap mut">Líquido</p><p class="t2">'+brl(liq)+'</p></div></div>'+
+  '<div class="hr"></div><p class="cap mut">Frete e taxa de serviço são pagos pelo cliente e ficam com a Webag. Não entram na sua conta.</p></section>'+
+  '<section class="card stack"><h2>Situação do dinheiro</h2><div class="row sb"><span>Já recebido</span><b>'+brl(rec)+'</b></div><div class="bar"><i style="width:'+Math.round(p.rec*100)+'%"></i></div><div class="row sb"><span>A receber</span><b>'+brl(areb)+'</b></div>'+note('info','clock','<p>O valor de cada pedido é liberado cerca de 5 dias após a entrega [protótipo: prazo ilustrativo].</p>')+'</section></div>'+
+ '<section class="sect"><h2>Extrato</h2><div class="card pad0 tscroll"><table class="tbl rt"><thead><tr><th>Data</th><th>Pedido</th><th>Tipo</th><th class="num">Itens</th><th class="num">Comissão</th><th class="num">Você recebe</th><th>Situação</th></tr></thead><tbody>'+ex.map(x=>{const c=r2(x[3]*S.loja.comissao/100);return '<tr><td data-l="Data" class="first b">'+x[0]+'</td><td data-l="Pedido">'+x[1]+'</td><td data-l="Tipo">'+x[2]+'</td><td data-l="Itens" class="num">'+brl(x[3])+'</td><td data-l="Comissão" class="num">'+brl(-c)+'</td><td data-l="Você recebe" class="num b '+(x[3]<0?'bad-t':'')+'">'+brl(r2(x[3]-c))+'</td><td data-l="Situação">'+(x[4]==='Pago'?tag('ok','check','Pago em '+x[5]):x[4]==='A receber'?tag('warn','clock','A receber em '+x[5]):tag('neu','minus',x[4]))+'</td></tr>'}).join('')+'</tbody></table></div></section>'};
+A.csv=()=>toast('extrato-moda-morato.csv baixado.',{icon:'download'});
+
+/* ===== LOJISTA: CONFIGURAÇÃO DA LOJA ===== */
+A.cfgTab=d=>{S.cfg.tab=d;render()};
+A.cfgSalvar=()=>{audit('Fátima Souza','Alterou configurações da loja',S.cfg.tab);toast('Alterações salvas.')};
+A.cfgSw=d=>{S.cfg[d]=!S.cfg[d];render()};
+A.diaSw=i=>{S.cfg.hor[+i][1]=S.cfg.hor[+i][1]?0:1;render()};
+V.lojista.loja=function(){
+ const c=S.cfg,t=c.tab;let b='';
+ if(t==='perfil')b='<div class="card stack16"><h2>Perfil da loja</h2><div class="row" style="gap:16px"><div class="thumb lg" style="border-radius:999px" aria-hidden="true">'+ic('store',32)+'</div><div><p class="b">Logo</p>'+btn('Trocar logo','toast1',{d:'Logo atualizada.',k:'secondary',sz:'sm',i:'upload'})+'</div></div>'+field('loja.nome','Nome da loja')+field('cfg.desc','Descrição',{ta:1,help:'Aparece na página da loja. Fale do que você vende e de onde fica.'})+'<div><p class="lbl">Foto de capa</p><div class="ph" style="aspect-ratio:16/6;margin-top:4px">'+ic('image',32)+'<span>Fachada ou vitrine, proporção 16:9</span></div>'+btn('Trocar capa','toast1',{d:'Capa atualizada.',k:'secondary',sz:'sm',i:'upload'}).replace('class="btn','style="margin-top:8px" class="btn')+'</div></div>';
+ if(t==='horarios')b='<div class="card stack"><h2>Horário de funcionamento</h2><p class="help">Fora do horário, a loja aparece como "Fechada agora" e não recebe pedidos.</p>'+c.hor.map((h,i)=>'<div class="row" style="padding:8px 0;border-bottom:1px solid var(--wb-color-neutral-200);gap:16px"><div class="swrow" style="width:190px">'+sw(h[1],'diaSw',i,'Aberto '+h[0])+'<span class="b">'+h[0]+'</span></div>'+(h[1]?'<input class="inp" type="time" style="width:130px" data-bind="cfg.hor.'+i+'.2" value="'+h[2]+'" aria-label="Abre '+h[0]+'"><span>até</span><input class="inp" type="time" style="width:130px" data-bind="cfg.hor.'+i+'.3" value="'+h[3]+'" aria-label="Fecha '+h[0]+'">':'<span class="mut">Fechado</span>')+'</div>').join('')+'</div>'+
+  '<div class="card" style="margin-top:16px"><div class="row sb"><div><h2>Pausar a loja agora</h2><p class="help">Para imprevistos. Você reabre quando quiser.</p></div>'+sw(!S.loja.aberta,'toggleLoja','','Pausar a loja')+'</div></div>';
+ if(t==='entrega')b='<div class="card stack16"><h2>Entrega e retirada</h2>'+note('brand','truck','<p class="b">A entrega é da Webag.</p><p>Você prepara o pedido e marca "pronto para coleta". Um motoboy da Webag busca na loja. O frete é definido pela Webag e pago pelo cliente: você não configura taxa nem raio.</p>')+
+  '<div class="swrow">'+sw(c.ent,'cfgSw','ent','Entrega pela Webag')+'<span class="b">Entrega pela Webag</span></div><div class="swrow">'+sw(c.ret,'cfgSw','ret','Retirada na loja')+'<span><b>Retirada na loja</b><br><span class="help">O cliente busca com um código. Grátis.</span></span></div>'+
+  field('cfg.prep','Tempo de preparo',{sel:[15,30,45,60]})+(c.ret?field('cfg.endRet','Endereço da loja (coleta e retirada)'):'')+'</div>';
+ if(t==='trocas')b='<div class="card stack16"><h2>Política de trocas</h2><div class="swrow">'+sw(c.vol,'cfgSw','vol','Aceitar troca por tamanho ou cor')+'<span><b>Aceitar troca por tamanho ou cor</b><br><span class="help">Lojas que aceitam vendem mais roupa e calçado.</span></span></div>'+(c.vol?field('cfg.prazo','Prazo para pedir a troca (dias)',{sel:[7,10,15,30],help:'Mínimo de 7 dias, igual ao direito de arrependimento.'})+'<div class="swrow">'+sw(c.levar,'cfgSw','levar','Cliente pode levar à loja')+'<span><b>Cliente pode levar à loja</b><br><span class="help">Troca levando à loja é grátis para o cliente.</span></span></div>':'')+
+  '<div class="note info">'+ic('lock',20)+'<div class="grow"><p class="b">Garantido por lei, não dá para mudar</p><p>Arrependimento: 7 dias, sem motivo, com reembolso total. Defeito: 30 dias (não duráveis) ou 90 dias (duráveis), com coleta grátis.</p></div></div>'+
+  '<div class="note brand">'+ic('clock',20)+'<div class="grow"><p class="b">Prazo de resposta: 24 horas</p><p>Se a loja não responder, a troca por tamanho ou cor é aprovada sozinha.</p></div></div></div>';
+ if(t==='whats')b='<div class="g2"><div class="card stack16"><h2>WhatsApp da loja</h2>'+field('cfg.whats','Número com DDD',{mode:'tel',help:'O cliente toca em "Falar com a loja" e abre a conversa aqui.'})+field('cfg.msg','Mensagem inicial',{ta:1})+btn('Testar no WhatsApp','toast1',{d:'Abrindo o WhatsApp com a mensagem pronta.',k:'secondary',i:'chat'})+'</div><div class="card sunk"><p class="capb mut" style="margin-bottom:8px">Como o cliente vê</p><div class="wa" id="wa-prev">'+esc(c.msg)+'1046</div></div></div>';
+ return head('Configurações da loja',esc(S.loja.nome)+' · Francisco Morato')+
+ tabs([['perfil','Perfil'],['horarios','Horários'],['entrega','Entrega e retirada'],['trocas','Política de trocas'],['whats','WhatsApp']],t,'cfgTab')+'<div role="tabpanel">'+b+'</div><div style="margin-top:16px">'+btn('Salvar alterações','cfgSalvar',{sz:'lg',i:'check'})+'</div>'};
+A.toast1=d=>toast(d);
+const _calc=A.calc;A.calc=function(p){if(p==='cfg.msg'){const w=$('#wa-prev');if(w)w.textContent=S.cfg.msg+'1046'}return _calc(p)};
+
+/* ===== LOJISTA: CADASTRO GUIADO E APROVAÇÃO ===== */
+function onbRules(){const f=S.onb.f,e={};const dg=s=>String(s).replace(/\D/g,'');
+ const st=S.onb.step;
+ if(st===1){if(f.nome.trim().length<3)e['onb.f.nome']='Informe seu nome completo.';if([11,14].indexOf(dg(f.doc).length)<0)e['onb.f.doc']='Confira o CPF ou CNPJ. Ele tem 11 ou 14 números.';if(!/^\S+@\S+\.\S+$/.test(f.email))e['onb.f.email']='Digite um e-mail válido, como nome@email.com.';if(dg(f.cel).length<10)e['onb.f.cel']='Digite o celular com DDD.'}
+ if(st===2){if(f.loja.trim().length<2)e['onb.f.loja']='Dê um nome à loja.';if(dg(f.cep).length!==8)e['onb.f.cep']='O CEP tem 8 números. Ex.: 07900-000.';if(f.end.trim().length<5)e['onb.f.end']='Informe rua e número da loja.';if(dg(f.wa).length<10)e['onb.f.wa']='Digite o WhatsApp da loja com DDD.'}
+ if(st===3){if(!S.onb.docs.id)e['onb.docs.id']='Envie o documento com foto para continuar.';if(!S.onb.docs.end)e['onb.docs.end']='Envie o comprovante de endereço para continuar.';if(S.onb.tipo==='PJ'&&!S.onb.docs.cnpj)e['onb.docs.cnpj']='Envie o cartão CNPJ ou o certificado MEI.'}
+ if(st===4){if(!S.onb.mp)e['onb.mp']='Conecte sua conta do Mercado Pago para receber suas vendas.'}
+ if(st===5){if(!S.onb.termos)e['onb.termos']='Aceite os termos para enviar o cadastro.'}
+ return e}
+A.onbFill=()=>{Object.assign(S.onb.f,{nome:'Fátima Souza Lima',doc:'12.345.678/0001-90',email:'fatima@modamorato.com.br',cel:'(11) 94000-1234',loja:'Moda Morato',cep:'07900-000',end:'Rua Capitão Antônio Ferreira, 120',bairro:'Centro',wa:'(11) 94000-1234',desc:'Moda feminina, masculina e calçados.'});S.err={};render()};
+A.onbNext=()=>{const e=onbRules();S.err=e;if(Object.keys(e).length){render();const f=$('[aria-invalid="true"]')||$('.err:not([hidden])');if(f)f.focus&&f.focus();toast('Falta '+Object.keys(e).length+(Object.keys(e).length>1?' itens':' item')+' nesta etapa.',{icon:'warn'});return}
+ S.onb.step++;S.err={};render(true)};
+A.onbVoltar=()=>{S.onb.step=Math.max(1,S.onb.step-1);S.err={};render(true)};
+A.onbIr=d=>{S.onb.step=+d;S.err={};render(true)};
+A.onbTipo=d=>{S.onb.tipo=d;render()};
+A.doc=d=>{S.onb.docs[d]=({id:'documento-frente.jpg',end:'conta-de-luz.pdf',cnpj:'cartao-cnpj.pdf'})[d];delete S.err['onb.docs.'+d];render()};
+A.mp=(d,el)=>{el.classList.add('load');el.innerHTML='<span class="spin"></span>Conectando';setTimeout(()=>{S.onb.mp=true;delete S.err['onb.mp'];render();toast('Mercado Pago conectado.')},900)};
+A.termos=(d,el)=>{S.onb.termos=el.checked;delete S.err['onb.termos'];const e=$('#e-termos');if(e)e.hidden=true};
+A.onbEnviar=(d,el)=>{const e=onbRules();if(Object.keys(e).length){S.err=e;render();return}
+ el.classList.add('load');el.innerHTML='<span class="spin"></span>Enviando cadastro';
+ setTimeout(()=>{S.loja.status='analise';S.loja.aprovada=false;const nome=S.onb.f.loja||'Moda Morato';S.ad.fila=S.ad.fila.filter(l=>!l.mine);S.ad.fila.unshift({id:'L-9001',mine:true,nome:nome,doc:S.onb.f.doc,cidade:S.onb.f.cidade+' · '+S.onb.f.bairro,cat:S.onb.f.cat,resp:S.onb.f.nome,end:S.onb.f.end+', '+S.onb.f.bairro,wa:S.onb.f.wa,email:S.onb.f.email,t0:Date.now(),origem:'Nova',st:'pend',chk:{},docs:['Documento com foto','Comprovante de endereço'].concat(S.onb.tipo==='PJ'?['Cartão CNPJ']:[]),risco:''});
+  audit('Fátima Souza','Enviou cadastro da loja',nome);toast('Cadastro enviado. Respondemos em até 2 dias úteis.',{icon:'checkc'});go('lojista/cadastro')},900)};
+A.sairOnb=()=>{S.loja.status='ativa';S.loja.aprovada=false;go('lojista/painel')};
+A.irPainel=()=>{S.loja.aprovada=false;go('lojista/painel')};
+A.aprovarMinha=()=>{if(typeof approveLoja==='function')approveLoja('L-9001',true);else toast('Aprovação indisponível.')};
+function upl(k,label,help){const d=S.onb.docs[k],er=S.err['onb.docs.'+k];return '<div class="card'+(er?'':'')+'" style="'+(er?'border:2px solid var(--wb-color-danger)':'')+'"><div class="row sb"><div><p class="b">'+label+'</p><p class="help">'+help+'</p>'+(er?'<p class="err" style="margin-top:4px">'+ic('warn',16)+'<span>'+er+'</span></p>':'')+'</div>'+(d?'<div class="row">'+tag('ok','check','Enviado')+'<span class="cap">'+d+'</span>'+btn('Trocar','doc',{d:k,k:'ghost',sz:'sm'})+'</div>':btn('Enviar foto ou arquivo','doc',{d:k,k:'secondary',i:'upload'}))+'</div></div>'}
+V.lojista.cadastro=function(){
+ const st=S.loja.status,o=S.onb;
+ if(st==='ativa'&&S.loja.aprovada){return head('Sua loja foi aprovada','A Moda Morato já aparece para os clientes de Francisco Morato.')+
+  '<div class="dash2"><section class="card stack16"><div style="color:var(--wb-color-success)">'+ic('checkc',48)+'</div><h2>Tudo certo. Falta pouco para vender.</h2><ol class="stack">'+[['Cadastre seus primeiros produtos','Quanto mais fotos, mais vendas.','lojista/catalogo/novo',1],['Confira os horários da loja','Fora do horário a loja aparece fechada.','lojista/loja',0],['Ative os sons de pedido novo','Para não perder nenhum pedido.','lojista/pedidos',0]].map((x,i)=>'<li class="row sb" style="flex-wrap:nowrap"><span><b>'+(i+1)+'. '+x[0]+'</b><br><span class="cap mut">'+x[1]+'</span></span><a class="btn secondary sm" href="#/'+x[2]+'">Abrir</a></li>').join('')+'</ol>'+btn('Ir para o painel','irPainel',{sz:'lg'})+'</section></div>'}
+ if(st==='analise'){
+  const mine=S.ad.fila.find(l=>l.mine);
+  return head('Cadastro em análise','Recebemos seu cadastro. Respondemos em até 2 dias úteis.')+
+  '<div class="dash2"><section class="card"><h2>Andamento</h2><ol class="tl" style="margin-top:16px"><li class="done"><span class="dot">'+ic('check',12)+'</span><p class="b">Cadastro enviado</p><p class="cap mut">Hoje, '+hhmm(mine?mine.t0:Date.now())+'</p></li><li class="cur"><span class="dot"></span><p class="b">Análise dos documentos</p><p class="cap mut">Nossa equipe confere os dados e os documentos. Você recebe um e-mail com o resultado.</p></li><li><span class="dot"></span><p class="b">Loja no ar</p><p class="cap mut">Depois da aprovação, seus produtos aparecem para os clientes.</p></li></ol></section>'+
+  '<div class="stack16"><section class="card"><h2>O que você enviou</h2><ul class="stack8" style="margin-top:8px">'+['Documento com foto','Comprovante de endereço','Cartão CNPJ','Conta do Mercado Pago'].map(x=>'<li class="row sb"><span>'+x+'</span>'+tag('ok','check','Recebido')+'</li>').join('')+'</ul></section>'+
+  '<section class="card sunk"><h2>Enquanto isso</h2><p class="mut" style="margin:4px 0 12px">Já dá para cadastrar produtos e conferir os horários.</p><div class="row"><a class="btn secondary" href="#/lojista/catalogo/novo">Cadastrar produto</a><a class="btn ghost" href="#/lojista/loja">Horários</a></div></section>'+
+  '<section class="card" style="border-style:dashed"><p class="capb mut">Atalho do protótipo</p><p class="cap mut" style="margin:4px 0 12px">No dia a dia, quem aprova é a equipe da Webag no painel Admin. Aqui você pode simular.</p><div class="row">'+btn('Aprovar como Admin','aprovarMinha',{sz:'sm'})+'<a class="btn ghost sm" href="#/admin/aprovacao" data-a="role" data-d="admin">Abrir fila no Admin</a></div></section></div></div>'}
+ /* assistente */
+ const s=o.step,f='onb.f.';
+ const nomes=['','Quem é você','Sua loja','Documentos','Receber','Revisão e envio'];
+ let b='';
+ if(s===1)b='<div class="card stack16"><fieldset style="border:0;padding:0"><legend class="lbl" style="margin-bottom:8px">Você vende como</legend><div class="chips">'+['PF','PJ'].map(k=>'<button type="button" class="chip" data-a="onbTipo" data-d="'+k+'" aria-pressed="'+(o.tipo===k)+'">'+(k==='PF'?'Pessoa física':'Empresa ou MEI (CNPJ)')+'</button>').join('')+'</div></fieldset>'+field(f+'nome','Nome completo do responsável')+field(f+'doc',o.tipo==='PJ'?'CNPJ da loja':'CPF',{mode:'numeric',ph:o.tipo==='PJ'?'00.000.000/0000-00':'000.000.000-00'})+field(f+'email','E-mail',{type:'email',mode:'email',ph:'nome@email.com'})+field(f+'cel','Celular com DDD',{mode:'tel',ph:'(11) 91234-5678',help:'Usamos para falar sobre o cadastro. Não aparece para clientes.'})+'</div>';
+ if(s===2)b='<div class="card stack16">'+field(f+'loja','Nome da loja')+field(f+'cat','Categoria principal',{sel:['Moda e calçados','Casa e utilidades','Eletrônicos','Papelaria','Pet','Brinquedos','Beleza e saúde']})+'<div class="g2">'+field(f+'cep','CEP',{mode:'numeric',ph:'07900-000'})+field(f+'cidade','Cidade',{sel:['Francisco Morato','Franco da Rocha','Caieiras','Cajamar']})+'</div>'+field(f+'end','Rua e número')+field(f+'bairro','Bairro')+field(f+'wa','WhatsApp da loja',{mode:'tel',ph:'(11) 91234-5678',help:'O cliente fala com você por aqui.'})+field(f+'desc','Descrição curta (opcional)',{ta:1})+'</div>';
+ if(s===3)b='<div class="stack16">'+upl('id','Documento do responsável','RG ou CNH, frente e verso na mesma foto, sem cortes.')+upl('end','Comprovante de endereço da loja','Conta de luz, água ou internet dos últimos 90 dias.')+(o.tipo==='PJ'?upl('cnpj','Cartão CNPJ ou certificado MEI','Pode ser o PDF baixado do site da Receita.'):'')+note('info','lock','<p>Os documentos ficam guardados com segurança e só a equipe de aprovação vê. Servem só para conferir sua loja.</p>')+'</div>';
+ if(s===4)b='<div class="stack16"><div class="card stack"><h2>Como você ganha</h2><dl class="kv"><dt>Preço que o cliente paga</dt><dd>R$ 100,00</dd><dt>Comissão da Webag ('+S.loja.comissao+'%)</dt><dd class="bad-t">− R$ '+(100*S.loja.comissao/100).toFixed(2).replace('.',',')+'</dd><dt>Você recebe</dt><dd class="ok-t">R$ '+(100-S.loja.comissao).toFixed(2).replace('.',',')+'</dd></dl><p class="help">Cadastre o preço já com a comissão. Em cada produto você vê quanto vai receber. A entrega é da Webag, sem custo para você.</p></div>'+
+  '<div class="card"'+(S.err['onb.mp']?' style="border:2px solid var(--wb-color-danger)"':'')+'><div class="row sb"><div><p class="b">Conta do Mercado Pago</p><p class="help">Suas vendas caem direto nela. Não guardamos dados de cartão nem de conta.</p>'+(S.err['onb.mp']?'<p class="err" style="margin-top:4px">'+ic('warn',16)+'<span>'+S.err['onb.mp']+'</span></p>':'')+'</div>'+(o.mp?tag('ok','checkc','Conectada'):btn('Conectar Mercado Pago','mp',{i:'wallet'}))+'</div></div></div>';
+ if(s===5){const rv=(t,sec,rows)=>'<section class="card"><div class="row sb"><h2>'+t+'</h2>'+btn('Editar','onbIr',{d:sec,k:'ghost',sz:'sm'})+'</div><dl class="kv" style="margin-top:8px">'+rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+esc(r[1]||'Não informado')+'</dd>').join('')+'</dl></section>';
+  b='<div class="stack16">'+rv('Quem é você',1,[['Nome',o.f.nome],[o.tipo==='PJ'?'CNPJ':'CPF',o.f.doc],['E-mail',o.f.email],['Celular',o.f.cel]])+rv('Sua loja',2,[['Loja',o.f.loja],['Endereço',o.f.end+', '+o.f.bairro+', '+o.f.cidade],['WhatsApp',o.f.wa]])+rv('Documentos e recebimento',3,[['Documentos',Object.keys(o.docs).filter(k=>o.docs[k]).length+' enviados'],['Mercado Pago',o.mp?'Conectado':'Não conectado']])+
+  '<label class="chk"><input type="checkbox" data-a="termos" '+(o.termos?'checked':'')+'><span>Li e aceito os <a href="#/lojista/cadastro">Termos de uso do lojista</a> e a comissão de '+S.loja.comissao+'% por venda.</span></label><p class="err" id="e-termos" '+(S.err['onb.termos']?'':'hidden')+'>'+ic('warn',16)+'<span>'+(S.err['onb.termos']||'')+'</span></p></div>'}
+ const last=s===5;
+ return '<div style="max-width:640px;margin:0 auto">'+(S.loja.status==='onboarding'?'<div class="row sb" style="margin-bottom:8px"><a class="back" href="#/lojista/painel" data-a="sairOnb">'+ic('left',20)+'Voltar ao painel de demonstração</a>'+(s===1?btn('Preencher com dados de exemplo','onbFill',{k:'ghost',sz:'sm'}):'')+'</div>':'')+
+ '<p class="capb mut">'+(last?'Última etapa':'Etapa '+s+' de 4')+'</p><h1 class="t1" tabindex="-1" style="margin:4px 0 8px">'+nomes[s]+'</h1><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="'+s+'" aria-label="Progresso do cadastro" style="margin-bottom:16px"><i style="width:'+(s/5*100)+'%"></i></div>'+
+ (s===1?note('brand','info','<p><b>Leva uns 10 minutos.</b> Tenha em mãos um documento com foto e um comprovante de endereço. A Webag retém '+S.loja.comissao+'% de cada venda e cuida da entrega.</p>')+'<div style="height:16px"></div>':'')+b+
+ '<div class="row" style="margin-top:24px;justify-content:space-between">'+(s>1?btn('Voltar','onbVoltar',{k:'secondary',sz:'lg',i:'left'}):'<span></span>')+(last?btn('Enviar cadastro','onbEnviar',{sz:'lg',i:'check'}):btn(['','Ir para a loja','Ir para os documentos','Ir para o recebimento','Revisar cadastro'][s],'onbNext',{sz:'lg'}))+'</div></div>'};
+/*__LOJISTA3__*/
+</script>
+
+<script>
+/*__ADMIN__*/
+</script>
+
+<script>
+/* ===== INICIALIZAÇÃO ===== */
+if(!S.ad){S.ad={fila:[],ent:[],mb:[],disp:[]}}
+render(true);
+</script>
+</body>
+</html>

@@ -74,7 +74,7 @@ Como dev, quero uma interface de provedor e um simulado, para o app funcionar po
 
 ### WB-151 Mercado Pago: PIX — Must — dep: WB-150, WB-155
 Como cliente, quero pagar por PIX real, para confirmar na hora.
-- **C1** Dado pedido, então criar pagamento PIX no provedor com valor, validade `pix_expiracao_min`, referência do pedido e (se split) a comissão; retorna QR e copia e cola.
+- **C1** Dado pedido, então criar pagamento PIX no provedor com valor, validade `pix_expiracao_min`, referência do pedido e (se split) a `application_fee` (comissão + taxa de entrega + taxa de serviço − cupom da plataforma, RN-10); retorna QR e copia e cola.
 - **C2** Dado webhook de aprovação válido, então o pedido vai a RECEBIDO em <= 5 s.
 - **C3** Dado PIX expirado, então o pagamento vira EXPIRADO e o pedido EXPIRADO (WB-024 C3).
 - **C4** Dado erro do provedor (5xx/timeout), então nenhum pedido duplicado; tentativa segura com a mesma chave de idempotência.
@@ -107,7 +107,7 @@ Como financeiro/dev, quero que cada evento do provedor seja processado uma vez, 
 Como sistema, quero estornar corretamente, para devolver o dinheiro ao cliente.
 - **C1** Dado pagamento APROVADO, então estorno total devolve o valor integral ao meio original e o pagamento fica ESTORNADO_TOTAL.
 - **C2** Dado estorno parcial, então valor > 0 e <= pago − já estornado; o pagamento fica ESTORNADO_PARCIAL; soma de estornos nunca excede o pago.
-- **C3** Dado estorno, então comissão e taxa de serviço são devolvidas proporcionalmente e o ledger reflete (RN-10).
+- **C3** Dado estorno, então comissão, **taxa de entrega** e taxa de serviço são devolvidas proporcionalmente (total: integralmente) e o ledger reflete (RN-10); o custo já pago ao motoboy não volta (custo da Webag, WB-238 C4).
 - **C4** Dado mesma solicitação duas vezes, então 1 estorno (idempotência).
 - **C5** Dado provedor indisponível, então o estorno fica "pendente" e é retentado; cliente vê "Estorno em processamento".
 - **C6** Dado split, então a divisão entre lojista e Webag segue o provedor (proporcional) e o estorno sai da conta do lojista; se o provedor recusar por saldo insuficiente do lojista, o estorno fica "pendente por saldo do lojista", o admin é alertado (WB-198) e decide entre suspender a loja e acionar a cobrança pelos Termos do Lojista. **Não há débito automático em repasse futuro** (DEC-016) [comportamento do MP com saldo negativo: verificar no sandbox, backend-dev].
@@ -124,12 +124,15 @@ Como Webag, quero reter a comissão e repassar ao lojista, para ter receita sem 
 
 ### WB-156 Ledger: comissão, taxa e extrato — Must — dep: WB-154
 Como financeiro, quero lançamentos contábeis por pedido, para que o extrato feche.
-- **C1** Dado pagamento aprovado, então grava lançamentos: venda, comissão (snapshot do percentual), taxa de serviço, taxa do provedor (quando conhecida), cupom da plataforma.
+- **C1** Dado pagamento aprovado, então grava lançamentos: venda (itens), comissão (snapshot do percentual), **taxa de entrega (receita da Webag)**, taxa de serviço, taxa do provedor (quando conhecida), cupom da plataforma; custo de logística entra depois, por corrida (WB-239).
 - **C2** Dado estorno/ajuste, então lançamentos inversos e proporcionais; nunca apaga lançamento (append-only).
-- **C3** Dado o exemplo de RN-10 (R$ 100,00, cupom R$ 10,00, frete R$ 8,00, PIX 0,99%), então o líquido do lojista é R$ 88,03 e a receita Webag R$ 9,00 (teste automatizado).
+- **C3** Dado o exemplo de RN-10 (R$ 100,00, cupom da loja R$ 10,00, taxa de entrega R$ 8,00, comissão 15%, PIX 0,99%), então o líquido do lojista é **R$ 75,53** e a receita Webag **R$ 21,50** (teste automatizado; **substitui** o exemplo antigo de R$ 88,03 e R$ 9,00, que vale só para comissão 10% com frete do lojista, modelo extinto pela DEC-036).
 - **C4** Dado soma dos lançamentos de um pedido, então sempre = total pago − estornos (invariante verificada).
 - **C5** Dado arredondamento, então half-up e diferença de centavo para o lojista (RN-01).
 - **C6** Dado categorias diferentes no pedido, então comissão por item/categoria somada (RN-10).
+- **C7** Dado frete grátis (limite de valor ou cupom), então a taxa de entrega é R$ 0, a `application_fee` mantém comissão + taxa de serviço e o subsídio (custo do motoboy sem taxa) aparece no relatório de logística (WB-240), nunca como lançamento negativo ao lojista.
+- **C8** Dado a taxa de troca e a diferença de preço (WB-175, WB-245), então entram como receita de logística da Webag em cobrança separada, sem comissão da loja; o estorno da taxa (troca cancelada depois de paga) devolve o valor integral.
+- **C9** Dado a soma dos lançamentos de um pedido, então a invariante C4 continua valendo com taxa de entrega e custos de logística separados (receita bruta, custo e receita líquida da Webag por pedido).
 
 ### WB-157 Conciliação diária — Must — dep: WB-153
 Como financeiro, quero conferir o sistema contra o provedor, para achar divergência cedo.
@@ -174,6 +177,9 @@ Como Webag, quero um segundo provedor, para reduzir dependência.
 | Centralizado pode ser atividade regulada | Risco regulatório crítico | Preferir split; parecer jurídico; registrar em decisoes |
 | Captura posterior com split pode não ser suportada | Risco técnico | HIP-010; ADR |
 | Taxas reais do MP no Transparente não confirmadas | Risco de margem | Taxas parametrizáveis no ledger; validar com o MP |
+| `application_fee` maior (comissão 15% + entrega + serviço): o MP pode ter teto ou regra para a parcela do marketplace; a taxa do MP incide sobre o total, que inclui a taxa de entrega, e no split quem paga é o lojista | Risco técnico/comercial | backend-dev confirma no sandbox (L.2); o fundador decide se a Webag assume a taxa do MP sobre a entrega |
+| Taxa de troca é da Webag mas o split é por loja | Risco técnico | ADR do backend (cobrança na conta da Webag ou pedido de troca com `application_fee` integral) |
+| NFS-e/tributos sobre taxa de entrega, taxa de troca e comissão | Risco fiscal | Contador do fundador |
 | Chargeback e fraude no início | Risco financeiro | Limite R$ 2.000 (HIP-012), antifraude do MP |
 | Lojista recebe, saca e some; estorno falha por saldo (SEC-105; sem retenção possível no split) | Risco financeiro, **risco residual aceito em DEC-016** | Limite de loja nova e alertas (WB-225), código de entrega (WB-226), estorno pelo admin e suspensão (WB-109), cobrança pelos Termos do Lojista |
 

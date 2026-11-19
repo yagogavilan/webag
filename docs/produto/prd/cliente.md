@@ -175,7 +175,7 @@ Como cliente, quero ver minhas últimas buscas, para repetir rápido.
 
 ### WB-016 Página da loja — Must — dep: WB-055, WB-056, WB-057
 Como cliente, quero ver a loja com horário, taxa, prazo e política de trocas, para confiar antes de comprar.
-- **C1** Dado a loja, então vejo capa, logo, nome, nota (ou "Novo" com menos de 3 avaliações), aberta/fechada com horário de hoje, tempo estimado, taxa de entrega para meu endereço (ou "Grátis acima de R$ X"), pedido mínimo, opção de retirada e política de trocas resumida.
+- **C1** Dado a loja, então vejo capa, logo, nome, nota (ou "Novo" com menos de 3 avaliações), aberta/fechada com horário de hoje, tempo estimado (preparo da loja + deslocamento), **taxa de entrega da Webag** para meu endereço (tabela do admin, RN-04; "a partir de R$ X" sem endereço completo; ou "Grátis acima de R$ X"), pedido mínimo (global), opção de retirada e política de trocas resumida (prazo da troca por tamanho/cor, "levando à loja é grátis").
 - **C2** Dado vitrine, então os produtos aparecem por seções na ordem da loja; produto sem estoque aparece como "Indisponível", ao final.
 - **C3** Dado loja fechada, então vejo "Fechada. Abre às HH:MM" e posso navegar, mas o carrinho não finaliza (RN-03).
 - **C4** Dado loja que não entrega no meu endereço, então vejo "Não entrega no seu endereço" e, se aceita retirada e estiver a <= 10 km, "Retirar na loja".
@@ -184,7 +184,7 @@ Como cliente, quero ver a loja com horário, taxa, prazo e política de trocas, 
 
 ### WB-017 Página do produto — Must — dep: WB-060, WB-061, WB-062
 Como cliente, quero ver fotos, variações, preço e estoque, para escolher certo.
-- **C1** Dado o produto, então vejo galeria (swipe, zoom), nome, preço (de/por quando promoção vigente), descrição, variações e avaliações.
+- **C1** Dado o produto, então vejo galeria (swipe, zoom), nome, preço (de/por quando promoção vigente), descrição, variações, **tabela de medidas** quando a loja a preencheu (WB-246), o resumo "Como vestiu?" quando há respostas suficientes (WB-247), o aviso "Não aceita troca por tamanho ou cor" quando for o caso (WB-244) e avaliações.
 - **C2** Dado variações (ex.: tamanho, cor), então só as combinações com estoque são selecionáveis; as sem estoque aparecem riscadas e não clicáveis.
 - **C3** Dado "Adicionar" sem escolher variação obrigatória, então vejo "Escolha o tamanho" e o seletor é destacado.
 - **C4** Dado estoque disponível <= 3 numa variação, então vejo "Últimas X unidades".
@@ -234,7 +234,7 @@ Como cliente, quero aplicar um cupom, para pagar menos.
 Como cliente, quero escolher entrega ou retirada e confirmar o endereço, para fechar o pedido em poucos toques.
 - **C1** Dado login (e-mail confirmado ou, no 1º pedido pago, ainda não confirmado, WB-224), então o checkout tem no máximo: (1) entrega/retirada + endereço, (2) pagamento, (3) revisar e pagar; nenhum campo extra além de CPF quando o provedor exigir.
 - **C2** Dado resumo, então vejo subtotal, desconto, frete (ou "Grátis"), taxa de serviço (se houver) e **total** antes de pagar, com o mesmo valor que será cobrado.
-- **C3** Dado loja que não aceita retirada, então a opção não aparece; dado endereço fora do raio, então só retirada (se houver) ou aviso para trocar de endereço.
+- **C3** Dado loja que não aceita retirada, então a opção não aparece; dado endereço fora do `raio_max_km`, de região inativa, ou logística fechada/pausada, então só retirada (se houver) ou aviso para trocar de endereço, com o motivo escrito ("Entrega volta às 09:00"); a taxa de entrega vem da tabela da Webag (WB-237) e o resumo a mostra em linha própria "Entrega Webag".
 - **C4** Dado loja fechada, pausada ou que fechou durante o checkout, então bloqueio com "Loja fechada" e o carrinho é mantido.
 - **C5** Dado alteração de preço, estoque ou frete desde o carrinho, então vejo "Algo mudou" com o que mudou e confirmo antes de pagar (RN-05).
 - **C6** Dado total acima de `pedido_max_cents` (R$ 2.000,00), então bloqueio com mensagem clara.
@@ -269,7 +269,7 @@ Como cliente, quero retirar na loja com um código, para buscar sem filas.
 
 ### WB-027 Acompanhar o pedido — Must — dep: WB-024, WB-025, WB-069
 Como cliente, quero ver em que etapa está o meu pedido, para saber quando chega.
-- **C1** Dado pedido ativo, então vejo a linha do tempo (recebido, aceito, em separação, saiu para entrega / pronto para retirada, entregue) com a etapa atual destacada e hora de cada uma.
+- **C1** Dado pedido ativo, então vejo a linha do tempo (recebido, aceito, em separação, **pronto aguardando o motoboy, motoboy a caminho da loja, saiu para entrega** / pronto para retirada, entregue) com a etapa atual destacada e hora de cada uma; os estados da entrega são da logística da Webag (WB-235, RN-18).
 - **C2** Dado mudança de status, então a tela atualiza em até 5 s sem eu fazer nada, e recebo push (WB-191).
 - **C3** Dado sem conexão, então vejo o último estado salvo com "Atualizado há X min" e a tela atualiza ao voltar a conexão.
 - **C4** Dado pedido recusado, cancelado ou expirado, então a linha do tempo mostra o motivo, o ator e o estado do estorno.
@@ -280,7 +280,7 @@ Como cliente, quero ver em que etapa está o meu pedido, para saber quando chega
 Como cliente, quero cancelar enquanto a loja não separou, para não receber o que não quero.
 - **C1** Dado RECEBIDO ou ACEITO, quando toco "Cancelar pedido" e confirmo, então o pedido vira CANCELADO (ator cliente), o estoque é liberado e o estorno total é iniciado; vejo o prazo (PIX: conta de origem; cartão: até 2 faturas).
 - **C2** Dado EM_SEPARACAO, então o botão vira "Pedir cancelamento": a loja decide em 10 min; sem resposta, o admin decide; vejo o andamento.
-- **C3** Dado SAIU_PARA_ENTREGA ou PRONTO_PARA_RETIRADA, então não há cancelar; vejo "Fale com a loja" e, após receber, "Pedir troca ou devolução".
+- **C3** Dado PRONTO_PARA_COLETA, SAIU_PARA_ENTREGA ou PRONTO_PARA_RETIRADA, então não há cancelar; vejo "Fale com a loja" (e "Falar com a Webag" na entrega) e, após receber, "Trocar" ou "Desistir da compra" (WB-170).
 - **C4** Dado AGUARDANDO_PAGAMENTO, então cancelo sem custo.
 - **C5** Dado cancelar duas vezes (toque duplo), então só um cancelamento e um estorno ocorrem.
 
@@ -305,6 +305,7 @@ Como cliente, quero avaliar após receber, para ajudar outros e premiar a loja.
 - **C4** Dado pedido cancelado/recusado/expirado, então o botão não existe.
 - **C5** Dado janela de 30 dias encerrada, então vejo "Prazo para avaliar encerrado".
 - **C6** Dado envio sem conexão, então o texto é preservado e reenvio ao reconectar.
+- **C7** Dado produto de moda ou calçado, então há a pergunta opcional "Como vestiu?" (WB-247, DEC-037); a avaliação da **entrega** (atraso do motoboy) é uma pergunta separada da nota da loja e do produto, para a loja não pagar pelo atraso da Webag `[HIPÓTESE; Designer desenha]`.
 
 ### WB-032 Perfil e dados pessoais — Must — dep: WB-008
 Como cliente, quero ver e editar meus dados, para mantê-los corretos.

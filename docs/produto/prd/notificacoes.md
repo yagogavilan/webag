@@ -48,14 +48,22 @@ SMS e WhatsApp (custo, HIP-022/028); notificação por voz; automações de cicl
 | PIX perto de expirar (2 min) | Cliente | push (app aberto/fechado), in-app | Transacional | "Seu PIX vence em 2 minutos." |
 | ACEITO | Cliente | push, in-app | Transacional | "[Loja] aceitou seu pedido." |
 | EM_SEPARACAO | Cliente | in-app (sem push) | Transacional | "Estão separando seu pedido." |
+| PRONTO_PARA_COLETA (entrega Webag) | Cliente | in-app (sem push) | Transacional | "Seu pedido está pronto e aguarda o motoboy." |
+| Motoboy a caminho da loja | Cliente | in-app (sem push) | Transacional | "O motoboy está a caminho da loja." |
 | SAIU_PARA_ENTREGA | Cliente | push, in-app | Transacional | "Seu pedido saiu para entrega." |
+| Entrega não realizada | Cliente | push, in-app, e-mail | Transacional | "Não conseguimos entregar: [motivo]. Combine uma nova tentativa." |
+| Pedido pronto para coleta; corrida sem motoboy há 10 e 20 min; entrega em atraso | Admin (operação) | painel com som, Web Push, e-mail (não depende da aba aberta, DEC-038c) | Operacional | "Pedido #X pronto na [loja]. Atribuir motoboy." |
+| Pedido coletado; entregue; falha de entrega | Loja | painel | Transacional | "O motoboy coletou o pedido #X." |
+| Comissão da loja alterada | Loja | painel, e-mail | Transacional | "Sua comissão mudou de A% para B% a partir de DD/MM." |
 | PRONTO_PARA_RETIRADA | Cliente | push, in-app | Transacional | "Pronto para retirar. Código [1234]." |
 | ENTREGUE | Cliente | push, in-app | Transacional | "Pedido entregue." + 1 h depois "Como foi? Avalie." |
 | RECUSADO / CANCELADO / EXPIRADO | Cliente | push, in-app, e-mail | Transacional | "[Motivo]. Estorno de R$ X iniciado." |
 | Estorno concluído | Cliente | push, e-mail | Transacional | "Estorno de R$ X concluído." |
 | Item indisponível (estorno parcial) | Cliente | push, in-app | Transacional | "[Item] acabou. Estornamos R$ X." |
 | Troca: aprovada, coleta agendada, recusada, concluída, expirando | Cliente | push, in-app | Transacional | Conforme status |
-| Nova troca; troca expirando (24 h, 4 h) | Loja | painel, Web Push, e-mail | Transacional | "Nova troca solicitada." |
+| Nova troca; troca expirando (12 h e 4 h antes do fim do SLA de 24 h); troca aprovada automaticamente | Loja | painel, Web Push, e-mail | Transacional | "Nova troca solicitada. Responda em 24 h ou ela será aprovada." |
+| Troca aprovada (taxa pendente: pague em 48 h; lembrete em 24 h); coleta confirmada (janela); motoboy a caminho da coleta | Cliente | push, in-app | Transacional | "Troca aprovada. Pague R$ X para agendar a coleta." |
+| Desistência recebida (confirmação imediata, Decreto 7.962/2013) | Cliente | push, in-app, e-mail | Transacional | "Recebemos seu pedido de desistência. Protocolo [TR-n]." |
 | Novo pedido | Loja | som, painel, Web Push, e-mail | Transacional | "Novo pedido #X" |
 | Pedido sem aceite aos 5 min | Loja | som forte, Web Push, e-mail | Transacional | "Aceite agora ou o pedido será cancelado." |
 | Pedido cancelado/pedido de cancelamento | Loja | painel, Web Push | Transacional | |
@@ -112,7 +120,7 @@ Como lojista, quero ser alertado de novos pedidos e prazos, para aceitar a tempo
 ### WB-193 Notificações de troca — Must — dep: WB-170
 Como cliente e lojista, quero ser avisado de cada passo da troca, para cumprir os prazos.
 - **C1** Dado cada mudança de estado de troca (RN-11), então a parte que precisa agir é notificada (cliente: aprovada, coleta agendada, recusada, reembolso; loja: nova troca, contestação, expirando).
-- **C2** Dado prazo da loja (48 h), então avisos em 24 h e 4 h restantes.
+- **C2** Dado prazo da loja (`troca_resposta_h`, **24 h** desde a DEC-037), então avisos com 12 h e 4 h restantes e, ao fim, "Aprovada automaticamente" à loja e ao cliente (WB-177).
 - **C3** Dado prazo do cliente (entregar item em 7 dias), então aviso em D-2.
 - **C4** Dado o admin, então é notificado de cada entrada em mediação (WB-198).
 

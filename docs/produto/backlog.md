@@ -1,7 +1,25 @@
 # Backlog Priorizado — Webag 1.0 e Fase 2
 
-Status: v1 | Dono: product-owner | Data: 2026-11-18
-Fonte de escopo: `docs/00-visao/brief.md` §3 e §4. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043). Personas: `personas.md`. Pesquisa: `pesquisa-mercado.md`.
+Status: v2 | Dono: product-owner | Data: 2026-11-18 | Atualizado: 2026-11-19
+Fonte de escopo: `docs/00-visao/brief.md` §3, §4 e §9. Regras: `regras-de-negocio.md`. Hipóteses: `docs/decisoes.md` (HIP-001 a HIP-043, HIP-D, HIP-C01, HIP-L01 a L14, HIP-T01 a T12). Personas: `personas.md`. Pesquisa: `pesquisa-mercado.md`.
+
+## Alterações 2026-11-19 (DEC-035 comissão, DEC-036 logística da Webag, DEC-037 trocas)
+Origem: brief §9 e `docs/decisoes.md`. **DEC-007 (entrega pelo lojista; frota da Webag fora da 1.0) está SUBSTITUÍDA pela DEC-036.** O que era "fase 2" (frota Webag, taxa de entrega Webag, coleta de trocas por entregador) entra na 1.0 **sem app do motoboy**: o admin despacha por WhatsApp. App do motoboy, rastreio e despacho automático continuam fase 2 (§6.1).
+
+| Item | O que mudou | Onde |
+|---|---|---|
+| DEC-007 | Substituída por DEC-036; HIP-005 (frete do lojista) e HIP-013 (raio por loja) substituídas | `decisoes.md`, RN-04 |
+| Comissão (DEC-035) | O lojista cadastra o preço já com a comissão e vê "Você recebe R$ X"; aviso de preço; explicação no onboarding; aviso quando a comissão muda. Seed 15% `[HIPÓTESE]` (era 10%). **WB-242** nova | `prd/logistica.md`, WB-060 C8, WB-051 C7, RN-10 |
+| Logística (DEC-036) | Novo PRD: lojista marca "pronto para coleta"; admin despacha; fila em tempo real; motoboys; mensagem de WhatsApp; estados da entrega; falha de entrega; custo por entrega; tabela de taxa por região e faixa (receita da Webag); relatórios. **WB-229 a WB-241** novas (13); WB-057 e WB-069 reescritas | `prd/logistica.md`, RN-04, RN-07, RN-18 |
+| Pagamentos | `application_fee` = comissão + taxa de entrega + taxa de serviço − cupom da plataforma; custo do motoboy fora do app; taxa de troca em cobrança separada; exemplo do ledger muda (R$ 75,53 e R$ 21,50) | `prd/pagamentos.md` (WB-151, 154, 156), RN-10 |
+| Lojista | Sem taxa, raio, mínimo nem grátis próprios (WB-057); política de troca só com prazo (sem taxa, WB-059); "Pronto para coleta" (WB-069); tabela de medidas e "sem troca voluntária" no produto (WB-060 C9) | `prd/lojista.md` |
+| Cliente | Taxa de entrega da tabela, motivo da indisponibilidade escrito, linha do tempo com estados da entrega, tabela de medidas, "Como vestiu?" | `prd/cliente.md` (WB-016, 017, 023, 027, 028, 031) |
+| Admin | Área Logística, tabela de taxa, flag `entrega_webag`, card de entregas, permissões | `prd/admin.md` |
+| Trocas (DEC-037) | PRD reescrito: 3 tipos com base legal, prazos "Você tem até DD/MM", taxa de troca da tabela do admin e só após a aprovação, troca na loja grátis, 1 troca voluntária por pedido, SLA de 24 h com aprovação automática, diferença de preço, reserva do tamanho novo, peça nova só depois da antiga conferida (DEC-038f), 4 toques (DEC-038b). **WB-243 a WB-248** novas (6); WB-170 a 178 reescritas | `prd/trocas.md`, RN-11 |
+| Parâmetros | Novas chaves em RN-02 (tabela de taxa, mínimo e grátis globais, horário da logística, SLAs, limites de troca, medidas) | `regras-de-negocio.md` |
+
+**Histórias novas (IDs seguintes ao último em uso, WB-228):** WB-229 a WB-248 (20): **15 Must** (229 a 239 e 241 a 244) e **5 Should** (240, 245, 246, 247, 248). Total da 1.0: 144 para **164**.
+**Crítica ao escopo:** a DEC-036 transforma a Webag em operadora de logística; o custo é maior que as 20 histórias: é uma operação diária (despacho, motoboys, pagamentos). O software cabe, a **operação de 1 pessoa não cabe em 24 h**: por isso `logistica_horario`, pausa e o marco M1 com 5 lojas e poucos pedidos por hora. Recomendo a ordem: logística (229 a 239) **antes** de trocas completas (243 a 248), porque sem entrega não há pedido; e a troca na loja (WB-243) sem corrida pode sair antes da coleta (WB-241).
 
 ## Alterações 2026-11 (alinhamento ao parecer do Security e a DEC-014 a DEC-018)
 Origem: `docs/seguranca/revisao-adrs.md` (SEC-101 a SEC-112), `requisitos-seguranca.md` e `docs/decisoes.md`. Só foi alterado o que o parecer pede.
@@ -59,10 +77,11 @@ Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md`
 | Épico | PRD | IDs |
 |---|---|---|
 | Cliente | `prd/cliente.md` | WB-001 a 038 |
-| Lojista | `prd/lojista.md` | WB-050 a 079, 227 |
+| Lojista | `prd/lojista.md` | WB-050 a 079, 227 (+ WB-242 em `prd/logistica.md`) |
 | Admin | `prd/admin.md` | WB-100 a 125 |
 | Pagamentos | `prd/pagamentos.md` | WB-150 a 161 |
-| Trocas ("Retira Troca") | `prd/trocas.md` | WB-170 a 178 |
+| **Logística da Webag** (DEC-036) | `prd/logistica.md` | WB-229 a 242 |
+| Trocas ("Retira Troca") | `prd/trocas.md` | WB-170 a 178, 243 a 248 |
 | Notificações | `prd/notificacoes.md` | WB-190 a 199 |
 | LGPD | `prd/lgpd.md` | WB-210 a 218 |
 | Segurança de acesso e risco de loja | `prd/seguranca-acesso.md` | WB-219 a 226, 228 |
@@ -77,13 +96,13 @@ Origem: tabelas Z de `docs/design/telas/onda-1b-contas.md`, `onda-5-posvenda.md`
 
 | MoSCoW | Qtde |
 |---|---|
-| Must | 117 (109 + WB-219 a 225 + WB-228) |
-| Should | 24 (21 + WB-079, que desceu de Could, + WB-226 + WB-227) |
+| Must | 132 (117 + 15 de DEC-036/037: WB-229 a 239 e 241 a 244) |
+| Should | 29 (24 + WB-240, 245, 246, 247, 248) |
 | Could | 2 (WB-010, 199) |
 | Won't (1.0) | 1 (WB-161) |
-| **Total 1.0** | **144** (142 + WB-227 e WB-228, DEC-024; só histórias de telas que o Designer desenhou sem história) |
+| **Total 1.0** | **164** (144 + 20 novas da DEC-035/036/037; 144 = 142 + WB-227 e WB-228 da DEC-024) |
 
-Crítica ao escopo: 116 Must é muito para uma "1.0 de piloto". Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
+Crítica ao escopo: 132 Must é muito para uma "1.0 de piloto" (eram 116 antes da DEC-036/037). Entrego tudo o que o brief pede, mas recomendo ao PM/CEO o **marco M1 (piloto fechado com 5 lojas)** após as ondas 0 a 3 mais WB-076, 108, 109, 112 e 031, e o restante (trocas completas, banners, relatórios, push segmentado) como M2, sem mudar a definição de pronto da missão. O prazo é decisão do PM e do CEO.
 
 ## 3. Ordem sugerida de construção
 
@@ -130,10 +149,11 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 26 | WB-104 | Suspender, reativar e editar loja | Must | 103 | |
 | 27 | WB-055 | Perfil da loja | Must | 054 | S |
 | 28 | WB-056 | Horários, feriados e pausa | Must | 055 | |
-| 29 | WB-057 | Entrega: raio, taxa, mínimo, grátis, tempo | Must | 055 | |
+| 29 | WB-057 | Entrega pela Webag e tempo de preparo (**reescrita, DEC-036**; sem taxa/raio da loja) | Must | 055 | |
 | 30 | WB-058 | Retirada na loja | Must | 055 | |
 | 31 | WB-059 | Política de trocas | Must | 055 | |
 | 32 | WB-060 | Criar e editar produto com fotos | Must | 054, 106 | S |
+| 32a | WB-244 | Produto sem troca voluntária (DEC-037) | Must | 060, 106 | |
 | 33 | WB-061 | Variações e estoque por variação | Must | 060 | |
 | 34 | WB-062 | Preço e promoção com período | Must | 060 | |
 | 35 | WB-064 | Pausar produto e estoque baixo | Must | 061 | |
@@ -171,14 +191,18 @@ Legenda: **P** = prioridade; **TM** = threat model.
 |---|---|---|---|---|---|
 | 59 | WB-111 | Comissões padrão e taxa de serviço | Must | 119 | |
 | 60 | WB-105 | Comissão por loja e por categoria | Must | 111 | |
+| 60a | WB-242 | Comissão transparente: "Você recebe R$ X", aviso de preço, onboarding (DEC-035) | Must | 060, 105 | |
+| 60b | WB-236 | Tabela de taxa de entrega por região e faixa, mínimo e frete grátis globais (DEC-036) | Must | 118, 119 | S (dinheiro) |
 | 61 | WB-151 | Mercado Pago: PIX | Must | 150, 155 | S |
 | 62 | WB-152 | Mercado Pago: cartão tokenizado | Must | 150, 155 | S |
 | 63 | WB-154 | Estorno total e parcial | Must | 151, 152 | S |
 | 64 | WB-156 | Ledger: comissão, taxa e extrato | Must | 154, 105 | S |
+| 64a | WB-238 | Ledger: taxa de entrega como receita da Webag e custo de logística (`application_fee`, L.2) | Must | 156, 236 | S |
 | 65 | WB-158 | PIX tardio ou duplicado | Must | 151, 154 | S |
 | 66 | WB-157 | Conciliação diária | Must | 153 | S |
 | 67 | WB-160 | Alternar simulado/real por .env + documentação | Must | 151-153 | S |
 | 68 | WB-023 | Checkout: entrega ou retirada | Must | 020, 003, 005 | S |
+| 68a | WB-237 | Checkout: taxa de entrega pela tabela (horário e pausa da logística) | Must | 023, 236 | |
 | 69 | WB-024 | Pagar com PIX | Must | 023, 151 | S |
 | 70 | WB-025 | Pagar com cartão de crédito | Must | 023, 152 | S |
 | 71 | WB-026 | Retirada: código e instruções | Must | 023, 058 | |
@@ -186,8 +210,16 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 73 | WB-067 | Painel de pedidos em tempo real | Must | 050, 024, 025 | |
 | 74 | WB-216 | Minimização de dados do cliente perante a loja | Must | 067 | S |
 | 75 | WB-068 | Aceitar ou recusar pedido | Must | 067, 154 | |
-| 76 | WB-069 | Atualizar status do pedido | Must | 068 | |
+| 76 | WB-069 | Atualizar status do pedido (**até "Pronto para coleta"**, DEC-036) | Must | 068 | |
+| 76a | WB-229 | Lojista marca "Pronto para coleta" | Must | 068, 069 | |
+| 76b | WB-231 | Admin: cadastro de motoboys | Must | 100 | S (dado pessoal) |
+| 76c | WB-230 | Admin: área Logística, fila em tempo real e alerta | Must | 229, 100 | |
+| 76d | WB-232 | Admin: atribuir motoboy e mensagem de WhatsApp | Must | 230, 231 | S (dado do cliente fora do sistema) |
+| 76e | WB-233 | Admin: atualizar estados da entrega | Must | 232 | |
+| 76f | WB-234 | Entrega não realizada: reentrega ou devolução à loja | Must | 233 | |
+| 76g | WB-239 | Admin: custo por entrega e histórico | Must | 233 | |
 | 77 | WB-027 | Acompanhar o pedido | Must | 024, 025, 069 | |
+| 77a | WB-235 | Cliente: acompanhar a entrega e receber avisos | Must | 233, 027, 191 | |
 | 78 | WB-191 | Notificações de pedido ao cliente | Must | 190, 027 | |
 | 79 | WB-192 | Alertas de pedido ao lojista | Must | 067 | |
 | 80 | WB-028 | Cancelar pedido | Must | 027, 154 | |
@@ -196,12 +228,15 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 83 | WB-070 | Item indisponível: estorno parcial | Should | 068, 154 | |
 | 84 | WB-071 | Imprimir comanda | Should | 067 | |
 | 85 | WB-072 | Histórico de pedidos (lojista) | Must | 067 | |
-| 85a | WB-226 | Código de entrega do cliente (flag) | Should | 069, 027 | S |
+| 85a | WB-226 | Código de entrega do cliente (flag; **recomendo subir para Must e ligar por padrão**, o risco agora é o motoboy, `prd/logistica.md`) | Should | 233, 027 | S |
+| 85b | WB-240 | Admin: relatórios de logística (margem, falhas, a pagar por motoboy) | Should | 239 | |
 
 ### Onda 4: pós-venda, dinheiro e gestão
 | # | ID | História | P | Depende de | TM |
 |---|---|---|---|---|---|
 | 86 | WB-031 | Avaliar loja e produto | Must | 027 | |
+| 86a | WB-246 | Tabela de medidas no produto | Should | 060, 017 | |
+| 86b | WB-247 | "Como vestiu?" na avaliação | Should | 031 | |
 | 87 | WB-074 | Responder avaliações | Should | 031 | |
 | 88 | WB-073 | Cupons próprios | Should | 020 | |
 | 89 | WB-116 | Cupons da plataforma | Must | 022 | |
@@ -209,11 +244,15 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 91 | WB-170 | Pedir troca no app | Must | 027, 059 | S |
 | 92 | WB-171 | Acompanhar a troca | Must | 170 | |
 | 93 | WB-172 | Loja: fila de trocas e decisão | Must | 170, 075 | |
-| 94 | WB-173 | Coleta e recebimento do item | Must | 172 | |
+| 93a | WB-243 | Troca na loja (grátis, código da troca) | Must | 170, 172 | |
+| 94 | WB-173 | Recebimento e inspeção do item (coleta é da logística) | Must | 172, 241 | |
+| 94a | WB-241 | Coleta e reentrega de troca na fila de Logística | Must | 230, 233, 172 | |
 | 95 | WB-174 | Resolução: reposição ou reembolso | Must | 173, 154 | |
-| 96 | WB-175 | Taxa de coleta | Must | 170, 154 | S |
+| 95a | WB-245 | Diferença de preço na troca | Should | 174, 154 | S |
+| 96 | WB-175 | Taxa de troca (coleta e reentrega; tabela do admin) | Must | 170, 154, 236 | S |
 | 97 | WB-178 | Arrependimento (CDC art. 49) | Must | 170 | |
-| 98 | WB-177 | Prazos automáticos das trocas | Must | 172 | |
+| 98 | WB-177 | Prazos automáticos das trocas (SLA de 24 h e aprovação automática) | Must | 172 | |
+| 98a | WB-248 | Relatório de trocas por loja e categoria | Should | 177, 239 | |
 | 99 | WB-193 | Notificações de troca | Must | 170 | |
 | 100 | WB-037 | "Não recebi meu pedido" | Must | 027 | |
 | 101 | WB-108 | Pedidos: visão geral e filtros (admin) | Must | 067 | |
@@ -257,7 +296,7 @@ Legenda: **P** = prioridade; **TM** = threat model.
 | 133b | WB-228 | Admin: meu perfil e segurança (tela AC6) | Must | 100, 222, 219 | S |
 | 134 | WB-161 | Segundo adaptador de pagamento | Won't (1.0) | 150 | |
 
-Observações de dependência: WB-219 a 224 não bloqueiam o início de outras histórias, mas WB-219/220/221/222/223 precisam estar prontas antes de G4 (requisitos G4 do Security: SEC-004, 010, 011, 015, 082). WB-225 depende de WB-198 apenas para o alerta (o limite funciona sem ele). WB-038 e WB-124 são um par (cliente denuncia, admin trata) e devem ir na mesma sprint, antes de G5 (exigência de lojas de apps para conteúdo de usuário). WB-213 e WB-214 também bloqueiam G5. WB-155 (ADR) precisa estar decidido **antes** de WB-053, WB-151 e WB-152. WB-018 mostra avaliações vazias até WB-031 existir.
+Observações de dependência (DEC-035/036/037): WB-236 (tabela de taxa) precisa estar pronta antes de WB-237, WB-238 e WB-175; WB-229 a WB-234 e WB-239 formam um bloco que entrega a ponta a ponta "pronto, atribuir, coletar, entregar, custo"; WB-241 depende desse bloco e de WB-172; WB-243 (troca na loja) **não** depende da logística e pode sair antes; WB-246 e WB-247 só fazem sentido com WB-017 e WB-031; WB-245 tem contorno manual (reembolso e novo pedido). Observações anteriores: WB-219 a 224 não bloqueiam o início de outras histórias, mas WB-219/220/221/222/223 precisam estar prontas antes de G4 (requisitos G4 do Security: SEC-004, 010, 011, 015, 082). WB-225 depende de WB-198 apenas para o alerta (o limite funciona sem ele). WB-038 e WB-124 são um par (cliente denuncia, admin trata) e devem ir na mesma sprint, antes de G5 (exigência de lojas de apps para conteúdo de usuário). WB-213 e WB-214 também bloqueiam G5. WB-155 (ADR) precisa estar decidido **antes** de WB-053, WB-151 e WB-152. WB-018 mostra avaliações vazias até WB-031 existir.
 
 ## 4. Cobertura do brief (rastreabilidade)
 
@@ -272,7 +311,9 @@ Observações de dependência: WB-219 a 224 não bloqueiam o início de outras h
 | §3.1 | Carrinho (1 loja, aviso, cupom, resumo) | 020, 021, 022 |
 | §3.1 | Checkout (entrega/retirada, PIX com QR/copia e cola/contagem, cartão) | 023, 024, 025, 026 |
 | §3.1 | Pedido em tempo real, push, WhatsApp | 027, 028, 029, 037, 190, 191 |
-| §3.1 | Trocas "Retira Troca" | 170 a 178, 059, 172 a 174 |
+| §3.1, §9 | Trocas "Retira Troca" (3 tipos, taxa só após aprovação, troca na loja grátis, SLA 24 h, medidas e "como vestiu") | 170 a 178, 243 a 248, 059, 172 a 174 |
+| §9 | Logística da Webag (pronto para coleta, fila, motoboys, WhatsApp, estados, taxa de entrega, custo, relatórios, coleta de troca) | 229 a 241, 057, 069 |
+| §9 | Comissão visível ao lojista ("Você recebe R$ X") | 242, 060 C8, 105, 111 |
 | §3.1 | Conta: pedidos, favoritos, endereços, cupons, notificações, dados, ajuda, exportar, excluir | 030, 019, 003, 033, 195, 032, 034, 212, 213 |
 | §3.1 | Avaliação | 031 |
 | §3.2 | Cadastro e onboarding com aprovação | 050 a 054 |
@@ -306,11 +347,12 @@ Itens do brief §7/§8 que **não** são histórias de usuário (devs/PM): seed,
 
 Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de evidência.
 
-### 6.1 Entregador (WB-300 a 309): app, despacho e rastreio
-- **Hipótese:** lojas sem entrega própria confiável e clientes querendo rastreio vão pedir frota. Gatilho: >= 30% das lojas pedem entrega Webag ou atraso > 20% nos pedidos de entrega do piloto.
-- Histórias previstas: WB-300 cadastro e aprovação do entregador; WB-301 app do entregador (disponibilidade, receber corrida); WB-302 despacho por proximidade (PostGIS); WB-303 rastreio em tempo real para o cliente; WB-304 prova de entrega (código/foto); WB-305 taxa de entrega Webag e repasse ao entregador; WB-306 coleta de trocas por entregador; WB-307 regras de recusa/timeout; WB-308 painel de operação de despacho no admin; WB-309 seguro/incidentes.
-- **Modelo de dados preparado (1.0):** `entrega` separada do `pedido` (tipo: loja, retirada, webag; status; entregador opcional); `entregador` como papel de usuário; `posicao_entregador` (série temporal); `despacho` (oferta, aceite, recusa); `ator` nos eventos de pedido já aceita "entregador". O estado SAIU_PARA_ENTREGA e a prova de entrega permanecem compatíveis.
-- Riscos: custo operacional, regime trabalhista do entregador, disputa de entregadores com iFood/aiqfome (Saipos), seguro.
+### 6.1 Entregador (WB-300 a 309): app do motoboy, despacho automático e rastreio
+- **Atualização 2026-11-19 (DEC-036):** o que era "frota Webag" **entrou na 1.0 sem app**: a Webag já despacha (admin, WhatsApp), cobra a taxa de entrega e coleta as trocas (WB-229 a WB-241). **Ficam na fase 2:** app ou link do motoboy, despacho automático, rastreio e pagamento ao motoboy dentro do sistema.
+- **Hipótese:** o despacho manual por WhatsApp não aguenta o volume e o cliente quer rastreio. **Gatilho:** > 15 entregas por hora no pico, tempo de atribuição p90 > 10 min por 2 semanas, ou > 20% de reclamação "cadê meu pedido".
+- Histórias previstas: WB-300 cadastro e aprovação do entregador (com documentos, CNH, curso de motofrete); WB-301 app ou página do motoboy com link e token (disponibilidade, receber corrida); WB-302 despacho por proximidade (PostGIS); WB-303 rastreio em tempo real para o cliente; WB-304 prova de entrega (código/foto); WB-305 pagamento ao motoboy e conciliação no sistema (**a taxa de entrega Webag e o custo já existem na 1.0**); WB-306 aceite da corrida de troca pelo motoboy; WB-307 regras de recusa/timeout; WB-308 painel de despacho com mapa; WB-309 seguro/incidentes.
+- **Modelo de dados (1.0, DEC-036 já usa):** `entrega` separada do `pedido` (tipo: entrega, coleta de troca, reentrega de troca; status de RN-18; motoboy; custo; pago_em); `entregador` como papel de usuário; `posicao_entregador` (série temporal); `despacho` (oferta, aceite, recusa); `ator` nos eventos de pedido já aceita "entregador". O estado SAIU_PARA_ENTREGA e a prova de entrega permanecem compatíveis.
+- Riscos: custo operacional, regime trabalhista do entregador (e Lei 12.009/2009), disputa de entregadores com iFood/aiqfome (Saipos), seguro. **Esses riscos já valem na 1.0** (a Webag contrata motoboys), ver `prd/logistica.md`.
 
 ### 6.2 Programa de pontos (WB-310 a 314)
 - **Hipótese:** pontos aumentam recompra em 30 dias. Gatilho: recompra < 25% após 90 dias do piloto (HIP-043) e dados de densidade suficientes.
@@ -322,7 +364,7 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 - **Hipótese:** assinatura de frete grátis (estilo clube) fideliza. Gatilho: frete é o maior motivo de abandono no checkout.
 - Previstas: WB-320 planos no admin; WB-321 assinar e pagar recorrente; WB-322 benefício de frete grátis/cupom mensal; WB-323 cancelar assinatura (sem fricção, regra do CDC); WB-324 repasse do custo do frete grátis (quem arca).
 - **Modelo preparado:** `plano`, `assinatura` (cliente, plano, status, próximo_ciclo), `beneficio` aplicável no cálculo de frete/cupom (RN-04, RN-09).
-- Riscos: cobrança recorrente exige provedor com suporte e regras de cancelamento; frete é do lojista (HIP-005), então o benefício precisa de custo definido.
+- Riscos: cobrança recorrente exige provedor com suporte e regras de cancelamento; **o frete agora é receita da Webag (DEC-036)**, então o custo do benefício é da Webag (uma assinatura de frete grátis vira subsídio direto; a margem de logística da WB-240 mostra quanto custa).
 
 ### 6.4 Chat interno (WB-330 a 334)
 - **Hipótese:** chat reduz o desvio para WhatsApp e dá prova nas disputas. Gatilho: > 30% das disputas sem evidência de conversa.
@@ -351,7 +393,7 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 | 2 | Split do MP exige conta e KYC do lojista; centralizado pode ser atividade regulada | Preferir split; centralizado só com parecer jurídico | WB-155, `pesquisa-mercado.md` §6 |
 | 3 | Pagamento só online (sem dinheiro/maquininha na entrega) | Manter na 1.0; medir no piloto | `pesquisa-mercado.md` §7 |
 | 4 | Vendedor pessoa física (CPF) com habitualidade; NFS-e da comissão da Webag | Permitir (brief), termos transferem responsabilidade, consultar contador | HIP-031 |
-| 5 | Comissão padrão de 10% | Adotar; revisar com dados do piloto | HIP-001 |
+| 5 | ~~Comissão padrão de 10%~~ → **15%** (exemplo do fundador, DEC-035) como seed `[HIPÓTESE]` | Confirmar o padrão com o fundador; validar em V1/V4 antes de fixar; comissão reduzida com vigência para as primeiras lojas (HIP-002). A comissão agora fica no teto do mercado (iFood 12% + 3,2%; ML 10 a 19%) sem a Webag ter tráfego | HIP-C01 |
 | 6 | Textos de termos, privacidade, política de trocas; encarregado de dados | Minuta técnica do PO; revisão do fundador/jurídico antes de G5 | PRD LGPD |
 | 7 | Lojista é painel web (não app): CLAUDE.md §2 ainda cita app para lojista | Seguir o brief; CEO atualizar CLAUDE.md | DEC-005 |
 | 8 | CLAUDE.md §1 lista Cajamar; o brief e DEC-009 listam Campo Limpo Paulista | Seguir o brief | DEC-009 |
@@ -359,6 +401,15 @@ Sem Gherkin até entrarem no roadmap. Cada épico só entra com o **gatilho** de
 | 10 | Valores de loja nova (R$ 500, 30 dias, 20 pedidos) `[HIPÓTESE]` | Validar com 5 lojas do piloto (V1/V4); parâmetros editáveis | WB-225 |
 | 11 | Captcha de terceiro na 1.0 | Não; começar com atraso progressivo e step-up por e-mail | WB-221 |
 | 12 | Termos do Lojista com cláusula de ressarcimento por pedido pago e não entregue | Jurídico/fundador antes de G5 | DEC-016 |
+| 13 | **Economia da entrega:** taxa que cobre o motoboy (R$ 8 a R$ 18) x R$ 3 a R$ 8 que o cliente supostamente aceita (V2) | Cotar motoboys antes do piloto; revalidar V2; relatório de margem (WB-240); frete grátis desligado | HIP-L01, HIP-L02, `prd/logistica.md` |
+| 14 | **Operação de logística de 1 pessoa**: horário, pausa e quem despacha | Definir `logistica_horario`; delegar a perfil de operação | HIP-L10, WB-230 C6 |
+| 15 | **Motoboys: vínculo, Lei 12.009/2009, seguro, responsabilidade solidária (CDC art. 7º pu, 25 §1º, 34)** | **Parecer jurídico antes de contratar ou pagar qualquer motoboy** (DEC-003) | `prd/logistica.md` §Riscos |
+| 16 | **Arrependimento domina a troca por tamanho** (grátis ao cliente, 5 vezes mais caro à Webag) | Manter honesto e visível; tornar a troca mais atraente; medir | `prd/trocas.md` §Economia |
+| 17 | **Revisão jurídica dos textos e regras de troca** (frete de devolução, reembolso "de imediato", 90 dias, itens sem arrependimento, taxa de coleta, aprovação automática, solidariedade do marketplace) | Fundador/advogado antes do G5; lista em `prd/trocas.md` §Perguntas | DEC-037 |
+| 18 | Quem arca com o custo da coleta em defeito e arrependimento | Webag absorve na 1.0 (DEC-016: sem desconto da loja); cobrança da loja só por cláusula | `prd/trocas.md` |
+| 19 | NFS-e e tributos sobre taxa de entrega, taxa de troca e comissão | Contador do fundador | `prd/pagamentos.md` |
+| 20 | Falha de entrega por culpa do cliente: cobrar a taxa? | Hoje estorno total; mudar só com parecer jurídico | WB-234 C3 |
+| 21 | `application_fee` com taxa de entrega e taxa de troca em conta da Webag viáveis no split do MP? | backend-dev (sandbox, ADR) | L.2, T.2 |
 
 ## 8. Aceite do PO (como vou validar)
 Uma história só é aceita se: (1) todos os critérios Dado/Quando/Então do PRD passam, incluindo erro, vazio e limites, verificados pelo QA; (2) DoD da skill `definicao-de-pronto` cumprida; (3) valores numéricos batem com `regras-de-negocio.md`; (4) eventos de analytics do PRD instrumentados. Recuso com motivo objetivo apontando o critério (ex.: "WB-068 C4: timeout de 10 min não cancelou o pedido").

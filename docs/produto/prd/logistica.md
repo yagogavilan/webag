@@ -26,7 +26,7 @@ App ou página do motoboy (link com token) e rastreio em tempo real (fase 2, DEC
 1. **Seu Marcos (lojista)** aceita o pedido, separa e toca "Pronto para coleta". Pronto: não liga para motoboy, não define frete.
 2. **Operadora (admin, perfil operação)** vê o alerta, abre a fila, escolhe o motoboy, toca "Enviar no WhatsApp", o motoboy responde "OK", ela marca "A caminho da loja", depois "Saiu para entrega" e "Entregue".
 3. **Carla (cliente)** vê "Pronto, aguardando o motoboy", "Motoboy a caminho da loja", "Saiu para entrega", "Entregue", com push em cada etapa.
-4. **Troca:** a coleta da troca por tamanho entra na mesma fila (corrida do tipo troca) e leva a peça nova na mesma viagem quando possível (DEC-037).
+4. **Troca:** a coleta da troca por tamanho entra na mesma fila (corrida de coleta de troca); **a peça nova só sai depois que a antiga foi conferida pela loja** (DEC-038f), em uma segunda corrida de reentrega, salvo na troca feita na loja.
 5. **Financeiro (Yago)** fecha a semana: quantas entregas, custo por motoboy, margem de logística, quanto pagar a cada motoboy (por PIX fora do app).
 
 ## Requisitos funcionais
@@ -95,9 +95,9 @@ Como lojista, quero avisar que o pedido está pronto, para a Webag mandar o moto
 ### WB-230 Admin: área Logística, fila em tempo real e alerta — Must — dep: WB-229, WB-100
 Como operadora, quero ver os pedidos a despachar e ser avisada na hora, para o cliente não esperar.
 - **C1** Dado o menu do admin, então existe a página **Logística** (simples e separada) para operação e super admin; financeiro e suporte entram só para leitura (matriz de permissões em `admin.md`).
-- **C2** Dado a fila, então listo corridas ativas ordenadas por tempo desde "pronto" (a mais antiga primeiro), com número do pedido, loja e bairro, bairro e cidade do destino, tipo (entrega, coleta de troca, troca combinada), volumes, taxa cobrada, estado, motoboy (se houver) e o contador de espera.
+- **C2** Dado a fila, então listo corridas ativas ordenadas por tempo desde "pronto" (a mais antiga primeiro), com número do pedido, loja e bairro, bairro e cidade do destino, tipo (entrega, coleta de troca, reentrega de troca), volumes, taxa cobrada, estado, motoboy (se houver) e o contador de espera.
 - **C3** Dado espera sem motoboy acima de `logistica_sla_atribuir_min` (10), então a linha fica amarela com o texto "Espera longa"; acima de `logistica_sla_atribuir_critico_min` (20), vermelha com "Atrasado" (ícone e texto, não só cor).
-- **C4** Dado nova corrida PRONTA_PARA_COLETA, então o painel mostra a linha no topo em até 3 s com som repetido a cada 30 s até alguém atribuir, e a faixa de som/conexão de WB-067 C2.
+- **C4** Dado nova corrida PRONTA_PARA_COLETA, então o painel mostra a linha no topo em até 3 s com som repetido a cada 30 s até alguém atribuir, e a faixa de som/conexão de WB-067 C2; **além disso o admin (operação) recebe Web Push e e-mail**, para o aviso **não depender da aba aberta** (DEC-038c).
 - **C5** Dado filtros, então filtro por cidade, loja, motoboy, estado e tipo; abas "Ativas" e "Concluídas hoje".
 - **C6** Dado "Pausar entregas" (por cidade ou geral) com motivo e previsão, então o checkout deixa de oferecer entrega Webag naquela área até reabrir (as corridas já criadas seguem), e o admin vê o aviso "Entregas pausadas em [cidade]". Dado `logistica_horario` encerrado, a pausa é automática.
 - **C7** Dado fila vazia, então "Nenhuma entrega para despachar" e a hora da última atualização.
@@ -133,13 +133,13 @@ Como operadora, quero registrar cada etapa, para o cliente e a loja saberem onde
 - **C4** Dado "Não entregue", então exijo o motivo (cliente ausente, endereço não encontrado, cliente recusou, risco/segurança, outro com texto) e sigo WB-234.
 - **C5** Dado cada transição, então grava ator, hora e motivo e notifica o cliente; a loja é notificada em coletado e entregue.
 - **C6** Dado "Cancelar corrida" com motivo (pedido cancelado, loja desistiu), então a corrida vira CANCELADA e o motivo vai ao pedido; o custo eventual do deslocamento pode ser registrado (WB-239).
-- **C7** Dado o padrão de auto-conclusão (`auto_conclusao_entrega_h`, 24 h), então corrida SAIU há 24 h sem fechamento gera alerta ao admin e, sem ação e sem "não recebi" do cliente, o pedido vira ENTREGUE (HIP-038), registrado como "fechado pelo sistema".
+- **C7** Dado o padrão de auto-conclusão (`auto_conclusao_entrega_h`, 24 h `[HIPÓTESE]`; é o mesmo parâmetro que a DEC-038c chama de `entrega_auto_h`: o backend usa a chave existente), então corrida SAIU há 24 h sem fechamento gera alerta ao admin e, sem ação e sem "não recebi" do cliente, o pedido vira ENTREGUE (HIP-038), registrado como "fechado pelo sistema".
 
 ### WB-234 Entrega não realizada: reentrega ou devolução à loja — Must — dep: WB-233
 Como operadora, quero tratar a falha de entrega, para o cliente não perder o dinheiro nem a loja o produto.
 - **C1** Dado "Não entregue" com motivo, então o cliente é avisado na hora ("Não conseguimos entregar: cliente ausente") com a opção "Combinar nova tentativa" (WhatsApp com a Webag) e a corrida fica NAO_ENTREGUE.
-- **C2** Dado nova tentativa combinada, então a corrida volta a SAIU_PARA_ENTREGA (reentrega); máximo `entrega_reentrega_max` (1) por pedido; sem custo extra ao cliente na 1.0 `[HIPÓTESE]`; o custo da 2ª viagem é registrado (WB-239).
-- **C3** Dado esgotar as tentativas ou o cliente desistir, então "Devolver à loja": a corrida vira DEVOLVIDA_A_LOJA quando o motoboy entregar o pacote e a loja confirmar o recebimento; o pedido vira CANCELADO (ator admin, motivo) com **estorno total** (inclui a taxa de entrega e a comissão, RN-10) `[HIPÓTESE: cobrar a taxa em caso de falha do cliente só após parecer jurídico]`.
+- **C2** Dado nova tentativa combinada, então a corrida volta a SAIU_PARA_ENTREGA (reentrega); máximo `entrega_reentrega_max` (1) **sem custo ao cliente**: o custo da entrega frustrada e da 2ª viagem é da Webag na 1.0 (DEC-038d) e é registrado (WB-239).
+- **C3** Dado a reentrega também falhar por culpa do cliente (**repetição**), então o cliente pode pedir **nova tentativa paga** (taxa de entrega da tabela, cobrança separada, DEC-038d `[HIPÓTESE]`); sem o pedido ou sem o pagamento em 24 h, "Devolver à loja": a corrida vira DEVOLVIDA_A_LOJA quando o motoboy entregar o pacote e a loja confirmar o recebimento; o pedido vira CANCELADO (ator admin, motivo) com **estorno total** (inclui a taxa de entrega e a comissão, RN-10) `[HIPÓTESE: reter a taxa nesse caso só após parecer jurídico]`.
 - **C4** Dado o produto devolvido, então a loja marca "Recebi de volta" e o item volta ao estoque se estiver em condição de revenda (RN-06); sem a confirmação em 48 h, alerta ao admin.
 - **C5** Dado falha por culpa da loja (endereço da loja errado, pedido não estava pronto), então o motivo "falha da loja" entra no índice de cancelamento da loja (RN-08) e o admin é alertado.
 - **C6** Dado pedido não entregue há 24 h sem desfecho, então destaque "Atenção" no WB-108 e alerta no WB-198.
@@ -201,9 +201,9 @@ Como financeiro e operação, quero relatórios, para ajustar a tabela e cobrar 
 
 ### WB-241 Coleta e reentrega de troca na fila — Must — dep: WB-230, WB-233, WB-172
 Como operadora, quero tratar a coleta da troca na mesma fila, para uma só rotina de despacho.
-- **C1** Dado troca APROVADA com "Coleta em casa" e (se houver taxa) paga, então nasce uma corrida do tipo **coleta de troca** (cliente para loja) ou **troca combinada** (loja leva a peça nova ao cliente e traz a antiga de volta) quando há reposição e estoque reservado; a corrida aparece na fila com o rótulo "Troca" e a janela escolhida pelo cliente.
-- **C2** Dado mensagem de WhatsApp, então usa o modelo de troca: "COLETAR com [1º nome], [endereço], [telefone]. LEVAR PARA: [loja, endereço]. [Se combinada: ANTES, PEGAR NA LOJA a peça nova ...]. Cliente entrega o item na embalagem. Sem cobrança."
-- **C3** Dado coleta feita e item entregue à loja, então o estado vira ENTREGUE na corrida e a troca avança para ITEM_RECEBIDO quando a **loja** confirma o recebimento (WB-173), nunca só pelo motoboy.
+- **C1** Dado troca APROVADA com "Coleta em casa" e (se houver taxa) paga, então nasce uma corrida **COLETA_TROCA** (cliente para loja); a corrida aparece na fila com o rótulo "Troca" e a janela escolhida pelo cliente. **A peça nova só sai depois da antiga conferida pela loja** (DEC-038f): quando a loja marca a inspeção OK, nasce a corrida **REENTREGA_TROCA** (loja para cliente) na mesma fila, sem nova cobrança ao cliente (a taxa de troca já cobre coleta e reentrega); em troca por reembolso não há reentrega. **Exceção:** na troca feita na loja (WB-243) a peça nova é entregue no balcão logo após a conferência.
+- **C2** Dado mensagem de WhatsApp, então usa o modelo de troca: "COLETAR com [1º nome], [endereço], [telefone]. LEVAR PARA: [loja, endereço]. Cliente entrega o item na embalagem. Sem cobrança." e, na reentrega, o modelo de entrega comum com a observação "Troca: peça nova".
+- **C3** Dado coleta feita e item entregue à loja, então o estado vira ENTREGUE na corrida e a troca avança para ITEM_RECEBIDO quando a **loja** confirma o recebimento (WB-173), nunca só pelo motoboy; a reentrega só é criada depois da inspeção OK.
 - **C4** Dado cliente ausente na coleta, então NAO_ENTREGUE (motivo) e a troca segue WB-173 C3 (até 2 reagendamentos; na 3ª, EXPIRADA); a taxa **não** é devolvida se a falha for do cliente `[HIPÓTESE; jurídico]` e é devolvida se for da Webag/loja.
 - **C5** Dado troca com "Levar à loja", então **não** há corrida.
 - **C6** Dado o custo da corrida, então vira custo de logística ligado à troca (relatório de trocas, WB-248), com o tipo de motivo (arrependimento/defeito: custo da Webag; tamanho/cor: coberto pela taxa).
@@ -211,9 +211,9 @@ Como operadora, quero tratar a coleta da troca na mesma fila, para uma só rotin
 
 ### WB-242 Lojista: comissão transparente ("Você recebe R$ X") — Must — dep: WB-060, WB-105
 Como lojista, quero ver quanto recebo por produto e entender a comissão, para precificar sem surpresa.
-- **C1** Dado o formulário de produto (e o preço por variação e o promocional), então ao lado do preço mostro "Comissão Webag ([pct]%): -R$ X" e **"Você recebe R$ Y"**, calculado com a comissão **efetiva da loja hoje** (loja > categoria > padrão, RN-10) e arredondamento half-up (RN-01); atualiza ao digitar.
-- **C2** Dado o texto fixo abaixo do campo de preço, então: "Cadastre o preço que o cliente paga aqui, já com a comissão. A taxa do Mercado Pago (0,99% no PIX e até 4,98% no cartão `[confirmar com o MP]`) é descontada à parte." (nunca a taxa de entrega: ela é da Webag).
-- **C3** Dado preço que, após a comissão, deixa o lojista com menos que R$ 0,01, então erro no campo.
+- **C1** Dado o formulário de produto (e o preço por variação e o promocional), então ao lado do preço mostro "Comissão Webag ([pct]%): -R$ X" e **"Você recebe cerca de R$ Y"** = preço menos comissão **menos a estimativa da tarifa do provedor** (PIX por padrão; "no cartão, cerca de R$ Z" em detalhe), calculado com a comissão **efetiva da loja hoje** (loja > categoria > padrão, RN-10) e arredondamento half-up (RN-01); atualiza ao digitar. As tarifas estimadas são os parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct` (RN-02; DEC-038a), editáveis no admin; o valor real do pedido vem do provedor (ledger).
+- **C2** Dado o texto fixo abaixo do campo de preço, então: "Cadastre o preço que o cliente paga aqui, já com a comissão. 'Cerca de' porque a tarifa do Mercado Pago é uma estimativa `[confirmar no contrato do MP]`." (nunca a taxa de entrega: ela é da Webag).
+- **C3** Dado preço que, após a comissão e a estimativa da tarifa, deixa o lojista com menos que R$ 0,01, então erro no campo.
 - **C4** Dado a comissão da loja mudar (WB-105), então o lojista vê o aviso "Sua comissão mudou de A% para B% a partir de DD/MM" no painel e por e-mail; produtos mostram o novo "Você recebe" e pedidos já pagos mantêm o snapshot (RN-10).
 - **C5** Dado o onboarding (WB-051), então uma tela de **uma frase** explica: "O Webag fica com [pct]% de cada venda e cuida da entrega. Você cadastra o preço final e vê quanto recebe." mais o link "Como é calculado" (exemplo de RN-10); o aceite dos Termos do Lojista cita comissão e entrega (jurídico).
 - **C6** Dado produto da categoria com comissão própria, então o "Você recebe" usa a da categoria; dado item com cupom da loja, a prévia explica que a comissão incide após o cupom da loja (RN-09).

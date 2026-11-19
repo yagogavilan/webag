@@ -1,6 +1,7 @@
 # PRD: Painel Admin (Webag)
 
 Status: pronto para G3 (aguarda estimativa e specs) | Dono: product-owner | Data: 2026-11-18 | Histórias: WB-100 a WB-125
+Atualizado: 2026-11-19 (DEC-035/036/037): nova área **Logística** (fila, motoboys, atribuição, estados, custo; histórias WB-230 a WB-234, WB-239, WB-240 e WB-241 em `prd/logistica.md`), **tabela de taxa de entrega** (WB-236) e relatório de trocas (WB-248, `prd/trocas.md`).
 Regras: `docs/produto/regras-de-negocio.md`; hipóteses: `docs/decisoes.md`. Origem: brief §3.3. Mesmo app `apps/web` do lojista, rotas e permissões separadas (DEC-005).
 
 ## Problema
@@ -39,6 +40,9 @@ Aplicativo admin móvel dedicado; CRM de suporte com tickets (usa WhatsApp/e-mai
 | RF-ADM-07 | Marketing e conteúdo: banners, cupons, push, termos | 115-117, 197 |
 | RF-ADM-08 | Regiões, parâmetros, flags, manutenção | 118-121 |
 | RF-ADM-09 | Relatórios, painel inicial e auditoria | 122, 123, 125 |
+| RF-ADM-10 | Logística: fila, motoboys, atribuição com WhatsApp, estados, custo por entrega, relatórios | 230-234, 239-241 (`prd/logistica.md`) |
+| RF-ADM-11 | Tabela de taxa de entrega por região e faixa; pedido mínimo e frete grátis globais | 236 (`prd/logistica.md`) |
+| RF-ADM-12 | Relatório de trocas por loja e categoria | 248 (`prd/trocas.md`) |
 
 ## Regras de negócio
 RN-02 (parâmetros), RN-03, RN-07, RN-08, RN-10, RN-11, RN-13 (perfis), RN-15 (métricas). Matriz de permissões: abaixo.
@@ -48,6 +52,9 @@ RN-02 (parâmetros), RN-03, RN-07, RN-08, RN-10, RN-11, RN-13 (perfis), RN-15 (m
 | Gerenciar admins, parâmetros, flags, manutenção | Sim | Não | Não | Não |
 | Aprovar/suspender/editar loja; moderar | Sim | Sim | Não | Não |
 | Comissões, taxa de serviço, repasses, conciliação | Sim | Não | Sim | Não |
+| **Tabela de taxa de entrega e de troca (WB-236)** | Sim | Não | Sim | Não |
+| **Logística: fila, motoboys, atribuir, estados, custo (WB-230 a 234, 239)** | Sim | Sim | Leitura e exportação de custos | Leitura da fila |
+| Relatórios de logística e de trocas (WB-240, 248) | Sim | Sim (sem custos) | Sim (com custos) | Não |
 | Estornar (até R$ 500) | Sim | Não | Sim | Não |
 | Estornar acima de R$ 500 (HIP-039) | Sim | Não | Não | Não |
 | Cancelar pedido | Sim | Sim | Sim | Não |
@@ -113,7 +120,7 @@ Como operação, quero suspender ou corrigir uma loja, para proteger clientes.
 Como financeiro, quero definir comissão por loja e por categoria, para negociar e incentivar.
 - **C1** Dado comissão por loja (0 a 30%) com início e fim opcionais, então vale conforme precedência loja > categoria > padrão (RN-10).
 - **C2** Dado fim da vigência, então volta a regra seguinte sozinha.
-- **C3** Dado alteração, então não é retroativa (pedidos já pagos mantêm o snapshot) e é auditada com motivo.
+- **C3** Dado alteração, então não é retroativa (pedidos já pagos mantêm o snapshot) e é auditada com motivo; **o lojista é avisado** ("Sua comissão mudou de A% para B% a partir de DD/MM", WB-242 C4).
 - **C4** Dado percentual fora de 0 a 30 ou vigência invertida, então erro.
 - **C5** Dado a visão da loja, então vejo a comissão efetiva hoje e a origem (loja, categoria ou padrão).
 
@@ -137,7 +144,7 @@ Como operação, quero remover ou pausar produtos impróprios, para cumprir a le
 Como operação/suporte, quero ver todos os pedidos, para acompanhar e investigar.
 - **C1** Dado a lista, então filtro por período, cidade, loja, estado, tipo, forma de pagamento e busca por número/cliente; paginação de 50.
 - **C2** Dado o detalhe, então vejo itens, valores (RN-10), pagamento, linha do tempo com ator/hora/motivo, trocas, avaliações e eventos de pagamento.
-- **C3** Dado pedido parado (RECEBIDO há > aceite+5 min, SAIU há > 4 h), então destacado como "Atenção".
+- **C3** Dado pedido parado (RECEBIDO há > aceite+5 min, PRONTO_PARA_COLETA sem motoboy há > `logistica_sla_atribuir_critico_min`, SAIU há > 4 h), então destacado como "Atenção"; o detalhe mostra a corrida (motoboy, estados, custo) com link para a Logística.
 - **C4** Dado dados pessoais, então mascarados com "Revelar" auditado.
 - **C5** Dado exportar CSV, então respeita os filtros e é auditado.
 
@@ -163,7 +170,8 @@ Como operação, quero decidir trocas contestadas e disputas "não recebi", para
 
 ### WB-111 Comissões padrão e taxa de serviço — Must — dep: WB-119
 Como financeiro, quero definir comissão padrão e taxa de serviço, para ajustar a receita sem deploy.
-- **C1** Dado `comissao_padrao_pct` (0 a 30, 2 casas), então vale para pedidos futuros.
+- **C1** Dado `comissao_padrao_pct` (0 a 30, 2 casas; seed 15 `[HIPÓTESE, DEC-035]`), então vale para pedidos futuros; a comissão **por loja** (WB-105, ex.: 15%) tem precedência sobre categoria e padrão, e a que vale hoje é a mostrada ao lojista como "Você recebe R$ X" (WB-242).
+- **C5** Dado a taxa de entrega, então ela **não** é editada aqui: é a tabela de WB-236 (`prd/logistica.md`); este cartão só mostra o resumo ("Taxa de entrega média hoje: R$ X") com atalho.
 - **C2** Dado taxa de serviço, então escolho nenhuma, valor fixo (R$ 0 a R$ 10) ou % (0 a 10), mostrada ao cliente em linha própria no checkout (RN-10).
 - **C3** Dado mudança, então exige motivo, entra em vigor na data/hora indicada e é auditada; histórico visível.
 - **C4** Dado `feature flag` de taxa desligada, então o cliente não vê a linha.
@@ -206,7 +214,7 @@ Como operação, quero criar cupons Webag, para campanhas e primeira compra.
 - **C3** Dado limite de usos atingido, então novos usos falham com "Cupom esgotado".
 - **C4** Dado pausar, então deixa de valer imediatamente.
 - **C5** Dado relatório do cupom, então vejo usos, desconto total e pedidos.
-- **C6** Dado modo split, então o desconto da plataforma (cupom de valor, percentual ou frete grátis subsidiado) em cada pedido é limitado à comissão (`application_fee`) daquele pedido (DEC-016, SEC-060); ao salvar o cupom, o painel mostra o aviso "Em pedidos com comissão menor, o desconto será cortado em R$ [comissão]". Um cupom que exigisse mais que isso fica desligado até haver mecanismo de pagamento ao lojista aprovado pelo fundador.
+- **C6** Dado modo split, então o desconto da plataforma (cupom de valor, percentual ou frete grátis subsidiado) em cada pedido é limitado à `application_fee` daquele pedido (comissão + taxa de entrega + taxa de serviço, RN-10; DEC-016, SEC-060, DEC-036); ao salvar o cupom, o painel mostra o aviso "Em pedidos com comissão menor, o desconto será cortado em R$ [comissão]". Um cupom que exigisse mais que isso fica desligado até haver mecanismo de pagamento ao lojista aprovado pelo fundador.
 - **C7** Dado cupom da plataforma, então é recusado quando telefone, e-mail ou dispositivo do cliente coincide com membro da loja do pedido (autoconsumo, SEC-061); a loja com > 30% dos usos de um cupom `[HIPÓTESE]` gera alerta ao admin.
 - **C8** Dado "primeira compra", então exige e-mail confirmado e nenhum pedido pago anterior do mesmo dispositivo, telefone ou endereço normalizado (SEC-060; WB-224 C2).
 
@@ -237,7 +245,7 @@ Como super admin, quero editar os parâmetros do negócio, para ajustar sem depl
 
 ### WB-120 Feature flags — Must — dep: WB-119
 Como super admin, quero ligar e desligar funções, para reagir a problemas.
-- **C1** Dado a lista fechada da 1.0 (cartão, PIX, retirada, login social, taxa de serviço, cadastro de lojista, trocas voluntárias, push de marketing, `email_nao_confirmado_compra` [HIP-D07, WB-224 C9] e `codigo_entrega` [WB-226]), então alterno cada uma com confirmação (R-34).
+- **C1** Dado a lista fechada da 1.0 (cartão, PIX, retirada, **entrega Webag (`entrega_webag`, desliga a oferta de entrega em todo o app, sem afetar corridas em andamento)**, login social, taxa de serviço, cadastro de lojista, trocas voluntárias, push de marketing, `email_nao_confirmado_compra` [HIP-D07, WB-224 C9] e `codigo_entrega` [WB-226]), então alterno cada uma com confirmação (R-34).
 - **C2** Dado desligar cartão ou PIX, então o checkout deixa de mostrá-lo na próxima abertura; pedidos já criados seguem.
 - **C3** Dado a flag desligada mantendo a função em andamento (ex.: trocas já abertas), então processos existentes terminam normalmente.
 - **C4** Dado mudança, então é auditada e o app obtém o valor em até 60 s (cache curto).
@@ -275,7 +283,7 @@ Como operação, quero tratar denúncias, para manter a plataforma saudável.
 
 ### WB-125 Painel inicial do admin — Should — dep: WB-122
 Como admin, quero ver o estado da operação ao entrar, para priorizar o dia.
-- **C1** Dado a abertura, então vejo pedidos de hoje, GMV, lojas na fila de aprovação, trocas/disputas em mediação, divergências de conciliação e lojas suspensas.
+- **C1** Dado a abertura, então vejo pedidos de hoje, GMV, lojas na fila de aprovação, **entregas para despachar e atrasadas**, trocas/disputas em mediação, divergências de conciliação e lojas suspensas.
 - **C2** Dado cada card, então leva à lista filtrada.
 - **C3** Dado perfil, então vejo só os cards permitidos.
 
