@@ -26,6 +26,7 @@ export class RateLimitGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    if (context.getType() !== 'http') return true; // mensagens do Socket.IO: o handshake é o ponto de entrada
     const req = context.switchToHttp().getRequest<Request>();
     if (req.path.startsWith('/health')) return true;
     const ip = req.ip ?? 'unknown';

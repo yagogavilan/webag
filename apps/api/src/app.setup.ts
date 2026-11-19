@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import { RealtimeAdapter } from './modules/realtime/realtime.adapter.js';
 import { bffClientIp } from './platform/http/client-ip.js';
 import type { Env } from './platform/config/env.js';
 import { findContractPath, loadContract, setupContractDocs } from './platform/openapi/contract-docs.js';
@@ -33,6 +34,9 @@ export function configureApp(app: NestExpressApplication): void {
   const origins = config.get('CORS_ORIGINS', { infer: true });
   // Sem origens configuradas, nenhuma origem de navegador é aceita (CORS restrito por padrão).
   app.enableCors({ origin: origins.length > 0 ? origins : false, credentials: true });
+
+  // Tempo real (ADR-004): Socket.IO no mesmo servidor HTTP, com o CORS da API.
+  app.useWebSocketAdapter(new RealtimeAdapter(app, origins));
 
   const docsEnabled =
     config.get('API_DOCS_ENABLED', { infer: true }) ??
