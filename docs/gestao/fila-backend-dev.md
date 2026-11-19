@@ -158,3 +158,6 @@ O D2 vira E2E (roteiro no achado).
 Y.2 [ ] SEC-169 (resíduo, Baixa): depende da decisão do fundador sobre o geocodificador. Se não for contratado, expor `pinVerified=false` à Logística (mobile-dev) é o mínimo. A cotação não usa o indicador hoje.
 Y.3 [x] Resposta à dúvida da V.2: o oráculo 403/401 só depois da senha certa é o mesmo do login com step-up. **Aceito** pelo Security.
 
+
+| ETA_CHANGED (decisão do CEO) | O app envia `acceptedEtaToAt` (fim da faixa que o cliente viu) na criação do pedido; o servidor devolve 409 `ETA_CHANGED` com `eta {fromAt,toAt}` só se o fim novo for pior que o aceito; reenviar com o novo `acceptedEtaToAt` aceita. |
+| Contrato | Declarar `Address.pinVerified` no schema do openapi.yaml; `Order.refund{amountCents,method,status}` e `StoreDelivery.unavailableReason` (WB-259/260); considerar abrir `GET /v1/cep/{cep}` sem login só se o limite de taxa por IP aguentar (senão manter ViaCEP no visitante). |
