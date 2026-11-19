@@ -31,3 +31,9 @@ L.2 [ ] Split/ledger: `application_fee` = comissão + taxa de entrega + taxa de 
 L.3 [ ] Módulo logística: motoboys (CRUD), entregas (uma por pedido de entrega e por coleta de troca), estados (pronto para coleta, aguardando motoboy, motoboy a caminho, coletado/saiu para entrega, entregue, não entregue com motivo), atribuição, histórico, custo por entrega, auditoria, permissão de perfil (operação/super admin), notificação ao cliente a cada mudança.
 L.4 [ ] Pedido: o lojista só chega até "pronto para coleta"; os estados seguintes são da logística; aviso ao admin em tempo real (Socket.IO/painel) quando um pedido fica pronto.
 L.5 [ ] Mensagem pronta de WhatsApp (link wa.me) para o motoboy com dados da coleta e entrega; dado pessoal do cliente minimizado (só o necessário, LGPD).
+
+## TROCAS (DEC-037): depois de L.1 a L.5
+T.1 [ ] Tipos de troca (arrependimento, defeito, tamanho/cor) com prazos por tipo (7 dias; 30/90 dias; prazo da loja com mínimo e máximo no admin), piso legal fixo (PARAMETER_LOCKED), 1 troca por pedido para tamanho/cor, produtos marcados "sem troca voluntária".
+T.2 [ ] Taxa de coleta/reentrega da tabela do admin por região, cobrada só após a aprovação (HIP-D09), gratuita na troca levando à loja; coleta da troca na fila de Logística; reserva do novo tamanho ao aprovar; diferença de preço paga/estornada; aprovação automática após o SLA da loja (parâmetro, 24 h).
+T.3 [ ] Reembolso de arrependimento com frete; custo da coleta como custo de logística no ledger; relatório de trocas por loja e categoria.
+T.4 [ ] Campo "tabela de medidas" no produto e "como vestiu?" na avaliação (API).
