@@ -243,8 +243,14 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       const results = await Promise.all(buyers.map((b) => placeOrder(ctx, b.user, b.addressId)));
       expect(results.filter((r) => r.status === 201)).toHaveLength(3);
       const lost = results.filter((r) => r.status === 409);
-      expect(lost).toHaveLength(3);
-      expect(lost.every((r) => r.body.code === 'STOCK_CONFLICT')).toBe(true);
+      expect(lost, JSON.stringify(results.map((r) => [r.status, r.body.code]))).toHaveLength(3);
+      // BUG-019 (f): quem perde pode ver o estoque acabar em dois pontos, conforme a corrida: na reserva (409 STOCK_CONFLICT) ou, se a
+      // reserva dos vencedores já apareceu na conferência da sacola, antes dela (409 CART_CHANGED com a mudança de estoque). As duas
+      // respostas são o "acabou o estoque" correto; o que nunca pode é um 201 a mais, outro status ou um perdedor com a mudança errada.
+      for (const r of lost) {
+        const stock = r.body.code === 'STOCK_CONFLICT' || (r.body.code === 'CART_CHANGED' && ((r.body.changes ?? []) as { kind: string }[]).some((c) => c.kind === 'OUT_OF_STOCK' || c.kind === 'QUANTITY_REDUCED' || c.kind === 'UNAVAILABLE'));
+        expect(stock, JSON.stringify(r.body)).toBe(true);
+      }
       expect(await variantRow(shop.variants[0]!)).toMatchObject({ stock: 3, reserved: 3 });
       // quem perdeu não ficou com pedido aberto nem cobrança
       const open = await ctx.db.select().from(orders).where(eq(orders.storeId, shop.store.id));
