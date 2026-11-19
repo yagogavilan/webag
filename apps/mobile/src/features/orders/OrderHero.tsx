@@ -56,6 +56,7 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
   const passed = late && order.delivery?.eta ? passedMinutes(order.delivery.eta.toAt, now) : 0;
   const stepLabel = step > 0 ? t('order.stepOf', { n: step, total: STEPS.length, name: STEP_NAMES[step - 1] ?? st.label }) : st.label;
   // O texto de apoio (motoboy devolvendo, estorno) vem do aviso abaixo no cancelamento por atraso; na loja, o texto curto do estorno
+  const heroTitle = accepted ? t('cancelRequest.approvedTitle') : late ? t('late.title') : st.label;
   const heroHint = accepted ? (delayAccepted ? null : t('cancelRequest.approvedBody')) : hint;
 
   return (
@@ -77,8 +78,8 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
           </Text>
         </View>
       ) : null}
-      <Text style={styles.title} variant="display">
-        {accepted ? t('cancelRequest.approvedTitle') : late ? t('late.title') : st.label}
+      <Text style={styles.title} variant={longWord(heroTitle) ? 'title1' : 'display'}>
+        {heroTitle}
       </Text>
       {refund ? (
         <View accessible accessibilityLabel={`${t('late.refundLabel')} ${refund}`} testID="tracking.refund">
@@ -143,6 +144,9 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
     </View>
   );
 }
+
+/** Palavra comprida ("Cancelamento") não cabe ao lado da arte no título grande: usa o título menor em vez de quebrar no meio da palavra. */
+const longWord = (text: string): boolean => text.split(' ').some((word) => word.length > 10);
 
 const styles = StyleSheet.create({
   hero: { backgroundColor: theme.color.surface.ink, borderRadius: theme.radius.card, padding: theme.space[5], gap: theme.space[2], overflow: 'hidden' },

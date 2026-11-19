@@ -81,9 +81,14 @@ export default function ConfirmedScreen() {
                 {o.mode === 'pickup' && o.pickup ? (
                   <>
                     {o.pickup.code ? (
-                      <Text accessibilityLabel={t('confirmed.pickupCodeA11y', { code: spacedCode(o.pickup.code) })} style={styles.onInk} testID="confirmed.pickup-code" variant="priceXl">
-                        {t('confirmed.pickupCode', { code: spacedCode(o.pickup.code) })}
-                      </Text>
+                      <View accessible accessibilityLabel={t('confirmed.pickupCodeA11y', { code: spacedCode(o.pickup.code) })} testID="confirmed.pickup-code">
+                        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.onInkMuted} variant="caption">
+                          {t('confirmed.pickupCodeLabel')}
+                        </Text>
+                        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.onInk} variant="priceXl">
+                          {spacedCode(o.pickup.code)}
+                        </Text>
+                      </View>
                     ) : null}
                     <Text style={styles.onInk}>{t('confirmed.pickupWhere', { address: o.pickup.address })}</Text>
                     <Button label={t('confirmed.directions')} onPress={() => void openDirections(o.pickup?.address ?? '')} testID="confirmed.directions" variant="onInk" />

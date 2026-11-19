@@ -929,6 +929,7 @@ export const ptBR = {
     order: 'Pedido {number}',
     estimate: 'Chega entre {eta}',
     pickupCode: 'Seu código: {code}',
+    pickupCodeLabel: 'Seu código de retirada',
     pickupCodeA11y: 'Seu código de retirada: {code}',
     pickupWhere: 'Retire em {address}',
     track: 'Acompanhar pedido',

@@ -334,9 +334,6 @@ export default function CheckoutScreen() {
       />
       {methodError ? <Banner testID="checkout.method-error" text={methodError} tone="warning" /> : null}
       <View style={styles.summary} testID="checkout.summary">
-        <Text accessibilityRole="header" variant="title2">
-          {t('checkout.summary')}
-        </Text>
         {cart.checkFailed ? <Banner testID="checkout.check-error" text={t('checkout.checkFailed')} tone="warning" actionLabel={t('common.tryAgain')} onAction={cart.refetch} /> : null}
         {summary ? <PriceSummary couponCode={view.coupon?.applied ? view.coupon.code : undefined} pickup={mode === 'pickup'} summary={summary} /> : null}
       </View>

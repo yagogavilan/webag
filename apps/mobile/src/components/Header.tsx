@@ -36,7 +36,7 @@ export function Header({ title, onBack, right, subtitle, large = false }: Header
             style={styles.slot}
             testID="header.back"
           >
-            <CaretLeft color={theme.color.text.primary} size={theme.size.iconMd} weight="bold" />
+            <CaretLeft color={theme.color.text.primary} size={theme.size.iconMd} />
           </Pressable>
         )}
         {large ? (
