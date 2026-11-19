@@ -6,10 +6,12 @@ import type { AlertSound } from '@/lib/orders/alert-sound';
 import { json, mockFetch } from '../../../test/render';
 import { fakeStore, renderLojista, storeHandlers } from '../../../test/lojista';
 import { OrderAlertHost } from './order-alert';
+import { SoundBanner, StatusBar } from './orders-chrome';
 import { OrdersPage } from './orders-page';
 import { OrdersRuntimeProvider } from './orders-runtime';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/lojista/pedidos' }));
+const nav = vi.hoisted(() => ({ path: '/lojista/pedidos' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => nav.path }));
 
 const store = fakeStore({ id: 's1', status: 'live', step: 4, name: 'Casa Bela' });
 const summary = (over: Partial<StoreOrderSummary> = {}): StoreOrderSummary => ({
@@ -119,6 +121,43 @@ describe('painel de pedidos do lojista (receber e aceitar)', () => {
     await waitFor(() => expect(calls.some((call) => call.url.pathname.endsWith('/orders/o1/accept') && call.init.method === 'POST')).toBe(true));
     await waitFor(() => expect(screen.queryByTestId('lojista.alert.modal')).not.toBeInTheDocument());
     expect(await screen.findByTestId('lojista.orders.card-o1-next')).toHaveTextContent('Iniciar separação');
+  });
+
+  it('U8.7: um só controle de som na barra (liga e depois toca o teste); o banner só existe em Início e Pedidos e "Agora não" vale o turno', async () => {
+    const sound = fakeSound();
+    vi.stubGlobal('fetch', server({ new: [], progress: [] }).impl);
+    const user = userEvent.setup();
+    nav.path = '/lojista/produtos';
+    const view = renderLojista(
+      <OrdersRuntimeProvider createSound={() => sound}>
+        <SoundBanner />
+        <StatusBar />
+      </OrdersRuntimeProvider>,
+    );
+    // Produtos: sem banner, mas o controle da barra continua um só
+    expect(await screen.findAllByTestId('lojista.orders.sound-test')).toHaveLength(1);
+    expect(screen.queryByTestId('lojista.orders.sound-banner')).not.toBeInTheDocument();
+    view.result.unmount();
+
+    nav.path = '/lojista/pedidos';
+    renderLojista(
+      <OrdersRuntimeProvider createSound={() => sound}>
+        <SoundBanner />
+        <StatusBar />
+      </OrdersRuntimeProvider>,
+    );
+    expect(await screen.findByTestId('lojista.orders.sound-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('lojista.orders.sound-status')).toHaveTextContent('Som desligado');
+    await user.click(screen.getByTestId('lojista.orders.sound-dismiss'));
+    expect(screen.queryByTestId('lojista.orders.sound-banner')).not.toBeInTheDocument();
+
+    // desligado, o toque liga e toca o teste; ligado, o toque só toca o teste
+    await user.click(screen.getByTestId('lojista.orders.sound-test'));
+    await waitFor(() => expect(screen.getByTestId('lojista.orders.sound-status')).toHaveTextContent('Som ligado'));
+    expect(sound.plays).toHaveLength(1);
+    await user.click(screen.getByTestId('lojista.orders.sound-test'));
+    expect(sound.plays).toHaveLength(2);
+    nav.path = '/lojista/pedidos';
   });
 
   it('sem pedidos: vazio com som de teste; sem conexão com a API: erro com tentar de novo', async () => {

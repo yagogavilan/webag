@@ -36,6 +36,53 @@ test.describe('Pedidos, logística e trocas', () => {
     await expect(page.getByText(/saiu para entrega|marcar como entregue/i)).toHaveCount(0);
   });
 
+  test('celular 390x844 com 1 pedido novo: "Aceitar pedido" e "Recusar" aparecem sem rolar e sem a barra inferior por cima; o banner de som só vale em Início e Pedidos (U8.7)', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const merchant = await seedMerchant('Casa Bela');
+    const order = await post('/__test/seed-order', { storeId: merchant.storeId });
+    await loginLojista(page, merchant.email, merchant.password);
+    await page.goto('/lojista/pedidos');
+
+    await expect(page.getByTestId(`lojista.orders.card-${order.id}-accept`)).toBeVisible();
+    if (process.env.SHOTS_DIR) {
+      await page.screenshot({ path: `${process.env.SHOTS_DIR}/lojista-pedidos-alerta-390x844.png` });
+      // a página por trás do alerta em tela cheia (só para a captura; o teste abaixo mede os botões do cartão)
+      await page.evaluate(() => {
+        const modal = document.querySelector('[data-testid="lojista.alert.modal"]');
+        (modal?.parentElement as HTMLElement | null)?.style.setProperty('display', 'none');
+      });
+      await page.screenshot({ path: `${process.env.SHOTS_DIR}/lojista-pedidos-390x844.png` });
+    }
+    const accept = page.getByTestId(`lojista.orders.card-${order.id}-accept`);
+    const reject = page.getByTestId(`lojista.orders.card-${order.id}-reject`);
+    await expect(accept).toBeInViewport({ ratio: 1 });
+    await expect(reject).toBeInViewport({ ratio: 1 });
+    // a barra inferior fixa não pode cobrir os botões
+    const nav = await page.locator('nav[aria-label="Menu principal"]').boundingBox();
+    const box = await reject.boundingBox();
+    expect(nav).not.toBeNull();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(nav!.y);
+    // com pedido novo, o aviso de "sem som" é o do alerta (uma vez); o banner da página não repete e a barra tem um só controle
+    await expect(page.getByTestId('lojista.orders.sound-test')).toHaveCount(1);
+    await expect(page.getByTestId('lojista.orders.sound-banner')).toHaveCount(0);
+    await expect(page.getByTestId('lojista.alert.sound-off')).toHaveCount(1);
+
+    // fora de Início e Pedidos o banner de som não aparece
+    for (const path of ['/lojista/produtos', '/lojista/trocas', '/lojista/avaliacoes', '/lojista/loja']) {
+      await page.goto(path);
+      await expect(page.getByTestId('lojista.orders.sound-banner')).toHaveCount(0);
+    }
+
+    if (process.env.SHOTS_DIR) {
+      // balcão (1366x768): a mesma tela, sem o alerta por cima
+      await page.setViewportSize({ width: 1366, height: 768 });
+      await page.goto('/lojista/pedidos');
+      await expect(page.getByTestId(`lojista.orders.card-${order.id}-accept`)).toBeVisible();
+      await page.evaluate(() => (document.querySelector('[data-testid="lojista.alert.modal"]')?.parentElement as HTMLElement | null)?.style.setProperty('display', 'none'));
+      await page.screenshot({ path: `${process.env.SHOTS_DIR}/lojista-pedidos-1366x768.png` });
+    }
+  });
+
   test('despachar motoboy: atribui, abre o link do WhatsApp e o segundo operador recebe conflito', async ({ page }) => {
     const merchant = await seedMerchant('Casa Bela');
     const delivery = await post('/__test/seed-delivery', { storeId: merchant.storeId });

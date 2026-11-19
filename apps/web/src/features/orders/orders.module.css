@@ -7,7 +7,10 @@
 .subnavLink:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: -2px; }
 
 /* ---- Barra de status: som e conexão ---- */
-.statusBar { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); flex-wrap: wrap; padding: var(--wb-space-3) var(--wb-space-4); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); }
+.statusBar { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); flex-wrap: wrap; padding: var(--wb-space-1) var(--wb-space-3); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); }
+.soundControl { display: inline-flex; align-items: center; gap: var(--wb-space-2); min-height: var(--wb-size-touch-min); padding: 0 var(--wb-space-2); border: 0; background: transparent; font: inherit; cursor: pointer; border-radius: var(--wb-radius-md); }
+.soundControl:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.bannerActions { display: inline-flex; align-items: center; gap: var(--wb-space-2); flex-wrap: wrap; }
 .statusGroup { display: flex; align-items: center; gap: var(--wb-space-3); flex-wrap: wrap; }
 .statusText { display: inline-flex; align-items: center; gap: var(--wb-space-2); }
 .soundOn { color: var(--wb-color-text-success); }
