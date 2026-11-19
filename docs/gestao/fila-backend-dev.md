@@ -42,3 +42,7 @@ T.4 [x] (feito: `sizeChart` e `noVoluntaryExchange` no produto, `fit` na avalia�
 P.1 [ ] ANTES DO 1º CLIENTE REAL: SEC-141 (cobrir estorno que ainda está no provedor faz o cliente receber 2 vezes: bloquear cobertura enquanto houver tentativa pendente no provedor, com teste) e SEC-142 (o limite de R$ 500 do financeiro não pode ser contornado fracionando o estorno: limite acumulado por pedido/dia).
 P.2 [ ] ANTES DO G4: SEC-143 (devolução à loja marcada só pela operação não pode estornar tudo), SEC-144 (leitura de telefone e endereço do cliente por suporte e financeiro com auditoria; apagar/anonimizar o dado após a conclusão, prazo LGPD), SEC-145 (separação de funções: quem lança o custo do motoboy não marca como pago), SEC-147 (total esperado obrigatório na criação do pedido).
 P.3 [ ] Corrigir o teste de cupom em `orders.e2e` (2º pedido sai sem cupom e mais caro: alinhar o teste ao comportamento correto do limite).
+
+## Estado após a rodada 2026-11-19 (CEO)
+- [x] T.2/T.3 (trocas), T.4, tempo real Socket.IO, push Expo, API do painel de pedidos e financeiro do lojista, seed (15%, frete, pedidos de demo): FEITOS (commit a3c17ec).
+- Abertos: P.1 a P.3 (segurança, antes do 1º cliente real/G4), DT-049 (taxa de troca e custo da coleta no ledger), DT-050 (lembretes 12 h e 4 h, mediação e contestação), relatório WB-240, revisão do Security sobre os guards HTTP que passaram a ignorar WebSocket.
