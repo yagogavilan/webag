@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { sessionStore } from '../src/api/session';
-import { deliveryEta, etaLabel, etaWindow, readEta } from '../src/features/catalog/eta';
+import { deliveryEta, etaFromBody, etaLabel, etaWindow } from '../src/features/catalog/eta';
 import { stepOf } from '../src/features/orders/OrderHero';
 import { ReportButton } from '../src/features/report/ReportSheet';
 import { renderScreen } from '../src/test/render';
@@ -17,8 +17,9 @@ describe('DEC-053: faixa de chegada, nunca número único', () => {
   it('usa a faixa do servidor quando existe', () => {
     const eta = { fromAt: new Date(2026, 10, 19, 15, 40).toISOString(), toAt: new Date(2026, 10, 19, 16, 40).toISOString() };
     expect(deliveryEta({ etaMinMinutes: 1, etaMaxMinutes: 2, eta }, from)).toEqual({ start: '15:40', end: '16:40' });
-    expect(readEta({ eta })).toEqual(eta);
-    expect(readEta({})).toBeNull();
+    expect(etaFromBody({ eta })).toEqual(eta);
+    expect(etaFromBody({})).toBeNull();
+    expect(etaFromBody({ eta: { fromAt: 1 } })).toBeNull();
   });
   it('loja fora do alcance de 120 min (ou sem entrega no endereço) é "fora da área"', () => {
     expect(deliveryEta({ etaMinMinutes: 100, etaMaxMinutes: 135 }, from)).toBeNull();

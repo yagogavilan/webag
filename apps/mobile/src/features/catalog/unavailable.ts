@@ -1,30 +1,14 @@
-import { z } from 'zod';
+import type { StoreDelivery } from '@webag/shared';
 import { t } from '../../i18n';
-import { MAX_ETA_MINUTES } from './eta';
 import { formatDeliveryBack } from './format';
 
 /**
- * Motivo da entrega indisponível (WB-260, DEC-065 F4). O contrato PROPOSTO traz `unavailableReason` em `StoreDelivery`
- * (`OUT_OF_RANGE` | `LOGISTICS_CLOSED` | `LOGISTICS_PAUSED`); enquanto o backend não entrega, o campo não existe e o app infere SÓ do que já
- * vem (`logisticsClosed`, `logisticsOpensAt`, teto da faixa). Sem causa conhecida diz "Entrega indisponível agora": nunca "fora da área"
- * por omissão (WB-260 C2 e C4). Quando o campo chegar, ele passa a mandar e nada mais muda na tela.
+ * Motivo da entrega indisponível (WB-260, DEC-065 F4): `StoreDelivery.unavailableReason` do contrato (`OUT_OF_RANGE` |
+ * `LOGISTICS_CLOSED` | `LOGISTICS_PAUSED`, nulo quando entrega). O app só traduz a causa do servidor em texto; não deduz nada
+ * de `logisticsClosed` nem do teto da faixa. Sem causa (campo ausente ou valor novo que este app não conhece) diz "Entrega
+ * indisponível agora": nunca "fora da área" por omissão (WB-260 C2 e C4). `OUT_OF_RANGE` também cobre a loja que não faz entrega.
  */
-export type UnavailableReason = 'OUT_OF_RANGE' | 'LOGISTICS_CLOSED' | 'LOGISTICS_PAUSED';
-const reasonSchema = z.enum(['OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'LOGISTICS_PAUSED']);
-
-/** Lê `unavailableReason` de qualquer objeto da API, sem depender de o tipo gerado já ter o campo; valor desconhecido vira `null`. */
-export function readUnavailableReason(source: unknown): UnavailableReason | null {
-  const raw = (source as { unavailableReason?: unknown } | null | undefined)?.unavailableReason;
-  const parsed = reasonSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
-}
-
-export interface DeliveryLike {
-  available?: boolean | null | undefined;
-  etaMaxMinutes?: number | undefined;
-  logisticsClosed?: boolean | undefined;
-  logisticsOpensAt?: string | null | undefined;
-}
+export type UnavailableReason = NonNullable<StoreDelivery['unavailableReason']>;
 
 export type UnavailableKind = 'out-of-range' | 'closed' | 'paused' | 'unknown';
 
@@ -41,27 +25,30 @@ export interface DeliveryUnavailable {
 }
 
 export interface UnavailableOptions {
-  /**
-   * A tela recebe o estado da logística (`logisticsClosed`) junto com a loja (a tela da loja recebe; o cartão da lista não). Então
-   * `available=false` sem logística fechada só pode ser distância. Sem isto, a causa desconhecida é "Entrega indisponível agora".
-   */
-  logisticsKnown?: boolean;
   now?: Date;
 }
 
-export function unavailableKind(d: DeliveryLike & { unavailableReason?: unknown }, opts: UnavailableOptions = {}): UnavailableKind {
-  const reason = readUnavailableReason(d);
-  if (reason === 'OUT_OF_RANGE') return 'out-of-range';
-  if (reason === 'LOGISTICS_CLOSED') return 'closed';
-  if (reason === 'LOGISTICS_PAUSED') return 'paused';
-  if (d.logisticsClosed || d.logisticsOpensAt) return d.logisticsOpensAt ? 'closed' : 'paused';
-  if (typeof d.etaMaxMinutes === 'number' && d.etaMaxMinutes > MAX_ETA_MINUTES) return 'out-of-range';
-  if (opts.logisticsKnown && d.available === false) return 'out-of-range';
-  return 'unknown';
+/** O que a API manda de `delivery` (cartão da lista, busca e página da loja). `unavailableReason` aceita texto: valor novo = "indisponível". */
+export interface DeliveryLike {
+  unavailableReason?: string | null | undefined;
+  logisticsOpensAt?: string | null | undefined;
 }
 
-export function deliveryUnavailable(d: DeliveryLike & { unavailableReason?: unknown }, opts: UnavailableOptions = {}): DeliveryUnavailable {
-  const kind = unavailableKind(d, opts);
+export function unavailableKind(d: DeliveryLike): UnavailableKind {
+  switch (d.unavailableReason) {
+    case 'OUT_OF_RANGE':
+      return 'out-of-range';
+    case 'LOGISTICS_CLOSED':
+      return 'closed';
+    case 'LOGISTICS_PAUSED':
+      return 'paused';
+    default:
+      return 'unknown';
+  }
+}
+
+export function deliveryUnavailable(d: DeliveryLike, opts: UnavailableOptions = {}): DeliveryUnavailable {
+  const kind = unavailableKind(d);
   const back = formatDeliveryBack(d.logisticsOpensAt, opts.now);
   switch (kind) {
     case 'out-of-range':

@@ -1,4 +1,3 @@
-import { readEta } from '../catalog/eta';
 import type { Cart } from '@webag/shared';
 import type { CartState } from './store';
 
@@ -80,7 +79,7 @@ export function fromServer(cart: Cart): CartView | null {
     opensAt: cart.store.opensAt,
     etaMin: cart.store.etaMinMinutes,
     etaMax: cart.store.etaMaxMinutes,
-    eta: readEta(cart.delivery),
+    eta: cart.delivery?.eta ?? null,
     logisticsOpensAt: cart.delivery?.logisticsOpensAt ?? null,
     lines: cart.items.map((i) => ({
       key: i.variantId,

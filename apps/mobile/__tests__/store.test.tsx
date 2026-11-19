@@ -76,11 +76,18 @@ describe('Loja (D8)', () => {
   });
 
   it('não entrega no endereço: oferece retirar na loja e ativa o modo retirada', async () => {
-    mockStore.mockResolvedValue(browseStore({ delivery: { ...browseStore().delivery, available: false, feeCents: null } }));
+    mockStore.mockResolvedValue(browseStore({ delivery: { ...browseStore().delivery, available: false, feeCents: null, unavailableReason: 'OUT_OF_RANGE' } }));
     await renderScreen(<StoreScreen />);
     expect(await screen.findByText('Não entrega no seu endereço.')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Retirar na loja' }));
     expect(modeStore.get()).toBe('pickup');
+  });
+
+  it('sem causa do servidor (available=false, sem unavailableReason): "Entrega indisponível agora", nunca "não entrega no seu endereço" (WB-260 C4)', async () => {
+    mockStore.mockResolvedValue(browseStore({ delivery: { ...browseStore().delivery, available: false, feeCents: null } }));
+    await renderScreen(<StoreScreen />);
+    expect(await screen.findByText('Entrega indisponível agora.')).toBeOnTheScreen();
+    expect(screen.queryByText('Não entrega no seu endereço.')).toBeNull();
   });
 
   it('barra "Ver sacola" só aparece com itens desta loja', async () => {

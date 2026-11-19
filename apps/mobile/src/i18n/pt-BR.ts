@@ -1103,6 +1103,7 @@ export const ptBR = {
     confirmCta: 'Cancelar pedido',
     confirmBack: 'Voltar',
     outBody: 'Seu pedido já está com o motoboy. Se quiser cancelar mesmo assim, a Webag responde em poucos minutos. Sem resposta, o cancelamento é aceito.',
+    outBodyMin: 'Seu pedido já está com o motoboy. Se quiser cancelar mesmo assim, a Webag responde em até {n} min. Sem resposta, o cancelamento é aceito.',
     outRequest: 'Pedir cancelamento',
     sentTitle: 'Pedido de cancelamento enviado',
     sentBody: 'A Webag responde até {hora}. Sem resposta, cancelamos e devolvemos o valor inteiro, com a entrega.',
@@ -1460,9 +1461,6 @@ export const ptBR = {
     title: 'Estorno de {value}',
     statusProcessing: 'Em andamento',
     statusDone: 'Concluído',
-    bodyPix: 'Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.',
-    bodyCard: 'Aparece na fatura do cartão em até 2 faturas, conforme o seu banco.',
-    bodyDone: 'O valor já foi devolvido.',
   },
   comp: {
     freeTitle: 'Entrega grátis no próximo pedido',

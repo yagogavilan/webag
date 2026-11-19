@@ -56,6 +56,8 @@ export default function CheckoutScreen() {
   const [changedOpen, setChangedOpen] = useState(false);
   // 409 ETA_CHANGED (WB-261): faixa vista na sacola x faixa nova do servidor; nenhum pedido foi criado
   const [etaChange, setEtaChange] = useState<{ before: EtaLike | null; after: EtaLike | null } | null>(null);
+  // fim da faixa que o cliente aceitou na folha "O horário mudou"; vai em `acceptedEtaToAt` até o modo mudar
+  const acceptedEta = useRef<string | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const [serverChanges, setServerChanges] = useState<CheckoutChange[]>([]);
@@ -189,6 +191,8 @@ export default function CheckoutScreen() {
       mode,
       addressId: address && addressIsReady(address) ? address.id : null,
       method,
+      // WB-261: o fim da faixa que o cliente viu (o aceito na folha, se houve; senão o da sacola)
+      acceptedEtaToAt: acceptedEta.current ?? cart.cart?.delivery?.eta?.toAt ?? null,
       ...(needsCpf ? { payerDocument: onlyDigits(cpf) } : {}),
     });
     if ('ignored' in result) return;
@@ -246,8 +250,9 @@ export default function CheckoutScreen() {
   const onEtaAccept = async () => {
     setAccepting(true);
     try {
-      // a faixa nova passa a ser a da sacola; o cliente já viu o horário e toca em Pagar de novo
-      await cart.reload();
+      // a faixa nova passa a ser a da sacola; o cliente já viu o horário e toca em Pagar de novo, agora com `acceptedEtaToAt` = faixa nova
+      const fresh = await cart.reload();
+      acceptedEta.current = etaChange?.after?.toAt ?? fresh.delivery?.eta?.toAt ?? null;
       void haptic('success');
       setEtaChange(null);
     } catch {
@@ -285,6 +290,7 @@ export default function CheckoutScreen() {
         onChangeAddress={() => router.push('/addresses')}
         onModeChange={(next) => {
           setMode(next);
+          acceptedEta.current = null;
           setFailure(null);
         }}
         ready={addressIsReady(address)}

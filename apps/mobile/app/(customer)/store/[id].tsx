@@ -15,7 +15,7 @@ import { MiniBag } from '../../../src/features/cart/MiniBag';
 import { Pressy } from '../../../src/motion';
 import { ReportButton } from '../../../src/features/report/ReportSheet';
 import { deliveryEta } from '../../../src/features/catalog/eta';
-import { deliveryUnavailable, readUnavailableReason } from '../../../src/features/catalog/unavailable';
+import { deliveryUnavailable } from '../../../src/features/catalog/unavailable';
 import { coverColor, initials } from '../../../src/features/catalog/StoreRow';
 import { IconButton } from '../../../src/components/IconButton';
 import { RemoteImage } from '../../../src/components/RemoteImage';
@@ -279,8 +279,8 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
   const range = pointDefined ? deliveryEta(d) : deliveryEta({ ...d, available: null });
   const noDelivery = pointDefined && d.available === false;
   // Logística fora do horário ou pausada (BUG-016/RN-18): só retirada; "Entregas voltam às 9h" quando há hora, "pausadas agora" quando não
-  // A causa vem de `unavailableReason` (WB-260) ou é inferida do que a API já manda; sem causa: "Entrega indisponível agora"
-  const unavailable = noDelivery || d.logisticsClosed || readUnavailableReason(d) ? deliveryUnavailable(d, { logisticsKnown: true }) : null;
+  // A causa vem de `unavailableReason` (WB-260); sem causa: "Entrega indisponível agora"
+  const unavailable = noDelivery || d.unavailableReason ? deliveryUnavailable(d) : null;
   const opsClosed = unavailable?.kind === 'closed' || unavailable?.kind === 'paused';
   const etaBand = range ? t('store.etaBand', { start: range.start, end: range.end }) : (unavailable?.chip ?? t('catalog.outOfArea'));
   const freeAbove = d.freeAboveCents > 0 ? t('store.couponFree', { value: formatMoney(d.freeAboveCents) }) : null;

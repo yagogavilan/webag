@@ -6,7 +6,7 @@ import { Warning } from '../../components/icons';
 import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { theme } from '../../theme';
-import { deliveryEta, readEta } from '../catalog/eta';
+import { deliveryEta } from '../catalog/eta';
 import { useNow } from '../../lib/useNow';
 import { isLate, passedMinutes } from './delivery-state';
 import { presentStatus, spacedCode } from './model';
@@ -45,7 +45,7 @@ export function OrderHero({ order, hint, refund = null }: { order: Order; hint: 
   const st = presentStatus(order.status);
   const step = stepOf(order.status);
   const active = step > 0 && order.status !== 'delivered';
-  const window = order.delivery && active ? deliveryEta({ etaMinMinutes: order.delivery.etaMinMinutes, etaMaxMinutes: order.delivery.etaMaxMinutes, eta: readEta(order.delivery), available: true }, new Date(order.createdAt)) : null;
+  const window = order.delivery && active ? deliveryEta({ etaMinMinutes: order.delivery.etaMinMinutes, etaMaxMinutes: order.delivery.etaMaxMinutes, eta: order.delivery.eta ?? null, available: true }, new Date(order.createdAt)) : null;
   const Art = order.status === 'out_for_delivery' ? EtapaACaminho : step >= 5 || order.status === 'ready_for_pickup' ? EtapaEntregue : EtapaSeparando;
   const code = order.tracking?.deliveryCode && order.status === 'out_for_delivery' ? order.tracking.deliveryCode : null;
   const late = isLate(order) && window !== null;

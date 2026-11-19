@@ -11,8 +11,8 @@ export type DeliveryNotice =
   | { kind: 'late'; passedMinutes: number; cancelFrom: string | null }
   /** Passou da tolerância, ainda na loja: cancelar na hora ou continuar esperando (E5). */
   | { kind: 'late-decide' }
-  /** Passou da tolerância, com o motoboy: pedir cancelamento à operação (E5b). */
-  | { kind: 'late-out' }
+  /** Passou da tolerância, com o motoboy: pedir cancelamento à operação (E5b). `respondWithinMin` = prazo de resposta da operação (`Order.delay.respondWithinMin`, F5), para a copy antes de pedir. */
+  | { kind: 'late-out'; respondWithinMin: number | null }
   /** Pedido de cancelamento por atraso aberto na operação (E5b, enviado). */
   | { kind: 'late-request-pending'; respondBy: string }
   | { kind: 'late-request-approved' }
@@ -48,7 +48,7 @@ export function deliveryNotice(order: Order, now: number): DeliveryNotice | null
     if (cr.status === 'pending') return { kind: 'cancel-pending', respondBy: formatHour(cr.respondBy), overdue: Date.parse(cr.respondBy) <= now };
     if (cr.status === 'refused') return { kind: 'cancel-refused', note: cr.decisionNote, by: cr.decidedBy };
   }
-  if (delay?.canCancelWithoutCost) return delay.cancelMode === 'request' ? { kind: 'late-out' } : { kind: 'late-decide' };
+  if (delay?.canCancelWithoutCost) return delay.cancelMode === 'request' ? { kind: 'late-out', respondWithinMin: delay.respondWithinMin ?? null } : { kind: 'late-decide' };
   if (delay?.late) {
     const toAt = order.delivery?.eta?.toAt;
     return { kind: 'late', passedMinutes: toAt ? passedMinutes(toAt, now) : 0, cancelFrom: delay.cancelAvailableAt ? formatHour(delay.cancelAvailableAt) : null };

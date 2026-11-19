@@ -79,6 +79,11 @@ export interface OrderDraft {
   card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | null;
   /** 11 dígitos, só quando o provedor pediu (`PAYER_DOCUMENT_REQUIRED`). */
   payerDocument?: string | null;
+  /**
+   * WB-261: o FIM da faixa que o cliente viu (`delivery.eta.toAt` da sacola; depois de aceitar "O horário mudou", o `eta.toAt` do 409). O
+   * servidor só avisa (409 `ETA_CHANGED`) se o fim novo passar mais de 5 min dele (DEC-068). Só na entrega; ausente = sem conferência.
+   */
+  acceptedEtaToAt?: string | null;
 }
 
 /** Corpo do `POST /v1/orders`. NUNCA leva valor além do `expectedTotalCents` (conferência): quem calcula é o servidor. */
@@ -100,6 +105,7 @@ export function buildOrderBody(cart: Cart, draft: OrderDraft): CreateOrderReques
         }
       : {}),
     ...(draft.payerDocument ? { payerDocument: draft.payerDocument } : {}),
+    ...(draft.mode === 'delivery' && draft.acceptedEtaToAt ? { acceptedEtaToAt: draft.acceptedEtaToAt } : {}),
   };
 }
 

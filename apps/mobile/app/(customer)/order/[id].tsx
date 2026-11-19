@@ -21,7 +21,7 @@ import { getPushStatus, openNotificationSettings, type PushStatus } from '../../
 import { useCancelForDelay, useCancelOrder, useRequestCancel } from '../../../src/features/orders/hooks';
 import { deliveryNotice } from '../../../src/features/orders/delivery-state';
 import { CompensationTicket } from '../../../src/features/coupons/CompensationTicket';
-import { readRefund } from '../../../src/features/orders/refund';
+import { refundOf } from '../../../src/features/orders/refund';
 import { RefundBlock } from '../../../src/features/orders/RefundBlock';
 import { OrderNotice } from '../../../src/features/orders/OrderNotice';
 import { SUPPORT_WHATSAPP } from '../../../src/features/checkout/config';
@@ -182,7 +182,7 @@ export default function OrderScreen() {
   };
 
   const notice = deliveryNotice(order, now);
-  const refund = readRefund(order);
+  const refund = refundOf(order);
   const pendingRequest = order.cancelRequest?.status === 'pending' || order.delay?.cancelRequest?.status === 'pending';
 
   const talkToWebag = async () => {

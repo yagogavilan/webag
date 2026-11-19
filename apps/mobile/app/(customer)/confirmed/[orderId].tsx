@@ -6,7 +6,7 @@ import { Banner } from '../../../src/components/Banner';
 import { Button } from '../../../src/components/Button';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { Text } from '../../../src/components/Text';
-import { deliveryEta, readEta } from '../../../src/features/catalog/eta';
+import { deliveryEta } from '../../../src/features/catalog/eta';
 import { useOrder } from '../../../src/features/checkout/hooks';
 import { Celebration } from '../../../src/features/orders/Celebration';
 import { openDirections } from '../../../src/features/orders/links';
@@ -36,7 +36,7 @@ export default function ConfirmedScreen() {
 
   const goOrder = () => router.replace({ pathname: '/order/[id]', params: { id } } as never);
   const o = order.data;
-  const window = o?.delivery ? deliveryEta({ etaMinMinutes: o.delivery.etaMinMinutes, etaMaxMinutes: o.delivery.etaMaxMinutes, eta: readEta(o.delivery), available: true }, new Date(o.createdAt)) : null;
+  const window = o?.delivery ? deliveryEta({ etaMinMinutes: o.delivery.etaMinMinutes, etaMaxMinutes: o.delivery.etaMaxMinutes, eta: o.delivery.eta ?? null, available: true }, new Date(o.createdAt)) : null;
 
   const onToggle = async (next: boolean) => {
     if (!next) return;

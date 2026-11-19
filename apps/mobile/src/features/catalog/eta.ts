@@ -67,10 +67,10 @@ export function deliveryEta(d: DeliveryEtaSource, from?: Date): { start: string;
   return etaWindow(d.etaMinMinutes, d.etaMaxMinutes, from);
 }
 
-/** Lê `eta` (aditivo no contrato, DEC-053) de qualquer objeto da API, sem depender de o tipo gerado já ter o campo. */
-export function readEta(source: unknown): EtaLike | null {
-  const eta = (source as { eta?: EtaLike | null } | null | undefined)?.eta;
-  return eta && typeof eta.fromAt === 'string' && typeof eta.toAt === 'string' ? eta : null;
+/** Lê `eta {fromAt,toAt}` do CORPO de um erro da API (o corpo do `ApiError` não é tipado; no resto o campo `eta` já é tipado no contrato). */
+export function etaFromBody(body: Record<string, unknown> | null | undefined): EtaLike | null {
+  const eta = body?.eta as Partial<EtaLike> | null | undefined;
+  return eta && typeof eta.fromAt === 'string' && typeof eta.toAt === 'string' ? { fromAt: eta.fromAt, toAt: eta.toAt } : null;
 }
 
 /** "Chega entre 15:40 e 16:40" a partir da faixa do servidor, ou da conta local (agora + minutos). `null` = fora da área. */

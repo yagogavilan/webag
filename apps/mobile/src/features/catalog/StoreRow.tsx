@@ -53,7 +53,7 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
   const range = pickup ? null : deliveryEta(store.delivery);
   const outOfArea = !pickup && range === null;
   // Entregas fechadas por horário da logística (BUG-016): a loja segue listada e a entrega volta a uma hora certa
-  // A causa vem de `unavailableReason` (WB-260) ou é inferida do que a API já manda; nunca "fora da área" por omissão
+  // A causa vem de `unavailableReason` (WB-260); sem ela, "Entrega indisponível", nunca "fora da área" por omissão
   const unavailable = outOfArea ? deliveryUnavailable(store.delivery) : null;
   const backLabel = unavailable?.back ? unavailable.chip : null;
   const eta = range ? `Chega entre ${range.start} e ${range.end}` : null;

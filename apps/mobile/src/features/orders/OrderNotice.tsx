@@ -30,8 +30,8 @@ interface ShellProps {
 
 /**
  * Cartão do acompanhamento para atraso, cancelamento por atraso e pedido de cancelamento em separação
- * (onda-7-eta-atraso.md §3.3 a §3.6, BUG-015). Texto sem "2 h"; devolução "na mesma forma de pagamento"; nenhuma promessa de
- * compensação (o contrato ainda não diz se existe nem de que tipo: docs/gestao/fila-mobile.md).
+ * (onda-7-eta-atraso.md §3.3 a §3.6, BUG-015). Texto sem "2 h"; devolução "na mesma forma de pagamento"; a compensação só aparece
+ * no bilhete do pedido entregue (`Order.compensation`), nunca prometida aqui; o prazo de resposta da operação vem de `Order.delay.respondWithinMin`.
  */
 export function OrderNotice({ order, notice, waiting, busy, onWait, onCancelLate, onRequestCancelLate, onContact }: OrderNoticeProps) {
   const total = formatMoney(order.summary.total.amount);
@@ -62,7 +62,7 @@ export function OrderNotice({ order, notice, waiting, busy, onWait, onCancelLate
           <Button disabled={busy} label={t('late.outRequest')} onPress={onRequestCancelLate} testID="tracking.late-request-cancel" variant="text" />
         </Shell>
       ) : (
-        <Shell body={t('late.outBody')} testID="tracking.late-out" title={t('late.decideTitle')}>
+        <Shell body={notice.respondWithinMin ? t('late.outBodyMin', { n: notice.respondWithinMin }) : t('late.outBody')} testID="tracking.late-out" title={t('late.decideTitle')}>
           <Button disabled={busy} label={t('late.wait')} onPress={onWait} size="lg" testID="tracking.late-wait" variant="secondary" />
           <Button disabled={busy} label={t('late.outRequest')} onPress={onRequestCancelLate} size="lg" testID="tracking.late-request-cancel" variant="secondary" />
           {contact}

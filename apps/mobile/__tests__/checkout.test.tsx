@@ -32,6 +32,8 @@ beforeEach(async () => {
   await modeStore.set('delivery');
 });
 
+const at = (h: number, m: number) => new Date(2026, 10, 19, h, m).toISOString();
+
 describe('S3. Checkout', () => {
   it('visitante: cadastro/login só aqui, voltando ao checkout', async () => {
     await renderScreen(<CheckoutScreen />);
@@ -54,9 +56,8 @@ describe('S3. Checkout', () => {
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith({ pathname: '/pay/[orderId]', params: { orderId: orderFixture().id } }));
   });
 
-  it('409 ETA_CHANGED (WB-261, contrato proposto): nenhum pedido, folha "O horário mudou" com antes e agora; continuar relê a sacola', async () => {
+  it('409 ETA_CHANGED (WB-261): envia o fim da faixa visto; nenhum pedido, folha "O horário mudou" com antes e agora; continuar relê a sacola e reenvia com o fim aceito', async () => {
     await login();
-    const at = (h: number, m: number) => new Date(2026, 10, 19, h, m).toISOString();
     mockFetch.mockResolvedValue(serverCart({ delivery: { mode: 'delivery', addressId: null, available: true, distanceM: 1200, feeFromCents: 500, estimated: false, eta: { fromAt: at(18, 45), toAt: at(19, 20) } } }));
     mockPlace.mockRejectedValueOnce(new ApiError({ kind: 'problem', status: 409, code: 'ETA_CHANGED', body: { eta: { fromAt: at(19, 0), toAt: at(19, 35) } } }));
     await renderScreen(<CheckoutScreen />);
@@ -64,6 +65,7 @@ describe('S3. Checkout', () => {
     await fireEvent.press(await screen.findByTestId('checkout.submit'));
 
     expect(await screen.findByTestId('cart.eta-changed-sheet')).toBeOnTheScreen();
+    expect(mockPlace.mock.calls[0]?.[0]).toMatchObject({ mode: 'delivery', acceptedEtaToAt: at(19, 20) });
     expect(screen.getByText('O horário mudou')).toBeOnTheScreen();
     expect(screen.getByText('18:45 – 19:20')).toBeOnTheScreen();
     expect(screen.getByTestId('cart.eta-changed-new')).toHaveTextContent('19:00 – 19:35');
@@ -79,6 +81,18 @@ describe('S3. Checkout', () => {
     await fireEvent.press(screen.getByTestId('checkout.submit'));
     await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(2));
     expect(mockPlace.mock.calls[1]?.[1]).not.toBe(mockPlace.mock.calls[0]?.[1]);
+    // reenviado com o fim da faixa NOVA (o do 409), que o cliente aceitou na folha
+    expect(mockPlace.mock.calls[1]?.[0]).toMatchObject({ acceptedEtaToAt: at(19, 35) });
+  });
+
+  it('sacola sem faixa do servidor não manda `acceptedEtaToAt` (nada a conferir)', async () => {
+    await login();
+    mockPlace.mockResolvedValue(orderFixture({ status: 'awaiting_payment' }));
+    await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
+    await fireEvent.press(await screen.findByTestId('checkout.submit'));
+    await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(1));
+    expect(mockPlace.mock.calls[0]?.[0]).not.toHaveProperty('acceptedEtaToAt');
   });
 
   it('409 ETA_CHANGED: "Voltar à sacola" leva à sacola', async () => {

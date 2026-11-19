@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react-native';
 import { fromServer } from '../src/features/cart/model';
 import { deriveCta } from '../src/features/cart/state';
 import { formatDeliveryBack } from '../src/features/catalog/format';
-import { deliveryUnavailable, readUnavailableReason } from '../src/features/catalog/unavailable';
+import { deliveryUnavailable } from '../src/features/catalog/unavailable';
 import { StoreRow } from '../src/features/catalog/StoreRow';
 import { deriveGate } from '../src/features/checkout/state';
 import { toCheckoutFailure } from '../src/features/checkout/errors';
@@ -28,22 +28,22 @@ describe('Entregas fechadas ou pausadas (BUG-016, RN-18)', () => {
     expect(formatDeliveryBack('lixo')).toBeNull();
   });
 
-  it('cartão da loja: chip "Entrega volta às 9h" quando a logística tem hora de volta; "Fora da área" quando não', async () => {
+  it('cartão da loja: chip "Entrega volta às 9h" quando a logística fechada tem hora de volta', async () => {
     const when = at(1, 9);
-    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false, logisticsOpensAt: when } })} testID="row" />);
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: when } })} testID="row" />);
     expect(screen.getByTestId('store-card.delivery-back')).toHaveTextContent('Entrega volta amanhã às 9h');
     expect(screen.getByTestId('row').props.accessibilityLabel).toContain('Entrega volta amanhã às 9h');
   });
 
-  it('cartão da loja sem causa conhecida (API antiga) diz "Entrega indisponível", nunca "Fora da área" por omissão (WB-260 C4)', async () => {
+  it('cartão da loja sem causa conhecida diz "Entrega indisponível", nunca "Fora da área" por omissão (WB-260 C4)', async () => {
     await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false } })} testID="row" />);
     expect(screen.getByText('Entrega indisponível')).toBeOnTheScreen();
     expect(screen.queryByText('Fora da área de entrega')).toBeNull();
     expect(screen.queryByTestId('store-card.delivery-back')).toBeNull();
   });
 
-  it('cartão da loja além do teto da faixa (a API já diz pela faixa) segue sendo "Longe demais para entregar"', async () => {
-    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false, etaMaxMinutes: 200 } })} testID="row" />);
+  it('cartão da loja fora do alcance (OUT_OF_RANGE, loja além do teto da faixa) diz "Longe demais para entregar"', async () => {
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false, unavailableReason: 'OUT_OF_RANGE', etaMaxMinutes: 200 } })} testID="row" />);
     expect(screen.getByText('Longe demais para entregar')).toBeOnTheScreen();
   });
 
@@ -81,34 +81,34 @@ describe('Entregas fechadas ou pausadas (BUG-016, RN-18)', () => {
   });
 });
 
-describe('Motivo real da entrega indisponível (WB-260, contrato proposto: StoreDelivery.unavailableReason)', () => {
+describe('Motivo real da entrega indisponível (WB-260: StoreDelivery.unavailableReason do contrato)', () => {
   const base = { ...storeCard().delivery, available: false };
 
   it('OUT_OF_RANGE: "Longe demais para entregar", mesmo com hora de logística no payload', async () => {
-    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'OUT_OF_RANGE' } as never })} testID="row" />);
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'OUT_OF_RANGE' } })} testID="row" />);
     expect(screen.getByText('Longe demais para entregar')).toBeOnTheScreen();
   });
 
   it('LOGISTICS_CLOSED com hora: "Entrega volta amanhã às 9h"; sem hora, "Entrega fechada agora" (não inventa hora)', async () => {
-    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(1, 9) } as never })} testID="row" />);
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(1, 9) } })} testID="row" />);
     expect(screen.getByTestId('store-card.delivery-back')).toHaveTextContent('Entrega volta amanhã às 9h');
   });
 
   it('LOGISTICS_PAUSED sem previsão: "Entrega pausada", nunca "fora da área"', async () => {
-    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_PAUSED' } as never })} testID="row" />);
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_PAUSED' } })} testID="row" />);
     expect(screen.getByText('Entrega pausada')).toBeOnTheScreen();
     expect(screen.queryByText(/fora da área/i)).toBeNull();
   });
 
-  it('textos por causa (função pura) e valor desconhecido do servidor vira "indisponível"', () => {
-    expect(deliveryUnavailable({ available: false, unavailableReason: 'OUT_OF_RANGE' }).title).toBe('Longe demais para entregar no seu endereço');
-    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_PAUSED' }).title).toBe('Entregas pausadas agora');
-    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_PAUSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas pausadas agora, voltam às 17h');
-    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas voltam às 17h');
-    expect(deliveryUnavailable({ available: false, unavailableReason: 'NOVO_MOTIVO' }).kind).toBe('unknown');
-    expect(readUnavailableReason({ unavailableReason: 'LOGISTICS_CLOSED' })).toBe('LOGISTICS_CLOSED');
-    expect(readUnavailableReason({})).toBeNull();
-    // a loja já traz `logisticsClosed`: available=false sem ele só pode ser distância
-    expect(deliveryUnavailable({ available: false }, { logisticsKnown: true }).kind).toBe('out-of-range');
+  it('textos por causa (função pura); sem causa ou valor novo do servidor vira "indisponível", nunca "fora da área"', () => {
+    expect(deliveryUnavailable({ unavailableReason: 'OUT_OF_RANGE' }).title).toBe('Longe demais para entregar no seu endereço');
+    expect(deliveryUnavailable({ unavailableReason: 'LOGISTICS_PAUSED' }).title).toBe('Entregas pausadas agora');
+    expect(deliveryUnavailable({ unavailableReason: 'LOGISTICS_PAUSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas pausadas agora, voltam às 17h');
+    expect(deliveryUnavailable({ unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas voltam às 17h');
+    expect(deliveryUnavailable({ unavailableReason: 'LOGISTICS_CLOSED' }).title).toBe('Entregas fechadas agora');
+    expect(deliveryUnavailable({ unavailableReason: 'NOVO_MOTIVO' }).kind).toBe('unknown');
+    expect(deliveryUnavailable({ unavailableReason: null }).title).toBe('Entrega indisponível agora');
+    // o app não deduz a causa de `logisticsOpensAt` sozinho: quem diz é o servidor
+    expect(deliveryUnavailable({ logisticsOpensAt: at(0, 17) }).kind).toBe('unknown');
   });
 });

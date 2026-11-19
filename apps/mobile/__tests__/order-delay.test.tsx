@@ -34,7 +34,7 @@ const iso = (minutesFromNow: number) => new Date(Date.now() + minutesFromNow * 6
 const eta = (fromMin: number, toMin: number) => ({ minMinutes: 0, maxMinutes: 0, fromAt: iso(fromMin), toAt: iso(toMin) });
 const cancelRequest = (over: Partial<CancelRequest> = {}): CancelRequest => ({ id: 'c1', status: 'pending', reason: null, requestedAt: iso(-1), respondBy: iso(9), decidedAt: null, decidedBy: null, decisionNote: null, ...over });
 const delivery = (e: ReturnType<typeof eta>) => ({ ...orderFixture().delivery!, eta: e });
-const delay = (over: Record<string, unknown> = {}) => ({ late: true, canCancelWithoutCost: false, cancelAvailableAt: iso(10), cancelMode: null, cancelRequest: null, ...over });
+const delay = (over: Partial<NonNullable<Order['delay']>> = {}): NonNullable<Order['delay']> => ({ late: true, canCancelWithoutCost: false, cancelAvailableAt: iso(10), cancelMode: null, cancelRequest: null, ...over });
 const order = (over: Partial<Order>): Order => orderFixture(over);
 
 beforeEach(async () => {
@@ -62,7 +62,7 @@ describe('Acompanhamento: faixa de entrega (DEC-053/054)', () => {
 describe('Atraso (WB-253)', () => {
   it('atrasando: aviso com a hora em que nasce o direito de cancelar, sem botões de cancelar nem "2 h"', async () => {
     const cancelFrom = iso(12);
-    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay({ cancelAvailableAt: cancelFrom }) as never }));
+    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay({ cancelAvailableAt: cancelFrom }) }));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByTestId('tracking.late-banner')).toBeOnTheScreen();
     expect(screen.getByTestId('order.late-tag')).toBeOnTheScreen();
@@ -75,7 +75,7 @@ describe('Atraso (WB-253)', () => {
   });
 
   it('atrasado antes de sair: continuar esperando mantém o direito de cancelar (D5)', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) as never }));
+    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) }));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByText('Passamos do prazo')).toBeOnTheScreen();
     expect(screen.getByText(/Você pode cancelar sem custo e receber R\$ 97,79 de volta, com a entrega, na mesma forma de pagamento/)).toBeOnTheScreen();
@@ -86,7 +86,7 @@ describe('Atraso (WB-253)', () => {
   });
 
   it('cancelar sem custo: folha de confirmação, uma chamada à API e reembolso na mesma forma de pagamento', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) as never }));
+    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) }));
     mockLate.mockResolvedValue(order({ status: 'cancelled', allowedActions: [], cancellation: { by: 'customer', reason: 'Atraso na entrega', at: iso(0) } as never, payment: { method: 'pix', status: 'refunded' } }));
     await renderScreen(<OrderScreen />);
     await fireEvent.press(await screen.findByTestId('tracking.late-cancel'));
@@ -102,7 +102,7 @@ describe('Atraso (WB-253)', () => {
   });
 
   it('cancelar sem custo antes do prazo: o servidor recusa e o app explica', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) as never }));
+    mockOrder.mockResolvedValue(order({ status: 'accepted', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) }));
     mockLate.mockRejectedValue(new ApiError({ kind: 'problem', status: 409, code: 'LATE_CANCEL_NOT_AVAILABLE' }));
     await renderScreen(<OrderScreen />);
     await fireEvent.press(await screen.findByTestId('tracking.late-cancel'));
@@ -111,10 +111,10 @@ describe('Atraso (WB-253)', () => {
   });
 
   it('com o motoboy: "Pedir cancelamento" abre o pedido à operação e mostra até quando ela responde', async () => {
-    const out = order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'request' }) as never });
+    const out = order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'request' }) });
     mockOrder.mockResolvedValueOnce(out);
     const respondBy = iso(10);
-    mockLate.mockResolvedValue(order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'request', cancelRequest: cancelRequest({ respondBy }) }) as never }));
+    mockLate.mockResolvedValue(order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'request', cancelRequest: cancelRequest({ respondBy }) }) }));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByText(/Seu pedido já está com o motoboy/)).toBeOnTheScreen();
     await fireEvent.press(screen.getByTestId('tracking.late-request-cancel'));
@@ -132,7 +132,7 @@ describe('Atraso (WB-253)', () => {
   });
 
   it('"Falar com a Webag" some quando não há WhatsApp configurado e abre o do ambiente quando há', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay() as never }));
+    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay() }));
     await renderScreen(<OrderScreen />);
     await screen.findByTestId('tracking.late-banner');
     expect(screen.queryByTestId('tracking.late-contact')).toBeNull();
@@ -140,7 +140,7 @@ describe('Atraso (WB-253)', () => {
 
   it('com WhatsApp da Webag configurado, abre a conversa com o número do pedido', async () => {
     mockSupport = '5511999990000';
-    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay() as never }));
+    mockOrder.mockResolvedValue(order({ status: 'in_preparation', delivery: delivery(eta(-40, -5)), delay: delay() }));
     const spy = jest.spyOn(rn.Linking, 'openURL').mockResolvedValue(undefined);
     await renderScreen(<OrderScreen />);
     await fireEvent.press(await screen.findByTestId('tracking.late-contact'));
@@ -201,19 +201,19 @@ describe('deliveryNotice (puro)', () => {
   const now = Date.now();
   it('precedência: cancelamento por atraso > pedido da operação > atraso', () => {
     expect(deliveryNotice(order({ status: 'accepted' }), now)).toBeNull();
-    expect(deliveryNotice(order({ status: 'accepted', delivery: delivery(eta(-30, -5)), delay: delay() as never }), now)?.kind).toBe('late');
-    expect(deliveryNotice(order({ status: 'accepted', delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) as never }), now)?.kind).toBe('late-decide');
-    expect(deliveryNotice(order({ status: 'out_for_delivery', delay: delay({ canCancelWithoutCost: true, cancelMode: 'request' }) as never }), now)?.kind).toBe('late-out');
-    expect(deliveryNotice(order({ status: 'out_for_delivery', delay: delay({ cancelRequest: cancelRequest({ status: 'approved' }) }) as never }), now)?.kind).toBe('late-request-approved');
+    expect(deliveryNotice(order({ status: 'accepted', delivery: delivery(eta(-30, -5)), delay: delay() }), now)?.kind).toBe('late');
+    expect(deliveryNotice(order({ status: 'accepted', delay: delay({ canCancelWithoutCost: true, cancelMode: 'immediate' }) }), now)?.kind).toBe('late-decide');
+    expect(deliveryNotice(order({ status: 'out_for_delivery', delay: delay({ canCancelWithoutCost: true, cancelMode: 'request' }) }), now)?.kind).toBe('late-out');
+    expect(deliveryNotice(order({ status: 'out_for_delivery', delay: delay({ cancelRequest: cancelRequest({ status: 'approved' }) }) }), now)?.kind).toBe('late-request-approved');
     expect(deliveryNotice(order({ status: 'cancelled', cancellation: { by: 'store', reason: 'Sem estoque', at: iso(0) } as never }), now)).toBeNull();
   });
 });
 
 describe('Compensação por atraso na tela do pedido (F2, WB-254)', () => {
-  const compensation = (over: Record<string, unknown> = {}) => ({ kind: 'free_shipping', valueCents: null, code: 'ATRASOK7M2QXW9', validUntil: iso(60 * 24 * 30), status: 'available', ...over });
+  const compensation = (over: Partial<NonNullable<Order['compensation']>> = {}): NonNullable<Order['compensation']> => ({ kind: 'free_shipping', valueCents: null, code: 'ATRASOK7M2QXW9', validUntil: iso(60 * 24 * 30), status: 'available', ...over });
 
   it('pedido entregue com compensação mostra o bilhete e abre Meus cupons', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'delivered', compensation: compensation() } as Partial<Order>));
+    mockOrder.mockResolvedValue(order({ status: 'delivered', compensation: compensation() }));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByTestId('tracking.compensation')).toBeOnTheScreen();
     expect(screen.getByText('Entrega grátis no próximo pedido')).toBeOnTheScreen();
@@ -224,7 +224,7 @@ describe('Compensação por atraso na tela do pedido (F2, WB-254)', () => {
   });
 
   it('sem compensação (no prazo, dentro da tolerância, cancelado ou atrasado ainda a caminho) não promete nada', async () => {
-    mockOrder.mockResolvedValue(order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -30)), delay: delay() } as Partial<Order>));
+    mockOrder.mockResolvedValue(order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -30)), delay: delay() }));
     await renderScreen(<OrderScreen />);
     await screen.findByTestId('tracking.late-banner');
     expect(screen.queryByTestId('tracking.compensation')).toBeNull();
@@ -232,11 +232,12 @@ describe('Compensação por atraso na tela do pedido (F2, WB-254)', () => {
   });
 });
 
-describe('Estorno com valor, meio e status (WB-259, contrato proposto: Order.refund)', () => {
-  const cancelled = (refund: unknown) => order({ status: 'cancelled', cancellation: { by: 'customer', reason: 'Cancelado por atraso', at: iso(-5) } as never, refund } as Partial<Order>);
+describe('Estorno com valor, meio e status (WB-259: Order.refund do contrato)', () => {
+  const refund = (over: Partial<NonNullable<Order['refund']>> = {}): NonNullable<Order['refund']> => ({ amountCents: 15679, method: 'pix', status: 'processing', deadlineText: 'Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.', ...over });
+  const cancelled = (r: Order['refund']) => order({ status: 'cancelled', cancellation: { by: 'customer', reason: 'Cancelado por atraso', at: iso(-5) }, refund: r });
 
-  it('PIX em andamento: "Estorno de R$ X", status, prazo por meio e frase única para o leitor de tela', async () => {
-    mockOrder.mockResolvedValue(cancelled({ amountCents: 15679, method: 'pix', status: 'processing' }));
+  it('PIX em andamento: "Estorno de R$ X", status, o prazo em texto vindo da API e frase única para o leitor de tela', async () => {
+    mockOrder.mockResolvedValue(cancelled(refund()));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByText(/Estorno de R\$\s156,79/)).toBeOnTheScreen();
     expect(screen.getByText('Em andamento')).toBeOnTheScreen();
@@ -245,24 +246,46 @@ describe('Estorno com valor, meio e status (WB-259, contrato proposto: Order.ref
     expect(everyText()).not.toMatch(/\b2 ?h\b/i);
   });
 
-  it('cartão: "em até 2 faturas, conforme o seu banco", sem data prometida; o valor do herói é o do estorno (parcial), não o total', async () => {
-    mockOrder.mockResolvedValue(cancelled({ amountCents: 4000, method: 'card', status: 'processing' }));
+  it('cartão: o texto de prazo é o da API (nada fixo no app), sem data prometida; o valor do herói é o do estorno (parcial), não o total', async () => {
+    mockOrder.mockResolvedValue(cancelled(refund({ amountCents: 4000, method: 'card', deadlineText: 'Aparece na fatura do cartão em até 2 faturas, conforme o seu banco.' })));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByText('Aparece na fatura do cartão em até 2 faturas, conforme o seu banco.')).toBeOnTheScreen();
     expect(screen.getByTestId('tracking.refund')).toHaveTextContent(/R\$\s40,00/);
   });
 
-  it('concluído: só diz que foi devolvido', async () => {
-    mockOrder.mockResolvedValue(cancelled({ amountCents: 15679, method: 'pix', status: 'completed' }));
+  it('concluído: "Concluído" e o prazo do banco continua à vista (concluído do lado da Webag)', async () => {
+    mockOrder.mockResolvedValue(cancelled(refund({ status: 'completed' })));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByText('Concluído')).toBeOnTheScreen();
-    expect(screen.getByText('O valor já foi devolvido.')).toBeOnTheScreen();
+    expect(screen.getByText('Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.')).toBeOnTheScreen();
+    expect(screen.queryByText('O valor já foi devolvido.')).toBeNull();
   });
 
-  it('sem `refund`, ou com forma inesperada: a seção não aparece e o resto da tela funciona', async () => {
-    mockOrder.mockResolvedValue(cancelled({ amountCents: 'muito', method: 'boleto', status: 'x' }));
+  it('sem `refund` (nulo ou ausente): a seção não aparece e o resto da tela funciona', async () => {
+    mockOrder.mockResolvedValue(cancelled(null));
     await renderScreen(<OrderScreen />);
     await screen.findByTestId('order.screen');
     expect(screen.queryByTestId('order.refund')).toBeNull();
+  });
+});
+
+describe('Prazo de resposta da operação (F5: Order.delay.respondWithinMin)', () => {
+  const out = (over: Partial<NonNullable<Order['delay']>> = {}) => order({ status: 'out_for_delivery', delivery: delivery(eta(-60, -25)), delay: delay({ canCancelWithoutCost: true, cancelMode: 'request', ...over }) });
+
+  it('antes de pedir, a copy diz "até N min" com o número do servidor (nunca fixo no app)', async () => {
+    mockOrder.mockResolvedValue(out({ respondWithinMin: 7 }));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByText(/a Webag responde em até 7 min/)).toBeOnTheScreen();
+    expect(everyText()).not.toMatch(/poucos minutos|\b10 min/);
+  });
+
+  it('sem o número (servidor antigo), volta ao texto sem prazo', async () => {
+    mockOrder.mockResolvedValue(out());
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByText(/a Webag responde em poucos minutos/)).toBeOnTheScreen();
+  });
+
+  it('deliveryNotice carrega o prazo', () => {
+    expect(deliveryNotice(out({ respondWithinMin: 12 }), Date.now())).toEqual({ kind: 'late-out', respondWithinMin: 12 });
   });
 });
