@@ -142,7 +142,13 @@ export default function AddressFormScreen() {
         let address;
         if (loggedIn) {
           // logado: a API é a fonte. O servidor valida região e limite e repete sem duplicar (rede ruim)
-          const saved = editing?.remote ? await updateRemoteAddress(editing.id, fields) : await createRemoteAddress(fields);
+          const send = (f: typeof fields) => (editing?.remote ? updateRemoteAddress(editing.id, f) : createRemoteAddress(f));
+          // 422 ADDRESS_PIN_FAR_FROM_CEP (SEC-169): o ponto do geocodificador do aparelho não bate com o CEP. Sem ponto o servidor usa o
+          // centro do CEP (contrato), então repete uma vez sem coordenadas em vez de deixar a pessoa presa num erro que não resolve.
+          const saved = await send(fields).catch((e: unknown) => {
+            if (e instanceof ApiError && e.code === 'ADDRESS_PIN_FAR_FROM_CEP') return send({ ...fields, latitude: null, longitude: null });
+            throw e;
+          });
           await addressStore.upsert(saved, { makeCurrent: true, ...(editing && !editing.remote ? { replaceId: editing.id } : {}) });
           address = saved;
         } else if (editing) {
@@ -166,7 +172,13 @@ export default function AddressFormScreen() {
           router.replace({ pathname: '/region-unavailable', params: { place: values.district || values.city, city: values.city } });
         } else if (error instanceof ApiError && error.code === 'ADDRESS_LIMIT_REACHED') setBanner(t('address.limit'));
         else if (error instanceof ApiError && error.code === 'ADDRESS_GEOCODING_FAILED') setBanner(t('address.geocodeFailed'));
-        else if (error instanceof ApiError && error.code === 'ADDRESS_DUPLICATE') setBanner(t('address.duplicate'));
+        else if (error instanceof ApiError && error.code === 'ADDRESS_CEP_NOT_FOUND') {
+          setBanner(t('address.cepInvalid'));
+          setFocus('cep');
+        } else if (error instanceof ApiError && error.code === 'ADDRESS_CEP_CITY_MISMATCH') {
+          setBanner(t('address.cepCityMismatch'));
+          setFocus('cep');
+        } else if (error instanceof ApiError && error.code === 'ADDRESS_DUPLICATE') setBanner(t('address.duplicate'));
         else if (error instanceof ApiError && error.isConnectivity) setBanner(t('address.offlineSave'));
         else setBanner(t('address.saveError'));
       } finally {

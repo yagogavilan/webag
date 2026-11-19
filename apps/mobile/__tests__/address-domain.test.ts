@@ -24,25 +24,25 @@ const ok = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.st
 describe('consulta de CEP (ViaCEP)', () => {
   it('preenche rua, bairro e cidade', async () => {
     const fetcher = jest.fn(() => ok({ logradouro: 'Rua das Palmeiras', bairro: 'Jardim Fortaleza', localidade: 'Francisco Morato', uf: 'SP' }));
-    const result = await lookupCep('07900-000', fetcher as unknown as typeof fetch);
+    const result = await lookupCep('07900-000', { fetcher: fetcher as unknown as typeof fetch });
     expect(result).toEqual({ kind: 'found', value: { street: 'Rua das Palmeiras', district: 'Jardim Fortaleza', city: 'Francisco Morato', state: 'SP' } });
     expect(fetcher).toHaveBeenCalledWith('https://viacep.com.br/ws/07900000/json/', expect.anything());
   });
 
   it('CEP inexistente ({erro:true}) e HTTP 400 viram não encontrado', async () => {
-    expect(await lookupCep('99999999', (() => ok({ erro: true })) as unknown as typeof fetch)).toEqual({ kind: 'not-found' });
-    expect(await lookupCep('99999999', (() => ok({}, 400)) as unknown as typeof fetch)).toEqual({ kind: 'not-found' });
+    expect(await lookupCep('99999999', { fetcher: (() => ok({ erro: true })) as unknown as typeof fetch })).toEqual({ kind: 'not-found' });
+    expect(await lookupCep('99999999', { fetcher: (() => ok({}, 400)) as unknown as typeof fetch })).toEqual({ kind: 'not-found' });
   });
 
   it('serviço fora do ar, rede ou resposta fora do formato viram indisponível, sem lançar', async () => {
-    expect(await lookupCep('07900000', (() => Promise.reject(new TypeError('x'))) as unknown as typeof fetch)).toEqual({ kind: 'unavailable' });
-    expect(await lookupCep('07900000', (() => ok({}, 503)) as unknown as typeof fetch)).toEqual({ kind: 'unavailable' });
-    expect(await lookupCep('07900000', (() => ok({ localidade: 42 })) as unknown as typeof fetch)).toEqual({ kind: 'unavailable' });
+    expect(await lookupCep('07900000', { fetcher: (() => Promise.reject(new TypeError('x'))) as unknown as typeof fetch })).toEqual({ kind: 'unavailable' });
+    expect(await lookupCep('07900000', { fetcher: (() => ok({}, 503)) as unknown as typeof fetch })).toEqual({ kind: 'unavailable' });
+    expect(await lookupCep('07900000', { fetcher: (() => ok({ localidade: 42 })) as unknown as typeof fetch })).toEqual({ kind: 'unavailable' });
   });
 
   it('não consulta CEP com menos de 8 dígitos', async () => {
     const fetcher = jest.fn();
-    expect(await lookupCep('0790', fetcher as unknown as typeof fetch)).toEqual({ kind: 'not-found' });
+    expect(await lookupCep('0790', { fetcher: fetcher as unknown as typeof fetch })).toEqual({ kind: 'not-found' });
     expect(fetcher).not.toHaveBeenCalled();
   });
 });

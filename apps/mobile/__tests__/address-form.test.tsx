@@ -158,6 +158,30 @@ describe('Endereço por CEP (D2)', () => {
       expect(state.status === 'ready' && state.addresses).toHaveLength(0);
     });
 
+    it('CEP inexistente (422 ADDRESS_CEP_NOT_FOUND, SEC-169) e de outra cidade (ADDRESS_CEP_CITY_MISMATCH) explicam e não salvam', async () => {
+      mockCreate.mockRejectedValue(new ApiError({ kind: 'problem', status: 422, code: 'ADDRESS_CEP_NOT_FOUND' }));
+      await fill();
+      expect(await screen.findByText('Esse CEP não existe. Confira os 8 números.')).toBeOnTheScreen();
+      mockCreate.mockRejectedValue(new ApiError({ kind: 'problem', status: 422, code: 'ADDRESS_CEP_CITY_MISMATCH' }));
+      await fireEvent.press(screen.getByTestId('address.submit'));
+      expect(await screen.findByText('Esse CEP é de outra cidade. Confira o CEP e a cidade.')).toBeOnTheScreen();
+      const state = addressStore.getState();
+      expect(state.status === 'ready' && state.addresses).toHaveLength(0);
+    });
+
+    it('ponto longe do CEP (422 ADDRESS_PIN_FAR_FROM_CEP): repete uma vez sem coordenadas e salva', async () => {
+      mockCreate
+        .mockRejectedValueOnce(new ApiError({ kind: 'problem', status: 422, code: 'ADDRESS_PIN_FAR_FROM_CEP' }))
+        .mockResolvedValueOnce({
+          id: 'srv-2', nickname: null, precision: 'full', cep: '07900000', street: 'Rua das Palmeiras', number: '120', noNumber: false,
+          complement: '', district: 'Jardim Fortaleza', city: 'Francisco Morato', state: 'SP', latitude: -23.28, longitude: -46.74, remote: true,
+        });
+      await fill();
+      await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/'));
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(mockCreate.mock.calls[1]?.[0]).toMatchObject({ latitude: null, longitude: null });
+    });
+
     it('região não atendida (422 REGION_NOT_SERVED) abre "Ainda não entregamos"', async () => {
       mockCreate.mockRejectedValue(new ApiError({ kind: 'problem', status: 422, code: 'REGION_NOT_SERVED' }));
       await fill();

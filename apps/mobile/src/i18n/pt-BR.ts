@@ -1383,6 +1383,8 @@ export const ptBR = {
     offlineSave: 'Conecte-se para salvar o endereço. O que você digitou está aqui.',
     offlineDelete: 'Conecte-se para excluir o endereço.',
     geocodeFailed: 'Não conseguimos localizar esse endereço. Confira a rua e o número.',
+    cepInvalid: 'Esse CEP não existe. Confira os 8 números.',
+    cepCityMismatch: 'Esse CEP é de outra cidade. Confira o CEP e a cidade.',
     duplicate: 'Você já salvou esse endereço.',
     saveError: 'Não foi possível salvar. Tente de novo.',
     deleteError: 'Não foi possível excluir. Tente de novo.',
