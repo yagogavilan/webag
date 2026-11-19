@@ -338,8 +338,9 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     expect(b.body.status).toBe('approved');
     const finance = await createAdmin(ctx, 'finance');
     const support = await createAdmin(ctx, 'support');
-    const day = new Date().toISOString().slice(0, 10);
-    const url = `/v1/admin/exchanges/report?from=${day}&to=${day}&storeId=${d.shop.store.id}`;
+    const brt = (offsetDays: number) => new Date(Date.now() - 3 * 3_600_000 + offsetDays * 86_400_000).toISOString().slice(0, 10); // dia de Brasília
+    const day = brt(0);
+    const url = `/v1/admin/exchanges/report?from=${brt(-3)}&to=${day}&storeId=${d.shop.store.id}`;
     const fin = (await ctx.http.get(url).set(bearer(finance.accessToken)).expect(200)).body;
     expect(fin.totals).toMatchObject({ deliveredOrders: 1, exchanges: 2, byType: { withdrawal: 1, defect: 0, size_color: 1 }, sizeColorWithoutSizeChart: 1, feeRevenue: { amount: 0 }, logisticsCost: { amount: 0 } });
     expect(fin.byStore[0]).toMatchObject({ storeId: d.shop.store.id, exchanges: 2, ratePct: 200, alert: true });
