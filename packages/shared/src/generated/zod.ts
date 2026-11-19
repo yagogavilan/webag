@@ -10680,7 +10680,13 @@ export const ListOrdersResponse = zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),
-  "createdAt": zod.iso.datetime({"offset":true})
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "eta": zod.union([zod.object({
+  "fromAt": zod.iso.datetime({"offset":true}),
+  "toAt": zod.iso.datetime({"offset":true}),
+  "minMinutes": zod.int().optional(),
+  "maxMinutes": zod.int().optional()
+}),zod.null()]).optional().describe('U8.5: faixa de chegada gravada no pedido (reancorada no pagamento) para a linha da lista ("Chega entre 18:46 e 19:46"); nula em retirada ou sem faixa. Os minutos são os do `EtaRange` do detalhe. Campo novo, opcional')
 })),
   "nextCursor": zod.string().nullable()
 })

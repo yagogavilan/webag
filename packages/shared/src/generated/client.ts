@@ -5268,6 +5268,16 @@ export type OrderSummaryStore = {
   logo: ImageUrls;
 };
 
+/**
+ * U8.5: faixa de chegada gravada no pedido (reancorada no pagamento) para a linha da lista ("Chega entre 18:46 e 19:46"); nula em retirada ou sem faixa. Os minutos são os do `EtaRange` do detalhe. Campo novo, opcional
+ */
+export type OrderSummaryEta = {
+  fromAt: string;
+  toAt: string;
+  minMinutes?: number;
+  maxMinutes?: number;
+} | null;
+
 export interface OrderSummary {
   id: string;
   number: string;
@@ -5279,6 +5289,8 @@ export interface OrderSummary {
   firstItemImage: ImageUrls;
   total: Money;
   createdAt: string;
+  /** U8.5: faixa de chegada gravada no pedido (reancorada no pagamento) para a linha da lista ("Chega entre 18:46 e 19:46"); nula em retirada ou sem faixa. Os minutos são os do `EtaRange` do detalhe. Campo novo, opcional */
+  eta?: OrderSummaryEta;
 }
 
 export interface OrderPage {

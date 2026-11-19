@@ -77,7 +77,7 @@ A varredura da troca avisa a loja 12 h e 4 h antes de a troca ser aprovada sozin
 - Variáveis novas: `WEB_PUBLIC_URL` (base de `/pagar/cartao`) e `MP_PUBLIC_KEY` (chave pública do MP, não é segredo).
 
 ## Seed de demonstração
-`pnpm db:seed` (fora de produção) cria lojas, clientes, avaliações, cupons, tabela de frete inicial (`seedLogistics`) e **pedidos `WB-DMxxx` em vários estados** (aguardando pagamento até entregue, cancelado e recusado, corridas na fila e uma troca pedida). Comissão padrão de 15% só no CLI do seed. Em produção só roda o seed base.
+`pnpm db:seed` (fora de produção) cria lojas, clientes, avaliações, cupons, tabela de frete inicial (`seedLogistics`) e **pedidos `WB-DMxxx` em vários estados** (aguardando pagamento até entregue, cancelado e recusado, corridas na fila e uma troca pedida). A comissão padrão é 15% no próprio código (DEC-073). **Logística contínua só no seed de desenvolvimento:** o seed põe `logistica_horario` em `00:00-23:59` e `logistica_dias` em `seg_dom` quando ainda estão no padrão de fábrica (09:00-20:00, seg a sáb) e ninguém os editou, para a demonstração à noite não mostrar "entrega indisponível"; o admin pode voltar ao horário real em Parâmetros, e a produção mantém o horário real (só roda o seed base).
 
 ## Proxy e IP do cliente (SEC-114)
 

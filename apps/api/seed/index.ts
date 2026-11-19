@@ -42,6 +42,10 @@ async function main(): Promise<void> {
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       });
       await seedLogistics(db, (message) => console.log(`[seed] ${message}`)); // hipótese de tabela de frete: só dev/staging (DEC-036)
+      // Demo fora do horário (fila do backend, CEO): quem clona e roda à noite via "entrega indisponível" (logística 09:00-20:00, BUG-016). SÓ no seed de
+      // dev/staging a logística nasce contínua (00:00-23:59, todos os dias); parâmetro já editado no admin não é tocado e a produção mantém o horário real.
+      await db.update(schema.parameters).set({ value: '00:00-23:59' }).where(and(eq(schema.parameters.key, 'logistica_horario'), eq(schema.parameters.value, '09:00-20:00'), isNull(schema.parameters.updatedBy)));
+      await db.update(schema.parameters).set({ value: 'seg_dom' }).where(and(eq(schema.parameters.key, 'logistica_dias'), eq(schema.parameters.value, 'seg_sab'), isNull(schema.parameters.updatedBy)));
       await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
       // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners.
       await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });

@@ -12928,6 +12928,17 @@ components:
         firstItemImage: { $ref: '#/components/schemas/ImageUrls' }
         total: { $ref: '#/components/schemas/Money' }
         createdAt: { type: string, format: date-time }
+        eta:
+          description: "U8.5: faixa de chegada gravada no pedido (reancorada no pagamento) para a linha da lista (\"Chega entre 18:46 e 19:46\"); nula em retirada ou sem faixa. Os minutos são os do `EtaRange` do detalhe. Campo novo, opcional"
+          oneOf:
+            - type: object
+              required: [fromAt, toAt]
+              properties:
+                fromAt: { type: string, format: date-time }
+                toAt: { type: string, format: date-time }
+                minMinutes: { type: integer }
+                maxMinutes: { type: integer }
+            - type: 'null'
     OrderPage:
       type: object
       required: [data, nextCursor]

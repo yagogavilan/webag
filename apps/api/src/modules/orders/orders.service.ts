@@ -1323,6 +1323,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
         firstItemImage: { urls: orderItemRows[0]?.image ?? {} },
         total: money(order.totalCents),
         createdAt: order.createdAt.toISOString(),
+        // U8.5: a faixa "Chega entre 18:46 e 19:46" na linha do pedido; nula em retirada e em pedido sem faixa gravada (o app não inventa horário).
+        eta: order.mode === 'delivery' ? etaOfOrder(order) : null,
       };
     });
   }
