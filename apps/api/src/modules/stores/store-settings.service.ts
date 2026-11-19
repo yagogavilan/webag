@@ -1,3 +1,4 @@
+import { DeliveryQuoteRegistry } from './delivery-quote.registry.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
@@ -5,7 +6,7 @@ import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
 import { storeActivity, storeDeliveryTiers, storeHolidays, storeHours, storeSettings, type stores } from './db/schema.js';
-import { applyFreeShipping, deliveryFee, MAX_FIXED_FEE_CENTS, validateFreeAbove, validateTiers, type Tier } from './domain/delivery.js';
+import type { Tier } from './domain/delivery.js';
 import { isOpenNow, pauseUntil, validateDayIntervals, type Interval, type PauseKind, type WeeklyHours } from './domain/hours.js';
 import { GEOCODING_PROVIDER, type GeocodingProvider } from './geocoding.js';
 import type { DeliveryInput } from './stores.schemas.js';
@@ -19,7 +20,6 @@ export interface Actor {
 
 const toMin = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 const toHhmm = (min: number): string => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
-const kmToM = (km: number): number => Math.round(km * 1000);
 
 /** Horários, feriados, pausa, entrega, retirada e política de trocas (WB-056..WB-059). Validação de negócio no servidor. */
 @Injectable()
@@ -31,6 +31,7 @@ export class StoreSettingsService {
     private readonly params: ParametersService,
     private readonly flags: FeatureFlagsService,
     private readonly audit: AuditService,
+    private readonly quotes: DeliveryQuoteRegistry,
   ) {}
 
   /** Lojista edita configuração salvo se suspensa/recusada (não força visibilidade, O2-APR-16); o admin sempre pode. */
@@ -77,7 +78,7 @@ export class StoreSettingsService {
 
   async present(store: Store, now = new Date()) {
     const settings = await this.stores.getSettings(store.id);
-    const [hours, holidays, tiers, open] = await Promise.all([this.weeklyHours(store.id), this.holidays(store.id), this.tiers(store.id), this.isOpenNow(store.id, now)]);
+    const [hours, holidays, open] = await Promise.all([this.weeklyHours(store.id), this.holidays(store.id), this.isOpenNow(store.id, now)]);
     const lowDefault = await this.params.getNumber('estoque_baixo_un');
     return {
       isOpenNow: open,
@@ -86,12 +87,14 @@ export class StoreSettingsService {
       pause: { active: settings.pausedIndefinitely || (settings.pausedUntil?.getTime() ?? 0) > now.getTime(), until: settings.pausedUntil?.toISOString() ?? null, indefinitely: settings.pausedIndefinitely },
       delivery: {
         acceptsDelivery: settings.acceptsDelivery,
-        radiusKm: settings.radiusM / 1000,
-        feeMode: settings.feeMode,
-        feeFixedCents: settings.feeFixedCents,
-        tiers: tiers.map((t) => ({ fromKm: t.fromM / 1000, toKm: t.toM / 1000, feeCents: t.feeCents })),
-        minOrderCents: settings.minOrderCents,
-        freeAboveCents: settings.freeAboveCents,
+        // DEC-036: taxa, raio, mínimo e entrega grátis são do admin; aqui só leitura (campos legados, sempre globais).
+        feeManagedBy: 'webag' as const,
+        radiusKm: await this.params.getNumber('raio_max_km'),
+        feeMode: 'by_distance' as const,
+        feeFixedCents: 0,
+        tiers: [] as { fromKm: number; toKm: number; feeCents: number }[],
+        minOrderCents: await this.params.getNumber('pedido_minimo_cents'),
+        freeAboveCents: await this.params.getNumber('frete_gratis_acima_cents'),
         etaMinMinutes: settings.etaMinMinutes,
         etaMaxMinutes: settings.etaMaxMinutes,
       },
@@ -172,21 +175,14 @@ export class StoreSettingsService {
 
   // ------------------------------------------------------------------- entrega
 
+  /**
+   * DEC-036: o lojista escolhe só "entrega pela Webag" e/ou "retirada" e o tempo de preparo; taxa, faixas, raio, mínimo e
+   * entrega grátis são do admin (campos antigos são aceitos e ignorados, para o app publicado não quebrar).
+   */
   async setDelivery(store: Store, input: DeliveryInput, actor: Actor, ctx: RequestContext): Promise<void> {
     this.assertEditable(store, actor);
     const settings = await this.stores.getSettings(store.id);
-    const maxKm = await this.params.getNumber('raio_max_km');
-    const radiusM = kmToM(input.radiusKm);
     const fieldErrors: { field: string; message: string }[] = [];
-    if (input.radiusKm < 1 || input.radiusKm > maxKm) fieldErrors.push({ field: 'radiusKm', message: `O raio vai de 1 a ${maxKm} km.` });
-    if (input.feeFixedCents > MAX_FIXED_FEE_CENTS) fieldErrors.push({ field: 'feeFixedCents', message: 'A taxa vai de R$ 0,00 a R$ 50,00.' });
-    const tiers: Tier[] = input.tiers.map((t) => ({ fromM: kmToM(t.fromKm), toM: kmToM(t.toKm), feeCents: t.feeCents }));
-    if (input.feeMode === 'by_distance') {
-      const problem = validateTiers(tiers, radiusM);
-      if (problem) fieldErrors.push({ field: 'tiers', message: problem });
-    }
-    const freeProblem = validateFreeAbove(input.freeAboveCents, input.minOrderCents);
-    if (freeProblem) fieldErrors.push({ field: 'freeAboveCents', message: freeProblem });
     if (input.etaMinMinutes >= input.etaMaxMinutes) fieldErrors.push({ field: 'etaMaxMinutes', message: 'O tempo máximo precisa ser maior que o mínimo.' });
     // Sempre sobra uma forma de receber pedido: entrega ou retirada (WB-057 C6).
     if (!input.acceptsDelivery && !settings.pickupEnabled) fieldErrors.push({ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' });
@@ -196,25 +192,8 @@ export class StoreSettingsService {
       // Trava a linha: duas abas desligando entrega e retirada ao mesmo tempo deixam pelo menos uma ativa.
       const [locked] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!input.acceptsDelivery && !locked?.pickupEnabled) throw errors.unprocessable('INVALID_DELIVERY', 'Configuração de entrega inválida', { errors: [{ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' }] });
-      await tx
-        .update(storeSettings)
-        .set({
-          acceptsDelivery: input.acceptsDelivery,
-          radiusM,
-          feeMode: input.feeMode,
-          feeFixedCents: input.feeFixedCents,
-          minOrderCents: input.minOrderCents,
-          freeAboveCents: input.freeAboveCents,
-          etaMinMinutes: input.etaMinMinutes,
-          etaMaxMinutes: input.etaMaxMinutes,
-          updatedAt: new Date(),
-        })
-        .where(eq(storeSettings.storeId, store.id));
-      await tx.delete(storeDeliveryTiers).where(eq(storeDeliveryTiers.storeId, store.id));
-      if (input.feeMode === 'by_distance') {
-        await tx.insert(storeDeliveryTiers).values(tiers.map((t, position) => ({ storeId: store.id, position, ...t })));
-      }
-      await this.record(tx, store, actor, ctx, 'delivery', { radiusM: settings.radiusM, feeMode: settings.feeMode, minOrderCents: settings.minOrderCents }, { radiusM, feeMode: input.feeMode, minOrderCents: input.minOrderCents });
+      await tx.update(storeSettings).set({ acceptsDelivery: input.acceptsDelivery, etaMinMinutes: input.etaMinMinutes, etaMaxMinutes: input.etaMaxMinutes, updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
+      await this.record(tx, store, actor, ctx, 'delivery', { acceptsDelivery: settings.acceptsDelivery }, { acceptsDelivery: input.acceptsDelivery });
     });
   }
 
@@ -288,14 +267,9 @@ export class StoreSettingsService {
    * WB-057 C5: a "prévia" usa a MESMA função do checkout (`quoteDelivery`): distância calculada no banco (PostGIS) e
    * faixa de taxa por `[de, até)`.
    */
-  async quoteDelivery(storeId: string, point: { lat: number; lng: number }, subtotalCents: number): Promise<{ available: boolean; distanceM: number | null; feeCents: number | null; freeShipping: boolean; belowMinimum: boolean }> {
-    const settings = await this.stores.getSettings(storeId);
-    const distanceM = await this.stores.distanceMeters(storeId, point);
-    if (!settings.acceptsDelivery || distanceM === null) return { available: false, distanceM, feeCents: null, freeShipping: false, belowMinimum: false };
-    const fee = deliveryFee({ mode: settings.feeMode, fixedCents: settings.feeFixedCents, tiers: await this.tiers(storeId), radiusM: settings.radiusM }, Math.round(distanceM));
-    if (fee === null) return { available: false, distanceM, feeCents: null, freeShipping: false, belowMinimum: false };
-    const final = applyFreeShipping(fee, subtotalCents, settings.freeAboveCents);
-    return { available: true, distanceM, feeCents: final, freeShipping: final === 0 && fee > 0, belowMinimum: subtotalCents < settings.minOrderCents };
+  async quoteDelivery(storeId: string, point: { lat: number; lng: number }, subtotalCents: number) {
+    const [settings, quote] = await Promise.all([this.stores.getSettings(storeId), this.quotes.quote(storeId, point, subtotalCents)]);
+    return settings.acceptsDelivery ? quote : { ...quote, available: false, feeCents: null, freeShipping: false };
   }
 
   async preview(store: Store, input: { cep?: string; lat?: number; lng?: number; subtotalCents: number }) {

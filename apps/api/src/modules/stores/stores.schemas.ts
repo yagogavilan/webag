@@ -79,20 +79,26 @@ export const holidaysSchema = z.strictObject({
 
 export const pauseSchema = z.strictObject({ kind: z.enum(['30m', '1h', '2h', 'end_of_day', 'until_resume']) });
 
-export const deliverySchema = z.strictObject({
+/**
+ * DEC-036: a taxa de entrega, o raio, o pedido mínimo e a entrega grátis são do ADMIN. Os campos antigos continuam aceitos
+ * (opcionais) e são ignorados, para o app já publicado não quebrar; saem numa versão futura.
+ */
+export const deliverySchema = z.object({
   acceptsDelivery: z.boolean(),
-  /** Em km, até 2 casas (0,9 e 15,01 são recusados). */
-  radiusKm: z.number().min(0.01).max(1000).multipleOf(0.01),
-  feeMode: z.enum(['fixed', 'by_distance']),
-  feeFixedCents: cents(10_000).default(0),
-  tiers: z
-    .array(z.strictObject({ fromKm: z.number().min(0).multipleOf(0.01), toKm: z.number().min(0).multipleOf(0.01), feeCents: cents(10_000) }))
-    .max(10)
-    .default([]),
-  minOrderCents: cents(10_000_000),
-  freeAboveCents: cents(10_000_000).default(0),
   etaMinMinutes: z.number().int().min(1).max(1440),
   etaMaxMinutes: z.number().int().min(1).max(1440),
+  /** @deprecated ignorado (DEC-036). */
+  radiusKm: z.number().optional(),
+  /** @deprecated ignorado (DEC-036). */
+  feeMode: z.enum(['fixed', 'by_distance']).optional(),
+  /** @deprecated ignorado (DEC-036). */
+  feeFixedCents: z.number().optional(),
+  /** @deprecated ignorado (DEC-036). */
+  tiers: z.array(z.unknown()).max(10).optional(),
+  /** @deprecated ignorado (DEC-036). */
+  minOrderCents: z.number().optional(),
+  /** @deprecated ignorado (DEC-036). */
+  freeAboveCents: z.number().optional(),
 });
 export type DeliveryInput = z.infer<typeof deliverySchema>;
 export { MAX_FIXED_FEE_CENTS };

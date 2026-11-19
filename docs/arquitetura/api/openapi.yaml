@@ -6554,63 +6554,26 @@ components:
     DeliveryRequest:
       type: object
       additionalProperties: false
+      description: "DEC-036: o lojista escolhe só entrega pela Webag (`acceptsDelivery`) e o tempo de preparo. Taxa de entrega, faixas, raio, pedido mínimo e entrega grátis são do ADMIN (`/v1/admin/delivery-fees` e parâmetros globais). Os campos legados (`radiusKm`, `feeMode`, `feeFixedCents`, `tiers`, `minOrderCents`, `freeAboveCents`) são aceitos e IGNORADOS, para apps já publicados não quebrarem; saem numa versão futura."
       required:
       - acceptsDelivery
-      - radiusKm
-      - feeMode
-      - minOrderCents
       - etaMinMinutes
       - etaMaxMinutes
       properties:
         acceptsDelivery:
           type: boolean
-        radiusKm:
-          type: number
-          minimum: 1
-          description: km, até 2 casas
-        feeMode:
-          type: string
-          enum:
-          - fixed
-          - by_distance
-        feeFixedCents:
-          type: integer
-          minimum: 0
-          maximum: 5000
-        tiers:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required:
-            - fromKm
-            - toKm
-            - feeCents
-            properties:
-              fromKm:
-                type: number
-                minimum: 0
-              toKm:
-                type: number
-                minimum: 0
-              feeCents:
-                type: integer
-                minimum: 0
-                maximum: 5000
-          maxItems: 5
-        minOrderCents:
-          type: integer
-          minimum: 0
-        freeAboveCents:
-          type: integer
-          minimum: 0
-          description: 0 desliga
         etaMinMinutes:
           type: integer
           minimum: 1
         etaMaxMinutes:
           type: integer
           maximum: 1440
+        radiusKm: { type: number, deprecated: true }
+        feeMode: { type: string, enum: [fixed, by_distance], deprecated: true }
+        feeFixedCents: { type: integer, deprecated: true }
+        tiers: { type: array, items: { type: object }, deprecated: true }
+        minOrderCents: { type: integer, deprecated: true }
+        freeAboveCents: { type: integer, deprecated: true }
     DeliveryPreviewRequest:
       type: object
       additionalProperties: false
@@ -6769,9 +6732,13 @@ components:
           - freeAboveCents
           - etaMinMinutes
           - etaMaxMinutes
+          description: "Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag."
           properties:
             acceptsDelivery:
               type: boolean
+            feeManagedBy:
+              type: string
+              enum: [webag]
             radiusKm:
               type: number
             feeMode:

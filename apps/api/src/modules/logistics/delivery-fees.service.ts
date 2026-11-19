@@ -1,11 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import { cities, neighborhoods } from '../admin/db/schema.js';
-import { StoresService } from '../stores/index.js';
+import { DeliveryQuoteRegistry, StoresService } from '../stores/index.js';
 import { deliveryFeeTables, deliveryFeeTiers } from './db/schema.js';
 import { applyFreeShipping, pickTier, startingFee, validateFeeTiers, type FeeScopeType, type FeeTier } from './domain/fees.js';
 
@@ -61,13 +61,23 @@ const DEFAULT_KEY = 'default';
  * (`quote`) serve o carrinho, o checkout e a prévia do admin, então os valores não divergem.
  */
 @Injectable()
-export class DeliveryFeesService {
+export class DeliveryFeesService implements OnModuleInit {
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly params: ParametersService,
     private readonly audit: AuditService,
     private readonly stores: StoresService,
+    private readonly registry: DeliveryQuoteRegistry,
   ) {}
+
+  /** A prévia do painel do lojista usa a MESMA conta (cidade da loja como destino aproximado, sem endereço). */
+  onModuleInit(): void {
+    this.registry.register(async (storeId, point, subtotalCents) => {
+      const store = await this.stores.getStore(storeId);
+      const quote = await this.quote(storeId, { ...point, cityId: store.addressCityId ?? null }, subtotalCents);
+      return { available: quote.available, distanceM: quote.distanceM, feeCents: quote.feeCents, freeShipping: quote.freeShipping, belowMinimum: quote.belowMinimum };
+    });
+  }
 
   private async tiersOf(tableIds: string[]): Promise<Map<string, FeeTier[]>> {
     const rows = tableIds.length ? await this.db.select().from(deliveryFeeTiers).where(inArray(deliveryFeeTiers.tableId, tableIds)).orderBy(deliveryFeeTiers.tableId, deliveryFeeTiers.position) : [];

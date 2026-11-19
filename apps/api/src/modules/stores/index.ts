@@ -11,3 +11,4 @@ export { GEOCODING_PROVIDER, type GeocodingProvider, type CepResult } from './ge
 export { hoursToday, isOpen, nextOpening, type OpeningInput } from './domain/opening.js';
 export { ExposureLimitService } from './exposure-limit.service.js';
 export { evaluateExposureLimit, type ExposureLimit } from './exposure-limit.js';
+export { DeliveryQuoteRegistry, type DeliveryQuoter, type DeliveryQuoteSummary } from './delivery-quote.registry.js';

@@ -35,6 +35,7 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 | Tabela | Conteúdo |
 |---|---|
 | `payment_attempts` | Tentativa por pagamento: provedor, ID no provedor (único por provedor), `external_reference` (pedido, Onda 4), loja recebedora, método, status, valor e comissão em centavos, `receiver_account_id` (conta do provedor que recebeu; estorno e re-consulta usam os tokens dela, SEC-130). **Sem coluna de cartão, CPF ou documento** (SEC-044) |
+| `delivery_fee_tables` / `delivery_fee_tiers` | Tabela de taxa de entrega do admin (L.1, DEC-036): uma VERSÃO por gravação (escopo `default`/cidade/bairro em `scope_key`, `effective_from`, motivo, autor; nunca retroativa) com até 6 faixas `[from_m, to_m)` (taxa de entrega, taxa de troca, custo previsto do motoboy, minutos). O pedido guarda `orders.delivery_snapshot` (faixa usada) |
 | `payment_refund_intents` | Intenção de estorno (gravada antes de chamar o provedor): `pending` (com `failures`, `next_attempt_at` e backoff de 5 min a 24 h), `done`, `exhausted` (6 falhas: fila do admin) ou `covered` (Webag assumiu, DEC-020a; `covered_by/at`, motivo). SEC-130 |
 | `payment_refunds` | Estornos, com chave de idempotência única por tentativa; append-only |
 | `webhook_events` | Fila durável e idempotência (`unique(provider, event_key)`); tentativas e próxima tentativa (backoff exponencial); `failed` = dead-letter |

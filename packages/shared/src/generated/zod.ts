@@ -1515,6 +1515,216 @@ export const SetCategoryCommissionResponse = zod.object({
 
 
 /**
+ * Uma tabela por escopo (padrão geral, cidade ou bairro). A taxa de entrega é da Webag, cobrada do cliente e vem do ENDEREÇO DE DESTINO (bairro > cidade > padrão) e da faixa de distância em linha reta; o lojista não tem taxa nem raio próprio (DEC-036). Pedido mínimo e entrega grátis são os parâmetros globais `pedido_minimo_cents` e `frete_gratis_acima_cents`. Permissão de admin: `delivery-fees:read`.
+ * @summary Tabelas de taxa de entrega em vigor (WB-236)
+ */
+export const listDeliveryFeeTablesResponseDataItemTiersItemFromMMin = 0;
+
+
+export const listDeliveryFeeTablesResponseDataItemTiersItemFeeCentsMin = 0;
+export const listDeliveryFeeTablesResponseDataItemTiersItemFeeCentsMax = 5000;
+
+export const listDeliveryFeeTablesResponseDataItemTiersItemExchangeFeeCentsMin = 0;
+
+export const listDeliveryFeeTablesResponseDataItemTiersItemExpectedCostCentsMin = 0;
+
+export const listDeliveryFeeTablesResponseDataItemTiersItemEtaMinutesMin = 0;
+
+
+
+export const ListDeliveryFeeTablesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "scopeType": zod.enum(['default', 'city', 'neighborhood']),
+  "scopeId": zod.uuid().nullable(),
+  "scopeName": zod.string().optional(),
+  "version": zod.int(),
+  "effectiveFrom": zod.iso.datetime({"offset":true}),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "tiers": zod.array(zod.object({
+  "fromM": zod.int().min(listDeliveryFeeTablesResponseDataItemTiersItemFromMMin),
+  "toM": zod.int().min(1),
+  "feeCents": zod.int().min(listDeliveryFeeTablesResponseDataItemTiersItemFeeCentsMin).max(listDeliveryFeeTablesResponseDataItemTiersItemFeeCentsMax),
+  "exchangeFeeCents": zod.int().min(listDeliveryFeeTablesResponseDataItemTiersItemExchangeFeeCentsMin).describe('Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.'),
+  "expectedCostCents": zod.int().min(listDeliveryFeeTablesResponseDataItemTiersItemExpectedCostCentsMin).describe('Custo previsto do motoboy (informativo).'),
+  "etaMinutes": zod.int().min(listDeliveryFeeTablesResponseDataItemTiersItemEtaMinutesMin)
+}))
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Cria uma versão NOVA (histórico), válida a partir de `effectiveFrom` (padrão: agora; não retroativa; até 90 dias à frente); o pedido guarda a faixa usada. Até 6 faixas `[fromM, toM)` contíguas a partir de 0, a última terminando no `raio_max_km`. Taxa de entrega de R$ 0 a R$ 50; taxa de troca até `taxa_coleta_max_cents` (padrão: 50% da entrega). `expectedVersion` = versão atual (0 se não houver): outra pessoa gravou antes = 409 `FEE_TABLE_CONFLICT`. Só super admin e financeiro: `delivery-fees:write`. Auditado.
+ * @summary Nova versão da tabela de um escopo
+ */
+export const putDeliveryFeeTableBodyTiersItemFromMMin = 0;
+
+
+export const putDeliveryFeeTableBodyTiersItemFeeCentsMin = 0;
+export const putDeliveryFeeTableBodyTiersItemFeeCentsMax = 5000;
+
+export const putDeliveryFeeTableBodyTiersItemExchangeFeeCentsMin = 0;
+
+export const putDeliveryFeeTableBodyTiersItemExpectedCostCentsMin = 0;
+
+export const putDeliveryFeeTableBodyTiersItemEtaMinutesMin = 0;
+
+export const putDeliveryFeeTableBodyTiersMax = 6;
+
+export const putDeliveryFeeTableBodyReasonMin = 3;
+export const putDeliveryFeeTableBodyReasonMax = 300;
+
+export const putDeliveryFeeTableBodyExpectedVersionMin = 0;
+
+
+
+export const PutDeliveryFeeTableBody = zod.object({
+  "scopeType": zod.enum(['default', 'city', 'neighborhood']),
+  "scopeId": zod.uuid().nullish(),
+  "tiers": zod.array(zod.object({
+  "fromM": zod.int().min(putDeliveryFeeTableBodyTiersItemFromMMin),
+  "toM": zod.int().min(1),
+  "feeCents": zod.int().min(putDeliveryFeeTableBodyTiersItemFeeCentsMin).max(putDeliveryFeeTableBodyTiersItemFeeCentsMax),
+  "exchangeFeeCents": zod.int().min(putDeliveryFeeTableBodyTiersItemExchangeFeeCentsMin).describe('Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.'),
+  "expectedCostCents": zod.int().min(putDeliveryFeeTableBodyTiersItemExpectedCostCentsMin).describe('Custo previsto do motoboy (informativo).'),
+  "etaMinutes": zod.int().min(putDeliveryFeeTableBodyTiersItemEtaMinutesMin)
+})).min(1).max(putDeliveryFeeTableBodyTiersMax),
+  "effectiveFrom": zod.iso.datetime({"offset":true}).optional(),
+  "reason": zod.string().min(putDeliveryFeeTableBodyReasonMin).max(putDeliveryFeeTableBodyReasonMax),
+  "expectedVersion": zod.int().min(putDeliveryFeeTableBodyExpectedVersionMin)
+})
+
+export const putDeliveryFeeTableResponseTiersItemFromMMin = 0;
+
+
+export const putDeliveryFeeTableResponseTiersItemFeeCentsMin = 0;
+export const putDeliveryFeeTableResponseTiersItemFeeCentsMax = 5000;
+
+export const putDeliveryFeeTableResponseTiersItemExchangeFeeCentsMin = 0;
+
+export const putDeliveryFeeTableResponseTiersItemExpectedCostCentsMin = 0;
+
+export const putDeliveryFeeTableResponseTiersItemEtaMinutesMin = 0;
+
+
+
+export const PutDeliveryFeeTableResponse = zod.object({
+  "id": zod.uuid(),
+  "scopeType": zod.enum(['default', 'city', 'neighborhood']),
+  "scopeId": zod.uuid().nullable(),
+  "scopeName": zod.string().optional(),
+  "version": zod.int(),
+  "effectiveFrom": zod.iso.datetime({"offset":true}),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "tiers": zod.array(zod.object({
+  "fromM": zod.int().min(putDeliveryFeeTableResponseTiersItemFromMMin),
+  "toM": zod.int().min(1),
+  "feeCents": zod.int().min(putDeliveryFeeTableResponseTiersItemFeeCentsMin).max(putDeliveryFeeTableResponseTiersItemFeeCentsMax),
+  "exchangeFeeCents": zod.int().min(putDeliveryFeeTableResponseTiersItemExchangeFeeCentsMin).describe('Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.'),
+  "expectedCostCents": zod.int().min(putDeliveryFeeTableResponseTiersItemExpectedCostCentsMin).describe('Custo previsto do motoboy (informativo).'),
+  "etaMinutes": zod.int().min(putDeliveryFeeTableResponseTiersItemEtaMinutesMin)
+}))
+})
+
+
+/**
+ * Permissão de admin: `delivery-fees:read`.
+ * @summary Versões de um escopo (inclui as futuras)
+ */
+export const ListDeliveryFeeHistoryQueryParams = zod.object({
+  "scopeType": zod.enum(['default', 'city', 'neighborhood']),
+  "scopeId": zod.uuid().optional()
+})
+
+export const listDeliveryFeeHistoryResponseDataItemTiersItemFromMMin = 0;
+
+
+export const listDeliveryFeeHistoryResponseDataItemTiersItemFeeCentsMin = 0;
+export const listDeliveryFeeHistoryResponseDataItemTiersItemFeeCentsMax = 5000;
+
+export const listDeliveryFeeHistoryResponseDataItemTiersItemExchangeFeeCentsMin = 0;
+
+export const listDeliveryFeeHistoryResponseDataItemTiersItemExpectedCostCentsMin = 0;
+
+export const listDeliveryFeeHistoryResponseDataItemTiersItemEtaMinutesMin = 0;
+
+
+
+export const ListDeliveryFeeHistoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "scopeType": zod.enum(['default', 'city', 'neighborhood']),
+  "scopeId": zod.uuid().nullable(),
+  "scopeName": zod.string().optional(),
+  "version": zod.int(),
+  "effectiveFrom": zod.iso.datetime({"offset":true}),
+  "reason": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "tiers": zod.array(zod.object({
+  "fromM": zod.int().min(listDeliveryFeeHistoryResponseDataItemTiersItemFromMMin),
+  "toM": zod.int().min(1),
+  "feeCents": zod.int().min(listDeliveryFeeHistoryResponseDataItemTiersItemFeeCentsMin).max(listDeliveryFeeHistoryResponseDataItemTiersItemFeeCentsMax),
+  "exchangeFeeCents": zod.int().min(listDeliveryFeeHistoryResponseDataItemTiersItemExchangeFeeCentsMin).describe('Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.'),
+  "expectedCostCents": zod.int().min(listDeliveryFeeHistoryResponseDataItemTiersItemExpectedCostCentsMin).describe('Custo previsto do motoboy (informativo).'),
+  "etaMinutes": zod.int().min(listDeliveryFeeHistoryResponseDataItemTiersItemEtaMinutesMin)
+}))
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Mesma função do carrinho: o valor é igual ao do checkout para o mesmo par loja/destino. Mostra custo previsto e margem prevista (negativa = a faixa dá prejuízo). Permissão de admin: `delivery-fees:read`.
+ * @summary Prévia da taxa (a mesma conta do checkout)
+ */
+export const previewDeliveryFeeQuerySubtotalCentsDefault = 0;
+export const previewDeliveryFeeQuerySubtotalCentsMin = 0;
+
+
+
+export const PreviewDeliveryFeeQueryParams = zod.object({
+  "storeId": zod.uuid(),
+  "lat": zod.number(),
+  "lng": zod.number(),
+  "cityId": zod.uuid().optional(),
+  "neighborhoodId": zod.uuid().optional(),
+  "subtotalCents": zod.int().min(previewDeliveryFeeQuerySubtotalCentsMin).default(previewDeliveryFeeQuerySubtotalCentsDefault)
+})
+
+export const PreviewDeliveryFeeResponse = zod.object({
+  "available": zod.boolean(),
+  "reason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('NO_FEE_TABLE'),zod.literal(null)]).nullable(),
+  "distanceM": zod.int().nullable(),
+  "fee": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "freeShipping": zod.boolean(),
+  "belowMinimum": zod.boolean(),
+  "minOrder": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "etaMinutes": zod.int().nullable(),
+  "expectedCost": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "exchangeFee": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "expectedMargin": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()])
+})
+
+
+/**
  * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
@@ -1877,6 +2087,7 @@ export const CreateStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -1889,7 +2100,7 @@ export const CreateStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -1975,6 +2186,7 @@ export const ListMyStoresResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -1987,7 +2199,7 @@ export const ListMyStoresResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -2078,6 +2290,7 @@ export const GetStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -2090,7 +2303,7 @@ export const GetStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -2220,6 +2433,7 @@ export const UpdateStoreProfileResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -2232,7 +2446,7 @@ export const UpdateStoreProfileResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -2380,6 +2594,7 @@ export const SubmitStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -2392,7 +2607,7 @@ export const SubmitStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -2447,6 +2662,7 @@ export const GetStoreSettingsResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -2459,7 +2675,7 @@ export const GetStoreSettingsResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -2570,42 +2786,23 @@ export const SetStoreDeliveryParams = zod.object({
 })
 
 
-export const setStoreDeliveryBodyFeeFixedCentsMin = 0;
-export const setStoreDeliveryBodyFeeFixedCentsMax = 5000;
-
-export const setStoreDeliveryBodyTiersItemFromKmMin = 0;
-
-export const setStoreDeliveryBodyTiersItemToKmMin = 0;
-
-export const setStoreDeliveryBodyTiersItemFeeCentsMin = 0;
-export const setStoreDeliveryBodyTiersItemFeeCentsMax = 5000;
-
-export const setStoreDeliveryBodyTiersMax = 5;
-
-export const setStoreDeliveryBodyMinOrderCentsMin = 0;
-
-export const setStoreDeliveryBodyFreeAboveCentsMin = 0;
-
-
 export const setStoreDeliveryBodyEtaMaxMinutesMax = 1440;
 
 
 
 export const SetStoreDeliveryBody = zod.object({
   "acceptsDelivery": zod.boolean(),
-  "radiusKm": zod.number().min(1).describe('km, até 2 casas'),
-  "feeMode": zod.enum(['fixed', 'by_distance']),
-  "feeFixedCents": zod.int().min(setStoreDeliveryBodyFeeFixedCentsMin).max(setStoreDeliveryBodyFeeFixedCentsMax).optional(),
-  "tiers": zod.array(zod.object({
-  "fromKm": zod.number().min(setStoreDeliveryBodyTiersItemFromKmMin),
-  "toKm": zod.number().min(setStoreDeliveryBodyTiersItemToKmMin),
-  "feeCents": zod.int().min(setStoreDeliveryBodyTiersItemFeeCentsMin).max(setStoreDeliveryBodyTiersItemFeeCentsMax)
-})).max(setStoreDeliveryBodyTiersMax).optional(),
-  "minOrderCents": zod.int().min(setStoreDeliveryBodyMinOrderCentsMin),
-  "freeAboveCents": zod.int().min(setStoreDeliveryBodyFreeAboveCentsMin).optional().describe('0 desliga'),
   "etaMinMinutes": zod.int().min(1),
-  "etaMaxMinutes": zod.int().max(setStoreDeliveryBodyEtaMaxMinutesMax)
-})
+  "etaMaxMinutes": zod.int().max(setStoreDeliveryBodyEtaMaxMinutesMax),
+  "radiusKm": zod.number().optional(),
+  "feeMode": zod.enum(['fixed', 'by_distance']).optional(),
+  "feeFixedCents": zod.int().optional(),
+  "tiers": zod.array(zod.looseObject({
+
+})).optional(),
+  "minOrderCents": zod.int().optional(),
+  "freeAboveCents": zod.int().optional()
+}).describe('DEC-036: o lojista escolhe só entrega pela Webag (`acceptsDelivery`) e o tempo de preparo. Taxa de entrega, faixas, raio, pedido mínimo e entrega grátis são do ADMIN (`/v1/admin/delivery-fees` e parâmetros globais). Os campos legados (`radiusKm`, `feeMode`, `feeFixedCents`, `tiers`, `minOrderCents`, `freeAboveCents`) são aceitos e IGNORADOS, para apps já publicados não quebrarem; saem numa versão futura.')
 
 export const SetStoreDeliveryResponse = zod.void()
 
@@ -3052,6 +3249,7 @@ export const GetAdminStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3064,7 +3262,7 @@ export const GetAdminStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3134,6 +3332,7 @@ export const GetAdminStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3146,7 +3345,7 @@ export const GetAdminStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3282,6 +3481,7 @@ export const EditAdminStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3294,7 +3494,7 @@ export const EditAdminStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3403,6 +3603,7 @@ export const ApproveStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3415,7 +3616,7 @@ export const ApproveStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3504,6 +3705,7 @@ export const ReactivateStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3516,7 +3718,7 @@ export const ReactivateStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3619,6 +3821,7 @@ export const RequestStoreCorrectionResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3631,7 +3834,7 @@ export const RequestStoreCorrectionResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3729,6 +3932,7 @@ export const RejectStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3741,7 +3945,7 @@ export const RejectStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3839,6 +4043,7 @@ export const SuspendStoreResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3851,7 +4056,7 @@ export const SuspendStoreResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),
@@ -3986,6 +4191,7 @@ export const DecideStoreDataReviewResponse = zod.object({
 }),
   "delivery": zod.object({
   "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
   "radiusKm": zod.number(),
   "feeMode": zod.string(),
   "feeFixedCents": zod.int(),
@@ -3998,7 +4204,7 @@ export const DecideStoreDataReviewResponse = zod.object({
   "freeAboveCents": zod.int(),
   "etaMinMinutes": zod.int(),
   "etaMaxMinutes": zod.int()
-}),
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
   "pickup": zod.object({
   "enabled": zod.boolean(),
   "useStoreAddress": zod.boolean(),

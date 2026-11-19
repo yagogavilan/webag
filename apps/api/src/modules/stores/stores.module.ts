@@ -1,3 +1,4 @@
+import { DeliveryQuoteRegistry } from './delivery-quote.registry.js';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../platform/config/env.js';
@@ -20,6 +21,7 @@ import { TeamService } from './team.service.js';
   imports: [AdminModule, IdentityModule, MediaModule, PaymentsModule],
   controllers: [StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
   providers: [
+    DeliveryQuoteRegistry,
     StoresService,
     StoreSettingsService,
     PaymentAccountService,
@@ -41,6 +43,6 @@ import { TeamService } from './team.service.js';
       useFactory: (config: ConfigService<Env, true>, fake: FakePaymentOAuthProvider, mp: MercadoPagoOAuthProvider) => (config.get('PAYMENT_PROVIDER', { infer: true }) === 'mercadopago' ? mp : fake),
     },
   ],
-  exports: [StoresService, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
+  exports: [StoresService, DeliveryQuoteRegistry, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
 })
 export class StoresModule {}

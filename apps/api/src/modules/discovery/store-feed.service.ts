@@ -5,7 +5,7 @@ import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
-import { storeDeliveryTiers, storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
+import { storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
 import { DeliveryFeesService, pickTier } from '../logistics/index.js';
 import { type WeeklyHours } from '../stores/index.js';
 import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
@@ -111,8 +111,7 @@ export class StoreFeedService {
     const ids = rows.map((row) => row.id);
 
     const today = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
-    const [tierRows, hourRows, holidayRows, extraRows, logoRows] = await Promise.all([
-      this.db.select().from(storeDeliveryTiers).where(inArray(storeDeliveryTiers.storeId, ids)),
+    const [hourRows, holidayRows, extraRows, logoRows] = await Promise.all([
       this.db.select().from(storeHours).where(inArray(storeHours.storeId, ids)),
       this.db.select().from(storeHolidays).where(inArray(storeHolidays.storeId, ids)),
       this.db.select().from(storeExtraCategories).where(inArray(storeExtraCategories.storeId, ids)),

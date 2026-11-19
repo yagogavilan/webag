@@ -892,6 +892,108 @@ export interface PaymentAlert {
   resolvedAt: string | null;
 }
 
+export interface DeliveryFeeTier {
+  /** @minimum 0 */
+  fromM: number;
+  /** @minimum 1 */
+  toM: number;
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  feeCents: number;
+  /**
+     * Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.
+     * @minimum 0
+     */
+  exchangeFeeCents: number;
+  /**
+     * Custo previsto do motoboy (informativo).
+     * @minimum 0
+     */
+  expectedCostCents: number;
+  /** @minimum 0 */
+  etaMinutes: number;
+}
+
+export type DeliveryFeeTableScopeType = typeof DeliveryFeeTableScopeType[keyof typeof DeliveryFeeTableScopeType];
+
+
+export const DeliveryFeeTableScopeType = {
+  default: 'default',
+  city: 'city',
+  neighborhood: 'neighborhood',
+} as const;
+
+export interface DeliveryFeeTable {
+  id: string;
+  scopeType: DeliveryFeeTableScopeType;
+  /** @nullable */
+  scopeId: string | null;
+  scopeName?: string;
+  version: number;
+  effectiveFrom: string;
+  reason: string;
+  createdAt: string;
+  tiers: DeliveryFeeTier[];
+}
+
+export type DeliveryFeeTableInputScopeType = typeof DeliveryFeeTableInputScopeType[keyof typeof DeliveryFeeTableInputScopeType];
+
+
+export const DeliveryFeeTableInputScopeType = {
+  default: 'default',
+  city: 'city',
+  neighborhood: 'neighborhood',
+} as const;
+
+export interface DeliveryFeeTableInput {
+  scopeType: DeliveryFeeTableInputScopeType;
+  /** @nullable */
+  scopeId?: string | null;
+  /**
+     * @minItems 1
+     * @maxItems 6
+     */
+  tiers: DeliveryFeeTier[];
+  effectiveFrom?: string;
+  /**
+     * @minLength 3
+     * @maxLength 300
+     */
+  reason: string;
+  /** @minimum 0 */
+  expectedVersion: number;
+}
+
+/**
+ * @nullable
+ */
+export type DeliveryFeePreviewReason = typeof DeliveryFeePreviewReason[keyof typeof DeliveryFeePreviewReason] | null;
+
+
+export const DeliveryFeePreviewReason = {
+  OUT_OF_RANGE: 'OUT_OF_RANGE',
+  NO_FEE_TABLE: 'NO_FEE_TABLE',
+} as const;
+
+export interface DeliveryFeePreview {
+  available: boolean;
+  /** @nullable */
+  reason: DeliveryFeePreviewReason;
+  /** @nullable */
+  distanceM: number | null;
+  fee: Money | null;
+  freeShipping: boolean;
+  belowMinimum: boolean;
+  minOrder: Money;
+  /** @nullable */
+  etaMinutes: number | null;
+  expectedCost: Money | null;
+  exchangeFee: Money | null;
+  expectedMargin: Money | null;
+}
+
 export type RefundQueueItemStatus = typeof RefundQueueItemStatus[keyof typeof RefundQueueItemStatus];
 
 
@@ -1193,6 +1295,13 @@ export interface Interval {
   end: string;
 }
 
+export type StoreSettingsDeliveryFeeManagedBy = typeof StoreSettingsDeliveryFeeManagedBy[keyof typeof StoreSettingsDeliveryFeeManagedBy];
+
+
+export const StoreSettingsDeliveryFeeManagedBy = {
+  webag: 'webag',
+} as const;
+
 export type StoreSettingsHoursItem = {
   weekday: number;
   intervals: Interval[];
@@ -1217,8 +1326,12 @@ export type StoreSettingsDeliveryTiersItem = {
   feeCents: number;
 };
 
+/**
+ * Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.
+ */
 export type StoreSettingsDelivery = {
   acceptsDelivery: boolean;
+  feeManagedBy?: StoreSettingsDeliveryFeeManagedBy;
   radiusKm: number;
   feeMode: string;
   feeFixedCents: number;
@@ -1257,6 +1370,7 @@ export interface StoreSettings {
   hours: StoreSettingsHoursItem[];
   holidays: StoreSettingsHolidaysItem[];
   pause: StoreSettingsPause;
+  /** Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag. */
   delivery: StoreSettingsDelivery;
   pickup: StoreSettingsPickup;
   exchangePolicy: StoreSettingsExchangePolicy;
@@ -1407,6 +1521,9 @@ export interface PauseRequest {
   kind: PauseRequestKind;
 }
 
+/**
+ * @deprecated
+ */
 export type DeliveryRequestFeeMode = typeof DeliveryRequestFeeMode[keyof typeof DeliveryRequestFeeMode];
 
 
@@ -1415,44 +1532,29 @@ export const DeliveryRequestFeeMode = {
   by_distance: 'by_distance',
 } as const;
 
-export type DeliveryRequestTiersItem = {
-  /** @minimum 0 */
-  fromKm: number;
-  /** @minimum 0 */
-  toKm: number;
-  /**
-     * @minimum 0
-     * @maximum 5000
-     */
-  feeCents: number;
-};
+export type DeliveryRequestTiersItem = { [key: string]: unknown };
 
+/**
+ * DEC-036: o lojista escolhe só entrega pela Webag (`acceptsDelivery`) e o tempo de preparo. Taxa de entrega, faixas, raio, pedido mínimo e entrega grátis são do ADMIN (`/v1/admin/delivery-fees` e parâmetros globais). Os campos legados (`radiusKm`, `feeMode`, `feeFixedCents`, `tiers`, `minOrderCents`, `freeAboveCents`) são aceitos e IGNORADOS, para apps já publicados não quebrarem; saem numa versão futura.
+ */
 export interface DeliveryRequest {
   acceptsDelivery: boolean;
-  /**
-     * km, até 2 casas
-     * @minimum 1
-     */
-  radiusKm: number;
-  feeMode: DeliveryRequestFeeMode;
-  /**
-     * @minimum 0
-     * @maximum 5000
-     */
-  feeFixedCents?: number;
-  /** @maxItems 5 */
-  tiers?: DeliveryRequestTiersItem[];
-  /** @minimum 0 */
-  minOrderCents: number;
-  /**
-     * 0 desliga
-     * @minimum 0
-     */
-  freeAboveCents?: number;
   /** @minimum 1 */
   etaMinMinutes: number;
   /** @maximum 1440 */
   etaMaxMinutes: number;
+  /** @deprecated */
+  radiusKm?: number;
+  /** @deprecated */
+  feeMode?: DeliveryRequestFeeMode;
+  /** @deprecated */
+  feeFixedCents?: number;
+  /** @deprecated */
+  tiers?: DeliveryRequestTiersItem[];
+  /** @deprecated */
+  minOrderCents?: number;
+  /** @deprecated */
+  freeAboveCents?: number;
 }
 
 export interface DeliveryPreviewRequest {
@@ -3938,6 +4040,42 @@ export type ExportAuditLogParams = {
 export type ReceivePaymentWebhookParams = {
   'data.id': string;
   type?: string;
+};
+
+export type ListDeliveryFeeTables200 = {
+  data: DeliveryFeeTable[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListDeliveryFeeHistoryParams = {
+  scopeType: ListDeliveryFeeHistoryScopeType;
+  scopeId?: string;
+};
+
+export type ListDeliveryFeeHistoryScopeType = typeof ListDeliveryFeeHistoryScopeType[keyof typeof ListDeliveryFeeHistoryScopeType];
+
+
+export const ListDeliveryFeeHistoryScopeType = {
+  default: 'default',
+  city: 'city',
+  neighborhood: 'neighborhood',
+} as const;
+
+export type ListDeliveryFeeHistory200 = {
+  data: DeliveryFeeTable[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type PreviewDeliveryFeeParams = {
+  storeId: string;
+  lat: number;
+  lng: number;
+  cityId?: string;
+  neighborhoodId?: string;
+  /** @minimum 0 */
+  subtotalCents?: number;
 };
 
 export type AdminRefundOrderBody = {
@@ -8125,6 +8263,251 @@ export const setCategoryCommission = async (categoryId: string,
     method: 'PUT',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(commissionRateInput)
+  }
+);}
+
+
+
+export type listDeliveryFeeTablesResponse200 = {
+  data: ListDeliveryFeeTables200
+  status: 200
+}
+
+export type listDeliveryFeeTablesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listDeliveryFeeTablesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listDeliveryFeeTablesResponseSuccess = (listDeliveryFeeTablesResponse200) & {
+  headers: Headers;
+};
+export type listDeliveryFeeTablesResponseError = (listDeliveryFeeTablesResponse401 | listDeliveryFeeTablesResponse403) & {
+  headers: Headers;
+};
+
+export type listDeliveryFeeTablesResponse = (listDeliveryFeeTablesResponseSuccess | listDeliveryFeeTablesResponseError)
+
+export const getListDeliveryFeeTablesUrl = () => {
+
+
+
+
+  return `/v1/admin/delivery-fees`
+}
+
+/**
+ * Uma tabela por escopo (padrão geral, cidade ou bairro). A taxa de entrega é da Webag, cobrada do cliente e vem do ENDEREÇO DE DESTINO (bairro > cidade > padrão) e da faixa de distância em linha reta; o lojista não tem taxa nem raio próprio (DEC-036). Pedido mínimo e entrega grátis são os parâmetros globais `pedido_minimo_cents` e `frete_gratis_acima_cents`. Permissão de admin: `delivery-fees:read`.
+ * @summary Tabelas de taxa de entrega em vigor (WB-236)
+ */
+export const listDeliveryFeeTables = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listDeliveryFeeTablesResponse> => {
+
+  return apiFetch<listDeliveryFeeTablesResponse>(getListDeliveryFeeTablesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type putDeliveryFeeTableResponse200 = {
+  data: DeliveryFeeTable
+  status: 200
+}
+
+export type putDeliveryFeeTableResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type putDeliveryFeeTableResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type putDeliveryFeeTableResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type putDeliveryFeeTableResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type putDeliveryFeeTableResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type putDeliveryFeeTableResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type putDeliveryFeeTableResponseSuccess = (putDeliveryFeeTableResponse200) & {
+  headers: Headers;
+};
+export type putDeliveryFeeTableResponseError = (putDeliveryFeeTableResponse400 | putDeliveryFeeTableResponse401 | putDeliveryFeeTableResponse403 | putDeliveryFeeTableResponse404 | putDeliveryFeeTableResponse409 | putDeliveryFeeTableResponse422) & {
+  headers: Headers;
+};
+
+export type putDeliveryFeeTableResponse = (putDeliveryFeeTableResponseSuccess | putDeliveryFeeTableResponseError)
+
+export const getPutDeliveryFeeTableUrl = () => {
+
+
+
+
+  return `/v1/admin/delivery-fees`
+}
+
+/**
+ * Cria uma versão NOVA (histórico), válida a partir de `effectiveFrom` (padrão: agora; não retroativa; até 90 dias à frente); o pedido guarda a faixa usada. Até 6 faixas `[fromM, toM)` contíguas a partir de 0, a última terminando no `raio_max_km`. Taxa de entrega de R$ 0 a R$ 50; taxa de troca até `taxa_coleta_max_cents` (padrão: 50% da entrega). `expectedVersion` = versão atual (0 se não houver): outra pessoa gravou antes = 409 `FEE_TABLE_CONFLICT`. Só super admin e financeiro: `delivery-fees:write`. Auditado.
+ * @summary Nova versão da tabela de um escopo
+ */
+export const putDeliveryFeeTable = async (deliveryFeeTableInput: DeliveryFeeTableInput, options?: Parameters<typeof apiFetch>[1]): Promise<putDeliveryFeeTableResponse> => {
+
+  return apiFetch<putDeliveryFeeTableResponse>(getPutDeliveryFeeTableUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(deliveryFeeTableInput)
+  }
+);}
+
+
+
+export type listDeliveryFeeHistoryResponse200 = {
+  data: ListDeliveryFeeHistory200
+  status: 200
+}
+
+export type listDeliveryFeeHistoryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listDeliveryFeeHistoryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listDeliveryFeeHistoryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listDeliveryFeeHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listDeliveryFeeHistoryResponseSuccess = (listDeliveryFeeHistoryResponse200) & {
+  headers: Headers;
+};
+export type listDeliveryFeeHistoryResponseError = (listDeliveryFeeHistoryResponse400 | listDeliveryFeeHistoryResponse401 | listDeliveryFeeHistoryResponse403 | listDeliveryFeeHistoryResponse404) & {
+  headers: Headers;
+};
+
+export type listDeliveryFeeHistoryResponse = (listDeliveryFeeHistoryResponseSuccess | listDeliveryFeeHistoryResponseError)
+
+export const getListDeliveryFeeHistoryUrl = (params: ListDeliveryFeeHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/delivery-fees/history?${stringifiedParams}` : `/v1/admin/delivery-fees/history`
+}
+
+/**
+ * Permissão de admin: `delivery-fees:read`.
+ * @summary Versões de um escopo (inclui as futuras)
+ */
+export const listDeliveryFeeHistory = async (params: ListDeliveryFeeHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<listDeliveryFeeHistoryResponse> => {
+
+  return apiFetch<listDeliveryFeeHistoryResponse>(getListDeliveryFeeHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type previewDeliveryFeeResponse200 = {
+  data: DeliveryFeePreview
+  status: 200
+}
+
+export type previewDeliveryFeeResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type previewDeliveryFeeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type previewDeliveryFeeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type previewDeliveryFeeResponseSuccess = (previewDeliveryFeeResponse200) & {
+  headers: Headers;
+};
+export type previewDeliveryFeeResponseError = (previewDeliveryFeeResponse400 | previewDeliveryFeeResponse401 | previewDeliveryFeeResponse403) & {
+  headers: Headers;
+};
+
+export type previewDeliveryFeeResponse = (previewDeliveryFeeResponseSuccess | previewDeliveryFeeResponseError)
+
+export const getPreviewDeliveryFeeUrl = (params: PreviewDeliveryFeeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/delivery-fees/preview?${stringifiedParams}` : `/v1/admin/delivery-fees/preview`
+}
+
+/**
+ * Mesma função do carrinho: o valor é igual ao do checkout para o mesmo par loja/destino. Mostra custo previsto e margem prevista (negativa = a faixa dá prejuízo). Permissão de admin: `delivery-fees:read`.
+ * @summary Prévia da taxa (a mesma conta do checkout)
+ */
+export const previewDeliveryFee = async (params: PreviewDeliveryFeeParams, options?: Parameters<typeof apiFetch>[1]): Promise<previewDeliveryFeeResponse> => {
+
+  return apiFetch<previewDeliveryFeeResponse>(getPreviewDeliveryFeeUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

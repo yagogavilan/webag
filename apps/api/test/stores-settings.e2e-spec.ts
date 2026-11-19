@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { storeMembers, storeSettings } from '../src/platform/database/schema.js';
+import { restoreFees, useFeeTable, useParam } from './helpers/fees.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createMerchant, ensureLegalDocs, insertStoreRow, registerUser, type TestMerchant } from './helpers/fixtures.js';
 
@@ -90,38 +91,28 @@ describe('Loja: horários, feriados, pausa, entrega, retirada e política de tro
   });
 
   describe('entrega (WB-057, RN-04) e retirada (WB-058)', () => {
-    const delivery = (over: Record<string, unknown> = {}) => ({
-      acceptsDelivery: true,
-      radiusKm: 5,
-      feeMode: 'by_distance',
-      tiers: [{ fromKm: 0, toKm: 2, feeCents: 500 }, { fromKm: 2, toKm: 5, feeCents: 900 }],
-      minOrderCents: 3000,
-      freeAboveCents: 10_000,
-      etaMinMinutes: 30,
-      etaMaxMinutes: 50,
-      ...over,
-    });
+    // DEC-036: o lojista só escolhe "entrega pela Webag" e o tempo de preparo; taxa, raio, mínimo e grátis são do admin.
+    const delivery = (over: Record<string, unknown> = {}) => ({ acceptsDelivery: true, etaMinMinutes: 30, etaMaxMinutes: 50, ...over });
     const preview = (point: { lat: number; lng: number }, subtotalCents: number) => ctx.http.post(url('delivery/preview')).set(as(owner)).send({ ...point, subtotalCents });
 
-    it('regras de validação: raio 1 a 15 km, faixas seguidas de 0 até o raio, grátis > mínimo, tempo máx > mín, sempre sobra entrega ou retirada', async () => {
+    it('regras de validação: tempo máx > mín e sempre sobra entrega ou retirada; os campos antigos de taxa e raio são aceitos e IGNORADOS', async () => {
       const put = (over: Record<string, unknown>) => ctx.http.put(url('delivery')).set(as(owner)).send(delivery(over));
-      await put({ radiusKm: 0.5, feeMode: 'fixed', tiers: [] }).expect(422);
-      await put({ radiusKm: 15.01, feeMode: 'fixed', tiers: [] }).expect(422); // acima do raio máximo
-      await put({ radiusKm: 5.001, feeMode: 'fixed', tiers: [] }).expect(400); // no máximo 2 casas decimais
-      await put({ tiers: [{ fromKm: 1, toKm: 5, feeCents: 500 }] }).expect(422); // não começa em 0
-      await put({ tiers: [{ fromKm: 0, toKm: 2, feeCents: 500 }, { fromKm: 3, toKm: 5, feeCents: 900 }] }).expect(422); // buraco
-      await put({ tiers: [{ fromKm: 0, toKm: 4, feeCents: 500 }] }).expect(422); // não termina no raio
-      await put({ minOrderCents: 5000, freeAboveCents: 5000 }).expect(422); // grátis precisa ser maior que o mínimo
       await put({ etaMinMinutes: 50, etaMaxMinutes: 50 }).expect(422);
-      await put({ feeMode: 'fixed', feeFixedCents: 5001, tiers: [] }).expect(422);
       await put({ acceptsDelivery: false }).expect(422); // retirada desligada: sobraria nada
-      await put({}).expect(204);
+      await put({ acceptsDelivery: 'sim' }).expect(400);
+      await put({ radiusKm: 99, feeMode: 'fixed', feeFixedCents: 99_999, tiers: [{ x: 1 }], minOrderCents: 1, freeAboveCents: 1 }).expect(204); // legado ignorado
       const saved = (await settings()).delivery;
-      expect(saved).toMatchObject({ radiusKm: 5, feeMode: 'by_distance', minOrderCents: 3000, freeAboveCents: 10_000 });
-      expect(saved.tiers).toHaveLength(2);
+      // continuam valendo os valores GLOBAIS do admin (raio máximo, mínimo, grátis), não os enviados
+      expect(saved).toMatchObject({ acceptsDelivery: true, etaMinMinutes: 30, etaMaxMinutes: 50, feeManagedBy: 'webag', radiusKm: 15, feeMode: 'by_distance', tiers: [] });
+      expect(saved.minOrderCents).not.toBe(1);
+      expect(saved.freeAboveCents).not.toBe(1);
     });
 
-    it('O2-ENT: prévia no PostGIS com a MESMA função do checkout: faixa [de, até), última faixa inclui o raio, fora do raio não entrega, grátis acima de X, abaixo do mínimo', async () => {
+    it('O2-ENT: prévia no PostGIS com a MESMA função do checkout e a tabela do admin: faixa [de, até), fora do raio não entrega, grátis acima de X, abaixo do mínimo', async () => {
+      await useParam(ctx, 'raio_max_km', 5);
+      await useParam(ctx, 'pedido_minimo_cents', 3000);
+      await useParam(ctx, 'frete_gratis_acima_cents', 10_000);
+      await useFeeTable(ctx, [{ fromM: 0, toM: 2_000, feeCents: 500 }, { fromM: 2_000, toM: 5_000, feeCents: 900 }]);
       await ctx.http.put(url('delivery')).set(as(owner)).send(delivery()).expect(204);
       const near = await preview(at(1000), 5000).expect(200);
       expect(near.body).toMatchObject({ available: true, feeCents: 500, freeShipping: false, belowMinimum: false });
@@ -139,12 +130,13 @@ describe('Loja: horários, feriados, pausa, entrega, retirada e política de tro
       // CEP de Francisco Morato (geocodificador fake) também funciona; sem endereço → 422
       expect((await ctx.http.post(url('delivery/preview')).set(as(owner)).send({ cep: '07900-100', subtotalCents: 5000 }).expect(200)).body).toHaveProperty('available');
       await ctx.http.post(url('delivery/preview')).set(as(owner)).send({ subtotalCents: 5000 }).expect(422);
+      await restoreFees(ctx);
     });
 
-    it('taxa fixa e frete grátis desligado (X = 0)', async () => {
-      await ctx.http.put(url('delivery')).set(as(owner)).send(delivery({ feeMode: 'fixed', feeFixedCents: 700, tiers: [], freeAboveCents: 0 })).expect(204);
-      const res = await preview(at(4000), 999_999).expect(200);
-      expect(res.body).toMatchObject({ available: true, feeCents: 700, freeShipping: false });
+    it('entrega desligada pelo lojista: a prévia diz que não entrega, mesmo com a tabela do admin', async () => {
+      await ctx.http.put(url('pickup')).set(as(owner)).send({ enabled: true, useStoreAddress: true, prepMinMinutes: 10, prepMaxMinutes: 20 }).expect(204);
+      await ctx.http.put(url('delivery')).set(as(owner)).send(delivery({ acceptsDelivery: false })).expect(204);
+      expect((await preview(at(1000), 5000).expect(200)).body).toMatchObject({ available: false, feeCents: null });
       await ctx.http.put(url('delivery')).set(as(owner)).send(delivery()).expect(204);
     });
 

@@ -39,7 +39,7 @@ export async function placeOrder(ctx: TestContext, user: RegisteredUser, address
 }
 
 export async function attemptOf(ctx: TestContext, orderId: string) {
-  const [attempt] = await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.externalReference, orderId));
+  const [attempt] = await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.externalReference, orderId)).orderBy(paymentAttempts.createdAt); // a do pedido é a PRIMEIRA (ordem estável)
   if (!attempt) throw new Error('pedido sem tentativa de pagamento');
   return attempt;
 }

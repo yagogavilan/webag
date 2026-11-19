@@ -32,10 +32,10 @@ describe('resumo de valores (RN-05, RN-09, RN-10)', () => {
     expect(summarize(base({ deliveryFeeCents: 0, coupon }))).toMatchObject({ discountCents: 0, totalCents: 17_180 });
   });
 
-  it('cupom da plataforma é limitado à comissão do pedido (WB-116 C6, DEC-016)', () => {
+  it('cupom da plataforma é limitado à application_fee: comissão + entrega + serviço (WB-116 C6, DEC-016, DEC-036)', () => {
     const coupon = { kind: 'fixed' as const, scope: 'platform' as const, value: 5_000, percentCapCents: null };
-    const r = summarize(base({ subtotalCents: 10_000, coupon })); // comissão 10% = 1.000
-    expect(r).toMatchObject({ discountCents: 1_000, couponFaceCents: 5_000, platformDiscountCapped: true });
+    const r = summarize(base({ subtotalCents: 10_000, coupon })); // comissão 10% = 1.000 + entrega (ver `base`)
+    expect(r).toMatchObject({ discountCents: 1_000 + base({}).deliveryFeeCents + base({}).serviceFeeCents, couponFaceCents: 5_000, platformDiscountCapped: true });
     expect(summarize(base({ subtotalCents: 10_000, coupon: { ...coupon, scope: 'store' } }))).toMatchObject({ discountCents: 5_000, platformDiscountCapped: false });
   });
 

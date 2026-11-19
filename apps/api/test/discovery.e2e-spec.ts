@@ -3,7 +3,7 @@ import { createTestApp, type TestContext } from './helpers/app.js';
 import { restoreFees, useFeeTable, useParam } from './helpers/fees.js';
 import { distanceM, isolatedPoint, makeStore, northOf, type TestPoint } from './helpers/discovery.js';
 import { ensureCategory, ensureLegalDocs } from './helpers/fixtures.js';
-import { paymentAccounts, products, productVariants, storeSettings } from '../src/platform/database/schema.js';
+import { paymentAccounts, products, productVariants } from '../src/platform/database/schema.js';
 
 const q = (p: TestPoint, extra = '') => `lat=${p.lat}&lng=${p.lng}${extra}`;
 
