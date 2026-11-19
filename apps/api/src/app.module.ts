@@ -13,7 +13,7 @@ import { CatalogModule } from './modules/catalog/index.js';
 import { StoresModule } from './modules/stores/index.js';
 import { AddressesModule } from './modules/addresses/index.js';
 import { CartModule } from './modules/cart/index.js';
-import { OrdersModule } from './modules/orders/index.js';
+import { devOrderModulesFor, OrdersModule } from './modules/orders/index.js';
 import { ExchangesModule } from './modules/exchanges/index.js';
 import { NotificationsModule } from './modules/notifications/index.js';
 import { RealtimeModule } from './modules/realtime/index.js';
@@ -120,6 +120,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     FeedbackModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
+    ...devOrderModulesFor(process.env.NODE_ENV),
   ],
   providers: [{ provide: APP_FILTER, useClass: ProblemFilter }],
 })

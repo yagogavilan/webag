@@ -1158,6 +1158,14 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return { canRequest: [withdrawal, voluntary, defect].some((d) => d !== null && d.getTime() > now), withdrawalUntil: withdrawal.toISOString(), voluntaryUntil: voluntary?.toISOString() ?? null, defectUntil: defect.toISOString() };
   }
 
+  /** Só para as rotas de simulação de desenvolvimento (F1): a tentativa de pagamento atual do pedido do cliente; 404 se não é dele. */
+  async paymentAttemptIdOf(principal: Principal, orderId: string): Promise<string> {
+    const [order] = await this.db.select({ paymentAttemptId: orders.paymentAttemptId }).from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, principal.userId)));
+    if (!order) throw errors.notFound('Pedido não encontrado.');
+    if (!order.paymentAttemptId) throw errors.conflict('ORDER_WITHOUT_PAYMENT', 'O pedido não tem pagamento a simular');
+    return order.paymentAttemptId;
+  }
+
   /**
    * B.1 "Não recebi meu pedido": avisa a operação (alerta `order_not_received`) e grava na auditoria; vale com o pedido a caminho ou
    * até 48 h depois de "entregue". Repetir é idempotente (um alerta por pedido). Não estorna nem muda o estado: a operação decide. Grava `not_received_at`, que impede a

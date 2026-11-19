@@ -65,6 +65,8 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
       await request(app.getHttpServer()).post('/v1/dev/payments').send({ amountCents: 100, method: 'pix' }).expect(404);
       await request(app.getHttpServer()).post(`/v1/dev/payments/${id}/approve`).expect(404);
       await request(app.getHttpServer()).get(`/v1/dev/payments/${id}`).expect(404);
+      // F1: a rota dev por pedido também não existe em produção (nem com login: 404, não 401/403)
+      for (const action of ['approve', 'decline', 'expire']) await request(app.getHttpServer()).post(`/v1/dev/orders/${id}/payment/${action}`).expect(404);
       // /docs desligado em produção por padrão (SEC-080) e o webhook do provedor real continua exigindo assinatura
       await request(app.getHttpServer()).get('/docs/openapi.json').expect(404);
       await request(app.getHttpServer()).post('/v1/webhooks/mercadopago?data.id=1').expect(401);
@@ -82,6 +84,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     try {
       await request(app.getHttpServer()).post('/v1/dev/payments').send({ amountCents: 100, method: 'pix' }).expect(404);
       await request(app.getHttpServer()).post(`/v1/dev/payments/${randomUUID()}/approve`).expect(404);
+      for (const action of ['approve', 'decline', 'expire']) await request(app.getHttpServer()).post(`/v1/dev/orders/${randomUUID()}/payment/${action}`).expect(404);
     } finally {
       await app.close();
     }
