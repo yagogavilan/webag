@@ -36,6 +36,8 @@ tags:
     description: Trilha de auditoria append-only
   - name: finance
     description: Comissão, taxa de serviço e ledger (admin financeiro)
+  - name: logistics
+    description: Logística da Webag (DEC-036), taxa de entrega por região e faixa, motoboys e entregas
   - name: payments
     description: Webhook do provedor de pagamento e alertas de conciliação
   - name: admin-stores
@@ -1546,6 +1548,111 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/ValidationError'
+  /v1/admin/delivery-fees:
+    get:
+      tags: [logistics]
+      operationId: listDeliveryFeeTables
+      summary: Tabelas de taxa de entrega em vigor (WB-236)
+      description: "Uma tabela por escopo (padrão geral, cidade ou bairro). A taxa de entrega é da Webag, cobrada do cliente e vem do ENDEREÇO DE DESTINO (bairro > cidade > padrão) e da faixa de distância em linha reta; o lojista não tem taxa nem raio próprio (DEC-036). Pedido mínimo e entrega grátis são os parâmetros globais `pedido_minimo_cents` e `frete_gratis_acima_cents`. Permissão de admin: `delivery-fees:read`."
+      responses:
+        '200':
+          description: Tabelas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DeliveryFeeTable' } }
+                  nextCursor: { type: [string, 'null'] }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [logistics]
+      operationId: putDeliveryFeeTable
+      summary: Nova versão da tabela de um escopo
+      description: "Cria uma versão NOVA (histórico), válida a partir de `effectiveFrom` (padrão: agora; não retroativa; até 90 dias à frente); o pedido guarda a faixa usada. Até 6 faixas `[fromM, toM)` contíguas a partir de 0, a última terminando no `raio_max_km`. Taxa de entrega de R$ 0 a R$ 50; taxa de troca até `taxa_coleta_max_cents` (padrão: 50% da entrega). `expectedVersion` = versão atual (0 se não houver): outra pessoa gravou antes = 409 `FEE_TABLE_CONFLICT`. Só super admin e financeiro: `delivery-fees:write`. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryFeeTableInput'
+      responses:
+        '200':
+          description: Versão criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeTable'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/delivery-fees/history:
+    get:
+      tags: [logistics]
+      operationId: listDeliveryFeeHistory
+      summary: Versões de um escopo (inclui as futuras)
+      description: "Permissão de admin: `delivery-fees:read`."
+      parameters:
+        - { name: scopeType, in: query, required: true, schema: { type: string, enum: [default, city, neighborhood] } }
+        - { name: scopeId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Versões, da mais nova à mais antiga
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DeliveryFeeTable' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/delivery-fees/preview:
+    get:
+      tags: [logistics]
+      operationId: previewDeliveryFee
+      summary: Prévia da taxa (a mesma conta do checkout)
+      description: "Mesma função do carrinho: o valor é igual ao do checkout para o mesmo par loja/destino. Mostra custo previsto e margem prevista (negativa = a faixa dá prejuízo). Permissão de admin: `delivery-fees:read`."
+      parameters:
+        - { name: storeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: lng, in: query, required: true, schema: { type: number } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { name: neighborhoodId, in: query, schema: { type: string, format: uuid } }
+        - { name: subtotalCents, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Prévia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryFeePreview'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/admin/orders/{orderId}/refunds:
     post:
       tags: [orders]
@@ -5813,6 +5920,55 @@ components:
         details: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
+    DeliveryFeeTier:
+      type: object
+      required: [fromM, toM, feeCents, exchangeFeeCents, expectedCostCents, etaMinutes]
+      properties:
+        fromM: { type: integer, minimum: 0 }
+        toM: { type: integer, minimum: 1 }
+        feeCents: { type: integer, minimum: 0, maximum: 5000 }
+        exchangeFeeCents: { type: integer, minimum: 0, description: 'Taxa de coleta/reentrega da troca por tamanho/cor (DEC-037); ausente na gravação = 50% da entrega.' }
+        expectedCostCents: { type: integer, minimum: 0, description: 'Custo previsto do motoboy (informativo).' }
+        etaMinutes: { type: integer, minimum: 0 }
+    DeliveryFeeTable:
+      type: object
+      required: [id, scopeType, scopeId, version, effectiveFrom, reason, createdAt, tiers]
+      properties:
+        id: { type: string, format: uuid }
+        scopeType: { type: string, enum: [default, city, neighborhood] }
+        scopeId: { type: [string, 'null'], format: uuid }
+        scopeName: { type: string }
+        version: { type: integer }
+        effectiveFrom: { type: string, format: date-time }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+        tiers: { type: array, items: { $ref: '#/components/schemas/DeliveryFeeTier' } }
+    DeliveryFeeTableInput:
+      type: object
+      additionalProperties: false
+      required: [scopeType, tiers, reason, expectedVersion]
+      properties:
+        scopeType: { type: string, enum: [default, city, neighborhood] }
+        scopeId: { type: [string, 'null'], format: uuid }
+        tiers: { type: array, minItems: 1, maxItems: 6, items: { $ref: '#/components/schemas/DeliveryFeeTier' } }
+        effectiveFrom: { type: string, format: date-time }
+        reason: { type: string, minLength: 3, maxLength: 300 }
+        expectedVersion: { type: integer, minimum: 0 }
+    DeliveryFeePreview:
+      type: object
+      required: [available, reason, distanceM, fee, freeShipping, belowMinimum, minOrder, etaMinutes, expectedCost, exchangeFee, expectedMargin]
+      properties:
+        available: { type: boolean }
+        reason: { type: [string, 'null'], enum: [OUT_OF_RANGE, NO_FEE_TABLE, null] }
+        distanceM: { type: [integer, 'null'] }
+        fee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        freeShipping: { type: boolean }
+        belowMinimum: { type: boolean }
+        minOrder: { $ref: '#/components/schemas/Money' }
+        etaMinutes: { type: [integer, 'null'] }
+        expectedCost: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        exchangeFee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        expectedMargin: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
     RefundQueueItem:
       type: object
       required: [id, attemptId, orderReference, amountCents, reason, status, failures, lastErrorCode, nextAttemptAt, coveredAt, createdAt]
