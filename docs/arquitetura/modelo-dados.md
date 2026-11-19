@@ -1,6 +1,6 @@
-# Modelo de dados — Webag (estado da Onda 1)
+# Modelo de dados — Webag (estado atual: migrações 0000 a 0042)
 
-Dono: backend-dev | Data: 2026-11-18 | Fonte da verdade: `apps/api/src/modules/*/db/schema.ts` (Drizzle) + `apps/api/drizzle/*.sql` (migrações versionadas, aplicadas por `pnpm db:migrate`; nunca alterar banco à mão).
+Dono: backend-dev | Revisado: 2026-11-19 (Tech Lead, Onda 7: mapa das migrações, Onda 2 e Onda 4 completas) | Fonte da verdade: `apps/api/src/modules/*/db/schema.ts` (Drizzle) + `apps/api/drizzle/*.sql` (migrações versionadas, aplicadas por `pnpm db:migrate`; nunca alterar banco à mão).
 
 Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do PG 18 e o CI/dev local roda em versões variadas, então fica como evolução, ver DT-016); dinheiro em centavos `integer`; datas `timestamptz` UTC; colunas `snake_case` no banco (Drizzle `casing`).
 
@@ -62,8 +62,29 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 
 Funções e índices: `f_norm(text)` (unaccent + lower, IMUTÁVEL) com índices GIN `pg_trgm` em `products.name` e `stores.name`; índice GiST de `stores.location` (migração 0005) alimenta `ST_DWithin` da descoberta. Migrações 0009 a 0011.
 
-## Próximas ondas
-Onda 2 adiciona `stores` (+ FK de `store_members`), documentos e catálogo; Onda 3 adiciona geografia (`geography(Point,4326)` + GiST); Onda 4 adiciona pedidos, `idempotency_keys`, `ledger_entries` (append-only, SEC-041) e liga `payment_attempts.external_reference` ao pedido.
+## stores e catalog (Onda 2, migração 0005)
+| Tabela | Conteúdo |
+|---|---|
+| `stores` | Loja: dono, `status` (`draft`, `in_review`, `correction_requested`, `approved`, `rejected`, `suspended`, `closed`), CPF/CNPJ, razão social, endereço (CEP, rua, bairro, cidade, UF), `lat`/`lng` + coluna GERADA `location geography(Point,4326)` com GiST (busca por raio com `ST_DWithin`), logo/capa (`media_assets`), SLA da análise (`sla_started_at`, `sla_elapsed_ms`), decisão e motivo, limite de exposição de loja nova (0018) |
+| `store_settings`, `store_hours`, `store_holidays`, `store_delivery_tiers` | Entrega e retirada, raio, taxa por faixa (`store_delivery_tiers`, modo `by_distance`), pedido mínimo, frete grátis acima de X, `pickup_enabled`, dias de troca voluntária, pausa; horários por dia da semana (minutos desde 00:00, horário de Brasília) e feriados. `eta_*_minutes` ficam só por compatibilidade (DEC-053) |
+| `store_documents`, `store_review_items`, `store_status_history`, `store_activity`, `store_extra_categories` | Documentos enviados (um vigente por tipo, 0013), pendências apontadas pelo admin, histórico de status, trilha de atividade da loja e categorias adicionais |
+| `payment_accounts`, `payment_oauth_states` | Conta de recebimento do lojista (provedor, id no provedor, titular mascarado, tokens OAuth CIFRADOS com `PAYMENT_TOKEN_ENC_KEY`) e o `state` do OAuth (hash, uso único, PKCE `code_verifier` cifrado, 0020) |
+| `media_assets` | Arquivo enviado por URL pré-assinada: dono, loja, finalidade (`store_logo`, `store_cover`, `product_image`, `store_document`, `banner`, `exchange_photo`), estado (`pending`, `ready`, `rejected`); o original fica no bucket privado e só as variantes re-codificadas em WebP (160/400/800, sem EXIF/GPS) vão ao público; documento só no privado (ADR-005) |
+| `products`, `product_variants`, `product_images`, `store_sections` | Produto (status `draft/active/paused/archived`, moderação, preço base e promocional com janela, tabela de medidas, `no_voluntary_exchange`), variação (atributos, SKU, preço, `stock`, `reserved` pela reserva de estoque do pedido, alerta de estoque baixo), imagens ordenadas e seções da vitrine. `products.idempotency_key` evita produto duplicado em rede ruim (0008) |
+| `moderation_terms`, `product_moderation_events` | Termos proibidos/de atenção do admin e a trilha de moderação |
+
+## orders, finance e idempotência (Onda 4, migrações 0012, 0015, 0016)
+| Tabela | Conteúdo |
+|---|---|
+| `orders` | Pedido: número público `WB-XXXXX` (único), cliente, loja, `status` (ver máquina em `docs/produto/regras-de-negocio.md`, RN-07), `mode` (`delivery`/`pickup`), `cart_revision`, endereço (snapshot JSON), faixa de chegada (`eta_from_at`/`eta_to_at`), código de retirada, cupom, valores em centavos (`subtotal`, `delivery_fee`, `service_fee`, `discount`, `store_coupon`, `platform_discount`, `total`, `commission`, `application_fee`), snapshot financeiro e de entrega (`finance`, `delivery_snapshot`), método e tentativa de pagamento, prazo de PIX e de aceite, `disputed_at` (0036), `late_notified_at` (0042). Tudo que o cliente viu é gravado no pedido (RN-05): preço e taxas não mudam depois |
+| `order_items` | Item com snapshot de nome, atributos, foto, quantidade, preço unitário, total da linha e `commission_pct_bp` do momento; `stock_state` (`reserved`, `sold`, `released`) |
+| `order_events` | Histórico de TODA transição: de, para, ator (`customer`/`store`/`system`/`admin`), usuário, motivo, hora |
+| `order_cancel_requests` | Pedido de cancelamento em separação (`kind` `preparation`/`late`, 0041/0042) e a decisão da loja ou do admin |
+| `idempotency_keys` | `Idempotency-Key` do cliente: escopo, chave, hash do corpo, resposta guardada, validade de 24 h (criar pedido, pagar) |
+| `store_commission_rates`, `category_commission_rates` | Taxas de comissão por loja e por categoria, em pontos-base, com vigência e motivo; vale a mais específica |
+| `ledger_transactions`, `ledger_entries` | Razão contábil de partidas dobradas, **append-only** (SEC-041): cada transação é única por `dedupe_key` (idempotente) e é composta de entradas de débito e crédito (partidas dobradas); contas e tipos em "Ledger" abaixo |
+
+Regras que o banco garante: dinheiro sempre `integer` em centavos; número do pedido único; uma tentativa de pagamento por `(provedor, id no provedor)`; um cupom resgatado uma vez por pedido (`coupon_redemptions_order_uq`).
 
 ### Ledger: contas e tipos acrescentados (DT-049)
 `ledger_transactions.kind` ganha `exchange_fee`, `exchange_fee_refund`, `logistics_cost` e `courier_payout`; `ledger_entries.account`, `exchange_fee_revenue` (receita da taxa de troca), `logistics_cost_expense` (despesa), `courier_payable` (a pagar ao motoboy) e `courier_payout_cash` (PIX pago por fora). São colunas `text` (sem migração); o `order_id` é o do pedido original e a loja é nula nos lançamentos de logística. O custo não é "por loja": o extrato do lojista (`store-finance`) continua lendo só `sale`, `provider_fee`, `refund`, `coverage` e `adjustment`.
@@ -99,3 +120,58 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 
 ## Q.2/Q.3 (BUG-016, BUG-015): pausa da logística e pedido de cancelamento — migrações 0040 e 0041
 `logistics_pauses` (`city_id` nulo = geral, `reason`, `paused_by/at`, `resumed_by/at`; índice único parcial: uma pausa aberta por escopo); o horário normal é o parâmetro `logistica_horario` (+ `logistica_dias`), em horário de Brasília. `order_cancel_requests` (uma `pending` por pedido: `status` pending/approved/refused, `reason`, `decided_by` store/admin/system, `alerted_at`; `reason` e `decision_note` são apagados na anonimização, SEC-158). Sem coluna nova em `orders`: BUG-012 e BUG-014 são comportamento (corrida cancelada cancela o pedido; retirada vence em `retirada_prazo_horas`, contadas do evento `ready_for_pickup`).
+
+## IP truncado nos aceites (S.6.2, migração 0039)
+`webag_truncate_ip(text)` e o gatilho `webag_allow_ip_truncation()` substituem o bloqueio total de `terms_acceptances` e `consents`: a ÚNICA alteração permitida é trocar o `ip` pelo próprio IP truncado (IPv4 /24, IPv6 /48), usada na anonimização da conta (SEC-159, DEC-050b). Qualquer outro UPDATE e todo DELETE continuam negados.
+
+## Compensação por atraso e cancelamento por atraso (E.3, migração 0042)
+`coupons.owner_user_id` (cupom pessoal: só o dono usa) e `coupons.source_order_id` (índice único parcial: no máximo um cupom de compensação por pedido atrasado); `order_cancel_requests.kind` (`preparation` padrão, ou `late`); `orders.late_notified_at` (um aviso de atraso por pedido).
+
+## Mapa das migrações (0000 a 0042)
+Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
+
+| Migração | O que muda |
+|---|---|
+| 0000 initial | `users`, `user_roles`, `sessions`, `refresh_tokens`, `auth_codes`, `invitations`, `admin_profiles`, `admin_recovery_codes`, `access_log`, termos e consentimentos, `cities`, `neighborhoods`, `categories`, `parameters`, `parameter_history`, `feature_flags`, `legal_documents`, `audit_log`, `payment_attempts`, `payment_refunds`, `webhook_events`, `payment_alerts` |
+| 0001 append_only_guards | Gatilho `webag_forbid_mutation()` nas tabelas append-only |
+| 0002 refund_idempotency | Chave de idempotência do estorno |
+| 0003 onda1_hardening_tickets | `auth_tickets` (tickets de uso único); limites do enrolamento do TOTP |
+| 0004 payments_hardening | `payment_refund_intents` (intenção de estorno gravada antes de chamar o provedor) |
+| 0005 onda2_stores_catalog | PostGIS; lojas, configurações, horários, documentos, conta de recebimento, catálogo, mídia |
+| 0006 sec113_recovery_reenroll | Reenrolamento do TOTP depois de código de recuperação |
+| 0007 admin_contract_audit_device_terms_summary | `audit_log.user_agent`; `legal_documents.change_summary` |
+| 0008 catalog_idempotency_store_review_flag | `products.idempotency_key` |
+| 0009 onda3_addresses_banners | `user_addresses` (com `location` geográfica), `banners` |
+| 0010 onda3_discovery | `favorites`, `reviews`, `search_history`; `unaccent`, `pg_trgm`, `f_norm()` e índices de busca |
+| 0011 onda3_cart_coupons | `carts`, `cart_items`, `coupons`, `coupon_redemptions` |
+| 0012 idempotency_keys | `idempotency_keys` |
+| 0013 store_documents_current_unique | Um documento vigente por tipo |
+| 0014 refund_intent_actor | Ator e `request_id` na intenção de estorno |
+| 0015 finance_ledger_commission | Comissões e razão contábil |
+| 0016 orders | `orders`, `order_items`, `order_events` |
+| 0017 payment_attempt_pix_qr_3ds | QR do PIX e URL do desafio 3DS na tentativa |
+| 0018 store_exposure_limit | Limite de exposição de loja nova |
+| 0019 sec130_refund_queue | Fila de estornos recusados (falhas, próxima tentativa, cobertura) |
+| 0020 sec140_oauth_pkce | `code_verifier` cifrado no OAuth |
+| 0021 l1_delivery_fee_tables | Tabela de taxa de entrega versionada |
+| 0022 l1_order_delivery_snapshot | `orders.delivery_snapshot` |
+| 0023 l3_logistics | `couriers`, `deliveries`, `delivery_events` |
+| 0024 t4_size_chart_exchange_flag | Tabela de medidas, produto sem troca voluntária, "como vestiu" |
+| 0025 t2_exchange_requests | `exchange_requests`, `exchange_events` |
+| 0026 t4_review_unique_per_order | Uma avaliação por alvo e pedido |
+| 0027 push_devices | `push_devices` |
+| 0028 sec141_refund_in_flight | Lease do estorno em andamento |
+| 0029 sec143_store_return_confirmation | Confirmação de devolução pela loja |
+| 0030 dt050_exchange_reminders_mediation | Lembretes, contestação e mediação de trocas |
+| 0031 o61_privacy | Exclusão de conta, exportação, pedidos de titular, expurgo (`retention_runs`) |
+| 0032 o61_dsr_sequence | Sequência do protocolo `PV-0001` |
+| 0033 o63_push_campaigns | Campanhas de push |
+| 0034 o63_highlights_banner_metrics | Destaques da Início; contadores de banner |
+| 0035 o65_feedback | Denúncias, ajuda (FAQ) e contatos |
+| 0036 r3_order_disputed | `orders.disputed_at` |
+| 0037 r4_exchange_difference_commission | Comissão da diferença de preço na troca |
+| 0038 e1_eta_entrega | Faixa de chegada (ETA) no pedido e na corrida |
+| 0039 s62_ip_truncation | Truncamento do IP na anonimização |
+| 0040 q2_logistics_pauses | `logistics_pauses` |
+| 0041 q3_order_cancel_requests | `order_cancel_requests` |
+| 0042 e3_late_compensation | Cupom de compensação por atraso; cancelamento por atraso |
