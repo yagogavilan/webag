@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { PG_POOL } from '../src/platform/database/database.module.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
-import { addToCart, approve, attemptOf, customerAt, placeOrder, shopWith } from './helpers/orders.js';
+import { addToCart, customerAt, placeOrder, shopWith } from './helpers/orders.js';
 
 /** R.6 / I9: as listas de pedidos fazem um número FIXO de consultas, não 2 ou 3 por pedido. */
 describe('Listas de pedidos sem N+1 (I9)', () => {
@@ -32,9 +32,8 @@ describe('Listas de pedidos sem N+1 (I9)', () => {
     const buyer = await customerAt(ctx, shop.origin);
     for (let i = 0; i < count; i += 1) {
       await addToCart(ctx, buyer.user, shop.variants[0]!, 1).expect(200);
-      const res = await placeOrder(ctx, buyer.user, buyer.addressId, { paymentMethod: 'pix' });
+      const res = await placeOrder(ctx, buyer.user, buyer.addressId, { paymentMethod: 'card', card: { token: 'fake_tok_approved', installments: 1 } }); // cartão aprova na hora (o teto de PIX por hora não atrapalha)
       expect(res.status, JSON.stringify(res.body)).toBe(201);
-      await approve(ctx, buyer.user, (await attemptOf(ctx, res.body.id as string)).id);
     }
     return { shop, buyer };
   }
@@ -46,6 +45,7 @@ describe('Listas de pedidos sem N+1 (I9)', () => {
     expect(small.result.status).toBe(200);
     expect(large.result.body.data).toHaveLength(12);
     expect(large.result.body.data[0]).toMatchObject({ status: 'received', itemCount: 1, firstItemName: 'Item', total: { amount: expect.any(Number) as number } });
+    expect(small.queries).toBeGreaterThan(0);
     expect(large.queries).toBe(small.queries);
   });
 
@@ -57,6 +57,7 @@ describe('Listas de pedidos sem N+1 (I9)', () => {
     expect(small.result.status).toBe(200);
     expect(large.result.body.data).toHaveLength(12);
     expect(large.result.body.data[0]).toMatchObject({ customerFirstName: expect.any(String) as string, itemCount: 1, firstItemName: 'Item' });
+    expect(small.queries).toBeGreaterThan(0);
     expect(large.queries).toBe(small.queries);
   });
 });
