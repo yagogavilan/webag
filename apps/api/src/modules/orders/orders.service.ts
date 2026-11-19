@@ -16,7 +16,7 @@ import { computeOrderFinance, LedgerService, type OrderFinance } from '../financ
 import { IdempotencyService } from '../idempotency/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
-import { PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
+import { ADMIN_REFUND_KEY_PREFIX, PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
 import type { PaymentStatus } from '../payments/db/schema.js';
 import type { ProviderPayment } from '../payments/payment-provider.js';
 import { stores } from '../stores/db/schema.js';
@@ -535,13 +535,16 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!order) throw errors.notFound('Pedido não encontrado.');
     if (!order.paymentAttemptId || !order.paidAt) throw errors.conflict('ORDER_NOT_PAID', 'Pedido sem pagamento a estornar');
     const limit = await this.params.getNumber('estorno_super_admin_cents');
-    if (input.amountCents > limit && ctx.principal?.adminProfile !== 'super_admin') {
+    const isSuper = ctx.principal?.adminProfile === 'super_admin';
+    if (input.amountCents > limit && !isSuper) {
       throw new AppError(403, 'SUPER_ADMIN_REQUIRED', 'Estorno acima do limite do seu perfil', { detail: 'Valores acima do limite exigem o super admin.' });
     }
-    const key = `admin-refund:${input.idempotencyKey}`;
+    // SEC-142: o limite vale pela soma (por pedido e por operador no dia), conferida sob lock ao gravar a intenção.
+    const cap = isSuper ? undefined : { perOrderCents: limit, perActorDayCents: await this.params.getNumber('estorno_financeiro_dia_cents') };
+    const key = `${ADMIN_REFUND_KEY_PREFIX}${input.idempotencyKey}`;
     let status: 'done' | 'queued' = 'done';
     try {
-      await this.payments.refund(order.paymentAttemptId, input.amountCents, input.reason, key, ctx);
+      await this.payments.refund(order.paymentAttemptId, input.amountCents, input.reason, key, ctx, cap);
     } catch (error) {
       const queued = await this.payments.hasQueuedRefund(order.paymentAttemptId, key);
       if (!queued) throw error;

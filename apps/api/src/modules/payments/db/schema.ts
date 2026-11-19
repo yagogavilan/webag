@@ -120,6 +120,8 @@ export const paymentRefundIntents = pgTable(
     failures: integer().notNull().default(0),
     nextAttemptAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     lastErrorCode: text(),
+    /** SEC-141: lease de quem está chamando o provedor agora; enquanto válido, ninguém cobre nem repete esta intenção. */
+    inFlightUntil: timestamp({ withTimezone: true }),
     /** Cobertura da Webag (DEC-020a): quem assumiu, quando e por quê. */
     coveredBy: uuid(),
     coveredAt: timestamp({ withTimezone: true }),

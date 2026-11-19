@@ -2005,7 +2005,7 @@ paths:
       tags: [orders]
       operationId: adminRefundOrder
       summary: Estorno manual do admin, total ou parcial (SEC-039)
-      description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado."
+      description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado."
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
@@ -2072,7 +2072,7 @@ paths:
       tags: [payments]
       operationId: listRefundQueue
       summary: Fila de estornos pendentes (SEC-130)
-      description: "Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`."
+      description: "Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Só `exhausted` pode ser coberto. Permissão de admin: `payments:refunds:read`."
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [pending, exhausted, covered] } }
         - $ref: '#/components/parameters/Cursor'
@@ -2095,7 +2095,7 @@ paths:
       tags: [payments]
       operationId: retryRefundIntent
       summary: Tentar o estorno de novo agora
-      description: "Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`."
+      description: "Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. 409 `REFUND_IN_FLIGHT` se outra chamada ao provedor está em andamento (SEC-141). Auditado. Permissão de admin: `payments:refunds:retry`."
       parameters:
         - { name: intentId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -2121,7 +2121,7 @@ paths:
       tags: [payments]
       operationId: coverRefundIntent
       summary: Cobertura da Webag (DEC-020a)
-      description: "Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`."
+      description: "Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Só intenção `exhausted` e sem chamada ao provedor em andamento: `pending` (ainda em retentativa) ou em voo é 409 `REFUND_NOT_COVERABLE`/`REFUND_IN_FLIGHT` (SEC-141). Permissão de admin: `payments:refunds:cover`."
       parameters:
         - { name: intentId, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:

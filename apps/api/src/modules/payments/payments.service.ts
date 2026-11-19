@@ -1,6 +1,6 @@
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -32,6 +32,11 @@ export interface PaymentListener {
   onRefundConfirmed?(tx: Tx, attempt: PaymentAttempt, refund: { amountCents: number; idempotencyKey: string; reason: string; refundedTotalCents: number }): Promise<void>;
   /** A Webag assumiu o estorno que o provedor não concluiu (DEC-020a): vira dívida do lojista no ledger, na mesma transação. */
   onRefundCovered?(tx: Tx, attempt: PaymentAttempt, coverage: { amountCents: number; idempotencyKey: string; reason: string }): Promise<void>;
+}
+/** SEC-142: tetos do estorno manual do perfil financeiro (o super admin não tem). */
+export interface ManualRefundCap {
+  perOrderCents: number;
+  perActorDayCents: number;
 }
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export interface RefundQueueItem {
@@ -71,6 +76,10 @@ const UNKNOWN_PAYMENT_GRACE_MS = 10 * 60_000;
 const REFUND_BACKOFF_MINUTES = [5, 30, 120, 360, 1440] as const;
 export const MAX_REFUND_FAILURES = REFUND_BACKOFF_MINUTES.length + 1;
 const REFUND_ALERT_KINDS = ['refund_failed', 'refund_exhausted', 'refund_unresolved'] as const;
+/** SEC-141: validade do lease de quem chama o provedor para estornar (o timeout do provedor é bem menor que isto). */
+const REFUND_LEASE_MS = 5 * 60_000;
+/** SEC-142: estornos manuais do admin usam esta chave de idempotência (ver `OrdersService.adminRefund`). */
+export const ADMIN_REFUND_KEY_PREFIX = 'admin-refund:';
 
 /** Transições permitidas da tentativa (SEC-033): só avança; evento repetido ou regressivo é ignorado. */
 const ALLOWED: Record<PaymentStatus, readonly PaymentStatus[]> = {
@@ -474,12 +483,20 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
    * limites por perfil e reautenticação ficam no endpoint do admin (Onda 4A). Auditoria na MESMA transação que confirma
    * o estorno (SEC-074).
    */
-  async refund(attemptId: string, amountCents: number, reason: string, idempotencyKey: string, ctx: RequestContext): Promise<void> {
-    await this.refundInternal(attemptId, amountCents, reason, idempotencyKey, {
-      actorId: ctx.principal?.userId ?? null,
-      actorRole: ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null,
-      requestId: ctx.requestId,
-    });
+  async refund(attemptId: string, amountCents: number, reason: string, idempotencyKey: string, ctx: RequestContext, manualCap?: ManualRefundCap): Promise<void> {
+    await this.refundInternal(
+      attemptId,
+      amountCents,
+      reason,
+      idempotencyKey,
+      {
+        actorId: ctx.principal?.userId ?? null,
+        actorRole: ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null,
+        requestId: ctx.requestId,
+      },
+      false,
+      manualCap,
+    );
   }
 
   /**
@@ -494,6 +511,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     reason: string,
     idempotencyKey: string,
     actor: { actorId: string | null; actorRole: string | null; requestId: string | null },
+    manualCap?: ManualRefundCap,
   ): Promise<{ kind: 'already' } | { kind: 'go'; attempt: PaymentAttempt }> {
     const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
     if (!attempt) throw errors.notFound('Pagamento não encontrado.');
@@ -522,8 +540,35 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     if (total + amountCents > attempt.amountCents) {
       throw errors.unprocessable('REFUND_EXCEEDS_PAID', 'Estorno maior que o valor pago');
     }
+    if (manualCap) await this.assertManualRefundWithinCap(tx, attemptId, amountCents, actor.actorId, manualCap);
     await tx.insert(paymentRefundIntents).values({ attemptId, idempotencyKey, amountCents, reason, actorId: actor.actorId, actorRole: actor.actorRole, requestId: actor.requestId });
     return { kind: 'go' as const, attempt };
+  }
+
+  /**
+   * SEC-142: o limite do financeiro vale pela SOMA, não pela requisição. (a) Por pedido: estornos manuais não falhados deste
+   * pagamento + o novo; (b) por operador: o que ele mesmo estornou nas últimas 24 h, em todos os pedidos. A trava da tentativa
+   * (já tomada) serializa o por-pedido; o por-operador usa um advisory lock próprio, e as duas validações rodam na transação
+   * que grava a intenção, então fracionar em paralelo não passa. Acima de qualquer teto só o super admin (sem `manualCap`).
+   */
+  private async assertManualRefundWithinCap(tx: Tx, attemptId: string, amountCents: number, actorId: string | null, cap: ManualRefundCap): Promise<void> {
+    const over = (detail: string): never => {
+      throw new AppError(403, 'SUPER_ADMIN_REQUIRED', 'Estorno acima do limite do seu perfil', { detail });
+    };
+    const manual = like(paymentRefundIntents.idempotencyKey, `${ADMIN_REFUND_KEY_PREFIX}%`);
+    const [{ perOrder } = { perOrder: 0 }] = await tx
+      .select({ perOrder: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
+      .from(paymentRefundIntents)
+      .where(and(eq(paymentRefundIntents.attemptId, attemptId), manual, ne(paymentRefundIntents.status, 'failed')));
+    if (perOrder + amountCents > cap.perOrderCents) over('A soma dos estornos manuais deste pedido passa do limite do seu perfil; o restante exige o super admin.');
+    if (actorId) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`webag:refund-daily:${actorId}`}))`);
+      const [{ perDay } = { perDay: 0 }] = await tx
+        .select({ perDay: sql<number>`coalesce(sum(${paymentRefundIntents.amountCents}), 0)::int` })
+        .from(paymentRefundIntents)
+        .where(and(eq(paymentRefundIntents.actorId, actorId), manual, ne(paymentRefundIntents.status, 'failed'), gt(paymentRefundIntents.createdAt, new Date(Date.now() - 24 * 3_600_000))));
+      if (perDay + amountCents > cap.perActorDayCents) over('Você atingiu o limite diário de estornos manuais do seu perfil; o restante exige o super admin.');
+    }
   }
 
   /** Conclui, fora de transação, um estorno já agendado por `reserveRefundIntent` (mesma chave; repetir não estorna de novo). */
@@ -548,17 +593,22 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     idempotencyKey: string,
     actor: { actorId: string | null; actorRole: string | null; requestId: string | null } = { actorId: null, actorRole: 'system', requestId: null },
     recovered = false,
+    manualCap?: ManualRefundCap,
   ): Promise<{ providerRefundId: string } | null> {
     if (!Number.isInteger(amountCents) || amountCents <= 0) throw errors.validation([{ field: 'amountCents', message: 'Valor inválido.' }]);
 
-    const phase1 = await this.db.transaction((tx) => this.reserveRefundIntent(tx, attemptId, amountCents, reason, idempotencyKey, actor));
+    const phase1 = await this.db.transaction((tx) => this.reserveRefundIntent(tx, attemptId, amountCents, reason, idempotencyKey, actor, manualCap));
     if (phase1.kind === 'already') return null;
     const { attempt } = phase1;
+
+    // SEC-141: lease antes de chamar o provedor. Quem não conseguir (outro processo já está com a intenção) não chama de novo.
+    if (!(await this.claimRefundIntent(attemptId, idempotencyKey))) return null;
 
     let remote: { providerRefundId: string };
     try {
       remote = await this.provider.refund(attempt.providerPaymentId!, amountCents, idempotencyKey, { storeId: attempt.storeId, receiverAccountId: attempt.receiverAccountId });
     } catch (error) {
+      await this.releaseRefundIntent(attemptId, idempotencyKey);
       await this.registerRefundFailure(attempt, idempotencyKey, error);
       if (error instanceof Object) this.providerRefundFailures.add(error);
       throw error;
@@ -566,13 +616,20 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
 
     await this.db.transaction(async (tx) => {
       const [locked] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, attemptId)).for('update');
+      // SEC-141: o dinheiro JÁ saiu pelo provedor; o registro é gravado sempre, qualquer que seja o estado da intenção.
       await tx
         .insert(paymentRefunds)
         .values({ attemptId, providerRefundId: remote.providerRefundId, idempotencyKey, amountCents, reason })
         .onConflictDoNothing();
+      const [before] = await tx
+        .select()
+        .from(paymentRefundIntents)
+        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)))
+        .for('update');
+      const coveredMeanwhile = before?.status === 'covered';
       await tx
         .update(paymentRefundIntents)
-        .set({ status: 'done', providerRefundId: remote.providerRefundId, updatedAt: new Date() })
+        .set({ status: coveredMeanwhile ? 'covered' : 'done', providerRefundId: remote.providerRefundId, inFlightUntil: null, updatedAt: new Date() })
         .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
       const [{ done } = { done: 0 }] = await tx
         .select({ done: sql<number>`coalesce(sum(${paymentRefunds.amountCents}), 0)::int` })
@@ -583,28 +640,58 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       }
       // SEC-130: concluído, os alertas de falha desta tentativa deixam de pedir ação.
       await this.resolveRefundAlerts(tx, attemptId);
-      if (locked) for (const listener of this.listeners) await listener.onRefundConfirmed?.(tx, locked, { amountCents, idempotencyKey, reason, refundedTotalCents: done });
+      if (coveredMeanwhile) {
+        // O cliente recebeu pelo provedor E a Webag assumiu o valor: cancela o repasse por fora e pede ação humana (o ledger já tem a cobertura).
+        await tx
+          .update(paymentAlerts)
+          .set({ resolvedAt: new Date() })
+          .where(and(eq(paymentAlerts.attemptId, attemptId), eq(paymentAlerts.kind, 'refund_covered_payout_pending'), isNull(paymentAlerts.resolvedAt)));
+        await tx.insert(paymentAlerts).values({ attemptId, kind: 'refund_double_paid', details: { intentId: before.id, orderReference: locked?.externalReference ?? null, amountCents, providerRefundId: remote.providerRefundId } });
+        this.logger.error(`estorno ${before.id} concluído no provedor depois da cobertura da Webag: pagamento em dobro evitado só se o repasse por fora NÃO for feito`);
+      } else if (locked) {
+        for (const listener of this.listeners) await listener.onRefundConfirmed?.(tx, locked, { amountCents, idempotencyKey, reason, refundedTotalCents: done });
+      }
       // N1: a auditoria vale para TODO estorno confirmado, inclusive o concluído pela conciliação (usa o ator gravado na
       // intenção, não o de quem rodou a recuperação). Na mesma transação: falha de auditoria desfaz o estorno gravado.
-      const [intent] = await tx
-        .select()
-        .from(paymentRefundIntents)
-        .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
       await this.audit.record(
         tx,
-        { ip: null, userAgent: null, requestId: intent?.requestId ?? null, deviceId: null, principal: null },
+        { ip: null, userAgent: null, requestId: before?.requestId ?? null, deviceId: null, principal: null },
         {
           action: 'payment.refund',
           targetType: 'payment_attempt',
           targetId: attemptId,
-          after: { amountCents, reason, providerRefundId: remote.providerRefundId, ...(recovered ? { concludedBy: 'reconciliation' } : {}) },
+          after: { amountCents, reason, providerRefundId: remote.providerRefundId, ...(recovered ? { concludedBy: 'reconciliation' } : {}), ...(coveredMeanwhile ? { afterCoverage: true } : {}) },
           reason,
-          actorId: intent?.actorId ?? null,
-          actorRole: intent?.actorRole ?? 'system',
+          actorId: before?.actorId ?? null,
+          actorRole: before?.actorRole ?? 'system',
         },
       );
     });
     return remote;
+  }
+
+  /** SEC-141: marca a intenção `pending` como em voo (lease). Falso se outro processo já a tem, ou se deixou de ser `pending`. */
+  private async claimRefundIntent(attemptId: string, idempotencyKey: string): Promise<boolean> {
+    const claimed = await this.db
+      .update(paymentRefundIntents)
+      .set({ inFlightUntil: new Date(Date.now() + REFUND_LEASE_MS) })
+      .where(
+        and(
+          eq(paymentRefundIntents.attemptId, attemptId),
+          eq(paymentRefundIntents.idempotencyKey, idempotencyKey),
+          eq(paymentRefundIntents.status, 'pending'),
+          or(isNull(paymentRefundIntents.inFlightUntil), lt(paymentRefundIntents.inFlightUntil, new Date())),
+        ),
+      )
+      .returning({ id: paymentRefundIntents.id });
+    return claimed.length > 0;
+  }
+
+  private async releaseRefundIntent(attemptId: string, idempotencyKey: string): Promise<void> {
+    await this.db
+      .update(paymentRefundIntents)
+      .set({ inFlightUntil: null })
+      .where(and(eq(paymentRefundIntents.attemptId, attemptId), eq(paymentRefundIntents.idempotencyKey, idempotencyKey)));
   }
 
   /**
@@ -646,7 +733,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     const stale = await this.db
       .select()
       .from(paymentRefundIntents)
-      .where(and(eq(paymentRefundIntents.status, 'pending'), lt(paymentRefundIntents.updatedAt, new Date(now.getTime() - 2 * 60_000)), lte(paymentRefundIntents.nextAttemptAt, now)))
+      .where(and(eq(paymentRefundIntents.status, 'pending'), lt(paymentRefundIntents.updatedAt, new Date(now.getTime() - 2 * 60_000)), lte(paymentRefundIntents.nextAttemptAt, now), or(isNull(paymentRefundIntents.inFlightUntil), lt(paymentRefundIntents.inFlightUntil, now))))
       .orderBy(asc(paymentRefundIntents.updatedAt))
       .limit(50);
     let recovered = 0;
@@ -878,6 +965,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       const [row] = await tx.select().from(paymentRefundIntents).where(eq(paymentRefundIntents.id, intentId)).for('update');
       if (!row) throw errors.notFound('Estorno não encontrado.');
       if (row.status !== 'exhausted' && !(row.status === 'pending' && row.failures > 0)) throw errors.conflict('REFUND_NOT_RETRYABLE', 'Este estorno não está pendente', 'Só estornos recusados pelo provedor podem ser repetidos.');
+      if (row.inFlightUntil && row.inFlightUntil.getTime() > Date.now()) throw errors.conflict('REFUND_IN_FLIGHT', 'Este estorno está sendo processado', 'Aguarde a conclusão da tentativa em andamento.');
       await tx.update(paymentRefundIntents).set({ status: 'pending', failures: 0, nextAttemptAt: new Date(), updatedAt: new Date(0) }).where(eq(paymentRefundIntents.id, intentId));
       await this.audit.record(tx, ctx, { action: 'payment.refund_retry', targetType: 'payment_refund_intent', targetId: intentId, after: { amountCents: row.amountCents } });
       return row;
@@ -902,7 +990,9 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     const result = await this.db.transaction(async (tx) => {
       const [row] = await tx.select().from(paymentRefundIntents).where(eq(paymentRefundIntents.id, intentId)).for('update');
       if (!row) throw errors.notFound('Estorno não encontrado.');
-      if (row.status !== 'exhausted' && !(row.status === 'pending' && row.failures > 0)) throw errors.conflict('REFUND_NOT_COVERABLE', 'Este estorno não pode ser coberto', 'Só estornos recusados pelo provedor podem ser cobertos pela Webag.');
+      // SEC-141: só `exhausted` (tentativas esgotadas) e sem chamada ao provedor em voo; `pending` ainda pode concluir no provedor.
+      if (row.status !== 'exhausted') throw errors.conflict('REFUND_NOT_COVERABLE', 'Este estorno não pode ser coberto', 'Só estornos com as tentativas esgotadas podem ser cobertos pela Webag.');
+      if (row.inFlightUntil && row.inFlightUntil.getTime() > Date.now()) throw errors.conflict('REFUND_IN_FLIGHT', 'Este estorno está sendo processado', 'Aguarde a conclusão da tentativa em andamento.');
       const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, row.attemptId)).for('update');
       if (!attempt) throw errors.notFound('Pagamento não encontrado.');
       const [{ already } = { already: 0 }] = await tx
