@@ -290,7 +290,8 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Sim | E-mail transacional. **Porta 587** (STARTTLS); a 465 não funciona com o código atual | Seção 6.3 |
 | `STORAGE_DRIVER` | Sim | `s3` (o `memory` é recusado em produção) | Fixo |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_PUBLIC`, `S3_BUCKET_PRIVATE`, `S3_PUBLIC_URL`, `S3_FORCE_PATH_STYLE` | Sim | Armazenamento de arquivos | VPS: `[G]` as chaves e `https://arquivos.<domínio>`. R2: painel Cloudflare > R2 > Manage API tokens |
-| `GEOCODING_PROVIDER` | Sim | `http` = ViaCEP + Nominatim (o `fake` é recusado) | Fixo. Nominatim tem política de uso moderado (OpenStreetMap) |
+| `GEOCODING_PROVIDER` | Sim | `http` = ViaCEP (o `fake` é recusado) | Fixo |
+| `GEOCODER_URL` / `GEOCODER_API_KEY` | Não | Geocodificador (CEP -> coordenada) compatível com a busca do Nominatim, em https. **Vazio = desligado (o padrão, e funciona)**: a API valida só CEP, município e UF, grava `pinVerified=false` e o lojista ajusta o pino no mapa. **O Nominatim público é proibido** (o boot recusa; SEC-169). Ligar exige um provedor com contrato ou Nominatim próprio (custo e escolha: fundador; ADR-008 §Adendo) | Cache por CEP em Redis (30 dias): o volume é de CEPs distintos, não de pedidos |
 | `LOG_LEVEL` | Não | `info` por padrão | |
 | `API_DOCS_ENABLED` | Não | **Nunca** `true` em produção (o boot recusa) | |
 | `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TTL_DAYS`, `REFRESH_ABSOLUTE_TTL_DAYS`, `REFRESH_REUSE_WINDOW_SECONDS` | Não | Duração de sessão (padrões: 900 s, 30 d, 90 d, 30 s) | Só se o produto mudar a regra; adicione em `environment` do serviço `api` |

@@ -133,6 +133,14 @@ export const envSchema = z
 
     // --- Geocodificação de CEP (ADR-008) ---
     GEOCODING_PROVIDER: z.enum(['fake', 'http']).default('fake'),
+    /**
+     * SEC-169: geocodificador (CEP -> coordenada) compatível com a busca do Nominatim (`GET <url>?street=&city=&state=&country=&format=json&limit=1`),
+     * próprio ou de um provedor com contrato. VAZIO = desligado (padrão): o servidor valida só CEP, município e UF, e o endereço fica com
+     * `pinVerified=false`. Nunca aponte para o Nominatim público: a política dele proíbe o volume de endereços de clientes.
+     */
+    GEOCODER_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    /** Chave do provedor, enviada como `key=` na consulta (estilo LocationIQ). Vazio = sem chave. */
+    GEOCODER_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(8).optional()),
   })
   .superRefine((env, ctx) => {
     // WB-160 C3: Mercado Pago ativo sem as chaves derruba o boot em QUALQUER ambiente (não no meio do pedido).
@@ -199,6 +207,11 @@ export const envSchema = z
     if (env.STORAGE_DRIVER === 'memory') fail('STORAGE_DRIVER', 'o armazenamento em memória não sobe em produção');
     if (env.S3_ACCESS_KEY === 'webag-dev' || env.S3_SECRET_KEY === 'webag-dev-secret-only')
       fail('S3_SECRET_KEY', 'credencial de desenvolvimento não é aceita em produção');
+    if (env.GEOCODER_URL) {
+      const geocoder = new URL(env.GEOCODER_URL);
+      if (geocoder.protocol !== 'https:') fail('GEOCODER_URL', 'em produção precisa ser https (a chave vai na consulta)');
+      if (/(^|\.)openstreetmap\.org$/i.test(geocoder.hostname)) fail('GEOCODER_URL', 'o Nominatim público é proibido para endereços de clientes (política de uso do OSM); use um geocodificador próprio ou com contrato');
+    }
     if (env.GEOCODING_PROVIDER === 'fake' && !staging) fail('GEOCODING_PROVIDER', 'o geocodificador fake não sobe em produção (só com APP_ENV=staging)');
   });
 

@@ -246,8 +246,10 @@ export class StoresController {
 export class CepController {
   constructor(@Inject(GEOCODING_PROVIDER) private readonly geocoding: GeocodingProvider) {}
 
-  /** WB-051 C3: autocompleta rua/bairro/cidade e a coordenada. Autenticado e com limite (usa serviço externo). */
-  @Roles('merchant')
+  /**
+   * WB-051 C3: autocompleta rua/bairro/cidade e a coordenada do centro do CEP (nula sem `GEOCODER_URL`). Qualquer conta autenticada
+   * (o app do cliente consulta por aqui em vez de falar direto com o ViaCEP, inventário de dados §3); com limite e cache por CEP.
+   */
   @RateLimit({ name: 'cep-lookup', limit: 60, windowSeconds: 600 })
   @Get(':cep')
   async lookup(@Param('cep') cep: string) {

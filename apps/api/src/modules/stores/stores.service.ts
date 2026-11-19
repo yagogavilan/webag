@@ -209,8 +209,8 @@ export class StoresService {
       const city = looked?.city ?? address.city;
       const state = looked?.state ?? address.state ?? 'SP';
       const street = address.street ?? looked?.street;
-      const lat = address.lat ?? looked?.lat;
-      const lng = address.lng ?? looked?.lng;
+      const lat = address.lat ?? looked?.lat ?? undefined; // sem geocodificador a coordenada vem nula: o lojista ajusta o pino no mapa
+      const lng = address.lng ?? looked?.lng ?? undefined;
       if (!city || !street || lat === undefined || lng === undefined) {
         if (!looked && !address.city) throw errors.unprocessable('CEP_NOT_FOUND', 'CEP não encontrado', { errors: [{ field: 'address.cep', message: 'Não encontramos esse CEP. Confira ou preencha o endereço à mão.' }] });
         throw errors.unprocessable('CEP_LOOKUP_INCOMPLETE', 'Complete o endereço', { errors: [{ field: 'address.street', message: 'Informe rua, cidade e ajuste o pino no mapa.' }] });

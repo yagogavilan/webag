@@ -289,7 +289,7 @@ export class StoreSettingsService {
     let point = input.lat !== undefined && input.lng !== undefined ? { lat: input.lat, lng: input.lng } : null;
     if (!point && input.cep) {
       const looked = await this.geocoding.lookup(input.cep.replace('-', '')).catch(() => null);
-      if (looked) point = { lat: looked.lat, lng: looked.lng };
+      if (looked && looked.lat !== null && looked.lng !== null) point = { lat: looked.lat, lng: looked.lng };
     }
     if (!point) throw errors.unprocessable('PREVIEW_NEEDS_ADDRESS', 'Informe um CEP válido ou a coordenada', { errors: [{ field: 'cep', message: 'Não conseguimos localizar esse endereço.' }] });
     return this.quoteDelivery(store.id, point, input.subtotalCents);

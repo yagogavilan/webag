@@ -21,8 +21,8 @@ export class CacheService {
     }
   }
 
-  /** Devolve o valor em cache ou calcula, grava com TTL (segundos) e devolve. */
-  async wrap<T>(namespace: string, key: string, ttlSeconds: number, compute: () => Promise<T>): Promise<T> {
+  /** Devolve o valor em cache ou calcula, grava com TTL (segundos, fixo ou decidido pelo valor, p.ex. "não achou" vale menos) e devolve. */
+  async wrap<T>(namespace: string, key: string, ttlSeconds: number | ((value: T) => number), compute: () => Promise<T>): Promise<T> {
     const full = `cache:${namespace}:${await this.version(namespace)}:${key}`;
     try {
       const hit = await this.redis.get(full);
@@ -32,7 +32,7 @@ export class CacheService {
     }
     const value = await compute();
     try {
-      await this.redis.set(full, JSON.stringify(value), 'EX', ttlSeconds);
+      await this.redis.set(full, JSON.stringify(value), 'EX', typeof ttlSeconds === 'function' ? ttlSeconds(value) : ttlSeconds);
     } catch (error) {
       logger.warn(`Cache indisponível (gravação): ${(error as Error).message}`);
     }

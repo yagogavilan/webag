@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { vi } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { GEOCODING_PROVIDER, type GeocodingProvider } from '../src/modules/stores/index.js';
 import { orders, users } from '../src/platform/database/schema.js';
 import { sha256Hex } from '../src/platform/crypto/crypto.js';
 import { RateLimitService } from '../src/platform/ratelimit/rate-limit.service.js';
@@ -141,7 +143,7 @@ describe('SEC-169: pino do endereço coerente com o CEP', () => {
     ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send({ cep: '07900-100', street: 'Rua Pino', number: '10', neighborhood: 'Centro', city: 'Francisco Morato', state: 'SP', ...over });
   const centerOf = async () => {
     const { FakeGeocodingProvider } = await import('../src/modules/stores/geocoding.js');
-    return (await new FakeGeocodingProvider().lookup('07900100'))!;
+    return (await new FakeGeocodingProvider().lookup('07900100')) as { lat: number; lng: number };
   };
 
   it('ponto a 25 km do CEP é recusado (422); a 300 m é aceito; sem ponto usa o do CEP', async () => {
@@ -180,6 +182,69 @@ describe('SEC-169: pino do endereço coerente com o CEP', () => {
     } finally {
       await useParam(ctx, 'endereco_pino_max_m', 2000);
     }
+  });
+
+  describe('reaberto: CEP inexistente, geocodificador desligado e provedor fora (A1 da reverificação)', () => {
+    const provider = () => ctx.app.get<GeocodingProvider>(GEOCODING_PROVIDER);
+    afterEach(() => vi.restoreAllMocks());
+
+    it('A1: CEP inexistente + cidade atendida + pino a milhares de km (ou em cima da loja) = 422 ADDRESS_CEP_NOT_FOUND, com ou sem pino; nada é gravado', async () => {
+      const user = await createCustomer(ctx);
+      for (const pin of [{ lat: -5, lng: -20 }, { lat: -23.28, lng: -46.74 }, {}]) {
+        const res = await address(user, { cep: '00012-345', ...pin });
+        expect(res.status, JSON.stringify(res.body)).toBe(422);
+        expect(res.body.code).toBe('ADDRESS_CEP_NOT_FOUND');
+      }
+      expect((await ctx.http.get('/v1/me/addresses').set(bearer(user.accessToken)).expect(200)).body.data).toHaveLength(0);
+    });
+
+    it('geocodificador ligado e no ar: o ponto é conferido e o endereço fica pinVerified=true (inclusive o do CEP sem ponto)', async () => {
+      const user = await createCustomer(ctx);
+      const center = await centerOf();
+      const ok = await address(user, { lat: center.lat, lng: center.lng });
+      expect(ok.status).toBe(201);
+      expect(ok.body.pinVerified).toBe(true);
+      const noPin = await address(await createCustomer(ctx), {});
+      expect(noPin.body.pinVerified).toBe(true);
+    });
+
+    it('geocodificador desligado (GEOCODER_URL vazio): valida só CEP, município e UF; o ponto do app é aceito e marcado pinVerified=false; sem ponto, 422', async () => {
+      vi.spyOn(provider(), 'centerOf').mockResolvedValue(null);
+      const user = await createCustomer(ctx);
+      const far = await address(user, { lat: -23.2811, lng: -46.7452 });
+      expect(far.status, JSON.stringify(far.body)).toBe(201);
+      expect(far.body.pinVerified).toBe(false);
+      expect((await address(user, { number: '77' })).body.code).toBe('ADDRESS_GEOCODING_FAILED'); // nem ponto nem centro
+      // município e UF continuam conferidos
+      const otherCity = await address(user, { cep: '07800-100', number: '99', lat: -23.28, lng: -46.74 });
+      expect(otherCity.status).toBe(422);
+      expect(otherCity.body.code).toBe('ADDRESS_CEP_CITY_MISMATCH');
+    });
+
+    it('serviço de CEP fora do ar: o endereço é aceito sem conferir (pinVerified=false), o pino fica como veio e a edição o reconfere quando o serviço volta', async () => {
+      vi.spyOn(provider(), 'lookupCep').mockRejectedValue(new Error('viacep fora'));
+      const user = await createCustomer(ctx);
+      const created = await address(user, { lat: -23.28, lng: -46.74 });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      expect(created.body).toMatchObject({ pinVerified: false, lat: -23.28, lng: -46.74 });
+      expect((await address(user, { number: '78' })).status).toBe(422); // sem ponto e sem CEP: nada a gravar
+      vi.restoreAllMocks();
+      const center = await centerOf();
+      const fixed = await ctx.http.patch(`/v1/me/addresses/${created.body.id}`).set(bearer(user.accessToken)).send({ lat: center.lat, lng: center.lng });
+      expect(fixed.status, JSON.stringify(fixed.body)).toBe(200);
+      expect(fixed.body.pinVerified).toBe(true);
+    });
+
+    it('conferência desligada pelo admin (endereco_pino_max_m = 0): aceita o ponto e marca pinVerified=false', async () => {
+      await useParam(ctx, 'endereco_pino_max_m', 0);
+      try {
+        const res = await address(await createCustomer(ctx), { lat: -5, lng: -20 });
+        expect(res.status).toBe(201);
+        expect(res.body.pinVerified).toBe(false);
+      } finally {
+        await useParam(ctx, 'endereco_pino_max_m', 2000);
+      }
+    });
   });
 });
 

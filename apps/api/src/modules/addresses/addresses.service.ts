@@ -1,9 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
-import { errors } from '../../platform/http/app-error.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
 import { ParametersService, RegionsService } from '../admin/index.js';
-import { GEOCODING_PROVIDER, type GeocodingProvider } from '../stores/index.js';
+import { GEOCODING_PROVIDER, type CepInfo, type GeocodingProvider } from '../stores/index.js';
 import type { CreateAddressInput, UpdateAddressInput } from './addresses.schemas.js';
 import { userAddresses } from './db/schema.js';
 import { users } from '../identity/db/schema.js';
@@ -32,6 +32,7 @@ export const presentAddress = (a: Address) => ({
   cityId: a.cityId,
   lat: a.lat,
   lng: a.lng,
+  pinVerified: a.pinVerified,
   isDefault: a.isDefault,
   createdAt: a.createdAt.toISOString(),
   updatedAt: a.updatedAt.toISOString(),
@@ -40,6 +41,8 @@ export const presentAddress = (a: Address) => ({
 /** Endereços salvos (WB-003, DEC-028). Toda leitura e escrita filtra por `user_id` do token: BOLA vira 404 (SEC-020). */
 @Injectable()
 export class AddressesService {
+  private readonly logger = new Logger(AddressesService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     @Inject(GEOCODING_PROVIDER) private readonly geocoding: GeocodingProvider,
@@ -59,26 +62,43 @@ export class AddressesService {
   }
 
   /**
-   * Ponto: o do GPS do aparelho, ou o do CEP. Sem nenhum dos dois, 422 e o app pede a posição (WB-002 C3).
-   * SEC-169: o ponto do app NÃO é confiável (raio, teto de ETA e faixa de frete saem dele): é conferido com o centro do CEP
-   * (`endereco_pino_max_m`) e a cidade do CEP precisa ser a informada. Sem geocodificação do CEP (provedor fora), aceita o do app.
+   * Ponto do endereço: o do GPS do aparelho, ou o centro do CEP. SEC-169: o ponto do app NÃO é confiável (raio, teto de ETA e faixa de
+   * frete saem dele). Regras, nesta ordem:
+   * 1. CEP inexistente (ViaCEP) = 422 `ADDRESS_CEP_NOT_FOUND`, com ou sem ponto (antes, qualquer ponto passava).
+   * 2. CEP de outro município ou UF que o informado = 422 `ADDRESS_CEP_CITY_MISMATCH`.
+   * 3. Com o geocodificador ligado (`GEOCODER_URL`) e no ar, o ponto é conferido contra o centro do CEP (`endereco_pino_max_m`):
+   *    longe demais = 422 `ADDRESS_PIN_FAR_FROM_CEP`. `pinVerified = true`.
+   * 4. Sem geocodificador (desligado, padrão) ou fora do ar, ou ViaCEP fora: aceita o ponto do app, valida só município/UF (quando o
+   *    ViaCEP responde) e o raio/teto de entrega da loja (na cotação), e grava `pinVerified = false`. Sem ponto nenhum: 422
+   *    `ADDRESS_GEOCODING_FAILED` e o app pede a posição.
+   * Nunca chama o Nominatim público: o provedor é o configurado em `GEOCODER_URL` e o resultado é cacheado por CEP.
    */
-  private async point(cep: string, city: string, given: { lat?: number | undefined; lng?: number | undefined }): Promise<{ lat: number; lng: number }> {
-    const found = await this.geocoding.lookup(cep).catch(() => null);
+  private async point(cep: string, city: string, state: string, given: { lat?: number | undefined; lng?: number | undefined }): Promise<{ lat: number; lng: number; pinVerified: boolean }> {
+    let info: CepInfo | null = null;
+    let cepServiceDown = false;
+    try {
+      info = await this.geocoding.lookupCep(cep);
+      if (info === null) throw errors.unprocessable('ADDRESS_CEP_NOT_FOUND', 'CEP não encontrado', { detail: 'Não encontramos esse CEP. Confira os números.' });
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'ADDRESS_CEP_NOT_FOUND') throw error;
+      cepServiceDown = true;
+      this.logger.warn(`consulta de CEP indisponível; endereço aceito com o pino sem conferir: ${(error as Error).message}`);
+    }
+    if (info) {
+      if (normalizeName(info.city) !== normalizeName(city) || info.state.toUpperCase() !== state.toUpperCase()) {
+        throw errors.unprocessable('ADDRESS_CEP_CITY_MISMATCH', 'O CEP é de outra cidade', { detail: `Esse CEP pertence a ${info.city}/${info.state}. Confira a cidade e o CEP.` });
+      }
+    }
+    const center = info && !cepServiceDown ? await this.geocoding.centerOf(info) : null;
     if (given.lat !== undefined && given.lng !== undefined) {
       const maxM = await this.parameters.getNumber('endereco_pino_max_m');
-      if (maxM > 0 && found) {
-        if (normalizeName(found.city) !== normalizeName(city)) {
-          throw errors.unprocessable('ADDRESS_CEP_CITY_MISMATCH', 'O CEP é de outra cidade', { detail: `Esse CEP pertence a ${found.city}. Confira a cidade e o CEP.` });
-        }
-        if (haversineMeters({ lat: given.lat, lng: given.lng }, found) > maxM) {
-          throw errors.unprocessable('ADDRESS_PIN_FAR_FROM_CEP', 'A posição está longe do CEP', { detail: 'A posição marcada no mapa está longe do CEP informado. Confirme o endereço no mapa.' });
-        }
+      if (center && maxM > 0 && haversineMeters({ lat: given.lat, lng: given.lng }, center) > maxM) {
+        throw errors.unprocessable('ADDRESS_PIN_FAR_FROM_CEP', 'A posição está longe do CEP', { detail: 'A posição marcada no mapa está longe do CEP informado. Confirme o endereço no mapa.' });
       }
-      return { lat: given.lat, lng: given.lng };
+      return { lat: given.lat, lng: given.lng, pinVerified: center !== null && maxM > 0 };
     }
-    if (!found) throw errors.unprocessable('ADDRESS_GEOCODING_FAILED', 'Não conseguimos localizar o endereço', { detail: 'Confirme a posição para continuar.' });
-    return { lat: found.lat, lng: found.lng };
+    if (!center) throw errors.unprocessable('ADDRESS_GEOCODING_FAILED', 'Não conseguimos localizar o endereço', { detail: 'Confirme a posição para continuar.' });
+    return { lat: center.lat, lng: center.lng, pinVerified: true };
   }
 
   private async served(city: string, state: string, neighborhood: string): Promise<{ cityId: string; neighborhoodId: string | null }> {
@@ -91,7 +111,7 @@ export class AddressesService {
     const region = await this.served(input.city, input.state, input.neighborhood);
     const existing = await this.findDuplicate(userId, input.cep, input.number, input.complement ?? null);
     if (existing) return { address: existing, created: false };
-    const point = await this.point(input.cep, input.city, input);
+    const point = await this.point(input.cep, input.city, input.state, input);
     const max = await this.parameters.getNumber('enderecos_max');
     const address = await this.db.transaction(async (tx) => {
       // Trava o usuário: duas criações simultâneas não passam do limite nem criam dois padrões.
@@ -116,6 +136,7 @@ export class AddressesService {
           neighborhoodId: region.neighborhoodId,
           lat: point.lat,
           lng: point.lng,
+          pinVerified: point.pinVerified,
           isDefault: makeDefault,
         })
         .returning();
@@ -154,7 +175,7 @@ export class AddressesService {
     const placeChanged = input.cep !== undefined || input.city !== undefined || input.state !== undefined || input.neighborhood !== undefined;
     const region = placeChanged ? await this.served(next.city, next.state, next.neighborhood) : { cityId: current.cityId, neighborhoodId: current.neighborhoodId };
     if (await this.findDuplicate(userId, next.cep, next.number, next.complement, id)) throw errors.conflict('ADDRESS_DUPLICATE', 'Endereço repetido', 'Você já tem esse endereço salvo.');
-    const point = input.lat !== undefined || input.cep !== undefined ? await this.point(next.cep, next.city, input) : { lat: current.lat, lng: current.lng };
+    const point = input.lat !== undefined || input.cep !== undefined ? await this.point(next.cep, next.city, next.state, input) : { lat: current.lat, lng: current.lng, pinVerified: current.pinVerified };
     return this.db.transaction(async (tx) => {
       await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
       if (input.isDefault) await tx.update(userAddresses).set({ isDefault: false }).where(and(eq(userAddresses.userId, userId), ne(userAddresses.id, id)));
@@ -173,6 +194,7 @@ export class AddressesService {
           neighborhoodId: region.neighborhoodId,
           lat: point.lat,
           lng: point.lng,
+          pinVerified: point.pinVerified,
           isDefault: input.isDefault ? true : current.isDefault,
           updatedAt: new Date(),
         })

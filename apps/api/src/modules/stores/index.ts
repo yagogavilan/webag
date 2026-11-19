@@ -7,7 +7,7 @@ export { presentStore, uuidParam } from './stores.controllers.js';
 export { isStoreVisible } from './domain/visibility.js';
 export { isOpenNow, type WeeklyHours } from './domain/hours.js';
 export { deliveryFee, type Tier } from './domain/delivery.js';
-export { GEOCODING_PROVIDER, type GeocodingProvider, type CepResult } from './geocoding.js';
+export { GEOCODING_PROVIDER, type GeocodingProvider, type CepResult, type CepInfo, type GeoPoint } from './geocoding.js';
 export { hoursToday, isOpen, nextOpening, type OpeningInput } from './domain/opening.js';
 export { ExposureLimitService } from './exposure-limit.service.js';
 export { evaluateExposureLimit, type ExposureLimit } from './exposure-limit.js';

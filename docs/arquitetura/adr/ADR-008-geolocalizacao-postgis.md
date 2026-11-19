@@ -42,6 +42,13 @@ Brief §3: endereço por localização do aparelho ou CEP; **só mostrar lojas q
 - Negativas / dívida: frete por linha reta subestima rotas com morro/rodovia (DT-007); Nominatim público não aguenta volume — ok para cadastro de loja, não para cliente.
 - Reavaliar se: reclamação de frete/raio, expansão para muitas cidades, ou app do entregador (fase 2) exigir rota real.
 
+## Adendo 2026-11-19 (SEC-169): geocodificador configurável, nunca o Nominatim público
+- **Decisão:** a API NÃO usa mais o Nominatim público (nem para o cadastro de loja). `GEOCODER_URL` (compatível com a busca do Nominatim, https) liga um geocodificador próprio ou com contrato; **vazio = desligado (padrão)**. O boot de produção recusa `openstreetmap.org`. O ViaCEP (existência, rua, bairro, cidade, UF) continua e todo resultado é cacheado por CEP em Redis (30 dias; "não achou" 1 dia); provedor fora do ar não é cacheado e recua 1 min.
+- **Validação do endereço do cliente (`addresses.service.ts`):** CEP inexistente = 422 `ADDRESS_CEP_NOT_FOUND`; município/UF diferentes = 422 `ADDRESS_CEP_CITY_MISMATCH`; com geocodificador no ar o ponto é conferido contra o centro do CEP (`endereco_pino_max_m`) e o endereço fica `pinVerified=true`; **sem** geocodificador (ou ViaCEP fora) o ponto do app é aceito, só município/UF e o raio/teto de entrega da loja (na cotação) valem, e o endereço fica `pinVerified=false` (campo exposto na API e no snapshot do pedido, para a Logística).
+- **Só vai ao geocodificador** rua, cidade e UF do CEP (sem número, complemento nem dado de conta): o dado é do CEP, não do cliente.
+- **Custo:** desligado = R$ 0 (menos proteção contra pino falso dentro da cidade atendida). Ligar: Nominatim próprio exige uma VM com ~2 GB de RAM para o recorte do Sudeste [HIPÓTESE, estimar antes de decidir]; provedores com contrato têm cota gratuita e plano pago [confirmar preços no momento da contratação]. Decisão e credencial: fundador.
+- **Dívida:** o raio de entrega com `pinVerified=false` não usa o centro da cidade (as cidades não têm coordenada cadastrada); o pino pode ser deslocado dentro do município atendido. Pagar com o geocodificador ligado antes de escalar o piloto.
+
 ## Fontes
 - [V] Docker Hub 2026-11-18: `postgis/postgis:18-3.6-alpine` (só amd64) e `imresamu/postgis:18-3.6-alpine` (amd64+arm64, mantido por mantenedor do docker-postgis); npm: `drizzle-orm` 0.45.4 (`geometry`), `expo-location` ~58.0.22, `react-native-maps` 1.29.11.
 - [N] https://postgis.net/docs/ST_DWithin.html ; https://postgis.net/docs/ST_Covers.html ; https://postgis.net/workshops/postgis-intro/knn.html ; https://postgis.net/docs/using_postgis_dbmanagement.html#PostGIS_Geography

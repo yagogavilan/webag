@@ -32,6 +32,8 @@ export const userAddresses = pgTable(
     neighborhoodId: uuid().references(() => neighborhoods.id),
     lat: doublePrecision().notNull(),
     lng: doublePrecision().notNull(),
+    /** SEC-169: o ponto foi conferido contra o centro do CEP (geocodificador ligado e no ar). `false` = aceito sem conferir (geocodificador desligado ou fora). */
+    pinVerified: boolean().notNull().default(false),
     isDefault: boolean().notNull().default(false),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

@@ -1890,8 +1890,13 @@ export interface CepResult {
   neighborhood: string;
   city: string;
   state: string;
-  lat: number;
-  lng: number;
+  /**
+     * Centro aproximado do CEP; nulo sem geocodificador (SEC-169)
+     * @nullable
+     */
+  lat: number | null;
+  /** @nullable */
+  lng: number | null;
 }
 
 export type PaymentAccountView = {
@@ -14883,7 +14888,7 @@ export const getLookupCepUrl = (cep: string,) => {
 }
 
 /**
- * Papel de lojista. Limite de 60 por 10 min.
+ * Qualquer conta autenticada (o app do cliente consulta o CEP por aqui em vez de falar direto com o ViaCEP; o lojista, no onboarding). Limite de 60 por 10 min; resposta cacheada por CEP. `lat`/`lng` são o centro aproximado do CEP e vêm NULOS quando o geocodificador está desligado ou fora do ar (SEC-169; o lojista ajusta o pino no mapa). 404 `NOT_FOUND` se o CEP não existe; 422 `CEP_LOOKUP_UNAVAILABLE` se o serviço de CEP está fora do ar (preencher à mão).
  * @summary Consultar CEP (rua, bairro, cidade e coordenada)
  */
 export const lookupCep = async (cep: string, options?: Parameters<typeof apiFetch>[1]): Promise<lookupCepResponse> => {
@@ -18059,7 +18064,7 @@ export const getCreateAddressUrl = () => {
 }
 
 /**
- * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito. 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
+ * A cidade precisa estar ativa em `/v1/regions` (422 `REGION_NOT_SERVED`). Sem `lat`/`lng` o servidor usa o ponto do CEP; sem nenhum dos dois, 422 `ADDRESS_GEOCODING_FAILED` e o app pede a posição. SEC-169: CEP INEXISTENTE = 422 `ADDRESS_CEP_NOT_FOUND`, com ou sem `lat`/`lng` (o GPS não dispensa um CEP que não existe); CEP de outra cidade ou UF que a informada = 422 `ADDRESS_CEP_CITY_MISMATCH`. Com o geocodificador ligado (`GEOCODER_URL` na API) e no ar, o `lat`/`lng` é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais = 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa) e o endereço volta com `pinVerified=true`. SEM geocodificador (desligado, o padrão) ou com o serviço de CEP fora do ar, o ponto do app é aceito, só valem município/UF e o raio de entrega da loja, e o endereço volta com `pinVerified=false` (o app não precisa tratar: é informativo). 422 `ADDRESS_LIMIT_REACHED` no limite. O primeiro endereço vira o padrão. Reenviar o mesmo endereço (CEP, número e complemento) devolve 200 com o existente, sem duplicar (rede ruim).
  * @summary Salvar endereço
  */
 export const createAddress = async (createAddressRequest: CreateAddressRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createAddressResponse> => {
@@ -18177,7 +18182,7 @@ export const getUpdateAddressUrl = (id: string,) => {
 }
 
 /**
- * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu. SEC-169: o `lat`/`lng` enviado é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais, 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa); CEP de outra cidade que a informada, 422 `ADDRESS_CEP_CITY_MISMATCH`. Sem geocodificação do CEP (provedor fora), o ponto do app é aceito.
+ * Só os campos enviados mudam. `isDefault` aceita apenas `true` (promove este e rebaixa o antigo padrão). 409 `ADDRESS_DUPLICATE` se igualar outro endereço seu. SEC-169: CEP INEXISTENTE = 422 `ADDRESS_CEP_NOT_FOUND`, com ou sem `lat`/`lng` (o GPS não dispensa um CEP que não existe); CEP de outra cidade ou UF que a informada = 422 `ADDRESS_CEP_CITY_MISMATCH`. Com o geocodificador ligado (`GEOCODER_URL` na API) e no ar, o `lat`/`lng` é conferido com o centro do CEP (`endereco_pino_max_m`, padrão 2.000 m): longe demais = 422 `ADDRESS_PIN_FAR_FROM_CEP` (o app mostra a mensagem e reabre o mapa) e o endereço volta com `pinVerified=true`. SEM geocodificador (desligado, o padrão) ou com o serviço de CEP fora do ar, o ponto do app é aceito, só valem município/UF e o raio de entrega da loja, e o endereço volta com `pinVerified=false` (o app não precisa tratar: é informativo).
  * @summary Editar endereço
  */
 export const updateAddress = async (id: string,

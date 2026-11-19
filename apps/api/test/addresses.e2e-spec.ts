@@ -58,14 +58,15 @@ describe('GET/POST/PATCH/DELETE /v1/me/addresses (WB-003, DEC-028)', () => {
     await ctx.http.patch(`/v1/me/addresses/${ids[0]}`).set(bearer(user.accessToken)).send({ isDefault: false }).expect(400);
   });
 
-  it('cidade fora da região atendida e CEP sem coordenada: 422 com code estável', async () => {
+  it('cidade fora da região atendida e CEP inexistente: 422 com code estável (SEC-169: o pino do app não salva um CEP que não existe)', async () => {
     const user = await createCustomer(ctx);
     const outside = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send(base({ cep: '01001-000', city: 'São Paulo' })).expect(422);
     expect(outside.body.code).toBe('REGION_NOT_SERVED');
     const noPoint = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send(base({ cep: '00000-000' })).expect(422);
-    expect(noPoint.body.code).toBe('ADDRESS_GEOCODING_FAILED');
-    // GPS informado dispensa o CEP.
-    await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send(base({ cep: '00000-000', lat: -23.28, lng: -46.74 })).expect(201);
+    expect(noPoint.body.code).toBe('ADDRESS_CEP_NOT_FOUND');
+    // Com o ponto do GPS também: o GPS não dispensa um CEP que não existe.
+    const withPin = await ctx.http.post('/v1/me/addresses').set(bearer(user.accessToken)).send(base({ cep: '00000-000', lat: -23.28, lng: -46.74 })).expect(422);
+    expect(withPin.body.code).toBe('ADDRESS_CEP_NOT_FOUND');
   });
 
   it('validação: campos obrigatórios, campo extra, lat sem lng e coordenada fora da faixa', async () => {

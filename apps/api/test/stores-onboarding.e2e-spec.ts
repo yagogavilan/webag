@@ -6,6 +6,7 @@ import { bearer, createTestApp, randomIp, type TestContext } from './helpers/app
 import {
   connectFakeAccount,
   createAdmin,
+  createCustomer,
   createMerchant,
   createStoreViaApi,
   ensureCategory,
@@ -140,6 +141,11 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
       expect(none.body.errors[0].field).toBe('address.cep');
       expect((await ctx.http.get('/v1/cep/07900-100').set(bearer(m.accessToken)).expect(200)).body).toMatchObject({ city: 'Francisco Morato' });
       await ctx.http.get('/v1/cep/123').set(bearer(m.accessToken)).expect(400);
+      // SEC-169 / inventário §3: o cliente consulta o CEP pela API (cache por CEP), não direto no ViaCEP; sem login é 401; CEP inexistente é 404
+      const customer = await createCustomer(ctx);
+      expect((await ctx.http.get('/v1/cep/07900-100').set(bearer(customer.accessToken)).expect(200)).body).toMatchObject({ city: 'Francisco Morato', state: 'SP', lat: expect.any(Number), lng: expect.any(Number) });
+      expect((await ctx.http.get('/v1/cep/07900-100')).status).toBe(401);
+      expect((await ctx.http.get('/v1/cep/00012-345').set(bearer(customer.accessToken))).status).toBe(404);
     });
 
     it('O2-PRF-03/04: descrição 300 (por caractere Unicode) ok e 301 → 422; 3 extras → 400; categoria inativa → 422; WhatsApp inválido → 400', async () => {

@@ -105,6 +105,8 @@ describe('validateEnv', () => {
       ['MP sem segredo de webhook', { MP_WEBHOOK_SECRET: undefined }, /MP_WEBHOOK_SECRET/],
       ['credencial de teste do MP', { MP_ACCESS_TOKEN: 'TEST-123' }, /MP_ACCESS_TOKEN/],
       ['chave de cifra ausente', { PAYMENT_TOKEN_ENC_KEY: undefined }, /PAYMENT_TOKEN_ENC_KEY/],
+      ['GEOCODER_URL sem https (SEC-169)', { GEOCODER_URL: 'http://geo.interno/search' }, /GEOCODER_URL/],
+      ['GEOCODER_URL apontando para o Nominatim público (SEC-169)', { GEOCODER_URL: 'https://nominatim.openstreetmap.org/search' }, /GEOCODER_URL/],
       ['chave de cifra com tamanho errado', { PAYMENT_TOKEN_ENC_KEY: Buffer.alloc(16).toString('base64') }, /PAYMENT_TOKEN_ENC_KEY/],
     ])('recusa subir com %s, sem imprimir o valor', (_name, override, pattern) => {
       let message = '';
@@ -117,6 +119,14 @@ describe('validateEnv', () => {
       for (const secret of [DEV_JWT_ACCESS_SECRET, 'TEST-123', 'a-very-long-random-production-secret-0123456789']) {
         expect(message).not.toContain(secret);
       }
+    });
+
+    it('SEC-169: GEOCODER_URL vazio = desligado (padrão, nunca o público); URL https própria é aceita; vazio vindo do compose vira "não definido"', () => {
+      expect(validateEnv(prod).GEOCODER_URL).toBeUndefined();
+      expect(validateEnv({ ...prod, GEOCODER_URL: '', GEOCODER_API_KEY: '' }).GEOCODER_URL).toBeUndefined();
+      expect(validateEnv({ ...prod, GEOCODER_URL: '', GEOCODER_API_KEY: '' }).GEOCODER_API_KEY).toBeUndefined();
+      expect(validateEnv({ ...prod, GEOCODER_URL: 'https://geocoder.webag.com.br/search', GEOCODER_API_KEY: 'chave-do-provedor-123' }).GEOCODER_URL).toBe('https://geocoder.webag.com.br/search');
+      expect(() => validateEnv({ ...prod, GEOCODER_URL: 'https://eu.locationiq.com/v1/search' })).not.toThrow();
     });
 
     it('APP_ENV=staging (DT-038) aceita fake, TEST- e geocodificador fake; produção explícita continua recusando', () => {

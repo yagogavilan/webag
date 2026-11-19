@@ -52,7 +52,7 @@ Convenções: PK `uuid` (`gen_random_uuid()`, v4; o `uuidv7()` do ADR-007 é do 
 ## Onda 3 (descoberta, endereços, sacola)
 | Tabela | Conteúdo |
 |---|---|
-| `user_addresses` | Endereços salvos (até `enderecos_max`); `lat`/`lng` + coluna GERADA `location geography(Point,4326)` com GiST; um padrão por usuário (índice único parcial); sem duplicar CEP+número+complemento |
+| `user_addresses` | Endereços salvos (até `enderecos_max`); `lat`/`lng` + coluna GERADA `location geography(Point,4326)` com GiST; um padrão por usuário (índice único parcial); sem duplicar CEP+número+complemento; `pin_verified` (0048): o ponto foi conferido contra o centro do CEP (`false` = aceito sem conferir) |
 | `banners` | Banner da home 2:1; cidade nula = todas; destino loja, categoria, produto, cupom ou nenhum; período e posição |
 | `reviews` | Avaliação de loja (`product_id` nulo) ou produto; só leitura na Onda 3; `order_id` sem FK até a Onda 4; remoção é `status = removed` |
 | `favorites` | Loja OU produto por usuário (CHECK de um alvo só; únicos parciais) |
@@ -119,7 +119,7 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 `store_settings.prep_minutes int null` (preparo da loja; nulo = `entrega_preparo_padrao_min`); `orders.eta_from_at/eta_to_at timestamptz null` (faixa em horário, gravada na criação e reancorada no pagamento; as colunas `eta_min_minutes/eta_max_minutes` passam a guardar a faixa calculada em minutos; `store_settings.eta_*_minutes` ficam só por compatibilidade, sem efeito); `orders.delivery_snapshot.eta` (partes da conta: preparo, despacho, deslocamento, estimativa); `deliveries.eta_to_at` (fim da faixa herdado do pedido) e `deliveries.late_alerted_at` (um alerta `delivery_late` por corrida). `delivery_fee_tiers.eta_minutes` fica sem efeito (legado).
 
 ## Q.2/Q.3 (BUG-016, BUG-015): pausa da logística e pedido de cancelamento — migrações 0040 e 0041
-`logistics_pauses` (`city_id` nulo = geral, `reason`, `paused_by/at`, `resumed_by/at`; índice único parcial: uma pausa aberta por escopo); o horário normal é o parâmetro `logistica_horario` (+ `logistica_dias`), em horário de Brasília. `order_cancel_requests` (uma `pending` por pedido: `status` pending/approved/refused, `reason`, `decided_by` store/admin/system, `alerted_at`; `reason` e `decision_note` são apagados na anonimização, SEC-158). Sem coluna nova em `orders`: BUG-012 e BUG-014 são comportamento (corrida cancelada cancela o pedido; retirada vence em `retirada_prazo_horas`, contadas do evento `ready_for_pickup`).
+`logistics_pauses` (`city_id` nulo = geral, `reason`, `paused_by/at`, `resumed_by/at`; índice único parcial: uma pausa aberta por escopo); o horário normal é o parâmetro `logistica_horario` (+ `logistica_dias`), em horário de Brasília. `order_cancel_requests` (uma `pending` por pedido: `status` pending/approved/refused/superseded (SEC-175: o pedido ou a corrida mudou antes da resposta; sem migração, a coluna é texto), `reason`, `decided_by` store/admin/system, `alerted_at`; `reason` e `decision_note` são apagados na anonimização, SEC-158). Sem coluna nova em `orders`: BUG-012 e BUG-014 são comportamento (corrida cancelada cancela o pedido; retirada vence em `retirada_prazo_horas`, contadas do evento `ready_for_pickup`).
 
 ## IP truncado nos aceites (S.6.2, migração 0039)
 `webag_truncate_ip(text)` e o gatilho `webag_allow_ip_truncation()` substituem o bloqueio total de `terms_acceptances` e `consents`: a ÚNICA alteração permitida é trocar o `ip` pelo próprio IP truncado (IPv4 /24, IPv6 /48), usada na anonimização da conta (SEC-159, DEC-050b). Qualquer outro UPDATE e todo DELETE continuam negados.
@@ -189,3 +189,4 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0045 bug014_pickup_reminder | `orders.pickup_reminded_at` |
 | 0046 sec165_push_campaign_attempts | `push_campaigns.attempts`, `sending_started_at` |
 | 0047 sec173_platform_family | Função `webag_platform_family` e trigger append-only estendido |
+| 0048 sec169_address_pin_verified | `user_addresses.pin_verified` |

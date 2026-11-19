@@ -337,6 +337,13 @@
       "when": 1795101819306,
       "tag": "0047_sec173_platform_family",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795104733597,
+      "tag": "0048_sec169_address_pin_verified",
+      "breakpoints": true
     }
   ]
 }
