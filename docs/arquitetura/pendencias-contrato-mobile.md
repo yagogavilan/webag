@@ -25,3 +25,6 @@ Registro do `mobile-dev` (2026-11-18). O app contorna cada item com a hipótese 
 | 11 | Endpoint de "Pedir de novo": não existe | App devolve os itens do pedido à sacola um a um (`PUT /v1/cart/items`); item recusado entra na lista "faltam" | backend-dev (Should) |
 | 12 | "Não recebi meu pedido" (`report_not_received` em `allowedActions`) sem operação no contrato | Ação não é exibida | backend-dev |
 | 13 | `POST /v1/me/push-devices` exige o `projectId` do EAS para o token Expo: `extra.eas.projectId` (`EAS_PROJECT_ID`) | Sem projectId (dev local) o registro falha em silêncio e o pedido segue sem push | fundador (`eas init`) |
+| 14 | Troca: `exchange-options` não traz preço das variações nem a diferença de preço, nem a taxa por região antes de pedir (só `pickupFee` por tipo) | App mostra "o valor fechado aparece quando a loja aprovar" e a taxa de `pickupFee`; não calcula diferença | backend-dev |
+| 15 | Troca: sem operação para "levar à loja em vez da coleta" depois de aprovada, nem para "contestar recusa" (X3) | Botões não exibidos; recusada mostra motivo e "Falar com a loja" | backend-dev |
+| 16 | Troca: pagamento da taxa só por PIX no app (`payExchange` aceita cartão) | Cartão da taxa fica para depois; PIX copia e cola com polling | mobile-dev |
