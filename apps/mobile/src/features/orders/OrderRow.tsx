@@ -7,7 +7,7 @@ import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { theme } from '../../theme';
-import { formatDateTime, itemCountLabel, presentStatus, summaryA11y } from './model';
+import { firstItemLabel, formatDateTime, formatHour, isActive, itemCountLabel, presentStatus, summaryA11y, summaryEta } from './model';
 
 export interface OrderRowProps {
   order: OrderSummary;
@@ -17,9 +17,12 @@ export interface OrderRowProps {
   onHelp?: () => void;
 }
 
-/** Linha de Meus pedidos (spec S8): logo, loja, selo, data e itens, total. Lida inteira como uma frase. */
+/** Linha de Meus pedidos (spec S8): logo, loja, selo, "Caixa de som +1" (ativo) ou data (anterior), faixa de chegada se houver, total. Lida inteira como uma frase. */
 export function OrderRow({ order, onPress, onPay, onReorder, onHelp }: OrderRowProps) {
   const status = presentStatus(order.status);
+  // Pedido ativo: o que é e (se o servidor mandou a faixa) quando chega. Anteriores: data e quantidade de itens.
+  const active = isActive(order.status);
+  const eta = active ? summaryEta(order) : null;
   return (
     <View style={styles.wrap}>
       <Pressable
@@ -36,9 +39,14 @@ export function OrderRow({ order, onPress, onPay, onReorder, onHelp }: OrderRowP
             {order.store.name}
           </Text>
           <Badge icon={status.icon} label={status.label} tone={status.tone} />
-          <Text color="secondary" variant="caption">
-            {`${formatDateTime(order.createdAt)} · ${itemCountLabel(order.itemCount)}`}
+          <Text color="secondary" numberOfLines={1} testID={`orders.detail-${order.id}`} variant="caption">
+            {active ? firstItemLabel(order) : `${formatDateTime(order.createdAt)} · ${itemCountLabel(order.itemCount)}`}
           </Text>
+          {eta?.fromAt && eta.toAt ? (
+            <Text testID={`orders.eta-${order.id}`} variant="captionStrong">
+              {t('order.arrivesBetween', { start: formatHour(eta.fromAt), end: formatHour(eta.toAt) })}
+            </Text>
+          ) : null}
         </View>
         <Text variant="priceStrong">{formatMoney(order.total.amount)}</Text>
       </Pressable>

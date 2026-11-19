@@ -48,7 +48,7 @@ describe('S8. Meus pedidos', () => {
     await renderScreen(<OrdersScreen />);
     expect(await screen.findByTestId('orders.section-active')).toBeOnTheScreen();
     expect(screen.getByTestId('orders.section-past')).toBeOnTheScreen();
-    expect(screen.getByTestId('orders.item-a1').props.accessibilityLabel).toMatch(/^Casa Bela, Aguardando pagamento, 18 nov, \d{2}:\d{2}, 3 itens$/);
+    expect(screen.getByTestId('orders.item-a1').props.accessibilityLabel).toBe('Casa Bela, Aguardando pagamento, Camiseta +2');
     await fireEvent.press(screen.getByTestId('orders.pay-pix-a1'));
     expect(router.push).toHaveBeenCalledWith({ pathname: '/pay/[orderId]', params: { orderId: 'a1' } });
     expect(screen.getByTestId('orders.reorder-p1')).toBeOnTheScreen();
@@ -119,5 +119,32 @@ describe('S7. Pedido: acompanhar', () => {
     mockOrder.mockRejectedValue(new ApiError({ kind: 'problem', status: 404, code: 'NOT_FOUND' }));
     await renderScreen(<OrderScreen />);
     expect(await screen.findByTestId('order.not-found')).toBeOnTheScreen();
+  });
+});
+
+describe('U8.5. OrderRow: o que é o pedido e quando chega', () => {
+  const { OrderRow } = jest.requireActual('../src/features/orders/OrderRow') as typeof import('../src/features/orders/OrderRow');
+  const at = (h: number, m: number) => new Date(2026, 10, 19, h, m).toISOString();
+
+  it('ativo sem eta: "Camiseta +2" no lugar da data e nenhum horário inventado', async () => {
+    await renderScreen(<OrderRow onPress={jest.fn()} order={summaryFixture({ id: 'a1', status: 'accepted', itemCount: 3, firstItemName: 'Camiseta' })} />);
+    expect(screen.getByTestId('orders.detail-a1')).toHaveTextContent('Camiseta +2');
+    expect(screen.queryByTestId('orders.eta-a1')).toBeNull();
+    expect(screen.queryByText(/Chega entre/)).toBeNull();
+  });
+
+  it('ativo com eta do servidor: "Chega entre 18:46 e 19:46"', async () => {
+    const order = { ...summaryFixture({ id: 'a2', status: 'out_for_delivery', itemCount: 1, firstItemName: 'Caixa de som' }), eta: { fromAt: at(18, 46), toAt: at(19, 46) } };
+    await renderScreen(<OrderRow onPress={jest.fn()} order={order} />);
+    expect(screen.getByTestId('orders.detail-a2')).toHaveTextContent('Caixa de som');
+    expect(screen.getByTestId('orders.eta-a2')).toHaveTextContent('Chega entre 18:46 e 19:46');
+    expect(screen.getByTestId('orders.item-a2').props.accessibilityLabel).toContain('Chega entre 18:46 e 19:46');
+  });
+
+  it('anterior: continua com data e itens, mesmo que venha eta', async () => {
+    const order = { ...summaryFixture({ id: 'p1', status: 'delivered', itemCount: 2 }), eta: { fromAt: at(18, 46), toAt: at(19, 46) } };
+    await renderScreen(<OrderRow onPress={jest.fn()} order={order} />);
+    expect(screen.getByTestId('orders.detail-p1')).toHaveTextContent(/2 itens/);
+    expect(screen.queryByTestId('orders.eta-p1')).toBeNull();
   });
 });

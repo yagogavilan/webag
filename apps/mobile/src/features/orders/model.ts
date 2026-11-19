@@ -115,9 +115,23 @@ export const formatHour = (iso: string): string => {
 
 export const itemCountLabel = (n: number): string => (n === 1 ? t('orders.itemOne') : t('orders.itemMany', { n }));
 
-/** Linha da lista: loja, status, data e total lidos como uma frase (a11y, spec S8). */
+/**
+ * `OrderSummary.eta` (faixa gravada no pedido, DEC-053) ainda não está no contrato publicado: pedido ao backend-dev (U8.5). O app lê o campo
+ * se vier e NUNCA calcula horário sozinho.
+ */
+export type SummaryEta = { fromAt: string; toAt: string } | null | undefined;
+export const summaryEta = (order: OrderSummary): SummaryEta => (order as OrderSummary & { eta?: SummaryEta }).eta;
+
+/** "Caixa de som +1": o que é o pedido, pelo nome do 1º item (U8.5). */
+export const firstItemLabel = (order: OrderSummary): string => (order.itemCount > 1 ? `${order.firstItemName} +${order.itemCount - 1}` : order.firstItemName);
+
+/** Linha da lista: loja, status, o que é o pedido (ativo) ou a data (anterior) e total lidos como uma frase (a11y, spec S8). */
 export function summaryA11y(order: OrderSummary): string {
-  return [order.store.name, presentStatus(order.status).label, formatDateTime(order.createdAt), itemCountLabel(order.itemCount)].join(', ');
+  const eta = summaryEta(order);
+  const detail = isActive(order.status)
+    ? [firstItemLabel(order), eta && eta.fromAt && eta.toAt ? t('order.arrivesBetween', { start: formatHour(eta.fromAt), end: formatHour(eta.toAt) }) : null]
+    : [formatDateTime(order.createdAt), itemCountLabel(order.itemCount)];
+  return [order.store.name, presentStatus(order.status).label, ...detail].filter(Boolean).join(', ');
 }
 
 /** "4 8 2 1": o código de retirada é lido dígito a dígito. */
