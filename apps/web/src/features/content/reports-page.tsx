@@ -110,7 +110,7 @@ function Case({ type, id, editable, onDone }: { type: ReportTarget; id: string; 
           {type === 'review' ? <p className="wb-text-caption" style={{ margin: 0 }}>Não removemos avaliação só por ser negativa.</p> : null}
           {editable ? (
             <div className={k.actions}>
-              <Button loading={busy} loadingLabel="Salvando…" onClick={() => (type === 'review' ? void keep() : void keep())} data-testid={T('keep')}>{type === 'review' ? 'Manter avaliação' : 'Manter'}</Button>
+              <Button loading={busy} loadingLabel="Salvando…" onClick={() => void keep()} data-testid={T('keep')}>{type === 'review' ? 'Manter avaliação' : 'Manter'}</Button>
               {type === 'review' ? <Button variant="secondary" disabled={busy} onClick={() => setRemoving(true)} data-testid={T('remove')}>Remover avaliação</Button> : <Button variant="secondary" disabled={busy} onClick={() => void forward()} data-testid={T('forward')}>Encaminhar</Button>}
               {type === 'product' ? <Link className="wb-text-body" href={asRoute('/admin/moderacao')}>Abrir a moderação de produtos</Link> : null}
             </div>
