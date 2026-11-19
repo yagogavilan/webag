@@ -103,3 +103,7 @@ App do entregador (despacho e rastreio), programa de pontos, assinatura, chat in
 5. Pronto para servidor: Dockerfiles de produção, variáveis documentadas, guia de deploy (VPS com Docker + opção gerenciada), backup do banco, checklist de publicação nas lojas.
 6. README completo e `docs/` atualizado (arquitetura, ADRs, modelo de dados, contrato da API, design system, decisões e hipóteses).
 7. Relatório final curto: o que foi construído, como rodar, o que depende do fundador, hipóteses assumidas, backlog da fase 2.
+
+## 9. Atualizações do fundador (2026-11-19)
+- **Comissão:** percentual retido pela Webag em cada venda, configurado no admin por loja (ex.: 15%), com padrão geral e por categoria. O lojista cadastra o preço do produto já incluindo a comissão. (DEC-035)
+- **Logística é da Webag:** o lojista prepara e marca "pronto para coleta"; a Webag despacha o motoboy. O admin precisa de uma área simples para ver os pedidos a entregar, atribuir o motoboy e acompanhar (inclui a coleta de trocas). A taxa de entrega passa a ser da Webag. Substitui o modelo "lojista entrega" (DEC-007). Detalhes e hipóteses em DEC-036. App do entregador continua fase 2.

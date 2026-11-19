@@ -23,3 +23,11 @@
 0.5 [ ] SEC-133 (cartão aprovado na criação confere comissão e recebedor), SEC-136 (timeout de cartão sem pedido: reconciliar/estornar), SEC-137 a 140 (OAuth com PKCE, mascarar erro de refresh e CPF nos logs).
 0.6 [ ] SEC-039: estorno pelo admin (total e parcial) com auditoria, antes do G4.
 Depois de 0.x o Security reverifica. NUNCA troque de branch nem faça push fora de `claude/admiring-lamport-62tq1a`.
+
+## MUDANÇA DE MODELO (DEC-035/036, fundador, 2026-11-19): logística da Webag
+> O backend-dev lê isto ao iniciar a PRÓXIMA rodada. Antes de codar, ler DEC-036 e os PRDs/regras que o PO vai atualizar (docs/produto/prd/logistica.md quando existir). Não desfazer o que já está certo: a comissão por loja/categoria e o ledger permanecem.
+L.1 [ ] Parâmetros de frete no admin: tabela de taxa de entrega por região e faixa de distância (cobrada do cliente), pedido mínimo e frete grátis acima de X globais; lojista perde a configuração de taxa/raio próprios (manter só "entrega pela Webag" e "retirada").
+L.2 [ ] Split/ledger: `application_fee` = comissão + taxa de entrega + taxa de serviço; o lojista recebe itens menos comissão; a taxa de entrega é receita da Webag no ledger; testes numéricos.
+L.3 [ ] Módulo logística: motoboys (CRUD), entregas (uma por pedido de entrega e por coleta de troca), estados (pronto para coleta, aguardando motoboy, motoboy a caminho, coletado/saiu para entrega, entregue, não entregue com motivo), atribuição, histórico, custo por entrega, auditoria, permissão de perfil (operação/super admin), notificação ao cliente a cada mudança.
+L.4 [ ] Pedido: o lojista só chega até "pronto para coleta"; os estados seguintes são da logística; aviso ao admin em tempo real (Socket.IO/painel) quando um pedido fica pronto.
+L.5 [ ] Mensagem pronta de WhatsApp (link wa.me) para o motoboy com dados da coleta e entrega; dado pessoal do cliente minimizado (só o necessário, LGPD).
