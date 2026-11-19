@@ -33,6 +33,14 @@ const optionalBool = z
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    /**
+     * DT-038 (DEC-032a): `staging` roda com NODE_ENV=production (mesma imagem) mas aceita pagamento `fake`, credencial `TEST-`
+     * do Mercado Pago e geocodificador `fake`. Produção (sem APP_ENV ou APP_ENV=production) recusa os três.
+     */
+    APP_ENV: z.enum(['development', 'test', 'staging', 'production']).optional(),
+    /** DT-039 (DEC-032b): sem DSN o Sentry fica desligado. */
+    SENTRY_DSN: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
     API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z
       .enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'])
@@ -161,20 +169,21 @@ export const envSchema = z
     if (env.CORS_ORIGINS.length === 0 || env.CORS_ORIGINS.includes('*'))
       fail('CORS_ORIGINS', 'em produção precisa listar origens exatas (sem vazio nem "*")');
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');
-    if (env.PAYMENT_PROVIDER === 'fake')
-      fail('PAYMENT_PROVIDER', 'o provedor fake não sobe em produção');
+    const staging = env.APP_ENV === 'staging';
+    if (env.PAYMENT_PROVIDER === 'fake' && !staging)
+      fail('PAYMENT_PROVIDER', 'o provedor fake não sobe em produção (só com APP_ENV=staging)');
     if (env.PAYMENT_PROVIDER === 'mercadopago') {
       if (!env.MP_WEBHOOK_SECRET) fail('MP_WEBHOOK_SECRET', 'obrigatório com Mercado Pago ativo');
       if (!env.MP_ACCESS_TOKEN) fail('MP_ACCESS_TOKEN', 'obrigatório com Mercado Pago ativo');
-      if (env.MP_ACCESS_TOKEN?.startsWith('TEST-'))
-        fail('MP_ACCESS_TOKEN', 'credencial de teste não é aceita em produção');
+      if (env.MP_ACCESS_TOKEN?.startsWith('TEST-') && !staging)
+        fail('MP_ACCESS_TOKEN', 'credencial de teste não é aceita em produção (só com APP_ENV=staging)');
     }
     if (env.PAYMENT_TOKEN_ENC_KEY === DEV_PAYMENT_TOKEN_ENC_KEY || Buffer.from(env.PAYMENT_TOKEN_ENC_KEY, 'base64').length !== 32)
       fail('PAYMENT_TOKEN_ENC_KEY', 'obrigatória em produção, diferente da de desenvolvimento: 32 bytes em base64');
     if (env.STORAGE_DRIVER === 'memory') fail('STORAGE_DRIVER', 'o armazenamento em memória não sobe em produção');
     if (env.S3_ACCESS_KEY === 'webag-dev' || env.S3_SECRET_KEY === 'webag-dev-secret-only')
       fail('S3_SECRET_KEY', 'credencial de desenvolvimento não é aceita em produção');
-    if (env.GEOCODING_PROVIDER === 'fake') fail('GEOCODING_PROVIDER', 'o geocodificador fake não sobe em produção');
+    if (env.GEOCODING_PROVIDER === 'fake' && !staging) fail('GEOCODING_PROVIDER', 'o geocodificador fake não sobe em produção (só com APP_ENV=staging)');
   });
 
 export type Env = z.infer<typeof envSchema>;

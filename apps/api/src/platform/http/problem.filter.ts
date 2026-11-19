@@ -1,5 +1,6 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { captureError } from '../observability/sentry.js';
 import { AppError } from './app-error.js';
 
 const ERROR_BASE = 'https://api.webag.com.br/errors/';
@@ -58,6 +59,7 @@ export class ProblemFilter implements ExceptionFilter {
         { err: exception instanceof Error ? exception : new Error(String(exception)), reqId: req.id },
         'Erro não tratado',
       );
+      captureError(exception, typeof req.id === 'string' ? req.id : undefined);
     }
 
     if (retryAfter !== undefined) res.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfter))));

@@ -158,6 +158,8 @@ services:
       RECOVERY_HMAC_KEY: ${RECOVERY_HMAC_KEY:?defina RECOVERY_HMAC_KEY no .env}
       MFA_ENC_KEY: ${MFA_ENC_KEY:?defina MFA_ENC_KEY no .env}
       PAYMENT_TOKEN_ENC_KEY: ${PAYMENT_TOKEN_ENC_KEY:?defina PAYMENT_TOKEN_ENC_KEY no .env}
+      # APP_ENV=staging (DT-038): único modo que aceita pagamento fake, credencial TEST- e geocodificador fake.
+      APP_ENV: ${APP_ENV:-production}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mercadopago}
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
       MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
@@ -177,6 +179,7 @@ services:
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       GEOCODING_PROVIDER: ${GEOCODING_PROVIDER:-http}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
     # Sem ports: só o nginx (mesma rede) fala com a API.
     expose: ['3000']
     networks: [webag]

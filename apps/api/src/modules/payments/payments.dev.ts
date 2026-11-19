@@ -64,6 +64,8 @@ export class PaymentsDevController {
 export class PaymentsDevModule {}
 
 /** Módulos de simulação: nunca em produção (SEC-036). */
-export function devModulesFor(nodeEnv: string | undefined): (typeof PaymentsDevModule)[] {
-  return nodeEnv === 'production' ? [] : [PaymentsDevModule];
+export function devModulesFor(nodeEnv: string | undefined, appEnv?: string, paymentProvider?: string): (typeof PaymentsDevModule)[] {
+  // DT-038: o staging usa o provedor fake e precisa simular pagamento; produção real nunca (o env.ts já a impede de usar fake).
+  if (nodeEnv === 'production') return appEnv === 'staging' && paymentProvider === 'fake' ? [PaymentsDevModule] : [];
+  return [PaymentsDevModule];
 }

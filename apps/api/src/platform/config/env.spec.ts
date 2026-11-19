@@ -113,6 +113,25 @@ describe('validateEnv', () => {
       }
     });
 
+    it('APP_ENV=staging (DT-038) aceita fake, TEST- e geocodificador fake; produção explícita continua recusando', () => {
+      const relaxed = { ...prod, APP_ENV: 'staging', PAYMENT_PROVIDER: 'fake', GEOCODING_PROVIDER: 'fake' };
+      expect(() => validateEnv(relaxed)).not.toThrow();
+      expect(() => validateEnv({ ...prod, APP_ENV: 'staging', MP_ACCESS_TOKEN: 'TEST-123' })).not.toThrow();
+      for (const appEnv of [undefined, 'production']) {
+        expect(() => validateEnv({ ...relaxed, APP_ENV: appEnv })).toThrow(/PAYMENT_PROVIDER/);
+        expect(() => validateEnv({ ...prod, APP_ENV: appEnv, MP_ACCESS_TOKEN: 'TEST-123' })).toThrow(/MP_ACCESS_TOKEN/);
+      }
+    });
+
+    it('staging NÃO afrouxa os segredos: chave de desenvolvimento continua recusada', () => {
+      expect(() => validateEnv({ ...prod, APP_ENV: 'staging', JWT_ACCESS_SECRET: DEV_JWT_ACCESS_SECRET })).toThrow(/JWT_ACCESS_SECRET/);
+    });
+
+    it('SENTRY_DSN vazio (compose) vale como desligado; DSN inválido derruba o boot', () => {
+      expect(validateEnv({ ...prod, SENTRY_DSN: '' }).SENTRY_DSN).toBeUndefined();
+      expect(() => validateEnv({ ...prod, SENTRY_DSN: 'nao-e-url' })).toThrow(/SENTRY_DSN/);
+    });
+
     it('TRUST_PROXY aceita lista de IP/CIDR e recusa CIDR que confia na internet (SEC-114)', () => {
       expect(validateEnv({ ...prod, TRUST_PROXY: '127.0.0.1,10.0.0.0/8' }).TRUST_PROXY).toEqual(['127.0.0.1', '10.0.0.0/8']);
       expect(() => validateEnv({ ...prod, TRUST_PROXY: '0.0.0.0/0' })).toThrow(/TRUST_PROXY/);
