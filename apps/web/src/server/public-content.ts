@@ -15,7 +15,7 @@ export interface LegalDoc {
 export interface HelpData {
   audience: 'customer' | 'merchant';
   contacts: { whatsapp: string | null; email: string | null; hours: string | null };
-  privacy: { officerName: string | null; officerEmail: string | null };
+  privacy: { officerName: string | null; officerEmail: string | null; deletionRegretHours?: number; fiscalRetentionYears?: number; accessLogMonths?: number; privacyAnswerDays?: number };
   groups: { id: string; label: string; items: { id: string; question: string; answer: string }[] }[];
 }
 

@@ -9,6 +9,7 @@ import { arrivedAt, elapsedTone, formatElapsed, nextStep } from '@/lib/orders/st
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { CompleteDialog } from './complete-dialog';
+import { ReadyBy } from './ready-by';
 import { ReadyDialog } from './ready-dialog';
 import { ModeBadge, OrderStatusBadge } from './status-badge';
 import s from './orders.module.css';
@@ -95,6 +96,7 @@ export function OrderCard({ order, now, online }: Props) {
           {order.itemCount} {order.itemCount === 1 ? 'item' : 'itens'} · {order.firstItemName}
           {order.itemCount > 1 ? ` +${order.itemCount - 1}` : ''}
         </p>
+        <ReadyBy orderId={order.id} readyByAt={order.readyByAt} now={now} />
         {order.total ? <p className={cx('wb-text-title2', s.total)}>{formatCents(order.total.amount)}</p> : null}
         {left !== null ? (
           <p className={s.countdown} data-testid={T(`card-${order.id}-countdown`)}>

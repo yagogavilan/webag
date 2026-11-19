@@ -105,6 +105,36 @@ describe('L8: acompanhar a aprovação', () => {
     expect(await screen.findByTestId('lojista.inicio.all-clear')).toHaveTextContent('Tudo em dia.');
   });
 
+  it('no ar: cartão de avaliação e ranking "Mais vendidos" com "Você recebe" vêm da API (W.6)', async () => {
+    const calls: string[] = [];
+    setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }), [
+      (url) => {
+        calls.push(url.pathname + url.search);
+        if (url.pathname.endsWith('/reviews/summary')) return json({ average: 4.7, total: 12, distribution: { '1': 0, '2': 0, '3': 1, '4': 3, '5': 8 }, withoutReply: 2 });
+        if (url.pathname.endsWith('/sales/top-products')) return json({ period: { from: '2026-11-13', to: '2026-11-19' }, data: [{ productId: 'p1', name: 'Camiseta Básica', image: { urls: {} }, units: 14, youReceive: { amount: 28450, currency: 'BRL' } }, { productId: 'p2', name: 'Calça Jeans', image: { urls: {} }, units: 1, youReceive: { amount: 9000, currency: 'BRL' } }] });
+        if (/\/finance\/sales/.test(url.pathname)) return json({ gross: { amount: 0, currency: 'BRL' }, orders: 0, averageTicket: { amount: 0, currency: 'BRL' } });
+        return undefined;
+      },
+    ]);
+    expect(await screen.findByTestId('lojista.home.reviews')).toHaveTextContent('4,7');
+    expect(screen.getByTestId('lojista.home.reviews')).toHaveTextContent('12 avaliações · 2 sem resposta');
+    expect(screen.getByTestId('lojista.home.reviews')).toHaveAttribute('href', '/lojista/avaliacoes');
+    expect(await screen.findByTestId('lojista.inicio.top-p1')).toHaveTextContent('Camiseta Básica');
+    expect(screen.getByTestId('lojista.inicio.top-p1')).toHaveTextContent('14 unidades');
+    expect(screen.getByTestId('lojista.inicio.top-p1')).toHaveTextContent('Você recebe');
+    expect(screen.getByTestId('lojista.inicio.top-p1')).toHaveTextContent(/R\$\s284,50/);
+    expect(screen.getByTestId('lojista.inicio.top-p2')).toHaveTextContent('1 unidade');
+    expect(calls.find((c) => c.includes('top-products'))).toMatch(/limit=5/);
+  });
+
+  it('no ar, funcionário sem "vendas_valores" e sem "avaliações" não vê ranking nem avaliação', async () => {
+    const calls: string[] = [];
+    setup(fakeStore({ status: 'live', step: 4, role: 'staff', permissions: ['orders'], name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }), [(url) => { calls.push(url.pathname); return undefined; }]);
+    await screen.findByTestId('lojista.inicio.hero');
+    expect(screen.queryByTestId('lojista.home.reviews')).not.toBeInTheDocument();
+    expect(calls.some((c) => c.includes('top-products') || c.includes('reviews/summary'))).toBe(false);
+  });
+
   it('suspensa: banner de erro com o motivo e suporte', async () => {
     setup(fakeStore({ status: 'suspended', step: 4, decisionReason: 'Muitas reclamações.' }));
     expect(await screen.findByText('Sua loja foi suspensa.')).toBeInTheDocument();

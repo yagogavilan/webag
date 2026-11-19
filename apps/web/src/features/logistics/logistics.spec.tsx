@@ -8,6 +8,8 @@ import { resultOf, summarize } from './history-tab';
 import { batchError, batchFailMessage } from './batch-dialog';
 import { LogisticsPage } from './logistics-page';
 import { ApiError } from '@/lib/api/errors';
+import { brasiliaToday, countdownText, lateAlertsSince, pendingLateCancel } from '@/lib/api/logistics';
+import { deliveredAtProblem, timeToDate } from './delivery-dialog';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/admin/logistica' }));
 
@@ -288,5 +290,144 @@ describe('revelar contato (SEC-144)', () => {
     expect(await screen.findByTestId('admin.logistica.customer-block')).toHaveTextContent('Rua B, 2');
     expect(body).toEqual({ reason: 'Cliente não atende o motoboy' });
     expect(screen.getByTestId('admin.logistica.revealed-note')).toBeInTheDocument();
+  });
+});
+
+const statsBody = (over: object = {}) => ({ period: { from: '2026-11-19', to: '2026-11-19' }, delivered: 12, onTime: { count: 11, of: 12, pct: 91.7 }, withinCeiling: { count: 12, of: 12, pct: 100, ceilingMinutes: 120 }, precisionMedianMinutes: 8, lateCancellations: 0, compensations: { granted: 0, redeemed: 0, cost: money(0), abdicatedFee: money(0) }, prepByStore: [], ...over });
+const lateCancel = (over: object = {}) => ({ id: 'c1', status: 'pending', reason: 'Atraso na entrega', requestedAt: new Date().toISOString(), respondBy: new Date(Date.now() + 7 * 60_000).toISOString(), decidedAt: null, decidedBy: null, decisionNote: null, ...over });
+
+describe('Logística v3: dados da onda 7 (W.3, W.4, Y.2)', () => {
+  it('4º número "No prazo hoje" vem de /admin/logistics/stats; suporte (403) fica com "Maior espera"', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', mockFetch((url) => {
+      const p = url.pathname.replace('/api/proxy/admin/', '');
+      if (p === 'admin/logistics/deliveries') return json({ data: [delivery()], nextCursor: null });
+      if (p === 'admin/logistics/stats') { calls.push(url.search); return json(statsBody()); }
+      return undefined;
+    }).impl);
+    const first = renderPanel(<LogisticsPage />, 'operations');
+    expect(await screen.findByTestId('admin.logistica.summary-ontime')).toHaveTextContent('No prazo hoje');
+    expect(screen.getByTestId('admin.logistica.summary-ontime')).toHaveTextContent('91,7%');
+    expect(screen.getByTestId('admin.logistica.summary-ontime')).toHaveTextContent('11 de 12 entregas');
+    expect(calls[0]).toBe(`?from=${brasiliaToday(Date.now())}&to=${brasiliaToday(Date.now())}`);
+    first.unmount();
+    vi.stubGlobal('fetch', mockFetch((url) => {
+      const p = url.pathname.replace('/api/proxy/admin/', '');
+      if (p === 'admin/logistics/deliveries') return json({ data: [delivery()], nextCursor: null });
+      if (p === 'admin/logistics/stats') return json({ code: 'FORBIDDEN', title: 'x', status: 403 }, 403);
+      return undefined;
+    }).impl);
+    renderPanel(<LogisticsPage />, 'support');
+    expect(await screen.findByTestId('admin.logistica.summary-longest')).toHaveTextContent('Maior espera');
+    expect(screen.queryByTestId('admin.logistica.summary-ontime')).not.toBeInTheDocument();
+  });
+
+  it('pedido de cancelamento por atraso: faixa com contagem, "Chego em até 10 min" e "Aceitar" com confirmação', async () => {
+    const bodies: unknown[] = [];
+    const row = delivery({ id: 'd9', orderId: 'o9', orderNumber: 'WB-E2026', status: 'out_for_delivery', allowedActions: ['delivered', 'not_delivered'], lateCancelRequest: lateCancel() } as Partial<Delivery>);
+    vi.stubGlobal('fetch', mockFetch((url, init) => {
+      const p = url.pathname.replace('/api/proxy/admin/', '');
+      if (p === 'admin/logistics/deliveries') return json({ data: [row], nextCursor: null });
+      if (p === 'admin/logistics/stats') return json(statsBody());
+      if (p === 'admin/orders/o9/late-cancel/respond' && init.method === 'POST') { bodies.push(JSON.parse(String(init.body))); return json({ status: 'ok' }); }
+      return undefined;
+    }).impl);
+    const user = userEvent.setup();
+    renderPanel(<LogisticsPage />, 'operations');
+    expect(await screen.findByTestId('admin.logistica.late-alert')).toHaveTextContent('1 pedido de cancelamento');
+    await user.click(screen.getByTestId('admin.logistica.late-alert-open'));
+    const strip = await screen.findByTestId('admin.logistica.cancel-request-d9');
+    expect(strip).toHaveTextContent('O cliente pediu cancelamento por atraso');
+    expect(screen.getByTestId('admin.logistica.cancel-request-d9-countdown')).toHaveTextContent(/0[67]:\d\d/);
+    await user.click(screen.getByTestId('admin.logistica.cancel-request-d9-arrive'));
+    await waitFor(() => expect(bodies).toEqual([{ action: 'arrive_soon' }]));
+    expect(await screen.findByText(/O cliente foi avisado: chega em até 10 min/)).toBeInTheDocument();
+    await user.click(screen.getByTestId('admin.logistica.cancel-request-d9-accept'));
+    expect(await screen.findByTestId('admin.logistica.cancel-request-d9-confirm')).toHaveTextContent('Não dá para desfazer');
+    await user.click(screen.getByTestId('admin.logistica.cancel-request-d9-accept-confirm'));
+    await waitFor(() => expect(bodies).toEqual([{ action: 'arrive_soon' }, { action: 'accept' }]));
+  });
+
+  it('suporte vê a faixa do pedido de cancelamento mas não os botões; pedido já respondido não mostra faixa', async () => {
+    const rows = [delivery({ id: 'd1', status: 'out_for_delivery', lateCancelRequest: lateCancel() } as Partial<Delivery>), delivery({ id: 'd2', orderNumber: 'WB-2', status: 'out_for_delivery', lateCancelRequest: lateCancel({ id: 'c2', status: 'approved' }) } as Partial<Delivery>)];
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/admin/logistics/deliveries') ? json({ data: rows, nextCursor: null }) : undefined)).impl);
+    const user = userEvent.setup();
+    renderPanel(<LogisticsPage />, 'support');
+    await user.click(await screen.findByTestId('admin.logistica.tab-andamento'));
+    expect(await screen.findByTestId('admin.logistica.cancel-request-d1')).toBeInTheDocument();
+    expect(screen.queryByTestId('admin.logistica.cancel-request-d1-arrive')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('admin.logistica.cancel-request-d2')).not.toBeInTheDocument();
+  });
+
+  it('alerta de atraso: som só para corrida que ganhou `lateAlertedAt` depois da primeira leitura, uma vez cada', () => {
+    const a = { id: 'a', lateAlertedAt: null as string | null };
+    const first = lateAlertsSince(null, [a, { id: 'b', lateAlertedAt: '2026-11-19T15:00:00Z' }]);
+    expect(first.fresh).toEqual([]);
+    const second = lateAlertsSince(first.ids, [{ ...a, lateAlertedAt: '2026-11-19T15:05:00Z' }, { id: 'b', lateAlertedAt: '2026-11-19T15:00:00Z' }]);
+    expect(second.fresh).toEqual(['a']);
+    expect(lateAlertsSince(second.ids, [{ id: 'a', lateAlertedAt: '2026-11-19T15:05:00Z' }, { id: 'b', lateAlertedAt: '2026-11-19T15:00:00Z' }]).fresh).toEqual([]);
+  });
+
+  it('pino não conferido (dropoffPinVerified=false) aparece na linha, em texto', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/admin/logistics/deliveries') ? json({ data: [delivery({ dropoffPinVerified: false } as Partial<Delivery>), delivery({ id: 'd2', dropoffPinVerified: true } as Partial<Delivery>)], nextCursor: null }) : undefined)).impl);
+    renderPanel(<LogisticsPage />, 'operations');
+    expect(await screen.findByTestId('admin.logistica.row-d1-pin')).toHaveTextContent('Pino do endereço não conferido');
+    expect(screen.queryByTestId('admin.logistica.row-d2-pin')).not.toBeInTheDocument();
+  });
+
+  it('cronômetro e fila de resposta: formato mm:ss e só pedido pendente', () => {
+    const now = Date.parse('2026-11-19T15:00:00Z');
+    expect(countdownText('2026-11-19T15:06:58Z', now)).toBe('06:58');
+    expect(countdownText('2026-11-19T14:59:00Z', now)).toBe('00:00');
+    expect(pendingLateCancel({ lateCancelRequest: null })).toBeNull();
+    expect(pendingLateCancel({ lateCancelRequest: lateCancel({ status: 'superseded' }) as never })).toBeNull();
+  });
+});
+
+describe('"Marcar entregue" com hora real (WB-262)', () => {
+  const NOW = Date.parse('2026-11-19T15:30:00');
+  it('hora em branco = agora; até 5 min não pede motivo; acima pede; futuro e mais de 60 min são recusados', () => {
+    expect(deliveredAtProblem('', null, '', NOW)).toEqual({ error: null, at: null, needsReason: false });
+    expect(deliveredAtProblem('15:27', null, '', NOW)).toMatchObject({ error: null, needsReason: false });
+    expect(deliveredAtProblem('15:20', null, '', NOW)).toMatchObject({ needsReason: true, error: expect.stringContaining('diga por que') });
+    expect(deliveredAtProblem('15:20', 'no_signal', '', NOW)).toMatchObject({ error: null, needsReason: true });
+    expect(deliveredAtProblem('15:20', 'other', '', NOW).error).toBe('Escreva o motivo.');
+    expect(deliveredAtProblem('15:20', 'other', 'Sem sinal na rua', NOW).error).toBeNull();
+    expect(deliveredAtProblem('15:40', null, '', NOW).error).toBe('A hora da entrega não pode ser no futuro.');
+    expect(deliveredAtProblem('14:00', 'no_signal', '', NOW).error).toContain('até 60 minutos');
+    expect(deliveredAtProblem('9h', null, '', NOW).error).toContain('formato 14:32');
+  });
+  it('virada da meia-noite: 23:50 às 00:10 é ontem', () => {
+    const at = timeToDate('23:50', Date.parse('2026-11-20T00:10:00'))!;
+    expect(at.getDate()).toBe(19);
+    expect(at.getHours()).toBe(23);
+  });
+
+  it('envia deliveredAt, motivo e nota ao marcar entregue e mostra a hora real na linha do tempo', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const running = delivery({ id: 'd1', status: 'out_for_delivery', allowedActions: ['delivered', 'not_delivered'], codeRequired: false });
+    vi.stubGlobal('fetch', mockFetch((url, init) => {
+      const p = url.pathname.replace('/api/proxy/admin/', '');
+      if (p === 'admin/logistics/deliveries') return json({ data: [running], nextCursor: null });
+      if (p === 'admin/logistics/deliveries/d1' && init.method !== 'POST') return json({ ...running, timeline: [{ id: 't1', to: 'delivered', at: new Date().toISOString(), deliveredAt: new Date(Date.now() - 12 * 60_000).toISOString(), deliveredAtReason: 'no_signal' }] });
+      if (p === 'admin/logistics/deliveries/d1/status' && init.method === 'POST') { sent = JSON.parse(String(init.body)); return json({ ...running, status: 'delivered' }); }
+      return undefined;
+    }).impl);
+    const user = userEvent.setup();
+    renderPanel(<LogisticsPage />, 'operations');
+    await user.click(await screen.findByTestId('admin.logistica.tab-andamento'));
+    await user.click(await screen.findByTestId('admin.logistica.andamento.row-d1-next'));
+    expect(await screen.findByText(/entregue de fato às/)).toHaveTextContent('Ele ficou sem sinal');
+    await user.click(await screen.findByTestId('admin.logistica.next-action'));
+    const time = new Date(Date.now() - 12 * 60_000);
+    await user.type(screen.getByTestId('admin.logistica.delivered-time'), `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`);
+    await user.click(screen.getByTestId('admin.logistica.delivered-confirm'));
+    expect(await screen.findByText(/diga por que/)).toBeInTheDocument();
+    expect(sent).toBeNull();
+    await user.click(screen.getByTestId('admin.logistica.delivered-reason-no_signal'));
+    await user.click(screen.getByTestId('admin.logistica.delivered-confirm'));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent).toMatchObject({ action: 'delivered', deliveredAtReason: 'no_signal' });
+    expect(typeof sent!.deliveredAt).toBe('string');
   });
 });

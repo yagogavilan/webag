@@ -29,7 +29,7 @@ export function assignErrorMessage(error: unknown): { message: string; needsAddr
  * Atribuir motoboy (LG3). Primeiro operador vence: se outra pessoa atribuiu antes, a API devolve 409 e a fila é relida.
  * Depois de atribuir, o botão "Enviar no WhatsApp" é um link real (wa.me) com a mensagem pronta; abrir o link registra o envio.
  */
-export function AssignDialog({ delivery, onClose }: { delivery: Pick<Delivery, 'id' | 'orderNumber' | 'storeName' | 'destination'>; onClose: () => void }) {
+export function AssignDialog({ delivery, onClose }: { delivery: Pick<Delivery, 'id' | 'orderNumber' | 'storeName' | 'destination'> & { dropoffPinVerified?: boolean | null }; onClose: () => void }) {
   const client = useQueryClient();
   const toast = useToast();
   const online = useOnline();
@@ -152,7 +152,8 @@ export function AssignDialog({ delivery, onClose }: { delivery: Pick<Delivery, '
           options={list.map((courier) => ({ value: courier.id, label: `${courier.name} · ${courier.busyNow ? 'Em corrida' : 'Livre'}`, description: formatPhone(courier.phone), testId: T(`driver-option-${courier.id}`) }))}
         />
       )}
-      {needsAddress ? <CheckboxField label="Confirmei o endereço com o cliente" checked={addressConfirmed} onChange={(event) => setAddressConfirmed(event.target.checked)} data-testid={T('address-confirmed')} /> : null}
+      {delivery.dropoffPinVerified === false && !needsAddress ? <Banner tone="warning" testId={T('pin-unverified')}>O pino do endereço de entrega não foi conferido. Confirme o endereço com o cliente antes de despachar.</Banner> : null}
+      {needsAddress || delivery.dropoffPinVerified === false ? <CheckboxField label="Confirmei o endereço com o cliente" checked={addressConfirmed} onChange={(event) => setAddressConfirmed(event.target.checked)} data-testid={T('address-confirmed')} /> : null}
       {error ? <Banner tone="danger" testId={T('assign-error')}>{error}</Banner> : null}
     </Dialog>
   );

@@ -19,6 +19,18 @@ import { useOnline } from '@/lib/use-online';
 
 const T = (id: string) => tid('relatorios', id);
 type Preset = PeriodId | 'custom';
+type ExportKind = 'ops' | 'orders' | 'revenue' | 'refunds';
+const EXPORTERS: Record<ExportKind, (f: ReportFilter) => Promise<{ blob: Blob; fileName: string }>> = { ops: reportsApi.exportOperations, orders: reportsApi.exportOrders, revenue: reportsApi.exportRevenue, refunds: reportsApi.exportRefunds };
+
+/** Mensagem do erro de exportação. `EXPORT_TOO_LARGE` (acima de 10.000 linhas) diz o que fazer; o detalhe da API traz quantas linhas foram encontradas. */
+export function exportErrorText(error: unknown, finance: boolean): string {
+  if (error instanceof ApiError) {
+    if (error.isNetwork) return 'Conecte-se para exportar.';
+    if (error.code === 'EXPORT_TOO_LARGE') return finance ? (error.detail ?? 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas).') : 'A exportação é grande. Reduza o período ou filtre por loja.';
+    if (error.status === 403) return 'Você não tem permissão para este relatório.';
+  }
+  return 'Não foi possível exportar agora. Tente de novo.';
+}
 
 function Variation({ pct }: { pct: number | null | undefined }) {
   if (pct === null || pct === undefined) return <span className="wb-text-caption">sem comparação</span>;
@@ -84,7 +96,7 @@ export function ReportsPage() {
   const [cityId, setCityId] = useState('');
   const [storeId, setStoreId] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [exporting, setExporting] = useState<'ops' | 'orders' | null>(null);
+  const [exporting, setExporting] = useState<ExportKind | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showOrders, setShowOrders] = useState(false);
 
@@ -102,15 +114,15 @@ export function ReportsPage() {
   const data = query.data;
   const showRevenue = user.adminProfile === 'super_admin' || user.adminProfile === 'finance';
 
-  async function exportCsv(kind: 'ops' | 'orders') {
+  async function exportCsv(kind: ExportKind) {
     setExporting(kind);
     setExportError(null);
     try {
-      const { blob, fileName } = await (kind === 'ops' ? reportsApi.exportOperations(filter) : reportsApi.exportOrders(filter));
+      const { blob, fileName } = await EXPORTERS[kind](filter);
       saveBlob(blob, fileName);
       toast.show('Arquivo pronto.');
     } catch (error) {
-      setExportError(error instanceof ApiError && error.isNetwork ? 'Conecte-se para exportar.' : error instanceof ApiError && error.code === 'EXPORT_TOO_LARGE' ? 'A exportação é grande. Reduza o período ou filtre por loja.' : 'Não foi possível exportar agora. Tente de novo.');
+      setExportError(exportErrorText(error, kind === 'revenue' || kind === 'refunds'));
     } finally {
       setExporting(null);
     }
@@ -139,6 +151,14 @@ export function ReportsPage() {
         <SelectField label="Loja" value={storeId} onChange={(e) => setStoreId(e.target.value)} data-testid={T('filter-store')}><option value="">Todas</option>{(stores.data?.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name ?? 'Loja'}</option>)}</SelectField>
         <SelectField label="Categoria" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} data-testid={T('filter-category')}><option value="">Todas</option>{flatCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</SelectField>
       </div>
+      {showRevenue ? (
+        <section aria-labelledby="fin-csv-title" className={k.actions} data-testid={T('finance-exports')} style={{ alignItems: 'center' }}>
+          <h2 id="fin-csv-title" className="wb-text-body-strong" style={{ margin: 0 }}>Planilhas financeiras</h2>
+          <Button variant="secondary" size="sm" icon={<DownloadSimple size={20} aria-hidden="true" />} loading={exporting === 'revenue'} loadingLabel="Preparando…" disabled={!validPeriod || exporting !== null || !online} onClick={() => void exportCsv('revenue')} data-testid={T('export-revenue')}>Receita por pedido (CSV)</Button>
+          <Button variant="secondary" size="sm" icon={<DownloadSimple size={20} aria-hidden="true" />} loading={exporting === 'refunds'} loadingLabel="Preparando…" disabled={!validPeriod || exporting !== null || !online} onClick={() => void exportCsv('refunds')} data-testid={T('export-refunds')}>Estornos (CSV)</Button>
+          <span className={cx('wb-text-caption', k.muted)}>Usam o período, a cidade e a loja escolhidos. No máximo 10.000 linhas; cada exportação fica na auditoria.</span>
+        </section>
+      ) : null}
       {exportError ? <Banner tone="danger" testId={T('export-error')}>{exportError}</Banner> : null}
 
       {!validPeriod ? <p className={k.muted}>Escolha o período para ver os números.</p> : query.isPending ? (

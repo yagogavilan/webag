@@ -14,6 +14,7 @@ import { formatDay } from '@/lib/format';
 import { canReplyReviews } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
+import { ReviewsSummaryCard } from './reviews-summary';
 import s from './reviews.module.css';
 
 const T = (id: string) => ltid('avaliacoes', id);
@@ -85,6 +86,7 @@ function Reviews({ storeId }: { storeId: string }) {
     <div className={s.page}>
       <PageHeader title="Avaliações" description="O que os clientes disseram e as suas respostas." />
       {!online ? <Banner tone="warning" offline>Sem conexão. Mostrando o que já carregou.</Banner> : null}
+      <ReviewsSummaryCard storeId={storeId} variant="page" />
       <div className={s.chips} role="group" aria-label="Filtrar avaliações">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className={cx(s.chip, filterId === f.id && s.chipOn, 'wb-text-body-strong')} aria-pressed={filterId === f.id} onClick={() => setFilterId(f.id)} data-testid={T(`filter-${f.id}`)}>

@@ -6,7 +6,7 @@ import { AccountDeletionFlow } from '@/features/public/account-deletion-flow';
 import { CancelDeletionPublic } from '@/features/public/cancel-deletion-public';
 import { PrivacyRequestForm } from '@/features/public/privacy-request-form';
 import { hoursText } from '@/features/account/legal-copy';
-import { deletionFacts } from '@/lib/public-deletion';
+import { deletionFacts, factsFromPrivacy } from '@/lib/public-deletion';
 import { loadHelp } from '@/server/public-content';
 
 export const metadata: Metadata = {
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export default async function Page() {
   const help = await loadHelp('customer');
   const privacy = help.status === 'ok' ? help.data.privacy : null;
-  const F = deletionFacts();
+  const F = deletionFacts(process.env, factsFromPrivacy(privacy));
   return (
     <Container>
       <h1 className={`wb-text-display ${s.title}`}>Excluir conta Webag</h1>
@@ -47,9 +47,13 @@ export default async function Page() {
         <h2>O que acontece depois</h2>
         <ul>
           <li>A conta fecha na hora. Você sai de todos os aparelhos e não consegue mais usar o app com ela.</li>
-          <li>
-            Você tem {hoursText(F.regretHours)} para desistir. Nesse prazo, use o formulário &ldquo;Mudou de ideia?&rdquo; mais abaixo, ou entre de novo no app com o e-mail e a senha. Passado o prazo, a exclusão não pode ser desfeita.
-          </li>
+          {F.regretHours > 0 ? (
+            <li>
+              Você tem {hoursText(F.regretHours)} para desistir. Nesse prazo, use o formulário &ldquo;Mudou de ideia?&rdquo; mais abaixo, ou entre de novo no app com o e-mail e a senha. Passado o prazo, a exclusão não pode ser desfeita.
+            </li>
+          ) : (
+            <li>A exclusão é imediata e não pode ser desfeita.</li>
+          )}
           <li>Terminado o prazo, apagamos ou anonimizamos os seus dados pessoais, como descrito abaixo. Você recebe um e-mail avisando.</li>
         </ul>
 
@@ -73,13 +77,15 @@ export default async function Page() {
         </p>
       </div>
 
-      <section className={s.card} aria-labelledby="desistir" data-testid="public.excluir.cancel">
-        <h2 id="desistir" className="wb-text-title2">Mudou de ideia?</h2>
-        <p className="wb-text-body">
-          Se você pediu a exclusão há menos de {hoursText(F.regretHours)}, entre com o e-mail e a senha para desistir e reativar a conta.
-        </p>
-        <CancelDeletionPublic />
-      </section>
+      {F.regretHours > 0 ? (
+        <section className={s.card} aria-labelledby="desistir" data-testid="public.excluir.cancel">
+          <h2 id="desistir" className="wb-text-title2">Mudou de ideia?</h2>
+          <p className="wb-text-body">
+            Se você pediu a exclusão há menos de {hoursText(F.regretHours)}, entre com o e-mail e a senha para desistir e reativar a conta.
+          </p>
+          <CancelDeletionPublic />
+        </section>
+      ) : null}
 
       <section className={s.card} aria-labelledby="encarregado" data-testid="public.excluir.request">
         <h2 id="encarregado" className="wb-text-title2">Não consegue receber o e-mail ou entrar?</h2>

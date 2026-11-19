@@ -19,6 +19,9 @@ export const reportsApi = {
   orders: (f: ReportFilter, cursor?: string) => apiRequest<ReportOrderPage>(A, 'admin/reports/orders', { query: { ...q(f), cursor, limit: 20 } }),
   exportOperations: (f: ReportFilter) => apiDownload(A, 'admin/reports/operations.csv', q(f)),
   exportOrders: (f: ReportFilter) => apiDownload(A, 'admin/reports/orders.csv', q(f)),
+  /** DT-060: R1 Receita por pedido e R2 Estornos (`reports:finance`: financeiro e super admin). Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE`. */
+  exportRevenue: (f: ReportFilter) => apiDownload(A, 'admin/reports/finance/revenue.csv', { from: f.from, to: f.to, cityId: f.cityId, storeId: f.storeId }),
+  exportRefunds: (f: ReportFilter) => apiDownload(A, 'admin/reports/finance/refunds.csv', { from: f.from, to: f.to, cityId: f.cityId, storeId: f.storeId }),
 };
 
 export const reportsKeys = {

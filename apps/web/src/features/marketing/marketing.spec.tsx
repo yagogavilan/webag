@@ -156,6 +156,19 @@ describe('PushPage (MK2)', () => {
 const coupon = (over: object = {}) => ({ id: 'k1', code: 'BEMVINDO10', kind: 'percent', value: 10, percentCapCents: 2000, minOrderCents: 5000, startsAt: PAST, endsAt: FUTURE, maxUses: 100, perCustomerLimit: 1, firstPurchaseOnly: true, active: true, status: 'live', uses: 12, discountTotal: { amount: 9800, currency: 'BRL' }, orders: 12, notice: 'O desconto é pago pelo Webag.', createdAt: PAST, ...over });
 
 describe('CouponsPage (WB-116)', () => {
+  it('mostra o teto de custo (maxCost) e, em "Ver uso por loja", o uso por loja (DT-059, WB-116 C5)', async () => {
+    const detail = { ...coupon(), maxCost: { amount: 200000, currency: 'BRL' }, usesByStore: [{ storeId: 's1', storeName: 'Casa Bela', uses: 8, discount: { amount: 7000, currency: 'BRL' }, sharePct: 66.7 }, { storeId: 's2', storeName: null, uses: 4, discount: { amount: 2800, currency: 'BRL' }, sharePct: 33.3 }] };
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/admin/coupons/k1') ? json(detail) : json(page([coupon({ maxCost: { amount: 200000, currency: 'BRL' } }), coupon({ id: 'k2', code: 'ANTIGO', maxUses: null, maxCost: null })])))).impl);
+    renderPanel(<CouponsPage />, 'finance');
+    expect(await screen.findByTestId('admin.cupons.row-k1-maxcost')).toHaveTextContent('até R$');
+    expect(screen.getByTestId('admin.cupons.row-k2')).toHaveTextContent('Sem limite de usos (cupom antigo)');
+    expect(screen.getByTestId('admin.cupons.row-k2-maxcost')).toHaveTextContent('Sem teto');
+    await userEvent.click(screen.getByTestId('admin.cupons.row-k1-usage'));
+    expect(await screen.findByTestId('admin.cupons.usage-s1')).toHaveTextContent('Casa Bela');
+    expect(screen.getByTestId('admin.cupons.usage-s1')).toHaveTextContent('66,7%');
+    expect(screen.getByTestId('admin.cupons.usage-s2')).toHaveTextContent('Loja sem nome');
+  });
+
   it('lista com custo e uso; financeiro lê sem editar', async () => {
     vi.stubGlobal('fetch', mockFetch(() => json(page([coupon()]))).impl);
     renderPanel(<CouponsPage />, 'finance');
@@ -179,8 +192,13 @@ describe('CouponsPage (WB-116)', () => {
     await userEvent.type(screen.getByTestId('admin.cupons.value-input'), '10,50');
     await userEvent.type(screen.getByLabelText('Começa em'), '2030-01-01T09:00');
     await userEvent.type(screen.getByLabelText('Termina em'), '2030-02-01T09:00');
+    // DT-059: o limite de usos é obrigatório; sem ele nada é enviado
+    await userEvent.click(screen.getByTestId('admin.cupons.submit'));
+    expect(await screen.findByText('Informe o limite de usos. Todo cupom da plataforma precisa de um teto.')).toBeInTheDocument();
+    expect(calls.find((c) => c.init.method === 'POST')).toBeUndefined();
+    await userEvent.type(screen.getByLabelText(/Limite de usos/), '200');
     await userEvent.click(screen.getByTestId('admin.cupons.submit'));
     await waitFor(() => expect(calls.find((c) => c.init.method === 'POST')).toBeTruthy());
-    expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string)).toMatchObject({ code: 'FRETE10', kind: 'fixed', value: 1050, perCustomerLimit: 1 });
+    expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string)).toMatchObject({ code: 'FRETE10', kind: 'fixed', value: 1050, maxUses: 200, perCustomerLimit: 1 });
   });
 });

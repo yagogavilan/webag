@@ -10,3 +10,12 @@
 .muted { margin: 0; color: var(--wb-color-text-secondary); }
 .reply { display: flex; flex-direction: column; gap: var(--wb-space-2); padding: var(--wb-space-3) var(--wb-space-4); border-left: var(--wb-border-width-strong) solid var(--wb-color-action-primary); border-radius: var(--wb-radius-control); background: var(--wb-color-surface-sunken); }
 .actions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
+.sumCard { display: flex; flex-direction: column; gap: var(--wb-space-1); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink); text-decoration: none; min-width: 0; }
+a.sumCard:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.sumHead { display: inline-flex; align-items: center; gap: var(--wb-space-2); }
+.sumValue { font-family: var(--wb-font-family-display); font-variant-numeric: tabular-nums; font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -0.03em; color: var(--wb-color-accent-base); }
+.sumHint { color: var(--wb-color-text-on-ink-muted); }
+.dist { list-style: none; margin: var(--wb-space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--wb-space-2); }
+.distRow { display: grid; grid-template-columns: 84px minmax(0, 1fr) 32px; gap: var(--wb-space-3); align-items: center; }
+.distBar { height: 10px; border-radius: var(--wb-radius-pill); background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.distFill { display: block; height: 100%; background: var(--wb-color-accent-base); }

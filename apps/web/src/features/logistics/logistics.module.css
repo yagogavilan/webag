@@ -29,3 +29,7 @@
 .actions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
 .timeline { display: flex; flex-direction: column; gap: var(--wb-space-1); margin: 0; padding: 0; list-style: none; }
 @media (max-width: 900px) { .row { grid-template-columns: 1fr; } .rowAction { width: 100%; } }
+.strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--wb-space-3); align-items: center; justify-content: space-between; padding: var(--wb-space-3); border-radius: var(--wb-radius-control); background: var(--wb-color-feedback-danger-subtle); color: var(--wb-color-text-primary); }
+.stripText { display: grid; gap: var(--wb-space-1); min-width: 0; flex: 1 1 260px; }
+.stripActions { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }
+.pinNote { grid-column: 1 / -1; display: flex; gap: var(--wb-space-2); align-items: center; color: var(--wb-color-text-primary); }

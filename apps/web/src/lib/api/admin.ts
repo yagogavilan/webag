@@ -1,3 +1,4 @@
+import type { GetAdminPendingCounts200 } from '@webag/shared';
 import { apiRequest } from './client';
 import type { AdminProfile } from '../session-types';
 
@@ -117,7 +118,11 @@ export interface SessionRow {
 
 const A = 'admin' as const;
 
+/** W.7: contagens por área para o Início e para os contadores da barra. Área sem permissão vem `null`. */
+export type PendingCounts = GetAdminPendingCounts200;
+
 export const adminApi = {
+  pending: () => apiRequest<PendingCounts>(A, 'admin/overview/pending'),
   cities: () => apiRequest<Page<City>>(A, 'admin/regions/cities'),
   createCity: (body: { name: string; state: string; active: boolean }) => apiRequest<City>(A, 'admin/regions/cities', { method: 'POST', body }),
   updateCity: (id: string, body: { name?: string; active?: boolean }) => apiRequest<City>(A, `admin/regions/cities/${id}`, { method: 'PATCH', body }),

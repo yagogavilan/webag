@@ -5,3 +5,6 @@
 .card:hover { background: var(--wb-color-neutral-200); }
 .card:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
 .icon { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--wb-color-surface-card); flex: none; }
+.kpis { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--wb-space-3); }
+.kpiLink { display: block; text-decoration: none; border-radius: var(--wb-radius-card); }
+.kpiLink:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }

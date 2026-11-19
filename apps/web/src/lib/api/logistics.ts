@@ -219,3 +219,12 @@ const brasiliaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Pa
 export function brasiliaToday(now: number): string {
   return brasiliaDay.format(new Date(now));
 }
+
+/**
+ * Corridas com alerta de atraso (`lateAlertedAt`, uma vez por corrida no servidor). Na primeira leitura (`seen` nulo) só memoriza: o som
+ * não toca por alerta que já estava lá quando a tela abriu. Depois, toca para cada corrida que ganhou o alerta.
+ */
+export function lateAlertsSince(seen: ReadonlySet<string> | null, rows: Pick<Delivery, 'id' | 'lateAlertedAt'>[]): { ids: Set<string>; fresh: string[] } {
+  const ids = new Set(rows.filter((row) => row.lateAlertedAt).map((row) => row.id));
+  return { ids, fresh: seen === null ? [] : [...ids].filter((id) => !seen.has(id)) };
+}

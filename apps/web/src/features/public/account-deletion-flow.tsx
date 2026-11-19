@@ -31,7 +31,7 @@ const T = (id: string) => `public.excluir.${id}`;
 /**
  * Exclusão de conta sem o app (WB-214, SEC-166, Google Play). Via A: e-mail, código enviado ao e-mail, revisão, confirmação. Via B:
  * e-mail e senha (única via para e-mail não confirmado). Se a conta está sob ataque, a API responde 403 `LOGIN_CODE_REQUIRED` à senha
- * certa e a tela passa à via A com o código do e-mail (SEC-168/176). A tela nunca diz se a conta existe: "Se existir uma conta com esse
+ * certa e já envia o código ao e-mail; a tela passa ao campo do código sem chamar de novo (SEC-168/176, W.2). A tela nunca diz se a conta existe: "Se existir uma conta com esse
  * e-mail, enviamos um código" e uma só mensagem para e-mail ou senha incorretos. O ticket de exclusão fica só em memória (nunca em
  * armazenamento do navegador, URL ou log) e a API é quem fecha a conta; o resultado mostrado vem do servidor.
  */
@@ -147,10 +147,9 @@ export function AccountDeletionFlow() {
         return;
       }
       if (result.code === 'LOGIN_CODE_REQUIRED') {
-        // SEC-176: senha certa, conta sob ataque. A API pede o código do e-mail; a tela o envia pela via A e abre o campo.
+        // SEC-176 / W.2: senha certa, conta sob ataque. A própria resposta 403 já ENVIOU o código ao e-mail (sem segundo envio, que gastaria
+        // o limite): a tela só abre o campo. "Reenviar" repete a via A depois dos 60 s.
         setPassword('');
-        const sent = await postStep('start', { email: email.trim() });
-        if (!sent.ok) return fail(sent);
         setCode('');
         setResendAt(Date.now() + RESEND_SECONDS * 1000);
         setNow(Date.now());

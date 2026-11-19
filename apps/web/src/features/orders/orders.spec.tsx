@@ -72,6 +72,28 @@ function server(orders: { new: StoreOrderSummary[]; progress: StoreOrderSummary[
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe('"Marque pronto até" (W.8, WB-257 C5)', () => {
+  const render = (over: Partial<StoreOrderSummary>) => {
+    vi.stubGlobal('fetch', server({ new: [], progress: [summary({ id: 'o2', status: 'in_preparation', allowedActions: ['ready'], ...over })] }).impl);
+    renderLojista(<OrdersRuntimeProvider createSound={() => fakeSound()}><OrdersPage /></OrdersRuntimeProvider>);
+  };
+  it('mostra o horário do servidor em pedido em preparo, sem a faixa do cliente', async () => {
+    render({ readyByAt: new Date(Date.now() + 15 * 60_000).toISOString() });
+    const chip = await screen.findByTestId('lojista.orders.ready-by-o2');
+    expect(chip).toHaveTextContent(/Marque “pronto” até \d{2}:\d{2} para cumprir o prazo/);
+    expect(chip).not.toHaveAttribute('data-late');
+  });
+  it('passou do horário: aviso sem ameaça; sem `readyByAt` não mostra nada', async () => {
+    render({ readyByAt: new Date(Date.now() - 5 * 60_000).toISOString() });
+    expect(await screen.findByTestId('lojista.orders.ready-by-o2')).toHaveTextContent('Passou do horário de pronto. Termine assim que puder.');
+  });
+  it('pedido sem readyByAt (antigo ou já pronto) não tem a pastilha', async () => {
+    render({ readyByAt: null });
+    await screen.findByTestId('lojista.orders.card-o2');
+    expect(screen.queryByTestId('lojista.orders.ready-by-o2')).not.toBeInTheDocument();
+  });
+});
+
 describe('painel de pedidos do lojista (receber e aceitar)', () => {
   it('pedido novo abre o alerta, toca o som e o aceite leva o pedido a "Em separação"', async () => {
     const sound = fakeSound();

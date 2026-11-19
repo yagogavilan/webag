@@ -49,11 +49,10 @@ describe('exclusão de conta sem o app (SEC-166)', () => {
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
   });
 
-  it('via B: senha certa em conta sob ataque pede o código do e-mail (SEC-176) e segue pela via A', async () => {
+  it('via B: senha certa em conta sob ataque recebe o código na própria resposta 403 (SEC-176, W.2) e não chama `start` de novo', async () => {
     const user = userEvent.setup();
     fetchMock
       .mockResolvedValueOnce(reply(403, { code: 'LOGIN_CODE_REQUIRED' }))
-      .mockResolvedValueOnce(reply(200, { sent: true }))
       .mockResolvedValueOnce(reply(200, { deleteTicket: TICKET, expiresIn: 600 }))
       .mockResolvedValueOnce(reply(200, REVIEW));
     render(<AccountDeletionFlow />);
@@ -62,9 +61,10 @@ describe('exclusão de conta sem o app (SEC-166)', () => {
     await user.type(T('password-input'), 'senha-certa');
     await user.click(T('password-submit'));
     expect(await screen.findByTestId('public.excluir.notice')).toHaveTextContent('Por segurança, enviamos um código');
-    expect(fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit).body)))).toEqual([{ email: 'ana@exemplo.com', password: 'senha-certa' }, { email: 'ana@exemplo.com' }]);
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit).body)))).toEqual([{ email: 'ana@exemplo.com', password: 'senha-certa' }]);
     await user.type(screen.getByLabelText('Dígito 1 de 6'), '111222');
     expect(await screen.findByTestId('public.excluir.delete-submit')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit).body)))[1]).toEqual({ email: 'ana@exemplo.com', code: '111222' });
     expect(lastBody()).toEqual({ deleteTicket: TICKET });
   });
 

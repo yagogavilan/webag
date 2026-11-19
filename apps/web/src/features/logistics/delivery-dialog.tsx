@@ -4,10 +4,11 @@ import { ChatCircleText, Eye, Phone } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ReasonDialog, UserMessageError } from '@/components/panel/reason-dialog';
-import { Banner, Button, Dialog, OtpInput, RadioCards, SkeletonRows, TextArea, TextField, useToast } from '@/components/ui';
+import { Banner, Button, Dialog, OtpInput, RadioCards, SkeletonRows, SolarIcon, TextArea, TextField, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
-import { FAIL_REASONS, KIND_LABEL, STATUS_LABEL, logisticsApi, logisticsKeys, type Delivery, type DeliveryDetail, type DeliveryKind, type FailReason } from '@/lib/api/logistics';
+import { DELIVERED_AT_FREE_MIN, DELIVERED_AT_MAX_BACK_MIN, DELIVERED_AT_REASONS, FAIL_REASONS, KIND_LABEL, STATUS_LABEL, logisticsApi, logisticsKeys, pendingLateCancel, type Delivery, type DeliveredAtReason, type DeliveryDetail, type DeliveryKind, type FailReason } from '@/lib/api/logistics';
 import { formatCents, formatFullDateTime } from '@/lib/format';
+import { LateCancelStrip } from './late-cancel';
 import { parseCents } from '@/lib/money';
 import { formatPhone, whatsappHref } from '@/lib/orders/status';
 import { tid } from '@/lib/testid';
@@ -17,6 +18,37 @@ import { EtaChip, KindBadge, WaitChip } from './logistics-page';
 import s from './logistics.module.css';
 
 const T = (id: string) => tid('logistica', id);
+const clock = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+/** "14:32" digitado vira o instante de hoje; se ficaria no futuro e ontem cai na janela de 60 min (virada da meia-noite), vale o de ontem; senão segue futuro e é recusado. `null` se o texto não é uma hora. */
+export function timeToDate(time: string, now: number): Date | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return null;
+  const at = new Date(now);
+  at.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  if (Number.isNaN(at.getTime())) return null;
+  if (at.getTime() > now + 2 * 60_000) {
+    const yesterday = new Date(at);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (now - yesterday.getTime() <= DELIVERED_AT_MAX_BACK_MIN * 60_000) return yesterday;
+  }
+  return at;
+}
+
+/** Confere a hora real da entrega antes de enviar (WB-262): nunca no futuro, no máximo 60 min atrás; acima de 5 min pede o motivo. */
+export function deliveredAtProblem(time: string, reason: DeliveredAtReason | null, note: string, now: number): { error: string | null; at: Date | null; needsReason: boolean } {
+  if (!time) return { error: null, at: null, needsReason: false };
+  const at = timeToDate(time, now);
+  if (!at) return { error: 'Digite a hora no formato 14:32.', at: null, needsReason: false };
+  const backMin = (now - at.getTime()) / 60_000;
+  if (backMin < -2) return { error: 'A hora da entrega não pode ser no futuro.', at, needsReason: false };
+  if (backMin > DELIVERED_AT_MAX_BACK_MIN) return { error: `Só dá para informar até ${DELIVERED_AT_MAX_BACK_MIN} minutos atrás. Fale com o super admin.`, at, needsReason: false };
+  const needsReason = backMin > DELIVERED_AT_FREE_MIN;
+  if (needsReason && !reason) return { error: `A hora é mais de ${DELIVERED_AT_FREE_MIN} minutos atrás: diga por que ela foi informada depois.`, at, needsReason };
+  if (needsReason && reason === 'other' && note.trim().length < 3) return { error: 'Escreva o motivo.', at, needsReason };
+  return { error: null, at, needsReason };
+}
+
 type Mode = 'main' | 'delivered' | 'not_delivered' | 'cancel';
 
 function actionError(error: unknown): string {
@@ -55,6 +87,9 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
   const [cost, setCost] = useState('');
   const [failReason, setFailReason] = useState<FailReason | null>(null);
   const [text, setText] = useState('');
+  const [realTime, setRealTime] = useState('');
+  const [realReason, setRealReason] = useState<DeliveredAtReason | null>(null);
+  const [realNote, setRealNote] = useState('');
   const allowed = new Set<string>(detail.allowedActions);
   const now = useNow(30_000);
   const [revealed, setRevealed] = useState<DeliveryDetail['contact'] | null>(null);
@@ -103,9 +138,15 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
       setError('Confira o custo da corrida.');
       return;
     }
+    const real = deliveredAtProblem(realTime, realReason, realNote, Date.now());
+    if (real.error) {
+      setError(real.error);
+      return;
+    }
+    const realFields = real.at ? { deliveredAt: real.at.toISOString(), ...(real.needsReason && realReason ? { deliveredAtReason: realReason, ...(realReason === 'other' ? { deliveredAtNote: realNote.trim() } : {}) } : {}) } : {};
     await run(
       async () => {
-        await logisticsApi.status(detail.id, detail.codeRequired ? { action: 'delivered', code } : { action: 'delivered' });
+        await logisticsApi.status(detail.id, { action: 'delivered', ...(detail.codeRequired ? { code } : {}), ...realFields });
         if (cents !== null) await logisticsApi.setCost(detail.id, { costCents: cents });
       },
       `Pedido ${detail.orderNumber ?? ''} entregue. O cliente foi avisado.`,
@@ -141,6 +182,13 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
           <div>
             <p className="wb-text-caption-strong" style={{ margin: '0 0 8px' }}>Código do cliente</p>
             <OtpInput length={4} value={code} onChange={setCode} label="Código de entrega do cliente" testId={T('delivered-code')} />
+          </div>
+        ) : null}
+        <TextField label="Hora da entrega (em branco: agora)" type="time" hint="Se o motoboy avisou depois, informe a hora real. Fica registrada junto com a hora do seu clique." value={realTime} onChange={(event) => setRealTime(event.target.value)} data-testid={T('delivered-time')} />
+        {deliveredAtProblem(realTime, realReason, realNote, now).needsReason ? (
+          <div data-testid={T('delivered-time-reason')}>
+            <RadioCards legend="Por que a hora foi informada depois?" name="delivered-reason" value={realReason} onChange={setRealReason} options={DELIVERED_AT_REASONS.map((reason) => ({ value: reason.id, label: reason.label, testId: T(`delivered-reason-${reason.id}`) }))} />
+            {realReason === 'other' ? <TextArea label="Explique" value={realNote} onChange={(event) => setRealNote(event.target.value.slice(0, 200))} counter={{ value: realNote.length, max: 200 }} rows={2} data-testid={T('delivered-note')} /> : null}
           </div>
         ) : null}
         <TextField label="Custo da corrida (opcional agora)" inputMode="decimal" placeholder="6,00" value={cost} onChange={(event) => setCost(event.target.value)} data-testid={T('delivered-cost')} />
@@ -186,6 +234,8 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
         {detail.status === 'ready_for_collection' ? <WaitChip delivery={detail} /> : <KindBadge kind={detail.kind as DeliveryKind} />}
       </div>
       <EtaChip delivery={detail} now={now} />
+      {pendingLateCancel(detail) ? <div className={s.row} style={{ gridTemplateColumns: '1fr', minHeight: 0 }}><LateCancelStrip delivery={detail} canWrite={canWrite} /></div> : null}
+      {detail.dropoffPinVerified === false && contact ? <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('pin-note')}><SolarIcon name="warning" size={20} /> O pino do endereço de entrega não foi conferido. Confirme o endereço com o cliente antes de despachar.</p> : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {step ? (
         <Button size="lg" onClick={step.go} loading={busy} loadingLabel="Atualizando…" data-testid={T(step.testId)}>
@@ -266,6 +316,7 @@ function Body({ detail, canWrite, onAssign, onClose }: { detail: DeliveryDetail;
             <li key={entry.id ?? index} className="wb-text-caption">
               {formatFullDateTime(entry.at ?? detail.updatedAt)} · {STATUS_LABEL[entry.to as keyof typeof STATUS_LABEL] ?? entry.to}
               {entry.reason ? ` · ${entry.reason}` : ''}
+              {entry.deliveredAt ? ` · entregue de fato às ${clock.format(new Date(entry.deliveredAt))}${entry.deliveredAtReason ? ` (${DELIVERED_AT_REASONS.find((r) => r.id === entry.deliveredAtReason)?.label ?? ''})` : ''}${entry.deliveredAtNote ? `: ${entry.deliveredAtNote}` : ''}` : ''}
             </li>
           ))}
         </ol>

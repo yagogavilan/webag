@@ -1,13 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Banner, Button, RadioCards, Switch, TextArea, TextField, ui, useToast } from '@/components/ui';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Banner, RadioCards, Switch, TextArea, TextField, cx, ui, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { saveErrorMessage } from '@/lib/api/messages';
-import { settingsApi, type DeliveryPreview, type StoreSettings } from '@/lib/api/store-settings';
-import { maskCep, onlyDigits } from '@/lib/br/mask';
+import { settingsApi, type EtaPreview, type StoreSettings } from '@/lib/api/store-settings';
 import { formatCents } from '@/lib/format';
+import l from './loja.module.css';
 import { parseDecimal } from '@/lib/money';
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
@@ -51,10 +52,6 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
   const [lastOff, setLastOff] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [previewCep, setPreviewCep] = useState('');
-  const [previewNumber, setPreviewNumber] = useState('');
-  const [preview, setPreview] = useState<{ cep: string; result: DeliveryPreview } | { error: string } | null>(null);
-  const [previewing, setPreviewing] = useState(false);
 
   const initial = JSON.stringify([d.acceptsDelivery, storePrep(d), p.enabled, p.useStoreAddress, p.address ?? '', p.instructions ?? '', String(p.prepMinMinutes), String(p.prepMaxMinutes)]);
   const dirty = JSON.stringify([delivery, prep, pickup, useStore, pickupAddress, notes, prepMin, prepMax]) !== initial;
@@ -110,26 +107,6 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
     }
   }
 
-  async function runPreview() {
-    const cep = onlyDigits(previewCep);
-    if (cep.length !== 8) return setPreview({ error: 'Digite um CEP com 8 números.' });
-    setPreviewing(true);
-    try {
-      setPreview({ cep: maskCep(cep), result: await settingsApi.preview(storeId, { cep, subtotalCents: 0 }) });
-    } catch (caught) {
-      setPreview({ error: caught instanceof ApiError && caught.isNetwork ? 'Conecte-se para ver a prévia.' : caught instanceof ApiError && caught.fields[0] ? caught.fields[0].message : 'Não foi possível calcular agora. Tente de novo.' });
-    } finally {
-      setPreviewing(false);
-    }
-  }
-
-  const previewText = (cep: string, r: DeliveryPreview): string => {
-    if (!r.available) return 'Fora da área: o cliente não vê sua loja nesse endereço.';
-    const fee = (r.feeCents ?? 0) === 0 ? 'nada (grátis)' : formatCents(r.feeCents ?? 0);
-    const eta = r.eta ? ` e recebe em ${r.eta.minMinutes} a ${r.eta.maxMinutes} min` : '';
-    return `Para o CEP ${cep} o cliente paga ${fee}${eta} (${((r.distanceM ?? 0) / 1000).toFixed(1).replace('.', ',')} km).`;
-  };
-
   return (
     <SettingsFrame
       screen="entrega"
@@ -139,23 +116,7 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
       submitLabel="Salvar entrega e retirada"
       onSubmit={() => void submit()}
       error={formError}
-      aside={
-        <div className={ui.stack} data-testid={T('preview-card')}>
-          <h2 className="wb-text-title2" style={{ margin: 0 }}>Prévia do cliente</h2>
-          <p className="wb-text-caption" style={{ margin: 0 }}>Usa o que está salvo. Salve antes para testar uma mudança.</p>
-          <TextField label="CEP" inputMode="numeric" value={previewCep} onChange={(e) => setPreviewCep(maskCep(e.target.value))} placeholder="00000-000" data-testid={T('preview-cep')} />
-          <TextField label="Número" value={previewNumber} onChange={(e) => setPreviewNumber(e.target.value)} data-testid={T('preview-number')} />
-          <div>
-            <Button variant="secondary" onClick={() => void runPreview()} loading={previewing} loadingLabel="Calculando…" disabled={!online} data-testid={T('preview-run')}>Ver prévia</Button>
-          </div>
-          {!online ? <p className="wb-text-caption" style={{ margin: 0 }}>Conecte-se para ver a prévia.</p> : null}
-          {preview ? (
-            <p className="wb-text-body" role="status" style={{ margin: 0 }} data-testid={T('preview-result')}>
-              {'error' in preview ? preview.error : previewText(preview.cep, preview.result)}
-            </p>
-          ) : null}
-        </div>
-      }
+      aside={<PreviewCard storeId={storeId} enabled={delivery} online={online} prep={prep} savedPrep={d.prepMinutes} />}
     >
       <section className={ui.stack} aria-labelledby="entrega-titulo">
         <h2 id="entrega-titulo" className="wb-text-title2" style={{ margin: 0 }}>Entrega pela Webag</h2>
@@ -207,5 +168,93 @@ export function DeliveryForm({ storeId, settings, refresh }: { storeId: string; 
         ) : null}
       </section>
     </SettingsFrame>
+  );
+}
+
+const PRESET_KM = [2, 5, 8] as const;
+const km1 = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+
+/** Preparo do campo como a API quer (5 a 120, inteiro); fora disso a prévia usa o salvo. */
+export function previewPrep(text: string): number | undefined {
+  if (!/^\d{1,3}$/.test(text.trim())) return undefined;
+  const n = Number(text);
+  return n >= PREP_MIN && n <= PREP_MAX ? n : undefined;
+}
+
+/**
+ * "Prévia para o cliente" (WB-257, spec `onda-7-paineis-v3.md` §2.2): a conta é a do servidor (`POST /delivery-preview`, a mesma do checkout), com o
+ * preparo ainda não salvo do formulário. Sem geocodificador contratado (DEC-067) a API não aceita CEP: o lojista escolhe a distância.
+ */
+function PreviewCard({ storeId, enabled, online, prep, savedPrep }: { storeId: string; enabled: boolean; online: boolean; prep: string; savedPrep?: number }) {
+  const [km, setKm] = useState('3');
+  const [debounced, setDebounced] = useState({ km: '3', prep: previewPrep(prep) });
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced({ km, prep: previewPrep(prep) }), 400);
+    return () => clearTimeout(timer);
+  }, [km, prep]);
+  const kmN = Number(debounced.km.replace(',', '.'));
+  const kmValid = debounced.km.trim() !== '' && Number.isFinite(kmN) && kmN >= 0 && kmN <= 100;
+  const query = useQuery({
+    queryKey: ['lojista', 'delivery-preview', storeId, debounced.km, debounced.prep ?? 'saved'],
+    queryFn: ({ signal }) => settingsApi.deliveryPreview(storeId, { distanceKm: kmN, ...(debounced.prep ? { prepMin: debounced.prep } : {}) }, signal),
+    enabled: enabled && online && kmValid,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const r = query.data;
+  const typedPrep = previewPrep(prep);
+  return (
+    <div className={ui.stack} data-testid={T('preview-card')}>
+      <h2 className="wb-text-title2" style={{ margin: 0 }}>Prévia para o cliente</h2>
+      {!enabled ? (
+        <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('preview-off')}>Ligue a entrega pela Webag para ver o horário que o cliente recebe.</p>
+      ) : (
+        <>
+          <p className="wb-text-caption" style={{ margin: 0 }}>Usa o preparo que está no campo, mesmo sem salvar. Escolha a distância até o cliente.</p>
+          <TextField label="Distância até o cliente (km)" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value.replace(/[^\d,.]/g, '').slice(0, 5))} error={kmValid ? undefined : 'Digite de 0 a 100 km.'} data-testid={T('preview-km')} />
+          <div className={l.chips} role="group" aria-label="Distâncias de teste">
+            {PRESET_KM.map((value) => (
+              <button key={value} type="button" className={`${l.chip} wb-text-body-strong`} aria-pressed={km === String(value)} onClick={() => setKm(String(value))} data-testid={T(`preview-km-${value}`)}>{value} km</button>
+            ))}
+          </div>
+          {!online ? <p className="wb-text-caption" style={{ margin: 0 }}>Conecte-se para ver a prévia.</p> : null}
+          <div aria-live="polite" className={ui.stack} data-testid={T('preview-result')}>
+            {query.isFetching && !r ? <p className="wb-text-caption" style={{ margin: 0 }}>Calculando…</p> : null}
+            {query.isError ? <Banner tone="warning" testId={T('preview-error')}>Não foi possível calcular agora. Tente de novo em instantes.</Banner> : null}
+            {r ? <PreviewResult r={r} km={kmN} /> : null}
+          </div>
+        </>
+      )}
+      {r && enabled ? (
+        <p className="wb-text-caption" style={{ margin: 0 }} data-testid={T('preview-reach')}>
+          Com {r.prepMin} min de preparo{typedPrep === undefined && savedPrep ? ' (o salvo)' : ''}, a loja alcança até {km1(r.reachKm)} km.
+        </p>
+      ) : null}
+      {r && enabled && typedPrep !== undefined && typedPrep > r.maxPrepMin ? (
+        <Banner tone="warning" testId={T('preview-max-prep')}>Com {typedPrep} min de preparo a loja não alcança nenhum endereço. O maior preparo que ainda entrega é {r.maxPrepMin} min.</Banner>
+      ) : null}
+    </div>
+  );
+}
+
+function PreviewResult({ r, km }: { r: EtaPreview; km: number }) {
+  if (!r.available || !r.eta) {
+    return r.reason === 'NO_FEE_TABLE' ? (
+      <Banner tone="warning" testId={T('preview-nofee')}>Ainda não há taxa de entrega cadastrada para essa distância. Fale com o suporte da Webag.</Banner>
+    ) : (
+      <Banner tone="warning" testId={T('preview-out')}>
+        <strong>Fora da área de entrega da loja.</strong> {km1(km)} km fica longe demais para o pedido chegar no prazo. A loja não aparece para quem mora lá; a retirada continua.
+      </Banner>
+    );
+  }
+  const e = r.eta;
+  return (
+    <div className={l.previewBox}>
+      <p className={cx('wb-text-title2', l.previewHeadline)} data-testid={T('preview-band')}>Chega em {e.fromMin} a {e.toMin} min</p>
+      <p className="wb-text-body" style={{ margin: 0 }} data-testid={T('preview-sum')}>
+        {r.fee ? (r.fee.amount === 0 ? 'O cliente não paga entrega. ' : `O cliente paga ${formatCents(r.fee.amount)} de entrega. `) : ''}
+        Conta: preparo {e.prepMin} + espera do motoboy {e.dispatchMin} + trajeto {e.travelMin} min, com folga de {e.bandMin} para mais e para menos.
+      </p>
+    </div>
   );
 }

@@ -1,8 +1,8 @@
-import type { StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily } from '@webag/shared';
+import type { GetStoreTopProducts200, StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily } from '@webag/shared';
 import { apiRequest } from './client';
 
 /** Financeiro da loja (WB-075 a 077). Vendas: `sales_values`; resumo e extrato: só o dono (RN-13). */
-export type { StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily };
+export type { GetStoreTopProducts200 as TopProducts, StatementPage, StoreFinanceSummary, StoreSales, StoreSalesDaily };
 export interface Period {
   from: string;
   to: string;
@@ -13,6 +13,7 @@ const base = (storeId: string) => `stores/${storeId}/finance`;
 
 export const financeApi = {
   sales: (storeId: string, period: Period) => apiRequest<StoreSales>(L, `${base(storeId)}/sales`, { query: { ...period } }),
+  topProducts: (storeId: string, period: Period, limit = 5) => apiRequest<GetStoreTopProducts200>(L, `${base(storeId)}/sales/top-products`, { query: { ...period, limit } }),
   salesDaily: (storeId: string, period: Period) => apiRequest<StoreSalesDaily>(L, `${base(storeId)}/sales/daily`, { query: { ...period } }),
   summary: (storeId: string, period: Period) => apiRequest<StoreFinanceSummary>(L, `${base(storeId)}/summary`, { query: { ...period } }),
   statement: (storeId: string, period: Period, cursor?: string) => apiRequest<StatementPage>(L, `${base(storeId)}/statement`, { query: { ...period, limit: 20, cursor } }),
@@ -21,6 +22,7 @@ export const financeApi = {
 
 export const financeKeys = {
   sales: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'sales', period.from, period.to] as const,
+  topProducts: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'top-products', period.from, period.to] as const,
   salesDaily: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'sales-daily', period.from, period.to] as const,
   summary: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'summary', period.from, period.to] as const,
   statement: (storeId: string, period: Period) => ['lojista', 'finance', storeId, 'statement', period.from, period.to] as const,

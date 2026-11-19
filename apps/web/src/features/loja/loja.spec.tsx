@@ -197,20 +197,56 @@ describe('Entrega e retirada (C4)', () => {
     expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/delivery'))!.init.body)).prepMinutes).toBeNull();
   });
 
-  it('prévia: dentro e fora do raio, e sem conexão avisa', async () => {
-    let fee = 700;
-    const { impl } = server(settings(), (url) => (url.pathname.endsWith('/delivery/preview') ? json({ available: fee >= 0, distanceM: fee < 0 ? null : 2300, feeCents: fee, freeShipping: false, belowMinimum: false, eta: { minMinutes: 55, maxMinutes: 85 } }) : undefined));
+  const etaPreview = (over: object = {}) => ({
+    available: true,
+    reason: null,
+    distanceM: 5000,
+    eta: { estimateMin: 61, fromMin: 46, toMin: 76, prepMin: 30, dispatchMin: 15, travelMin: 16, bandMin: 15, withinCeiling: true },
+    etaRange: { minMinutes: 46, maxMinutes: 76, fromAt: '2026-11-19T15:00:00Z', toAt: '2026-11-19T16:00:00Z' },
+    fee: { amount: 690, currency: 'BRL' },
+    prepMin: 30,
+    reachKm: 9,
+    maxPrepMin: 70,
+    radiusKm: 10,
+    ...over,
+  });
+
+  it('prévia (W.5): a conta vem do servidor com o preparo do campo e a distância escolhida; sem CEP', async () => {
+    const bodies: unknown[] = [];
+    const { impl } = server(settings(), (url, init) => {
+      if (!url.pathname.endsWith('/delivery-preview')) return undefined;
+      bodies.push(JSON.parse(String(init.body)));
+      return json(etaPreview());
+    });
     vi.stubGlobal('fetch', impl);
     renderLojista(<DeliveryPage />);
-    await userEvent.type(await screen.findByTestId('lojista.entrega.preview-cep'), '07900000');
-    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
-    expect(await screen.findByText(/Para o CEP 07900-000 o cliente paga R\$\s7,00 e recebe em 55 a 85 min \(2,3 km\)/)).toBeInTheDocument();
-    fee = 0;
-    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
-    expect(await screen.findByText(/paga nada \(grátis\)/)).toBeInTheDocument();
-    fee = -1;
-    await userEvent.click(screen.getByTestId('lojista.entrega.preview-run'));
-    expect(await screen.findByText(/Fora da área/)).toBeInTheDocument();
+    expect(await screen.findByTestId('lojista.entrega.preview-band')).toHaveTextContent('Chega em 46 a 76 min');
+    expect(screen.getByTestId('lojista.entrega.preview-sum')).toHaveTextContent(/paga R\$\s6,90 de entrega\. Conta: preparo 30 \+ espera do motoboy 15 \+ trajeto 16 min, com folga de 15 para mais e para menos/);
+    expect(screen.getByTestId('lojista.entrega.preview-reach')).toHaveTextContent('alcança até 9 km');
+    expect(screen.queryByTestId('lojista.entrega.preview-cep')).not.toBeInTheDocument();
+    expect(bodies[0]).toEqual({ distanceKm: 3, prepMin: 25 });
+    await userEvent.click(screen.getByTestId('lojista.entrega.preview-km-8'));
+    await waitFor(() => expect(bodies.at(-1)).toEqual({ distanceKm: 8, prepMin: 25 }));
+  });
+
+  it('prévia: fora do alcance usa a frase da spec; preparo acima do máximo avisa; sem entrega ligada não consulta', async () => {
+    let out = true;
+    const calls: string[] = [];
+    const withPickup = settings({ pickup: { enabled: true, useStoreAddress: true, address: null, instructions: null, prepMinMinutes: 15, prepMaxMinutes: 30 } });
+    const { impl } = server(withPickup, (url) => {
+      if (!url.pathname.endsWith('/delivery-preview')) return undefined;
+      calls.push(url.pathname);
+      return json(out ? etaPreview({ available: false, reason: 'OUT_OF_RANGE', eta: null, etaRange: null, fee: null, maxPrepMin: 20 }) : etaPreview());
+    });
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<DeliveryPage />);
+    expect(await screen.findByTestId('lojista.entrega.preview-out')).toHaveTextContent('Fora da área de entrega da loja. 3 km fica longe demais para o pedido chegar no prazo. A loja não aparece para quem mora lá; a retirada continua.');
+    expect(screen.getByTestId('lojista.entrega.preview-max-prep')).toHaveTextContent('não alcança nenhum endereço');
+    expect(document.body).not.toHaveTextContent(/2 h/);
+    out = false;
+    await userEvent.click(screen.getByTestId('lojista.entrega.delivery-switch'));
+    expect(await screen.findByTestId('lojista.entrega.preview-off')).toBeInTheDocument();
+    expect(calls).toHaveLength(1);
   });
 });
 

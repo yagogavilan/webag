@@ -9,6 +9,7 @@ import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import type { Me } from '@/lib/session-types';
 import { createPanelQueryClient } from '@/lib/query-client';
 import { useOnline } from '@/lib/use-online';
+import { usePendingCounts } from '@/features/admin-home/pending';
 import { AdminRealtimeProvider, useWaitingForCourier } from '@/features/logistics/nav-count';
 import { IdleGuard } from './idle-guard';
 import { PanelFrame, type AccountEntry, type FrameTestIds, type NavGroup } from './frame';
@@ -61,6 +62,7 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
   const toast = useToast();
   const online = useOnline();
   const { waiting } = useWaitingForCourier();
+  const pending = usePendingCounts();
 
   const logout = useCallback(
     async (reason?: 'inatividade' | 'expirada') => {
@@ -107,9 +109,13 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
           href: item.href,
           icon: ICONS[item.section],
           ...(item.section === 'logistica' ? { count: waiting.length, countLabel: (n: number) => `${n} esperando motoboy`, countTestId: 'admin.logistica.nav-count' } : {}),
+          ...(item.section === 'lojas' && pending?.stores ? { count: pending.stores.inReview, countLabel: (n: number) => `${n} em análise`, countTestId: 'admin.lojas.nav-count' } : {}),
+          ...(item.section === 'disputas' && pending?.disputes ? { count: pending.disputes.inMediation, countLabel: (n: number) => `${n} em mediação`, countTestId: 'admin.disputas.nav-count' } : {}),
+          ...(item.section === 'estornos' && pending?.refunds ? { count: pending.refunds.needingAction, countLabel: (n: number) => `${n} pedem ação`, countTestId: 'admin.estornos.nav-count' } : {}),
+          ...(item.section === 'titulares' && pending?.dataRequests ? { count: pending.dataRequests.open, countLabel: (n: number) => `${n} abertos`, countTestId: 'admin.titulares.nav-count' } : {}),
         })),
     })).filter((group) => group.items.length > 0);
-  }, [profile, waiting.length]);
+  }, [profile, waiting.length, pending]);
 
   const account: AccountEntry[] = [
     { key: 'perfil', label: 'Meu perfil', hint: `${user.name} · ${profile ? PROFILE_LABEL[profile] : ''}`, icon: 'account', href: '/admin/perfil', testId: TEST_IDS.account('perfil') },

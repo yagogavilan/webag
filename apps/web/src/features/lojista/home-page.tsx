@@ -13,10 +13,12 @@ import { useOptionalOrdersRuntime } from '@/features/orders/orders-runtime';
 import { exchangesApi, exchangesKeys } from '@/lib/api/exchanges';
 import { financeApi, financeKeys, periodOf } from '@/lib/api/finance';
 import { formatCents } from '@/lib/format';
+import { ReviewsSummaryCard } from '@/features/reviews/reviews-summary';
+import { pickImage } from '@/lib/catalog/helpers';
 import f from '@/features/finance/finance.module.css';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { formatClock, formatDateTime } from '@/lib/format';
-import { NEW_PRODUCT_PATH, canSeeSalesValues, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
+import { NEW_PRODUCT_PATH, canReplyReviews, canSeeSalesValues, isOnboarding, isOwner, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
 import s from './lojista.module.css';
 import { draftErrorMessage } from './onboarding/use-draft';
@@ -335,6 +337,8 @@ function Live({ store }: { store: MerchantStore }) {
         )}
       </section>
       {showValues ? <SalesKpis storeId={store.id} /> : null}
+      {showValues ? <TopProducts storeId={store.id} /> : null}
+      {canReplyReviews(store) ? <ReviewsSummaryCard storeId={store.id} variant="home" /> : null}
     </div>
   );
 }
@@ -382,6 +386,46 @@ function SalesKpis({ storeId }: { storeId: string }) {
           <p className={f.kpiValue}>{money(weekQ.data.averageTicket)}</p>
         </li>
       </ul>
+    </section>
+  );
+}
+
+/**
+ * "Mais vendidos da semana" (W.6): unidades e "você recebe" por produto (parte do líquido do pedido, antes da tarifa do provedor).
+ * Só com `vendas_valores`. Sem vendas no período o bloco some; falha não derruba o painel.
+ */
+function TopProducts({ storeId }: { storeId: string }) {
+  const week = periodOf('7d');
+  const query = useQuery({ queryKey: financeKeys.topProducts(storeId, week), queryFn: () => financeApi.topProducts(storeId, week, 5), refetchInterval: 5 * 60_000, retry: 1 });
+  const rows = query.data?.data ?? [];
+  if (query.isPending || rows.length === 0) return null;
+  return (
+    <section aria-labelledby="mais-vendidos" data-testid={T('top-products')}>
+      <h2 id="mais-vendidos" className="wb-text-title2" style={{ margin: '0 0 12px' }}>Mais vendidos da semana</h2>
+      <ol className={s.ranking}>
+        {rows.map((row, index) => {
+          const url = pickImage(row.image.urls, 160);
+          return (
+            <li key={row.productId} className={s.rankRow} data-testid={T(`top-${row.productId}`)}>
+              <span className={s.rankNumber} aria-hidden="true">{index + 1}</span>
+              <span className={s.rankThumb}>
+                {url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- imagem pública já redimensionada pelo servidor
+                  <img src={url} alt="" width={48} height={48} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : null}
+              </span>
+              <span className={s.rankText}>
+                <span className="wb-text-body-strong">{row.name}</span>
+                <span className={cx('wb-text-caption', ui.muted)}>{row.units} {row.units === 1 ? 'unidade' : 'unidades'}</span>
+              </span>
+              <span className={s.rankGet}>
+                <span className={cx('wb-text-caption', ui.muted)}>Você recebe</span>
+                <span className="wb-text-body-strong">{formatCents(row.youReceive.amount)}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

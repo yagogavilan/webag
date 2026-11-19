@@ -1,13 +1,14 @@
 'use client';
 
 import { Motorcycle, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DeadlineBlock, Kpi, KpiRow, LimaAction, NightBlock, type DeadlineState } from '@/components/panel/blocks';
 import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
 import { Banner, Button, EmptyState, ErrorState, NoAccessState, SkeletonRows, SolarIcon, Switch, Tabs, cx, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
-import { KIND_LABEL, STATUS_LABEL, batchesOf, etaBandText, etaLevel, etaLevelText, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
+import { KIND_LABEL, STATUS_LABEL, batchesOf, brasiliaToday, countdownText, etaBandText, etaLevel, etaLevelText, lateAlertsSince, logisticsApi, logisticsKeys, pendingLateCancel, sortQueueByEta, waitLevel, waitText, type AreaBatch, type Delivery, type DeliveryKind } from '@/lib/api/logistics';
 import { formatCents } from '@/lib/format';
 import { createAlertSound } from '@/lib/orders/alert-sound';
 import { tid } from '@/lib/testid';
@@ -18,6 +19,7 @@ import { BatchAssignDialog } from './batch-dialog';
 import { CouriersTab } from './couriers-tab';
 import { DeliveryDialog } from './delivery-dialog';
 import { HistoryTab } from './history-tab';
+import { LateCancelStrip } from './late-cancel';
 import { useWaitingForCourier } from './nav-count';
 import s from './logistics.module.css';
 
@@ -103,6 +105,20 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
   }, [waiting.length]);
 
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
+
+  // ---- alerta de atraso: o servidor marca `lateAlertedAt` uma vez por corrida; o som toca uma vez por corrida nesta sessão
+  const seenLate = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (query.data === undefined) return;
+    const { ids, fresh } = lateAlertsSince(seenLate.current, rows);
+    seenLate.current = ids;
+    if (fresh.length > 0) sound.play('strong');
+  }, [query.data, rows, sound]);
+
+  // ---- "No prazo hoje" (`logistics:report`; o suporte recebe 403 e fica com "Maior espera")
+  const today = brasiliaToday(now);
+  const stats = useQuery({ queryKey: logisticsKeys.stats(today), queryFn: () => logisticsApi.stats(today, today), refetchInterval: 120_000, retry: false });
+  const lateCancels = useMemo(() => rows.filter((row) => pendingLateCancel(row)), [rows]);
   const filterKind = (row: Delivery) => kind === 'all' || (kind === 'delivery' ? row.kind === 'delivery' : row.kind !== 'delivery');
   const queue = useMemo(() => sortQueueByEta(rows.filter((row) => row.status === 'ready_for_collection' && filterKind(row)), now), [rows, kind, now]); // eslint-disable-line react-hooks/exhaustive-deps
   const progress = useMemo(() => rows.filter((row) => row.status !== 'ready_for_collection' && filterKind(row)).sort((a, b) => Date.parse(a.readyAt) - Date.parse(b.readyAt)), [rows, kind]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -150,22 +166,27 @@ function Logistics({ canWrite }: { canWrite: boolean }) {
   return (
     <div className={s.page}>
       <PageHeader title="Logística" eyebrow="Entrega pela Webag" description="Despache os pedidos prontos para coleta." />
-      {lateByEta > 0 ? (
+      {lateByEta > 0 || lateCancels.length > 0 ? (
         <NightBlock
           icon="alert"
           role="alert"
-          title={`${lateByEta} ${lateByEta === 1 ? 'corrida atrasada' : 'corridas atrasadas'}`}
+          title={lateByEta > 0 ? `${lateByEta} ${lateByEta === 1 ? 'corrida atrasada' : 'corridas atrasadas'}` : `${lateCancels.length} ${lateCancels.length === 1 ? 'pedido de cancelamento' : 'pedidos de cancelamento'}`}
           testId={T('late-alert')}
-          action={<LimaAction onClick={() => setTab(lateInQueue ? 'queue' : 'progress')} testId={T('late-alert-open')}>{lateInQueue ? 'Ver na fila' : 'Ver em andamento'}</LimaAction>}
+          action={<LimaAction onClick={() => setTab(lateCancels.length > 0 || !lateInQueue ? 'progress' : 'queue')} testId={T('late-alert-open')}>{lateCancels.length > 0 || !lateInQueue ? 'Ver em andamento' : 'Ver na fila'}</LimaAction>}
         >
-          Passaram do fim da faixa prometida ao cliente. A mais urgente fica no topo.
+          {lateByEta > 0 ? 'Passaram do fim da faixa prometida ao cliente. A mais urgente fica no topo.' : null}
+          {lateCancels[0] ? <> {lateCancels[0].orderNumber ? `#${lateCancels[0].orderNumber}` : 'Um cliente'} pediu cancelamento. Responda em <strong>{countdownText(lateCancels[0].lateCancelRequest!.respondBy, now)}</strong>, senão o sistema aceita.</> : null}
         </NightBlock>
       ) : null}
       <KpiRow>
         <Kpi label="Esperando motoboy" value={waiting.length} tone="night" testId={T('summary-waiting')} />
         <Kpi label="Em risco" value={riskCount} tone={riskCount > 0 ? 'warning' : 'neutral'} hint={riskCount > 0 ? 'Perto do fim da faixa' : undefined} testId={T('summary-risk')} />
         <Kpi label="Atrasadas" value={lateByEta} tone={lateByEta > 0 ? 'danger' : 'neutral'} hint={hasEta ? undefined : 'Sem faixa nas corridas'} testId={T('summary-late')} />
-        <Kpi label="Maior espera" value={`${longest} min`} testId={T('summary-longest')} />
+        {stats.data ? (
+          <Kpi label="No prazo hoje" value={stats.data.onTime.pct === null ? '—' : `${stats.data.onTime.pct.toLocaleString('pt-BR')}%`} hint={stats.data.onTime.of === 0 ? 'Nenhuma entrega com faixa hoje' : `${stats.data.onTime.count} de ${stats.data.onTime.of} entregas`} testId={T('summary-ontime')} />
+        ) : (
+          <Kpi label="Maior espera" value={`${longest} min`} testId={T('summary-longest')} />
+        )}
       </KpiRow>
       <div className={s.bar} data-testid={T('status-bar')}>
         <div className={s.barGroup}>
@@ -239,6 +260,8 @@ function deadlineOf(row: Delivery, now: number): { state: DeadlineState; label: 
   return { state: 'none', label: row.kind === 'delivery' ? 'Sem faixa' : 'Coleta de troca', value: '—', sub: row.kind === 'delivery' ? undefined : 'Coletar hoje' };
 }
 
+const FINAL = new Set(['delivered', 'not_delivered', 'returned_to_store', 'cancelled']);
+
 function Row({ row, now, tab, primary, canWrite, online, onAssign, onOpen }: { row: Delivery; now: number; tab: Tab; primary: boolean; canWrite: boolean; online: boolean; onAssign: () => void; onOpen: () => void }) {
   const queueRow = tab === 'queue';
   const deadline = deadlineOf(row, now);
@@ -254,6 +277,7 @@ function Row({ row, now, tab, primary, canWrite, online, onAssign, onOpen }: { r
           </span>
           <span className={s.route}>{row.storeName ?? 'Loja'}{row.destination ? ` \u2192 ${row.destination}` : ''}</span>
           <EtaChip delivery={row} now={now} />
+          {row.dropoffPinVerified === false && !FINAL.has(row.status) ? <span className={cx('wb-text-caption-strong', s.wait)} data-testid={T(`row-${row.id}-pin`)}><SolarIcon name="warning" size={16} />Pino do endereço não conferido</span> : null}
           <span className={cx('wb-text-caption', s.muted)}>
             {row.orderNumber ? `#${row.orderNumber} · ` : ''}
             {row.volumes} {row.volumes === 1 ? 'volume' : 'volumes'} · taxa {formatCents(row.fee.amount)}
@@ -269,6 +293,7 @@ function Row({ row, now, tab, primary, canWrite, online, onAssign, onOpen }: { r
             Abrir
           </Button>
         ) : null}
+        {pendingLateCancel(row) ? <LateCancelStrip delivery={row} canWrite={canWrite} /> : null}
       </div>
     </li>
   );

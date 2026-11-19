@@ -77,6 +77,37 @@ describe('ReportsPage (RL1)', () => {
     expect(await screen.findByTestId('admin.relatorios.export-error')).toHaveTextContent('A exportação é grande');
   });
 
+  it('financeiro exporta Receita por pedido e Estornos; acima de 10.000 linhas mostra a mensagem da API (DT-060)', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
+    let large = false;
+    const csv = (name: string) => new Response('a;b', { status: 200, headers: { 'content-type': 'text/csv', 'content-disposition': `attachment; filename="${name}.csv"` } });
+    const { impl, calls } = base((url) => {
+      if (url.pathname.endsWith('/finance/revenue.csv')) return large ? json({ code: 'EXPORT_TOO_LARGE', title: 'Período grande demais', status: 422, detail: 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas). Encontradas: 10001.' }, 422) : csv('receita');
+      if (url.pathname.endsWith('/finance/refunds.csv')) return csv('estornos');
+      return undefined;
+    });
+    vi.stubGlobal('fetch', impl);
+    renderPanel(<ReportsPage />, 'finance');
+    await userEvent.click(await screen.findByTestId('admin.relatorios.export-revenue'));
+    expect(await screen.findByText('Arquivo pronto.')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('admin.relatorios.export-refunds'));
+    await waitFor(() => expect(calls.some((c) => c.url.pathname.endsWith('/finance/refunds.csv'))).toBe(true));
+    const revenueCall = calls.find((c) => c.url.pathname.endsWith('/finance/revenue.csv'))!;
+    expect(revenueCall.url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    large = true;
+    await userEvent.click(screen.getByTestId('admin.relatorios.export-revenue'));
+    expect(await screen.findByTestId('admin.relatorios.export-error')).toHaveTextContent('Período grande demais. Reduza o intervalo (máximo 10.000 linhas). Encontradas: 10001.');
+  });
+
+  it('operação não vê as planilhas financeiras', async () => {
+    vi.stubGlobal('fetch', base().impl);
+    renderPanel(<ReportsPage />, 'operations');
+    await screen.findByTestId('admin.relatorios.kpi-orders');
+    expect(screen.queryByTestId('admin.relatorios.finance-exports')).not.toBeInTheDocument();
+  });
+
   it('período sem dados: estado vazio com "Limpar filtros"', async () => {
     vi.stubGlobal('fetch', base((url) => (url.pathname.endsWith('/reports/operations') ? json(report({ empty: true })) : undefined)).impl);
     renderPanel(<ReportsPage />);

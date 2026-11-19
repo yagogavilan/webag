@@ -16,6 +16,7 @@ import { ACTOR_LABEL, ORDER_STATUS_LABEL, addressLines, arrivedAt, attributesTex
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useNow } from '@/lib/use-now';
+import { ReadyBy } from './ready-by';
 import { useOnline } from '@/lib/use-online';
 import { CompleteDialog } from './complete-dialog';
 import { OrdersGate } from './orders-gate';
@@ -128,6 +129,7 @@ function Body({ order, online }: { order: StoreOrder; online: boolean }) {
         <p className="wb-text-caption" style={{ margin: 0 }}>
           {formatClock(arrivedAt(order))} · {formatElapsed(now - Date.parse(arrivedAt(order)))}
         </p>
+        <ReadyBy orderId={order.id} readyByAt={order.readyByAt} now={now} />
       </div>
 
       {error ? (

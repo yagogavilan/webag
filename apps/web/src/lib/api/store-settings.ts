@@ -1,3 +1,4 @@
+import type { PreviewStoreDeliveryEta200, PreviewStoreDeliveryEtaBody } from '@webag/shared';
 import { apiRequest } from './client';
 
 /**
@@ -70,15 +71,9 @@ export interface StoreSettings {
 
 export type PauseKind = '30m' | '1h' | '2h' | 'end_of_day' | 'until_resume';
 
-export interface DeliveryPreview {
-  available: boolean;
-  distanceM: number | null;
-  feeCents: number | null;
-  freeShipping: boolean;
-  belowMinimum: boolean;
-  /** Faixa para o CEP testado (DEC-053). PROVISÓRIO: `EtaRange` ainda não faz parte de `DeliveryPreview` no openapi.yaml (pendência O6-3). */
-  eta?: { minMinutes: number; maxMinutes: number } | null;
-}
+/** W.5: prévia do horário e da taxa com a MESMA conta do checkout (o navegador do lojista não calcula nada). */
+export type EtaPreview = PreviewStoreDeliveryEta200;
+export type EtaPreviewBody = PreviewStoreDeliveryEtaBody;
 
 export interface ProfileView {
   id: string;
@@ -115,7 +110,7 @@ export const settingsApi = {
   pause: (storeId: string, kind: PauseKind) => apiRequest<void>(L, `stores/${storeId}/pause`, { method: 'POST', body: { kind } }),
   resume: (storeId: string) => apiRequest<void>(L, `stores/${storeId}/pause`, { method: 'DELETE' }),
   setDelivery: (storeId: string, body: DeliveryInput) => apiRequest<void>(L, `stores/${storeId}/delivery`, { method: 'PUT', body }),
-  preview: (storeId: string, body: { cep: string; subtotalCents: number }) => apiRequest<DeliveryPreview>(L, `stores/${storeId}/delivery/preview`, { method: 'POST', body }),
+  deliveryPreview: (storeId: string, body: EtaPreviewBody, signal?: AbortSignal) => apiRequest<EtaPreview>(L, `stores/${storeId}/delivery-preview`, { method: 'POST', body, signal }),
   setPickup: (storeId: string, body: { enabled: boolean; useStoreAddress: boolean; address?: string; instructions?: string; prepMinMinutes: number; prepMaxMinutes: number }) => apiRequest<void>(L, `stores/${storeId}/pickup`, { method: 'PUT', body }),
   setExchange: (storeId: string, body: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }) => apiRequest<void>(L, `stores/${storeId}/exchange-policy`, { method: 'PUT', body }),
 };

@@ -5,6 +5,7 @@ import { canReplyReviews, visibleLojistaNav } from '@/lib/lojista-access';
 import { json, mockFetch } from '../../../test/render';
 import { fakeStore, renderLojista, storeHandlers } from '../../../test/lojista';
 import { ReviewsPage, replyError, stars } from './reviews-page';
+import { summaryText } from './reviews-summary';
 import { ApiError } from '@/lib/api/errors';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/lojista/avaliacoes' }));
@@ -93,5 +94,27 @@ describe('avaliações do lojista (WB-195)', () => {
     vi.stubGlobal('fetch', mockFetch(...storeHandlers(fakeStore({ id: 's1', status: 'live', step: 4, role: 'staff', permissions: ['orders'], name: 'Casa Bela' }))).impl);
     renderLojista(<ReviewsPage />);
     expect(await screen.findByText(/não tem acesso/i)).toBeInTheDocument();
+  });
+});
+
+describe('resumo das avaliações (W.6)', () => {
+  const summary = (over: object = {}) => ({ average: 4.7, total: 12, distribution: { '1': 0, '2': 1, '3': 1, '4': 2, '5': 8 }, withoutReply: 2, ...over });
+  it('texto do resumo: nota, total e sem resposta; vazio sem avaliações', () => {
+    expect(summaryText(summary())).toBe('Nota 4,7 em 12 avaliações, 2 sem resposta');
+    expect(summaryText(summary({ withoutReply: 0, total: 1 }))).toBe('Nota 4,7 em 1 avaliação, todas respondidas');
+    expect(summaryText(summary({ average: null, total: 0 }))).toBe('Ainda sem avaliações');
+  });
+  it('a página mostra a nota com a distribuição por estrelas, vinda da API', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/reviews/summary') ? json(summary()) : url.pathname.endsWith('/stores/s1/reviews') ? json({ data: [review()], nextCursor: null }) : undefined), ...live()).impl);
+    renderLojista(<ReviewsPage />);
+    expect(await screen.findByTestId('lojista.avaliacoes.summary-average')).toHaveTextContent('4,7');
+    expect(screen.getByTestId('lojista.avaliacoes.summary-hint')).toHaveTextContent('12 avaliações · 2 sem resposta');
+    expect(screen.getByRole('list', { name: 'Quantidade de avaliações por nota' })).toHaveTextContent('5 estrelas');
+  });
+  it('se o resumo falha, o bloco some e a lista segue', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (url.pathname.endsWith('/reviews/summary') ? json({ code: 'X', title: 'x', status: 500 }, 500) : url.pathname.endsWith('/stores/s1/reviews') ? json({ data: [review()], nextCursor: null }) : undefined), ...live()).impl);
+    renderLojista(<ReviewsPage />);
+    expect(await screen.findByTestId('lojista.avaliacoes.list')).toBeInTheDocument();
+    expect(screen.queryByTestId('lojista.avaliacoes.summary')).not.toBeInTheDocument();
   });
 });

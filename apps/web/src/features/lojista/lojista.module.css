@@ -87,3 +87,10 @@
 .member { display: flex; align-items: center; gap: var(--wb-space-3); min-height: 72px; padding: var(--wb-space-3) 0; border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); }
 .memberMain { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .perms { display: flex; flex-wrap: wrap; gap: var(--wb-space-1); }
+.ranking { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wb-space-2); }
+.rankRow { display: grid; grid-template-columns: 40px 48px minmax(0, 1fr) auto; gap: var(--wb-space-3); align-items: center; padding: var(--wb-space-3); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); }
+.rankNumber { font-family: var(--wb-font-family-display); font-size: 32px; line-height: 36px; font-weight: 800; text-align: center; color: var(--wb-color-text-primary); }
+.rankThumb { display: block; width: 48px; height: 48px; border-radius: var(--wb-radius-md); background: var(--wb-color-surface-card); overflow: hidden; }
+.rankText { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.rankGet { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .rankRow { grid-template-columns: 32px 40px minmax(0, 1fr); } .rankGet { grid-column: 2 / -1; align-items: flex-start; } }
