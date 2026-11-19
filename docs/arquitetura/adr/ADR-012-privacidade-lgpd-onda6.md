@@ -20,7 +20,7 @@
 | 10 | **Retenção (DT-021)**: job diário idempotente, em lotes, só com contagens no `retention_runs`; falha vira alerta ao admin | WB-215 C1/C3 | Cron externo |
 
 ## Consequências
-- Parâmetros novos: `exclusao_arrependimento_horas`, `retencao_log_acesso_meses` (piso 6), `retencao_foto_troca_dias`, `retencao_loja_reprovada_dias`, `exportacao_link_min`.
+- Parâmetros novos: `exclusao_arrependimento_horas`, `retencao_log_acesso_meses` (piso 6), `retencao_foto_troca_dias`, `retencao_loja_reprovada_dias`, `exportacao_link_min`. Adendo SEC-185 (2026-11-19): `retencao_bloqueio_anos` (padrão 5, faixa 1 a 10, [HIPÓTESE] a validar com o jurídico) para `user_status_history`, apagado pelo expurgo diário.
 - `consents`/`terms_acceptances` retêm o IP do aceite ligado à casca anonimizada: base "prova/exercício regular de direitos" `[validar com o jurídico]`; se o parecer exigir apagar o IP, é preciso trocar o trigger append-only por um expurgo controlado.
 - Backups: o dado apagado persiste até a rotação (`[validar]` com o tech-lead; `docs/seguranca`).
 - Segurança a revisar: confirmação só por senha, limite de tentativas e resposta idêntica no cancelamento, link de download de uso único, ausência de segredo e de dado de terceiros no arquivo, varredura de "nenhum dado pessoal restante" (teste `privacy-deletion.e2e-spec.ts`).

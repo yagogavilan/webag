@@ -110,6 +110,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('retencao_fiscal_anos', 5, 5, 20, 'Retenção de dados fiscais e financeiros (anos)', 'HIP-024'),
   int('exclusao_arrependimento_horas', 72, 0, 168, 'Período de arrependimento da exclusão de conta (horas); padrão 72 h (SEC-154: com 0 a exclusão é imediata e sem volta). Limitado por exclusao_anonimizacao_dias', 'SEC-154'),
   int('retencao_log_acesso_meses', 6, 6, 24, 'Retenção do registro de acesso (meses); piso do Marco Civil, art. 15', 'SEC-075'),
+  int('retencao_bloqueio_anos', 5, 1, 10, 'Retenção do histórico de bloqueio e desbloqueio de conta (anos); [HIPÓTESE: validar com o jurídico]', 'SEC-185'),
   int('retencao_foto_troca_dias', 180, 30, 365, 'Retenção das fotos de troca após a conclusão (dias)', 'WB-215'),
   int('retencao_loja_reprovada_dias', 90, 30, 365, 'Retenção dos documentos de loja reprovada (dias)', 'HIP-035'),
   int('exportacao_link_min', 5, 1, 30, 'Validade do link de download da exportação (minutos); uso único', 'WB-212'),

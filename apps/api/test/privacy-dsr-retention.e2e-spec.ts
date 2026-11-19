@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, like } from 'drizzle-orm';
 import { DsrService } from '../src/modules/privacy/dsr.service.js';
 import { RetentionService } from '../src/modules/privacy/retention.service.js';
-import { accessLog, authCodes, exchangeRequests, mediaAssets, orderItems, orders, paymentAlerts, privacyRequests, retentionRuns, sessions, storeDocuments, stores, webhookEvents } from '../src/platform/database/schema.js';
+import { accessLog, authCodes, userStatusHistory, exchangeRequests, mediaAssets, orderItems, orders, paymentAlerts, privacyRequests, retentionRuns, sessions, storeDocuments, stores, webhookEvents } from '../src/platform/database/schema.js';
 import { createTestApp, bearer, STRONG_PASSWORD, type TestContext } from './helpers/app.js';
 import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, expireReauth, insertStoreRow, memoryStorage, registerUser } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, placeOrder, shopWith } from './helpers/orders.js';
@@ -187,6 +187,24 @@ describe('Pedidos de titulares (WB-217) e retenção (WB-215, DT-021)', () => {
       expect(await retention.runIfDue()).toBeNull();
       // O acesso do usuário que sobrou é só o recente (a exigência legal de 6 meses).
       expect((await ctx.db.select().from(accessLog).where(and(eq(accessLog.userId, user.userId)))).every((r) => r.createdAt.getTime() > Date.now() - 183 * DAY)).toBe(true);
+    });
+
+    it('SEC-185: o histórico de bloqueio some depois de retencao_bloqueio_anos (5); o recente fica; o prazo é parâmetro', async () => {
+      const user = await createCustomer(ctx);
+      const [old, edge, recent] = await ctx.db
+        .insert(userStatusHistory)
+        .values([
+          { userId: user.userId, action: 'blocked', reason: 'motivo antigo de teste da retenção', createdAt: new Date(Date.now() - 5 * 365.25 * DAY - DAY) },
+          { userId: user.userId, action: 'unblocked', reason: 'motivo quase no limite do prazo', createdAt: new Date(Date.now() - 4 * 365.25 * DAY) },
+          { userId: user.userId, action: 'blocked', reason: 'motivo recente de teste da retenção', createdAt: new Date(Date.now() - 30 * DAY) },
+        ])
+        .returning({ id: userStatusHistory.id });
+      const result = await retention.run();
+      expect(result.errors).toEqual([]);
+      expect(result.counts.userStatusHistory).toBeGreaterThanOrEqual(1);
+      const left = (await ctx.db.select({ id: userStatusHistory.id }).from(userStatusHistory).where(eq(userStatusHistory.userId, user.userId))).map((r) => r.id).sort();
+      expect(left).toEqual([edge!.id, recent!.id].sort());
+      expect(left).not.toContain(old!.id);
     });
 
     it('fotos de troca somem 180 dias depois da troca encerrada; troca em andamento e troca recente mantêm', async () => {

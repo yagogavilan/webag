@@ -22,7 +22,7 @@ export interface RetentionResult {
  * WB-215 / DT-021 / DT-032: expurgo diário, idempotente e em lotes. Cada passo roda isolado (um que falha não derruba os outros),
  * grava só CONTAGENS em `retention_runs` (nunca dado pessoal) e uma falha vira o alerta `retention_failed` ao admin (WB-198).
  *
- * Prazos (parâmetros): registro de acesso 6 meses (piso do Marco Civil), fotos de troca 180 dias após o fim da troca, documentos de
+ * Prazos (parâmetros): registro de acesso 6 meses (piso do Marco Civil), histórico de bloqueio 5 anos (SEC-185), fotos de troca 180 dias após o fim da troca, documentos de
  * loja reprovada 90 dias após a decisão. Sessões vencidas, códigos, tickets, convites usados e webhooks processados não têm
  * finalidade depois de expirar. Dados FISCAIS (pedidos, pagamentos, ledger) não são apagados: viram anônimos na exclusão da conta.
  */
@@ -62,11 +62,12 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async execute(id: string, now: Date): Promise<RetentionResult> {
-    const [accessMonths, photoDays, rejectedDays, durableDays] = await Promise.all([
+    const [accessMonths, photoDays, rejectedDays, durableDays, blockYears] = await Promise.all([
       this.params.getNumber('retencao_log_acesso_meses'),
       this.params.getNumber('retencao_foto_troca_dias'),
       this.params.getNumber('retencao_loja_reprovada_dias'),
       this.params.getNumber('troca_defeito_duravel_dias'),
+      this.params.getNumber('retencao_bloqueio_anos'),
     ]);
     const ago = (days: number) => new Date(now.getTime() - days * DAY);
     const counts: Record<string, number> = {};
@@ -81,6 +82,8 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
     };
 
     await step('accessLog', () => this.purge('access_log', sql`created_at < ${new Date(now.getTime() - accessMonths * 30.4375 * DAY).toISOString()}::timestamptz`));
+    // SEC-185: o histórico de bloqueio (motivo em texto livre do admin) tem prazo: `retencao_bloqueio_anos` (padrão 5, [HIPÓTESE] a validar com o jurídico).
+    await step('userStatusHistory', () => this.purge('user_status_history', sql`created_at < ${new Date(now.getTime() - blockYears * 365.25 * DAY).toISOString()}::timestamptz`));
     await step('sessions', () => this.purge('sessions', sql`coalesce(revoked_at, absolute_expires_at) < ${ago(30).toISOString()}::timestamptz and (revoked_at is not null or absolute_expires_at < ${now.toISOString()}::timestamptz)`));
     await step('authCodes', () => this.purge('auth_codes', sql`created_at < ${ago(7).toISOString()}::timestamptz`));
     await step('authTickets', () => this.purge('auth_tickets', sql`expires_at < ${ago(7).toISOString()}::timestamptz`));
