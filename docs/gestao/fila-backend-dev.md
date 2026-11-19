@@ -72,3 +72,8 @@ Q.1 [ ] BUG-011 (ALTA, bloqueia G4): rota do admin para cancelar pedido; estorno
 Q.2 [ ] BUG-016: horário e pausa da logística (`logistica_horario`, "pausar entregas") valendo no pedido e no app; BUG-012: cancelar corrida não deixa o pedido parado.
 Q.3 [ ] BUG-014 (retirada 48 h), BUG-015 (rotas de "não recebi meu pedido" e "pedir cancelamento"), BUG-017 (parâmetros do admin sem efeito: listar quais e ligar), BUG-018 ("Mais vendidos" na descoberta), BUG-013/SEC-148, BUG-019 (testes frágeis por horário/ordem e `seed-orders`).
 Os testes `it.fails` de `apps/api/test/qa-onda3-5-lacunas.e2e-spec.ts` ficam vermelhos quando a correção entra: troque para `it` normal.
+
+## Estado após a Onda 6 (CEO, 2026-11-19)
+- [x] FEITOS: O6.1 a O6.5, B.1, B.2, DT-052 parcial (commits da Onda 6; ADR-012).
+- ABERTOS, nesta ordem: Q.1 (BUG-011, ALTA, bloqueia G4), R.1 a R.6 (revisão do tech-lead), Q.2 e Q.3 (bugs do QA), DT-059 a DT-064.
+- Frontend pendente: página pública `/pagar/cartao?i=<token>` (apps/web), `POST /v1/me/push-campaigns/{id}/opened` no app, I11 (R.7).
