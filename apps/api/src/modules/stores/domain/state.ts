@@ -1,5 +1,5 @@
 /** Máquina de estados da loja (RN-16, R-29). Toda transição fora desta tabela é recusada e auditada. */
-export const STORE_STATUSES = ['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended'] as const;
+export const STORE_STATUSES = ['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed'] as const;
 export type StoreStatus = (typeof STORE_STATUSES)[number];
 
 export type StoreActor = 'merchant' | 'admin';
@@ -10,6 +10,7 @@ interface Transition {
   actor: StoreActor;
 }
 
+/** `closed` é terminal e só nasce da exclusão da conta do dono (privacy, WB-213 C8): não há transição de usuário para ele. */
 export const STORE_TRANSITIONS: readonly Transition[] = [
   { from: 'draft', to: 'in_review', actor: 'merchant' },
   { from: 'in_review', to: 'approved', actor: 'admin' },

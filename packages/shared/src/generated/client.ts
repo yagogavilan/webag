@@ -1450,6 +1450,7 @@ export const StoreStatus = {
   approved: 'approved',
   rejected: 'rejected',
   suspended: 'suspended',
+  closed: 'closed',
 } as const;
 
 export type StoreDocumentType = typeof StoreDocumentType[keyof typeof StoreDocumentType];
@@ -4772,6 +4773,68 @@ export interface StatementPage {
   nextCursor: string | null;
 }
 
+export type DeletionBlockerKind = typeof DeletionBlockerKind[keyof typeof DeletionBlockerKind];
+
+
+export const DeletionBlockerKind = {
+  order: 'order',
+  exchange: 'exchange',
+  store_order: 'store_order',
+  store_exchange: 'store_exchange',
+  store_refund: 'store_refund',
+} as const;
+
+export interface DeletionBlocker {
+  kind: DeletionBlockerKind;
+  id: string;
+  /**
+     * Número legível do pedido ou da troca (a tela monta 'Pedido #4821 · saiu para entrega')
+     * @nullable
+     */
+  number: string | null;
+  status: string;
+}
+
+export interface AccountDeletionOverview {
+  canDelete: boolean;
+  /** @maxItems 20 */
+  blockers: DeletionBlocker[];
+  /** Falso = conta só com login social (confirma com o provedor) */
+  hasPassword: boolean;
+  /** Dono de loja: a loja será encerrada junto */
+  ownsStore: boolean;
+  /** Parâmetro exclusao_anonimizacao_dias */
+  anonymizationDays: number;
+  /** Parâmetro retencao_fiscal_anos */
+  fiscalRetentionYears: number;
+  /** Período de arrependimento (0 = exclui na hora) */
+  regretHours: number;
+}
+
+export interface DeleteAccountRequest {
+  password: string;
+}
+
+export type DeleteAccountResponseStatus = typeof DeleteAccountResponseStatus[keyof typeof DeleteAccountResponseStatus];
+
+
+export const DeleteAccountResponseStatus = {
+  completed: 'completed',
+  pending: 'pending',
+} as const;
+
+export interface DeleteAccountResponse {
+  status: DeleteAccountResponseStatus;
+  effectiveAt: string;
+  /** @nullable */
+  cancelableUntil: string | null;
+}
+
+export interface CancelAccountDeletionRequest {
+  email: string;
+  password: string;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -5356,6 +5419,7 @@ export const ListAdminStoresStatus = {
   approved: 'approved',
   rejected: 'rejected',
   suspended: 'suspended',
+  closed: 'closed',
 } as const;
 
 export type ListAdminStores200 = {
@@ -20013,5 +20077,170 @@ export const getStoreStatementCsv = async (storeId: string,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type getAccountDeletionResponse200 = {
+  data: AccountDeletionOverview
+  status: 200
+}
+
+export type getAccountDeletionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAccountDeletionResponseSuccess = (getAccountDeletionResponse200) & {
+  headers: Headers;
+};
+export type getAccountDeletionResponseError = (getAccountDeletionResponse401) & {
+  headers: Headers;
+};
+
+export type getAccountDeletionResponse = (getAccountDeletionResponseSuccess | getAccountDeletionResponseError)
+
+export const getGetAccountDeletionUrl = () => {
+
+
+
+
+  return `/v1/me/deletion`
+}
+
+/**
+ * Bloqueios (pedido ou troca em aberto; dono de loja: pedidos, trocas e estornos da loja) e os prazos que o texto "O que acontece" cita (nunca fixos na tela). `canDelete` é falso para conta de admin.
+ * @summary O que impede (ou não) a exclusão da minha conta
+ */
+export const getAccountDeletion = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getAccountDeletionResponse> => {
+
+  return apiFetch<getAccountDeletionResponse>(getGetAccountDeletionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteAccountResponse200 = {
+  data: DeleteAccountResponse
+  status: 200
+}
+
+export type deleteAccountResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type deleteAccountResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteAccountResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteAccountResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type deleteAccountResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type deleteAccountResponseSuccess = (deleteAccountResponse200) & {
+  headers: Headers;
+};
+export type deleteAccountResponseError = (deleteAccountResponse400 | deleteAccountResponse401 | deleteAccountResponse403 | deleteAccountResponse409 | deleteAccountResponse429) & {
+  headers: Headers;
+};
+
+export type deleteAccountResponse = (deleteAccountResponseSuccess | deleteAccountResponseError)
+
+export const getDeleteAccountUrl = () => {
+
+
+
+
+  return `/v1/me/deletion`
+}
+
+/**
+ * Confirma só com a senha (nunca código por e-mail, mesmo com e-mail não confirmado; DEC-014/015). A conta fecha na hora: sessões e sockets
+ * revogados, aparelhos de push e sacola apagados, loja do dono encerrada (`closed`). A anonimização roda em `effectiveAt` (imediata quando
+ * o período de arrependimento é 0). Erros: 403 `INVALID_PASSWORD` (conta no limite de tentativas do login, depois 429), 403
+ * `ADMIN_ACCOUNT_NOT_DELETABLE`, 409 `DELETION_BLOCKED` (com `blockers`), 409 `PASSWORD_NOT_SET` (conta só com login social).
+ * @summary Excluir minha conta (só a senha, SEC-096)
+ */
+export const deleteAccount = async (deleteAccountRequest: DeleteAccountRequest, options?: Parameters<typeof apiFetch>[1]): Promise<deleteAccountResponse> => {
+
+  return apiFetch<deleteAccountResponse>(getDeleteAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(deleteAccountRequest)
+  }
+);}
+
+
+
+export type cancelAccountDeletionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelAccountDeletionResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type cancelAccountDeletionResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelAccountDeletionResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type cancelAccountDeletionResponseSuccess = (cancelAccountDeletionResponse204) & {
+  headers: Headers;
+};
+export type cancelAccountDeletionResponseError = (cancelAccountDeletionResponse400 | cancelAccountDeletionResponse401 | cancelAccountDeletionResponse429) & {
+  headers: Headers;
+};
+
+export type cancelAccountDeletionResponse = (cancelAccountDeletionResponseSuccess | cancelAccountDeletionResponseError)
+
+export const getCancelAccountDeletionUrl = () => {
+
+
+
+
+  return `/v1/auth/account-deletion/cancel`
+}
+
+/**
+ * Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP.
+ * @summary Arrependimento - cancelar a exclusão da conta
+ */
+export const cancelAccountDeletion = async (cancelAccountDeletionRequest: CancelAccountDeletionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelAccountDeletionResponse> => {
+
+  return apiFetch<cancelAccountDeletionResponse>(getCancelAccountDeletionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cancelAccountDeletionRequest)
   }
 );}

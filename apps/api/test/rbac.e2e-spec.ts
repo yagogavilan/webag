@@ -111,6 +111,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'GET /v1/search/products',
         'GET /v1/search/stores',
         'GET /v1/search/suggestions',
+        'POST /v1/auth/account-deletion/cancel',
         'POST /v1/auth/email-exists',
         'POST /v1/auth/invitations/accept',
         'POST /v1/auth/login',

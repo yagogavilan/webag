@@ -191,3 +191,65 @@ export function staffInviteEmail(link: string, storeName: string, days: number):
     html: html('Convite para a equipe', [`Você foi convidado para a equipe da loja ${storeName}: <a href="${link}">criar minha senha</a>.`, `O link vale por ${days} dias e só pode ser usado uma vez.`]),
   };
 }
+
+/** WB-213 C4: sem dado pessoal (o destinatário pode não ser o dono do e-mail, SEC-008d). */
+export function accountDeletionRequestedEmail(effectiveAt: Date): Body {
+  const date = effectiveAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return {
+    subject: 'Recebemos o pedido para excluir sua conta Webag',
+    text: `Sua conta Webag foi fechada. Você pode se arrepender até ${date}: entre com e-mail e senha e confirme que quer manter a conta. Depois dessa data a exclusão é definitiva.\n\n${footer}`,
+    html: html('Pedido de exclusão recebido', [
+      'Sua conta Webag foi fechada.',
+      `Você pode se arrepender até ${date}: entre com e-mail e senha e confirme que quer manter a conta. Depois dessa data a exclusão é definitiva.`,
+    ]),
+  };
+}
+
+export function accountDeletedEmail(): Body {
+  return {
+    subject: 'Sua conta Webag foi excluída',
+    text: `Sua conta Webag foi excluída. Apagamos seus dados pessoais; guardamos só o que a lei obriga, sem identificar você. Obrigado por ter usado o Webag.\n\n${footer}`,
+    html: html('Sua conta foi excluída', [
+      'Sua conta Webag foi excluída.',
+      'Apagamos seus dados pessoais; guardamos só o que a lei obriga, sem identificar você. Obrigado por ter usado o Webag.',
+    ]),
+  };
+}
+
+export function accountDeletionCancelledEmail(): Body {
+  return {
+    subject: 'A exclusão da sua conta Webag foi cancelada',
+    text: `A exclusão da sua conta Webag foi cancelada e a conta voltou a funcionar. Se não foi você, redefina a senha agora.\n\n${footer}`,
+    html: html('Exclusão cancelada', ['A exclusão da sua conta Webag foi cancelada e a conta voltou a funcionar.', 'Se não foi você, redefina a senha agora.']),
+  };
+}
+
+export function dataExportReadyEmail(validUntil: Date): Body {
+  const date = validUntil.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return {
+    subject: 'Seus dados do Webag estão prontos',
+    text: `A cópia dos seus dados está pronta. Abra o app Webag, entre em Conta > Privacidade e dados > Exportar meus dados e toque em "Baixar". Ela fica disponível até ${date}.\n\n${footer}`,
+    html: html('Seus dados estão prontos', [
+      'A cópia dos seus dados está pronta.',
+      `Abra o app Webag, entre em Conta &gt; Privacidade e dados &gt; Exportar meus dados e toque em "Baixar". Ela fica disponível até ${date}.`,
+    ]),
+  };
+}
+
+export function privacyRequestReceivedEmail(protocol: string, dueAt: Date): Body {
+  const date = dueAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return {
+    subject: `Recebemos seu pedido de privacidade (${protocol})`,
+    text: `Recebemos seu pedido. Protocolo ${protocol}. Respondemos até ${date}.\n\n${footer}`,
+    html: html('Recebemos seu pedido', [`Protocolo <strong>${protocol}</strong>.`, `Respondemos até ${date}.`]),
+  };
+}
+
+export function privacyRequestAnsweredEmail(protocol: string, answer: string): Body {
+  const escaped = answer.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return {
+    subject: `Resposta ao seu pedido de privacidade (${protocol})`,
+    text: `Protocolo ${protocol}.\n\n${answer}\n\n${footer}`,
+    html: html(`Resposta ao pedido ${protocol}`, [escaped.replace(/\n/g, '<br>')]),
+  };
+}

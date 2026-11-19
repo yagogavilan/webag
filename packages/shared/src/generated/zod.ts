@@ -2693,7 +2693,7 @@ export const createStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const CreateStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -2792,7 +2792,7 @@ export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp
 export const ListMyStoresResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -2896,7 +2896,7 @@ export const getStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegEx
 
 export const GetStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -3039,7 +3039,7 @@ export const updateStoreProfileResponseSettingsHoursItemIntervalsItemEndRegExp =
 
 export const UpdateStoreProfileResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -3200,7 +3200,7 @@ export const submitStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const SubmitStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -3818,7 +3818,7 @@ export const listAdminStoresQueryLimitMax = 50;
 
 
 export const ListAdminStoresQueryParams = zod.object({
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']).optional().describe('Padrão: in_review'),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']).optional().describe('Padrão: in_review'),
   "cursor": zod.string().max(listAdminStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
   "limit": zod.int().min(1).max(listAdminStoresQueryLimitMax).default(listAdminStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
 })
@@ -3855,7 +3855,7 @@ export const getAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new 
 export const GetAdminStoreResponse = zod.object({
   "store": zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4087,7 +4087,7 @@ export const editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new
 
 export const EditAdminStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4209,7 +4209,7 @@ export const approveStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new R
 
 export const ApproveStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4311,7 +4311,7 @@ export const reactivateStoreResponseSettingsHoursItemIntervalsItemEndRegExp = ne
 
 export const ReactivateStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4427,7 +4427,7 @@ export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemEndRegE
 
 export const RequestStoreCorrectionResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4538,7 +4538,7 @@ export const rejectStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new Re
 
 export const RejectStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4649,7 +4649,7 @@ export const suspendStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new R
 
 export const SuspendStoreResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -4797,7 +4797,7 @@ export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemEndRegEx
 
 export const DecideStoreDataReviewResponse = zod.object({
   "id": zod.uuid(),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended']),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
   "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
   "legalName": zod.string().nullish(),
@@ -10733,3 +10733,57 @@ export const GetStoreStatementCsvQueryParams = zod.object({
 })
 
 export const GetStoreStatementCsvResponse = zod.string()
+
+
+/**
+ * Bloqueios (pedido ou troca em aberto; dono de loja: pedidos, trocas e estornos da loja) e os prazos que o texto "O que acontece" cita (nunca fixos na tela). `canDelete` é falso para conta de admin.
+ * @summary O que impede (ou não) a exclusão da minha conta
+ */
+export const getAccountDeletionResponseBlockersMax = 20;
+
+
+
+export const GetAccountDeletionResponse = zod.object({
+  "canDelete": zod.boolean(),
+  "blockers": zod.array(zod.object({
+  "kind": zod.enum(['order', 'exchange', 'store_order', 'store_exchange', 'store_refund']),
+  "id": zod.uuid(),
+  "number": zod.string().nullable().describe('Número legível do pedido ou da troca (a tela monta \'Pedido #4821 · saiu para entrega\')'),
+  "status": zod.string()
+})).max(getAccountDeletionResponseBlockersMax),
+  "hasPassword": zod.boolean().describe('Falso = conta só com login social (confirma com o provedor)'),
+  "ownsStore": zod.boolean().describe('Dono de loja: a loja será encerrada junto'),
+  "anonymizationDays": zod.int().describe('Parâmetro exclusao_anonimizacao_dias'),
+  "fiscalRetentionYears": zod.int().describe('Parâmetro retencao_fiscal_anos'),
+  "regretHours": zod.int().describe('Período de arrependimento (0 = exclui na hora)')
+})
+
+
+/**
+ * Confirma só com a senha (nunca código por e-mail, mesmo com e-mail não confirmado; DEC-014/015). A conta fecha na hora: sessões e sockets
+ * revogados, aparelhos de push e sacola apagados, loja do dono encerrada (`closed`). A anonimização roda em `effectiveAt` (imediata quando
+ * o período de arrependimento é 0). Erros: 403 `INVALID_PASSWORD` (conta no limite de tentativas do login, depois 429), 403
+ * `ADMIN_ACCOUNT_NOT_DELETABLE`, 409 `DELETION_BLOCKED` (com `blockers`), 409 `PASSWORD_NOT_SET` (conta só com login social).
+ * @summary Excluir minha conta (só a senha, SEC-096)
+ */
+export const DeleteAccountBody = zod.object({
+  "password": zod.string()
+})
+
+export const DeleteAccountResponse = zod.object({
+  "status": zod.enum(['completed', 'pending']),
+  "effectiveAt": zod.iso.datetime({"offset":true}),
+  "cancelableUntil": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP.
+ * @summary Arrependimento - cancelar a exclusão da conta
+ */
+export const CancelAccountDeletionBody = zod.object({
+  "email": zod.email(),
+  "password": zod.string()
+})
+
+export const CancelAccountDeletionResponse = zod.void()

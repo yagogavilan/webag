@@ -448,6 +448,16 @@ export class AuthService {
 
   // ------------------------------------------------------------------- helpers
 
+  /**
+   * Confirmação por senha de ações sensíveis (exportar e excluir conta, SEC-096/DEC-015): mesmo limite do login (WB-221 C6).
+   * Conta sem senha (login social) não tem como confirmar por aqui: 409 `PASSWORD_NOT_SET`.
+   */
+  async confirmPassword(userId: string, password: string, ctx: RequestContext, scope: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user.passwordHash) throw errors.conflict('PASSWORD_NOT_SET', 'Conta sem senha', 'Confirme com o provedor de login da conta.');
+    await this.assertPassword(user, password, ctx, scope);
+  }
+
   /** Confere a senha atual contando falhas no mesmo limite do login (WB-221 C6). Erro: 403. */
   private async assertPassword(user: UserRow, password: string, ctx: RequestContext, scope: string): Promise<void> {
     const maxFails = await this.params.getNumber('login_falhas');

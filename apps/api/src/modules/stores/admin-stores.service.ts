@@ -211,4 +211,5 @@ const DECISION_ACTION: Record<StoreStatus, string> = {
   correction_requested: 'request_correction',
   rejected: 'reject',
   suspended: 'suspend',
+  closed: 'close',
 };

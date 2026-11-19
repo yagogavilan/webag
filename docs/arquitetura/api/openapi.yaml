@@ -66,6 +66,8 @@ tags:
     description: Trocas e devoluções (arrependimento, defeito, tamanho/cor)
   - name: orders
     description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento) e painel de pedidos da loja (lista, detalhe, comanda, aceitar, recusar, andamento, cancelar)"
+  - name: privacy
+    description: LGPD (O6.1) - excluir conta, exportar dados, pedidos de titulares e retenção
 security:
   - bearerAuth: []
 paths:
@@ -3471,6 +3473,7 @@ paths:
           - approved
           - rejected
           - suspended
+          - closed
         description: "Padrão: in_review"
       - $ref: "#/components/parameters/Cursor"
       - $ref: "#/components/parameters/Limit"
@@ -6291,6 +6294,75 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/me/deletion:
+    get:
+      tags: [privacy]
+      operationId: getAccountDeletion
+      summary: O que impede (ou não) a exclusão da minha conta
+      description: "Bloqueios (pedido ou troca em aberto; dono de loja: pedidos, trocas e estornos da loja) e os prazos que o texto \"O que acontece\" cita (nunca fixos na tela). `canDelete` é falso para conta de admin."
+      responses:
+        '200':
+          description: Situação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeletionOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [privacy]
+      operationId: deleteAccount
+      summary: Excluir minha conta (só a senha, SEC-096)
+      description: |
+        Confirma só com a senha (nunca código por e-mail, mesmo com e-mail não confirmado; DEC-014/015). A conta fecha na hora: sessões e sockets
+        revogados, aparelhos de push e sacola apagados, loja do dono encerrada (`closed`). A anonimização roda em `effectiveAt` (imediata quando
+        o período de arrependimento é 0). Erros: 403 `INVALID_PASSWORD` (conta no limite de tentativas do login, depois 429), 403
+        `ADMIN_ACCOUNT_NOT_DELETABLE`, 409 `DELETION_BLOCKED` (com `blockers`), 409 `PASSWORD_NOT_SET` (conta só com login social).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+      responses:
+        '200':
+          description: Conta fechada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAccountResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/account-deletion/cancel:
+    post:
+      tags: [privacy]
+      operationId: cancelAccountDeletion
+      summary: Arrependimento - cancelar a exclusão da conta
+      description: "Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAccountDeletionRequest'
+      responses:
+        '204':
+          description: Conta reativada (e loja do dono reaberta no estado anterior)
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -7569,6 +7641,7 @@ components:
           - approved
           - rejected
           - suspended
+          - closed
         documentType:
           type: string
           enum:
@@ -10101,3 +10174,42 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/StatementLine' } }
         nextCursor: { type: [string, 'null'] }
+    DeletionBlocker:
+      type: object
+      required: [kind, id, number, status]
+      properties:
+        kind: { type: string, enum: [order, exchange, store_order, store_exchange, store_refund] }
+        id: { type: string, format: uuid }
+        number: { type: [string, 'null'], description: "Número legível do pedido ou da troca (a tela monta 'Pedido #4821 · saiu para entrega')" }
+        status: { type: string }
+    AccountDeletionOverview:
+      type: object
+      required: [canDelete, blockers, hasPassword, ownsStore, anonymizationDays, fiscalRetentionYears, regretHours]
+      properties:
+        canDelete: { type: boolean }
+        blockers: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/DeletionBlocker' } }
+        hasPassword: { type: boolean, description: "Falso = conta só com login social (confirma com o provedor)" }
+        ownsStore: { type: boolean, description: "Dono de loja: a loja será encerrada junto" }
+        anonymizationDays: { type: integer, description: "Parâmetro exclusao_anonimizacao_dias" }
+        fiscalRetentionYears: { type: integer, description: "Parâmetro retencao_fiscal_anos" }
+        regretHours: { type: integer, description: "Período de arrependimento (0 = exclui na hora)" }
+    DeleteAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string }
+    DeleteAccountResponse:
+      type: object
+      required: [status, effectiveAt, cancelableUntil]
+      properties:
+        status: { type: string, enum: [completed, pending] }
+        effectiveAt: { type: string, format: date-time }
+        cancelableUntil: { type: [string, 'null'], format: date-time }
+    CancelAccountDeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
