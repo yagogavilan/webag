@@ -17,9 +17,16 @@ async function post(path: string, body: unknown): Promise<{ id: string; number?:
   return (await response.json()) as { id: string; number?: string };
 }
 
+/** O alerta de pedido novo é modal e travado; para fotografar o que há atrás dele, esconde-o só na captura. */
+async function hideAlert(page: Page) {
+  await page.addStyleTag({ content: '[data-dialog-root]:has([data-testid="lojista.alert.modal"]) { display: none !important; }' });
+  await page.evaluate(() => document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert')));
+}
+
 async function shot(page: Page, name: string, viewport: 'desk' | 'mob', full = true) {
   await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(1200);
+  await hideAlert(page);
   await page.screenshot({ path: `${OUT}/${viewport}-${name}.png`, fullPage: full });
 }
 
@@ -44,10 +51,12 @@ test.describe('capturas v3', () => {
     for (const viewport of ['desk', 'mob'] as const) {
       await page.setViewportSize(viewport === 'desk' ? DESKTOP : MOBILE);
       await page.goto('/lojista');
-      await page.getByTestId('lojista.alert.accept').click({ timeout: 4000 }).catch(() => undefined);
+      await page.getByTestId('lojista.alert.modal').waitFor({ timeout: 6000 }).catch(() => undefined);
+      await hideAlert(page);
       await shot(page, 'lojista-inicio', viewport);
       await page.goto('/lojista/pedidos');
-      await page.getByTestId('lojista.alert.accept').click({ timeout: 5000 }).catch(() => undefined);
+      await page.getByTestId('lojista.alert.modal').waitFor({ timeout: 6000 }).catch(() => undefined);
+      await hideAlert(page);
       await shot(page, 'lojista-pedidos', viewport);
       await page.goto('/lojista/avaliacoes');
       await shot(page, 'lojista-avaliacoes', viewport);
@@ -60,8 +69,9 @@ test.describe('capturas v3', () => {
     }
     await page.setViewportSize(MOBILE);
     await page.goto('/lojista');
-    await page.getByTestId('lojista.nav.more').click();
+    await page.getByTestId('lojista.nav.more').click({ force: true });
     await page.waitForTimeout(600);
+    await hideAlert(page);
     await page.screenshot({ path: `${OUT}/mob-lojista-mais.png` });
   });
 
@@ -76,8 +86,8 @@ test.describe('capturas v3', () => {
       await shot(page, 'admin-inicio', viewport);
       await page.goto('/admin/logistica');
       await shot(page, 'admin-logistica', viewport);
-      await page.goto('/admin/parametros');
-      await shot(page, 'admin-parametros', viewport);
+      await page.goto('/admin/parametros/entrega');
+      await shot(page, 'admin-parametros-entrega', viewport);
       await page.goto('/admin/lojas');
       await shot(page, 'admin-lojas', viewport);
     }

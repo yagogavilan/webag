@@ -185,7 +185,7 @@ function Form({ params: list }: { params: Parameter[] }) {
             {cross[0]}
           </Banner>
         ) : null}
-        {GROUPS.map((group) => (
+        {GROUPS.filter((group) => group.keys.some((key) => params.has(key))).map((group) => (
           <section key={group.id} className={s.group} aria-labelledby={`pg-${group.id}`} data-testid={T(`group-${group.id}`)}>
             <h2 id={`pg-${group.id}`} className={cx('wb-text-title2', s.groupTitle)}>{group.title}</h2>
             <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>{group.hint}</p>
