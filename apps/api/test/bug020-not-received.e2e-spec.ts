@@ -1,12 +1,11 @@
 import { eq, sql } from 'drizzle-orm';
 import { vi } from 'vitest';
-import { LedgerService } from '../src/modules/finance/index.js';
 import { DeliveriesService } from '../src/modules/logistics/index.js';
 import { OrderEventBus, type OrderEvent } from '../src/modules/orders/order-events.bus.js';
-import { deliveries, deliveryEvents, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
+import { deliveries, paymentAlerts } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
-import { addToCart, cartView, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
+import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
 
 /** L.4 e L.5 (DEC-036): o pedido de entrega passa pela logística da Webag; aviso ao admin e ao cliente; devolução à loja. */
 describe('BUG-020: "não recebi" x auto-conclusão de 24 h (RN-07)', () => {
@@ -45,7 +44,6 @@ describe('BUG-020: "não recebi" x auto-conclusão de 24 h (RN-07)', () => {
   }
   const courier = async () => (await ctx.http.post(`${base}/couriers`).set(bearer(ops.accessToken)).send({ name: 'Carlos Moto Silva', phone: `11 9${String(Math.floor(1e7 + Math.random() * 9e7))}`, documentsChecked: true }).expect(201)).body as { id: string };
   const act = (id: string, body: Record<string, unknown>) => ctx.http.post(`${base}/deliveries/${id}/status`).set(bearer(ops.accessToken)).send(body);
-  const customerView = async (r: Awaited<ReturnType<typeof readyOrder>>) => (await ctx.http.get(`/v1/orders/${r.orderId}`).set(bearer(r.buyer.user.accessToken)).expect(200)).body;
 
   async function outForDelivery() {
     const r = await readyOrder();
