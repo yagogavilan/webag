@@ -101,6 +101,7 @@ export const ptBR = {
     welcome: 'Conta criada. Bem-vindo ao Webag.',
   },
   login: {
+    undoDeletion: 'Excluí minha conta e me arrependi',
     title: 'Entrar',
     createAccount: 'Criar conta',
     email: 'E-mail',

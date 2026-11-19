@@ -1,0 +1,77 @@
+# Fluxo crítico: excluir conta pelo app (SEC-166, Apple 5.1.1(v)). Conta de teste DESCARTÁVEL, sem pedido nem troca em aberto
+# (com pedido aberto a tela mostra "Conclua antes de excluir"). Só a senha confirma (DEC-015).
+# NÃO executado: [HIPÓTESE] escrito sem emulador; validar no primeiro Android/iPhone disponível (QA).
+#   maestro test -e E2E_EMAIL=descartavel@exemplo.test -e E2E_PASSWORD='Cachorro-Azul-2024' e2e/excluir-conta.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: tabs.account
+- tapOn:
+    id: home.login
+- tapOn:
+    id: auth.login-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login-password-input
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth.login-submit
+# Conta > Privacidade e dados > Excluir minha conta (3 toques)
+- tapOn:
+    id: tabs.account
+- tapOn:
+    id: account.item-privacy
+- tapOn:
+    id: account.privacy-action-delete
+- assertVisible:
+    id: account.delete-info
+# sem senha: explica e não abre a confirmação
+- tapOn:
+    id: account.delete-submit
+- assertVisible: Digite sua senha para continuar.
+- tapOn:
+    id: account.delete-password-input
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: account.delete-submit
+# o foco inicial é "Cancelar": cancelar não exclui
+- assertVisible:
+    id: account.delete-dialog
+- tapOn:
+    id: account.delete-cancel
+- assertNotVisible:
+    id: account.delete-done
+- tapOn:
+    id: account.delete-submit
+- tapOn:
+    id: account.delete-confirm
+- extendedWaitUntil:
+    visible: Sua conta foi excluída
+    timeout: 20000
+# arrependimento: com período > 0 aparece o aviso e o cancelamento
+- runFlow:
+    when:
+      visible:
+        id: account.delete-undo
+    commands:
+      - assertVisible:
+          id: account.delete-regret
+      - tapOn:
+          id: account.delete-undo
+      - assertVisible:
+          id: account.undo-form
+      - tapOn:
+          id: account.undo-password-input
+      - inputText: ${E2E_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: account.undo-submit
+      - assertVisible:
+          id: auth.login-email-input

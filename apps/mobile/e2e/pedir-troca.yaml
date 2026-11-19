@@ -50,3 +50,5 @@ appId: br.com.webag.app
     id: exchange.next-step
 - assertVisible:
     id: exchange.timeline
+# Contrato novo: diferença de preço, prazo "até DD/MM", "levar à loja", contestar recusa e "não recebi meu pedido" são cobertos
+# pelos testes de componente (__tests__/exchange-contract.test.tsx); aqui só o caminho feliz de ponta a ponta.

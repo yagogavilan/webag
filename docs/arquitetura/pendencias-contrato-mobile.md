@@ -28,3 +28,22 @@ Registro do `mobile-dev` (2026-11-18). O app contorna cada item com a hipótese 
 | 14 | Troca: `exchange-options` não traz preço das variações nem a diferença de preço, nem a taxa por região antes de pedir (só `pickupFee` por tipo) | App mostra "o valor fechado aparece quando a loja aprovar" e a taxa de `pickupFee`; não calcula diferença | backend-dev |
 | 15 | Troca: sem operação para "levar à loja em vez da coleta" depois de aprovada, nem para "contestar recusa" (X3) | Botões não exibidos; recusada mostra motivo e "Falar com a loja" | backend-dev |
 | 16 | Troca: pagamento da taxa só por PIX no app (`payExchange` aceita cartão) | Cartão da taxa fica para depois; PIX copia e cola com polling | mobile-dev |
+
+## Direção v3, Onda 6 e DEC-053 no app (2026-11-19)
+| # | Pedido ou situação | Hoje no app | Dono |
+|---|---|---|---|
+| 9 | **Resolvida:** cartão pela página segura. O app pede `POST /v1/card-intents`, abre só `WEB_PUBLIC_URL/pagar/cartao?i=<token>` (origem e rota conferidas) e acompanha o servidor (`GET /v1/orders`). O formulário de cartões de teste e `PAYMENT_MODE` saíram do checkout | `EXPO_PUBLIC_WEB_URL` precisa existir nos perfis do EAS (`eas.json`) | fundador / mobile-dev |
+| 12, 14, 15 | **Resolvidas:** "não recebi meu pedido", "levar à loja", "contestar recusa", diferença de preço e prazo "até DD/MM" | n/a | n/a |
+| 17 | `eta` (EtaRange `fromAt`/`toAt`) é aditivo e está sendo entregue pelo back-end. O app usa `delivery.eta` quando vem e, sem ele, ancora `etaMinMinutes`/`etaMaxMinutes` no relógio (faixa de 5 em 5 min). `packages/shared` precisa ser regerado e commitado pelo back-end (`getBrowseProduct` ganhou `params` lat/lng; o app chama as duas assinaturas) | Faixa "Chega entre 15:40 e 16:40" em cartão de loja, loja, sacola, pedido confirmado e acompanhamento; loja fora do alcance mostra "Fora da área de entrega" | backend-dev |
+| 18 | Cupons da loja (bilhetes na tela da loja) e `cover` da loja não existem em `BrowseStore`/`StoreCard` | A loja mostra "vantagens" derivadas de `freeAboveCents`, retirada e política de troca; capa = cor da loja (hash do id) com a arte da categoria | backend-dev |
+| 19 | Ofertas do início ("Baixou o preço") vêm de `home.offers`; sem `cover`, o cartão de loja usa a arte do kit | n/a | n/a |
+| 20 | Consentimentos: `waitlist` só aparece quando já está ligado (não há lista de bairros por usuário no contrato) | Interruptor "Avisar quando o Webag chegar na minha região" só com a lista de espera ativa | backend-dev |
+| 21 | Campanhas: `POST /v1/me/push-campaigns/{id}/opened` é chamado ao tocar na notificação (`data.campaignId`, UUID validado) | Abre só `/order/<id>` e `/exchange/<id>` (UUID validado); URL em `data` nunca abre | n/a |
+| 22 | Solar (Iconify, CC BY 4.0) e Tabler (logotipo do WhatsApp, MIT) exigem atribuição na tela "Sobre/licenças" da versão pública | Ainda não há tela de licenças | PO / mobile-dev |
+| 23 | Pedido do cliente não traz o tipo de produto para "Como vestiu?" (usa o nome do atributo: tamanho, número) e só em pedido de 1 item | Avaliação por item em pedido com vários itens fica para a próxima rodada | PO |
+
+### Textos para revisão jurídica (marcados `[validar com jurídico]` em `src/i18n/pt-BR.ts`)
+CC3 exportar (prazo de 24 h e o que a cópia traz), CC4 excluir conta ("O que acontece", prazos de anonimização e retenção fiscal vêm do servidor, arrependimento em horas) e CC6 consentimento de marketing (até 2 por semana, 9h às 20h). O texto do Dialog "Excluir sua conta?" segue a identidade §8.
+
+### Revisão do Security (SEC)
+Mexe com auth, pagamento, armazenamento local e deep link: exclusão de conta (senha só em memória, `POST /v1/me/deletion` sem retry), exportação (link de uso único aberto no navegador; o app nunca guarda o arquivo), cartão pela página segura (URL validada contra `WEB_PUBLIC_URL`), push (só identificadores UUID viram rota), relógio do servidor para prazos (I11) e um único socket por aparelho.

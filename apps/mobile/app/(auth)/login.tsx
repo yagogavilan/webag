@@ -228,6 +228,8 @@ export default function LoginScreen() {
         testID="auth.forgot-password"
         variant="text"
       />
+      {/* Arrependimento da exclusão de conta (SEC-166): só vale dentro do prazo; rota pública */}
+      <Button label={t('login.undoDeletion')} onPress={() => router.push('/cancel-deletion' as never)} style={styles.forgot} testID="auth.cancel-deletion" variant="text" />
 
       {banner ? (
         <Banner

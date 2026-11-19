@@ -6,7 +6,8 @@ export type TextVariant = keyof typeof theme.text;
 export type TextColor = keyof typeof theme.color.text;
 
 const HEADINGS: readonly TextVariant[] = ['display', 'title1', 'title2'];
-const COMPACT: readonly TextVariant[] = ['micro'];
+// Cartaz e números grandes (46 a 92): teto menor de fonte dinâmica (1,2) para não estourar a largura; nunca viram "cabeçalho" sozinhos.
+const COMPACT: readonly TextVariant[] = ['micro', 'poster', 'celebrate', 'priceXl', 'numeralXl', 'hero', 'sticker'];
 
 export interface TextProps extends RNTextProps {
   ref?: Ref<ComponentRef<typeof RNText>>;

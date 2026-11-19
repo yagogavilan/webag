@@ -47,6 +47,7 @@ appId: br.com.webag.app
     id: checkout.screen
 - assertVisible:
     id: checkout.summary
+# nenhum meio vem escolhido (DEC-035): escolher PIX ou cartão
 - tapOn:
     id: checkout.pay-pix
 - tapOn:

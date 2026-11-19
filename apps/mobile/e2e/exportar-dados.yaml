@@ -1,0 +1,54 @@
+# Fluxo crítico: exportar meus dados (LGPD art. 18, SEC-166). Conta de teste com e-mail CONFIRMADO (sem e-mail confirmado a tela
+# leva a confirmar o e-mail). O arquivo chega por link de uso único aberto no navegador do sistema (não validado aqui).
+# NÃO executado: [HIPÓTESE] escrito sem emulador; validar no primeiro Android/iPhone disponível (QA).
+#   maestro test -e E2E_EMAIL=maria@exemplo.test -e E2E_PASSWORD='Cachorro-Azul-2024' e2e/exportar-dados.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: tabs.account
+- tapOn:
+    id: home.login
+- tapOn:
+    id: auth.login-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login-password-input
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth.login-submit
+- tapOn:
+    id: tabs.account
+- tapOn:
+    id: account.item-privacy
+- tapOn:
+    id: account.privacy-action-export
+- assertVisible:
+    id: account.export-screen
+# senha errada conta no limite e mostra "Senha incorreta."
+- tapOn:
+    id: account.export-password-input
+- inputText: senha-errada-123
+- hideKeyboard
+- tapOn:
+    id: account.export-submit
+- assertVisible: Senha incorreta.
+- tapOn:
+    id: account.export-password-input
+- eraseText: 30
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: account.export-submit
+- assertVisible: Pedido recebido
+- tapOn:
+    id: account.export-back
+# o cartão de status mostra a exportação em andamento e o botão fica inerte
+- assertVisible:
+    id: account.export-status
+- assertVisible: Você já tem uma em andamento

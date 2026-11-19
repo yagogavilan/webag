@@ -40,7 +40,7 @@ maestro test apps/mobile/e2e                            # E2E: precisa de aparel
 | Variável | Uso |
 |---|---|
 | `EXPO_PUBLIC_API_URL` | API REST e canal Socket.IO `/rt` (mesma origem) |
-| `EXPO_PUBLIC_PAYMENT_MODE` | `fake` (padrão fora de produção): cartões de teste com token `fake_tok_*`; `mercadopago`: cartão exige a página segura do Mercado Pago (pendência 9 em `docs/arquitetura/pendencias-contrato-mobile.md`; hoje indisponível, só PIX) |
+| `EXPO_PUBLIC_WEB_URL` | Site público do Webag (`WEB_PUBLIC_URL`): o cartão abre `<url>/pagar/cartao?i=<token>` no navegador do sistema (o app não vê o cartão). Padrão `http://localhost:3001`; em staging e produção, o domínio real |
 | `EAS_PROJECT_ID` | Necessário para o token de push (`expo-notifications`); sem ele o registro falha em silêncio |
 
 Código nativo novo desta entrega (exige **development build**, não roda no Expo Go): `expo-notifications` (push), `expo-image-picker` (foto do defeito), `react-native-webview` (3DS). Ícone, splash e ícone adaptativo: `pnpm --filter @webag/mobile assets` (símbolo v4a + cor de marca do tema).
