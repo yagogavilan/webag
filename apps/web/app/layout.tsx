@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: { default: 'Webag', template: '%s | Webag' },
   // Painéis internos: fora de buscadores.
   robots: { index: false, follow: false },
+  icons: { icon: '/brand/webag-favicon.svg' },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

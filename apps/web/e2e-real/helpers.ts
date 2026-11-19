@@ -162,6 +162,7 @@ export async function merchantToken(email: string, password: string): Promise<st
   return body.tokens.accessToken;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- corpo de resposta livre do teste
 async function call(token: string, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   const response = await fetch(`${API}${path}`, { method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await response.text();

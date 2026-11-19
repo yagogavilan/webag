@@ -6,8 +6,8 @@ const store = (over: Partial<MerchantStore> = {}) => ({ status: 'draft', role: '
 
 describe('navegação do lojista', () => {
   it('o dono vê Equipe; o funcionário, não (RN-13)', () => {
-    expect(visibleLojistaNav(store()).map((i) => i.section)).toEqual(['inicio', 'produtos', 'loja', 'equipe']);
-    expect(visibleLojistaNav(store({ role: 'staff' })).map((i) => i.section)).toEqual(['inicio', 'produtos']);
+    expect(visibleLojistaNav(store()).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'produtos', 'financeiro', 'loja', 'equipe']);
+    expect(visibleLojistaNav(store({ role: 'staff' })).map((i) => i.section)).toEqual(['inicio', 'pedidos', 'produtos']);
   });
 });
 

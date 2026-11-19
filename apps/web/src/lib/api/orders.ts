@@ -8,7 +8,14 @@ import { apiRequest } from './client';
  */
 export type { OrderStatus, OrderTimelineEntry, StoreOrder, StoreOrderAction, StoreOrderCounts, StoreOrderPage, StoreOrderSummary };
 export type OrderScope = 'new' | 'in_progress' | 'history';
-export type OrderAdvanceStatus = 'in_preparation' | 'out_for_delivery' | 'ready_for_pickup' | 'delivered';
+export interface AdvanceExtra {
+  /** Retirada: os 4 dígitos que o cliente informa. */
+  pickupCode?: string | undefined;
+  /** Pronto para coleta: volumes (1 a 99) e observação para o motoboy (até 100). */
+  volumes?: number | undefined;
+  note?: string | undefined;
+}
+export type OrderAdvanceStatus = 'in_preparation' | 'ready_for_collection' | 'ready_for_pickup' | 'delivered';
 
 const L = 'lojista' as const;
 const base = (storeId: string) => `stores/${storeId}/orders`;
@@ -27,8 +34,13 @@ export const ordersApi = {
   get: (storeId: string, orderId: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}`),
   accept: (storeId: string, orderId: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/accept`, { method: 'POST' }),
   refuse: (storeId: string, orderId: string, reason: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/refuse`, { method: 'POST', body: { reason } }),
-  advance: (storeId: string, orderId: string, status: OrderAdvanceStatus, pickupCode?: string) =>
-    apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/status`, { method: 'POST', body: pickupCode ? { status, pickupCode } : { status } }),
+  advance: (storeId: string, orderId: string, status: OrderAdvanceStatus, extra: AdvanceExtra = {}) => {
+    const body: Record<string, unknown> = { status };
+    if (extra.pickupCode) body.pickupCode = extra.pickupCode;
+    if (extra.volumes && status === 'ready_for_collection') body.volumes = extra.volumes;
+    if (extra.note?.trim() && status === 'ready_for_collection') body.note = extra.note.trim();
+    return apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/status`, { method: 'POST', body });
+  },
   cancel: (storeId: string, orderId: string, reason: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/cancel`, { method: 'POST', body: { reason } }),
 };
 

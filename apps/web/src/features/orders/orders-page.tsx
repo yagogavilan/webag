@@ -1,12 +1,14 @@
 'use client';
 
 import { Receipt } from '@phosphor-icons/react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
 import { Banner, EmptyState, ErrorState, Skeleton, Tabs, cx } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import type { StoreOrderSummary } from '@/lib/api/orders';
 import { ORDER_GROUPS, ORDER_GROUP_LABEL, groupOf, type OrderGroup } from '@/lib/orders/status';
+import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useNow } from '@/lib/use-now';
 import { useOnline } from '@/lib/use-online';
@@ -37,6 +39,7 @@ export function OrdersPage() {
 
 function Board() {
   const rt = useOrdersRuntime();
+  const router = useRouter();
   const online = useOnline();
   const now = useNow(30_000);
   const [tab, setTab] = useState<OrderGroup>('new');
@@ -52,7 +55,7 @@ function Board() {
 
   const failure = rt.newQuery.data === undefined ? rt.newQuery : rt.progressQuery.data === undefined ? rt.progressQuery : null;
   if (failure?.isError) {
-    if (failure.error instanceof ApiError && failure.error.status === 403) return <NoAccessState onBack={() => window.location.assign('/lojista')} />;
+    if (failure.error instanceof ApiError && failure.error.status === 403) return <NoAccessState onBack={() => router.push(asRoute('/lojista'))} />;
     return <ErrorState offline={!online || (failure.error instanceof ApiError && failure.error.isNetwork)} onRetry={() => void rt.refresh()} />;
   }
 

@@ -6,7 +6,8 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   received: 'Aguardando você',
   accepted: 'Pedido aceito',
   in_preparation: 'Em separação',
-  out_for_delivery: 'Saiu para entrega',
+  ready_for_collection: 'Pronto para coleta',
+  out_for_delivery: 'Com o entregador',
   ready_for_pickup: 'Pronto para retirar',
   delivered: 'Entregue',
   cancelled: 'Cancelado',
@@ -20,6 +21,7 @@ export const ORDER_STATUS_TONE: Record<OrderStatus, OrderTone> = {
   received: 'info',
   accepted: 'info',
   in_preparation: 'info',
+  ready_for_collection: 'success',
   out_for_delivery: 'info',
   ready_for_pickup: 'success',
   delivered: 'success',
@@ -28,15 +30,15 @@ export const ORDER_STATUS_TONE: Record<OrderStatus, OrderTone> = {
   expired: 'neutral',
 };
 
-/** Colunas do painel: Novos, Em preparo, Saiu ou pronto. */
+/** Colunas do painel: Novos, Em separação, Prontos (para coleta ou retirada). O que vem depois da coleta é da logística (DEC-036). */
 export type OrderGroup = 'new' | 'preparing' | 'ready';
 export const ORDER_GROUPS: readonly OrderGroup[] = ['new', 'preparing', 'ready'];
-export const ORDER_GROUP_LABEL: Record<OrderGroup, string> = { new: 'Novos', preparing: 'Em preparo', ready: 'Saiu ou pronto' };
+export const ORDER_GROUP_LABEL: Record<OrderGroup, string> = { new: 'Novos', preparing: 'Em separação', ready: 'Prontos' };
 
 export function groupOf(status: OrderStatus): OrderGroup | null {
   if (status === 'received') return 'new';
   if (status === 'accepted' || status === 'in_preparation') return 'preparing';
-  if (status === 'out_for_delivery' || status === 'ready_for_pickup') return 'ready';
+  if (status === 'ready_for_collection' || status === 'out_for_delivery' || status === 'ready_for_pickup') return 'ready';
   return null;
 }
 
@@ -44,46 +46,40 @@ export const isFinished = (status: OrderStatus): boolean => status === 'delivere
 
 export interface NextStep {
   /** Ação da API que o botão executa. */
-  action: Extract<StoreOrderAction, 'prepare' | 'dispatch' | 'ready' | 'complete'>;
+  action: Extract<StoreOrderAction, 'prepare' | 'ready' | 'complete'>;
   label: string;
   /** Destino enviado a `POST /status`. */
   to: OrderAdvanceStatus;
 }
 
-const STEPS: Record<NextStep['action'], Omit<NextStep, 'label'>> = {
-  prepare: { action: 'prepare', to: 'in_preparation' },
-  dispatch: { action: 'dispatch', to: 'out_for_delivery' },
-  ready: { action: 'ready', to: 'ready_for_pickup' },
-  complete: { action: 'complete', to: 'delivered' },
-};
-
 /**
- * O próximo passo do pedido (StatusAction, P2): um botão só. Quem manda é `allowedActions` da API; aqui só se escolhe o
- * rótulo. Em "aceito" o passo é separar; pular direto para "saiu"/"pronto" fica no menu "Mais" (`skipStep`).
+ * O próximo passo do pedido (StatusAction, P2): um botão só. Quem manda é `allowedActions` da API; aqui só se escolhe o rótulo.
+ * Entrega Webag: a loja termina em "Pronto para coleta" (DEC-036); "saiu" e "entregue" são da logística e nunca aparecem.
+ * Retirada: "Pronto para retirar" e depois "Entregar com código".
  */
 export function nextStep(order: { status: OrderStatus; mode: 'delivery' | 'pickup'; allowedActions: StoreOrderAction[] }): NextStep | null {
   const allowed = new Set(order.allowedActions);
-  const pick = (action: NextStep['action'], label: string): NextStep | null => (allowed.has(action) ? { ...STEPS[action], label } : null);
+  const ready: NextStep | null = allowed.has('ready')
+    ? order.mode === 'delivery'
+      ? { action: 'ready', to: 'ready_for_collection', label: 'Pronto para coleta' }
+      : { action: 'ready', to: 'ready_for_pickup', label: 'Pronto para retirar' }
+    : null;
   switch (order.status) {
     case 'accepted':
-      return pick('prepare', 'Iniciar separação') ?? skipStep(order);
+      return allowed.has('prepare') ? { action: 'prepare', to: 'in_preparation', label: 'Iniciar separação' } : ready;
     case 'in_preparation':
-      return skipStep(order);
-    case 'out_for_delivery':
-      return pick('complete', 'Marcar como entregue');
+      return ready;
     case 'ready_for_pickup':
-      return pick('complete', 'Entregar com código');
+      return allowed.has('complete') ? { action: 'complete', to: 'delivered', label: 'Entregar com código' } : null;
     default:
       return null;
   }
 }
 
-/** "Saiu para entrega" (entrega) ou "pronto para retirada" (retirada): o passo seguinte em "separação" e o atalho em "aceito". */
+/** Atalho em "aceito": pular a separação e ir direto a "pronto". */
 export function skipStep(order: { mode: 'delivery' | 'pickup'; allowedActions: StoreOrderAction[] }): NextStep | null {
-  const allowed = new Set(order.allowedActions);
-  if (order.mode === 'delivery' && allowed.has('dispatch')) return { ...STEPS.dispatch, label: 'Marcar como saiu para entrega' };
-  if (order.mode === 'pickup' && allowed.has('ready')) return { ...STEPS.ready, label: 'Marcar como pronto para retirada' };
-  return null;
+  if (!order.allowedActions.includes('ready')) return null;
+  return order.mode === 'delivery' ? { action: 'ready', to: 'ready_for_collection', label: 'Já está pronto para coleta' } : { action: 'ready', to: 'ready_for_pickup', label: 'Já está pronto para retirar' };
 }
 
 /** Hora em que o pedido "chegou" para a loja: o pagamento aprovado (a loja nem vê o que não foi pago). */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useMerchant } from '@/features/lojista/store-context';
 import { ordersApi, ordersKeys, type StoreOrderPage, type StoreOrderSummary } from '@/lib/api/orders';
 import { ordersAvailable } from '@/lib/lojista-access';
@@ -81,34 +81,25 @@ export function OrdersRuntimeProvider({ children, createSound = createAlertSound
   const inProgress = useMemo(() => [...(progressQuery.data?.data ?? [])].sort(byArrival), [progressQuery.data]);
 
   // ---- som
-  const soundRef = useRef<AlertSound | null>(null);
-  const [soundOn, setSoundOn] = useState(false);
-  const [soundSupported, setSoundSupported] = useState(true);
-  useEffect(() => {
-    const instance = createSound();
-    soundRef.current = instance;
-    setSoundSupported(instance.supported);
-    setSoundOn(instance.isEnabled());
-    return instance.subscribe(() => setSoundOn(instance.isEnabled()));
-  }, [createSound]);
+  const [sound] = useState(createSound);
+  const soundOn = useSyncExternalStore(sound.subscribe, sound.isEnabled, () => false);
+  const soundSupported = sound.supported;
 
-  const enableSound = useCallback(async () => {
-    const ok = (await soundRef.current?.enable()) ?? false;
-    setSoundOn(ok);
-    return ok;
-  }, []);
-  const testSound = useCallback(() => soundRef.current?.play('normal'), []);
+  const enableSound = useCallback(() => sound.enable(), [sound]);
+  const testSound = useCallback(() => sound.play('normal'), [sound]);
 
   const pendingRef = useRef(pending);
-  pendingRef.current = pending;
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
   const ring = useCallback(() => {
     const list = pendingRef.current;
     const oldest = list[0];
     if (!oldest) return;
     const strong = Date.now() - Date.parse(arrivedAt(oldest)) >= STRONG_AFTER_MS;
-    soundRef.current?.play(strong ? 'strong' : 'normal');
+    sound.play(strong ? 'strong' : 'normal');
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(strong ? [400, 150, 400, 150, 400] : [250, 120, 250]);
-  }, []);
+  }, [sound]);
 
   // Pedido que acabou de chegar: toca na hora, sem esperar os 15 s.
   const announced = useRef(new Set<string>());
@@ -152,13 +143,15 @@ export function OrdersRuntimeProvider({ children, createSound = createAlertSound
   }, [enabled, pendingCount]);
 
   // ---- tela acesa (Wake Lock): sem suporte, o painel mostra a dica "Deixe a tela ligada".
-  const [wakeLock, setWakeLock] = useState<WakeLockState>('off');
+  const [wakeLockHeld, setWakeLock] = useState<'active' | 'off'>('off');
+  const wakeLockUnsupported = useSyncExternalStore(
+    () => () => undefined,
+    () => !('wakeLock' in navigator),
+    () => false,
+  );
+  const wakeLock: WakeLockState = enabled && wakeLockUnsupported ? 'unsupported' : wakeLockHeld;
   useEffect(() => {
-    if (!enabled) return;
-    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) {
-      setWakeLock('unsupported');
-      return;
-    }
+    if (!enabled || wakeLockUnsupported) return;
     let sentinel: WakeLockSentinel | null = null;
     let cancelled = false;
     const acquire = async () => {
@@ -183,7 +176,7 @@ export function OrdersRuntimeProvider({ children, createSound = createAlertSound
       document.removeEventListener('visibilitychange', onVisible);
       void sentinel?.release();
     };
-  }, [enabled]);
+  }, [enabled, wakeLockUnsupported]);
 
   const refetchNew = newQuery.refetch;
   const refetchProgress = progressQuery.refetch;

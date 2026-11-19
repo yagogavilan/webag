@@ -1,4 +1,20 @@
 /* Base global. Cores, espaços e tipografia vêm só de @webag/tokens (variáveis --wb-*). */
+/* Outfit (títulos e logotipo da identidade v2) é servida do próprio app; Figtree vem do @fontsource. */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/outfit-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/outfit-latin-700-normal.woff2') format('woff2');
+}
+
 *,
 *::before,
 *::after {
@@ -18,4 +34,27 @@ body {
 
 a {
   color: var(--wb-color-text-link);
+}
+
+/* Movimento de marca: as linhas de velocidade entram da esquerda; o conteúdo sobe 16 px (identidade-v2 §6). */
+@keyframes wb-line-in {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wb-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.wb-line { animation: wb-line-in 600ms var(--wb-motion-easing-enter) backwards; }
+.wb-line:nth-child(2) { animation-delay: 60ms; }
+.wb-line:nth-child(3) { animation-delay: 120ms; }
+.wb-line:nth-child(4) { animation-delay: 180ms; }
+.wb-enter > * { animation: wb-enter var(--wb-motion-duration-base) var(--wb-motion-easing-enter) backwards; }
+.wb-enter > *:nth-child(2) { animation-delay: 40ms; }
+.wb-enter > *:nth-child(3) { animation-delay: 80ms; }
+.wb-enter > *:nth-child(4) { animation-delay: 120ms; }
+.wb-enter > *:nth-child(n + 5) { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wb-line,
+  .wb-enter > * { animation: none !important; }
 }

@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useToast } from '@/components/ui';
 import { useMerchant } from '@/features/lojista/store-context';
 import { ApiError } from '@/lib/api/errors';
-import { ordersApi, ordersKeys, type OrderAdvanceStatus, type StoreOrder, type StoreOrderSummary } from '@/lib/api/orders';
+import { ordersApi, ordersKeys, type AdvanceExtra, type OrderAdvanceStatus, type StoreOrder, type StoreOrderSummary } from '@/lib/api/orders';
 import { asRoute } from '@/lib/routes';
 
 export const OFFLINE_MESSAGE = 'Conecte-se para mudar o status. Nada foi alterado.';
@@ -16,7 +16,7 @@ type OrderRef = Pick<StoreOrderSummary, 'id' | 'number'>;
 
 const ADVANCE_TOAST: Record<OrderAdvanceStatus, (number: string) => string> = {
   in_preparation: (n) => `Pedido ${n} em separação.`,
-  out_for_delivery: (n) => `Pedido ${n} saiu para entrega.`,
+  ready_for_collection: (n) => `Pedido ${n} pronto para coleta. A logística do Webag foi avisada.`,
   ready_for_pickup: (n) => `Pedido ${n} pronto para retirada.`,
   delivered: (n) => `Pedido ${n} entregue.`,
 };
@@ -97,7 +97,7 @@ export function useOrderActions() {
   );
 
   const advance = useCallback(
-    (order: OrderRef, to: OrderAdvanceStatus, pickupCode?: string) => run(order, () => ordersApi.advance(storeId, order.id, to, pickupCode), () => toast.show(ADVANCE_TOAST[to](order.number))),
+    (order: OrderRef, to: OrderAdvanceStatus, extra?: AdvanceExtra) => run(order, () => ordersApi.advance(storeId, order.id, to, extra), () => toast.show(ADVANCE_TOAST[to](order.number))),
     [run, storeId, toast],
   );
 

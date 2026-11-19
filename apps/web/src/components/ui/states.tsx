@@ -4,6 +4,7 @@ import { Lock, WarningCircle, WifiSlash } from '@phosphor-icons/react';
 import { useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { Button } from './button';
 import { cx } from './cx';
+import { SpeedLines } from './logo';
 import s from './ui.module.css';
 
 type IconType = ComponentType<{ size?: number; weight?: 'duotone' | 'regular' | 'fill'; 'aria-hidden'?: boolean | 'true' }>;
@@ -15,8 +16,11 @@ export function MessageState({ icon: Icon, title, text, children, testId, role, 
   }, [focusTitle]);
   return (
     <div className={s.state} data-testid={testId} role={role}>
-      <span className={s.stateIcon}>
-        <Icon size={64} weight="duotone" aria-hidden="true" />
+      <span className={s.stateIcon} aria-hidden="true">
+        <SpeedLines className={s.stateLines} tone="onLight" />
+        <span className={s.stateBag}>
+          <Icon size={48} weight="duotone" aria-hidden="true" />
+        </span>
       </span>
       <h2 ref={ref} tabIndex={-1} className={cx('wb-text-title2', s.stateTitle)} style={{ outline: 'none' }}>
         {title}

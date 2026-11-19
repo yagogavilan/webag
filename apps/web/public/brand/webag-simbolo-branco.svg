@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v4a "Sacola Trapezio". Simbolo isolado, cor solida #FFFFFF, sem gradiente. viewBox 0 0 160 104 (convencao da v3).
+     Estrategias: (1) corpo em trapezio (topo mais largo, base mais estreita, cantos raio 9, inclinado para a frente por assimetria dos lados),
+     (2) alca LARGA e BAIXA (arco 52 x 30 no eixo, traco 14, ocupa 69% da largura do topo do corpo), (3) dois olhais em espaco negativo sob as pernas da alca.
+     Corpo = poligono interno (inset 9) com traco 18 e juncao redonda => raio externo 9. Extensao externa: topo y34, base y104, x 58..154.
+     Olhais: mascara simples (circulos r 4,5 em 80,52 e 132,52). Barras: 3 pilulas, altura 14, vao 14, terminam a ~11 do corpo seguindo a borda esquerda. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 104" width="160" height="104" role="img" aria-labelledby="wb-v4a-t">
+  <title id="wb-v4a-t">Webag</title>
+  <defs>
+    <mask id="wb-olhais" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#FFFFFF"/>
+      <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+      <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+    </mask>
+  </defs>
+  <g id="barras" fill="#FFFFFF">
+    <rect x="24" y="34" width="23" height="14" rx="7"/>
+    <rect x="0" y="62" width="49" height="14" rx="7"/>
+    <rect x="18" y="90" width="34" height="14" rx="7"/>
+  </g>
+  <g id="sacola" fill="#FFFFFF" mask="url(#wb-olhais)">
+    <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+  </g>
+</svg>

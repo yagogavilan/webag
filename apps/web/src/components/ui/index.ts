@@ -12,3 +12,4 @@ export * from './switch';
 export * from './toast';
 export { default as ui } from './ui.module.css';
 export * from './logo';
+export * from './hero';

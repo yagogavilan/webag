@@ -11,6 +11,7 @@ const ICON: Record<OrderStatus, IconType> = {
   received: Hourglass,
   accepted: CheckCircle,
   in_preparation: Package,
+  ready_for_collection: Package,
   out_for_delivery: Truck,
   ready_for_pickup: Storefront,
   delivered: CheckCircle,

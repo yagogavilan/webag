@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
 import { ReauthProvider } from './reauth';
-import { Badge, Banner, Logo, ToastProvider, cx, useToast } from '@/components/ui';
+import { Badge, Banner, Logo, SpeedLines, ToastProvider, cx, useToast } from '@/components/ui';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import { STORE_STATUS_LABEL, supportHref, visibleLojistaNav, type LojistaSection } from '@/lib/lojista-access';
 import { createPanelQueryClient } from '@/lib/query-client';
@@ -124,11 +124,23 @@ function Header({ onLogout }: { onLogout: () => void }) {
   const { store } = useMerchant();
   return (
     <header className={s.header}>
+      <SpeedLines className={s.headerLines} />
       <Link href="/lojista" className={s.brand} aria-label="Webag, início do painel da loja">
-        <Logo size={32} />
-        {store.data?.name ? <span className={cx('wb-text-body-strong', s.storeName)}>{store.data.name}</span> : null}
+        <span className={s.logoFull}>
+          <Logo size={36} tone="white" />
+        </span>
+        <span className={s.logoSym}>
+          <Logo size={30} tone="white" compact />
+        </span>
       </Link>
-      <StatusChip />
+      {store.data?.name ? (
+        <span className={s.storePill}>
+          <span className={cx('wb-text-body-strong', s.storeName)}>{store.data.name}</span>
+          <StatusChip />
+        </span>
+      ) : (
+        <StatusChip />
+      )}
       <span className={s.spacer} />
       <HeaderActions onLogout={onLogout} />
     </header>
@@ -149,6 +161,9 @@ function PanelFrame({ children }: { children: ReactNode }) {
       <div className={s.body}>
         <aside className={s.sidebar}>
           <Nav variant="side" />
+          <div className={s.sideLines}>
+            <SpeedLines />
+          </div>
         </aside>
         <main id="conteudo" className={s.main} tabIndex={-1}>
           <div className={s.content}>{children}</div>

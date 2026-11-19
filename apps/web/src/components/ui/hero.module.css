@@ -1,0 +1,26 @@
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wb-space-4);
+  min-height: 132px;
+  padding: var(--wb-space-6) var(--wb-space-6) var(--wb-space-6) 148px;
+  border-radius: 24px 24px 24px 6px;
+  background: var(--wb-color-surface-hero);
+  color: var(--wb-color-text-on-hero);
+}
+.lines { position: absolute; left: 0; top: 50%; width: 120px; height: auto; transform: translateY(-50%); z-index: -1; pointer-events: none; }
+.body { display: grid; gap: var(--wb-space-2); justify-items: start; min-width: 0; }
+.title { margin: 0; overflow-wrap: anywhere; }
+.chip { display: inline-flex; align-items: center; min-height: 28px; padding: 2px var(--wb-space-3); border-radius: var(--wb-radius-pill); background: #fff; color: var(--wb-color-brand-800); }
+.actions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
+.hero :focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px var(--wb-color-brand-800); }
+@media (max-width: 700px) {
+  .hero { padding: var(--wb-space-5); }
+  .lines { display: none; }
+  .title { font-size: 32px; line-height: 40px; }
+}

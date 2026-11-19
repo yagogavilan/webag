@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { ActionMenu, Banner, ToastProvider, cx, ui, useToast } from '@/components/ui';
+import { ActionMenu, Banner, Logo, SpeedLines, ToastProvider, cx, ui, useToast } from '@/components/ui';
 import { PROFILE_LABEL, visibleNav, type AdminSection } from '@/lib/admin-access';
 import { onSessionLost, sessionRequest } from '@/lib/api/client';
 import type { Me } from '@/lib/session-types';
@@ -102,20 +102,31 @@ function Frame({ user, children }: { user: Me; children: ReactNode }) {
         <button type="button" className={cx(ui.iconButton, s.burger)} aria-label="Abrir menu" aria-expanded={drawer} onClick={() => setDrawer(true)} data-testid="nav-open">
           <List size={24} aria-hidden="true" />
         </button>
-        <Link href="/admin" className={cx('wb-text-title2', s.brand)}>
-          webag
+        <SpeedLines className={s.headerLines} />
+        <Link href="/admin" className={s.brand} aria-label="Webag, início da administração">
+          <span className={s.logoFull}>
+            <Logo size={36} tone="white" />
+          </span>
+          <span className={s.logoSym}>
+            <Logo size={30} tone="white" compact />
+          </span>
         </Link>
         <span className={cx('wb-text-label', s.badgeArea)}>Administração</span>
         <span className={s.spacer} />
-        <span className={cx('wb-text-caption', s.userName)} data-testid="user-name">
-          {user.name} · {user.adminProfile ? PROFILE_LABEL[user.adminProfile] : ''}
+        <span className={s.userPill}>
+          <span className={cx('wb-text-caption', s.userName)} data-testid="user-name">
+            {user.name} · {user.adminProfile ? PROFILE_LABEL[user.adminProfile] : ''}
+          </span>
+          <ActionMenu label={`Menu de ${user.name}`} actions={userMenu} testId="user-menu" />
         </span>
-        <ActionMenu label={`Menu de ${user.name}`} actions={userMenu} testId="user-menu" />
       </header>
       {!online ? <Banner tone="warning" offline testId="offline-banner">Sem conexão. Mostrando o que já carregou.</Banner> : null}
       <div className={s.body}>
         <aside className={cx(s.sidebar, collapsed && s.sidebarCollapsed)}>
           <Nav user={user} collapsed={collapsed} />
+          <div className={s.sideLines}>
+            <SpeedLines />
+          </div>
           <button type="button" className={cx(ui.iconButton, s.collapse)} aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} aria-pressed={collapsed} onClick={() => setCollapsed((v) => !v)}>
             <SidebarSimple size={24} aria-hidden="true" />
           </button>

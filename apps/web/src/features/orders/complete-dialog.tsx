@@ -34,7 +34,7 @@ export function CompleteDialog({ order, onClose, onDone }: { order: Pick<StoreOr
       setError('Digite os 4 dígitos do código do cliente.');
       return;
     }
-    const result = await actions.advance(order, 'delivered', pickup ? value : undefined);
+    const result = await actions.advance(order, 'delivered', pickup ? { pickupCode: value } : undefined);
     if (result.ok) {
       onDone?.();
       onClose();
