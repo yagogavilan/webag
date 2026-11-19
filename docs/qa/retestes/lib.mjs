@@ -3,7 +3,7 @@
 // Variáveis: API_URL (padrão http://localhost:3000), MAILPIT_URL (padrão http://localhost:8025), PG_CONTAINER (padrão webag-postgres-1),
 //            PG_USER/PG_DB (padrão webag/webag), QA_TOTP_FILE (onde guardar o segredo TOTP do admin de desenvolvimento).
 import { spawnSync } from 'node:child_process';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,10 +29,17 @@ export const notTested = (id, title, reason) => record(id, title, null, `NÃO TE
 export const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 // ---------------------------------------------------------------- http e banco
+// A API só confia no X-Forwarded-For com TRUST_PROXY=1 (como atrás do nginx/BFF). O limite de taxa é por IP; para um gerador de teste
+// com um único IP, cada conta (token) recebe um IP de origem estável e fictício. Para o ambiente padrão (sem TRUST_PROXY) o cabeçalho é ignorado.
+function originOf(token) {
+  if (!token) return '10.200.0.1';
+  const h = createHash('sha1').update(token.slice(-24)).digest();
+  return `10.${h[0]}.${h[1]}.${h[2] || 1}`;
+}
 export async function api(method, path, { body, token, headers = {} } = {}) {
   const response = await fetch(API + path, {
     method,
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': originOf(token), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
@@ -95,6 +102,7 @@ export async function admin() {
   }
   if (!existsSync(TOTP_FILE)) throw new Error(`segredo TOTP do admin desconhecido (${TOTP_FILE}); recrie o ambiente com pnpm run setup`);
   const secret = readFileSync(TOTP_FILE, 'utf8').trim();
+  let lastVerify = '';
   for (let attempt = 0; attempt < 4; attempt++) {
     const last = existsSync(LAST_FILE) ? Number(readFileSync(LAST_FILE, 'utf8')) : 0;
     while (currentStep() <= last + (attempt > 0 ? 1 : 0)) await sleep(2000); // espera o próximo passo de 30 s
@@ -103,15 +111,33 @@ export async function admin() {
     const step = currentStep();
     const verify = await api('POST', '/v1/auth/mfa/verify', { body: { mfaToken: login.data.mfaToken, code: totpCode(secret, 0) } });
     writeFileSync(LAST_FILE, String(step));
+    lastVerify = `${verify.status} ${JSON.stringify(verify.data).slice(0, 160)}`;
     if (verify.status === 200) {
       adminToken = verify.data.tokens.accessToken;
       writeFileSync(TOKEN_FILE, adminToken);
       return adminToken;
     }
   }
-  throw new Error('não consegui concluir o login do admin com TOTP');
+  throw new Error(`não consegui concluir o login do admin com TOTP: ${lastVerify}`);
 }
-export const adminCall = async (method, path, body, headers) => api(method, path, { body, token: await admin(), headers });
+/** Reautenticação do admin (SEC-016: operações sensíveis pedem o TOTP de novo depois de `reauth_min` = 5 min). Um passo de 30 s por vez. */
+async function reauth() {
+  const secret = readFileSync(TOTP_FILE, 'utf8').trim();
+  const last = existsSync(LAST_FILE) ? Number(readFileSync(LAST_FILE, 'utf8')) : 0;
+  while (currentStep() <= last) await sleep(2000);
+  const step = currentStep();
+  const r = await api('POST', '/v1/auth/reauth', { token: adminToken, body: { totpCode: totpCode(secret, 0) } });
+  writeFileSync(LAST_FILE, String(step));
+  if (r.status !== 204 && r.status !== 200) throw new Error(`reauth ${r.status} ${JSON.stringify(r.data).slice(0, 160)}`);
+}
+export const adminCall = async (method, path, body, headers) => {
+  let r = await api(method, path, { body, token: await admin(), headers });
+  if (r.status === 403 && r.data?.code === 'REAUTH_REQUIRED') {
+    await reauth();
+    r = await api(method, path, { body, token: adminToken, headers });
+  }
+  return r;
+};
 
 export async function setParam(key, value, reason = 'Reteste QA Onda 7') {
   const r = await adminCall('PUT', `/v1/admin/parameters/${key}`, { value, reason });

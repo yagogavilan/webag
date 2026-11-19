@@ -3,6 +3,7 @@
 // Seções: bug011 bug012 bug014 bug015 bug016 bug017 bug018 teto atraso sec169 sec170 sec168 troca
 // Cada verificação imprime PASS/FALHA com a evidência (HTTP, estados, valores). Manipula o relógio só pelo banco (recua timestamps)
 // e espera a varredura do próprio servidor (20 a 30 s); nada é chamado "por dentro" do código.
+import { randomUUID } from 'node:crypto';
 import { notTested, adminCall, api, createAddress, deliveryOf, deliveryStatus, finish, getOrder, inPreparation, LAT, LNG, newCustomer, outForDelivery, paidAccepted, pay, place, readyForCollection, record, resetParam, setParam, sleep, sql, stockOf, store, storeOrder, waitFor, cartOf, login, SEED_PASSWORD } from './lib.mjs';
 
 const money = (m) => (m && typeof m === 'object' ? (m.amount ?? m.cents ?? m.value) : m);
@@ -117,7 +118,7 @@ async function bug014() {
   const o = (await getOrder(c, pk.id)).data;
   record('BUG-014d', 'pronto há 49 h: cancelado pelo sistema, com estorno total', cancelled && o.payment?.status === 'refunded', `status=${o.status}; pagamento=${o.payment?.status}; motivo=${JSON.stringify(o.cancellation)}`);
   const reservedAfter = sql(`select stock||'/'||reserved from product_variants where id = '${globalThis.__variant}'`);
-  record('BUG-014e', 'estoque devolvido (a reserva do pedido cancelado é liberada)', Number(reservedAfter.split('/')[1]) < Number(reservedBefore.split('/')[1]), `estoque/reservado antes do cancelamento ${reservedBefore}, depois ${reservedAfter}`);
+  record('BUG-014e', 'estoque devolvido (as unidades do pedido cancelado voltam ao estoque)', Number(reservedAfter.split('/')[0]) > Number(reservedBefore.split('/')[0]), `estoque/reservado antes do cancelamento ${reservedBefore}, depois ${reservedAfter} (a reserva é o próprio decremento de estoque)`);
   void t0;
   // retirado a tempo não é cancelado
   const pk2 = await paidAccepted(c, 'pickup');
@@ -471,9 +472,12 @@ async function sec169() {
   // edição também confere
   const edit = await api('PATCH', `/v1/me/addresses/${near.data?.id}`, { token: c.token, body: { lat: -22.5, lng: -46.0 } });
   record('SEC-169e', 'editar o endereço para um ponto longe do CEP também é recusado', edit.status === 422, `HTTP ${edit.status} ${edit.data?.code}`);
-  // o ataque B6: ponto longe da loja com CEP da região => cai na regra do teto
-  const hidden = await createAddress(c, { cep: '07900-100', number: '15', lat: -23.2801 + 0.0195, lng: LNG }); // ~2,2 km do CEP, dentro de 2 km? deve passar ou não
-  record('SEC-169f', 'ponto a ~2,2 km do centro do CEP (acima do limite de 2000 m): recusado', hidden.status === 422, `HTTP ${hidden.status} ${hidden.data?.code}`);
+  // limite de 2000 m (endereco_pino_max_m): 1,9 km passa, 2,1 km não (centro real do CEP = o ponto devolvido sem GPS)
+  const center = { lat: none.data?.lat, lng: none.data?.lng };
+  const metersNorth = (m) => center.lat + m / 111_320;
+  const inside = await createAddress(c, { cep: '07900-100', number: '15', lat: metersNorth(1900), lng: center.lng });
+  const outside = await createAddress(c, { cep: '07900-100', number: '16', lat: metersNorth(2100), lng: center.lng });
+  record('SEC-169f', 'limite de 2000 m do centro do CEP: 1,9 km aceito (201) e 2,1 km recusado (422)', inside.status === 201 && outside.status === 422, `1,9 km HTTP ${inside.status}; 2,1 km HTTP ${outside.status} ${outside.data?.code}`);
   // CEP de outra cidade, nome certo da outra cidade, mas região não atendida
   const sp = await createAddress(c, { cep: '01001-000', number: '1', city: 'São Paulo', neighborhood: 'Sé', lat: -23.55, lng: -46.633 });
   record('SEC-169g', 'CEP de São Paulo (fora das regiões): 422 REGION_NOT_SERVED', sp.status === 422, `HTTP ${sp.status} ${sp.data?.code}`);
@@ -580,8 +584,126 @@ async function sec168() {
   }
 }
 
-const sections = { bug011, bug012, bug014, bug015, bug016, bug017, bug018, teto, atraso, sec169, sec170, sec168 };
+// ------------------------------------------------------------------------------------------------ concorrência de estoque (flaky visto na suíte)
+async function estoque() {
+  const s = await store();
+  const original = sql(`select stock||'|'||reserved from product_variants where id = '${s.variantId}'`).split('|');
+  const rounds = [];
+  for (let round = 0; round < 3; round++) {
+    sql(`update product_variants set stock = 12, reserved = 0 where id = '${s.variantId}'`); // 6 clientes x 4 unidades: só 3 cabem
+    const customers = await Promise.all(Array.from({ length: 6 }, () => newCustomer()));
+    const prepared = [];
+    for (const c of customers) {
+      const { cart } = await cartOf(c, 'pickup');
+      prepared.push({ c, cart: cart.data });
+    }
+    const results = await Promise.all(prepared.map(({ c, cart }) => api('POST', '/v1/orders', { token: c.token, headers: { 'Idempotency-Key': `qa7-${round}-${c.email}` }, body: { mode: 'pickup', cartRevision: cart.revision, expectedTotalCents: cart.summary.total.amount, paymentMethod: 'pix' } })));
+    const won = results.filter((r) => r.status === 201).length;
+    const lostCodes = results.filter((r) => r.status !== 201).map((r) => `${r.status}:${r.data?.code}`);
+    const [stock, reserved] = sql(`select stock, reserved from product_variants where id = '${s.variantId}'`).split('|').map(Number);
+    rounds.push({ won, lostCodes, stock, reserved });
+    for (const r of results) if (r.status === 201) await adminCall('POST', `/v1/admin/orders/${r.data.id}/cancel`, { reason: 'Reteste QA estoque: limpar', refund: true }).catch(() => undefined);
+  }
+  sql(`update product_variants set stock = ${original[0]}, reserved = ${original[1]} where id = '${s.variantId}'`);
+  record('ESTOQUE-1', '6 clientes simultâneos disputam o estoque de 3 pedidos (3 rodadas): exatamente 3 vencem, 3 perdem com o MESMO código STOCK_CONFLICT e o estoque termina em 0 (nunca negativo)', rounds.every((r) => r.won === 3 && r.lostCodes.every((c) => c === '409:STOCK_CONFLICT') && r.stock === 0 && r.stock >= 0), JSON.stringify(rounds));
+}
+
+// ------------------------------------------------------------------------------------------------ limpeza (devolve o estoque dos pedidos de teste que ficaram abertos)
+async function limpeza() {
+  const ids = sql(`select o.id from orders o join users u on u.id = o.user_id where (u.email like 'qa7.%' or u.email like 'smoke.%') and o.status in ('awaiting_payment','received','accepted','in_preparation','ready_for_pickup','ready_for_collection','out_for_delivery')`).split('\n').filter(Boolean);
+  let done = 0;
+  for (const id of ids) {
+    const r = await adminCall('POST', `/v1/admin/orders/${id}/cancel`, { reason: 'Limpeza do QA: devolver estoque do pedido de teste', refund: true });
+    if (r.status === 200) done++;
+  }
+  console.log(`  pedidos de teste abertos: ${ids.length}; cancelados: ${done}`);
+}
+
+// ------------------------------------------------------------------------------------------------ trocas (exchanges) e logística de coleta
+async function deliveredOrder(c) {
+  const { order, deliveryId } = await outForDelivery(c);
+  const code = (await getOrder(c, order.id)).data?.tracking?.deliveryCode;
+  const done = await adminCall('POST', `/v1/admin/logistics/deliveries/${deliveryId}/status`, { action: 'delivered', code });
+  if (done.status !== 200) throw new Error(`entregar ${done.status} ${JSON.stringify(done.data).slice(0, 200)}`);
+  return (await getOrder(c, order.id)).data;
+}
+async function troca() {
+  const s = await store();
+  const c = await newCustomer();
+  const other = await newCustomer();
+  const exch = (customer, orderId, body) => api('POST', `/v1/orders/${orderId}/exchanges`, { token: customer.token, headers: { 'Idempotency-Key': randomUUID() }, body });
+  const storeCall = (method, path, body) => api(method, `/v1/stores/${s.id}${path}`, { token: s.owner, body });
+
+  // (1) arrependimento, entrega na loja
+  const o1 = await deliveredOrder(c);
+  const itemOf = async (order) => (await api('GET', `/v1/orders/${order.id}/exchange-options`, { token: c.token })).data?.items?.[0]?.orderItemId;
+  const item1 = { id: await itemOf(o1) };
+  const total1 = money(o1.summary.total);
+  const bola = await exch(other, o1.id, { orderItemId: item1.id, type: 'withdrawal', method: 'drop_at_store' });
+  record('TROCA-1', 'outra conta não pede troca do pedido alheio (404)', bola.status === 404, `HTTP ${bola.status}`);
+  const w = await exch(c, o1.id, { orderItemId: item1.id, type: 'withdrawal', method: 'drop_at_store' });
+  record('TROCA-2', 'arrependimento nasce aprovado na hora e a resolução é sempre reembolso', w.status === 201 && w.data?.status === 'approved' && w.data?.resolution === 'refund', `HTTP ${w.status}; status=${w.data?.status}; resolução=${w.data?.resolution}; taxa de coleta=${money(w.data?.fee)}`);
+  const dup = await exch(c, o1.id, { orderItemId: item1.id, type: 'withdrawal', method: 'drop_at_store' });
+  record('TROCA-3', 'o mesmo item não pode ser trocado duas vezes (409/422)', [409, 422].includes(dup.status), `HTTP ${dup.status} ${dup.data?.code}`);
+  const drop = await api('POST', `/v1/exchanges/${w.data?.id}/drop-at-store`, { token: c.token, body: {} });
+  const mid = await api('GET', `/v1/exchanges/${w.data?.id}`, { token: c.token });
+  const recv = await storeCall('POST', `/exchanges/${w.data?.id}/receive`, { ok: true, code: mid.data?.storeCode });
+  const afterW = await api('GET', `/v1/exchanges/${w.data?.id}`, { token: c.token });
+  const refunded = refundedCents(o1.id);
+  record('TROCA-4', 'a loja confirma o recebimento: troca concluída e reembolso feito (total do pedido)', recv.status === 200 && afterW.data?.status === 'completed' && refunded === total1, `drop HTTP ${drop.status}; receive HTTP ${recv.status}; status=${afterW.data?.status}; reembolsado=${refunded}/${total1}`);
+
+  // (2) arrependimento com coleta em casa => corrida de coleta (logística)
+  const o2 = await deliveredOrder(c);
+  const w2 = await exch(c, o2.id, { orderItemId: await itemOf(o2), type: 'withdrawal', method: 'pickup_at_home' });
+  const pickupDelivery = w2.data?.id ? sql(`select id||'|'||status||'|'||kind from deliveries where exchange_id = '${w2.data.id}' order by created_at desc limit 1`) : '';
+  record('TROCA-5', 'coleta em casa cria a corrida de coleta na fila da logística', w2.status === 201 && pickupDelivery !== '', `HTTP ${w2.status} ${w2.data?.code ?? ''}; corrida=${pickupDelivery}`);
+  if (pickupDelivery) {
+    const [dId] = pickupDelivery.split('|');
+    const couriers = await adminCall('GET', '/v1/admin/logistics/couriers');
+    const courier = couriers.data?.data?.find((m) => m.active !== false)?.id;
+    const as = await adminCall('POST', `/v1/admin/logistics/deliveries/${dId}/assign`, { courierId: courier });
+    const steps = [];
+    for (const action of ['confirm', 'picked_up']) steps.push((await adminCall('POST', `/v1/admin/logistics/deliveries/${dId}/status`, { action })).status);
+    const fin = await adminCall('POST', `/v1/admin/logistics/deliveries/${dId}/status`, { action: 'delivered' });
+    const ex2 = await api('GET', `/v1/exchanges/${w2.data?.id}`, { token: c.token });
+    record('TROCA-6', 'coleta percorre atribuir, a caminho, coletou e entregue à loja; a troca avança', as.status === 200 && steps.every((x) => x === 200), `assign ${as.status}; passos ${steps.join(',')}; entrega-à-loja HTTP ${fin.status}; troca=${ex2.data?.status}`);
+    const rc = await storeCall('POST', `/exchanges/${w2.data?.id}/receive`, { ok: true });
+    const ex3 = await api('GET', `/v1/exchanges/${w2.data?.id}`, { token: c.token });
+    record('TROCA-7', 'a loja confirma o recebimento da coleta: troca concluída e reembolso total', rc.status === 200 && ex3.data?.status === 'completed' && refundedCents(o2.id) === money(o2.summary.total), `receive HTTP ${rc.status}; status=${ex3.data?.status}; reembolsado=${refundedCents(o2.id)}/${money(o2.summary.total)}`);
+  }
+
+  // (3) fora do prazo de 7 dias do arrependimento
+  const o3 = await deliveredOrder(c);
+  sql(`update orders set delivered_at = now() - interval '8 days' where id = '${o3.id}'`);
+  const late = await exch(c, o3.id, { orderItemId: await itemOf(o3), type: 'withdrawal', method: 'drop_at_store' });
+  record('TROCA-8', 'arrependimento fora dos 7 dias é recusado (piso legal: CDC art. 49)', [409, 422].includes(late.status), `HTTP ${late.status} ${late.data?.code}`);
+
+  // (4) troca voluntária por tamanho/cor: loja em silêncio => aprovação automática
+  const policy = await api('PUT', `/v1/stores/${s.id}/exchange-policy`, { token: s.owner, body: { voluntaryDays: 7, collectionFeeCents: 0 } });
+  const o4 = await deliveredOrder(c);
+  const v = await exch(c, o4.id, { orderItemId: await itemOf(o4), type: 'size_color', reasonCode: 'size', method: 'drop_at_store', resolution: 'refund' });
+  record('TROCA-9', 'troca por tamanho/cor nasce "requested" (a loja decide)', v.status === 201 && v.data?.status === 'requested', `HTTP ${v.status} ${v.data?.code ?? ''}; status=${v.data?.status}`);
+  if (v.status === 201) {
+    sql(`update exchange_requests set answer_deadline_at = now() - interval '1 minute' where id = '${v.data.id}'`);
+    const auto = await waitFor(async () => (await api('GET', `/v1/exchanges/${v.data.id}`, { token: c.token })).data?.status !== 'requested', { timeoutMs: 90_000 });
+    const ex = (await api('GET', `/v1/exchanges/${v.data.id}`, { token: c.token })).data;
+    record('TROCA-10', 'APROVAÇÃO AUTOMÁTICA: loja em silêncio além do prazo => aprovada pelo sistema (autoApproved=true, decidedBy=system)', auto && ['approved', 'awaiting_fee'].includes(ex?.status) && ex?.autoApproved === true && ex?.decidedBy === 'system', `status=${ex?.status}; autoApproved=${ex?.autoApproved}; decidedBy=${ex?.decidedBy}`);
+  }
+  // (5) loja recusa com motivo, cliente contesta => mediação
+  const o5 = await deliveredOrder(c);
+  const v5 = await exch(c, o5.id, { orderItemId: await itemOf(o5), type: 'size_color', reasonCode: 'color', method: 'drop_at_store', resolution: 'refund' });
+  if (v5.status === 201) {
+    const ref = await storeCall('POST', `/exchanges/${v5.data.id}/refuse`, { reason: 'Item usado, fora da política' });
+    const contest = await api('POST', `/v1/exchanges/${v5.data.id}/contest`, { token: c.token, body: { text: 'O item está lacrado, com etiqueta de fábrica' } });
+    const med = await adminCall('GET', '/v1/admin/exchanges/mediations');
+    record('TROCA-11', 'loja recusa, cliente contesta: a troca vai para mediação e aparece na fila do admin', ref.status === 200 && contest.status === 200 && JSON.stringify(med.data).includes(v5.data.id), `refuse ${ref.status}; contest ${contest.status} ${JSON.stringify(contest.data).slice(0, 120)}; fila=${JSON.stringify(med.data).includes(v5.data.id)}`);
+  } else record('TROCA-11', 'loja recusa, cliente contesta', false, `criação HTTP ${v5.status} ${v5.data?.code}`);
+}
+
+const sections = { troca, limpeza, estoque, bug011, bug012, bug014, bug015, bug016, bug017, bug018, teto, atraso, sec169, sec170, sec168 };
 const wanted = process.argv.slice(2);
+// Acomodação do gerador (não é o que se testa): um cliente só gera 5 PIX por hora (`pix_hora_max`); os cenários precisam de mais.
+await setParam('pix_hora_max', 30, 'Reteste QA Onda 7: acomodação do gerador de pedidos (restaurado no fim)');
 for (const name of wanted.length ? wanted : Object.keys(sections)) {
   if (!sections[name]) {
     console.error(`seção desconhecida: ${name}`);
@@ -594,4 +716,5 @@ for (const name of wanted.length ? wanted : Object.keys(sections)) {
     record(`${name.toUpperCase()}-ERRO`, 'a seção terminou com exceção', false, String(error?.stack ?? error).split('\n').slice(0, 3).join(' | '));
   }
 }
+await resetParam('pix_hora_max').catch(() => undefined);
 process.exit(finish() === 0 ? 0 : 1);
