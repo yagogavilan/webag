@@ -5799,6 +5799,102 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/orders/{orderId}/cancel-request:
+    post:
+      tags: [orders]
+      operationId: requestOrderCancel
+      summary: Pedir o cancelamento com o pedido em separação (BUG-015, WB-028 C2)
+      description: "Só com o pedido `in_preparation`; a loja decide em `cancelamento_resposta_min` (10 min) e, sem resposta, o admin é alertado e decide. Idempotente: pedir de novo devolve a mesma solicitação. 409 `ORDER_NOT_CANCELLABLE` em outro estado (em `received`/`accepted` use o cancelamento direto). O cliente acompanha em `Order.cancelRequest`."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 200 }
+      responses:
+        '202':
+          description: Pedido de cancelamento registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/orders/{orderId}/cancel-request/accept:
+    post:
+      tags: [store-orders]
+      operationId: acceptStoreOrderCancelRequest
+      summary: A loja aprova o pedido de cancelamento do cliente (cancela e estorna)
+      description: "Permissão `orders`. Cancela o pedido (ator loja, estoque devolvido, estorno total). 409 `NO_CANCEL_REQUEST` se não há pedido pendente. Idempotente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pedido atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrder'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/orders/{orderId}/cancel-request/decline:
+    post:
+      tags: [store-orders]
+      operationId: declineStoreOrderCancelRequest
+      summary: A loja recusa o pedido de cancelamento do cliente, com motivo
+      description: "Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 3, maxLength: 200 }
+      responses:
+        '200':
+          description: Pedido atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOrder'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /v1/orders/{orderId}/cancel:
     parameters:
       - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -10724,14 +10820,30 @@ components:
         isNew: { type: boolean, description: 'Mostrar "Novo" no lugar da nota' }
     LogisticsPause:
       type: object
+      additionalProperties: false
       required: [id, cityId, reason, pausedAt]
       properties:
         id: { type: string, format: uuid }
         cityId: { type: [string, 'null'], format: uuid }
         reason: { type: string }
         pausedAt: { type: string, format: date-time }
+    CancelRequest:
+      type: object
+      additionalProperties: false
+      required: [id, status, reason, requestedAt, respondBy, decidedAt, decidedBy, decisionNote]
+      description: "BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide."
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, approved, refused] }
+        reason: { type: [string, 'null'] }
+        requestedAt: { type: string, format: date-time }
+        respondBy: { type: string, format: date-time }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        decidedBy: { type: [string, 'null'], enum: [store, admin, system, null] }
+        decisionNote: { type: [string, 'null'] }
     EtaRange:
       type: object
+      additionalProperties: false
       required: [minMinutes, maxMinutes, fromAt, toAt]
       description: "DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área')."
       properties:
@@ -11290,6 +11402,7 @@ components:
       type: object
       required: [id, number, status, mode, createdAt, paidAt, acceptedAt, acceptDeadlineAt, customer, items, delivery, pickup, values, couponCode, timeline, cancellation, allowedActions]
       properties:
+        cancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }], description: 'BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.' }
         logistics:
           description: 'Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'
           oneOf:
@@ -11483,6 +11596,7 @@ components:
       type: object
       required: [id, number, status, mode, createdAt, updatedAt, store, items, summary, couponCode, delivery, pickup, payment, exchangePolicy, timeline, allowedActions, cancellation, tracking]
       properties:
+        cancelRequest: { oneOf: [{ $ref: '#/components/schemas/CancelRequest' }, { type: 'null' }], description: 'BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.' }
         tracking:
           description: 'Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto.'
           oneOf:

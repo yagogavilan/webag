@@ -89,3 +89,9 @@ E.2 [ ] Logística: alerta de atraso quando passa do fim da faixa do pedido (sub
 
 ## AJUSTE DE E.1 (DEC-054, prioridade alta)
 E.3 [ ] O teto `entrega_max_min` = 120 vale para o FIM da faixa (estimativa + `entrega_faixa_min` de folga <= 120), não para a estimativa; o alcance cai (~9 km a 6 min/km); loja que não cabe aparece "fora da área" para o endereço; testes de limite (119, 120, 121). Nomes de parâmetro: usar os que já existem (`entrega_despacho_min`, `entrega_rota_fator_pct`, `entrega_faixa_min`); criar 4 chaves novas da RN-19: tolerância de atraso, tipo e valor da compensação (padrão: entrega grátis no próximo pedido) e resposta ao cancelamento por atraso (WB-253 a WB-255).
+
+## Achados do Security nos frontends da Onda 6 (DEC-056; `seguranca/revisao-onda6-frontends.md`)
+F.1 [ ] SEC-168 (Média, pequena): no arrependimento da exclusão, limitar tentativas de senha POR CONTA (não só por IP) e exigir reautenticação completa (com o segundo fator/código quando houver) ao reabrir a conta.
+F.2 [ ] SEC-169: conferir o ponto de latitude/longitude enviado pelo app com o CEP e o município do endereço (tolerância configurável); recusar/ignorar ponto incoerente; E.3 (teto no fim da faixa) segue aberto: loja a 10,5 km não pode mostrar faixa de 102 a 132 min.
+F.3 [ ] SEC-170: cupom `firstPurchaseOnly` não pode ser burlado trocando só o complemento do endereço (normalizar endereço: sem complemento) nem por pedidos simultâneos antes do pagamento (reservar o uso do cupom por conta/dispositivo/telefone no momento do pedido); permitir criar cupom de primeira compra somente com teto de orçamento por campanha.
+F.4 [ ] SEC-171 a 174 (Baixas) conforme o tempo. Inventário de dados para o Data Safety/App Privacy (fotos, busca, conteúdo do usuário, interações de push, ViaCEP): manter em `docs/seguranca/`.

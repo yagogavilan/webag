@@ -91,6 +91,14 @@ export class OrdersController {
     return this.orders.reportNotReceived(principal, orderIdParam(orderId), ctx);
   }
 
+  /** BUG-015 / WB-028 C2: com o pedido em separação o cliente pede o cancelamento e a loja decide. */
+  @HttpCode(202)
+  @RateLimit({ name: 'order-cancel-request', limit: 20, windowSeconds: 3600 })
+  @Post(':orderId/cancel-request')
+  requestCancel(@CurrentPrincipal() principal: Principal, @Param('orderId') orderId: string, @Body(new ZodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>) {
+    return this.orders.requestCancel(principal.userId, orderIdParam(orderId), body.reason ?? null);
+  }
+
   @HttpCode(200)
   @RateLimit({ name: 'order-cancel', limit: 30, windowSeconds: 3600 })
   @Post(':orderId/cancel')

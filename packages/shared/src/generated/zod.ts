@@ -8629,6 +8629,16 @@ export const GetStoreOrderParams = zod.object({
 })
 
 export const GetStoreOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -8754,6 +8764,16 @@ export const AcceptOrderParams = zod.object({
 })
 
 export const AcceptOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -8865,6 +8885,16 @@ export const RefuseOrderBody = zod.object({
 })
 
 export const RefuseOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -8981,6 +9011,16 @@ export const AdvanceOrderBody = zod.object({
 })
 
 export const AdvanceOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -9083,6 +9123,16 @@ export const ConfirmReturnReceivedByStoreParams = zod.object({
 })
 
 export const ConfirmReturnReceivedByStoreResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -9194,6 +9244,16 @@ export const CancelOrderByStoreBody = zod.object({
 })
 
 export const CancelOrderByStoreResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
   "logistics": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
   "courierFirstName": zod.string().nullish(),
@@ -9337,6 +9397,16 @@ export const CreateOrderBody = zod.object({
 })
 
 export const CreateOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9529,6 +9599,16 @@ export const GetOrderParams = zod.object({
 })
 
 export const GetOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),
@@ -9668,6 +9748,267 @@ export const GetOrderResponse = zod.object({
 
 
 /**
+ * Só com o pedido `in_preparation`; a loja decide em `cancelamento_resposta_min` (10 min) e, sem resposta, o admin é alertado e decide. Idempotente: pedir de novo devolve a mesma solicitação. 409 `ORDER_NOT_CANCELLABLE` em outro estado (em `received`/`accepted` use o cancelamento direto). O cliente acompanha em `Order.cancelRequest`.
+ * @summary Pedir o cancelamento com o pedido em separação (BUG-015, WB-028 C2)
+ */
+export const RequestOrderCancelParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const requestOrderCancelBodyReasonMax = 200;
+
+
+
+export const RequestOrderCancelBody = zod.object({
+  "reason": zod.string().max(requestOrderCancelBodyReasonMax).optional()
+})
+
+export const RequestOrderCancelResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.')
+
+
+/**
+ * Permissão `orders`. Cancela o pedido (ator loja, estoque devolvido, estorno total). 409 `NO_CANCEL_REQUEST` se não há pedido pendente. Idempotente.
+ * @summary A loja aprova o pedido de cancelamento do cliente (cancela e estorna)
+ */
+export const ApproveStoreOrderCancelRequestParams = zod.object({
+  "storeId": zod.uuid(),
+  "orderId": zod.uuid()
+})
+
+export const ApproveStoreOrderCancelRequestResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "paidAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "customer": zod.object({
+  "firstName": zod.string(),
+  "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
+}),
+  "items": zod.array(zod.object({
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "lineTotal": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()])
+})),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.record(zod.string(), zod.unknown()),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "eta": zod.union([zod.object({
+  "minMinutes": zod.int(),
+  "maxMinutes": zod.int(),
+  "fromAt": zod.iso.datetime({"offset":true}),
+  "toAt": zod.iso.datetime({"offset":true})
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "values": zod.union([zod.null(),zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "netBeforeProviderFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
+  "couponCode": zod.string().nullable(),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})]),
+  "allowedActions": zod.array(zod.enum(['accept', 'refuse', 'prepare', 'dispatch', 'ready', 'complete', 'cancel']))
+})
+
+
+/**
+ * Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente.
+ * @summary A loja recusa o pedido de cancelamento do cliente, com motivo
+ */
+export const RefuseStoreOrderCancelRequestParams = zod.object({
+  "storeId": zod.uuid(),
+  "orderId": zod.uuid()
+})
+
+export const refuseStoreOrderCancelRequestBodyReasonMin = 3;
+export const refuseStoreOrderCancelRequestBodyReasonMax = 200;
+
+
+
+export const RefuseStoreOrderCancelRequestBody = zod.object({
+  "reason": zod.string().min(refuseStoreOrderCancelRequestBodyReasonMin).max(refuseStoreOrderCancelRequestBodyReasonMax)
+})
+
+export const RefuseStoreOrderCancelRequestResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão.'),
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "paidAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "customer": zod.object({
+  "firstName": zod.string(),
+  "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
+}),
+  "items": zod.array(zod.object({
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "lineTotal": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()])
+})),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.record(zod.string(), zod.unknown()),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int(),
+  "eta": zod.union([zod.object({
+  "minMinutes": zod.int(),
+  "maxMinutes": zod.int(),
+  "fromAt": zod.iso.datetime({"offset":true}),
+  "toAt": zod.iso.datetime({"offset":true})
+}).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra.')
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "values": zod.union([zod.null(),zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "netBeforeProviderFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
+  "couponCode": zod.string().nullable(),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})]),
+  "allowedActions": zod.array(zod.enum(['accept', 'refuse', 'prepare', 'dispatch', 'ready', 'complete', 'cancel']))
+})
+
+
+/**
  * Cliente cancela livremente em `awaiting_payment` (libera o estoque, sem estorno), `received` e `accepted` (estorno total automático, sem comissão). Depois disso responde 409 `ORDER_NOT_CANCELLABLE` e o app oferece o pedido de cancelamento à loja ou o suporte. Idempotente: cancelar um pedido já cancelado pelo cliente devolve 200 com o mesmo pedido. Pedido de outra conta responde 404.
  * @summary Cancelar o pedido (WB-028, RN-08)
  */
@@ -9684,6 +10025,16 @@ export const CancelOrderBody = zod.object({
 })
 
 export const CancelOrderResponse = zod.object({
+  "cancelRequest": zod.union([zod.object({
+  "id": zod.uuid(),
+  "status": zod.enum(['pending', 'approved', 'refused']),
+  "reason": zod.string().nullable(),
+  "requestedAt": zod.iso.datetime({"offset":true}),
+  "respondBy": zod.iso.datetime({"offset":true}),
+  "decidedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "decidedBy": zod.union([zod.literal('store'),zod.literal('admin'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "decisionNote": zod.string().nullable()
+}).describe('BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.'),zod.null()]).optional().describe('BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve.'),
   "tracking": zod.union([zod.null(),zod.object({
   "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']),
   "courierFirstName": zod.string().nullable(),

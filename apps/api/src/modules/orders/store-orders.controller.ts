@@ -116,6 +116,27 @@ export class StoreOrdersController {
     return this.orders.get(id, orderId, await this.showValues(p.userId, id));
   }
 
+  /** BUG-015: a loja aprova o pedido de cancelamento do cliente (cancela e estorna) ou recusa com motivo. */
+  @StorePermission('orders')
+  @HttpCode(200)
+  @RateLimit(WRITE)
+  @Post(':orderId/cancel-request/accept')
+  async acceptCancelRequest(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string) {
+    const id = uuidParam(storeId);
+    await this.orders.decideCancelRequest(id, orderIdParam(orderId), p.userId, 'approved', null);
+    return this.orders.get(id, orderId, await this.showValues(p.userId, id));
+  }
+
+  @StorePermission('orders')
+  @HttpCode(200)
+  @RateLimit(WRITE)
+  @Post(':orderId/cancel-request/decline')
+  async declineCancelRequest(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Body(new ZodPipe(reasonSchema)) body: z.infer<typeof reasonSchema>) {
+    const id = uuidParam(storeId);
+    await this.orders.decideCancelRequest(id, orderIdParam(orderId), p.userId, 'refused', body.reason);
+    return this.orders.get(id, orderId, await this.showValues(p.userId, id));
+  }
+
   @StorePermission('orders')
   @HttpCode(200)
   @RateLimit(WRITE)

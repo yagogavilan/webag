@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, asc, count, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
@@ -22,7 +22,7 @@ import type { ProviderPayment } from '../payments/payment-provider.js';
 import { stores } from '../stores/db/schema.js';
 import { users } from '../identity/db/schema.js';
 import { paymentAttempts } from '../payments/db/schema.js';
-import { orderEvents, orderItems, orders } from './db/schema.js';
+import { orderCancelRequests, orderEvents, orderItems, orders } from './db/schema.js';
 import { DAY_MS, windowDays } from '../exchanges/domain/eligibility.js';
 import { etaOfOrder } from './domain/eta-view.js';
 import { canTransition, customerActions, PAID_STATUSES, refundDueOnCancel, type CustomerAction, type OrderActor, type OrderStatus } from './domain/state.js';
@@ -48,7 +48,7 @@ const money = (amount: number): Money => ({ amount, currency: 'BRL' });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Ações que já existem na API; o contrato lista as demais (troca, avaliação...) para ondas futuras. */
-const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'contact_store', 'report_not_received'];
+const IMPLEMENTED_ACTIONS: readonly CustomerAction[] = ['cancel', 'request_cancel', 'contact_store', 'report_not_received'];
 /** B.1: "não recebi meu pedido" também vale por 48 h depois de marcado como entregue. */
 const NOT_RECEIVED_WINDOW_MS = 48 * 3_600_000;
 
@@ -471,6 +471,34 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   }
 
   /** Cancelamento pelo cliente (RN-08): livre até o aceite; depois, 409 `ORDER_NOT_CANCELLABLE`. Idempotente. */
+  /**
+   * BUG-015 / WB-028 C2: com o pedido EM SEPARAÇÃO o cliente não cancela; ele PEDE o cancelamento e a loja decide em
+   * `cancelamento_resposta_min`. Idempotente (toque duplo devolve a mesma solicitação). Outro estado: 409 com a orientação.
+   */
+  async requestCancel(userId: string, orderId: string, reason: string | null): Promise<CancelRequestView> {
+    const timeoutMin = await this.params.getNumber('cancelamento_resposta_min');
+    let order: OrderRow | undefined;
+    const row = await this.db.transaction(async (tx) => {
+      [order] = await tx.select().from(orders).where(and(eq(orders.id, orderId), eq(orders.userId, userId))).for('update');
+      if (!order) throw errors.notFound('Pedido não encontrado.');
+      if (order.status !== 'in_preparation') {
+        throw errors.conflict('ORDER_NOT_CANCELLABLE', 'Não dá para pedir o cancelamento agora', order.status === 'received' || order.status === 'accepted' ? 'Neste momento você pode cancelar direto.' : 'Fale com a loja.');
+      }
+      const [open] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.status, 'pending')));
+      if (open) return open;
+      const [created] = await tx.insert(orderCancelRequests).values({ orderId, reason: reason?.slice(0, 200) ?? null }).returning();
+      return created!;
+    });
+    if (order) await this.bus.emit(this.eventOf(order, order.status, 'customer', 'Cliente pediu o cancelamento', new Date())).catch(() => undefined);
+    return presentCancelRequest(row, timeoutMin);
+  }
+
+  /** A solicitação mais recente do pedido (qualquer estado), para as telas. */
+  async cancelRequestOf(orderId: string): Promise<CancelRequestView | null> {
+    const [row] = await this.db.select().from(orderCancelRequests).where(eq(orderCancelRequests.orderId, orderId)).orderBy(desc(orderCancelRequests.requestedAt)).limit(1);
+    return row ? presentCancelRequest(row, await this.params.getNumber('cancelamento_resposta_min')) : null;
+  }
+
   async cancelByCustomer(userId: string, orderId: string, reason: string | null): Promise<void> {
     let done: { event: OrderEvent; refund: PendingRefund | null } | null = null;
     await this.db.transaction(async (tx) => {
@@ -841,6 +869,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const orphans = await this.expireOrphans(now);
     const acceptTimeouts = await this.timeoutAccept(now);
     const pickupExpired = await this.expirePickups(now);
+    await this.alertStaleCancelRequests(now);
     return { expiredPix, orphans, acceptTimeouts, pickupExpired };
   }
 
@@ -848,6 +877,20 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
    * BUG-014 / WB-026 C3 / RN-07: retirada não feita em `retirada_prazo_horas` (padrão 48 h, contadas de "pronto para retirada") é
    * cancelada pelo sistema com estorno total e estoque devolvido. Idempotente: o pedido encerrado sai da consulta.
    */
+  /** BUG-015 / WB-028 C2: a loja não respondeu ao pedido de cancelamento no prazo: o admin é alertado (uma vez) e decide. */
+  private async alertStaleCancelRequests(now: Date): Promise<void> {
+    const cutoff = new Date(now.getTime() - (await this.params.getNumber('cancelamento_resposta_min')) * 60_000);
+    const stale = await this.db
+      .select({ id: orderCancelRequests.id, orderId: orderCancelRequests.orderId })
+      .from(orderCancelRequests)
+      .where(and(eq(orderCancelRequests.status, 'pending'), lte(orderCancelRequests.requestedAt, cutoff), isNull(orderCancelRequests.alertedAt)))
+      .limit(50);
+    for (const row of stale) {
+      const [claimed] = await this.db.update(orderCancelRequests).set({ alertedAt: now }).where(and(eq(orderCancelRequests.id, row.id), isNull(orderCancelRequests.alertedAt))).returning({ id: orderCancelRequests.id });
+      if (claimed) await this.payments.raiseAlert(null, 'cancel_request_unanswered', { orderId: row.orderId, requestId: row.id }).catch(() => undefined);
+    }
+  }
+
   private async expirePickups(now: Date): Promise<number> {
     const hours = await this.params.getNumber('retirada_prazo_horas');
     const cutoff = new Date(now.getTime() - hours * 3_600_000);
@@ -942,6 +985,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       this.payments.latestForReference(order.id),
     ]);
     const [logo] = store?.logoAssetId ? await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : [];
+    const cancelRequest = await this.cancelRequestOf(order.id);
     const paid = PAID_STATUSES.includes(order.status);
     const cancelled = order.status === 'cancelled' || order.status === 'refused';
     const finance = order.finance as unknown as OrderFinance;
@@ -972,7 +1016,9 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       payment: { method: order.paymentMethod, status: publicPaymentStatus(attempt?.status) },
       exchangePolicy: { voluntaryDays: order.exchangeVoluntaryDays, collectionFeeCents: order.exchangeCollectionFeeCents, version: order.exchangePolicyVersion },
       timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor, reason: e.reason })),
-      allowedActions: this.actionsOf(order),
+      allowedActions: this.actionsOf(order).filter((a) => a !== 'request_cancel' || cancelRequest?.status !== 'pending'),
+      /** BUG-015: o pedido de cancelamento em separação e o que a loja respondeu; nulo se nunca houve. */
+      cancelRequest,
       /** B.1: prazos finais da troca já na entrada do pedido ("Troca até 25/11"); nulos fora do prazo ou sem entrega. */
       exchange: this.exchangeWindowOf(order),
       cancellation: cancelled && order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, reason: order.cancelReason, at: order.cancelledAt.toISOString() } : null,
@@ -1125,3 +1171,28 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
   return (e.code === '23505' && e.constraint === constraint) || (e.cause?.code === '23505' && e.cause.constraint === constraint);
 }
 
+
+export interface CancelRequestView {
+  id: string;
+  status: 'pending' | 'approved' | 'refused';
+  reason: string | null;
+  requestedAt: string;
+  /** Até quando a loja decide; passado o prazo o admin decide. */
+  respondBy: string;
+  decidedAt: string | null;
+  decidedBy: 'store' | 'admin' | 'system' | null;
+  decisionNote: string | null;
+}
+
+function presentCancelRequest(row: typeof orderCancelRequests.$inferSelect, timeoutMin: number): CancelRequestView {
+  return {
+    id: row.id,
+    status: row.status,
+    reason: row.reason,
+    requestedAt: row.requestedAt.toISOString(),
+    respondBy: new Date(row.requestedAt.getTime() + timeoutMin * 60_000).toISOString(),
+    decidedAt: row.decidedAt?.toISOString() ?? null,
+    decidedBy: row.decidedBy,
+    decisionNote: row.decisionNote,
+  };
+}

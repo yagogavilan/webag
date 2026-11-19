@@ -28,6 +28,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('taxa_servico_valor', 0, 0, 5000, 'Taxa de serviço: centavos (fixa) ou pontos-base de % (percentual, até 50,00%)', 'HIP-003'),
   int('pix_expiracao_min', 15, 5, 60, 'Validade do PIX (min)', 'HIP-006'),
   int('loja_aceite_timeout_min', 10, 3, 30, 'Tempo da loja para aceitar o pedido (min)', 'HIP-008'),
+  int('cancelamento_resposta_min', 10, 3, 60, 'Prazo da loja para decidir o pedido de cancelamento do cliente com o pedido em separação (min); sem resposta o admin é alertado (WB-028 C2)', 'WB-028'),
   int('loja_aceite_lembrete_min', 5, 3, 30, 'Lembrete de aceite à loja (min)', 'HIP-008'),
   int('parcelas_max', 3, 1, 12, 'Máximo de parcelas no cartão', 'HIP-011'),
   int('parcela_min_cents', 3000, 1000, undefined, 'Valor mínimo da parcela (centavos)', 'HIP-011'),

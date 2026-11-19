@@ -30,7 +30,6 @@ export interface CatalogActor {
   userId: string;
 }
 
-const MAX_IMAGES = 8;
 const MAX_SECTIONS = 30;
 const MAX_BULK = 200;
 
@@ -484,7 +483,8 @@ export class CatalogService {
   async setImages(store: Store, actor: CatalogActor, productId: string, imageIds: string[]) {
     this.assertWritable(store);
     if (new Set(imageIds).size !== imageIds.length) throw errors.validation([{ field: 'imageIds', message: 'Foto repetida.' }]);
-    if (imageIds.length > MAX_IMAGES) throw errors.unprocessable('TOO_MANY_IMAGES', 'Fotos demais', { errors: [{ field: 'imageIds', message: `No máximo ${MAX_IMAGES} fotos por produto.` }] });
+    const maxImages = await this.params.getNumber('foto_max_produto'); // BUG-017: parâmetro do admin (RN-02)
+    if (imageIds.length > maxImages) throw errors.unprocessable('TOO_MANY_IMAGES', 'Fotos demais', { errors: [{ field: 'imageIds', message: `No máximo ${maxImages} fotos por produto.` }] });
     for (const id of imageIds) await this.media.requireReady(id, { storeId: store.id, purposes: ['product_image'] });
     await this.db.transaction(async (tx) => {
       const product = await this.requireProduct(store.id, productId, tx, true);
@@ -707,7 +707,7 @@ export class CatalogService {
    */
   async importCsv(store: Store, actor: CatalogActor, csv: string, mode: 'preview' | 'commit', onExisting: 'skip' | 'update') {
     this.assertWritable(store);
-    const plan = planImport(csv, await this.importCategories(), await this.params.getNumber('variacoes_max'));
+    const plan = planImport(csv, await this.importCategories(), await this.params.getNumber('variacoes_max'), await this.params.getNumber('import_max_linhas'));
     if ('fileError' in plan) throw errors.unprocessable('IMPORT_FILE_INVALID', 'Planilha inválida', { detail: plan.fileError, errors: [{ field: 'file', message: plan.fileError }] });
 
     const skus = plan.products.flatMap((p) => p.variants.map((v) => v.sku?.toLowerCase()).filter((s): s is string => Boolean(s)));

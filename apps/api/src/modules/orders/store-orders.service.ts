@@ -9,7 +9,7 @@ import { REDIS } from '../../platform/redis/redis.module.js';
 import { users } from '../identity/db/schema.js';
 import { couriers, DeliveriesService } from '../logistics/index.js';
 import { etaOfOrder } from './domain/eta-view.js';
-import { orderEvents, orderItems, orders } from './db/schema.js';
+import { orderCancelRequests, orderEvents, orderItems, orders } from './db/schema.js';
 import { nextStatuses, type OrderStatus } from './domain/state.js';
 import type { OrderEvent } from './order-events.bus.js';
 import { OrdersService, type OrderRow } from './orders.service.js';
@@ -143,10 +143,11 @@ export class StoreOrdersService {
   /** Detalhe completo (WB-068): itens, entrega ou retirada, cliente, valores (se permitido) e histórico. */
   async get(storeId: string, orderId: string, showValues: boolean) {
     const order = await this.load(storeId, orderId);
-    const [items, events, [customer]] = await Promise.all([
+    const [items, events, [customer], cancelRequest] = await Promise.all([
       this.db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
       this.db.select().from(orderEvents).where(eq(orderEvents.orderId, order.id)).orderBy(asc(orderEvents.id)),
       this.db.select({ name: users.name, phone: users.phone }).from(users).where(eq(users.id, order.userId)),
+      this.orders.cancelRequestOf(order.id),
     ]);
     const active = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'].includes(order.status);
     const delivery = order.mode === 'delivery' ? await this.deliveries.forOrder(order.id) : null;
@@ -161,6 +162,8 @@ export class StoreOrdersService {
       paidAt: order.paidAt?.toISOString() ?? null,
       acceptedAt: order.acceptedAt?.toISOString() ?? null,
       acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
+      /** BUG-015: pedido de cancelamento do cliente (em separação) e a decisão; nulo se nunca houve. */
+      cancelRequest,
       customer: { firstName: firstName(customer?.name), phone: active && order.mode === 'delivery' ? (customer?.phone ?? null) : null },
       items: items.map((i) => ({ name: i.name, attributes: i.attributes, image: { urls: i.image }, quantity: i.quantity, unitPrice: showValues ? money(i.unitPriceCents) : null, lineTotal: showValues ? money(i.lineTotalCents) : null })),
       delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
@@ -251,6 +254,25 @@ export class StoreOrdersService {
   /** SEC-143: "recebi de volta" — a loja confirma a devolução da corrida; só então o pedido é cancelado e estornado. */
   async confirmReturnReceived(storeId: string, orderId: string, userId: string, ctx: RequestContext): Promise<void> {
     await this.act(storeId, orderId, userId, async (tx, order) => this.orders.confirmStoreReturnInTx(tx, order, 'store', ctx, null));
+  }
+
+  /**
+   * BUG-015 / WB-028 C2: decisão da loja sobre o pedido de cancelamento do cliente. Aprovar cancela o pedido (ator loja, estoque devolvido,
+   * estorno total); recusar mantém o pedido e registra o motivo. Decidir de novo o que já foi decidido é idempotente.
+   */
+  async decideCancelRequest(storeId: string, orderId: string, userId: string, decision: 'approved' | 'refused', note: string | null): Promise<void> {
+    await this.act(storeId, orderId, userId, async (tx, order) => {
+      const [request] = await tx.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, orderId), eq(orderCancelRequests.status, 'pending'))).for('update');
+      if (!request) {
+        const [last] = await tx.select().from(orderCancelRequests).where(eq(orderCancelRequests.orderId, orderId)).orderBy(sql`${orderCancelRequests.requestedAt} desc`).limit(1);
+        if (last?.status === decision) return { event: null };
+        throw errors.conflict('NO_CANCEL_REQUEST', 'Não há pedido de cancelamento', 'O cliente não pediu o cancelamento deste pedido, ou ele já foi decidido.');
+      }
+      await tx.update(orderCancelRequests).set({ status: decision, decidedAt: new Date(), decidedBy: 'store', decisionNote: note?.slice(0, 200) ?? null }).where(eq(orderCancelRequests.id, request.id));
+      if (decision === 'refused') return { event: null };
+      const { event, refund } = await this.orders.closeOrder(tx, order, 'cancelled', 'store', 'Cancelamento pedido pelo cliente e aprovado pela loja', userId);
+      return { event, refund };
+    });
   }
 
   async cancel(storeId: string, orderId: string, userId: string, reason: string): Promise<void> {

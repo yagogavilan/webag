@@ -2936,6 +2936,45 @@ export interface LogisticsPause {
   pausedAt: string;
 }
 
+export type CancelRequestStatus = typeof CancelRequestStatus[keyof typeof CancelRequestStatus];
+
+
+export const CancelRequestStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  refused: 'refused',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CancelRequestDecidedBy = typeof CancelRequestDecidedBy[keyof typeof CancelRequestDecidedBy] | null;
+
+
+export const CancelRequestDecidedBy = {
+  store: 'store',
+  admin: 'admin',
+  system: 'system',
+} as const;
+
+/**
+ * BUG-015: pedido de cancelamento com o pedido em separação. `respondBy` = até quando a loja decide; passado, o admin decide.
+ */
+export interface CancelRequest {
+  id: string;
+  status: CancelRequestStatus;
+  /** @nullable */
+  reason: string | null;
+  requestedAt: string;
+  respondBy: string;
+  /** @nullable */
+  decidedAt: string | null;
+  /** @nullable */
+  decidedBy: CancelRequestDecidedBy;
+  /** @nullable */
+  decisionNote: string | null;
+}
+
 /**
  * DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio ('Chega entre 15:40 e 16:40'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` ('fora da área').
  */
@@ -3932,6 +3971,8 @@ export interface OrderTimelineEntry {
 }
 
 export interface StoreOrder {
+  /** BUG-015: pedido de cancelamento do cliente (em separação) aguardando a loja, ou a decisão. */
+  cancelRequest?: CancelRequest | null;
   /** Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto. */
   logistics?: StoreOrderLogistics;
   id: string;
@@ -4303,6 +4344,8 @@ export type OrderCancellation = {
 } | null;
 
 export interface Order {
+  /** BUG-015: pedido de cancelamento em separação e a decisão da loja; nulo se nunca houve. */
+  cancelRequest?: CancelRequest | null;
   /** Acompanhamento da entrega Webag (WB-235): estado da corrida, SÓ o primeiro nome do motoboy e o código de entrega a partir de “saiu para entrega”. Nulo na retirada ou antes de o pedido ficar pronto. */
   tracking: OrderTracking;
   id: string;
@@ -7222,6 +7265,19 @@ export const ListOrdersScope = {
   active: 'active',
   past: 'past',
 } as const;
+
+export type RequestOrderCancelBody = {
+  /** @maxLength 200 */
+  reason?: string;
+};
+
+export type DeclineStoreOrderCancelRequestBody = {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+};
 
 export type ListExchangesParams = {
   /** @maxLength 200 */
@@ -20456,6 +20512,204 @@ export const getOrder = async (orderId: string, options?: Parameters<typeof apiF
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type requestOrderCancelResponse202 = {
+  data: CancelRequest
+  status: 202
+}
+
+export type requestOrderCancelResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type requestOrderCancelResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type requestOrderCancelResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type requestOrderCancelResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type requestOrderCancelResponseSuccess = (requestOrderCancelResponse202) & {
+  headers: Headers;
+};
+export type requestOrderCancelResponseError = (requestOrderCancelResponse401 | requestOrderCancelResponse404 | requestOrderCancelResponse409 | requestOrderCancelResponse429) & {
+  headers: Headers;
+};
+
+export type requestOrderCancelResponse = (requestOrderCancelResponseSuccess | requestOrderCancelResponseError)
+
+export const getRequestOrderCancelUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/cancel-request`
+}
+
+/**
+ * Só com o pedido `in_preparation`; a loja decide em `cancelamento_resposta_min` (10 min) e, sem resposta, o admin é alertado e decide. Idempotente: pedir de novo devolve a mesma solicitação. 409 `ORDER_NOT_CANCELLABLE` em outro estado (em `received`/`accepted` use o cancelamento direto). O cliente acompanha em `Order.cancelRequest`.
+ * @summary Pedir o cancelamento com o pedido em separação (BUG-015, WB-028 C2)
+ */
+export const requestOrderCancel = async (orderId: string,
+    requestOrderCancelBody?: RequestOrderCancelBody, options?: Parameters<typeof apiFetch>[1]): Promise<requestOrderCancelResponse> => {
+
+  return apiFetch<requestOrderCancelResponse>(getRequestOrderCancelUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(requestOrderCancelBody)
+  }
+);}
+
+
+
+export type acceptStoreOrderCancelRequestResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type acceptStoreOrderCancelRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acceptStoreOrderCancelRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptStoreOrderCancelRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptStoreOrderCancelRequestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type acceptStoreOrderCancelRequestResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type acceptStoreOrderCancelRequestResponseSuccess = (acceptStoreOrderCancelRequestResponse200) & {
+  headers: Headers;
+};
+export type acceptStoreOrderCancelRequestResponseError = (acceptStoreOrderCancelRequestResponse401 | acceptStoreOrderCancelRequestResponse403 | acceptStoreOrderCancelRequestResponse404 | acceptStoreOrderCancelRequestResponse409 | acceptStoreOrderCancelRequestResponse429) & {
+  headers: Headers;
+};
+
+export type acceptStoreOrderCancelRequestResponse = (acceptStoreOrderCancelRequestResponseSuccess | acceptStoreOrderCancelRequestResponseError)
+
+export const getAcceptStoreOrderCancelRequestUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/cancel-request/accept`
+}
+
+/**
+ * Permissão `orders`. Cancela o pedido (ator loja, estoque devolvido, estorno total). 409 `NO_CANCEL_REQUEST` se não há pedido pendente. Idempotente.
+ * @summary A loja aprova o pedido de cancelamento do cliente (cancela e estorna)
+ */
+export const acceptStoreOrderCancelRequest = async (storeId: string,
+    orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<acceptStoreOrderCancelRequestResponse> => {
+
+  return apiFetch<acceptStoreOrderCancelRequestResponse>(getAcceptStoreOrderCancelRequestUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type declineStoreOrderCancelRequestResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type declineStoreOrderCancelRequestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type declineStoreOrderCancelRequestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type declineStoreOrderCancelRequestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type declineStoreOrderCancelRequestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type declineStoreOrderCancelRequestResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type declineStoreOrderCancelRequestResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type declineStoreOrderCancelRequestResponseSuccess = (declineStoreOrderCancelRequestResponse200) & {
+  headers: Headers;
+};
+export type declineStoreOrderCancelRequestResponseError = (declineStoreOrderCancelRequestResponse400 | declineStoreOrderCancelRequestResponse401 | declineStoreOrderCancelRequestResponse403 | declineStoreOrderCancelRequestResponse404 | declineStoreOrderCancelRequestResponse409 | declineStoreOrderCancelRequestResponse429) & {
+  headers: Headers;
+};
+
+export type declineStoreOrderCancelRequestResponse = (declineStoreOrderCancelRequestResponseSuccess | declineStoreOrderCancelRequestResponseError)
+
+export const getDeclineStoreOrderCancelRequestUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/cancel-request/decline`
+}
+
+/**
+ * Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente.
+ * @summary A loja recusa o pedido de cancelamento do cliente, com motivo
+ */
+export const declineStoreOrderCancelRequest = async (storeId: string,
+    orderId: string,
+    declineStoreOrderCancelRequestBody: DeclineStoreOrderCancelRequestBody, options?: Parameters<typeof apiFetch>[1]): Promise<declineStoreOrderCancelRequestResponse> => {
+
+  return apiFetch<declineStoreOrderCancelRequestResponse>(getDeclineStoreOrderCancelRequestUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(declineStoreOrderCancelRequestBody)
   }
 );}
 

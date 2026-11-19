@@ -10,6 +10,10 @@
   Parâmetros de revisão: ?estatico=1 (sem animação, para captura), ?longo=1 (tela inteira, sem rolagem interna),
   ?carregando=1 (skeleton de cada tela; em #confirmado é "Confirmando seu pagamento"),
   ?endereco=1 (Início com a folha "Seu endereço está certo?"), ?acento=sol (descartado pelo CEO; mantido só para comparação).
+  Onda 7 (2026-11-19), faixa de entrega e atraso (docs/design/telas/onda-7-eta-atraso.md): ?estado=
+    normal (padrão) | ajustada (#sacola "O horário mudou"; #acompanha "Agora chega mais cedo") | atrasando | atrasado | atrasado-saiu |
+    cancelado | compensacao | fora-loja (#loja, #produto, #sacola) | fora-area (#inicio, lista de espera) | fechado | pausado.
+    Sem hash, cada estado abre na tela certa. &folha=1 abre a folha do estado (cancelar, lista de espera).
   Rodada 2 (2026-11-19): objetos de produto viraram <symbol> SVG (OBJ), um estilo só; ver kit-marca-v3.md §7.
   Fontes: Bricolage Grotesque 600/700/800 (display) e Figtree 400/600/700/800 (interface), embutidas pelo CEO entre os marcadores.
 -->
@@ -525,6 +529,74 @@ a{color:inherit;text-decoration:none;-webkit-tap-highlight-color:transparent}
 .obj-g .pl .art{position:absolute;left:6%;top:6%;width:88%;height:88%}
 .obj-g .dk .art{--g:rgba(0,0,0,.42)}
 
+/* ---------- ONDA 7: FAIXA DE ENTREGA E ATRASO (onda-7-eta-atraso.md) ---------- */
+.etaln{display:flex;align-items:center;gap:10px;margin:14px 20px 0;font:15px/22px var(--fu);color:var(--n7)}
+.etaln b{color:var(--noite);font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.etaln.in{margin:12px 0 0}
+.opsb{display:flex;align-items:center;gap:14px;margin:34px 20px 0;padding:16px;border-radius:22px;background:var(--noite);color:#fff}
+.opsb .ic{flex:none;width:48px;height:48px;border-radius:14px;background:var(--n8);display:grid;place-items:center}
+.opsb b{display:block;font:800 21px/24px var(--fd);letter-spacing:-.025em}
+.opsb span{display:block;font:14px/20px var(--fu);color:var(--n3);margin-top:3px}
+.opsb+.sh{margin-top:30px}
+.oor{display:flex;gap:14px;margin:14px 20px 0;padding:16px;border-radius:22px;box-shadow:inset 0 0 0 2px var(--noite)}
+.oor.in{margin:12px 0 0}
+.oor .ic{flex:none;width:44px;height:44px;border-radius:14px;background:var(--n1);display:grid;place-items:center}
+.oor b{display:block;font:700 16px/22px var(--fu)}
+.oor p{font:14px/20px var(--fu);color:var(--n6);margin-top:2px}
+.oor .acts{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px}
+.btn.sm2{height:44px;border-radius:14px;padding:0 16px;font-size:15px;justify-content:center}
+.rc.dis{background:#fff;box-shadow:inset 0 0 0 1.5px var(--n3);cursor:not-allowed}
+.rc.dis b,.rc.dis .v{color:var(--n6)}
+.rc.dis span{color:var(--alerta);font-weight:700}
+.rc.dis .icb{color:var(--n5)}.rc.dis .icb .du{fill:var(--n3)}
+.shake2{animation:shake .35s}
+/* Início sem nenhuma loja que entregue (lista de espera) */
+.oarea{padding:30px 20px 184px}
+.oarea .ill{height:176px}
+.oarea .ill svg{width:100%;height:100%;overflow:visible}
+.oarea h2{font:800 36px/1 var(--fd);letter-spacing:-.045em;margin-top:6px}
+.oarea>p{font:16px/24px var(--fu);color:var(--n7);margin-top:12px}
+.oarea .btn{margin-top:22px}
+.oarea .txtbtn{display:block;margin:8px auto 0}
+.okbox{display:flex;gap:12px;align-items:flex-start;margin-top:22px;padding:16px;border-radius:20px;background:var(--n1);font:15px/22px var(--fu);color:var(--n7)}
+.okbox .ck{flex:none;width:28px;height:28px;border-radius:9px;background:var(--acento);color:var(--noite);display:grid;place-items:center}
+.okbox b{display:block;color:var(--noite);font-weight:700}
+.mailrow{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;background:var(--n1);font:16px/22px var(--fu)}
+.mailrow span{font:13px/18px var(--fu);color:var(--n6);display:block}
+/* Acompanhamento: atraso, mais cedo, cancelado e compensação */
+.agora.late{color:#fff}
+.agora.late .i{color:var(--acento)}
+.trk .eta.was{font-size:40px;color:var(--n3)}
+.trk .eta-s{font:15px/22px var(--fu);color:var(--n3);margin-top:8px}
+.trk .late-n{font:700 16px/22px var(--fu);color:#fff;margin-top:10px}
+.trk .old{font:600 15px/22px var(--fu);color:var(--n4);margin-top:8px}
+.trk .old s{font-variant-numeric:tabular-nums}
+.latec{margin:24px 20px 0;padding:18px;border-radius:24px;background:var(--n1)}
+.latec h2{font:800 26px/1.04 var(--fd);letter-spacing:-.035em}
+.latec p{font:15px/22px var(--fu);color:var(--n7);margin-top:8px}
+.latec p b{color:var(--noite)}
+.latec .bt2{display:grid;gap:10px;margin-top:16px}
+.btn.alt{background:#fff;color:var(--noite);justify-content:center;box-shadow:inset 0 0 0 2px var(--noite)}
+.btn.ink{background:var(--noite);justify-content:center;gap:10px}
+.btn.danger{background:#B3261E;justify-content:center}
+.latec .lnk{margin-top:6px}
+.latec .sim2{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--n3)}
+.latec .sim2 button{min-height:40px;text-align:left;font:600 14px/20px var(--fu);color:var(--n6);text-decoration:underline}
+.tkt{position:relative;display:flex;gap:14px;align-items:center;margin:24px 20px 0;padding:18px;border-radius:24px;background:var(--n1)}
+.tkt::before,.tkt::after{content:"";position:absolute;top:50%;width:18px;height:18px;margin-top:-9px;border-radius:50%;background:#fff}
+.tkt::before{left:-9px}.tkt::after{right:-9px}
+.tkt .ic{flex:none;width:56px;height:56px;border-radius:16px;background:var(--noite);display:grid;place-items:center}
+.tkt b{display:block;font:800 22px/1.05 var(--fd);letter-spacing:-.03em}
+.tkt p{font:14px/20px var(--fu);color:var(--n6);margin-top:6px}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0}
+.cmp>div{padding:12px 14px;border-radius:16px;background:var(--n1)}
+.cmp>div:last-child{background:var(--noite);color:#fff}
+.cmp span{display:block;font:13px/18px var(--fu);color:var(--n6)}
+.cmp>div:last-child span{color:var(--n3)}
+.cmp s,.cmp b{display:block;font:800 21px/26px var(--fd);letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmp s{color:var(--n6);font-weight:700}
+.live .agora.late{font-size:12px;gap:6px}
+
 /* Toast */
 .toast{position:absolute;z-index:90;left:16px;right:16px;bottom:100px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:6px 8px 6px 16px;border-radius:16px;background:var(--noite);color:#fff;font:600 15px/20px var(--fu);animation:toastIn .4s var(--spring) both}
 .toast button{min-height:44px;padding:0 10px;color:var(--acento);font:800 15px/20px var(--fu)}
@@ -578,6 +650,19 @@ html.long .s-ok{height:844px}
   <a href="#inicio">Início</a><a href="#loja">Loja</a><a href="#produto">Produto</a><a href="#sacola">Sacola</a><a href="#confirmado">Pedido confirmado</a><a href="#acompanha">Acompanhamento</a><a href="#pedidos">Pedidos</a><a href="#objetos">Objetos (revisão)</a>
   <button type="button" onclick="addrSheet(document.querySelector('#app .scr:not(.out)'))">Estado: endereço</button>
   <button type="button" onclick="const u=new URL(location.href);u.searchParams.has('carregando')?u.searchParams.delete('carregando'):u.searchParams.set('carregando','1');location.href=u.href">Estado: carregando</button>
+  <b style="font-size:16px;margin:10px 0 2px">Faixa e atraso</b>
+  <button type="button" onclick="setEst('normal','loja')">Faixa normal</button>
+  <button type="button" onclick="setEst('ajustada','sacola')">Faixa ajustada (sacola)</button>
+  <button type="button" onclick="setEst('ajustada','acompanha')">Chega mais cedo</button>
+  <button type="button" onclick="setEst('atrasando')">Atrasando</button>
+  <button type="button" onclick="setEst('atrasado')">Atrasado: cancelar sem custo</button>
+  <button type="button" onclick="setEst('atrasado-saiu')">Atrasado, já saiu</button>
+  <button type="button" onclick="setEst('cancelado')">Cancelado por atraso</button>
+  <button type="button" onclick="setEst('compensacao')">Entregue com atraso</button>
+  <button type="button" onclick="setEst('fora-loja')">Loja fora da área</button>
+  <button type="button" onclick="setEst('fora-area')">Sem loja no endereço</button>
+  <button type="button" onclick="setEst('fechado')">Entregas fechadas</button>
+  <button type="button" onclick="setEst('pausado')">Entregas pausadas</button>
 </nav>
 <div id="device"><div id="app"></div></div>
 <script>
@@ -591,6 +676,17 @@ if(Q.has('estatico'))H.classList.add('static');
 if(Q.get('acento')==='sol')H.classList.add('acento-sol');
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches||Q.has('estatico');
 const LONG=Q.has('longo');
+/* Onda 7: estado da faixa de entrega (onda-7-eta-atraso.md). Horários coerentes com RN-19: Moda Prima a 1,8 km,
+   preparo 20 + despacho 15 + deslocamento 15 = 50 min, folga 15: 35 a 65 min; pedido pago às 18:10, janela em múltiplos de 5. */
+const ESTS=['normal','ajustada','atrasando','atrasado','atrasado-saiu','cancelado','compensacao','fora-loja','fora-area','fechado','pausado'];
+const EST=ESTS.includes(Q.get('estado'))?Q.get('estado'):'normal';
+const NODELIV=['fora-loja','fechado','pausado'].includes(EST);
+const LATE=['atrasando','atrasado','atrasado-saiu'].includes(EST);
+const CLK=EST==='fechado'?'20:30':EST==='pausado'?'16:05':'18:12';
+const ADDR=EST==='fora-area'?'Rua das Flores, 45':EST==='fora-loja'?'Av. Brasil, 1200':'Rua das Palmeiras, 120';
+const ETA='18:45 – 19:20';
+let ETA_C=ETA,SEEN_ETA=false;
+function setEst(e,h){const u=new URL(location.href);u.searchParams.set('estado',e);u.searchParams.delete('folha');u.hash=h||'';location.href=u.href}
 const r2=v=>Math.round(v*100)/100;
 const brl=v=>r2(v).toFixed(2).replace('.',',');
 const money=v=>'R$ '+brl(v);
@@ -619,6 +715,7 @@ ticket:'<path fill="currentColor" d="M14.005 4H9.99502C6.21439 4 4.32407 4 3.149
 heart:'<path fill="none" stroke="currentColor" stroke-width="1.5" d="M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z"/>',
 heartF:'<path fill="currentColor" d="M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z"/>',
 trash:'<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M9.1709 4C9.58273 2.83481 10.694 2 12.0002 2C13.3064 2 14.4177 2.83481 14.8295 4"/><path d="M20.5001 6H3.5"/><path d="M18.8332 8.5L18.3732 15.3991C18.1962 18.054 18.1077 19.3815 17.2427 20.1907C16.3777 21 15.0473 21 12.3865 21H11.6132C8.95235 21 7.62195 21 6.75694 20.1907C5.89194 19.3815 5.80344 18.054 5.62644 15.3991L5.1665 8.5"/><path d="M9.5 11L10 16"/><path d="M14.5 11L14 16"/></g>',
+danger:'<path fill="currentColor" d="M12 3C9.68925 3 8.23007 5.58716 5.31171 10.7615L4.94805 11.4063C2.52291 15.7061 1.31034 17.856 2.40626 19.428C3.50217 21 6.21356 21 11.6363 21H12.3637C17.7864 21 20.4978 21 21.5937 19.428C22.6897 17.856 21.4771 15.7061 19.0519 11.4063L18.6883 10.7615C15.7699 5.58716 14.3107 3 12 3Z" opacity=".5"/><path fill="currentColor" d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V8C11.25 7.58579 11.5858 7.25 12 7.25Z"/><path fill="currentColor" d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/>',
 plus:'<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" d="M12 5v14M5 12h14"/>',
 minus:'<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4" d="M5 12h14"/>',
 check:'<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6" d="m5 12.5l4.5 4.5L19 7.5"/>',
@@ -635,7 +732,7 @@ function bagSym(f,e,cls=''){return `<svg class="${cls}" viewBox="56 4 100 101" a
 function logoW(h){return `<svg viewBox="0 0 458 126" height="${h}" width="${Math.round(h*458/126)}" role="img" aria-label="Webag"><g fill="#fff"><rect x="24" y="34" width="23" height="14" rx="7"/><rect x="0" y="62" width="49" height="14" rx="7"/><rect x="18" y="90" width="34" height="14" rx="7"/>${WORD}</g>${bagG('#fff','#C02EF0')}</svg>`}
 function symW(w){return `<svg viewBox="0 0 160 104" width="${w}" height="${Math.round(w*104/160)}" aria-hidden="true"><g fill="#fff"><rect x="24" y="34" width="23" height="14" rx="7"/><rect x="0" y="62" width="49" height="14" rx="7"/><rect x="18" y="90" width="34" height="14" rx="7"/></g>${bagG('#fff','#C02EF0')}</svg>`}
 const SBI='<svg width="70" height="12" viewBox="0 0 70 12" aria-hidden="true"><g fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="6" width="3" height="6" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/><path d="M29 3.4a9 9 0 0 1 12 0l-1.5 1.6a7 7 0 0 0-9 0zM31.6 6a5.5 5.5 0 0 1 6.8 0L36.9 7.6a3.3 3.3 0 0 0-3.8 0zM35 11.6l-1.7-1.9a2.5 2.5 0 0 1 3.4 0z"/><rect x="46" y="1" width="20" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="48" y="3" width="14" height="6" rx="1.5"/><rect x="67.2" y="4" width="1.6" height="4" rx=".8"/></g></svg>';
-function sb(dk,t='18:12'){return `<div class="sb ${dk?'dk':''}" aria-hidden="true"><span>${t}</span>${SBI}</div>`}
+function sb(dk,t=CLK){return `<div class="sb ${dk?'dk':''}" aria-hidden="true"><span>${t}</span>${SBI}</div>`}
 
 /* ---------- Objetos de produto: sistema de ilustração v3.2 (substituto de foto) ----------
  Estilo único (kit-marca-v3.md §7): geométrico sólido, SEM contorno, 3 tons por objeto
@@ -761,10 +858,10 @@ function ca(k,c,css,x){return `<div class="ca" style="${css}">${art(k,c,'',x)}</
 
 /* ---------- Dados fictícios ---------- */
 const ST={
- moda:{n:'Moda Prima',ini:'MP',c:'#2F4A6B',sub:'Moda feminina e masculina',bairro:'Jardim Silvia',dist:'1,8',rate:'4,7',nrev:96,t:'30–45',fee:5},
- casa:{n:'Casa Bela',ini:'CB',c:'#9A4B2E',sub:'Casa e decoração',dist:'1,2',rate:'4,8',nrev:212,t:'25–40',fee:5},
- bella:{n:'Bella Cosméticos',ini:'BC',c:'#7A2E3A',sub:'Beleza e cuidados',dist:'4,1',rate:'4,9',nrev:143,t:'40–55',fee:8},
- pe:{n:'Pé Leve Calçados',ini:'PL',c:'#5B6B2F',sub:'Calçados',dist:'2,4',rate:'4,6',nrev:58,t:'35–50',fee:6},
+ moda:{n:'Moda Prima',ini:'MP',c:'#2F4A6B',sub:'Moda feminina e masculina',bairro:'Jardim Silvia',dist:'1,8',rate:'4,7',nrev:96,t:'35–65',fee:5},
+ casa:{n:'Casa Bela',ini:'CB',c:'#9A4B2E',sub:'Casa e decoração',dist:'1,2',rate:'4,8',nrev:212,t:'30–60',fee:5},
+ bella:{n:'Bella Cosméticos',ini:'BC',c:'#7A2E3A',sub:'Beleza e cuidados',dist:'4,1',rate:'4,9',nrev:143,t:'50–85',fee:8},
+ pe:{n:'Pé Leve Calçados',ini:'PL',c:'#5B6B2F',sub:'Calçados',dist:'2,4',rate:'4,6',nrev:58,t:'40–70',fee:6},
  papel:{n:'Papelaria Estrela',ini:'PE',c:'#7A5A12'},tec:{n:'TecPonto Eletrônicos',ini:'TP',c:'#44525C'}
 };
 const PR={
@@ -794,6 +891,12 @@ let PS={c:0,s:-1,q:1};
 const count=()=>CART.reduce((a,x)=>a+x.q,0);
 const subt=()=>CART.reduce((a,x)=>a+PR[x.id].p*x.q,0);
 const total=()=>subt()+(RECV==='entrega'?FEE:0)+SVC;
+/* Onda 7: cenário de acompanhamento por estado (relógio, etapa e minutos passados do fim da faixa) */
+const TRKS={normal:{clock:'18:15'},ajustada:{clock:'18:38',stage:3},atrasando:{clock:'19:28',stage:2,late:8},atrasado:{clock:'19:37',stage:2,late:17},'atrasado-saiu':{clock:'19:38',stage:3,late:18},cancelado:{clock:'19:40',stage:2},compensacao:{clock:'19:53',stage:4}};
+const TS=TRKS[EST]||TRKS.normal;
+if(TS.stage!=null)STAGE=TS.stage;
+if(NODELIV)RECV=null;
+const DONE_ALL=EST==='compensacao';
 
 /* ---------- Preço e contagem animada ---------- */
 function priceIn(v){const s=r2(Math.max(0,v)).toFixed(2).split('.');return `<span class="vh">R$ ${s[0]},${s[1]}</span><span class="c" aria-hidden="true">R$</span><span aria-hidden="true">${s[0]}</span><span class="d" aria-hidden="true">,${s[1]}</span>`}
@@ -803,7 +906,23 @@ function tween(el,to,dur=450,fmt){if(!el)return;const from=parseFloat(el.dataset
 /* ---------- Componentes ---------- */
 function bagbar(){const n=count();return `<button class="bagbar" id="bagbar" onclick="go('sacola')" aria-label="Ver sacola: ${n} itens, ${money(subt())}"><span class="bb-i">${ic('bag',24)}<b id="bbN">${n}</b></span><span class="bb-t"><b>Ver sacola</b><span>Moda Prima · ${n} itens</span></span>${price(subt(),'bb-p','bbP')}</button>`}
 function tabbar(on){const T=[['inicio','Início','home','homeF'],['busca','Busca','search','searchD'],['pedidos','Pedidos','orders','orders'],['conta','Conta','user','user']];const LIVE={inicio:1,pedidos:1};return `<nav class="tab" aria-label="Navegação principal">${T.map(t=>{const cur=t[0]===on;return `<a href="#${LIVE[t[0]]?t[0]:on}" class="${cur?'on':''}" ${cur?'aria-current="page"':''} ${LIVE[t[0]]?'':`onclick="toast('${t[1]}: fora do escopo desta rodada');return false"`}>${ic(cur?t[3]:t[2],26)}${t[1]}</a>`}).join('')}</nav>`}
-function storeCard(id,big,arts){const s=ST[id];return `<a class="stc ${big?'big':''}" href="#loja"><div class="cov" style="--sc:${s.c}"><span class="eta">${ic('clock',18,'icb')}${s.t} min</span>${arts}<span class="mono">${s.ini}</span></div><h3>${s.n}</h3><p class="meta">${ic('star',14)}<b>${s.rate}</b>(${s.nrev}) · Entrega R$ ${brl(s.fee)} · ${s.dist} km</p></a>`}
+function storeCard(id,big,arts){const s=ST[id];const off=EST==='fechado'||EST==='pausado';
+ const chip=EST==='fechado'?`${ic('scooter',18,'icb')}Entrega volta às 9h`:EST==='pausado'?`${ic('scooter',18,'icb')}Entrega pausada`:`${ic('clock',18,'icb')}${s.t} min`;
+ const al=EST==='fechado'?'Entregas voltam amanhã às 9 horas':EST==='pausado'?'Entregas pausadas agora':'Chega em '+s.t.replace('–',' a ')+' minutos';
+ return `<a class="stc ${big?'big':''}" href="#loja" data-testid="home.store-card-${id}"><div class="cov" style="--sc:${s.c}"><span class="eta" data-testid="home.store-card-${id}.eta" aria-label="${al}">${chip}</span>${arts}<span class="mono">${s.ini}</span></div><h3>${s.n}</h3><p class="meta">${ic('star',14)}<b>${s.rate}</b>(${s.nrev}) · ${off?'Retire grátis':'Entrega R$ '+brl(s.fee)} · ${s.dist} km</p></a>`}
+/* Faixa das entregas fechadas ou pausadas (Início) */
+function opsBanner(){if(EST!=='fechado'&&EST!=='pausado')return '';const f=EST==='fechado';
+ return `<div class="opsb rv" style="--i:5" role="status" data-testid="home.ops-banner"><span class="ic">${ic('scooter',28,'ic2')}</span><div><b>${f?'Entregas voltam amanhã às 9h':'Entregas pausadas agora'}</b><span>${f?'Hoje ainda dá para retirar na loja.':'Retire grátis na loja ou tente daqui a pouco.'}</span></div></div>`}
+/* Nenhuma loja entrega no endereço: estado vazio com lista de espera (WB-251 C4, WB-004 C5) */
+let WAIT=false;
+function oarea(){return `<section class="oarea rv" style="--i:4" data-testid="home.empty-out-of-area">
+ <div class="ill" aria-hidden="true"><svg viewBox="0 0 350 176"><path d="M154 122C196 122 204 78 242 72" fill="none" stroke="#D6CFDB" stroke-width="7" stroke-linecap="round" stroke-dasharray="1 15"/><ellipse cx="80" cy="166" rx="56" ry="7" fill="rgba(28,23,33,.12)"/><g transform="translate(-6 52)"><rect x="24" y="34" width="23" height="14" rx="7" fill="#1C1721"/><rect x="0" y="62" width="49" height="14" rx="7" fill="#1C1721"/><rect x="18" y="90" width="34" height="14" rx="7" fill="#1C1721"/>${bagG('#C02EF0','#FFFFFF')}</g><ellipse cx="290" cy="166" rx="38" ry="6" fill="rgba(28,23,33,.12)"/><g transform="translate(244 58) scale(4)" style="color:#1C1721">${I.pin}</g><circle cx="292" cy="98" r="8" fill="#D6FF4A"/></svg></div>
+ <h2>Ainda não entregamos em Mairiporã.</h2>
+ <p>A Webag está chegando em novos bairros. Quer um aviso quando chegar aí?</p>
+ ${WAIT?`<div class="okbox" role="status" data-testid="waitlist.confirmed"><span class="ck">${ic('check',16)}</span><span><b>Anotado.</b>Avisamos você por e-mail quando a Webag chegar em Mairiporã.</span></div>`:`<button class="btn full ctr" onclick="waitSheet()" data-testid="waitlist.open">Avisar quando chegar</button>`}
+ <button class="txtbtn" onclick="toast('Abre a lista de endereços salvos')" data-testid="home.change-address">Trocar endereço</button>
+</section>`}
+function waitSheet(){const host=$('#app .scr:not(.out)');if(!host||$('#sheet'))return;host.insertAdjacentHTML('beforeend',`<div class="scrim" id="scrim" onclick="closeSheet()"></div><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shT" tabindex="-1" data-testid="waitlist.sheet"><i class="grab" aria-hidden="true"></i><h2 id="shT">Avisar quando chegar</h2><p>Usamos seu e-mail só para avisar quando a Webag chegar em Mairiporã. Você cancela quando quiser.</p><div class="mailrow">${ic('bell',24,'icb')}<div>maria.souza@gmail.com<span>E-mail da sua conta</span></div></div><button class="btn full ctr" onclick="closeSheet();WAIT=true;show()" data-testid="waitlist.confirm">Quero o aviso</button><button class="txtbtn ctr" onclick="closeSheet()" data-testid="waitlist.cancel">Agora não</button></div>`);$('#sheet').focus({preventScroll:true})}
 function offerCard(id,big,artCss){const p=PR[id];return `<a class="oc ${big?'big':''}" href="#loja"><div class="pl">${`<span class="off"><span>-${pct(p)}%</span></span>`}<div style="position:absolute;${artCss}">${art(p.k,p.c,'',p.k==='sneaker'?'#C02EF0':undefined)}</div></div><p class="onm">${p.n}</p><p class="pp">${price(p.p)}<s>R$ ${brl(p.old)}</s></p></a>`}
 function pcard(id,i){const p=PR[id];return `<div class="pc rv" style="--i:${i}" role="link" tabindex="0" aria-label="${p.n}, ${money(p.p)}" onclick="toProd(this)"><div class="pl">${art(p.k,p.c,'crop')}${p.old?`<span class="off"><span>-${pct(p)}%</span></span>`:''}</div><button class="add" aria-label="Adicionar ${p.n} à sacola" onclick="event.stopPropagation();quickAdd(this,'${id}')">${ic('plus',22)}</button><p class="pn">${p.n}</p><p class="pp">${price(p.p)}${p.old?`<s>R$ ${brl(p.old)}</s>`:''}</p></div>`}
 
@@ -812,12 +931,12 @@ const CATS=[['Calçados','sneaker','#F4F2EE','sq'],['Beleza','perfume','#D99A3D'
 function catStrip(){return `<nav class="cats rv" style="--i:4" aria-label="Categorias"><a class="cat big" href="#inicio" onclick="toast('Categoria Moda');return false"><span class="tile"></span>${art('dress','#C9B79B','c2')}${art('tee','#F2EFE9','c1')}<b>Moda</b></a>${CATS.map(c=>`<a class="cat ${c[3]}" href="#inicio" onclick="toast('Categoria ${c[0]}');return false"><span class="tile"></span>${art(c[1],c[2],'',c[1]==='sneaker'?'#C02EF0':c[1]==='cesta'?'#D6FF4A':undefined)}<span>${c[0]}</span></a>`).join('')}</nav>`}
 
 /* ---------- TELA: INÍCIO ---------- */
-function inicio(){const n=count();return `<section class="scr s-ini" data-r="inicio">${sb(true)}
-<div class="mini" id="mini"><span style="flex:none">${symW(42)}</span><button class="addr" onclick="toast('Abre a lista de endereços salvos')">${ic('pin',20,'ic2')}<span>Rua das Palmeiras, 120</span>${ic('down',16)}</button><button class="ib ink" aria-label="Buscar" onclick="toast('Abre a busca com o teclado aberto')">${ic('search',22)}</button></div>
+function inicio(){const FA=EST==='fora-area';const n=FA?0:count();return `<section class="scr s-ini" data-r="inicio">${sb(true)}
+<div class="mini" id="mini"><span style="flex:none">${symW(42)}</span><button class="addr" onclick="toast('Abre a lista de endereços salvos')">${ic('pin',20,'ic2')}<span>${ADDR}</span>${ic('down',16)}</button><button class="ib ink" aria-label="Buscar" onclick="toast('Abre a busca com o teclado aberto')">${ic('search',22)}</button></div>
 <div class="scroll" id="sc">
  <header class="hh"><div class="hh-bg"></div>
   <div class="hh-top rv" style="--i:0">${logoW(30)}<button class="ib bag" id="bagBtn" aria-label="Sacola: ${n} itens" onclick="go('sacola')">${ic('bag',24,'icb')}${n?`<b class="badge">${n}</b>`:''}</button></div>
-  <button class="addr rv" style="--i:1" aria-label="Entregar em Rua das Palmeiras, 120. Trocar endereço" onclick="toast('Abre a lista de endereços salvos')">${ic('pin',20,'ic2')}<span>Rua das Palmeiras, 120</span>${ic('down',16)}</button>
+  <button class="addr rv" style="--i:1" aria-label="Entregar em ${ADDR}. Trocar endereço" onclick="toast('Abre a lista de endereços salvos')">${ic('pin',20,'ic2')}<span>${ADDR}</span>${ic('down',16)}</button>
   <h1 class="rv" style="--i:2">O que vai<br>pra <span class="hl">sacola</span><br>hoje?</h1>
   <div class="hh-art" aria-hidden="true">
    ${bagSym('#6A1580','#C02EF0','ha-bag')}
@@ -826,7 +945,8 @@ function inicio(){const n=count();return `<section class="scr s-ini" data-r="ini
   </div>
   <button class="search rv" style="--i:3" onclick="toast('Abre a busca com o teclado aberto')">${ic('searchD',24,'ic2')}<span>Buscar produto ou loja</span></button>
  </header>
- ${catStrip()}
+ ${FA?oarea():`${catStrip()}
+ ${opsBanner()}
  <div class="sh rv" style="--i:5"><h2>Abertas agora</h2><a class="lnk" href="#inicio" onclick="toast('Lista de todas as lojas');return false">Ver todas</a></div>
  <div class="hs rv" style="--i:6">
   ${storeCard('moda',true,ca('dress','#C9B79B','left:124px;top:-18px;width:112px;height:112px;transform:rotate(-10deg)')+ca('tee','#F2EFE9','left:160px;top:18px;width:150px;height:150px;transform:rotate(6deg)')+ca('purse','#A8693A','left:70px;top:66px;width:100px;height:100px;transform:rotate(-8deg)'))}
@@ -846,13 +966,18 @@ function inicio(){const n=count();return `<section class="scr s-ini" data-r="ini
  <section class="rk">
   <div class="sh" style="margin-top:44px"><h2>Mais pedidos<br>da semana</h2></div>
   ${[['p14','Papelaria Estrela'],['p4','Pé Leve Calçados'],['p6','Bella Cosméticos']].map((r,i)=>{const p=PR[r[0]];return `<a class="rki" href="#loja"><span class="n" aria-hidden="true">${i+1}</span><span class="pl">${art(p.k,p.c,'crop')}</span><span class="tx"><b>${p.n}</b><span class="st">${r[1]}</span><span class="pp">${price(p.p)}</span></span></a>`}).join('')}
- </section>
+ </section>`}
 </div>
 ${n?bagbar():''}
 ${tabbar('inicio')}
 </section>`}
 
 /* ---------- TELA: LOJA ---------- */
+function lojaEta(){
+ if(EST==='fora-loja')return `<div class="oor rv" style="--i:4" role="status" data-testid="store.out-of-range"><span class="ic">${ic('pin',24,'icb')}</span><div><b>Não entrega no seu endereço</b><p>${ADDR} fica longe demais desta loja. Retire grátis na loja ou veja quem entrega aí.</p><div class="acts"><button class="lnk" onclick="toast('Abre Av. Dr. Lúcio, 88 no mapa. Na sacola, escolha Retirar na loja.')" data-testid="store.pickup">Retirar na loja</button><button class="lnk" onclick="toast('Lista as lojas que entregam em Av. Brasil, 1200')" data-testid="store.see-others">Ver lojas que entregam aí</button></div></div></div>`;
+ if(EST==='fechado')return `<p class="etaln rv" style="--i:4" data-testid="store.eta-line">${ic('shop',22,'icb')}<span>Entregas voltam amanhã às 9h. Hoje dá para retirar até 21h.</span></p>`;
+ if(EST==='pausado')return `<p class="etaln rv" style="--i:4" data-testid="store.eta-line">${ic('shop',22,'icb')}<span>Entregas pausadas agora. Dá para retirar grátis na loja.</span></p>`;
+ return `<p class="etaln rv" style="--i:4" data-testid="store.eta-line" aria-label="Pedindo agora, chega entre 18 horas e 45 minutos e 19 horas e 20 minutos">${ic('clock',22,'icb')}<span>Pedindo agora, chega entre <b>18:45 e 19:20</b></span></p>`}
 function loja(){const s=ST.moda;return `<section class="scr s-loja" data-r="loja" style="--sc:${s.c}">${sb(true)}
 <div class="mini light" id="mini"><button class="ib" aria-label="Voltar" onclick="back('inicio')">${ic('left',24)}</button><b class="mini-t">Moda Prima</b><button class="ib" aria-label="Buscar nesta loja" onclick="toast('Busca dentro da loja')">${ic('search',22)}</button></div>
 <div class="topbtns" id="tb"><button class="ib" aria-label="Voltar" onclick="back('inicio')">${ic('left',24)}</button><span class="sp"></span><button class="ib" aria-label="Buscar nesta loja" onclick="toast('Busca dentro da loja')">${ic('search',22)}</button><button class="ib fav" aria-label="Favoritar loja" aria-pressed="false" onclick="fav(this)">${ic('heart',22)}${ic('heartF',22)}</button></div>
@@ -865,13 +990,14 @@ function loja(){const s=ST.moda;return `<section class="scr s-loja" data-r="loja
  <div class="sid">
   <div class="slogo" aria-hidden="true">MP</div>
   <h1 class="rv" style="--i:1">Moda Prima</h1>
-  <p class="sub rv" style="--i:2"><span class="opn"><i></i>Aberta até 19h</span>· ${s.bairro}, ${s.dist} km</p>
+  <p class="sub rv" style="--i:2"><span class="opn"><i></i>Aberta até ${EST==='fechado'?'21h':'19h'}</span>· ${s.bairro}, ${EST==='fora-loja'?'10,6':s.dist} km</p>
  </div>
  <div class="stats rv" style="--i:3">
   <div><b id="stR" data-v="4.7">4,7</b><span>${ic('star',13)}96 avaliações</span></div>
-  <div><b>30–45</b><span>min até você</span></div>
-  <div><b>R$ 5</b><span>entrega Webag</span></div>
+  ${EST==='fora-loja'?'<div data-testid="store.eta"><b>—</b><span>não entrega aqui</span></div>':EST==='fechado'?'<div data-testid="store.eta"><b>9h</b><span>entregas voltam</span></div>':EST==='pausado'?'<div data-testid="store.eta"><b>—</b><span>entregas pausadas</span></div>':`<div data-testid="store.eta" aria-label="Chega em ${s.t.replace('–',' a ')} minutos"><b>${s.t}</b><span>min até você</span></div>`}
+  ${NODELIV?'<div><b>Grátis</b><span>retirada na loja</span></div>':'<div><b>R$ 5</b><span>entrega Webag</span></div>'}
  </div>
+ ${lojaEta()}
  <div class="tix rv" style="--i:4" aria-label="Cupons e vantagens da loja">
   <button class="tk" onclick="toast('Cupom MODA10 salvo. Vale em compras acima de R$ 99.')">${ic('ticket',26,'icb')}<span><b>R$ 10 off</b><span>acima de R$ 99</span></span></button>
   <button class="tk" onclick="toast('Abre: endereço, horário e mapa da loja')">${ic('shop',26,'icb')}<span><b>Retire grátis</b><span>Av. Dr. Lúcio, 88</span></span></button>
@@ -913,7 +1039,7 @@ function produto(){const p=PR.p1,n=count();return `<section class="scr s-prod" d
   <div class="prow">${price(p.p,'xl')}<a class="rate" href="#produto" onclick="toast('Abre as avaliações');return false"><b>${ic('star',16)}4,7</b><span>38 avaliações</span></a></div>
   <div id="opts">${prodOpts()}</div>
   <div class="facts">
-   <div class="fact"><span class="ic">${ic('scooter',24,'icb')}</span><div><b>Chega em 30–45 min</b><span>Entrega Webag R$ 5,00 · ou retire grátis na loja</span></div></div>
+   <div class="fact" data-testid="product.eta">${EST==='fora-loja'?`<span class="ic">${ic('pin',24,'icb')}</span><div><b>Não entrega no seu endereço</b><span>Retire grátis na loja · Av. Dr. Lúcio, 88</span></div>`:EST==='fechado'?`<span class="ic">${ic('scooter',24,'icb')}</span><div><b>Entregas voltam amanhã às 9h</b><span>Hoje dá para retirar grátis na loja até 21h</span></div>`:EST==='pausado'?`<span class="ic">${ic('scooter',24,'icb')}</span><div><b>Entregas pausadas agora</b><span>Retire grátis na loja · Av. Dr. Lúcio, 88</span></div>`:`<span class="ic">${ic('scooter',24,'icb')}</span><div><b>Chega hoje entre 18:45 e 19:20</b><span>Entrega Webag R$ 5,00 · ou retire grátis na loja</span></div>`}</div>
    <div class="fact"><span class="ic">${ic('shield',24,'icb')}</span><div><b>Troca pelo app</b><span>Até 7 dias depois de receber</span></div></div>
   </div>
   <div class="desc"><h2>Sobre a peça</h2><p>Algodão penteado de 160 g/m², gola reforçada e caimento reto. Lavar do avesso, até 30 graus.</p></div>
@@ -935,14 +1061,15 @@ function sacola(){return `<section class="scr s-sac" data-r="sacola">${sb(false)
  <div class="sug rv" style="--i:3">${['p20','p1b','p2','p3'].map(sug).join('')}</div>
  <h2 class="h3 rv" style="--i:4">Como receber</h2>
  <div class="recv rv" style="--i:5" role="radiogroup" aria-label="Como receber">
-  <button class="rc ${RECV==='entrega'?'on':''}" role="radio" aria-checked="${RECV==='entrega'}" onclick="setRecv('entrega')">${ic('scooter',28,'icb')}<b>Entrega Webag</b><span>30–45 min</span><span class="v">R$ 5,00</span><span class="ck">${ic('check',16)}</span></button>
-  <button class="rc ${RECV==='retirada'?'on':''}" role="radio" aria-checked="${RECV==='retirada'}" onclick="setRecv('retirada')">${ic('shop',28,'icb')}<b>Retirar na loja</b><span>Av. Dr. Lúcio, 88</span><span class="v">Grátis</span><span class="ck">${ic('check',16)}</span></button>
+  ${NODELIV?`<button class="rc dis" role="radio" aria-checked="false" aria-disabled="true" onclick="setRecv('entrega')" data-testid="cart.receive-delivery">${ic('scooter',28,'icb')}<b>Entrega Webag</b><span>${EST==='fora-loja'?'Não entrega aqui':EST==='fechado'?'Volta amanhã às 9h':'Pausada agora'}</span><span class="v">—</span></button>`:`<button class="rc ${RECV==='entrega'?'on':''}" role="radio" aria-checked="${RECV==='entrega'}" onclick="setRecv('entrega')" data-testid="cart.receive-delivery" aria-label="Entrega Webag, chega entre 18 horas e 45 minutos e 19 horas e 20 minutos, 5 reais">${ic('scooter',28,'icb')}<b>Entrega Webag</b><span style="font-variant-numeric:tabular-nums">${ETA}</span><span class="v">R$ 5,00</span><span class="ck">${ic('check',16)}</span></button>`}
+  <button class="rc ${RECV==='retirada'?'on':''}" role="radio" aria-checked="${RECV==='retirada'}" onclick="setRecv('retirada')" data-testid="cart.receive-pickup">${ic('shop',28,'icb')}<b>Retirar na loja</b><span>Av. Dr. Lúcio, 88</span><span class="v">Grátis</span><span class="ck">${ic('check',16)}</span></button>
  </div>
+ <div class="rv" style="--i:5;padding:0 20px" data-testid="cart.eta">${EST==='fora-loja'?`<div class="oor in" role="status"><span class="ic">${ic('pin',24,'icb')}</span><div><b>A entrega não chega no seu endereço</b><p>${ADDR} fica longe demais desta loja. Retire grátis na loja ou troque o endereço.</p><div class="acts"><button class="lnk" onclick="toast('Abre a lista de endereços salvos')" data-testid="cart.change-address">Trocar endereço</button></div></div></div>`:EST==='fechado'?`<p class="etaln in">${ic('clock',22,'icb')}<span>As entregas de hoje acabaram às 20h. Hoje dá para retirar na loja até 21h.</span></p>`:EST==='pausado'?`<p class="etaln in">${ic('clock',22,'icb')}<span>As entregas estão pausadas agora. Retire grátis na loja ou tente daqui a pouco.</span></p>`:`<p class="etaln in">${ic('clock',22,'icb')}<span>O horário conta a partir do pagamento aprovado.</span></p>`}</div>
  <button class="irow coupon rv" style="--i:6" onclick="toast('Abre a folha de cupons')"><span class="ic">${ic('ticket',24,'icb')}</span><span class="t"><b>Adicionar cupom</b><span>BEMVINDO10 disponível pra você</span></span>${ic('right',20)}</button>
  <h2 class="h3 rv" style="--i:7">Resumo de valores</h2>
  <div class="sum rv" style="--i:7">
   <div class="r"><span id="sSubL">Subtotal (${count()} itens)</span><span id="sSub">${money(subt())}</span></div>
-  <div class="r"><span>Entrega Webag</span><span id="sFee">${RECV==='entrega'?money(FEE):'Grátis'}</span></div>
+  <div class="r"><span>Entrega Webag</span><span id="sFee">${RECV==='entrega'?money(FEE):RECV?'Grátis':'—'}</span></div>
   <div class="r"><span style="display:flex;align-items:center">Taxa de serviço<button class="info" aria-label="O que é a taxa de serviço" onclick="toast('Mantém o app e o suporte. Já está no total.')">i</button></span><span>${money(SVC)}</span></div>
   <div class="r"><span>Cupom</span><span style="font-weight:400;color:var(--n6)">Nenhum aplicado</span></div>
   <div class="bdiv" aria-hidden="true" style="margin:10px 0"><i></i><i></i><i></i></div>
@@ -950,7 +1077,7 @@ function sacola(){return `<section class="scr s-sac" data-r="sacola">${sb(false)
  </div>
  <p class="fine">${ic('shield',20,'icb')}Você escolhe como pagar no próximo passo.</p>
 </div>
-<div class="pbar"><button class="btn full" onclick="go('confirmado')"><span>Ir para o pagamento</span><span class="bp" id="ctaT" data-v="${total()}">${money(total())}</span></button></div>
+<div class="pbar"><button class="btn full ${RECV?'':'off'}" id="cta" ${RECV?'':'aria-disabled="true"'} onclick="goPay()" data-testid="cart.checkout"><span id="ctaL">${RECV?'Ir para o pagamento':'Escolha como receber'}</span><span class="bp" id="ctaT" data-v="${total()}">${money(total())}</span></button></div>
 </section>`}
 
 /* ---------- TELA: PEDIDO CONFIRMADO ---------- */
@@ -969,7 +1096,7 @@ function confirmado(){return `<section class="scr s-ok" data-r="confirmado">${sb
  <h1>Pedido feito.</h1>
  <p class="sub">Agora é com a gente.</p>
  <p class="eta-l">Chega entre</p>
- <p class="eta">18:45 – 19:00</p>
+ <p class="eta" data-testid="order-confirmed.eta">${ETA_C}</p>
 </div>
 <div class="ok-panel">
  <div class="op-card">
@@ -997,28 +1124,53 @@ const STAGES=[
  {h:'Pedido entregue',l:'Entregue',ill:'done',now:'18:52'}
 ];
 const TL=[['Pedido confirmado','18:10 · a loja aceitou às 18:12'],['Separando os itens',''],['Motoboy busca na loja',''],['Saiu para entrega',''],['Entregue','']];
-function tlHtml(){return TL.map((t,i)=>`<li class="${i<STAGE?'done':i===STAGE?'now':''}"><i>${i<STAGE?ic('check',14):''}</i><div><b>${t[0]}</b><span>${i<STAGE?(t[1]||'Feito'):i===STAGE?'Agora':''}</span></div></li>`).join('')}
-function segHtml(){return STAGES.map((s,i)=>`<i class="${i<STAGE?'done':i===STAGE?'now':''}"></i>`).join('')}
+function tlHtml(){return TL.map((t,i)=>{const d=i<STAGE||DONE_ALL;return `<li class="${d?'done':i===STAGE?'now':''}"><i>${d?ic('check',14):''}</i><div><b>${t[0]}</b><span>${d?(DONE_ALL&&i===4?'19:52 · você informou o código':(t[1]||'Feito')):i===STAGE?'Agora':''}</span></div></li>`}).join('')}
+function segHtml(){return STAGES.map((s,i)=>`<i class="${i<STAGE||DONE_ALL?'done':i===STAGE?'now':''}"></i>`).join('')}
 /* Rótulo da etapa ancorado sob o segmento atual (alinhado à direita a partir da etapa 3, para não estourar a largura) */
 function segL(){const s=STAGES[STAGE];return `<p class="seg-l ${STAGE>1?'r':''}" id="tL" style="${STAGE>1?'':`padding-left:${STAGE*20}%`}"><b>Etapa ${STAGE+1} de 5</b>· ${s.l}</p>`}
-function acompanha(){const s=STAGES[STAGE];return `<section class="scr s-trk" data-r="acompanha">${sb(true,'18:15')}
+/* Cabeçalho do acompanhamento conforme o estado da faixa (onda-7-eta-atraso.md §T6) */
+function trkHead(){const s=STAGES[STAGE];
+ if(EST==='cancelado')return {now:`${ic('close',16)}<span>Cancelado · ${TS.clock}</span>`,late:1,h:'Pedido cancelado',ill:'',seg:0,eta:`<p class="eta-l">Devolvemos</p><p class="eta" data-testid="tracking.refund">R$ 156,79</p><p class="eta-s">O valor inteiro, com a entrega.</p>`};
+ if(TS.late)return {now:`${ic('danger',18)}<span>Atrasado · ${TS.clock}</span>`,late:1,h:'Passou do horário previsto',ill:s.ill,seg:1,eta:`<p class="eta-l">Previsto entre</p><p class="eta was" data-testid="tracking.eta">${ETA}</p><p class="late-n">Passou ${TS.late} min. Já estamos cuidando disso.</p>`};
+ if(EST==='ajustada')return {now:`<i class="pulse"></i><span id="tNow">Agora · ${TS.clock}</span>`,h:s.h,ill:s.ill,seg:1,eta:`<p class="eta-l">Agora chega mais cedo</p><p class="eta" data-testid="tracking.eta">18:40 – 19:05</p><p class="old" data-testid="tracking.earlier">Antes: <s>${ETA}</s></p>`};
+ if(EST==='compensacao')return {now:`${ic('check',16)}<span>Entregue · 19:52</span>`,late:1,h:'Pedido entregue',ill:'done',seg:1,eta:`<p class="eta-l">Entregue às</p><p class="eta" data-testid="tracking.eta">19:52</p><p class="eta-s">Previsto entre ${ETA}.</p>`};
+ return {now:`<i class="pulse"></i><span id="tNow">Agora · ${s.now}</span>`,h:s.h,ill:s.ill,seg:1,eta:`<p class="eta-l">Chega entre</p><p class="eta" data-testid="tracking.eta">${ETA}</p><p class="eta-s">Se adiantar, a gente avisa.</p>`}}
+/* Cartão abaixo do cabeçalho: aviso de atraso, decisão de cancelar, resultado e compensação */
+let LSTEP='';
+function lateCard(){
+ const wa=`<button class="lnk" onclick="toast('Abre o WhatsApp da Webag com o número do pedido')" data-testid="tracking.late-contact">Falar com a Webag</button>`;
+ if(EST==='atrasando')return `<section class="latec rv" style="--i:4" role="status" data-testid="tracking.late-banner"><h2>Seu pedido está demorando mais que o previsto</h2><p>Já estamos cuidando disso. Se passar de <b>19:35</b>, você pode cancelar sem custo.</p><div class="bt2"><button class="btn ink full" onclick="toast('Abre o WhatsApp da Webag com o número do pedido')" data-testid="tracking.late-contact">${ic('wa',20)}Falar com a Webag</button></div></section>`;
+ if(EST==='atrasado'){
+  if(LSTEP==='wait')return `<section class="latec" role="status" data-testid="tracking.late-banner"><h2>Combinado, seguimos</h2><p>Quando o pedido chegar, você ganha <b>entrega grátis no próximo pedido</b>. Se mudar de ideia antes de ele sair da loja, ainda dá para cancelar sem custo.</p><button class="lnk" onclick="lateCancel()" data-testid="tracking.late-cancel">Cancelar sem custo</button>${wa}</section>`;
+  return `<section class="latec rv" style="--i:4" role="status" data-testid="tracking.late-banner"><h2>Passamos do prazo</h2><p>Você pode cancelar sem custo e receber <b>R$ 156,79</b> de volta, com a entrega. Se preferir esperar, ganha entrega grátis no próximo pedido.</p><div class="bt2"><button class="btn alt full" onclick="LSTEP='wait';redrawLate()" data-testid="tracking.late-wait">Continuar esperando</button><button class="btn alt full" onclick="lateCancel()" data-testid="tracking.late-cancel">Cancelar sem custo</button></div>${wa}</section>`}
+ if(EST==='atrasado-saiu'){
+  if(LSTEP==='sent')return `<section class="latec" role="status" data-testid="tracking.late-request-sent"><h2>Pedido de cancelamento enviado</h2><p>A Webag responde até <b>19:48</b>. Sem resposta, cancelamos e devolvemos o valor inteiro, com a entrega.</p>${wa}<div class="sim2"><button onclick="LSTEP='eta10';redrawLate()">Simular: a Webag avisa que chega (só no protótipo)</button><button onclick="LSTEP='ok';redrawLate()">Simular: cancelamento aceito (só no protótipo)</button></div></section>`;
+  if(LSTEP==='eta10')return `<section class="latec" role="status"><h2>Chega até 19:48</h2><p>O motoboy está perto. Se não chegar até lá, o cancelamento é aceito sozinho e devolvemos o valor inteiro.</p>${wa}</section>`;
+  if(LSTEP==='ok')return `<section class="latec" role="status"><h2>Cancelamento aceito</h2><p>O motoboy devolve o pedido à loja. Devolvemos <b>R$ 156,79</b>, com a entrega, em até 1 dia útil no PIX.</p>${wa}</section>`;
+  return `<section class="latec rv" style="--i:4" role="status" data-testid="tracking.late-banner"><h2>Passamos do prazo</h2><p>Seu pedido já está com o motoboy. Se quiser cancelar mesmo assim, a Webag responde em até 10 min. Sem resposta, o cancelamento é aceito.</p><div class="bt2"><button class="btn alt full" onclick="LSTEP='keep';toast('Combinado. Quando chegar, você ganha entrega grátis no próximo pedido.')" data-testid="tracking.late-wait">Continuar esperando</button><button class="btn alt full" onclick="LSTEP='sent';redrawLate()" data-testid="tracking.late-request-cancel">Pedir cancelamento</button></div>${wa}</section>`}
+ if(EST==='cancelado')return `<section class="latec rv" style="--i:4" role="status" data-testid="tracking.late-cancelled"><h2>Cancelado sem custo</h2><p>Devolvemos <b>R$ 156,79</b> no PIX, com a entrega. Cai em até 1 dia útil. Os itens voltaram para a loja.</p><div class="bt2"><button class="btn ink full" onclick="go('inicio')">Voltar ao início</button></div></section>`;
+ if(EST==='compensacao')return `<section class="tkt rv" style="--i:4" data-testid="tracking.compensation"><span class="ic">${ic('ticket',30,'ic2')}</span><div><b>Entrega grátis no próximo pedido</b><p>Pedimos desculpas pelo atraso. Vale por 30 dias, em pedidos com entrega.</p><button class="lnk" onclick="toast('Abre Meus cupons')" data-testid="tracking.compensation-open">Ver meus cupons</button></div></section>`;
+ return ''}
+function redrawLate(){const c=$('#lateW');if(c){c.innerHTML=lateCard();const f=c.querySelector('h2');if(f){f.setAttribute('tabindex','-1');f.focus({preventScroll:true})}}}
+function lateCancel(){const host=$('#app .scr:not(.out)');if(!host||$('#sheet'))return;host.insertAdjacentHTML('beforeend',`<div class="scrim" id="scrim" onclick="closeSheet()"></div><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shT" tabindex="-1" data-testid="tracking.late-cancel-sheet"><i class="grab" aria-hidden="true"></i><h2 id="shT">Cancelar o pedido #4821?</h2><p>Você recebe <b>R$ 156,79</b> de volta, com a entrega, em até 1 dia útil no PIX. Os itens voltam para a loja.</p><button class="btn full danger" onclick="setEst('cancelado','acompanha')" data-testid="tracking.late-cancel-confirm">Cancelar pedido</button><button class="txtbtn ctr" onclick="closeSheet()">Voltar</button></div>`);$('#sheet').focus({preventScroll:true})}
+function acompanha(){const s=STAGES[STAGE],H=trkHead(),canc=EST==='cancelado';return `<section class="scr s-trk" data-r="acompanha">${sb(true,TS.clock)}
 <div class="scroll" id="sc">
  <header class="trk"><div class="trk-bg"></div>
   <div class="trk-top"><button class="ib dk2" aria-label="Voltar" onclick="back('inicio')">${ic('left',24)}</button><b>Pedido #4821</b><button class="txtbtn w" onclick="toast('Abre a ajuda deste pedido')">Ajuda</button></div>
-  <p class="agora rv" style="--i:0"><i class="pulse"></i><span id="tNow">Agora · ${s.now}</span></p>
-  <h1 class="rv" style="--i:1" id="tH" aria-live="polite">${s.h}</h1>
-  <div class="trk-ill" id="tI" aria-hidden="true">${ILL[s.ill]}</div>
-  <div class="seg rv" style="--i:2" id="seg" role="img" aria-label="Etapa ${STAGE+1} de 5: ${s.l}">${segHtml()}</div>
-  ${segL()}
-  <p class="eta-l rv" style="--i:3">Chega entre</p>
-  <p class="eta rv" style="--i:3">18:45 – 19:00</p>
+  <p class="agora rv ${H.late?'late':''}" style="--i:0">${H.now}</p>
+  <h1 class="rv" style="--i:1" id="tH" aria-live="polite">${H.h}</h1>
+  <div class="trk-ill" id="tI" aria-hidden="true">${H.ill?ILL[H.ill]:''}</div>
+  ${H.seg?`<div class="seg rv" style="--i:2" id="seg" role="img" aria-label="Etapa ${DONE_ALL?5:STAGE+1} de 5: ${DONE_ALL?'Entregue':s.l}">${segHtml()}</div>
+  ${DONE_ALL?'<p class="seg-l r" id="tL"><b>Etapa 5 de 5</b>· Entregue</p>':segL()}`:''}
+  <div class="rv" style="--i:3;margin-top:${H.seg?0:26}px">${H.eta}</div>
  </header>
- <section class="code rv" style="--i:4"><h2>Código de entrega</h2><p>Fale este código ao motoboy só quando o pedido estiver na sua mão.</p><div class="digits" aria-label="Código 4 8 2 7"><span>4</span><span>8</span><span>2</span><span>7</span></div></section>
- <h2 class="tl-h">Etapas</h2>
- <ol class="tl" id="tl">${tlHtml()}</ol>
+ <div id="lateW">${lateCard()}</div>
+ ${canc||DONE_ALL?'':`<section class="code rv" style="--i:4"><h2>Código de entrega</h2><p>Fale este código ao motoboy só quando o pedido estiver na sua mão.</p><div class="digits" aria-label="Código 4 8 2 7"><span>4</span><span>8</span><span>2</span><span>7</span></div></section>`}
+ ${canc?'':`<h2 class="tl-h">Etapas</h2>
+ <ol class="tl" id="tl">${tlHtml()}</ol>`}
  <div class="cardc"><span class="mono-s">MP</span><div class="t"><b>Moda Prima</b><span>Dúvida sobre os itens? Fale com a loja.</span></div><button class="btn wa" onclick="toast('Abre o WhatsApp da loja com o número do pedido')">${ic('wa',20)}WhatsApp</button></div>
  <div class="cardc"><span class="ic" style="width:32px;display:grid;place-items:center">${ic('pin',26,'icb')}</span><div class="t"><b>Rua das Palmeiras, 120</b><span>2 itens · R$ 156,79 no PIX</span></div>${ic('right',20)}</div>
- <button class="sim" onclick="nextStage()">Simular próxima etapa (só no protótipo)</button>
+ ${EST==='normal'?'<button class="sim" onclick="nextStage()">Simular próxima etapa (só no protótipo)</button>':'<div style="height:44px"></div>'}
 </div>
 </section>`}
 
@@ -1033,12 +1185,12 @@ function again(n){toast('Sua sacola tem itens da Moda Prima. Trocar pelos itens 
 function pedidos(){const n=count(),s=STAGES[STAGE];return `<section class="scr s-ped" data-r="pedidos">${sb(false)}
 <div class="scroll" id="sc">
  <h1 class="ped-h rv" style="--i:0">Pedidos</h1>
- <a class="live rv" style="--i:1" href="#acompanha" aria-label="Em andamento, Moda Prima: ${s.h}. Chega entre 18:45 e 19:00. Acompanhar pedido">
-  <span class="lv-top"><span class="mono-s">MP</span><b>Moda Prima</b><span class="agora sm"><i class="pulse"></i>Agora</span></span>
-  <span class="lv-h">${s.h}</span>
+ ${EST==='cancelado'||DONE_ALL?'':`<a class="live rv" style="--i:1" href="#acompanha" data-testid="orders.live" aria-label="Em andamento, Moda Prima: ${LATE?'passou do horário previsto':s.h}. ${LATE?'Previsto entre':'Chega entre'} 18:45 e 19:20. Acompanhar pedido">
+  <span class="lv-top"><span class="mono-s">MP</span><b>Moda Prima</b>${LATE?`<span class="agora sm late">${ic('danger',16)}Atrasado</span>`:'<span class="agora sm"><i class="pulse"></i>Agora</span>'}</span>
+  <span class="lv-h">${LATE?'Passou do horário previsto':s.h}</span>
   <span class="seg">${segHtml()}</span>
-  <span class="lv-b"><span><span class="lv-l">Etapa ${STAGE+1} de 5 · chega entre</span><b>18:45 – 19:00</b></span><span class="btn white sm">Acompanhar</span></span>
- </a>
+  <span class="lv-b"><span><span class="lv-l">Etapa ${STAGE+1} de 5 · ${LATE?'previsto entre':'chega entre'}</span><b>${EST==='ajustada'?'18:40 – 19:05':ETA}</b></span><span class="btn white sm">Acompanhar</span></span>
+ </a>`}
  <h2 class="ped-sec rv" style="--i:2">Anteriores</h2>
  ${ORD.map(ordCard).join('')}
  <div class="endpad"></div>
@@ -1127,7 +1279,7 @@ let HIST=[];
 function go(r){if(location.hash.slice(1)===r)show();else location.hash=r}
 function back(f){if(HIST.length>1){history.back()}else go(f)}
 function show(){
- const r=(location.hash.slice(1)||'inicio');if(!R[r])return;
+ const r=(location.hash.slice(1)||DEF[EST]||'inicio');if(!R[r])return;
  CART=CART.filter(Boolean);
  const isBack=HIST.length>1&&HIST[HIST.length-2]===r;
  if(isBack)HIST.pop();else if(HIST[HIST.length-1]!==r)HIST.push(r);
@@ -1141,8 +1293,14 @@ function show(){
  if(sk0)return;
  (AFTER[r]||(()=>{}))(el);
  if(r==='inicio'&&Q.has('endereco')&&!SEEN_ADDR){SEEN_ADDR=true;addrSheet(el)}
+ if(Q.has('folha')&&!SEEN_F&&FOLHA[EST]&&FOLHA[EST][0]===r){SEEN_F=true;FOLHA[EST][1]()}
 }
-let SEEN_ADDR=false;
+let SEEN_ADDR=false,SEEN_F=false;
+/* Onda 7: tela inicial de cada estado e folha aberta por &folha=1 */
+const DEF={ajustada:'sacola',atrasando:'acompanha',atrasado:'acompanha','atrasado-saiu':'acompanha',cancelado:'acompanha',compensacao:'acompanha','fora-loja':'loja','fora-area':'inicio',fechado:'inicio',pausado:'inicio'};
+const FOLHA={ajustada:['sacola',()=>etaSheet()],'fora-area':['inicio',()=>waitSheet()],atrasado:['acompanha',()=>lateCancel()]};
+function etaSheet(){const host=$('#app .scr:not(.out)');if(!host||$('#sheet'))return;host.insertAdjacentHTML('beforeend',`<div class="scrim" id="scrim" onclick="closeSheet()"></div><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shT" tabindex="-1" data-testid="cart.eta-changed-sheet"><i class="grab" aria-hidden="true"></i><h2 id="shT">O horário mudou</h2><p>A previsão mudou desde que você abriu a sacola. Confira antes de pagar.</p><div class="cmp"><div><span>Antes</span><s>${ETA}</s></div><div><span>Agora chega entre</span><b>19:00 – 19:35</b></div></div><button class="btn full ctr" onclick="closeSheet();SEEN_ETA=true;ETA_C='19:00 – 19:35';go('confirmado')" data-testid="cart.eta-changed-accept">Continuar com o novo horário</button><button class="txtbtn ctr" onclick="closeSheet()" data-testid="cart.eta-changed-back">Voltar à sacola</button></div>`);$('#sheet').focus({preventScroll:true})}
+function goPay(){if(!RECV){toast('Escolha entrega ou retirada para continuar.');const g=$('.recv');if(g){g.classList.remove('shake2');void g.offsetWidth;g.classList.add('shake2')}hap(30);return}if(EST==='ajustada'&&!SEEN_ETA&&RECV==='entrega'){etaSheet();return}go('confirmado')}
 window.addEventListener('hashchange',show);
 
 function onMini(el,th,light){const sc=el.querySelector('.scroll'),mini=el.querySelector('.mini'),tb=el.querySelector('.topbtns'),sbar=el.querySelector('.sb');if(!sc||!mini)return;sc.addEventListener('scroll',()=>{const on=sc.scrollTop>th;mini.classList.toggle('on',on);if(tb)tb.classList.toggle('hide',on);if(light&&sbar)sbar.classList.toggle('dk',!on)},{passive:true})}
@@ -1174,11 +1332,12 @@ function addToBag(btn){if(btn.classList.contains('done')){go('sacola');return}if
 function fly(src,dst){if(RM||!src||!dst)return;const app=$('#app').getBoundingClientRect(),a=src.getBoundingClientRect(),b=dst.getBoundingClientRect();const c=document.createElement('div');c.className='flyer';c.innerHTML=src.innerHTML;Object.assign(c.style,{left:(a.left-app.left)+'px',top:(a.top-app.top)+'px',width:a.width+'px',height:a.height+'px'});$('#app').appendChild(c);const dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2);c.animate([{transform:'translate(0,0) scale(1) rotate(-4deg)',opacity:1},{transform:`translate(${dx*.55}px,${dy*.35-50}px) scale(.42) rotate(-12deg)`,opacity:1,offset:.55},{transform:`translate(${dx}px,${dy}px) scale(.06) rotate(-24deg)`,opacity:.3}],{duration:560,easing:'cubic-bezier(.45,0,.65,1)'}).onfinish=()=>c.remove()}
 
 /* Sacola */
-function updTotals(){tween($('#sTot'),total());tween($('#ctaT'),total(),450,money);$('#sSub').textContent=money(subt());$('#sFee').textContent=RECV==='entrega'?money(FEE):'Grátis';$('#sacN').textContent='· '+count()+' itens';$('#sSubL').textContent='Subtotal ('+count()+' itens)'}
+function updTotals(){tween($('#sTot'),total());tween($('#ctaT'),total(),450,money);$('#sSub').textContent=money(subt());$('#sFee').textContent=RECV==='entrega'?money(FEE):RECV?'Grátis':'—';$('#sacN').textContent='· '+count()+' itens';$('#sSubL').textContent='Subtotal ('+count()+' itens)'}
 function sugAdd(btn,id){const p=PR[id];if(NEEDS_VAR[p.k]){toast('Escolha o tamanho de '+p.n+' na ficha do produto.');return}hap(10);CART=CART.filter(Boolean);const ex=CART.find(x=>x.id===id);ex?ex.q++:CART.push({id,v:'Tamanho único',q:1});$('#items').innerHTML=CART.map(itemRow).join('');updTotals();btn.classList.add('ok');btn.innerHTML=ic('check',20);btn.setAttribute('aria-label','Adicionado');toast(p.n+' na sacola',['Desfazer',()=>{const x=CART.find(y=>y.id===id);if(x){x.q--;if(!x.q)CART.splice(CART.indexOf(x),1)}$('#items').innerHTML=CART.map(itemRow).join('');updTotals();btn.classList.remove('ok');btn.innerHTML=ic('plus',20)}])}
 function iq(i,d){const x=CART[i];if(!x)return;hap(6);if(x.q+d<=0){const row=$('#it'+i),removed=CART[i];row.classList.add('gone');CART[i]=null;setTimeout(()=>{updTotalsSafe()},10);toast(PR[removed.id].n+' saiu da sacola',['Desfazer',()=>{CART[i]=removed;row.classList.remove('gone');updTotalsSafe()}]);return}x.q+=d;const row=$('#it'+i);row.outerHTML=itemRow(x,i);updTotalsSafe()}
 function updTotalsSafe(){const keep=CART;CART=keep.filter(Boolean);updTotals();CART=keep}
-function setRecv(m){if(RECV===m)return;RECV=m;hap(8);document.querySelectorAll('.rc').forEach((b,i)=>{const on=(i===0)===(m==='entrega');b.classList.toggle('on',on);b.setAttribute('aria-checked',on)});updTotalsSafe()}
+function setRecv(m){if(m==='entrega'&&NODELIV){toast(EST==='fora-loja'?'Esta loja não entrega em '+ADDR+'. Retire na loja ou troque o endereço.':EST==='fechado'?'As entregas voltam amanhã às 9h. Hoje dá para retirar na loja.':'As entregas estão pausadas agora. Retire na loja.');hap(30);return}
+ if(RECV===m)return;RECV=m;hap(8);document.querySelectorAll('.rc').forEach((b,i)=>{const on=(i===0)===(m==='entrega');b.classList.toggle('on',on);b.setAttribute('aria-checked',on)});updTotalsSafe();const c=$('#cta');if(c){c.classList.remove('off');c.removeAttribute('aria-disabled');$('#ctaL').textContent='Ir para o pagamento'}}
 
 /* Confirmado */
 AFTER.confirmado=el=>{hap(20);if(RM)return;setTimeout(()=>confetti(el.querySelector('#cfx'),337,213),520)};

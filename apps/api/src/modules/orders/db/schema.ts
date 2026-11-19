@@ -122,3 +122,25 @@ export const orderEvents = pgTable(
   },
   (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
 );
+
+export const CANCEL_REQUEST_STATUSES = ['pending', 'approved', 'refused'] as const;
+
+/**
+ * Pedido de cancelamento do cliente com o pedido EM SEPARAÇÃO (BUG-015, WB-028 C2): a loja decide em `cancelamento_resposta_min`
+ * (10 min); sem resposta, o admin é alertado e decide (cancelando o pedido). Uma solicitação aberta por pedido.
+ */
+export const orderCancelRequests = pgTable(
+  'order_cancel_requests',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    orderId: uuid().notNull().references(() => orders.id, { onDelete: 'cascade' }),
+    status: text({ enum: CANCEL_REQUEST_STATUSES }).notNull().default('pending'),
+    reason: varchar({ length: 200 }),
+    requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp({ withTimezone: true }),
+    decidedBy: text({ enum: ['store', 'admin', 'system'] }),
+    decisionNote: varchar({ length: 200 }),
+    alertedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [uniqueIndex('order_cancel_requests_open_uq').on(t.orderId).where(sql`${t.status} = 'pending'`), index('order_cancel_requests_order_idx').on(t.orderId, t.requestedAt)],
+);

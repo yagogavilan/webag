@@ -86,7 +86,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect(paths.some((p) => /not-received/.test(p))).toBe(true);
   });
 
-  it.fails('BUG-015 (WB-028 C2): "Pedir cancelamento" (request_cancel, pedido em preparo) tem operação no contrato', () => {
+  it('BUG-015 (WB-028 C2): "Pedir cancelamento" (request_cancel, pedido em preparo) tem operação no contrato', () => {
     const yaml = readFileSync(new URL('../../../docs/arquitetura/api/openapi.yaml', import.meta.url), 'utf8');
     const paths = yaml.split('\n').filter((l) => /^ {2}\/v1\//.test(l));
     expect(paths.some((p) => /request-cancel|cancel-request/.test(p))).toBe(true); // obtido: nenhuma

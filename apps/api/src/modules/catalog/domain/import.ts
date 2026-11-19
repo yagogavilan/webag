@@ -110,6 +110,7 @@ export function planImport(
   csv: string,
   categoriesByName: ReadonlyMap<string, string>,
   maxCombinations: number,
+  maxLines: number = IMPORT_MAX_LINES,
 ): ImportFileError | { products: ImportedProduct[]; errors: ImportError[]; totalLines: number } {
   if (Buffer.byteLength(csv) > IMPORT_MAX_BYTES) return { fileError: 'O arquivo passa do limite de 1 MB.' };
   const rows = parseCsv(csv);
@@ -117,7 +118,7 @@ export function planImport(
   if (!header || IMPORT_HEADERS.some((h) => !header.includes(h))) return { fileError: `Cabeçalho inválido. Use o modelo (colunas: ${IMPORT_HEADERS.join(', ')}).` };
   const body = rows.slice(1);
   if (body.length === 0) return { fileError: 'A planilha não tem linhas de produto.' };
-  if (body.length > IMPORT_MAX_LINES) return { fileError: `A planilha passa de ${IMPORT_MAX_LINES} linhas.` };
+  if (body.length > maxLines) return { fileError: `A planilha passa de ${maxLines} linhas.` };
 
   const col = (row: string[], name: Header): string => (row[header.indexOf(name)] ?? '').trim();
   const errors: ImportError[] = [];
