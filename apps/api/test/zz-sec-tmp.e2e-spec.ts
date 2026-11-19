@@ -224,4 +224,15 @@ describe('SEC tmp: ataques', () => {
     log('K> após estorno total + webhook repetido: tentativa', att.status, 'pedido', o2.status, 'alertas', al.map((a) => a.kind));
     void orders;
   });
+  });
+
+  it('L. SEC-131: 6 criações concorrentes da mesma conta (carrinhos idênticos)', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 2_000, stock: 200 }]);
+    const buyer = await customerAt(ctx, shop.origin);
+    await addToCart(ctx, buyer.user, shop.variants[0]!, 50).expect(200);
+    const rev = (await ctx.http.get(`/v1/cart?addressId=${buyer.addressId}`).set(bearer(buyer.user.accessToken)).expect(200)).body.revision;
+    const res = await Promise.all([1, 2, 3, 4, 5, 6].map(() => ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ mode: 'delivery', addressId: buyer.addressId, cartRevision: rev, paymentMethod: 'pix' })));
+    const pend = await ctx.db.select().from(orders).where(eq(orders.userId, buyer.user.userId));
+    log('L>', res.map((x) => `${x.status}:${x.body.code ?? ''}`), 'pedidos', pend.length);
+  });
 });

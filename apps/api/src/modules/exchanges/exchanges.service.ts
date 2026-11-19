@@ -12,13 +12,12 @@ import { effectivePrice, InventoryService } from '../catalog/index.js';
 import { products, productVariants } from '../catalog/db/schema.js';
 import { IdempotencyService } from '../idempotency/index.js';
 import { users } from '../identity/db/schema.js';
-import { DeliveriesService, type Delivery, type DeliveryActor, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
+import { DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
 import { MediaService } from '../media/index.js';
 import { orderItems, orders } from '../orders/db/schema.js';
 import { generateOrderNumber } from '../orders/order-number.js';
 import { PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
-import { paymentAttempts, type PaymentStatus } from '../payments/db/schema.js';
-import type { ProviderPayment } from '../payments/payment-provider.js';
+import { paymentAttempts } from '../payments/db/schema.js';
 import { stores } from '../stores/db/schema.js';
 import { exchangeEvents, exchangeRequests, OPEN_EXCHANGE_STATUSES, type ExchangeActor, type ExchangeStatus } from './db/schema.js';
 import { approvalMode, collectionFeeCents, evaluateEligibility, EXCHANGE_TYPES, priceDifferenceCents, refundCents, storeAnswerDeadline, windowDays, DAY_MS, type EligibilityReason, type ExchangeType } from './domain/eligibility.js';
@@ -554,7 +553,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
   // =================================================================== corridas (coleta e reentrega)
 
-  async onDeliveryChange(tx: Tx, delivery: Delivery, from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
+  async onDeliveryChange(tx: Tx, delivery: Delivery, _from: DeliveryStatus | null, to: DeliveryStatus): Promise<void> {
     if (!delivery.exchangeId || to !== 'delivered') return;
     const { ex } = await this.lockFor(tx, delivery.exchangeId);
     const now = new Date();
