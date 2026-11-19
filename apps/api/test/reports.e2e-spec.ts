@@ -156,7 +156,7 @@ describe('Relatórios operacionais do admin (WB-122, RN-15, O6.4)', () => {
   it('CSV com os mesmos números e auditado; fórmula de planilha é neutralizada', async () => {
     const csv = await get(`orders.csv?${q()}`).expect(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
-    const lines = csv.text.replace(/^﻿/, '').trim().split('\r\n');
+    const lines = csv.text.replace(String.fromCharCode(0xfeff), '').trim().split('\r\n');
     expect(lines[0]).toBe('pedido;loja;status;modo;pago_em;entregue_em;subtotal;taxa_entrega;taxa_servico;desconto;total;comissao;cancelado_por;motivo');
     expect(lines).toHaveLength(1 + 5);
     const r = (await get(`operations?${q()}`).expect(200)).body;
