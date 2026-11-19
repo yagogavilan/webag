@@ -17,7 +17,8 @@
     "e2e": "maestro test e2e",
     "assets": "node scripts/build-assets.mjs",
     "assets:art": "node scripts/build-art.mjs",
-    "assets:icons": "node scripts/build-icons.mjs"
+    "assets:icons": "node scripts/build-icons.mjs",
+    "assets:licenses": "node scripts/build-license-texts.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "0.4.1",

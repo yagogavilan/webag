@@ -1,6 +1,6 @@
 # Avisos de terceiros (Third-party notices)
 
-O Webag usa os componentes de código aberto abaixo. Esta lista espelha a página pública `/licencas` (a tela equivalente no app ainda não existe: ver "Pendências"). Ao adicionar um ícone, uma fonte ou uma biblioteca com atribuição obrigatória, atualize este arquivo, `apps/web/src/lib/licenses.ts` e a tela do app.
+O Webag usa os componentes de código aberto abaixo. Esta lista espelha a página pública `/licencas` (a tela equivalente no app é Conta > Sobre o Webag > Licenças, `apps/mobile/src/legal/credits.ts`). Ao adicionar um ícone, uma fonte ou uma biblioteca com atribuição obrigatória, atualize este arquivo, `apps/web/src/lib/licenses.ts` e a tela do app.
 
 ## Ícones
 
@@ -20,7 +20,7 @@ O Webag usa os componentes de código aberto abaixo. Esta lista espelha a págin
 ### Phosphor Icons (MIT)
 
 - Autoria: Phosphor Icons. Origem: https://github.com/phosphor-icons/react.
-- Uso: ícones dos painéis web (admin e lojista), pelo pacote `@phosphor-icons/react`. O app declara `phosphor-react-native` mas não importa nenhum ícone dele (dependência sobrando; ver "Pendências" abaixo).
+- Uso: ícones dos painéis web (admin e lojista), pelo pacote `@phosphor-icons/react`. O app não usa mais o Phosphor (`phosphor-react-native` foi removido, DT-068).
 
 ## Fontes (SIL Open Font License 1.1, https://openfontlicense.org)
 
@@ -59,6 +59,6 @@ O `pnpm licenses` só enxerga as variantes de binário instaladas na máquina qu
 
 | # | Item | Dono | Por quê |
 |---|---|---|---|
-| 1 | O app não tem a tela "Licenças de código aberto" (Conta > Sobre) que este arquivo e a DEC-055 descrevem. Solar (CC BY 4.0) exige atribuição visível onde os ícones são usados; hoje ela só existe na página web `/licencas` | `mobile-dev` | A solução mais barata é um item "Licenças" que abre `<WEB_PUBLIC_URL>/licencas` (pelo navegador do sistema), sem duplicar a lista no app |
-| 2 | `phosphor-react-native` está em `apps/mobile/package.json` e no `tsconfig.json`, mas nenhum arquivo do app o importa | `mobile-dev` | Dependência sem uso: remover (menos superfície e menos licença a declarar) |
+| 1 | **Feito** (2026-11-19): tela Conta > Sobre o Webag > Licenças com os créditos do Solar (CC BY 4.0, com alteração e links), do glifo do WhatsApp (MIT) e das fontes (OFL, texto integral copiado dos pacotes); a lista de bibliotecas abre `<EXPO_PUBLIC_WEB_URL>/licencas`. Falta conferir o copyright do Tabler ([M] no texto do designer) | `mobile-dev` | Atribuição visível onde os ícones são usados |
+| 2 | **Feito**: `phosphor-react-native` removido do `package.json` e do `tsconfig.json` | `mobile-dev` | Dependência sem uso |
 | 3 | `apps/web/src/lib/licenses.ts` descreve o Phosphor só como "painéis web" e não cita o texto da licença da Outfit | `mobile-dev` ou `product-designer` | Manter em sincronia com este arquivo (a página `/licencas` é a atribuição pública) |

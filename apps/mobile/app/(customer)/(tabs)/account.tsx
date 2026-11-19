@@ -1,10 +1,9 @@
-import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { signOut } from '../../../src/api/auth-api';
 import { useSession } from '../../../src/api/session';
 import { Button } from '../../../src/components/Button';
-import { ArrowsClockwise, Bell, Heart, MapPin, Question, Receipt, ShieldUser, Document } from '../../../src/components/icons';
+import { ArrowsClockwise, Bell, Heart, Info, MapPin, Question, Receipt, ShieldUser, Document } from '../../../src/components/icons';
 import { ListItem } from '../../../src/components/ListItem';
 import { Screen } from '../../../src/components/Screen';
 import { Text } from '../../../src/components/Text';
@@ -20,7 +19,6 @@ export default function AccountScreen() {
   const toast = useToast();
   const session = useSession();
   const loggedIn = session.status === 'authenticated';
-  const version = Constants.expoConfig?.version ?? '';
 
   return (
     <Screen bottomInset={false} scroll testID="account.screen">
@@ -88,6 +86,7 @@ export default function AccountScreen() {
         <ListItem icon={ShieldUser} onPress={() => router.push('/privacy' as never)} testID="account.item-privacy" title={t('account.privacyItem')} />
         <ListItem icon={Receipt} onPress={() => router.push('/legal/customer_terms')} testID="account.legal" title={t('account.legal')} />
         <ListItem icon={Document} onPress={() => router.push('/legal/privacy')} testID="account.privacy" title={t('legal.privacy')} />
+        <ListItem icon={Info} onPress={() => router.push('/about' as never)} testID="account.item-about" title={t('account.aboutItem')} />
       </View>
 
       {loggedIn ? (
@@ -100,11 +99,6 @@ export default function AccountScreen() {
           testID="home.sign-out"
           variant="secondary"
         />
-      ) : null}
-      {version ? (
-        <Text color="secondary" testID="account.version" variant="caption">
-          {t('account.version', { version })}
-        </Text>
       ) : null}
     </Screen>
   );

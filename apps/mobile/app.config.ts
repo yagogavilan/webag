@@ -14,6 +14,17 @@ function readBrand(): string {
 const BRAND = readBrand();
 
 /**
+ * Build de loja (EAS preview/production) com `EXPO_PUBLIC_WEB_URL` ausente, de exemplo ("SEU-DOMINIO") ou inseguro embutiria um endereço
+ * errado nos termos, na política, nas licenças e no cartão (DEC-055: "senão o cartão abre localhost"). Falha o build em vez de publicar.
+ */
+export function assertWebUrl(profile: string | undefined, url: string | undefined): void {
+  if (profile !== 'preview' && profile !== 'production') return;
+  const bad = !url || /SEU-DOMINIO|localhost|127\.0\.0\.1|10\.0\.2\.2/i.test(url) || !/^https:\/\//i.test(url);
+  if (bad) throw new Error(`EXPO_PUBLIC_WEB_URL inválida para o perfil ${profile}: informe o domínio real com https:// (eas.json ou EAS Environment Variables; ver docs/deploy/guia-deploy.md).`);
+}
+assertWebUrl(process.env.EAS_BUILD_PROFILE, process.env.EXPO_PUBLIC_WEB_URL);
+
+/**
  * Configuração do app. Tudo aqui é embutido no binário (público): nada de segredo.
  * Variáveis por ambiente: EXPO_PUBLIC_* (infra/env.example no dev; EAS Environment Variables nos builds, ver eas.json e
  * docs/deploy/checklist-publicacao-lojas.md). Ícone, splash e ícone adaptativo: assets/ (pnpm --filter @webag/mobile assets; símbolo v4a de docs/design/logo).
