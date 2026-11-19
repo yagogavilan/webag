@@ -32,4 +32,25 @@ describe('U8.3. BannerCarousel: pontos no lugar das setas', () => {
     await renderScreen(<BannerCarousel banners={[banner('b1')]} onOpen={jest.fn()} />);
     expect(screen.queryByTestId('home.banner-dots', { includeHiddenElements: true })).toBeNull();
   });
+
+  it('banner sem arte (ou arte que não carregou): desenho do kit com título e botão, nunca caixa vazia', async () => {
+    await renderScreen(
+      <BannerCarousel
+        banners={[banner('b1', { title: 'Tudo para o seu mercado', destination: { type: 'category', id: 'c1', code: null } }), banner('b2', { title: 'Sem destino', destination: { type: 'none', id: null, code: null } })]}
+        onOpen={jest.fn()}
+      />,
+    );
+    expect(screen.getAllByTestId('home.banner-art', { includeHiddenElements: true })).toHaveLength(2);
+    expect(screen.getByText('Tudo para o seu mercado', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(screen.getByText('Ver categoria', { includeHiddenElements: true })).toBeOnTheScreen();
+    // sem destino não há botão (o banner não é tocável)
+    expect(screen.getByText('Sem destino', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(screen.getAllByText(/Ver |Usar /, { includeHiddenElements: true })).toHaveLength(1);
+  });
+
+  it('cupom: o código aparece como adesivo e o botão diz "Usar cupom"', async () => {
+    await renderScreen(<BannerCarousel banners={[banner('b1', { title: 'Frete grátis', destination: { type: 'coupon', id: null, code: 'FRETEGRATIS' } })]} onOpen={jest.fn()} />);
+    expect(screen.getByText('FRETEGRATIS', { includeHiddenElements: true })).toBeOnTheScreen();
+    expect(screen.getByText('Usar cupom', { includeHiddenElements: true })).toBeOnTheScreen();
+  });
 });

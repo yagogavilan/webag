@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, View, useWindowDimensions } from 'reac
 import { RemoteImage } from '../../components/RemoteImage';
 import { t } from '../../i18n';
 import { theme } from '../../theme';
+import { BannerArt } from './BannerArt';
 
 export interface BannerCarouselProps {
   banners: readonly Banner[];
@@ -52,7 +53,7 @@ export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
         keyExtractor={(b) => b.id}
         onMomentumScrollEnd={(e) => setIndex(Math.max(0, Math.min(banners.length - 1, Math.round(e.nativeEvent.contentOffset.x / step))))}
         ref={list}
-        renderItem={({ item }) => (
+        renderItem={({ item, index: i }) => (
           <Pressable
             accessibilityLabel={item.title}
             accessibilityRole={item.destination.type === 'none' ? 'image' : 'button'}
@@ -61,7 +62,14 @@ export function BannerCarousel({ banners, onOpen }: BannerCarouselProps) {
             style={{ width }}
             testID={`home.banner-${item.id}`}
           >
-            <RemoteImage aspectRatio={2} priority="high" radius={theme.radius.xl} urls={item.image.urls} width={width} />
+            <RemoteImage
+              aspectRatio={2}
+              fallback={{ node: <BannerArt banner={item} index={i} width={width} /> }}
+              priority="high"
+              radius={theme.radius.xl}
+              urls={item.image.urls}
+              width={width}
+            />
           </Pressable>
         )}
         showsHorizontalScrollIndicator={false}
