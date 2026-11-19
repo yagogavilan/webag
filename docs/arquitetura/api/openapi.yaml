@@ -8088,6 +8088,21 @@ components:
         createdAt:
           type: string
           format: date-time
+        commissionPct:
+          type: [number, 'null']
+          description: "Comissão efetiva da loja em % (loja > categoria > padrão; 'Você recebe'). Nulo para funcionário (RN-13)"
+        commissionSource:
+          type: [string, 'null']
+          enum: [store, category, default, null]
+        commissionCategories:
+          type: array
+          description: "Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário"
+          items:
+            type: object
+            required: [categoryId, pct]
+            properties:
+              categoryId: { type: string, format: uuid }
+              pct: { type: number }
         role:
           type: string
           description: Só em /stores/mine

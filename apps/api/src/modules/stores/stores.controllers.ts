@@ -47,11 +47,13 @@ export async function presentStore(
   store: Store,
   viewer: 'owner' | 'staff' | 'admin',
 ) {
-  const [extra, logo, cover, open] = await Promise.all([
+  const [extra, logo, cover, open, commission] = await Promise.all([
     services.stores.extraCategoryIds(store.id),
     store.logoAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : Promise.resolve([]),
     store.coverAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.coverAssetId)) : Promise.resolve([]),
     services.stores.openReviewItems(store.id),
+    // RN-13: o financeiro (comissão) é do dono e do admin; o funcionário não vê.
+    viewer === 'staff' ? Promise.resolve(null) : services.stores.commissionView(store.id),
   ]);
   return {
     id: store.id,
@@ -76,6 +78,10 @@ export async function presentStore(
     // O motivo de recusa/suspensão é do lojista saber; o de aprovação não é.
     decisionReason: store.status === 'rejected' || store.status === 'suspended' ? (store.decisionReason ?? store.suspensionReason) : null,
     createdAt: store.createdAt.toISOString(),
+    /** Comissão efetiva (%) e origem; `commissionCategories` só quando a loja não tem taxa própria. Funcionário: nulos. */
+    commissionPct: commission?.pct ?? null,
+    commissionSource: commission?.source ?? null,
+    commissionCategories: commission?.categories ?? [],
   };
 }
 

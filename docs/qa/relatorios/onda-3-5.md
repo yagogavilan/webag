@@ -133,7 +133,7 @@ Arquivos: OLG order-logistics, LOG logistics, LRP logistics-report, S143 sec143-
 | O5-SLA-01 a 05 | OK | EXC (aprovação automática em 24 h, sem estoque vira reembolso), DT50 (lembretes 12 h e 4 h, contestar, mediação) |
 | O5-COL-01, 02, 03, O5-LOJ-01, 02, O5-IDOR-01 | OK | QJ (J9: o motoboy não conclui; só a loja), EXC, DT50, DT49, QC |
 | O5-PNL-01, 02, 03, 04, 05, 06, 09 | OK | SOR, SFN, RT, W-F, **W-R** |
-| O5-PNL-07 | SEM | CSV do extrato sem injeção de fórmula: não testado |
+| O5-PNL-07 | PARC | CSV do extrato: pelo código só leva campos gerados pelo sistema (número com `cell()`, datas, valores), sem texto livre do usuário, logo sem vetor de injeção de fórmula; sem teste automatizado |
 | O5-PNL-08 | PARC | testes do web; conferência numérica contra a comissão efetiva não repetida |
 | O5-ADM-01 | OK | **W-R** (fila, atribuir, `wa.me`) |
 | O5-ADM-02, 03, 04 | OK | ARF, S141, PAY (alertas), auditoria nos testes de logística e estorno |

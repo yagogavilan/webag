@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../platform/config/env.js';
 import { AdminModule } from '../admin/index.js';
+import { FinanceModule } from '../finance/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { MediaModule } from '../media/index.js';
 import { PaymentsModule } from '../payments/index.js';
@@ -18,7 +19,7 @@ import { StoresService } from './stores.service.js';
 import { TeamService } from './team.service.js';
 
 @Module({
-  imports: [AdminModule, IdentityModule, MediaModule, PaymentsModule],
+  imports: [AdminModule, FinanceModule, IdentityModule, MediaModule, PaymentsModule],
   controllers: [StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
   providers: [
     DeliveryQuoteRegistry,

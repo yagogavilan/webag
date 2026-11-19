@@ -43,6 +43,13 @@ export class StoreFinanceController {
     return this.finance.sales(uuidParam(storeId), q.from, q.to);
   }
 
+  /** Série diária (gráfico "Vendas por dia"); mesma permissão e definição de `sales`. */
+  @StorePermission('sales_values')
+  @Get('sales/daily')
+  salesDaily(@Param('storeId') storeId: string, @Query(new ZodPipe(period)) q: z.infer<typeof period>) {
+    return this.finance.salesDaily(uuidParam(storeId), q.from, q.to);
+  }
+
   @StorePermission('finance')
   @Get('summary')
   summary(@Param('storeId') storeId: string, @Query(new ZodPipe(period)) q: z.infer<typeof period>) {

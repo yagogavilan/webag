@@ -5,7 +5,7 @@ import { errors } from '../../platform/http/app-error.js';
 import { categories } from '../admin/db/schema.js';
 import { ParametersService } from '../admin/index.js';
 import { categoryCommissionRates, storeCommissionRates } from './db/schema.js';
-import { MAX_COMMISSION_BP, resolveCommission, type CommissionSource, type RateRow } from './domain/commission.js';
+import { currentRate, MAX_COMMISSION_BP, resolveCommission, type CommissionSource, type RateRow } from './domain/commission.js';
 import { pctToBp } from './domain/money.js';
 
 export interface ResolvedCommission {
@@ -65,6 +65,24 @@ export class CommissionService {
   /** Comissão efetiva hoje da loja e sua origem (WB-105 C5): sem categoria, é a que vale para um item "sem categoria". */
   async effectiveForStore(storeId: string, at = new Date()): Promise<ResolvedCommission> {
     return (await this.resolveForItems(storeId, [null], at))[0]!;
+  }
+
+  /**
+   * "Você recebe" do lojista: comissão efetiva da loja (loja > categoria > padrão) e, quando não há taxa própria da loja, as
+   * categorias com taxa em vigor (o filho herda a da mãe; quem monta a conta sabe a árvore de categorias). Percentuais em %.
+   */
+  async viewForStore(storeId: string, at = new Date()): Promise<{ pct: number; source: CommissionSource; categories: { categoryId: string; pct: number }[] }> {
+    const effective = await this.effectiveForStore(storeId, at);
+    if (effective.source === 'store') return { pct: effective.pctBp / 100, source: 'store', categories: [] };
+    const rows = await this.db.select().from(categoryCommissionRates);
+    const byCategory = new Map<string, RateRow[]>();
+    for (const row of rows) byCategory.set(row.categoryId, [...(byCategory.get(row.categoryId) ?? []), row]);
+    const categoriesWithRate: { categoryId: string; pct: number }[] = [];
+    for (const [categoryId, list] of byCategory) {
+      const rate = currentRate(list, at);
+      if (rate && rate.pctBp !== null) categoriesWithRate.push({ categoryId, pct: rate.pctBp / 100 });
+    }
+    return { pct: (await this.defaultBp()) / 100, source: 'default', categories: categoriesWithRate };
   }
 
   private validate(input: RateInput): { startsAt: Date; endsAt: Date | null } {

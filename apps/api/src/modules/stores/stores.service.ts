@@ -7,6 +7,7 @@ import { AuditService, LegalService, ParametersService } from '../admin/index.js
 import { isUniqueViolation } from '../admin/util.js';
 import { categories, cities } from '../admin/db/schema.js';
 import { storeMembers, users } from '../identity/db/schema.js';
+import { CommissionService } from '../finance/index.js';
 import { MediaService } from '../media/index.js';
 import {
   paymentAccounts,
@@ -49,9 +50,15 @@ export class StoresService {
     private readonly params: ParametersService,
     private readonly audit: AuditService,
     private readonly media: MediaService,
+    private readonly commission: CommissionService,
   ) {}
 
   // ----------------------------------------------------------------- leitura
+
+  /** Comissão efetiva para o "Você recebe" do painel (dono e admin). */
+  commissionView(storeId: string) {
+    return this.commission.viewForStore(storeId);
+  }
 
   async getStore(storeId: string, executor: DbOrTx = this.db): Promise<Store> {
     const [store] = await executor.select().from(stores).where(eq(stores.id, storeId));

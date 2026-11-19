@@ -52,6 +52,27 @@ export class StoreFinanceService {
     return { period: { from, to }, orders: n, gross: money(gross), averageTicket: money(n === 0 ? 0 : Math.round(gross / n)) };
   }
 
+  /**
+   * Série de vendas por dia civil de Brasília para o gráfico do painel: um ponto por dia do período (dia sem venda = zero), com a
+   * MESMA definição de "vendas" do resumo (itens menos cupom da loja, pedidos pagos por data de pagamento). A soma da série é igual
+   * ao `sales` do mesmo período.
+   */
+  async salesDaily(storeId: string, from: string, to: string) {
+    const res = await this.db.execute<{ date: string; orders: number; gross: number }>(sql`
+      with days as (select generate_series(${from}::date, ${to}::date, interval '1 day')::date as d)
+      select to_char(days.d, 'YYYY-MM-DD') as date, count(o.id)::int as orders, coalesce(sum(o.subtotal_cents - o.store_coupon_cents), 0)::int as gross
+      from days
+      left join orders o on o.store_id = ${storeId}::uuid and o.paid_at is not null
+        and o.status in (${sql.join(PAID_STATUSES.map((st) => sql`${st}`), sql`, `)})
+        and (o.paid_at at time zone 'America/Sao_Paulo')::date = days.d
+      group by days.d order by days.d`);
+    return {
+      period: { from, to },
+      timezone: 'America/Sao_Paulo',
+      data: res.rows.map((r) => ({ date: r.date, orders: r.orders, gross: money(r.gross) })),
+    };
+  }
+
   /** Visão do dono: vendas, comissão, tarifa do provedor, estornos, líquido e o que ainda está para entrar. */
   async summary(storeId: string, from: string, to: string) {
     const start = dayStart(from).toISOString();
