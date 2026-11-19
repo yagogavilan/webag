@@ -59,6 +59,9 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
   it('cupons e favoritos de teste existem; cliente seed tem endereço padrão e entra com a senha do seed', async () => {
     const codes = (await ctx.db.select({ code: coupons.code }).from(coupons)).map((c) => c.code);
     expect(codes).toEqual(expect.arrayContaining(['BEMVINDO10', 'FRETEGRATIS', 'LOJA5']));
+    // BUG-023: o cupom de primeira compra do seed tem teto de usos (a mesma regra que o admin impõe, SEC-170d).
+    const [welcome] = await ctx.db.select().from(coupons).where(eq(coupons.code, 'BEMVINDO10'));
+    expect(welcome).toMatchObject({ firstPurchaseOnly: true, maxUses: 100 });
     const [ana] = await ctx.db.select().from(users).where(eq(users.email, 'cliente.ana@seed.webag.local'));
     expect(await ctx.db.select().from(userAddresses).where(eq(userAddresses.userId, ana!.id))).toHaveLength(1);
     expect((await ctx.db.select().from(favorites).where(eq(favorites.userId, ana!.id))).length).toBeGreaterThanOrEqual(3);

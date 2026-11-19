@@ -173,7 +173,7 @@ export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise
   // 4. Cupons (códigos públicos de teste).
   const firstStore = seedStoreRows.find((s) => s.name === 'Moda Passo Firme') ?? seedStoreRows[0];
   const couponSeeds = [
-    { code: 'BEMVINDO10', kind: 'percent' as const, scope: 'platform' as const, value: 10, percentCapCents: 1500, minOrderCents: 3000, firstPurchaseOnly: true, maxUses: null as number | null },
+    { code: 'BEMVINDO10', kind: 'percent' as const, scope: 'platform' as const, value: 10, percentCapCents: 1500, minOrderCents: 3000, firstPurchaseOnly: true, maxUses: 100 as number | null },
     { code: 'FRETEGRATIS', kind: 'free_shipping' as const, scope: 'platform' as const, value: 0, percentCapCents: null, minOrderCents: 5000, firstPurchaseOnly: false, maxUses: 500 },
     ...(firstStore ? [{ code: 'LOJA5', kind: 'fixed' as const, scope: 'store' as const, value: 500, percentCapCents: null, minOrderCents: 2000, firstPurchaseOnly: false, maxUses: 100, storeId: firstStore.id }] : []),
   ];
@@ -181,7 +181,8 @@ export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise
     await db
       .insert(coupons)
       .values({ ...c, storeId: 'storeId' in c ? c.storeId : null, startsAt: new Date(Date.now() - 86_400_000), endsAt: new Date(Date.now() + 90 * 86_400_000) })
-      .onConflictDoNothing();
+      // BUG-023 (SEC-170d): cupom de primeira compra sempre com teto de usos; a semeadura repetida completa o que ficou sem teto, sem mexer em outro campo.
+      .onConflictDoUpdate({ target: sql`upper(${coupons.code})`, set: { maxUses: sql`coalesce(${coupons.maxUses}, ${c.maxUses})` } });
   }
 
   // 5. Favoritos das duas primeiras clientes.

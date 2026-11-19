@@ -67,6 +67,8 @@ services:
       AWS_ENDPOINT_URL: http://storage:9000
       PUBLIC_BUCKET: ${S3_BUCKET_PUBLIC:-webag-public}
       PRIVATE_BUCKET: ${S3_BUCKET_PRIVATE:-webag-private}
+      # BUG-025: origens permitidas no CORS dos buckets (upload pelo navegador); 3101 = painel do lojista em dev
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:3101,http://localhost:8081}
     volumes:
       - ./infra/storage-init.sh:/storage-init.sh:ro
     entrypoint: ['/bin/sh', '/storage-init.sh']
@@ -108,7 +110,7 @@ services:
       NODE_ENV: development
       API_PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:8081}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:3101,http://localhost:8081}
       DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD:-webag_dev_only}@postgres:5432/${POSTGRES_DB:-webag}
       REDIS_URL: redis://redis:6379
       # Dentro da rede do compose os serviços se chamam pelo nome. Quem usa a URL do armazenamento de fora (navegador, app)
