@@ -1867,6 +1867,8 @@ export const ListDeliveriesResponse = zod.object({
   "volumes": zod.int(),
   "note": zod.string().nullish(),
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
+  "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -1918,6 +1920,8 @@ export const GetDeliveryResponse = zod.object({
   "volumes": zod.int(),
   "note": zod.string().nullish(),
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
+  "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -1989,6 +1993,8 @@ export const AssignDeliveryResponse = zod.object({
   "volumes": zod.int(),
   "note": zod.string().nullish(),
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
+  "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2098,6 +2104,8 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "volumes": zod.int(),
   "note": zod.string().nullish(),
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
+  "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2175,6 +2183,8 @@ export const SetDeliveryCostResponse = zod.object({
   "volumes": zod.int(),
   "note": zod.string().nullish(),
   "destination": zod.string().nullish().describe('Bairro e cidade.'),
+  "customerPhoneMasked": zod.string().nullish().describe('Telefone do cliente mascarado \'(11) 9****-7777\' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`'),
+  "contactRevealable": zod.boolean().optional().describe('Há contato a revelar (corrida ativa, antes da retenção)'),
   "fee": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
@@ -2724,6 +2734,12 @@ export const CreateStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -2823,6 +2839,12 @@ export const ListMyStoresResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -2927,6 +2949,12 @@ export const GetStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3070,6 +3098,12 @@ export const UpdateStoreProfileResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3231,6 +3265,12 @@ export const SubmitStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -3886,6 +3926,12 @@ export const GetAdminStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4118,6 +4164,12 @@ export const EditAdminStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4240,6 +4292,12 @@ export const ApproveStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4342,6 +4400,12 @@ export const ReactivateStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4458,6 +4522,12 @@ export const RequestStoreCorrectionResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4569,6 +4639,12 @@ export const RejectStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4680,6 +4756,12 @@ export const SuspendStoreResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -4828,6 +4910,12 @@ export const DecideStoreDataReviewResponse = zod.object({
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "decisionReason": zod.string().nullish(),
   "createdAt": zod.iso.datetime({"offset":true}),
+  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
+  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
+  "commissionCategories": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "pct": zod.number()
+})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
   "role": zod.string().optional().describe('Só em /stores/mine'),
   "settings": zod.object({
   "isOpenNow": zod.boolean(),
@@ -9333,6 +9421,7 @@ export const CreateExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9427,6 +9516,7 @@ export const ListExchangesResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9514,6 +9604,7 @@ export const GetExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9607,6 +9698,7 @@ export const CancelExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9701,6 +9793,7 @@ export const ContestExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9886,6 +9979,7 @@ export const ListStoreExchangesResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -9974,6 +10068,7 @@ export const GetStoreExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -10060,6 +10155,7 @@ export const AcceptExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -10155,6 +10251,7 @@ export const RefuseExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -10256,6 +10353,7 @@ export const ReceiveExchangeResponse = zod.object({
   "id": zod.uuid(),
   "number": zod.string().describe('Protocolo (TR-XXXXX).'),
   "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
   "orderNumber": zod.string(),
   "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
   "type": zod.enum(['withdrawal', 'defect', 'size_color']),
@@ -11119,4 +11217,265 @@ export const FinishWebAccountDeletionResponse = zod.object({
   "status": zod.enum(['completed', 'pending']),
   "effectiveAt": zod.iso.datetime({"offset":true}),
   "cancelableUntil": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * O painel não guarda o JWT no navegador (ADR-003): o BFF pede o ticket e o navegador abre o `/rt` com `auth: { ticket }`. 256 bits, 60 s, USO ÚNICO, atrelado a usuário, sessão e escopo. `scope=store` exige `storeId` e ser membro com a permissão de pedidos (404 caso contrário); `scope=admin` exige perfil com `logistics:read` e 2º fator feito (403); `scope=user` só abre a sala do próprio usuário. A permissão é conferida de novo no handshake; o socket vive o TTL do access token e depois emite `auth.expired`.
+ * @summary Ticket de uso único para abrir o Socket.IO /rt (60 s)
+ */
+export const CreateRealtimeTicketBody = zod.object({
+  "scope": zod.enum(['user', 'store', 'admin']),
+  "storeId": zod.uuid().optional().describe('Obrigatório com scope=store; proibido nos outros')
+})
+
+export const CreateRealtimeTicketResponse = zod.object({
+  "ticket": zod.string().describe('Uso único; abrir o socket com auth: { ticket }'),
+  "expiresInSeconds": zod.int()
+})
+
+
+/**
+ * Permissão da loja `sales_values`. Um ponto por dia civil de Brasília do período (dia sem venda = zero), com a MESMA definição de `getStoreSales`: a soma da série é igual ao total do período.
+ * @summary Vendas por dia (gráfico do painel)
+ */
+export const GetStoreSalesDailyParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreSalesDailyQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.')
+})
+
+export const GetStoreSalesDailyResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "timezone": zod.string(),
+  "data": zod.array(zod.object({
+  "date": zod.iso.date(),
+  "orders": zod.int(),
+  "gross": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}))
+})
+
+
+/**
+ * Super admin, operação, financeiro e suporte (`exchanges:read`). Mais recentes primeiro; sem dado pessoal do cliente. `q` busca pelo número (TR-XXXXX).
+ * @summary Lista de trocas para o admin (AT3/M3)
+ */
+export const listAdminExchangesQueryQMin = 3;
+export const listAdminExchangesQueryQMax = 12;
+
+export const listAdminExchangesQueryLimitMax = 100;
+
+
+
+export const ListAdminExchangesQueryParams = zod.object({
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']).optional(),
+  "storeId": zod.uuid().optional(),
+  "q": zod.string().min(listAdminExchangesQueryQMin).max(listAdminExchangesQueryQMax).optional(),
+  "limit": zod.int().min(1).max(listAdminExchangesQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListAdminExchangesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * `exchanges:read`. O código do balcão nunca vem (`storeCode` nulo).
+ * @summary Detalhe da troca para o admin (linha do tempo, fotos, corridas)
+ */
+export const GetAdminExchangeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetAdminExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "storeId": zod.uuid().optional(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * [HIPÓTESE do design: perfis operação e super admin] Só com a taxa AINDA NÃO paga e sem pagamento em andamento (409 `EXCHANGE_NOT_AWAITING_FEE`, `EXCHANGE_FEE_ALREADY_PAID`, `EXCHANGE_PAYMENT_IN_PROGRESS`, `EXCHANGE_NO_FEE`). Zera a taxa; sem diferença de preço a pagar a troca é liberada na hora (coleta na fila); com diferença, continua aguardando só ela. Motivo obrigatório; histórico da troca e auditoria `exchange.fee_waived`.
+ * @summary Isentar a taxa de coleta (operação e super admin)
+ */
+export const WaiveExchangeFeeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const waiveExchangeFeeBodyReasonMin = 10;
+export const waiveExchangeFeeBodyReasonMax = 160;
+
+
+
+export const WaiveExchangeFeeBody = zod.object({
+  "reason": zod.string().min(waiveExchangeFeeBodyReasonMin).max(waiveExchangeFeeBodyReasonMax)
+})
+
+export const WaiveExchangeFeeResponse = zod.object({
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
 })

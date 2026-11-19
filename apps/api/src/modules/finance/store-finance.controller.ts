@@ -5,8 +5,15 @@ import { Ctx, StorePermission, type RequestContext } from '../../platform/auth/d
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AuditService } from '../admin/index.js';
-import { uuidParam } from '../stores/index.js';
+import { errors } from '../../platform/http/app-error.js';
 import { StoreFinanceService, type StatementLine } from './store-finance.service.js';
+
+/** Local (não importa de `stores`): `stores` depende de `finance` (comissão efetiva) e o ciclo derrubaria o boot. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidParam = (value: string): string => {
+  if (!UUID.test(value)) throw errors.notFound();
+  return value;
+};
 
 const period = z
   .strictObject({ from: z.iso.date(), to: z.iso.date(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() })

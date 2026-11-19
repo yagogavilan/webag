@@ -7,7 +7,7 @@ import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.modu
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
-import { ParametersService } from '../admin/index.js';
+import { AuditService, ParametersService } from '../admin/index.js';
 import { effectivePrice, InventoryService } from '../catalog/index.js';
 import { products, productVariants } from '../catalog/db/schema.js';
 import { LedgerService } from '../finance/index.js';
@@ -105,6 +105,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     private readonly media: MediaService,
     private readonly idempotency: IdempotencyService,
     private readonly ledger: LedgerService,
+    private readonly audit: AuditService,
     readonly bus: ExchangeEventBus,
   ) {}
 
@@ -900,6 +901,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       id: ex.id,
       number: ex.number,
       orderId: ex.orderId,
+      storeId: ex.storeId,
       orderNumber: order?.number ?? '',
       status: ex.status,
       type: ex.type,
@@ -949,6 +951,56 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     const [ex] = await this.db.select().from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, userId)));
     if (!ex) throw errors.notFound('Troca não encontrada.');
     return this.present(ex, 'customer', true);
+  }
+
+  // ------------------------------------------------------------------- admin (AT3/M3)
+
+  /** Lista para o admin (suporte, operação, financeiro): filtros por estado, loja e número; mais recentes primeiro. Sem dado do cliente. */
+  async listForAdmin(query: { status?: ExchangeStatus | undefined; storeId?: string | undefined; q?: string | undefined; cursor?: string | undefined; limit?: unknown }) {
+    const where = and(
+      query.status ? eq(exchangeRequests.status, query.status) : undefined,
+      query.storeId ? eq(exchangeRequests.storeId, query.storeId) : undefined,
+      query.q ? eq(exchangeRequests.number, query.q.toUpperCase()) : undefined,
+    );
+    return this.page(where, 'store', query);
+  }
+
+  async getForAdmin(exchangeId: string) {
+    const [ex] = await this.db.select().from(exchangeRequests).where(eq(exchangeRequests.id, exchangeId));
+    if (!ex) throw errors.notFound('Troca não encontrada.');
+    return this.present(ex, 'store', true);
+  }
+
+  /**
+   * "Isentar a taxa" (AT3, [HIPÓTESE] do design: operação e super admin). Só com a taxa ainda NÃO paga e sem pagamento em andamento:
+   * zera a taxa de coleta; se não sobra diferença de preço a pagar, a troca é liberada na hora (coleta na fila ou código do balcão);
+   * se sobra, continua aguardando só a diferença. Motivo obrigatório, histórico da troca e auditoria. Taxa já paga: 409 (o estorno
+   * da taxa paga é do financeiro, pelo estorno do pedido).
+   */
+  async waiveFee(exchangeId: string, reason: string, ctx: RequestContext): Promise<{ status: ExchangeStatus; fee: ReturnType<typeof money>; totalDue: ReturnType<typeof money> }> {
+    const adminId = ctx.principal?.userId ?? null;
+    let event: ExchangeEvent | null = null;
+    const result = await this.db.transaction(async (tx) => {
+      const { ex, order } = await this.lockFor(tx, exchangeId);
+      if (ex.status !== 'awaiting_fee') throw errors.conflict('EXCHANGE_NOT_AWAITING_FEE', 'Não há taxa a isentar', `A troca está em "${ex.status}".`);
+      if (ex.feePaidAt) throw errors.conflict('EXCHANGE_FEE_ALREADY_PAID', 'A taxa já foi paga', 'A devolução da taxa paga é feita pelo financeiro, pelo estorno do pedido.');
+      if (ex.feeCents <= 0) throw errors.conflict('EXCHANGE_NO_FEE', 'Esta troca não tem taxa de coleta');
+      const [open] = await tx.select({ id: paymentAttempts.id }).from(paymentAttempts).where(and(eq(paymentAttempts.externalReference, `exchange:${ex.id}`), inArray(paymentAttempts.status, ['creating', 'pending', 'pending_3ds'])));
+      if (open) throw errors.conflict('EXCHANGE_PAYMENT_IN_PROGRESS', 'Há um pagamento em andamento', 'Espere o pagamento vencer ou ser concluído antes de isentar a taxa.');
+      const now = new Date();
+      const due = Math.max(ex.differenceCents, 0);
+      const to: ExchangeStatus = due > 0 ? 'awaiting_fee' : 'approved';
+      const note = `Taxa isentada pelo admin: ${reason}`.slice(0, 200);
+      const [updated] = await tx.update(exchangeRequests).set({ feeCents: 0, status: to, feeDueAt: due > 0 ? ex.feeDueAt : null, updatedAt: now }).where(eq(exchangeRequests.id, ex.id)).returning();
+      if (!updated) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', 'A troca mudou enquanto você agia.');
+      await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'awaiting_fee', toStatus: to, actor: 'admin', actorUserId: adminId, reason: note });
+      await this.audit.record(tx, ctx, { action: 'exchange.fee_waived', targetType: 'exchange', targetId: ex.id, before: { feeCents: ex.feeCents, status: ex.status }, after: { feeCents: 0, status: to }, reason });
+      const final = to === 'approved' ? await this.activate(tx, updated, order) : updated;
+      if (to === 'approved') event = this.eventOf(final, 'awaiting_fee', 'approved', 'admin', note, now);
+      return final;
+    });
+    if (event) await this.bus.emit(event);
+    return { status: result.status, fee: money(result.feeCents), totalDue: money(this.dueCents(result)) };
   }
 
   async getForStore(storeId: string, exchangeId: string) {

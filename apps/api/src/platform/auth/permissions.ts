@@ -56,6 +56,9 @@ export const ADMIN_PERMISSIONS = {
   'exchanges:report': [SUPER, OPS, FIN],
   /** WB-110: fila de mediação e decisão sobre trocas contestadas ou com inspeção reprovada; operação e super admin. */
   'exchanges:mediate': [SUPER, OPS],
+  /** AT3/M3: lista e detalhe das trocas (suporte atende o cliente); isentar a taxa é de operação e super admin. */
+  'exchanges:read': [SUPER, OPS, FIN, SUP],
+  'exchanges:waive-fee': [SUPER, OPS],
   /** WB-217: pedidos de titulares (LGPD) são só do super admin; revelar o e-mail do solicitante exige reautenticação e auditoria. */
   'privacy:manage': [SUPER],
   'payments:alerts:read': [SUPER, FIN],

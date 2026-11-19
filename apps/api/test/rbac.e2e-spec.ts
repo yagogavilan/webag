@@ -52,6 +52,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'commissions:write': null,
   'exchanges:report': { method: 'get', path: '/v1/admin/exchanges/report?from=2026-01-01&to=2026-01-31' },
   'exchanges:mediate': { method: 'get', path: '/v1/admin/exchanges/mediations' },
+  'exchanges:read': { method: 'get', path: '/v1/admin/exchange-requests' },
+  'exchanges:waive-fee': null,
   'privacy:manage': { method: 'get', path: '/v1/admin/privacy-requests' },
   'payments:alerts:read': { method: 'get', path: '/v1/admin/payments/alerts' },
   'payments:webhooks:reprocess': null,

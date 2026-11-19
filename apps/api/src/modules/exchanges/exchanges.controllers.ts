@@ -7,6 +7,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { parseIdempotencyKey } from '../idempotency/index.js';
 import { uuidParam } from '../stores/index.js';
+import { EXCHANGE_STATUSES } from './db/schema.js';
 import { EXCHANGE_TYPES } from './domain/eligibility.js';
 import { AuditService } from '../admin/index.js';
 import { ExchangesReportService } from './exchanges-report.service.js';
@@ -216,5 +217,40 @@ export class ExchangeMediationAdminController {
   async decide(@Param('exchangeId') exchangeId: string, @Body(new ZodPipe(mediationDecision)) body: z.infer<typeof mediationDecision>, @Ctx() ctx: RequestContext) {
     await this.exchanges.decideMediation(idParam(exchangeId), body.decision, body.reason, ctx);
     return { status: 'decided' as const };
+  }
+}
+
+const adminListSchema = z.strictObject({
+  status: z.enum(EXCHANGE_STATUSES).optional(),
+  storeId: z.uuid().optional(),
+  q: z.string().trim().min(3).max(12).optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.string().max(4).optional(),
+});
+const waiveSchema = z.strictObject({ reason: z.string().trim().min(10).max(160) });
+
+/** AT3/M3: lista, detalhe e isenção da taxa de coleta. Rotas próprias (`exchange-requests`) para não colidir com `exchanges/mediations`. */
+@Controller('v1/admin/exchange-requests')
+export class ExchangeRequestsAdminController {
+  constructor(private readonly exchanges: ExchangesService) {}
+
+  @AdminOnly('exchanges:read')
+  @Get()
+  list(@Query(new ZodPipe(adminListSchema)) query: z.infer<typeof adminListSchema>) {
+    return this.exchanges.listForAdmin(query);
+  }
+
+  @AdminOnly('exchanges:read')
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.exchanges.getForAdmin(idParam(id));
+  }
+
+  @AdminOnly('exchanges:waive-fee')
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-exchange-waive-fee', limit: 60, windowSeconds: 3600 })
+  @Post(':id/waive-fee')
+  waive(@Param('id') id: string, @Body(new ZodPipe(waiveSchema)) body: z.infer<typeof waiveSchema>, @Ctx() ctx: RequestContext) {
+    return this.exchanges.waiveFee(idParam(id), body.reason, ctx);
   }
 }

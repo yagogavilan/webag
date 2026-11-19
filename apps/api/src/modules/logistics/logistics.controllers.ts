@@ -36,6 +36,12 @@ const presentCourier = (c: typeof couriers.$inferSelect & { deliveriesLast7Days?
  * Corrida para o painel. LGPD (WB-230/RN-18): nome, telefone e endereço do cliente só aparecem enquanto a corrida está ativa;
  * depois de concluída o painel mostra só bairro e cidade. Nunca o CÓDIGO de entrega (esse é do cliente).
  */
+/** (11) 9****-7777: o suficiente para o operador reconhecer o cliente sem ver o número (SEC-144). */
+export const maskPhone = (digits: string | null | undefined): string | null => {
+  const d = (digits ?? '').replace(/\D/g, '');
+  return d.length === 11 ? `(${d.slice(0, 2)}) ${d[2]}****-${d.slice(7)}` : null;
+};
+
 function presentDelivery(d: Delivery & { waitingMinutes?: number | null; sla?: string | null }, detail: boolean, courierName: string | null = null) {
   const contact = (d.contact ?? {}) as Partial<DeliveryMessageData>;
   const active = ACTIVE_STATUSES.includes(d.status);
@@ -55,6 +61,9 @@ function presentDelivery(d: Delivery & { waitingMinutes?: number | null; sla?: s
     volumes: d.volumes,
     note: d.note,
     destination: place.slice(-2).join(', ') || null,
+    /** SEC-144: telefone mascarado (ativa) para a lista; o número inteiro e o endereço só por `contact-reveal` (motivo + auditoria). */
+    customerPhoneMasked: active ? maskPhone(contact.customerPhone) : null,
+    contactRevealable: active && d.contact !== null && d.piiClearedAt === null,
     fee: money(d.feeCents),
     expectedCost: money(d.expectedCostCents),
     cost: d.costCents === null ? null : money(d.costCents),

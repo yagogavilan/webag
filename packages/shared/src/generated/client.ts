@@ -1022,6 +1022,13 @@ export interface Delivery {
      * @nullable
      */
   destination?: string | null;
+  /**
+     * Telefone do cliente mascarado '(11) 9****-7777' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`
+     * @nullable
+     */
+  customerPhoneMasked?: string | null;
+  /** Há contato a revelar (corrida ativa, antes da retenção) */
+  contactRevealable?: boolean;
   fee: Money;
   expectedCost: Money;
   cost: Money | null;
@@ -1476,6 +1483,23 @@ export type StoreReviewItemsItem = {
   reason: string;
 };
 
+/**
+ * @nullable
+ */
+export type StoreCommissionSource = typeof StoreCommissionSource[keyof typeof StoreCommissionSource] | null;
+
+
+export const StoreCommissionSource = {
+  store: 'store',
+  category: 'category',
+  default: 'default',
+} as const;
+
+export type StoreCommissionCategoriesItem = {
+  categoryId: string;
+  pct: number;
+};
+
 export interface Interval {
   /** @pattern ^([01]\d|2[0-3]):[0-5]\d$ */
   start: string;
@@ -1596,6 +1620,15 @@ export interface Store {
   /** @nullable */
   decisionReason?: string | null;
   createdAt: string;
+  /**
+     * Comissão efetiva da loja em % (loja > categoria > padrão; 'Você recebe'). Nulo para funcionário (RN-13)
+     * @nullable
+     */
+  commissionPct?: number | null;
+  /** @nullable */
+  commissionSource?: StoreCommissionSource;
+  /** Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário */
+  commissionCategories?: StoreCommissionCategoriesItem[];
   /** Só em /stores/mine */
   role?: string;
   settings?: StoreSettings;
@@ -4479,6 +4512,7 @@ export interface Exchange {
   /** Protocolo (TR-XXXXX). */
   number: string;
   orderId: string;
+  storeId?: string;
   orderNumber: string;
   status: ExchangeStatus;
   type: ExchangeType;
@@ -5027,6 +5061,58 @@ export interface WebDeletionVerifyRequest {
 
 export interface WebDeletionTicketRequest {
   deleteTicket: string;
+}
+
+export type RealtimeTicketRequestScope = typeof RealtimeTicketRequestScope[keyof typeof RealtimeTicketRequestScope];
+
+
+export const RealtimeTicketRequestScope = {
+  user: 'user',
+  store: 'store',
+  admin: 'admin',
+} as const;
+
+export interface RealtimeTicketRequest {
+  scope: RealtimeTicketRequestScope;
+  /** Obrigatório com scope=store; proibido nos outros */
+  storeId?: string;
+}
+
+export interface RealtimeTicket {
+  /** Uso único; abrir o socket com auth: { ticket } */
+  ticket: string;
+  expiresInSeconds: number;
+}
+
+export type StoreSalesDailyPeriod = {
+  from?: string;
+  to?: string;
+};
+
+export type StoreSalesDailyDataItem = {
+  date: string;
+  orders: number;
+  gross: Money;
+};
+
+export interface StoreSalesDaily {
+  period: StoreSalesDailyPeriod;
+  timezone: string;
+  data: StoreSalesDailyDataItem[];
+}
+
+export interface WaiveExchangeFeeRequest {
+  /**
+     * @minLength 10
+     * @maxLength 160
+     */
+  reason: string;
+}
+
+export interface WaiveExchangeFeeResponse {
+  status: ExchangeStatus;
+  fee: Money;
+  totalDue: Money;
 }
 
 /**
@@ -6311,6 +6397,29 @@ export const ListPrivacyRequestsStatus = {
   in_progress: 'in_progress',
   answered: 'answered',
 } as const;
+
+export type GetStoreSalesDailyParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+};
+
+export type ListAdminExchangesParams = {
+  status?: ExchangeStatus;
+  storeId?: string;
+  /**
+   * @minLength 3
+   * @maxLength 12
+   */
+  q?: string;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -21290,5 +21399,322 @@ export const finishWebAccountDeletion = async (webDeletionTicketRequest: WebDele
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(webDeletionTicketRequest)
+  }
+);}
+
+
+
+export type createRealtimeTicketResponse200 = {
+  data: RealtimeTicket
+  status: 200
+}
+
+export type createRealtimeTicketResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createRealtimeTicketResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createRealtimeTicketResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createRealtimeTicketResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createRealtimeTicketResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createRealtimeTicketResponseSuccess = (createRealtimeTicketResponse200) & {
+  headers: Headers;
+};
+export type createRealtimeTicketResponseError = (createRealtimeTicketResponse400 | createRealtimeTicketResponse401 | createRealtimeTicketResponse403 | createRealtimeTicketResponse404 | createRealtimeTicketResponse429) & {
+  headers: Headers;
+};
+
+export type createRealtimeTicketResponse = (createRealtimeTicketResponseSuccess | createRealtimeTicketResponseError)
+
+export const getCreateRealtimeTicketUrl = () => {
+
+
+
+
+  return `/v1/realtime/tickets`
+}
+
+/**
+ * O painel não guarda o JWT no navegador (ADR-003): o BFF pede o ticket e o navegador abre o `/rt` com `auth: { ticket }`. 256 bits, 60 s, USO ÚNICO, atrelado a usuário, sessão e escopo. `scope=store` exige `storeId` e ser membro com a permissão de pedidos (404 caso contrário); `scope=admin` exige perfil com `logistics:read` e 2º fator feito (403); `scope=user` só abre a sala do próprio usuário. A permissão é conferida de novo no handshake; o socket vive o TTL do access token e depois emite `auth.expired`.
+ * @summary Ticket de uso único para abrir o Socket.IO /rt (60 s)
+ */
+export const createRealtimeTicket = async (realtimeTicketRequest: RealtimeTicketRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createRealtimeTicketResponse> => {
+
+  return apiFetch<createRealtimeTicketResponse>(getCreateRealtimeTicketUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(realtimeTicketRequest)
+  }
+);}
+
+
+
+export type getStoreSalesDailyResponse200 = {
+  data: StoreSalesDaily
+  status: 200
+}
+
+export type getStoreSalesDailyResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreSalesDailyResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreSalesDailyResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreSalesDailyResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreSalesDailyResponseSuccess = (getStoreSalesDailyResponse200) & {
+  headers: Headers;
+};
+export type getStoreSalesDailyResponseError = (getStoreSalesDailyResponse400 | getStoreSalesDailyResponse401 | getStoreSalesDailyResponse403 | getStoreSalesDailyResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreSalesDailyResponse = (getStoreSalesDailyResponseSuccess | getStoreSalesDailyResponseError)
+
+export const getGetStoreSalesDailyUrl = (storeId: string,
+    params: GetStoreSalesDailyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/sales/daily?${stringifiedParams}` : `/v1/stores/${storeId}/finance/sales/daily`
+}
+
+/**
+ * Permissão da loja `sales_values`. Um ponto por dia civil de Brasília do período (dia sem venda = zero), com a MESMA definição de `getStoreSales`: a soma da série é igual ao total do período.
+ * @summary Vendas por dia (gráfico do painel)
+ */
+export const getStoreSalesDaily = async (storeId: string,
+    params: GetStoreSalesDailyParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreSalesDailyResponse> => {
+
+  return apiFetch<getStoreSalesDailyResponse>(getGetStoreSalesDailyUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAdminExchangesResponse200 = {
+  data: ExchangePage
+  status: 200
+}
+
+export type listAdminExchangesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminExchangesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminExchangesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminExchangesResponseSuccess = (listAdminExchangesResponse200) & {
+  headers: Headers;
+};
+export type listAdminExchangesResponseError = (listAdminExchangesResponse400 | listAdminExchangesResponse401 | listAdminExchangesResponse403) & {
+  headers: Headers;
+};
+
+export type listAdminExchangesResponse = (listAdminExchangesResponseSuccess | listAdminExchangesResponseError)
+
+export const getListAdminExchangesUrl = (params?: ListAdminExchangesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/exchange-requests?${stringifiedParams}` : `/v1/admin/exchange-requests`
+}
+
+/**
+ * Super admin, operação, financeiro e suporte (`exchanges:read`). Mais recentes primeiro; sem dado pessoal do cliente. `q` busca pelo número (TR-XXXXX).
+ * @summary Lista de trocas para o admin (AT3/M3)
+ */
+export const listAdminExchanges = async (params?: ListAdminExchangesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminExchangesResponse> => {
+
+  return apiFetch<listAdminExchangesResponse>(getListAdminExchangesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type getAdminExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminExchangeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminExchangeResponseSuccess = (getAdminExchangeResponse200) & {
+  headers: Headers;
+};
+export type getAdminExchangeResponseError = (getAdminExchangeResponse401 | getAdminExchangeResponse403 | getAdminExchangeResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminExchangeResponse = (getAdminExchangeResponseSuccess | getAdminExchangeResponseError)
+
+export const getGetAdminExchangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/exchange-requests/${id}`
+}
+
+/**
+ * `exchanges:read`. O código do balcão nunca vem (`storeCode` nulo).
+ * @summary Detalhe da troca para o admin (linha do tempo, fotos, corridas)
+ */
+export const getAdminExchange = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminExchangeResponse> => {
+
+  return apiFetch<getAdminExchangeResponse>(getGetAdminExchangeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type waiveExchangeFeeResponse200 = {
+  data: WaiveExchangeFeeResponse
+  status: 200
+}
+
+export type waiveExchangeFeeResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type waiveExchangeFeeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type waiveExchangeFeeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type waiveExchangeFeeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type waiveExchangeFeeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type waiveExchangeFeeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type waiveExchangeFeeResponseSuccess = (waiveExchangeFeeResponse200) & {
+  headers: Headers;
+};
+export type waiveExchangeFeeResponseError = (waiveExchangeFeeResponse400 | waiveExchangeFeeResponse401 | waiveExchangeFeeResponse403 | waiveExchangeFeeResponse404 | waiveExchangeFeeResponse409 | waiveExchangeFeeResponse429) & {
+  headers: Headers;
+};
+
+export type waiveExchangeFeeResponse = (waiveExchangeFeeResponseSuccess | waiveExchangeFeeResponseError)
+
+export const getWaiveExchangeFeeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/exchange-requests/${id}/waive-fee`
+}
+
+/**
+ * [HIPÓTESE do design: perfis operação e super admin] Só com a taxa AINDA NÃO paga e sem pagamento em andamento (409 `EXCHANGE_NOT_AWAITING_FEE`, `EXCHANGE_FEE_ALREADY_PAID`, `EXCHANGE_PAYMENT_IN_PROGRESS`, `EXCHANGE_NO_FEE`). Zera a taxa; sem diferença de preço a pagar a troca é liberada na hora (coleta na fila); com diferença, continua aguardando só ela. Motivo obrigatório; histórico da troca e auditoria `exchange.fee_waived`.
+ * @summary Isentar a taxa de coleta (operação e super admin)
+ */
+export const waiveExchangeFee = async (id: string,
+    waiveExchangeFeeRequest: WaiveExchangeFeeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<waiveExchangeFeeResponse> => {
+
+  return apiFetch<waiveExchangeFeeResponse>(getWaiveExchangeFeeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(waiveExchangeFeeRequest)
   }
 );}

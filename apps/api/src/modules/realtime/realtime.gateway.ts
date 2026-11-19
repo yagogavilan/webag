@@ -4,7 +4,10 @@ import { and, eq } from 'drizzle-orm';
 import type { Server, Socket } from 'socket.io';
 import { adminHasPermission, memberHasStorePermission } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../../platform/config/env.js';
 import { PrincipalService, SessionService } from '../identity/index.js';
+import { RealtimeTicketService } from './realtime-ticket.service.js';
 import { storeMembers } from '../identity/db/schema.js';
 import { orders } from '../orders/db/schema.js';
 
@@ -34,6 +37,8 @@ export class RealtimeGateway implements OnGatewayInit {
   constructor(
     private readonly sessions: SessionService,
     private readonly principals: PrincipalService,
+    private readonly tickets: RealtimeTicketService,
+    private readonly config: ConfigService<Env, true>,
     @Inject(DRIZZLE) private readonly db: Db,
   ) {}
 
@@ -47,7 +52,9 @@ export class RealtimeGateway implements OnGatewayInit {
   }
 
   private async authenticate(socket: Socket): Promise<void> {
-    const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
+    const auth = (socket.handshake.auth as { token?: unknown; ticket?: unknown } | undefined) ?? {};
+    if (typeof auth.ticket === 'string' && auth.ticket.length > 0) return this.authenticateByTicket(socket, auth.ticket);
+    const token = auth.token;
     if (typeof token !== 'string' || token.length === 0 || token.length > 2_000) throw new Error('no token');
     const claims = await this.sessions.verifyAccess(token);
     if (!claims) throw new Error('bad token');
@@ -63,15 +70,44 @@ export class RealtimeGateway implements OnGatewayInit {
     if (principal.adminProfile && principal.mfaVerified && adminHasPermission(principal.adminProfile, 'logistics:read')) await socket.join(ADMIN_OPS_ROOM);
     // Token vencido: o servidor desconecta com o motivo; o cliente renova o token e reconecta (ADR-004).
     const exp = (claims as { exp?: number }).exp;
-    if (exp) {
-      const ms = Math.max(exp * 1000 - Date.now(), 0);
-      data.expTimer = setTimeout(() => {
-        socket.emit('auth.expired', { reason: 'token_expired' });
-        socket.disconnect(true);
-      }, ms);
-      data.expTimer.unref();
-      socket.once('disconnect', () => clearTimeout(data.expTimer));
+    this.scheduleExpiry(socket, exp ? exp * 1000 - Date.now() : null);
+  }
+
+  /**
+   * Handshake por ticket de uso único (DEC-045): o ticket é atrelado a usuário, sessão e escopo. A sessão precisa continuar ativa;
+   * as permissões são conferidas de novo agora; só as salas do escopo pedido são abertas. O socket vive no máximo o TTL do access
+   * token e depois pede `auth.expired` (o BFF emite outro ticket).
+   */
+  private async authenticateByTicket(socket: Socket, ticket: string): Promise<void> {
+    const claims = await this.tickets.redeem(ticket);
+    if (!claims) throw new Error('bad ticket');
+    const loaded = await this.principals.load(claims.userId, claims.sessionId);
+    if (!loaded) throw new Error('no session');
+    const { principal } = loaded;
+    const data = socket.data as SocketData;
+    data.userId = principal.userId;
+    data.sessionId = principal.sessionId;
+    await socket.join(userRoom(principal.userId));
+    if (claims.scope === 'store' && claims.storeId) {
+      const [member] = await this.db.select().from(storeMembers).where(and(eq(storeMembers.userId, principal.userId), eq(storeMembers.storeId, claims.storeId)));
+      if (!member || !memberHasStorePermission(member, 'orders')) throw new Error('no membership');
+      await socket.join(storeRoom(claims.storeId));
+    } else if (claims.scope === 'admin') {
+      if (!principal.adminProfile || !principal.mfaVerified || !adminHasPermission(principal.adminProfile, 'logistics:read')) throw new Error('not admin');
+      await socket.join(ADMIN_OPS_ROOM);
     }
+    this.scheduleExpiry(socket, this.config.get('JWT_ACCESS_TTL_SECONDS', { infer: true }) * 1000);
+  }
+
+  private scheduleExpiry(socket: Socket, ms: number | null): void {
+    if (ms === null) return;
+    const data = socket.data as SocketData;
+    data.expTimer = setTimeout(() => {
+      socket.emit('auth.expired', { reason: 'token_expired' });
+      socket.disconnect(true);
+    }, Math.max(ms, 0));
+    data.expTimer.unref();
+    socket.once('disconnect', () => clearTimeout(data.expTimer));
   }
 
   /** O cliente pede para acompanhar UM pedido (tela de acompanhamento). Recusa em silêncio de pedido alheio: mesma resposta de "não existe". */

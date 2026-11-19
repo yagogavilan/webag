@@ -68,6 +68,8 @@ tags:
     description: "Pedido do cliente (criar, acompanhar, cancelar, pagamento) e painel de pedidos da loja (lista, detalhe, comanda, aceitar, recusar, andamento, cancelar)"
   - name: privacy
     description: LGPD (O6.1) - excluir conta, exportar dados, pedidos de titulares e retenção
+  - name: realtime
+    description: Tempo real (Socket.IO /rt) - tickets de uso único para os painéis
 security:
   - bearerAuth: []
 paths:
@@ -6729,6 +6731,135 @@ paths:
           $ref: '#/components/responses/Gone'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/realtime/tickets:
+    post:
+      tags: [realtime]
+      operationId: createRealtimeTicket
+      summary: Ticket de uso único para abrir o Socket.IO /rt (60 s)
+      description: "O painel não guarda o JWT no navegador (ADR-003): o BFF pede o ticket e o navegador abre o `/rt` com `auth: { ticket }`. 256 bits, 60 s, USO ÚNICO, atrelado a usuário, sessão e escopo. `scope=store` exige `storeId` e ser membro com a permissão de pedidos (404 caso contrário); `scope=admin` exige perfil com `logistics:read` e 2º fator feito (403); `scope=user` só abre a sala do próprio usuário. A permissão é conferida de novo no handshake; o socket vive o TTL do access token e depois emite `auth.expired`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeTicketRequest'
+      responses:
+        '200':
+          description: Ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeTicket'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/stores/{storeId}/finance/sales/daily:
+    get:
+      tags: [finance]
+      operationId: getStoreSalesDaily
+      summary: Vendas por dia (gráfico do painel)
+      description: "Permissão da loja `sales_values`. Um ponto por dia civil de Brasília do período (dia sem venda = zero), com a MESMA definição de `getStoreSales`: a soma da série é igual ao total do período."
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Série
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreSalesDaily' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/exchange-requests:
+    get:
+      tags: [exchanges]
+      operationId: listAdminExchanges
+      summary: Lista de trocas para o admin (AT3/M3)
+      description: "Super admin, operação, financeiro e suporte (`exchanges:read`). Mais recentes primeiro; sem dado pessoal do cliente. `q` busca pelo número (TR-XXXXX)."
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ExchangeStatus' } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, schema: { type: string, minLength: 3, maxLength: 12 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/exchange-requests/{id}:
+    get:
+      tags: [exchanges]
+      operationId: getAdminExchange
+      summary: Detalhe da troca para o admin (linha do tempo, fotos, corridas)
+      description: "`exchanges:read`. O código do balcão nunca vem (`storeCode` nulo)."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Troca
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/exchange-requests/{id}/waive-fee:
+    post:
+      tags: [exchanges]
+      operationId: waiveExchangeFee
+      summary: Isentar a taxa de coleta (operação e super admin)
+      description: "[HIPÓTESE do design: perfis operação e super admin] Só com a taxa AINDA NÃO paga e sem pagamento em andamento (409 `EXCHANGE_NOT_AWAITING_FEE`, `EXCHANGE_FEE_ALREADY_PAID`, `EXCHANGE_PAYMENT_IN_PROGRESS`, `EXCHANGE_NO_FEE`). Zera a taxa; sem diferença de preço a pagar a troca é liberada na hora (coleta na fila); com diferença, continua aguardando só ela. Motivo obrigatório; histórico da troca e auditoria `exchange.fee_waived`."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaiveExchangeFeeRequest'
+      responses:
+        '200':
+          description: Isentada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WaiveExchangeFeeResponse' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -7588,6 +7719,8 @@ components:
         volumes: { type: integer }
         note: { type: [string, 'null'] }
         destination: { type: [string, 'null'], description: 'Bairro e cidade.' }
+        customerPhoneMasked: { type: [string, 'null'], description: "Telefone do cliente mascarado '(11) 9****-7777' enquanto a corrida está ativa (SEC-144); o número inteiro e o endereço só por `contact-reveal`" }
+        contactRevealable: { type: boolean, description: 'Há contato a revelar (corrida ativa, antes da retenção)' }
         fee: { $ref: '#/components/schemas/Money' }
         expectedCost: { $ref: '#/components/schemas/Money' }
         cost: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
@@ -10306,6 +10439,7 @@ components:
         id: { type: string, format: uuid }
         number: { type: string, description: 'Protocolo (TR-XXXXX).' }
         orderId: { type: string, format: uuid }
+        storeId: { type: string, format: uuid }
         orderNumber: { type: string }
         status: { $ref: '#/components/schemas/ExchangeStatus' }
         type: { $ref: '#/components/schemas/ExchangeType' }
@@ -10738,3 +10872,44 @@ components:
       required: [deleteTicket]
       properties:
         deleteTicket: { type: string }
+    RealtimeTicketRequest:
+      type: object
+      additionalProperties: false
+      required: [scope]
+      properties:
+        scope: { type: string, enum: [user, store, admin] }
+        storeId: { type: string, format: uuid, description: "Obrigatório com scope=store; proibido nos outros" }
+    RealtimeTicket:
+      type: object
+      required: [ticket, expiresInSeconds]
+      properties:
+        ticket: { type: string, description: "Uso único; abrir o socket com auth: { ticket }" }
+        expiresInSeconds: { type: integer, example: 60 }
+    StoreSalesDaily:
+      type: object
+      required: [period, timezone, data]
+      properties:
+        period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        timezone: { type: string, example: America/Sao_Paulo }
+        data:
+          type: array
+          items:
+            type: object
+            required: [date, orders, gross]
+            properties:
+              date: { type: string, format: date }
+              orders: { type: integer }
+              gross: { $ref: '#/components/schemas/Money' }
+    WaiveExchangeFeeRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 160 }
+    WaiveExchangeFeeResponse:
+      type: object
+      required: [status, fee, totalDue]
+      properties:
+        status: { $ref: '#/components/schemas/ExchangeStatus' }
+        fee: { $ref: '#/components/schemas/Money' }
+        totalDue: { $ref: '#/components/schemas/Money' }
