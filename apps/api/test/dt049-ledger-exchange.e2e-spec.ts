@@ -54,16 +54,16 @@ describe('Ledger da troca e da logística (DT-049)', () => {
     return { d, ex, attempt: attempt! };
   }
 
-  it('taxa paga: R$ 24,00 entram no provedor; R$ 9,00 são receita da Webag e R$ 15,00 ficam a favor da loja; o lançamento é idempotente e fecha', async () => {
+  it('taxa paga: R$ 24,00 entram no provedor; R$ 9,00 são receita da Webag e a diferença de R$ 15,00 vai à loja menos a comissão (I12: split); o lançamento é idempotente e fecha', async () => {
     const { d, ex, attempt } = await paidSizeExchange();
     expect(attempt.amountCents).toBe(2_400);
-    expect(await byKind(d.orderId, 'exchange_fee')).toEqual(['exchange_fee_revenue:credit:900', 'merchant_payable:credit:1500', 'provider_clearing:debit:2400']);
+    expect(await byKind(d.orderId, 'exchange_fee')).toEqual(['commission_revenue:credit:150', 'exchange_fee_revenue:credit:900', 'merchant_payable:credit:1350', 'provider_clearing:debit:2400']);
     const b = await ledger.balances(d.orderId);
     expect(b).toMatchObject({ exchangeFeeRevenue: 900, exchangeReceivedCents: 2_400, exchangeRefundedCents: 0 });
     expect((await ledger.verifyOrder(d.orderId)).ok).toBe(true);
     // repetir o webhook/aprovação não lança de novo
     await ctx.http.post(`/v1/dev/payments/${attempt.id}/approve`).set(bearer(d.buyer.user.accessToken)).send({});
-    expect(await byKind(d.orderId, 'exchange_fee')).toHaveLength(3);
+    expect(await byKind(d.orderId, 'exchange_fee')).toHaveLength(4);
     expect(await ctx.db.select().from(exchangeRequests).where(eq(exchangeRequests.id, ex.id))).toHaveLength(1);
   });
 
@@ -71,7 +71,7 @@ describe('Ledger da troca e da logística (DT-049)', () => {
     const { d, ex, attempt } = await paidSizeExchange();
     await ctx.http.post(`/v1/exchanges/${ex.id}/cancel`).set(bearer(d.buyer.user.accessToken)).send({}).expect(200);
     expect((await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, attempt.id))).map((r) => r.amountCents)).toEqual([2_400]);
-    expect(await byKind(d.orderId, 'exchange_fee_refund')).toEqual(['exchange_fee_revenue:debit:900', 'merchant_payable:debit:1500', 'provider_clearing:credit:2400']);
+    expect(await byKind(d.orderId, 'exchange_fee_refund')).toEqual(['commission_revenue:debit:150', 'exchange_fee_revenue:debit:900', 'merchant_payable:debit:1350', 'provider_clearing:credit:2400']);
     const b = await ledger.balances(d.orderId);
     expect(b).toMatchObject({ exchangeFeeRevenue: 0, exchangeReceivedCents: 2_400, exchangeRefundedCents: 2_400 });
     expect((await ledger.verifyOrder(d.orderId)).ok).toBe(true);
