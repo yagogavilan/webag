@@ -1,0 +1,1 @@
+ALTER TABLE "user_addresses" ADD COLUMN "pin_verified" boolean DEFAULT false NOT NULL;
