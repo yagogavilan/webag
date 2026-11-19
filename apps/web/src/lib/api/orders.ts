@@ -1,4 +1,4 @@
-import type { OrderStatus, OrderTimelineEntry, StoreOrder, StoreOrderAction, StoreOrderCounts, StoreOrderPage, StoreOrderSummary } from '@webag/shared';
+import type { StoreOrderTicket, OrderStatus, OrderTimelineEntry, StoreOrder, StoreOrderAction, StoreOrderCounts, StoreOrderPage, StoreOrderSummary } from '@webag/shared';
 import { apiRequest } from './client';
 
 /**
@@ -31,6 +31,7 @@ export interface OrderListQuery {
 export const ordersApi = {
   list: (storeId: string, query: OrderListQuery = {}) => apiRequest<StoreOrderPage>(L, base(storeId), { query: { scope: query.scope, number: query.number, cursor: query.cursor, limit: query.limit } }),
   counts: (storeId: string) => apiRequest<StoreOrderCounts>(L, `${base(storeId)}/counts`),
+  ticket: (storeId: string, orderId: string) => apiRequest<StoreOrderTicket>(L, `${base(storeId)}/${orderId}/ticket`),
   get: (storeId: string, orderId: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}`),
   accept: (storeId: string, orderId: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/accept`, { method: 'POST' }),
   refuse: (storeId: string, orderId: string, reason: string) => apiRequest<StoreOrder>(L, `${base(storeId)}/${orderId}/refuse`, { method: 'POST', body: { reason } }),

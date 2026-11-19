@@ -5,6 +5,9 @@ import { Banner, Button, Dialog, TextArea } from '@/components/ui';
 import { saveErrorMessage } from '@/lib/api/messages';
 import { DiffView, type DiffRow } from './diff-view';
 
+/** Erro com texto já pronto para o lojista/admin (a tela que chamou sabe o que dizer). */
+export class UserMessageError extends Error {}
+
 export const REASON_MIN = 10;
 export const REASON_MAX = 200;
 const REASON_HARD_MAX = 500;
@@ -63,7 +66,7 @@ export function ReasonDialog({ title, description, diff, withReason = true, quic
       await onConfirm(reason.trim());
       onClose();
     } catch (caught) {
-      setError(saveErrorMessage(caught));
+      setError(caught instanceof UserMessageError ? caught.message : saveErrorMessage(caught));
       setBusy(false);
     }
   }

@@ -58,3 +58,8 @@ a {
   .wb-line,
   .wb-enter > * { animation: none !important; }
 }
+
+/* Impressão (comanda, extratos): sem cabeçalho, menus e faixas do painel. */
+@media print {
+  [data-chrome] { display: none !important; }
+}

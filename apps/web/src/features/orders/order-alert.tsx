@@ -136,6 +136,11 @@ function OrderAlert({ order, queue }: { order: StoreOrderSummary; queue: number 
               {remaining > 0 ? `Responda em ${formatCountdown(remaining)}` : 'Prazo encerrado. O pedido está sendo cancelado.'}
             </p>
           ) : null}
+          {runtime.sound.enabled ? null : (
+            <Banner tone="danger" testId={T('sound-off')} action={<Button size="sm" onClick={() => void runtime.sound.enable()} data-testid={T('sound-enable')}>Ligar som</Button>}>
+              Alertas sem som. Ligue o som para ouvir os próximos pedidos.
+            </Banner>
+          )}
           {online ? null : <p className="wb-text-caption" style={{ margin: 0 }}>Conecte-se para aceitar. O pedido continua esperando.</p>}
           {error ? <Banner tone="danger">{error}</Banner> : null}
         </div>

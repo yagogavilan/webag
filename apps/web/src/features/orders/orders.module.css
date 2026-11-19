@@ -124,3 +124,6 @@
   .sheet { border: 0; padding: 0; width: 100%; max-width: none; }
   .noPrint { display: none !important; }
 }
+
+.paperChoice { min-height: var(--wb-size-touch-min); padding: 0 var(--wb-space-4); border: var(--wb-border-width-strong) solid transparent; border-radius: var(--wb-radius-pill); background: var(--wb-color-surface-sunken); color: var(--wb-color-text-primary); cursor: pointer; font: inherit; }
+.paperChoiceOn { background: var(--wb-color-brand-100); border-color: var(--wb-color-action-primary); color: var(--wb-color-brand-800); }
