@@ -8,6 +8,7 @@ import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { theme } from '../../theme';
+import { productFallback } from '../catalog/image';
 import { Price } from '../catalog/Price';
 import type { CartLine } from './model';
 import { warningText } from './state';
@@ -34,7 +35,7 @@ function CartLineItemBase({ line, quantity, onQuantity, onRemove }: CartLineItem
         accessibilityLabel={[line.name, line.variantLabel, unavailable ? t('cart.warnSoldOut') : `${quantity} x ${formatMoney(line.unitPriceCents)}, ${t('cart.itemTotal', { value: total })}`].filter(Boolean).join(', ')}
         style={styles.row}
       >
-        <RemoteImage alt={line.name} height={THUMB} radius={theme.radius.lg} urls={line.urls} width={THUMB} />
+        <RemoteImage alt={line.name} fallback={productFallback(line.name)} height={THUMB} radius={theme.radius.lg} urls={line.urls} width={THUMB} />
         <View style={styles.texts}>
           <Text numberOfLines={2} variant="bodyStrong">
             {line.name}

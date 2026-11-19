@@ -26,6 +26,7 @@ import { StoreCoverCard } from '../../../src/features/catalog/StoreCoverCard';
 import { StoreRow } from '../../../src/features/catalog/StoreRow';
 import { HomeHero } from '../../../src/features/catalog/HomeHero';
 import { OfferBento } from '../../../src/features/catalog/OfferBento';
+import { productFallback } from '../../../src/features/catalog/image';
 import { MiniBag } from '../../../src/features/cart/MiniBag';
 import { t } from '../../../src/i18n';
 import { RemoteImage } from '../../../src/components/RemoteImage';
@@ -263,7 +264,7 @@ export default function CustomerHome() {
                 <Text allowFontScaling={false} style={styles.bestNumber} variant="numeralXl">
                   {i + 1}
                 </Text>
-                <RemoteImage height={theme.size.thumb} radius={theme.radius.lg} urls={p.urls} width={theme.size.thumb} />
+                <RemoteImage fallback={productFallback(p.name)} height={theme.size.thumb} radius={theme.radius.lg} urls={p.urls} width={theme.size.thumb} />
                 <View style={styles.bestInfo}>
                   <Text numberOfLines={2} variant="bodyStrong">
                     {p.name}

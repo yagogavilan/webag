@@ -9,6 +9,7 @@ import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { theme } from '../../theme';
 import { closedLabel } from './format';
+import { productFallback } from './image';
 import { Price } from './Price';
 
 /** Dado mínimo para desenhar um produto, venha ele da busca, da home, da loja ou dos favoritos. */
@@ -79,7 +80,7 @@ export function ProductTile({ product, width, onPress, tone = 'light', testID }:
   return (
     <Pressy accessibilityLabel={a11yLabel(product)} accessibilityRole="button" onPress={onPress} style={[styles.tile, { width }]} testID={testID}>
       <View style={styles.photoBox}>
-        <RemoteImage aspectRatio={4 / 5} radius={theme.radius.card - 2} style={ink ? styles.photoInk : undefined} urls={product.urls} width={width} />
+        <RemoteImage aspectRatio={4 / 5} fallback={productFallback(product.name, ink)} radius={theme.radius.card - 2} style={ink ? styles.photoInk : undefined} urls={product.urls} width={width} />
         {hasPromo && product.discountPercent ? <OfferSeal label={t('catalog.off', { pct: product.discountPercent })} style={styles.seal} /> : null}
       </View>
       <View style={styles.info}>

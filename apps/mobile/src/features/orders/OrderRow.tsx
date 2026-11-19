@@ -7,6 +7,8 @@ import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { theme } from '../../theme';
+import { logoFallback } from '../catalog/image';
+import { coverColor } from '../catalog/StoreRow';
 import { firstItemLabel, formatDateTime, formatHour, isActive, itemCountLabel, presentStatus, summaryA11y, summaryEta } from './model';
 
 export interface OrderRowProps {
@@ -33,7 +35,7 @@ export function OrderRow({ order, onPress, onPay, onReorder, onHelp }: OrderRowP
         style={styles.row}
         testID={`orders.item-${order.id}`}
       >
-        <RemoteImage alt="" height={48} radius={14} urls={order.store.logo.urls} width={48} />
+        <RemoteImage alt="" fallback={logoFallback(order.store.name, coverColor(order.store.id))} height={48} radius={14} urls={order.store.logo.urls} width={48} />
         <View style={styles.texts}>
           <Text numberOfLines={1} variant="bodyStrong">
             {order.store.name}

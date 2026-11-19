@@ -7,6 +7,7 @@ import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { Pressy } from '../../motion';
 import { theme } from '../../theme';
+import { logoFallback } from './image';
 import { coverColor, initials } from './StoreRow';
 
 export interface StoreCoverCardProps {
@@ -37,7 +38,7 @@ export function StoreCoverCard({ store, categoryName, width, onPress, testID }: 
         </View>
         <Sticker label={t('home.newBadge')} rotate={-6} style={styles.badge} />
         {store.logo.urls && Object.keys(store.logo.urls).length > 0 ? (
-          <RemoteImage height={theme.size.avatarMd} radius={theme.radius.lg} style={styles.logo} urls={store.logo.urls} width={theme.size.avatarMd} />
+          <RemoteImage fallback={logoFallback(store.name, color)} height={theme.size.avatarMd} radius={theme.radius.lg} style={styles.logo} urls={store.logo.urls} width={theme.size.avatarMd} />
         ) : (
           <View style={styles.logo}>
             <Text style={{ color }} variant="title2">

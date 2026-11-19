@@ -18,7 +18,9 @@ import { Skeleton } from '../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
+import { logoFallback } from '../../src/features/catalog/image';
 import { ProductTile } from '../../src/features/catalog/ProductTile';
+import { coverColor } from '../../src/features/catalog/StoreRow';
 import { useSetFavorite, type FavoriteKind } from '../../src/features/favorites/hooks';
 import { t } from '../../src/i18n';
 import { useOnline } from '../../src/lib/useOnline';
@@ -137,7 +139,7 @@ export default function FavoritesScreen() {
                 style={styles.storeMain}
                 testID={`favorites.item-${item.store.id}`}
               >
-                <RemoteImage height={theme.size.avatarMd} urls={item.store.logo.urls} width={theme.size.avatarMd} />
+                <RemoteImage fallback={logoFallback(item.store.name, coverColor(item.store.id))} height={theme.size.avatarMd} urls={item.store.logo.urls} width={theme.size.avatarMd} />
                 <View style={styles.flex}>
                   <Text numberOfLines={1} variant="bodyStrong">
                     {item.store.name}

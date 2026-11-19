@@ -15,6 +15,7 @@ import { MiniBag } from '../../../src/features/cart/MiniBag';
 import { Pressy } from '../../../src/motion';
 import { ReportButton } from '../../../src/features/report/ReportSheet';
 import { deliveryEta } from '../../../src/features/catalog/eta';
+import { logoFallback } from '../../../src/features/catalog/image';
 import { deliveryUnavailable } from '../../../src/features/catalog/unavailable';
 import { coverColor, initials } from '../../../src/features/catalog/StoreRow';
 import { IconButton } from '../../../src/components/IconButton';
@@ -301,7 +302,14 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
     <View>
       <View style={{ height: COVER_H + top }}>
         {hasCover ? (
-          <RemoteImage height={COVER_H + top} priority="high" radius={0} urls={store.cover.urls} width={coverWidth} />
+          <RemoteImage
+            fallback={{ art: objectFor(store.name + ' ' + (store.description ?? '')), color: '#F2EFE9', ground: 'rgba(0,0,0,0.35)', background: color }}
+            height={COVER_H + top}
+            priority="high"
+            radius={0}
+            urls={store.cover.urls}
+            width={coverWidth}
+          />
         ) : (
           <DiagonalBlock color={color} height={COVER_H + top} style={StyleSheet.absoluteFill}>
             <View pointerEvents="none" style={styles.coverArt}>
@@ -330,7 +338,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           <View style={styles.logoShadow} />
           <View style={styles.logo}>
             {hasLogo ? (
-              <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={60} radius={16} urls={store.logo.urls} width={60} />
+              <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} fallback={logoFallback(store.name, color)} height={60} radius={16} urls={store.logo.urls} width={60} />
             ) : (
               <Text style={{ color }} variant="title1">
                 {initials(store.name)}

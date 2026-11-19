@@ -1,5 +1,4 @@
 import { StyleSheet, View } from 'react-native';
-import { ProductArt, objectFor } from '../../art/ProductArt';
 import { Money } from '../../components/Money';
 import { RemoteImage } from '../../components/RemoteImage';
 import { OfferSeal } from '../../components/Sticker';
@@ -8,6 +7,7 @@ import { t } from '../../i18n';
 import { formatMoney } from '../../lib/format';
 import { Pressy } from '../../motion';
 import { theme } from '../../theme';
+import { productFallback } from './image';
 import type { ProductTileData } from './ProductTile';
 
 /** Cartão de oferta sobre noite: foto em estúdio escuro, selo lima só com preço antigo visível ao lado do preço. */
@@ -17,8 +17,7 @@ function OfferCard({ product, tall, onPress, testID }: { product: ProductTileDat
   return (
     <Pressy accessibilityLabel={a11y} accessibilityRole="button" onPress={onPress} style={[styles.offer, tall && styles.tall]} testID={testID}>
       <View style={[styles.photo, tall && styles.photoTall]}>
-        <RemoteImage height={tall ? 232 : 100} radius={theme.radius.lg} urls={product.urls} width={tall ? 156 : 156} style={styles.img} />
-        {!product.urls || Object.keys(product.urls).length === 0 ? <ProductArt color="#C7CCD3" ground="rgba(0,0,0,0.4)" name={objectFor(product.name)} size={tall ? 140 : 90} style={styles.art} /> : null}
+        <RemoteImage fallback={productFallback(product.name, true)} height={tall ? 232 : 100} radius={theme.radius.lg} urls={product.urls} width={156} style={styles.img} />
         {hasPromo && product.discountPercent ? <OfferSeal label={t('catalog.off', { pct: product.discountPercent })} style={styles.seal} /> : null}
       </View>
       <Text numberOfLines={2} style={styles.name} variant="captionStrong">
@@ -62,7 +61,6 @@ const styles = StyleSheet.create({
   photo: { height: 100, borderRadius: theme.radius.lg, backgroundColor: theme.color.neutral[800], overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   photoTall: { height: 232 },
   img: { position: 'absolute', width: '100%' },
-  art: { position: 'absolute' },
   seal: { position: 'absolute', left: 10, top: 10 },
   name: { color: theme.color.neutral[0] },
   prices: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },

@@ -67,14 +67,22 @@ const KEYWORDS: [RegExp, ObjectName][] = [
   [/bolsa|mochila|handbag|shopping-bag|acess/i, 'purse'],
   [/cal[cç]a|jeans|bermuda/i, 'jeans'],
   [/perfum|beleza|cosm|sparkle|cuidado/i, 'perfume'],
-  [/fone|headphone|eletr|celular|device|laptop|televis|tecnolog/i, 'phones'],
+  [/fone|headphone|eletr|celular|device|laptop|televis|tecnolog|caixa de som|bluetooth|[áa]udio|inform[áa]tica/i, 'phones'],
   [/vaso|plant|flor|casa|decor|armchair|house|lightbulb|jardim|m[oó]vel/i, 'vase'],
   [/caderno|livro|papel|pencil|book|escola|backpack|brinq|game|baby/i, 'notebook'],
-  [/ra[cç][aã]o|pet|dog|paw/i, 'racao'],
+  [/ra[cç][aã]o|pet|dog|paw|bolinha|coleira|osso|cachorro|gato|c[aã]o\b/i, 'racao'],
   [/cesta|mercad|basket|fruta|aliment|carrot|bread|pizza|bebida|cake|coffee|cooking|storefront/i, 'cesta'],
   [/rel[oó]gio|watch|diamond|joia/i, 'relogio'],
 ];
 export function objectFor(label: string): ObjectName {
   for (const [re, obj] of KEYWORDS) if (re.test(label)) return obj;
   return 'cesta';
+}
+
+/** Cor base estável por semente (nome do produto): peças vizinhas na lista não ficam todas da mesma cor. Só tons sólidos do kit (escuros ou médios, legíveis sobre o papel). */
+const ART_COLORS = ['#4E6E91', '#C7792E', '#8A3B22', '#6A1580', '#4A6630', '#2C2632'] as const;
+export function artColorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return ART_COLORS[h % ART_COLORS.length] as string;
 }

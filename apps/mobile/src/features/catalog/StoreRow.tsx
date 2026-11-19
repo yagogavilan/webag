@@ -10,6 +10,7 @@ import { theme } from '../../theme';
 import { closedLabel, formatDistance, formatFee, formatRating, ratingA11y } from './format';
 import { deliveryUnavailable } from './unavailable';
 import { deliveryEta } from './eta';
+import { logoFallback } from './image';
 
 export interface StoreRowProps {
   store: StoreCard;
@@ -99,7 +100,7 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
         <View style={styles.logoShadow} />
         <View style={styles.logo}>
           {store.logo.urls && Object.keys(store.logo.urls).length > 0 ? (
-            <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={52} radius={theme.radius.lg - 2} urls={store.logo.urls} width={52} />
+            <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} fallback={logoFallback(store.name, color)} height={52} radius={theme.radius.lg - 2} urls={store.logo.urls} width={52} />
           ) : (
             <Text allowFontScaling={false} style={[styles.initials, { color }]} variant="title2">
               {initials(store.name)}

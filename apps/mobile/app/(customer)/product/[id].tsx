@@ -24,7 +24,9 @@ import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { closedLabel, formatRating, ratingA11y } from '../../../src/features/catalog/format';
+import { logoFallback, productFallback } from '../../../src/features/catalog/image';
 import { Price } from '../../../src/features/catalog/Price';
+import { coverColor } from '../../../src/features/catalog/StoreRow';
 import { useProductQuery, useReviewsQuery, useStoreQuery, useDeliveryPoint } from '../../../src/features/catalog/queries';
 import { ReviewItem } from '../../../src/features/catalog/ReviewItem';
 import { buildGroups, findVariant, missingAttributes, selectOption, shownPrice, variantLabel, type Selection } from '../../../src/features/catalog/variants';
@@ -354,7 +356,7 @@ export default function ProductScreen() {
           ) : null}
 
           <Pressable accessibilityLabel={`${t('product.seeStore')}, ${product.store.name}`} accessibilityRole="button" onPress={() => router.push(`/store/${product.store.id}`)} style={styles.storeRow} testID="product.store">
-            {store.data ? <RemoteImage height={40} radius={theme.radius.lg} urls={store.data.logo.urls} width={40} /> : <Storefront color={theme.color.text.secondary} size={theme.size.iconMd} />}
+            {store.data ? <RemoteImage fallback={logoFallback(store.data.name, coverColor(store.data.id))} height={40} radius={theme.radius.lg} urls={store.data.logo.urls} width={40} /> : <Storefront color={theme.color.text.secondary} size={theme.size.iconMd} />}
             <Text style={styles.flex} variant="bodyStrong">
               {product.store.name}
             </Text>
@@ -475,7 +477,7 @@ function Gallery({ images, name, width }: { images: { id: string; urls: Record<s
         ref={list}
         renderItem={({ item, index: i }) => (
           <Pressable accessibilityLabel={`${t('product.gallery', { n: i + 1, total: images.length })}. ${t('product.galleryOpen')}`} accessibilityRole="imagebutton" onPress={() => setFull(true)} style={{ width }}>
-            <RemoteImage alt={name} aspectRatio={1} priority={i === 0 ? 'high' : 'normal'} radius={0} urls={item.urls} width={width} />
+            <RemoteImage alt={name} aspectRatio={1} fallback={productFallback(name)} priority={i === 0 ? 'high' : 'normal'} radius={0} urls={item.urls} width={width} />
           </Pressable>
         )}
         showsHorizontalScrollIndicator={false}
