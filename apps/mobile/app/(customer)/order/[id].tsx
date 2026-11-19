@@ -21,6 +21,8 @@ import { getPushStatus, openNotificationSettings, type PushStatus } from '../../
 import { useCancelForDelay, useCancelOrder, useRequestCancel } from '../../../src/features/orders/hooks';
 import { deliveryNotice } from '../../../src/features/orders/delivery-state';
 import { CompensationTicket } from '../../../src/features/coupons/CompensationTicket';
+import { readRefund } from '../../../src/features/orders/refund';
+import { RefundBlock } from '../../../src/features/orders/RefundBlock';
 import { OrderNotice } from '../../../src/features/orders/OrderNotice';
 import { SUPPORT_WHATSAPP } from '../../../src/features/checkout/config';
 import { TextField } from '../../../src/components/TextField';
@@ -180,6 +182,7 @@ export default function OrderScreen() {
   };
 
   const notice = deliveryNotice(order, now);
+  const refund = readRefund(order);
   const pendingRequest = order.cancelRequest?.status === 'pending' || order.delay?.cancelRequest?.status === 'pending';
 
   const talkToWebag = async () => {
@@ -218,7 +221,7 @@ export default function OrderScreen() {
         <Banner actionLabel={t('confirmed.pushSettings')} onAction={() => void openNotificationSettings()} testID="order.banner-push" text={t('confirmed.pushBlocked')} tone="info" />
       ) : null}
 
-      <OrderHero hint={hint} order={order} refund={notice?.kind === 'cancelled-late' ? formatMoney(order.summary.total.amount) : null} />
+      <OrderHero hint={hint} order={order} refund={notice?.kind === 'cancelled-late' ? formatMoney(refund?.amountCents ?? order.summary.total.amount) : null} />
       {notice ? (
         <OrderNotice
           busy={cancelLate.isPending}
@@ -232,6 +235,7 @@ export default function OrderScreen() {
         />
       ) : null}
 
+      <RefundBlock refund={refund} />
       <CompensationTicket compensation={order.compensation ?? null} onOpen={() => router.push('/coupons' as never)} />
 
       <StatusTimeline order={order} />

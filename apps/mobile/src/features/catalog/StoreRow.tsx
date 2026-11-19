@@ -7,7 +7,8 @@ import { Text } from '../../components/Text';
 import { t } from '../../i18n';
 import { Pressy } from '../../motion';
 import { theme } from '../../theme';
-import { closedLabel, formatDeliveryBack, formatDistance, formatFee, formatRating, ratingA11y } from './format';
+import { closedLabel, formatDistance, formatFee, formatRating, ratingA11y } from './format';
+import { deliveryUnavailable } from './unavailable';
 import { deliveryEta } from './eta';
 
 export interface StoreRowProps {
@@ -52,15 +53,16 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
   const range = pickup ? null : deliveryEta(store.delivery);
   const outOfArea = !pickup && range === null;
   // Entregas fechadas por horário da logística (BUG-016): a loja segue listada e a entrega volta a uma hora certa
-  const backWhen = outOfArea ? formatDeliveryBack(store.delivery.logisticsOpensAt) : null;
-  const backLabel = backWhen ? t('ops.chipBack', { when: backWhen }) : null;
+  // A causa vem de `unavailableReason` (WB-260) ou é inferida do que a API já manda; nunca "fora da área" por omissão
+  const unavailable = outOfArea ? deliveryUnavailable(store.delivery) : null;
+  const backLabel = unavailable?.back ? unavailable.chip : null;
   const eta = range ? `Chega entre ${range.start} e ${range.end}` : null;
   const status = store.open ? t('catalog.open') : closedLabel(store.opensAt);
   const label = [
     store.name,
     categoryName,
     ratingA11y(store.rating),
-    outOfArea ? (backLabel ?? t('catalog.outOfArea')) : eta,
+    unavailable ? unavailable.chip : eta,
     meta,
     status,
     store.delivery.freeShipping && !pickup ? t('catalog.freeShipping') : null,
@@ -79,7 +81,7 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
         <View style={styles.chip}>
           {outOfArea ? (
             <Text allowFontScaling={false} style={styles.chipText} testID={backLabel ? 'store-card.delivery-back' : undefined} variant="captionStrong">
-              {backLabel ?? t('catalog.outOfArea')}
+              {unavailable?.chip}
             </Text>
           ) : range ? (
             <>

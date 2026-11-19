@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react-native';
 import { fromServer } from '../src/features/cart/model';
 import { deriveCta } from '../src/features/cart/state';
 import { formatDeliveryBack } from '../src/features/catalog/format';
+import { deliveryUnavailable, readUnavailableReason } from '../src/features/catalog/unavailable';
 import { StoreRow } from '../src/features/catalog/StoreRow';
 import { deriveGate } from '../src/features/checkout/state';
 import { toCheckoutFailure } from '../src/features/checkout/errors';
@@ -34,10 +35,16 @@ describe('Entregas fechadas ou pausadas (BUG-016, RN-18)', () => {
     expect(screen.getByTestId('row').props.accessibilityLabel).toContain('Entrega volta amanhã às 9h');
   });
 
-  it('cartão da loja fora da área (sem hora de volta) segue dizendo "Fora da área de entrega"', async () => {
+  it('cartão da loja sem causa conhecida (API antiga) diz "Entrega indisponível", nunca "Fora da área" por omissão (WB-260 C4)', async () => {
     await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false } })} testID="row" />);
-    expect(screen.getByText('Fora da área de entrega')).toBeOnTheScreen();
+    expect(screen.getByText('Entrega indisponível')).toBeOnTheScreen();
+    expect(screen.queryByText('Fora da área de entrega')).toBeNull();
     expect(screen.queryByTestId('store-card.delivery-back')).toBeNull();
+  });
+
+  it('cartão da loja além do teto da faixa (a API já diz pela faixa) segue sendo "Longe demais para entregar"', async () => {
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...storeCard().delivery, available: false, etaMaxMinutes: 200 } })} testID="row" />);
+    expect(screen.getByText('Longe demais para entregar')).toBeOnTheScreen();
   });
 
   const closed = (opensAt: string | null) => {
@@ -71,5 +78,37 @@ describe('Entregas fechadas ou pausadas (BUG-016, RN-18)', () => {
   it('o servidor recusa o pedido com LOGISTICS_CLOSED: mensagem clara, nunca "2 h"', () => {
     const failure = toCheckoutFailure(new ApiError({ kind: 'problem', status: 422, code: 'LOGISTICS_CLOSED' }));
     expect(failure).toMatchObject({ kind: 'blocked', message: 'As entregas estão fechadas agora. Retire na loja ou tente mais tarde.' });
+  });
+});
+
+describe('Motivo real da entrega indisponível (WB-260, contrato proposto: StoreDelivery.unavailableReason)', () => {
+  const base = { ...storeCard().delivery, available: false };
+
+  it('OUT_OF_RANGE: "Longe demais para entregar", mesmo com hora de logística no payload', async () => {
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'OUT_OF_RANGE' } as never })} testID="row" />);
+    expect(screen.getByText('Longe demais para entregar')).toBeOnTheScreen();
+  });
+
+  it('LOGISTICS_CLOSED com hora: "Entrega volta amanhã às 9h"; sem hora, "Entrega fechada agora" (não inventa hora)', async () => {
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(1, 9) } as never })} testID="row" />);
+    expect(screen.getByTestId('store-card.delivery-back')).toHaveTextContent('Entrega volta amanhã às 9h');
+  });
+
+  it('LOGISTICS_PAUSED sem previsão: "Entrega pausada", nunca "fora da área"', async () => {
+    await renderScreen(<StoreRow onPress={jest.fn()} store={storeCard({ delivery: { ...base, unavailableReason: 'LOGISTICS_PAUSED' } as never })} testID="row" />);
+    expect(screen.getByText('Entrega pausada')).toBeOnTheScreen();
+    expect(screen.queryByText(/fora da área/i)).toBeNull();
+  });
+
+  it('textos por causa (função pura) e valor desconhecido do servidor vira "indisponível"', () => {
+    expect(deliveryUnavailable({ available: false, unavailableReason: 'OUT_OF_RANGE' }).title).toBe('Longe demais para entregar no seu endereço');
+    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_PAUSED' }).title).toBe('Entregas pausadas agora');
+    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_PAUSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas pausadas agora, voltam às 17h');
+    expect(deliveryUnavailable({ available: false, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: at(0, 17) }, { now: NOON }).title).toBe('Entregas voltam às 17h');
+    expect(deliveryUnavailable({ available: false, unavailableReason: 'NOVO_MOTIVO' }).kind).toBe('unknown');
+    expect(readUnavailableReason({ unavailableReason: 'LOGISTICS_CLOSED' })).toBe('LOGISTICS_CLOSED');
+    expect(readUnavailableReason({})).toBeNull();
+    // a loja já traz `logisticsClosed`: available=false sem ele só pode ser distância
+    expect(deliveryUnavailable({ available: false }, { logisticsKnown: true }).kind).toBe('out-of-range');
   });
 });

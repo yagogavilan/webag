@@ -15,6 +15,7 @@ import { MiniBag } from '../../../src/features/cart/MiniBag';
 import { Pressy } from '../../../src/motion';
 import { ReportButton } from '../../../src/features/report/ReportSheet';
 import { deliveryEta } from '../../../src/features/catalog/eta';
+import { deliveryUnavailable, readUnavailableReason } from '../../../src/features/catalog/unavailable';
 import { coverColor, initials } from '../../../src/features/catalog/StoreRow';
 import { IconButton } from '../../../src/components/IconButton';
 import { RemoteImage } from '../../../src/components/RemoteImage';
@@ -23,7 +24,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
-import { closedLabel, closesAtToday, formatDeliveryBack, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
+import { closedLabel, closesAtToday, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
 import { fromBrowseItem, ProductTile } from '../../../src/features/catalog/ProductTile';
 import { modeStore, useDeliveryPoint, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
 import { AboutStoreSheet, ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
@@ -276,17 +277,18 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
   const status = store.open ? (closes ? t('store.openUntil', { time: closes }) : t('store.open')) : closedLabel(store.opensAt);
   const fee = formatFee(d.feeCents, { approximate });
   const range = pointDefined ? deliveryEta(d) : deliveryEta({ ...d, available: null });
-  const etaBand = range ? t('store.etaBand', { start: range.start, end: range.end }) : t('catalog.outOfArea');
+  const noDelivery = pointDefined && d.available === false;
+  // Logística fora do horário ou pausada (BUG-016/RN-18): só retirada; "Entregas voltam às 9h" quando há hora, "pausadas agora" quando não
+  // A causa vem de `unavailableReason` (WB-260) ou é inferida do que a API já manda; sem causa: "Entrega indisponível agora"
+  const unavailable = noDelivery || d.logisticsClosed || readUnavailableReason(d) ? deliveryUnavailable(d, { logisticsKnown: true }) : null;
+  const opsClosed = unavailable?.kind === 'closed' || unavailable?.kind === 'paused';
+  const etaBand = range ? t('store.etaBand', { start: range.start, end: range.end }) : (unavailable?.chip ?? t('catalog.outOfArea'));
   const freeAbove = d.freeAboveCents > 0 ? t('store.couponFree', { value: formatMoney(d.freeAboveCents) }) : null;
   const metaA11y = t('store.meta', {
     eta: etaBand,
     fee: fee ?? 'a calcular',
     distance: d.distanceM !== null ? formatDistance(d.distanceM) : 'distância indisponível',
   });
-  const noDelivery = pointDefined && d.available === false;
-  // Logística fora do horário ou pausada (BUG-016/RN-18): só retirada; "Entregas voltam às 9h" quando há hora, "pausadas agora" quando não
-  const deliveryBack = d.logisticsClosed ? formatDeliveryBack(d.logisticsOpensAt) : null;
-  const deliveryPaused = Boolean(d.logisticsClosed) && deliveryBack === null;
   const pickupEta = store.pickup.enabled ? formatEta(store.pickup.prepMinMinutes, store.pickup.prepMaxMinutes) : null;
   const favoriteLabel = favorite.isFavorite ? t('store.unfavorite', { name: store.name }) : t('store.favorite', { name: store.name });
   const color = coverColor(store.id);
@@ -349,7 +351,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
         {!store.open ? (
           <Banner testID="store.closed-banner" text={store.opensAt ? t('store.closedBanner', { label: closedLabel(store.opensAt) }) : t('store.pausedBanner')} tone="info" />
         ) : null}
-        {d.logisticsClosed ? (
+        {opsClosed && unavailable ? (
           <Banner
             actionLabel={store.pickup.offered ? t('ops.pickupHere') : undefined}
             onAction={
@@ -361,7 +363,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
                 : undefined
             }
             testID="store.ops-banner"
-            text={`${deliveryPaused ? t('ops.paused') : t('ops.back', { when: deliveryBack ?? '' })}. ${deliveryPaused ? t('ops.pausedSub') : t('ops.backSub')}`}
+            text={`${unavailable.title}${unavailable.sub ? `. ${unavailable.sub}` : ''}`}
             tone="info"
           />
         ) : noDelivery ? (
@@ -374,7 +376,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
               } else router.push('/addresses');
             }}
             testID="store.no-delivery-banner"
-            text={t('store.noDeliveryTitle')}
+            text={unavailable?.kind === 'unknown' ? `${unavailable.title}.` : t('store.noDeliveryTitle')}
             tone="warning"
           />
         ) : null}
@@ -392,7 +394,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           <View style={[styles.stat, styles.statMid]} testID="store.eta">
             <Text variant="title1">{range ? `${range.start} – ${range.end}` : '—'}</Text>
             <Text color="secondary" variant="caption">
-              {range ? t('store.etaCaption') : d.logisticsClosed ? (deliveryPaused ? t('ops.chipPaused') : t('ops.chipBack', { when: deliveryBack ?? '' })) : t('catalog.outOfArea')}
+              {range ? t('store.etaCaption') : (unavailable?.chip ?? t('catalog.outOfArea'))}
             </Text>
           </View>
           <View style={styles.stat}>

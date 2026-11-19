@@ -42,7 +42,13 @@ export function useCheckoutCart(mode: ReceiveMode) {
     apply(cart);
     return cart;
   }, [apply, params]);
-  return { authed, params, cart: query.data, isLoading: query.isLoading, isError: query.isError && !query.data, checkFailed: query.isError && Boolean(query.data), isFetching: query.isFetching, refetch: () => void query.refetch(), apply, accept };
+  /** Relê a sacola agora (a faixa e a revisão novas) e devolve o que o servidor calculou. */
+  const reload = useCallback(async (): Promise<Cart> => {
+    const cart = await fetchCart(params);
+    apply(cart);
+    return cart;
+  }, [apply, params]);
+  return { authed, params, cart: query.data, isLoading: query.isLoading, isError: query.isError && !query.data, checkFailed: query.isError && Boolean(query.data), isFetching: query.isFetching, refetch: () => void query.refetch(), apply, accept, reload };
 }
 
 /**
@@ -98,7 +104,7 @@ export function useSubmitOrder() {
       } catch (error) {
         const failure = toCheckoutFailure(error);
         // A chave "grudou" num corpo que o servidor já conhece: a próxima tentativa começa com chave nova
-        if (failure.kind === 'key-reused' || failure.kind === 'declined') holder.current = null;
+        if (failure.kind === 'key-reused' || failure.kind === 'declined' || failure.kind === 'eta-changed') holder.current = null;
         return { ok: false, failure };
       } finally {
         if (timer.current) clearTimeout(timer.current);

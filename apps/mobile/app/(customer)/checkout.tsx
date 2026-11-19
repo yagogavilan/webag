@@ -18,6 +18,8 @@ import { PriceSummary } from '../../src/features/cart/PriceSummary';
 import { formatOpensAt } from '../../src/features/catalog/format';
 import { modeStore } from '../../src/features/catalog/queries';
 import { ChangedSheet } from '../../src/features/checkout/ChangedSheet';
+import { EtaChangedSheet } from '../../src/features/checkout/EtaChangedSheet';
+import type { EtaLike } from '../../src/features/catalog/eta';
 import { isCheckoutEnabled, isSecureCardUrl } from '../../src/features/checkout/config';
 import { openExternal } from '../../src/features/legal/open-link';
 import { cardIntentMemory } from '../../src/features/checkout/card-intent';
@@ -52,6 +54,8 @@ export default function CheckoutScreen() {
   const [needsCpf, setNeedsCpf] = useState(false);
   const [failure, setFailure] = useState<CheckoutFailure | null>(null);
   const [changedOpen, setChangedOpen] = useState(false);
+  // 409 ETA_CHANGED (WB-261): faixa vista na sacola x faixa nova do servidor; nenhum pedido foi criado
+  const [etaChange, setEtaChange] = useState<{ before: EtaLike | null; after: EtaLike | null } | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const [serverChanges, setServerChanges] = useState<CheckoutChange[]>([]);
@@ -142,6 +146,9 @@ export default function CheckoutScreen() {
         if (f.cart) cart.apply(f.cart);
         setServerChanges(f.changes);
         setChangedOpen(true);
+        return;
+      case 'eta-changed':
+        setEtaChange({ before: view?.eta ?? null, after: f.eta });
         return;
       case 'payer-document':
         setNeedsCpf(true);
@@ -236,6 +243,20 @@ export default function CheckoutScreen() {
     }
   };
 
+  const onEtaAccept = async () => {
+    setAccepting(true);
+    try {
+      // a faixa nova passa a ser a da sacola; o cliente já viu o horário e toca em Pagar de novo
+      await cart.reload();
+      void haptic('success');
+      setEtaChange(null);
+    } catch {
+      toast.show(t('etaChanged.failed'));
+    } finally {
+      setAccepting(false);
+    }
+  };
+
   const failureBanner = failure ? <FailureBanner failure={failure} onChangeCard={() => setFailure(null)} onPix={() => {
           setFailure(null);
           setMethod('pix');
@@ -310,6 +331,17 @@ export default function CheckoutScreen() {
         {cart.checkFailed ? <Banner testID="checkout.check-error" text={t('checkout.checkFailed')} tone="warning" actionLabel={t('common.tryAgain')} onAction={cart.refetch} /> : null}
         {summary ? <PriceSummary couponCode={view.coupon?.applied ? view.coupon.code : undefined} pickup={mode === 'pickup'} summary={summary} /> : null}
       </View>
+      <EtaChangedSheet
+        accepting={accepting}
+        after={etaChange?.after ?? null}
+        before={etaChange?.before ?? null}
+        onAccept={() => void onEtaAccept()}
+        onBack={() => {
+          setEtaChange(null);
+          router.replace('/cart');
+        }}
+        visible={etaChange !== null}
+      />
       <ChangedSheet
         accepting={accepting}
         changes={changes.length > 0 ? changes : serverChanges}

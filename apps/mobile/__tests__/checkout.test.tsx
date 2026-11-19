@@ -54,6 +54,43 @@ describe('S3. Checkout', () => {
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith({ pathname: '/pay/[orderId]', params: { orderId: orderFixture().id } }));
   });
 
+  it('409 ETA_CHANGED (WB-261, contrato proposto): nenhum pedido, folha "O horário mudou" com antes e agora; continuar relê a sacola', async () => {
+    await login();
+    const at = (h: number, m: number) => new Date(2026, 10, 19, h, m).toISOString();
+    mockFetch.mockResolvedValue(serverCart({ delivery: { mode: 'delivery', addressId: null, available: true, distanceM: 1200, feeFromCents: 500, estimated: false, eta: { fromAt: at(18, 45), toAt: at(19, 20) } } }));
+    mockPlace.mockRejectedValueOnce(new ApiError({ kind: 'problem', status: 409, code: 'ETA_CHANGED', body: { eta: { fromAt: at(19, 0), toAt: at(19, 35) } } }));
+    await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
+    await fireEvent.press(await screen.findByTestId('checkout.submit'));
+
+    expect(await screen.findByTestId('cart.eta-changed-sheet')).toBeOnTheScreen();
+    expect(screen.getByText('O horário mudou')).toBeOnTheScreen();
+    expect(screen.getByText('18:45 – 19:20')).toBeOnTheScreen();
+    expect(screen.getByTestId('cart.eta-changed-new')).toHaveTextContent('19:00 – 19:35');
+    expect(router.replace).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/pay/[orderId]' }));
+
+    const reads = mockFetch.mock.calls.length;
+    await fireEvent.press(screen.getByTestId('cart.eta-changed-accept'));
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(reads));
+    await waitFor(() => expect(screen.queryByTestId('cart.eta-changed-new')).toBeNull());
+
+    // o cliente toca em Pagar de novo: chave de idempotência nova (a anterior ficou presa à resposta 409)
+    mockPlace.mockResolvedValueOnce(orderFixture({ status: 'awaiting_payment' }));
+    await fireEvent.press(screen.getByTestId('checkout.submit'));
+    await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(2));
+    expect(mockPlace.mock.calls[1]?.[1]).not.toBe(mockPlace.mock.calls[0]?.[1]);
+  });
+
+  it('409 ETA_CHANGED: "Voltar à sacola" leva à sacola', async () => {
+    await login();
+    mockPlace.mockRejectedValueOnce(new ApiError({ kind: 'problem', status: 409, code: 'ETA_CHANGED', body: {} }));
+    await renderScreen(<CheckoutScreen />);
+    await fireEvent.press(await screen.findByTestId('checkout.pay-pix'));
+    await fireEvent.press(await screen.findByTestId('checkout.submit'));
+    await fireEvent.press(await screen.findByTestId('cart.eta-changed-back'));
+    expect(router.replace).toHaveBeenCalledWith('/cart');
+  });
+
   it('toque duplo cria um pedido só', async () => {
     await login();
     let release: (v: unknown) => void = () => undefined;

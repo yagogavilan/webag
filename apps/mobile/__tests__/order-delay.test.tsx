@@ -231,3 +231,38 @@ describe('Compensação por atraso na tela do pedido (F2, WB-254)', () => {
     expect(everyText()).not.toMatch(/entrega grátis/i);
   });
 });
+
+describe('Estorno com valor, meio e status (WB-259, contrato proposto: Order.refund)', () => {
+  const cancelled = (refund: unknown) => order({ status: 'cancelled', cancellation: { by: 'customer', reason: 'Cancelado por atraso', at: iso(-5) } as never, refund } as Partial<Order>);
+
+  it('PIX em andamento: "Estorno de R$ X", status, prazo por meio e frase única para o leitor de tela', async () => {
+    mockOrder.mockResolvedValue(cancelled({ amountCents: 15679, method: 'pix', status: 'processing' }));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByText(/Estorno de R\$\s156,79/)).toBeOnTheScreen();
+    expect(screen.getByText('Em andamento')).toBeOnTheScreen();
+    expect(screen.getByText('Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil.')).toBeOnTheScreen();
+    expect(screen.getByLabelText(/Estorno de R\$\s156,79, Em andamento\. Volta para a conta que pagou o PIX/)).toBeOnTheScreen();
+    expect(everyText()).not.toMatch(/\b2 ?h\b/i);
+  });
+
+  it('cartão: "em até 2 faturas, conforme o seu banco", sem data prometida; o valor do herói é o do estorno (parcial), não o total', async () => {
+    mockOrder.mockResolvedValue(cancelled({ amountCents: 4000, method: 'card', status: 'processing' }));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByText('Aparece na fatura do cartão em até 2 faturas, conforme o seu banco.')).toBeOnTheScreen();
+    expect(screen.getByTestId('tracking.refund')).toHaveTextContent(/R\$\s40,00/);
+  });
+
+  it('concluído: só diz que foi devolvido', async () => {
+    mockOrder.mockResolvedValue(cancelled({ amountCents: 15679, method: 'pix', status: 'completed' }));
+    await renderScreen(<OrderScreen />);
+    expect(await screen.findByText('Concluído')).toBeOnTheScreen();
+    expect(screen.getByText('O valor já foi devolvido.')).toBeOnTheScreen();
+  });
+
+  it('sem `refund`, ou com forma inesperada: a seção não aparece e o resto da tela funciona', async () => {
+    mockOrder.mockResolvedValue(cancelled({ amountCents: 'muito', method: 'boleto', status: 'x' }));
+    await renderScreen(<OrderScreen />);
+    await screen.findByTestId('order.screen');
+    expect(screen.queryByTestId('order.refund')).toBeNull();
+  });
+});

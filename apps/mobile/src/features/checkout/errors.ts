@@ -1,6 +1,7 @@
 import type { Cart, CheckoutChange } from '@webag/shared';
 import { ApiError } from '../../api/problem';
 import { t, type MessageKey } from '../../i18n';
+import { readEta, type EtaLike } from '../catalog/eta';
 
 /**
  * Falhas do `POST /v1/orders`, por `code` estável (contrato-api). A tela decide a ação; o texto vem daqui. `detail` do
@@ -9,6 +10,8 @@ import { t, type MessageKey } from '../../i18n';
 export type CheckoutFailure =
   | { kind: 'offline' }
   | { kind: 'cart-changed'; changes: CheckoutChange[]; cart: Cart | null }
+  /** 409 `ETA_CHANGED` (WB-261, contrato proposto): o fim da faixa piorou entre a sacola e o pedido; `eta` é a faixa nova, se a API a mandou. */
+  | { kind: 'eta-changed'; eta: EtaLike | null }
   | { kind: 'store-closed'; opensAt: string | null }
   | { kind: 'stock'; name: string | null }
   | { kind: 'payer-document' }
@@ -42,6 +45,8 @@ export function toCheckoutFailure(error: unknown): CheckoutFailure {
         changes: Array.isArray(error.body.changes) ? (error.body.changes as CheckoutChange[]) : [],
         cart: typeof error.body.cart === 'object' && error.body.cart !== null ? (error.body.cart as Cart) : null,
       };
+    case 'ETA_CHANGED':
+      return { kind: 'eta-changed', eta: readEta(error.body) };
     case 'STORE_CLOSED':
       return { kind: 'store-closed', opensAt: typeof error.body.opensAt === 'string' ? error.body.opensAt : null };
     case 'STOCK_CONFLICT':
