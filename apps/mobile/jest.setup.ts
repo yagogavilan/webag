@@ -87,3 +87,8 @@ jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(async () => ({ canceled: true, assets: [] })),
   launchImageLibraryAsync: jest.fn(async () => ({ canceled: true, assets: [] })),
 }));
+
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
+jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn(), activateKeepAwakeAsync: jest.fn(), deactivateKeepAwake: jest.fn() }));
+
+jest.mock('react-native-webview', () => ({ WebView: () => null }));

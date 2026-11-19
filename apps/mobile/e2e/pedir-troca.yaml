@@ -1,0 +1,52 @@
+# Fluxo crítico: pedir troca (WB-170). Conta de teste com pedido ENTREGUE dentro do prazo (seed de demonstração de dev e staging).
+# NÃO executado: [HIPÓTESE] escrito sem emulador; validar no primeiro Android disponível (QA).
+#   maestro test -e E2E_EMAIL=maria@exemplo.test -e E2E_PASSWORD='Cachorro-Azul-2024' e2e/pedir-troca.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: home.login
+- tapOn:
+    id: auth.login-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login-password-input
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth.login-submit
+# Pedidos > pedido entregue > Pedir troca
+- tapOn:
+    id: tabs.orders
+- assertVisible:
+    id: orders.section-past
+- tapOn:
+    id: 'orders.item-.*'
+- tapOn:
+    id: order.exchange
+# 1 tela, sem digitar: motivo, peça nova, como devolver
+- assertVisible:
+    id: exchange.screen
+- tapOn:
+    id: exchange.reason-size
+- tapOn:
+    id: 'exchange.swap-.*'
+- assertVisible:
+    id: exchange.pay-today
+- assertVisible: Hoje você paga R$ 0,00.
+- tapOn:
+    id: exchange.return-store
+- tapOn:
+    id: exchange.submit
+- assertVisible: Pedido de troca enviado
+- tapOn:
+    id: exchange.success-track
+# acompanhamento: próximo passo e linha do tempo
+- assertVisible:
+    id: exchange.next-step
+- assertVisible:
+    id: exchange.timeline

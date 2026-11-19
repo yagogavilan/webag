@@ -1,0 +1,79 @@
+# Fluxo crítico: comprar com PIX (WB-023, 024, 026). Conta de teste já existente e e-mail do ambiente com provedor `fake`.
+# A confirmação do pagamento NUNCA vem do app: depois de copiar o código, aprove o pagamento no provedor fake
+# (POST /v1/dev/payments/{attemptId}/approve, só dev e staging) e a tela muda sozinha para "Pedido confirmado".
+# NÃO executado: [HIPÓTESE] escrito sem emulador (Maestro exige aparelho); validar no primeiro Android disponível (QA).
+#   maestro test -e E2E_EMAIL=maria@exemplo.test -e E2E_PASSWORD='Cachorro-Azul-2024' e2e/comprar-com-pix.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: location.neighborhood-any
+# explorar até a sacola
+- scrollUntilVisible:
+    element:
+      id: 'home.store-.*'
+- tapOn:
+    id: 'home.store-.*'
+- tapOn:
+    id: 'store.product-.*'
+- runFlow:
+    when:
+      visible:
+        id: 'product.group-.*'
+    commands:
+      - tapOn:
+          id: 'product.variant-.*'
+- tapOn:
+    id: product.add
+- tapOn: Ver sacola
+# cadastro/login só aqui, ao pagar
+- tapOn:
+    id: cart.submit
+- tapOn:
+    id: auth.login-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login-password-input
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth.login-submit
+# checkout em 1 tela: receber, pagar, resumo sem surpresa
+- assertVisible:
+    id: checkout.screen
+- assertVisible:
+    id: checkout.summary
+- tapOn:
+    id: checkout.pay-pix
+- tapOn:
+    id: checkout.submit
+# PIX: valor, contagem de 15 min, copia e cola
+- assertVisible:
+    id: pix.amount
+- assertVisible:
+    id: pix.countdown
+- assertVisible:
+    id: pix.code
+- tapOn:
+    id: pix.copy
+- assertVisible: Código copiado
+# (aprovar no provedor fake aqui) -> a tela muda sozinha
+- extendedWaitUntil:
+    visible:
+      id: confirmed.title
+    timeout: 120000
+- assertVisible:
+    id: confirmed.order-number
+- tapOn:
+    id: confirmed.track
+# acompanhamento: linha do tempo e WhatsApp da loja
+- assertVisible:
+    id: order.timeline
+- assertVisible:
+    id: order.step-1
+- assertVisible:
+    id: order.whatsapp

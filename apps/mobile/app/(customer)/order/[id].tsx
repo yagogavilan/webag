@@ -20,7 +20,7 @@ import { useOrder } from '../../../src/features/checkout/hooks';
 import { getPushStatus, openNotificationSettings, type PushStatus } from '../../../src/features/notifications/push';
 import { useCancelOrder } from '../../../src/features/orders/hooks';
 import { openDirections, openWhatsapp } from '../../../src/features/orders/links';
-import { isActive, formatDateTime, formatHour, presentStatus, spacedCode } from '../../../src/features/orders/model';
+import { isActive, formatDateTime, formatHour, itemCountLabel, presentStatus, spacedCode } from '../../../src/features/orders/model';
 import { reorderItems } from '../../../src/features/orders/reorder';
 import { StatusTimeline } from '../../../src/features/orders/StatusTimeline';
 import { useInvalidateOnEvent } from '../../../src/features/realtime/useRealtime';
@@ -183,7 +183,7 @@ export default function OrderScreen() {
       </View>
 
       <Button label={details ? t('order.hideDetails') : t('order.details')} onPress={() => setDetails((v) => !v)} testID="order.details-toggle" variant="text" />
-      <Text color="secondary" style={styles.center}>{t('order.summaryLine', { count: `${order.items.length}`, total: formatMoney(order.summary.total.amount) })}</Text>
+      <Text color="secondary" style={styles.center}>{t('order.summaryLine', { count: itemCountLabel(order.items.reduce((n, i) => n + i.quantity, 0)), total: formatMoney(order.summary.total.amount) })}</Text>
       {details ? (
         <View style={styles.details} testID="order.details">
           <Text accessibilityRole="header" variant="title2">{t('order.items')}</Text>

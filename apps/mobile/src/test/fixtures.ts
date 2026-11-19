@@ -95,7 +95,7 @@ export const browseProduct = (over: Partial<BrowseProduct> = {}): BrowseProduct 
 });
 
 /** Endereço atual com ponto, para as telas que dependem de lat/lng. */
-export async function seedAddress(precision: 'approx' | 'full' = 'full'): Promise<void> {
+export async function seedAddress(precision: 'approx' | 'full' = 'full', remote = false): Promise<void> {
   await addressStore.clearAll();
   await addressStore.hydrate();
   await addressStore.add({
@@ -111,6 +111,7 @@ export async function seedAddress(precision: 'approx' | 'full' = 'full'): Promis
     state: 'SP',
     latitude: -23.28,
     longitude: -46.74,
+    ...(remote ? { remote: true } : {}),
   });
 }
 
