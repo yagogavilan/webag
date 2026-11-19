@@ -1,4 +1,4 @@
-import { eq, like } from 'drizzle-orm';
+import { and, eq, like } from 'drizzle-orm';
 import { seedDemoOrders } from '../seed/orders-demo.js';
 import { seedOnda1 } from '../seed/onda1.js';
 import { seedOnda2 } from '../seed/onda2.js';
@@ -39,7 +39,7 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   });
 
   it('o painel da loja e o financeiro leem os pedidos de demonstração; em produção o seed se recusa', async () => {
-    const [sample] = await ctx.db.select().from(orders).where(eq(orders.status, 'received'));
+    const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), like(orders.number, 'WB-DM%')));
     expect(sample).toBeDefined();
     const [owner] = await ctx.db.select({ email: users.email }).from(storeMembers).innerJoin(users, eq(users.id, storeMembers.userId)).where(eq(storeMembers.storeId, sample!.storeId));
     const login = await ctx.http.post('/v1/auth/login').send({ email: owner!.email, password: PASSWORD });
