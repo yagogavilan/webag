@@ -70,6 +70,12 @@ O pagamento da taxa da troca (conta da Webag, sem split) lança `exchange_fee`: 
 ## Trocas: SLA, contestação e mediação (DT-050)
 A varredura da troca avisa a loja 12 h e 4 h antes de a troca ser aprovada sozinha (`remindStoreDeadlines`, uma vez cada, só push à loja). O cliente contesta a recusa da LOJA uma vez em até `contestacao_dias` (`POST /v1/exchanges/{id}/contest`); a fila do admin (`GET /v1/admin/exchanges/mediations`, atrasada após `mediacao_dias_uteis` dias úteis) e a decisão (`POST /v1/admin/exchanges/mediations/{id}/decision`, `customer` aprova e segue o fluxo, `store` recusa em definitivo) exigem `exchanges:mediate` (operação e super admin).
 
+## Onda 6: LGPD, marketing, relatórios e ajuda (ADR-012)
+- `privacy`: excluir conta (app: só a senha; web: `/v1/auth/account-deletion/*` com `delete_ticket`; arrependimento opcional em `exclusao_arrependimento_horas`), exportar dados (job assíncrono, link de uso único), pedidos de titulares (fila do super admin) e expurgo diário (`retention_runs`). Varredura de "nenhum dado pessoal restante" em `test/privacy-deletion.e2e-spec.ts`.
+- `marketing`: push segmentado (consentimento `marketing_push`, mínimo `push_mkt_min_segmento`, limite semanal, janela 9h-20h, agendamento), cupons da plataforma, destaques da Início. `reports`: relatórios operacionais (RN-15) com CSV e conferência com o ledger. `feedback`: ajuda, denúncia/moderação e resposta do lojista às avaliações.
+- `realtime`: `POST /v1/realtime/tickets` (uso único, 60 s) para o painel abrir o Socket.IO sem ver o JWT. `orders`: `POST /v1/card-intents` (cartão na página segura; o app nunca toca em dado de cartão). Jobs rodam por varredura idempotente em processo (desligados em teste e na CLI).
+- Variáveis novas: `WEB_PUBLIC_URL` (base de `/pagar/cartao`) e `MP_PUBLIC_KEY` (chave pública do MP, não é segredo).
+
 ## Seed de demonstração
 `pnpm db:seed` (fora de produção) cria lojas, clientes, avaliações, cupons, tabela de frete inicial (`seedLogistics`) e **pedidos `WB-DMxxx` em vários estados** (aguardando pagamento até entregue, cancelado e recusado, corridas na fila e uma troca pedida). Comissão padrão de 15% só no CLI do seed. Em produção só roda o seed base.
 

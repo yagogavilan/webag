@@ -78,3 +78,15 @@ Onda 2 adiciona `stores` (+ FK de `store_members`), documentos e catálogo; Onda
 | `stores.status = 'closed'` | Estado terminal que só nasce da exclusão da conta do dono (sem transição de usuário) |
 
 Na anonimização a linha de `users` fica como casca (`deleted-<uuid>@anon.webag.invalid`, "Conta excluída") para manter FKs de pedidos e ledger; o endereço do pedido vira `{city, state, cityId}`. `consents` e `terms_acceptances` (append-only por trigger) permanecem como prova.
+
+## Onda 6 (O6.2 a O6.5)
+| Tabela | Conteúdo |
+|---|---|
+| `push_campaigns` / `push_campaign_recipients` | Push de marketing (WB-197): segmento (JSON), destino, janela (`send_at`), contagens (estimados, enviados, entregues, excluídos pelo limite semanal); quem recebeu cada campanha (base do limite de `push_mkt_max_semana`, das aberturas e dos descadastros). O público é recalculado no envio |
+| `home_highlights` | Destaque fixado na Início (loja ou produto) por cidade e período (WB-115 C4) |
+| `banners.impressions` / `clicks` | Contadores totais do banner (WB-115 C5), sem dado do cliente |
+| `help_faqs` / `content_settings` | Perguntas da ajuda por público e grupo (cliente: order, payment, exchange, account; lojista: orders, products, exchanges, money, team) e configuração de contatos (WhatsApp, e-mail, horário, encarregado), editáveis pelo admin |
+| `content_reports` | Denúncia de avaliação, produto ou loja; única por (alvo, denunciante); `status` open/kept/removed/forwarded |
+| Redis | `rt:ticket:<hash>` (ticket de tempo real, 60 s, `GETDEL`) e `card-intent:<hash>` (intenção de cartão, 15 min, `GETDEL`); nenhum dado de cartão |
+
+Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`, `order_items`, `stores`, `users` e o ledger; a série de vendas por dia é uma consulta sobre `orders`.

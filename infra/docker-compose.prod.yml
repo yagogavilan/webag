@@ -148,6 +148,9 @@ services:
       BFF_SHARED_SECRET: ${BFF_SHARED_SECRET:?defina BFF_SHARED_SECRET no .env}
       API_PUBLIC_URL: https://${API_HOST:?defina API_HOST no .env}
       ADMIN_WEB_URL: https://${ADMIN_HOST:?defina ADMIN_HOST no .env}
+      # B.2: base da página segura de cartão (/pagar/cartao), servida pelo web do lojista/admin.
+      WEB_PUBLIC_URL: https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
+      MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
       # Origens exatas (sem "*"): os painéis.
       CORS_ORIGINS: https://${ADMIN_HOST},https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webag}
