@@ -32,7 +32,7 @@ export const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 // A API só confia no X-Forwarded-For com TRUST_PROXY=1 (como atrás do nginx/BFF). O limite de taxa é por IP; para um gerador de teste
 // com um único IP, cada conta (token) recebe um IP de origem estável e fictício. Para o ambiente padrão (sem TRUST_PROXY) o cabeçalho é ignorado.
 function originOf(token) {
-  if (!token) return '10.200.0.1';
+  if (!token) return `10.${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}`; // anônimo: IP novo a cada chamada (cadastro e login têm limite por IP)
   const h = createHash('sha1').update(token.slice(-24)).digest();
   return `10.${h[0]}.${h[1]}.${h[2] || 1}`;
 }
@@ -216,20 +216,24 @@ export async function store() {
 }
 
 // ---------------------------------------------------------------- pedidos
-export async function cartOf(customer, mode = 'delivery', couponCode) {
+export async function cartOf(customer, mode = 'delivery', couponCode, { variantId, quantity = 4 } = {}) {
   const s = await store();
   const q = `mode=${mode}${mode === 'delivery' ? `&addressId=${customer.addressId}` : ''}`;
   await api('DELETE', '/v1/cart', { token: customer.token });
-  const put = await api('PUT', `/v1/cart/items/${s.variantId}?${q}`, { token: customer.token, body: { quantity: 4, replaceStore: true } });
-  if (put.status !== 200) return { put, cart: put };
+  const put = await api('PUT', `/v1/cart/items/${variantId ?? s.variantId}?${q}`, { token: customer.token, body: { quantity, replaceStore: true } });
+  if (put.status !== 200) {
+    console.log(`  [aviso] PUT /v1/cart/items devolveu HTTP ${put.status} ${JSON.stringify(put.data).slice(0, 200)}`);
+    return { put, cart: put };
+  }
   if (couponCode) await api('PUT', `/v1/cart/coupon?${q}`, { token: customer.token, body: { code: couponCode } });
   const cart = await api('GET', `/v1/cart?${q}`, { token: customer.token });
+  if (cart.status !== 200) console.log(`  [aviso] GET /v1/cart devolveu HTTP ${cart.status} ${JSON.stringify(cart.data).slice(0, 200)}`);
   return { put, cart };
 }
 
 /** Cria o pedido (PIX). Devolve { order, res }; `order` nulo se recusado. */
-export async function place(customer, mode = 'delivery', { couponCode } = {}) {
-  const { cart } = await cartOf(customer, mode, couponCode);
+export async function place(customer, mode = 'delivery', { couponCode, variantId, quantity } = {}) {
+  const { cart } = await cartOf(customer, mode, couponCode, { variantId, quantity });
   const total = cart.data?.summary?.total?.amount ?? cart.data?.summary?.total;
   const res = await api('POST', '/v1/orders', {
     token: customer.token,

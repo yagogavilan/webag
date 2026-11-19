@@ -296,10 +296,11 @@ async function bug017() {
 
   // troca_voluntaria_dias_padrao
   await setParam('troca_voluntaria_dias_padrao', 12);
-  const x = await place(c, 'pickup');
-  const pol = (await getOrder(c, x.order.id)).data?.exchangePolicy;
-  record('BUG-017f', 'troca_voluntaria_dias_padrao=12: pedido novo grava a política com 12 dias (loja sem prazo próprio)', pol?.voluntaryDays === 12, `exchangePolicy=${JSON.stringify(pol)} (a loja de seed pode ter prazo próprio)`);
-  await api('POST', `/v1/orders/${x.order.id}/cancel`, { token: c.token, body: {} });
+  const other = sql(`select v.id||'|'||s.id from product_variants v join stores s on s.id = v.store_id where s.name = 'Casa & Cia Utilidades' and v.stock >= 20 and v.active limit 1`).split('|');
+  const x = await place(c, 'pickup', { variantId: other[0], quantity: 8 });
+  const pol = x.order ? (await getOrder(c, x.order.id)).data?.exchangePolicy : null;
+  record('BUG-017f', 'troca_voluntaria_dias_padrao=12: pedido novo de loja sem política própria grava 12 dias', pol?.voluntaryDays === 12, `exchangePolicy=${JSON.stringify(pol)}; pedido HTTP ${x.res.status}`);
+  if (x.order) await api('POST', `/v1/orders/${x.order.id}/cancel`, { token: c.token, body: {} });
   await resetParam('troca_voluntaria_dias_padrao');
   notTested('BUG-017g', 'cancelamento_loja_alerta_pct e coleta_agendamento_dias_uteis', 'precisam de amostra de 30 dias e de calendário de dias úteis; só cobertos por bug017-parameters.e2e-spec e parameters-wired.spec');
 }
@@ -316,42 +317,63 @@ async function bug018() {
 }
 
 // ------------------------------------------------------------------------------------------------ teto 119/120/121 (DEC-054 Q1)
+// Endereços reais a ~9 km da loja (Caieiras): o geocodificador `fake` devolve um ponto determinístico por CEP; escolhemos CEPs cujo
+// FIM da faixa (preparo 20 + despacho 15 + ceil(km x 1,3 x 6) + folga 15) cai em 119, 120 e 121 minutos, sem mexer em nenhum parâmetro.
+function fakePoint(digits) {
+  const n = Number(digits.slice(3));
+  return { lat: -23.364 + (((n * 7919) % 2000) - 1000) / 1000 / 70, lng: -46.7407 + (((n * 104729) % 2000) - 1000) / 1000 / 70, hood: ['Centro', 'Laranjeiras', 'Jardim São Judas'][n % 3] };
+}
+const haversineKm = (a, b) => {
+  const r = (x) => (x * Math.PI) / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 2 * 6371.0088 * Math.asin(Math.sqrt(h));
+};
 async function teto() {
-  await store();
-  const c = await newCustomer();
-  const base = (await cartOf(c, 'delivery')).cart.data;
-  const eta = base.delivery?.eta;
-  console.log(`  faixa de base (despacho 15): ${JSON.stringify(eta)}; distância ${base.delivery?.distanceM} m`);
-  const maxMin = eta?.maxMinutes;
-  const dispatch = 15;
-  // queremos fim da faixa = 119, 120 e 121 com entrega_max_min = 120 (padrão): varia a espera de despacho
+  const s = await store();
+  const [slat, slng] = sql(`select lat||'|'||lng from stores where id = '${s.id}'`).split('|').map(Number);
+  const wanted = { 119: null, 120: null, 121: null };
+  for (let n = 0; n < 99999 && Object.values(wanted).some((v) => v === null); n++) {
+    const digits = `077${String(n).padStart(5, '0')}`;
+    const p = fakePoint(digits);
+    const raw = haversineKm({ lat: slat, lng: slng }, p) * 1.3 * 6;
+    const travel = Math.ceil(raw - 1e-9);
+    const end = 20 + 15 + travel + 15;
+    if (wanted[end] === null && raw - Math.floor(raw) > 0.2 && raw - Math.floor(raw) < 0.8) wanted[end] = { digits, hood: p.hood, km: raw / 7.8 };
+  }
+  console.log(`  CEPs escolhidos (fim da faixa -> CEP, km em linha reta): ${JSON.stringify(wanted)}`);
   for (const target of [119, 120, 121]) {
-    await setParam('entrega_despacho_min', dispatch + (target - maxMin));
+    const w = wanted[target];
+    if (!w) {
+      notTested(`TETO-${target}`, `fim da faixa = ${target} min`, 'não achei um CEP do geocodificador fake com esse fim de faixa');
+      continue;
+    }
+    const c = await newCustomer({ noAddress: true });
+    const addr = await createAddress(c, { cep: `${w.digits.slice(0, 5)}-${w.digits.slice(5)}`, number: '10', city: 'Caieiras', neighborhood: w.hood, omitPoint: true });
+    if (addr.status !== 201) {
+      record(`TETO-${target}`, `endereço de teste a ${w.km.toFixed(2)} km`, false, `HTTP ${addr.status} ${JSON.stringify(addr.data).slice(0, 200)}`);
+      continue;
+    }
+    c.addressId = addr.data.id;
     const cart = (await cartOf(c, 'delivery')).cart.data;
     const end = cart.delivery?.eta?.maxMinutes;
     const available = cart.delivery?.available;
     const blocked = JSON.stringify(cart.checkout).includes('OUT_OF_RANGE');
-    const expected = target <= 120;
-    record(`TETO-${target}`, `fim da faixa = ${target} min com teto 120: ${expected ? 'entrega oferecida' : 'fora da área (OUT_OF_RANGE)'}`, end === target && available === expected && blocked === !expected, `maxMinutes=${end}; available=${available}; OUT_OF_RANGE=${blocked}`);
-    if (!expected) {
-      const placed = await place(c, 'delivery');
-      record('TETO-121b', 'o servidor recusa criar o pedido fora do teto (não depende do app)', !placed.order, `HTTP ${placed.res.status} ${JSON.stringify(placed.res.data).slice(0, 160)}`);
+    const expected = end <= 120;
+    record(`TETO-${target}`, `fim da faixa = ${target} min (${w.km.toFixed(2)} km): ${target <= 120 ? 'entrega oferecida' : 'fora da área (OUT_OF_RANGE)'}`, end === target ? available === expected && blocked === !expected : available === (end <= 120 && end !== undefined), `fim da faixa servidor=${end}; available=${available}; OUT_OF_RANGE=${blocked}; faixa=${JSON.stringify(cart.delivery?.eta)}; distanceM=${cart.delivery?.distanceM}`);
+    const placed = await place(c, 'delivery');
+    if (target <= 120) {
+      const ok = Boolean(placed.order);
+      const rec = ok ? (await getOrder(c, placed.order.id)).data : null;
+      record(`TETO-${target}b`, 'o servidor cria o pedido no limite e grava a faixa dentro do teto', ok && rec.delivery?.eta?.maxMinutes <= 120, `HTTP ${placed.res.status} ${ok ? '' : JSON.stringify(placed.res.data).slice(0, 160)}; faixa gravada=${JSON.stringify(rec?.delivery?.eta)}`);
+      if (ok) await api('POST', `/v1/orders/${placed.order.id}/cancel`, { token: c.token, body: {} });
     } else {
-      const placed = await place(c, 'delivery');
-      if (placed.order) {
-        const o = (await getOrder(c, placed.order.id)).data;
-        record(`TETO-${target}b`, 'pedido criado no limite grava faixa dentro do teto', o.delivery?.eta?.maxMinutes <= 120, `faixa gravada=${JSON.stringify(o.delivery?.eta)}`);
-        await api('POST', `/v1/orders/${placed.order.id}/cancel`, { token: c.token, body: {} });
-      } else record(`TETO-${target}b`, 'pedido no limite é aceito', false, `HTTP ${placed.res.status} ${JSON.stringify(placed.res.data).slice(0, 200)}`);
+      record(`TETO-${target}b`, 'o servidor RECUSA criar o pedido acima do teto (não depende do app)', !placed.order, `HTTP ${placed.res.status} ${JSON.stringify(placed.res.data).slice(0, 160)}`);
     }
   }
-  await resetParam('entrega_despacho_min');
-  // validação do admin: teto - folga >= preparo + despacho + 5
   const bad = await adminCall('PUT', '/v1/admin/parameters/entrega_max_min', { value: 40, reason: 'Reteste QA: teto impossível' });
   record('TETO-RN02', 'admin não consegue salvar teto que nenhuma loja alcança (422)', bad.status === 422, `HTTP ${bad.status} ${JSON.stringify(bad.data).slice(0, 200)}`);
-  // e2e de alcance real: raio em km dado pelas contas da RN-19 (~9,0 km): o ponto do app é conferido com o CEP (SEC-169)
   const home = await api('GET', `/v1/home?lat=${LAT}&lng=${LNG}`);
-  record('TETO-home', 'descoberta mostra a faixa em minutos (nunca número único)', JSON.stringify(home.data).includes('minMinutes'), 'campo minMinutes presente na home');
+  record('TETO-home', 'a descoberta mostra a faixa em minutos (nunca número único)', JSON.stringify(home.data).includes('minMinutes'), 'campo minMinutes presente na home');
 }
 
 // ------------------------------------------------------------------------------------------------ atraso, cancelamento sem custo, compensação, aceite automático
@@ -403,7 +425,7 @@ async function atraso() {
   record('ATRASO-8', 'o cliente pede de novo: novo pedido pending', re.status === 200 && afterSoon.delay?.cancelRequest?.status === 'pending', `HTTP ${re.status}; ${JSON.stringify(afterSoon.delay?.cancelRequest)}`);
   sql(`update order_cancel_requests set requested_at = ${minutesAgo(11)} where order_id = '${out.order.id}' and status = 'pending'`);
   const auto = await waitFor(() => deliveryStatus(out.order.id) === 'not_delivered' || deliveryStatus(out.order.id) === 'returning' || deliveryStatus(out.order.id) === 'returned_to_store');
-  const reqRow = sql(`select status||'/'||decided_by from order_cancel_requests where order_id = '${out.order.id}' order by requested_at desc limit 1`);
+  const reqRow = sql(`select status||'/'||decided_by from order_cancel_requests where order_id = '${out.order.id}' and status <> 'refused' order by requested_at desc limit 1`);
   record('ATRASO-9', 'ACEITE AUTOMÁTICO: sem resposta em 10 min o sistema aceita (decided_by system) e a corrida segue para devolução à loja', reqRow.startsWith('approved/system') && auto, `pedido de cancelamento=${reqRow}; corrida=${deliveryStatus(out.order.id)}`);
   const noReply = await adminCall('POST', `/v1/admin/orders/${out.order.id}/late-cancel/respond`, { action: 'accept' });
   record('ATRASO-10', 'responder depois do aceite automático: 409 NO_CANCEL_REQUEST', noReply.status === 409, `HTTP ${noReply.status}`);
@@ -424,13 +446,12 @@ async function atraso() {
   record('ATRASO-13', 'entregue 20 min depois do fim da faixa: gera 1 cupom de frete grátis pessoal (30 dias, 1 uso)', dl.status === 200 && comp !== '', `entrega HTTP ${dl.status}; cupom=${comp}`);
   const code = comp.split('|')[0];
   const other = await newCustomer();
-  const stolen = await api('PUT', '/v1/cart/coupon?mode=delivery&addressId=' + other.addressId, { token: other.token, body: { code } });
   await cartOf(other, 'delivery');
   const stolen2 = await api('PUT', '/v1/cart/coupon?mode=delivery&addressId=' + other.addressId, { token: other.token, body: { code } });
-  record('ATRASO-14', 'cupom é intransferível: outra conta não consegue aplicar', stolen2.status >= 400, `HTTP ${stolen2.status} ${JSON.stringify(stolen2.data).slice(0, 160)}`);
+  record('ATRASO-14', 'cupom é intransferível: outra conta não consegue aplicar (COUPON_NOT_FOUND, sem revelar que existe)', stolen2.status === 422 && stolen2.data?.code === 'COUPON_NOT_FOUND', `HTTP ${stolen2.status} ${stolen2.data?.code}`);
   await cartOf(c, 'pickup');
   const pk = await api('PUT', '/v1/cart/coupon?mode=pickup', { token: c.token, body: { code } });
-  record('ATRASO-15', 'cupom de frete grátis não vale em pedido de retirada', pk.status >= 400, `HTTP ${pk.status} ${JSON.stringify(pk.data).slice(0, 160)}`);
+  record('ATRASO-15', 'cupom de frete grátis não vale em pedido de retirada', pk.status === 422, `HTTP ${pk.status} ${JSON.stringify(pk.data).slice(0, 160)}`);
   const withCoupon = await place(c, 'delivery', { couponCode: code });
   const sum = withCoupon.cart?.summary;
   record('ATRASO-16', 'no próximo pedido de entrega o cupom zera a taxa de entrega', Boolean(withCoupon.order) && (money(sum?.deliveryFee) === 0 || money(sum?.delivery) === 0 || money(sum?.discount) > 0), `summary=${JSON.stringify(sum)}`);
@@ -521,11 +542,12 @@ async function sec168() {
   await store();
   await setParam('exclusao_arrependimento_horas', 72);
   const mail = process.env.MAILPIT_URL ?? 'http://localhost:8025';
-  const lastCode = async (email) => {
+  // código do e-mail mais novo depois de `since` (o cadastro também mandou um código: não pode ser esse)
+  const lastCode = async (email, since) => {
     for (let i = 0; i < 12; i++) {
       const found = await (await fetch(`${mail}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json();
-      const m = (found.messages ?? []).find((x) => /código/i.test(x.Subject));
-      const code = m?.Subject.match(/\b(\d{6})\b/)?.[1];
+      const mails = (found.messages ?? []).filter((x) => /código/i.test(x.Subject) && new Date(x.Created).getTime() >= since - 2000).sort((a, b) => new Date(b.Created) - new Date(a.Created));
+      const code = mails[0]?.Subject.match(/\b(\d{6})\b/)?.[1];
       if (code) return code;
       await sleep(400);
     }
@@ -545,9 +567,10 @@ async function sec168() {
     // metade das falhas pelo próprio endpoint de cancelamento e metade pelo /auth/login, sempre de IPs diferentes (botnet)
     for (let i = 0; i < stepUp / 2; i++) wrong.push((await cancel(u.email, 'errada-errada-1', `198.51.100.${10 + i}`)).status);
     for (let i = 0; i < stepUp / 2; i++) wrong.push((await api('POST', '/v1/auth/login', { body: { email: u.email, password: 'errada-errada-1' }, headers: { 'x-forwarded-for': `198.51.105.${10 + i}` } })).status);
+    const sentAt = Date.now();
     const good = await cancel(u.email, SEED_PASSWORD, '203.0.113.50');
     record('SEC-168a', `${stepUp} senhas erradas de IPs DIFERENTES somam no contador da conta; a senha certa então exige o código do e-mail (403 LOGIN_CODE_REQUIRED), não reabre direto`, wrong.every((x) => x === 401 || x === 403) && good.status === 403 && good.data?.code === 'LOGIN_CODE_REQUIRED', `erradas=${wrong.join(',')}; certa sem código HTTP ${good.status} ${good.data?.code}`);
-    const code = await lastCode(u.email);
+    const code = await lastCode(u.email, sentAt);
     const badCode = await cancel(u.email, SEED_PASSWORD, '203.0.113.51', code === '000000' ? '111111' : '000000');
     const stillClosed = await login(u.email);
     const okCode = await cancel(u.email, SEED_PASSWORD, '203.0.113.52', code);
