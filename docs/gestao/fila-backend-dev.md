@@ -243,3 +243,7 @@ G4 **APROVADO COM RESSALVAS**. SEC-180 verificado (corrigido na API). Detalhes, 
 
 ## G4 final do QA (2026-11-19): resíduo para o backend-dev
 Q.9 [ ] **BUG-019 (Média, 1 linha de teste):** `apps/api/test/seed-onda3.e2e-spec.ts` "banners: 3" falha em clone novo (cache frio do vitest, como no CI): `apps/api/seed/onda3.ts:197` só cria os 3 banners se não existir NENHUM e `banners.e2e-spec.ts` deixa banners no banco compartilhado; com `banners.e2e` antes de `seed-onda3` o teste lê 2 (1ª execução completa em clone novo: 762 de 763; 2 de 2 execuções frias só com os 2 arquivos). As execuções 2 e 3 (763 de 763) só passaram porque o vitest põe o arquivo que falhou no início da fila. Correção: apagar `banners` antes do `seedOnda3` no `beforeAll` do teste (ou o seed conferir por título). Reteste do QA: 1 execução completa a frio. Detalhe em `docs/qa/bugs/BUG-019.md` e `docs/qa/relatorios/g4-final.md` §3. Demais bugs do QA (010, 020 a 025) fechados.
+
+| BUG-019 residual (CEO) | `seed-onda3` "banners" falha em clone novo com cache frio (reproduzido 2 de 2): corrigir a causa (1 linha segundo o QA) e garantir e2e verde SEM depender da reordenação de arquivos do vitest. |
+| Segurança (pergunta do QA) | O token do convite de admin vira sessão completa após confirmar o TOTP: confirmar se é intencional (Security). |
+| Memória | API chegou a ~950-975 MB com imagens: documentar limite de contêiner >= 1 GB no guia de deploy. |
