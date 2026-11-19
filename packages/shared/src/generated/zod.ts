@@ -1880,6 +1880,7 @@ export const ListDeliveriesResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),zod.null()]),
   "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "costRegisteredBy": zod.uuid().nullish().describe('Quem lançou o custo (SEC-145).'),
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
@@ -1892,7 +1893,7 @@ export const ListDeliveriesResponse = zod.object({
 
 
 /**
- * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD). Nunca devolve o código de entrega. Permissão: `logistics:read`.
+ * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD) E para quem despacha (`logistics:write`); financeiro e suporte usam `POST .../contact-reveal` (SEC-144). Nunca devolve o código de entrega. Permissão: `logistics:read`.
  * @summary Detalhe da corrida com a linha do tempo
  */
 export const GetDeliveryParams = zod.object({
@@ -1930,6 +1931,7 @@ export const GetDeliveryResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),zod.null()]),
   "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "costRegisteredBy": zod.uuid().nullish().describe('Quem lançou o custo (SEC-145).'),
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
@@ -2000,6 +2002,7 @@ export const AssignDeliveryResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),zod.null()]),
   "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "costRegisteredBy": zod.uuid().nullish().describe('Quem lançou o custo (SEC-145).'),
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
@@ -2027,7 +2030,7 @@ export const AssignDeliveryResponse = zod.object({
 
 
 /**
- * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:read`.
+ * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:write` (a mensagem leva o contato do cliente; financeiro e suporte recebem 403, SEC-144).
  * @summary Mensagem pronta e link wa.me para o motoboy
  */
 export const GetDeliveryWhatsappParams = zod.object({
@@ -2108,6 +2111,7 @@ export const UpdateDeliveryStatusResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),zod.null()]),
   "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "costRegisteredBy": zod.uuid().nullish().describe('Quem lançou o custo (SEC-145).'),
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
@@ -2135,7 +2139,7 @@ export const UpdateDeliveryStatusResponse = zod.object({
 
 
 /**
- * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Permissão: `logistics:write`.
+ * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Acima de 1,5x o previsto da faixa ou de `entrega_custo_alerta_cents` exige `reason` (422 `COST_REASON_REQUIRED`) e alerta o financeiro (`delivery_cost_high`); acima de `entrega_custo_max_cents`, 422 `COST_ABOVE_LIMIT` (SEC-145). Permissão: `logistics:write`.
  * @summary Custo pago ao motoboy (WB-239)
  */
 export const SetDeliveryCostParams = zod.object({
@@ -2184,6 +2188,7 @@ export const SetDeliveryCostResponse = zod.object({
   "currency": zod.enum(['BRL'])
 }).describe('Valor monetário em centavos.'),zod.null()]),
   "costPaidAt": zod.iso.datetime({"offset":true}).nullish(),
+  "costRegisteredBy": zod.uuid().nullish().describe('Quem lançou o custo (SEC-145).'),
   "attempts": zod.int(),
   "failReason": zod.string().nullish(),
   "whatsappSentAt": zod.iso.datetime({"offset":true}).nullish(),
@@ -2194,16 +2199,128 @@ export const SetDeliveryCostResponse = zod.object({
 
 
 /**
- * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:write`.
+ * Corridas do período pela hora em que ficaram prontas (dia civil de Brasília), sem as canceladas. Entregas, no prazo (pronto até entregue dentro de `logistica_alerta_entrega_min`, [HIPÓTESE] até o PO definir o prazo), falhas por motivo, tempos médios em minutos, taxa cobrada, custo, margem (só das corridas com custo registrado), custo do subsídio do frete grátis (taxa zero) e margem por cidade com `negativeMargin` destacando a negativa; os totais são a soma das linhas. Permissão: `logistics:report` (super admin, operação, financeiro).
+ * @summary Relatório de logística (WB-240)
+ */
+export const GetLogisticsReportSummaryQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date(),
+  "cityId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional(),
+  "courierId": zod.uuid().optional(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']).optional()
+})
+
+export const GetLogisticsReportSummaryResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "totals": zod.object({
+  "deliveries": zod.int().optional(),
+  "finished": zod.int().optional(),
+  "delivered": zod.int().optional(),
+  "onTime": zod.int().optional(),
+  "onTimeLimitMinutes": zod.int().optional(),
+  "failuresByReason": zod.record(zod.string(), zod.int()).optional(),
+  "avgMinutes": zod.object({
+  "readyToAssigned": zod.number().nullish(),
+  "readyToCollected": zod.number().nullish(),
+  "readyToDelivered": zod.number().nullish()
+}).optional(),
+  "feeCollected": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "cost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "margin": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "runsWithoutCost": zod.int().optional(),
+  "freeShippingDeliveries": zod.int().optional(),
+  "freeShippingCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}),
+  "byCity": zod.array(zod.object({
+  "cityId": zod.uuid().nullish(),
+  "cityName": zod.string().nullish(),
+  "deliveries": zod.int().optional(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "cost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "margin": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "negativeMargin": zod.boolean().optional()
+}))
+})
+
+
+/**
+ * Custo das corridas já lançadas e ainda não pagas, por motoboy, com quem lançou (`registeredBy`, SEC-145). `format=csv` exporta (valores em centavos, BOM) e a exportação é auditada (`logistics.payable.export`). Permissão: `logistics:report`.
+ * @summary A pagar por motoboy (WB-240 C2)
+ */
+export const GetLogisticsReportPayableQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date(),
+  "cityId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional(),
+  "courierId": zod.uuid().optional(),
+  "kind": zod.enum(['delivery', 'exchange_pickup', 'exchange_return']).optional(),
+  "format": zod.enum(['json', 'csv']).optional()
+})
+
+export const GetLogisticsReportPayableResponse = zod.object({
+  "period": zod.looseObject({
+
+}),
+  "data": zod.array(zod.object({
+  "courierId": zod.uuid().optional(),
+  "courierName": zod.string().optional(),
+  "courierPhone": zod.string().optional(),
+  "runs": zod.int().optional(),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "oldestRunAt": zod.iso.datetime({"offset":true}).optional(),
+  "registeredBy": zod.array(zod.uuid()).optional()
+})),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "runs": zod.int()
+})
+
+
+/**
+ * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:payout` (financeiro e super admin, SEC-145). Quem lançou o custo de alguma corrida do lote não marca como pago: 403 `SEGREGATION_OF_DUTIES`; o super admin pode com `overrideReason` (auditado).
  * @summary Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
  */
 export const markDeliveryPayoutsBodyDeliveryIdsMax = 100;
+
+export const markDeliveryPayoutsBodyOverrideReasonMin = 10;
+export const markDeliveryPayoutsBodyOverrideReasonMax = 200;
 
 
 
 export const MarkDeliveryPayoutsBody = zod.object({
   "deliveryIds": zod.array(zod.uuid()).min(1).max(markDeliveryPayoutsBodyDeliveryIdsMax),
-  "paidOn": zod.iso.date()
+  "paidOn": zod.iso.date(),
+  "overrideReason": zod.string().min(markDeliveryPayoutsBodyOverrideReasonMin).max(markDeliveryPayoutsBodyOverrideReasonMax).optional().describe('Só super admin que lançou o custo do lote (SEC-145).')
 })
 
 export const MarkDeliveryPayoutsResponse = zod.object({
@@ -2216,7 +2333,57 @@ export const MarkDeliveryPayoutsResponse = zod.object({
 
 
 /**
- * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
+ * Permissão: `logistics:contact` (super admin, operação, financeiro e suporte). Motivo obrigatório (10 a 200 caracteres); a leitura vai para a auditoria (`delivery.contact_revealed`: quem, quando e por quê, sem o dado). 409 `CONTACT_NOT_AVAILABLE` depois que a corrida termina e o contato é apagado (`pii_corrida_retencao_dias`, padrão 7).
+ * @summary Revelar telefone e endereço do cliente da corrida (SEC-144)
+ */
+export const RevealDeliveryContactParams = zod.object({
+  "deliveryId": zod.uuid()
+})
+
+export const revealDeliveryContactBodyReasonMin = 10;
+export const revealDeliveryContactBodyReasonMax = 200;
+
+
+
+export const RevealDeliveryContactBody = zod.object({
+  "reason": zod.string().min(revealDeliveryContactBodyReasonMin).max(revealDeliveryContactBodyReasonMax)
+})
+
+export const RevealDeliveryContactResponse = zod.object({
+  "contact": zod.object({
+  "pickupAddress": zod.string().nullish(),
+  "storePhone": zod.string().nullish(),
+  "dropoffAddress": zod.string().nullish(),
+  "customerFirstName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish()
+})
+})
+
+
+/**
+ * Permissão: `logistics:write`, com reautenticação. A corrida `returned_to_store` NÃO cancela nem estorna o pedido (a operação declara, a loja confirma); quando a loja não confirma no painel, o admin registra com motivo (auditado). Quem declarou a devolução não confirma pela loja (403 `SEGREGATION_OF_DUTIES`; super admin pode). Cancela o pedido e estorna tudo, com a taxa de entrega. 409 `RETURN_NOT_PENDING` se não há devolução aguardando.
+ * @summary Admin registra que a loja recebeu a devolução (SEC-143)
+ */
+export const AdminConfirmStoreReturnParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const adminConfirmStoreReturnBodyReasonMin = 10;
+export const adminConfirmStoreReturnBodyReasonMax = 300;
+
+
+
+export const AdminConfirmStoreReturnBody = zod.object({
+  "reason": zod.string().min(adminConfirmStoreReturnBodyReasonMin).max(adminConfirmStoreReturnBodyReasonMax)
+})
+
+export const AdminConfirmStoreReturnResponse = zod.object({
+  "status": zod.enum(['cancelled'])
+})
+
+
+/**
+ * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
 export const AdminRefundOrderParams = zod.object({
@@ -2287,7 +2454,7 @@ export const ListPaymentAlertsResponse = zod.object({
 
 
 /**
- * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`.
+ * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Só `exhausted` pode ser coberto. Permissão de admin: `payments:refunds:read`.
  * @summary Fila de estornos pendentes (SEC-130)
  */
 export const listRefundQueueQueryCursorMax = 200;
@@ -2322,7 +2489,7 @@ export const ListRefundQueueResponse = zod.object({
 
 
 /**
- * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`.
+ * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. 409 `REFUND_IN_FLIGHT` se outra chamada ao provedor está em andamento (SEC-141). Auditado. Permissão de admin: `payments:refunds:retry`.
  * @summary Tentar o estorno de novo agora
  */
 export const RetryRefundIntentParams = zod.object({
@@ -2335,7 +2502,7 @@ export const RetryRefundIntentResponse = zod.object({
 
 
 /**
- * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`.
+ * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Só intenção `exhausted` e sem chamada ao provedor em andamento: `pending` (ainda em retentativa) ou em voo é 409 `REFUND_NOT_COVERABLE`/`REFUND_IN_FLIGHT` (SEC-141). Permissão de admin: `payments:refunds:cover`.
  * @summary Cobertura da Webag (DEC-020a)
  */
 export const CoverRefundIntentParams = zod.object({
@@ -8357,6 +8524,102 @@ export const AdvanceOrderResponse = zod.object({
 
 
 /**
+ * Permissão da loja: `orders`. Só para pedido de entrega cuja corrida terminou em `returned_to_store` (a operação declara a devolução; a loja confirma). Cancela o pedido e estorna tudo, inclusive a taxa de entrega (DEC-039e). 409 `RETURN_NOT_PENDING` se não há devolução aguardando ou já foi confirmada.
+ * @summary Loja confirma que recebeu a mercadoria devolvida (SEC-143)
+ */
+export const ConfirmReturnReceivedByStoreParams = zod.object({
+  "storeId": zod.uuid(),
+  "orderId": zod.uuid()
+})
+
+export const ConfirmReturnReceivedByStoreResponse = zod.object({
+  "logistics": zod.union([zod.null(),zod.object({
+  "status": zod.enum(['ready_for_collection', 'awaiting_courier', 'courier_en_route', 'out_for_delivery', 'delivered', 'not_delivered', 'returned_to_store', 'cancelled']).optional(),
+  "courierFirstName": zod.string().nullish(),
+  "volumes": zod.int().optional()
+})]).optional().describe('Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.'),
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "paidAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "acceptDeadlineAt": zod.iso.datetime({"offset":true}).nullable(),
+  "customer": zod.object({
+  "firstName": zod.string(),
+  "phone": zod.string().nullable().describe('Só enquanto o pedido de entrega está em andamento (LGPD: minimização)')
+}),
+  "items": zod.array(zod.object({
+  "name": zod.string(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}),
+  "quantity": zod.int(),
+  "unitPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]),
+  "lineTotal": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()])
+})),
+  "delivery": zod.union([zod.null(),zod.object({
+  "address": zod.record(zod.string(), zod.unknown()),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+})]),
+  "pickup": zod.union([zod.null(),zod.object({
+  "address": zod.string(),
+  "instructions": zod.string().nullable(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+})]),
+  "values": zod.union([zod.null(),zod.object({
+  "subtotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "delivery": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "storeDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "netBeforeProviderFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}).describe('Só com `sales_values`. `netBeforeProviderFee` = bruto da loja - comissão (a tarifa do provedor sai depois).')]),
+  "couponCode": zod.string().nullable(),
+  "timeline": zod.array(zod.object({
+  "status": zod.enum(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused', 'expired']).describe('Estados do pedido (RN-07). Transições validadas no servidor; o histórico guarda ator e hora de cada uma.'),
+  "at": zod.iso.datetime({"offset":true}),
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable()
+})),
+  "cancellation": zod.union([zod.null(),zod.object({
+  "by": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string().nullable(),
+  "at": zod.iso.datetime({"offset":true})
+})]),
+  "allowedActions": zod.array(zod.enum(['accept', 'refuse', 'prepare', 'dispatch', 'ready', 'complete', 'cancel']))
+})
+
+
+/**
  * Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. De `accepted`, `in_preparation` ou `ready_for_pickup` (depois de `ready_for_collection` só o admin cancela). Motivo obrigatório; estorno total, estoque devolvido; conta no índice de cancelamento da loja. Idempotente.
  * @summary Loja cancela depois do aceite (RN-08)
  */
@@ -8466,7 +8729,7 @@ export const CancelOrderByStoreResponse = zod.object({
  *
  * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
  *
- * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (opcional) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+ * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (obrigatório, SEC-147) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
@@ -8500,7 +8763,7 @@ export const CreateOrderBody = zod.object({
   "mode": zod.enum(['delivery', 'pickup']),
   "addressId": zod.uuid().optional().describe('Obrigatório na entrega; deve ser do cliente (404 se de outra conta)'),
   "cartRevision": zod.int().describe('`revision` da sacola que o cliente viu'),
-  "expectedTotalCents": zod.int().min(createOrderBodyExpectedTotalCentsMin).optional().describe('Total (centavos) que o cliente viu. Opcional; se diferir do calculado pelo servidor: 409 CART_CHANGED'),
+  "expectedTotalCents": zod.int().min(createOrderBodyExpectedTotalCentsMin).describe('Total (centavos) que o cliente viu (`summary.total` da sacola). OBRIGATÓRIO (SEC-147; 400 sem ele); se diferir do calculado pelo servidor (frete mudou, cupom esgotou): 409 CART_CHANGED com `DELIVERY_FEE_CHANGED` ou `DISCOUNT_CHANGED`'),
   "paymentMethod": zod.enum(['pix', 'card']),
   "card": zod.object({
   "token": zod.string().min(createOrderBodyCardTokenMin).max(createOrderBodyCardTokenMax),
@@ -9118,6 +9381,8 @@ export const CreateExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9210,6 +9475,8 @@ export const ListExchangesResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9295,6 +9562,8 @@ export const GetExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9386,6 +9655,102 @@ export const CancelExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Só recusa da LOJA (a decisão do admin é final), uma vez e em até `contestacao_dias` (7) depois da recusa: 409 `EXCHANGE_NOT_CONTESTABLE` ou `EXCHANGE_CONTEST_EXPIRED`. A troca vai à mediação (`in_mediation`) e a loja e o admin são avisados. Repetir é idempotente (200). Texto de 10 a 500 caracteres. O campo `contestableUntil` da troca diz até quando cabe contestar.
+ * @summary Contestar a recusa da loja (WB-176)
+ */
+export const ContestExchangeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const contestExchangeBodyTextMin = 10;
+export const contestExchangeBodyTextMax = 500;
+
+
+
+export const ContestExchangeBody = zod.object({
+  "text": zod.string().min(contestExchangeBodyTextMin).max(contestExchangeBodyTextMax)
+})
+
+export const ContestExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9569,6 +9934,8 @@ export const ListStoreExchangesResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9655,6 +10022,8 @@ export const GetStoreExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9739,6 +10108,8 @@ export const AcceptExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9832,6 +10203,8 @@ export const RefuseExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -9931,6 +10304,8 @@ export const ReceiveExchangeResponse = zod.object({
   "autoApproved": zod.boolean().optional(),
   "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
   "decisionReason": zod.string().nullish(),
+  "contestableUntil": zod.iso.datetime({"offset":true}).nullish().describe('Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.'),
+  "contested": zod.boolean().optional(),
   "photoCount": zod.int().optional(),
   "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
   "photos": zod.array(zod.object({
@@ -10020,6 +10395,63 @@ export const ListOrderReviewsResponse = zod.object({
 }).and(zod.object({
   "productId": zod.uuid().nullish()
 })))
+})
+
+
+/**
+ * Mais antiga primeiro, com `overdue` quando passa de `mediacao_dias_uteis` dias úteis e `origin` (`customer_contest`, `store_refusal` ou `inspection_failed`). `refusalNotAllowedByLaw` avisa que a recusa da loja não é permitida por lei (arrependimento; defeito dentro do prazo) e sugere aprovar. Permissão: `exchanges:mediate` (super admin e operação).
+ * @summary Fila "Em mediação" (WB-110)
+ */
+export const listExchangeMediationsQueryLimitMax = 100;
+
+
+
+export const ListExchangeMediationsQueryParams = zod.object({
+  "limit": zod.int().min(1).max(listExchangeMediationsQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListExchangeMediationsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "number": zod.string().optional(),
+  "orderId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional(),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']).optional(),
+  "resolution": zod.enum(['replace', 'refund']).optional(),
+  "origin": zod.enum(['customer_contest', 'store_refusal', 'inspection_failed']).optional(),
+  "storeReason": zod.string().nullish(),
+  "customerText": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "startedAt": zod.iso.datetime({"offset":true}).optional(),
+  "deadlineAt": zod.iso.datetime({"offset":true}).optional(),
+  "overdue": zod.boolean().optional(),
+  "refusalNotAllowedByLaw": zod.boolean().optional()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * `customer` (a favor do cliente): antes de a loja receber o item, a troca é aprovada e segue o fluxo (inclusive a taxa); com o item já na loja, vale a inspeção como aprovada (reembolso ou peça nova). `store`: recusa FINAL, libera a reserva e o cliente não pode contestar de novo. Justificativa de 10 a 200 caracteres, registrada no histórico da troca; as partes são avisadas. 409 `EXCHANGE_NOT_IN_MEDIATION` se já decidida. Permissão: `exchanges:mediate`.
+ * @summary Decidir a mediação (WB-110 C2)
+ */
+export const DecideExchangeMediationParams = zod.object({
+  "exchangeId": zod.uuid()
+})
+
+export const decideExchangeMediationBodyReasonMin = 10;
+export const decideExchangeMediationBodyReasonMax = 200;
+
+
+
+export const DecideExchangeMediationBody = zod.object({
+  "decision": zod.enum(['customer', 'store']),
+  "reason": zod.string().min(decideExchangeMediationBodyReasonMin).max(decideExchangeMediationBodyReasonMax)
+})
+
+export const DecideExchangeMediationResponse = zod.object({
+  "status": zod.enum(['decided'])
 })
 
 

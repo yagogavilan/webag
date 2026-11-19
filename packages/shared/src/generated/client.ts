@@ -1027,6 +1027,11 @@ export interface Delivery {
   cost: Money | null;
   /** @nullable */
   costPaidAt?: string | null;
+  /**
+     * Quem lançou o custo (SEC-145).
+     * @nullable
+     */
+  costRegisteredBy?: string | null;
   attempts: number;
   /** @nullable */
   failReason?: string | null;
@@ -3878,10 +3883,10 @@ export interface CreateOrderRequest {
   /** `revision` da sacola que o cliente viu */
   cartRevision: number;
   /**
-     * Total (centavos) que o cliente viu. Opcional; se diferir do calculado pelo servidor: 409 CART_CHANGED
+     * Total (centavos) que o cliente viu (`summary.total` da sacola). OBRIGATÓRIO (SEC-147; 400 sem ele); se diferir do calculado pelo servidor (frete mudou, cupom esgotou): 409 CART_CHANGED com `DELIVERY_FEE_CHANGED` ou `DISCOUNT_CHANGED`
      * @minimum 0
      */
-  expectedTotalCents?: number;
+  expectedTotalCents: number;
   paymentMethod: CreateOrderRequestPaymentMethod;
   /** Obrigatório com `paymentMethod=card`. Só o TOKEN gerado pelo checkout do Mercado Pago no aparelho; nunca número de cartão. */
   card?: CreateOrderRequestCard;
@@ -4503,6 +4508,12 @@ export interface Exchange {
   decidedBy?: ExchangeDecidedBy;
   /** @nullable */
   decisionReason?: string | null;
+  /**
+     * Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.
+     * @nullable
+     */
+  contestableUntil?: string | null;
+  contested?: boolean;
   photoCount?: number;
   /**
      * Só ao cliente, na troca na loja já aprovada.
@@ -5036,6 +5047,122 @@ export type SetDeliveryCostBody = {
   reason?: string;
 };
 
+export type GetLogisticsReportSummaryParams = {
+  from: string;
+  /** Inclusivo; no máximo 366 dias do início */
+  to: string;
+  cityId?: string;
+  storeId?: string;
+  courierId?: string;
+  kind?: GetLogisticsReportSummaryKind;
+};
+
+export type GetLogisticsReportSummaryKind = typeof GetLogisticsReportSummaryKind[keyof typeof GetLogisticsReportSummaryKind];
+
+
+export const GetLogisticsReportSummaryKind = {
+  delivery: 'delivery',
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type GetLogisticsReportSummary200Period = {
+  from?: string;
+  to?: string;
+};
+
+export type GetLogisticsReportSummary200TotalsFailuresByReason = {[key: string]: number};
+
+export type GetLogisticsReportSummary200TotalsAvgMinutes = {
+  /** @nullable */
+  readyToAssigned?: number | null;
+  /** @nullable */
+  readyToCollected?: number | null;
+  /** @nullable */
+  readyToDelivered?: number | null;
+};
+
+export type GetLogisticsReportSummary200Totals = {
+  deliveries?: number;
+  finished?: number;
+  delivered?: number;
+  onTime?: number;
+  onTimeLimitMinutes?: number;
+  failuresByReason?: GetLogisticsReportSummary200TotalsFailuresByReason;
+  avgMinutes?: GetLogisticsReportSummary200TotalsAvgMinutes;
+  feeCollected?: Money;
+  cost?: Money;
+  margin?: Money;
+  runsWithoutCost?: number;
+  freeShippingDeliveries?: number;
+  freeShippingCost?: Money;
+};
+
+export type GetLogisticsReportSummary200ByCityItem = {
+  /** @nullable */
+  cityId?: string | null;
+  /** @nullable */
+  cityName?: string | null;
+  deliveries?: number;
+  fee?: Money;
+  cost?: Money;
+  margin?: Money;
+  negativeMargin?: boolean;
+};
+
+export type GetLogisticsReportSummary200 = {
+  period: GetLogisticsReportSummary200Period;
+  totals: GetLogisticsReportSummary200Totals;
+  byCity: GetLogisticsReportSummary200ByCityItem[];
+};
+
+export type GetLogisticsReportPayableParams = {
+  from: string;
+  /** Inclusivo; no máximo 366 dias do início */
+  to: string;
+  cityId?: string;
+  storeId?: string;
+  courierId?: string;
+  kind?: GetLogisticsReportPayableKind;
+  format?: GetLogisticsReportPayableFormat;
+};
+
+export type GetLogisticsReportPayableKind = typeof GetLogisticsReportPayableKind[keyof typeof GetLogisticsReportPayableKind];
+
+
+export const GetLogisticsReportPayableKind = {
+  delivery: 'delivery',
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type GetLogisticsReportPayableFormat = typeof GetLogisticsReportPayableFormat[keyof typeof GetLogisticsReportPayableFormat];
+
+
+export const GetLogisticsReportPayableFormat = {
+  json: 'json',
+  csv: 'csv',
+} as const;
+
+export type GetLogisticsReportPayable200OnePeriod = { [key: string]: unknown };
+
+export type GetLogisticsReportPayable200OneDataItem = {
+  courierId?: string;
+  courierName?: string;
+  courierPhone?: string;
+  runs?: number;
+  total?: Money;
+  oldestRunAt?: string;
+  registeredBy?: string[];
+};
+
+export type GetLogisticsReportPayable200One = {
+  period: GetLogisticsReportPayable200OnePeriod;
+  data: GetLogisticsReportPayable200OneDataItem[];
+  total: Money;
+  runs: number;
+};
+
 export type MarkDeliveryPayoutsBody = {
   /**
      * @minItems 1
@@ -5043,11 +5170,61 @@ export type MarkDeliveryPayoutsBody = {
      */
   deliveryIds: string[];
   paidOn: string;
+  /**
+     * Só super admin que lançou o custo do lote (SEC-145).
+     * @minLength 10
+     * @maxLength 200
+     */
+  overrideReason?: string;
 };
 
 export type MarkDeliveryPayouts200 = {
   count: number;
   total: Money;
+};
+
+export type RevealDeliveryContactBody = {
+  /**
+     * @minLength 10
+     * @maxLength 200
+     */
+  reason: string;
+};
+
+export type RevealDeliveryContact200Contact = {
+  /** @nullable */
+  pickupAddress?: string | null;
+  /** @nullable */
+  storePhone?: string | null;
+  /** @nullable */
+  dropoffAddress?: string | null;
+  /** @nullable */
+  customerFirstName?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+};
+
+export type RevealDeliveryContact200 = {
+  contact: RevealDeliveryContact200Contact;
+};
+
+export type AdminConfirmStoreReturnBody = {
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
+};
+
+export type AdminConfirmStoreReturn200Status = typeof AdminConfirmStoreReturn200Status[keyof typeof AdminConfirmStoreReturn200Status];
+
+
+export const AdminConfirmStoreReturn200Status = {
+  cancelled: 'cancelled',
+} as const;
+
+export type AdminConfirmStoreReturn200 = {
+  status: AdminConfirmStoreReturn200Status;
 };
 
 export type AdminRefundOrderBody = {
@@ -5675,6 +5852,14 @@ export type ListExchangesParams = {
   limit?: LimitParameter;
 };
 
+export type ContestExchangeBody = {
+  /**
+     * @minLength 10
+     * @maxLength 500
+     */
+  text: string;
+};
+
 export type ListStoreExchangesParams = {
   /** @maxLength 200 */
   cursor?: string;
@@ -5698,6 +5883,94 @@ export const ListStoreExchangesScope = {
 
 export type ListOrderReviews200 = {
   data: OrderReview[];
+};
+
+export type ListExchangeMediationsParams = {
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListExchangeMediations200DataItemType = typeof ListExchangeMediations200DataItemType[keyof typeof ListExchangeMediations200DataItemType];
+
+
+export const ListExchangeMediations200DataItemType = {
+  withdrawal: 'withdrawal',
+  defect: 'defect',
+  size_color: 'size_color',
+} as const;
+
+export type ListExchangeMediations200DataItemResolution = typeof ListExchangeMediations200DataItemResolution[keyof typeof ListExchangeMediations200DataItemResolution];
+
+
+export const ListExchangeMediations200DataItemResolution = {
+  replace: 'replace',
+  refund: 'refund',
+} as const;
+
+export type ListExchangeMediations200DataItemOrigin = typeof ListExchangeMediations200DataItemOrigin[keyof typeof ListExchangeMediations200DataItemOrigin];
+
+
+export const ListExchangeMediations200DataItemOrigin = {
+  customer_contest: 'customer_contest',
+  store_refusal: 'store_refusal',
+  inspection_failed: 'inspection_failed',
+} as const;
+
+export type ListExchangeMediations200DataItem = {
+  id?: string;
+  number?: string;
+  orderId?: string;
+  storeId?: string;
+  type?: ListExchangeMediations200DataItemType;
+  resolution?: ListExchangeMediations200DataItemResolution;
+  origin?: ListExchangeMediations200DataItemOrigin;
+  /** @nullable */
+  storeReason?: string | null;
+  /** @nullable */
+  customerText?: string | null;
+  photoCount?: number;
+  startedAt?: string;
+  deadlineAt?: string;
+  overdue?: boolean;
+  refusalNotAllowedByLaw?: boolean;
+};
+
+export type ListExchangeMediations200 = {
+  data: ListExchangeMediations200DataItem[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type DecideExchangeMediationBodyDecision = typeof DecideExchangeMediationBodyDecision[keyof typeof DecideExchangeMediationBodyDecision];
+
+
+export const DecideExchangeMediationBodyDecision = {
+  customer: 'customer',
+  store: 'store',
+} as const;
+
+export type DecideExchangeMediationBody = {
+  decision: DecideExchangeMediationBodyDecision;
+  /**
+     * @minLength 10
+     * @maxLength 200
+     */
+  reason: string;
+};
+
+export type DecideExchangeMediation200Status = typeof DecideExchangeMediation200Status[keyof typeof DecideExchangeMediation200Status];
+
+
+export const DecideExchangeMediation200Status = {
+  decided: 'decided',
+} as const;
+
+export type DecideExchangeMediation200 = {
+  status: DecideExchangeMediation200Status;
 };
 
 export type GetExchangesReportParams = {
@@ -9868,7 +10141,7 @@ export const getGetDeliveryUrl = (deliveryId: string,) => {
 }
 
 /**
- * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD). Nunca devolve o código de entrega. Permissão: `logistics:read`.
+ * Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD) E para quem despacha (`logistics:write`); financeiro e suporte usam `POST .../contact-reveal` (SEC-144). Nunca devolve o código de entrega. Permissão: `logistics:read`.
  * @summary Detalhe da corrida com a linha do tempo
  */
 export const getDelivery = async (deliveryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getDeliveryResponse> => {
@@ -9997,7 +10270,7 @@ export const getGetDeliveryWhatsappUrl = (deliveryId: string,) => {
 }
 
 /**
- * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:read`.
+ * Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:write` (a mensagem leva o contato do cliente; financeiro e suporte recebem 403, SEC-144).
  * @summary Mensagem pronta e link wa.me para o motoboy
  */
 export const getDeliveryWhatsapp = async (deliveryId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getDeliveryWhatsappResponse> => {
@@ -10190,7 +10463,7 @@ export const getSetDeliveryCostUrl = (deliveryId: string,) => {
 }
 
 /**
- * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Permissão: `logistics:write`.
+ * Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Acima de 1,5x o previsto da faixa ou de `entrega_custo_alerta_cents` exige `reason` (422 `COST_REASON_REQUIRED`) e alerta o financeiro (`delivery_cost_high`); acima de `entrega_custo_max_cents`, 422 `COST_ABOVE_LIMIT` (SEC-145). Permissão: `logistics:write`.
  * @summary Custo pago ao motoboy (WB-239)
  */
 export const setDeliveryCost = async (deliveryId: string,
@@ -10202,6 +10475,133 @@ export const setDeliveryCost = async (deliveryId: string,
     method: 'PUT',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(setDeliveryCostBody)
+  }
+);}
+
+
+
+export type getLogisticsReportSummaryResponse200 = {
+  data: GetLogisticsReportSummary200
+  status: 200
+}
+
+export type getLogisticsReportSummaryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getLogisticsReportSummaryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getLogisticsReportSummaryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getLogisticsReportSummaryResponseSuccess = (getLogisticsReportSummaryResponse200) & {
+  headers: Headers;
+};
+export type getLogisticsReportSummaryResponseError = (getLogisticsReportSummaryResponse400 | getLogisticsReportSummaryResponse401 | getLogisticsReportSummaryResponse403) & {
+  headers: Headers;
+};
+
+export type getLogisticsReportSummaryResponse = (getLogisticsReportSummaryResponseSuccess | getLogisticsReportSummaryResponseError)
+
+export const getGetLogisticsReportSummaryUrl = (params: GetLogisticsReportSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/logistics/reports/summary?${stringifiedParams}` : `/v1/admin/logistics/reports/summary`
+}
+
+/**
+ * Corridas do período pela hora em que ficaram prontas (dia civil de Brasília), sem as canceladas. Entregas, no prazo (pronto até entregue dentro de `logistica_alerta_entrega_min`, [HIPÓTESE] até o PO definir o prazo), falhas por motivo, tempos médios em minutos, taxa cobrada, custo, margem (só das corridas com custo registrado), custo do subsídio do frete grátis (taxa zero) e margem por cidade com `negativeMargin` destacando a negativa; os totais são a soma das linhas. Permissão: `logistics:report` (super admin, operação, financeiro).
+ * @summary Relatório de logística (WB-240)
+ */
+export const getLogisticsReportSummary = async (params: GetLogisticsReportSummaryParams, options?: Parameters<typeof apiFetch>[1]): Promise<getLogisticsReportSummaryResponse> => {
+
+  return apiFetch<getLogisticsReportSummaryResponse>(getGetLogisticsReportSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getLogisticsReportPayableResponse200ApplicationJson = {
+  data: GetLogisticsReportPayable200One
+  status: 200
+}
+
+export type getLogisticsReportPayableResponse200TextCsv = {
+  data: string
+  status: 200
+}
+
+export type getLogisticsReportPayableResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getLogisticsReportPayableResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getLogisticsReportPayableResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getLogisticsReportPayableResponseSuccess = (getLogisticsReportPayableResponse200ApplicationJson | getLogisticsReportPayableResponse200TextCsv) & {
+  headers: Headers;
+};
+export type getLogisticsReportPayableResponseError = (getLogisticsReportPayableResponse400 | getLogisticsReportPayableResponse401 | getLogisticsReportPayableResponse403) & {
+  headers: Headers;
+};
+
+export type getLogisticsReportPayableResponse = (getLogisticsReportPayableResponseSuccess | getLogisticsReportPayableResponseError)
+
+export const getGetLogisticsReportPayableUrl = (params: GetLogisticsReportPayableParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/logistics/reports/payable?${stringifiedParams}` : `/v1/admin/logistics/reports/payable`
+}
+
+/**
+ * Custo das corridas já lançadas e ainda não pagas, por motoboy, com quem lançou (`registeredBy`, SEC-145). `format=csv` exporta (valores em centavos, BOM) e a exportação é auditada (`logistics.payable.export`). Permissão: `logistics:report`.
+ * @summary A pagar por motoboy (WB-240 C2)
+ */
+export const getLogisticsReportPayable = async (params: GetLogisticsReportPayableParams, options?: Parameters<typeof apiFetch>[1]): Promise<getLogisticsReportPayableResponse> => {
+
+  return apiFetch<getLogisticsReportPayableResponse>(getGetLogisticsReportPayableUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 
@@ -10260,7 +10660,7 @@ export const getMarkDeliveryPayoutsUrl = () => {
 }
 
 /**
- * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:write`.
+ * O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:payout` (financeiro e super admin, SEC-145). Quem lançou o custo de alguma corrida do lote não marca como pago: 403 `SEGREGATION_OF_DUTIES`; o super admin pode com `overrideReason` (auditado).
  * @summary Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
  */
 export const markDeliveryPayouts = async (markDeliveryPayoutsBody: MarkDeliveryPayoutsBody, options?: Parameters<typeof apiFetch>[1]): Promise<markDeliveryPayoutsResponse> => {
@@ -10271,6 +10671,136 @@ export const markDeliveryPayouts = async (markDeliveryPayoutsBody: MarkDeliveryP
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(markDeliveryPayoutsBody)
+  }
+);}
+
+
+
+export type revealDeliveryContactResponse200 = {
+  data: RevealDeliveryContact200
+  status: 200
+}
+
+export type revealDeliveryContactResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type revealDeliveryContactResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type revealDeliveryContactResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type revealDeliveryContactResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type revealDeliveryContactResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type revealDeliveryContactResponseSuccess = (revealDeliveryContactResponse200) & {
+  headers: Headers;
+};
+export type revealDeliveryContactResponseError = (revealDeliveryContactResponse400 | revealDeliveryContactResponse401 | revealDeliveryContactResponse403 | revealDeliveryContactResponse404 | revealDeliveryContactResponse409) & {
+  headers: Headers;
+};
+
+export type revealDeliveryContactResponse = (revealDeliveryContactResponseSuccess | revealDeliveryContactResponseError)
+
+export const getRevealDeliveryContactUrl = (deliveryId: string,) => {
+
+
+
+
+  return `/v1/admin/logistics/deliveries/${deliveryId}/contact-reveal`
+}
+
+/**
+ * Permissão: `logistics:contact` (super admin, operação, financeiro e suporte). Motivo obrigatório (10 a 200 caracteres); a leitura vai para a auditoria (`delivery.contact_revealed`: quem, quando e por quê, sem o dado). 409 `CONTACT_NOT_AVAILABLE` depois que a corrida termina e o contato é apagado (`pii_corrida_retencao_dias`, padrão 7).
+ * @summary Revelar telefone e endereço do cliente da corrida (SEC-144)
+ */
+export const revealDeliveryContact = async (deliveryId: string,
+    revealDeliveryContactBody: RevealDeliveryContactBody, options?: Parameters<typeof apiFetch>[1]): Promise<revealDeliveryContactResponse> => {
+
+  return apiFetch<revealDeliveryContactResponse>(getRevealDeliveryContactUrl(deliveryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(revealDeliveryContactBody)
+  }
+);}
+
+
+
+export type adminConfirmStoreReturnResponse200 = {
+  data: AdminConfirmStoreReturn200
+  status: 200
+}
+
+export type adminConfirmStoreReturnResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adminConfirmStoreReturnResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adminConfirmStoreReturnResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adminConfirmStoreReturnResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adminConfirmStoreReturnResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type adminConfirmStoreReturnResponseSuccess = (adminConfirmStoreReturnResponse200) & {
+  headers: Headers;
+};
+export type adminConfirmStoreReturnResponseError = (adminConfirmStoreReturnResponse400 | adminConfirmStoreReturnResponse401 | adminConfirmStoreReturnResponse403 | adminConfirmStoreReturnResponse404 | adminConfirmStoreReturnResponse409) & {
+  headers: Headers;
+};
+
+export type adminConfirmStoreReturnResponse = (adminConfirmStoreReturnResponseSuccess | adminConfirmStoreReturnResponseError)
+
+export const getAdminConfirmStoreReturnUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/admin/orders/${orderId}/store-return`
+}
+
+/**
+ * Permissão: `logistics:write`, com reautenticação. A corrida `returned_to_store` NÃO cancela nem estorna o pedido (a operação declara, a loja confirma); quando a loja não confirma no painel, o admin registra com motivo (auditado). Quem declarou a devolução não confirma pela loja (403 `SEGREGATION_OF_DUTIES`; super admin pode). Cancela o pedido e estorna tudo, com a taxa de entrega. 409 `RETURN_NOT_PENDING` se não há devolução aguardando.
+ * @summary Admin registra que a loja recebeu a devolução (SEC-143)
+ */
+export const adminConfirmStoreReturn = async (orderId: string,
+    adminConfirmStoreReturnBody: AdminConfirmStoreReturnBody, options?: Parameters<typeof apiFetch>[1]): Promise<adminConfirmStoreReturnResponse> => {
+
+  return apiFetch<adminConfirmStoreReturnResponse>(getAdminConfirmStoreReturnUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminConfirmStoreReturnBody)
   }
 );}
 
@@ -10329,7 +10859,7 @@ export const getAdminRefundOrderUrl = (orderId: string,) => {
 }
 
 /**
- * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
+ * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
  * @summary Estorno manual do admin, total ou parcial (SEC-039)
  */
 export const adminRefundOrder = async (orderId: string,
@@ -10452,7 +10982,7 @@ export const getListRefundQueueUrl = (params?: ListRefundQueueParams,) => {
 }
 
 /**
- * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`.
+ * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Só `exhausted` pode ser coberto. Permissão de admin: `payments:refunds:read`.
  * @summary Fila de estornos pendentes (SEC-130)
  */
 export const listRefundQueue = async (params?: ListRefundQueueParams, options?: Parameters<typeof apiFetch>[1]): Promise<listRefundQueueResponse> => {
@@ -10511,7 +11041,7 @@ export const getRetryRefundIntentUrl = (intentId: string,) => {
 }
 
 /**
- * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`.
+ * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. 409 `REFUND_IN_FLIGHT` se outra chamada ao provedor está em andamento (SEC-141). Auditado. Permissão de admin: `payments:refunds:retry`.
  * @summary Tentar o estorno de novo agora
  */
 export const retryRefundIntent = async (intentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<retryRefundIntentResponse> => {
@@ -10575,7 +11105,7 @@ export const getCoverRefundIntentUrl = (intentId: string,) => {
 }
 
 /**
- * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`.
+ * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Só intenção `exhausted` e sem chamada ao provedor em andamento: `pending` (ainda em retentativa) ou em voo é 409 `REFUND_NOT_COVERABLE`/`REFUND_IN_FLIGHT` (SEC-141). Permissão de admin: `payments:refunds:cover`.
  * @summary Cobertura da Webag (DEC-020a)
  */
 export const coverRefundIntent = async (intentId: string,
@@ -17586,6 +18116,72 @@ export const advanceOrder = async (storeId: string,
 
 
 
+export type confirmReturnReceivedByStoreResponse200 = {
+  data: StoreOrder
+  status: 200
+}
+
+export type confirmReturnReceivedByStoreResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type confirmReturnReceivedByStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type confirmReturnReceivedByStoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type confirmReturnReceivedByStoreResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type confirmReturnReceivedByStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type confirmReturnReceivedByStoreResponseSuccess = (confirmReturnReceivedByStoreResponse200) & {
+  headers: Headers;
+};
+export type confirmReturnReceivedByStoreResponseError = (confirmReturnReceivedByStoreResponse401 | confirmReturnReceivedByStoreResponse403 | confirmReturnReceivedByStoreResponse404 | confirmReturnReceivedByStoreResponse409 | confirmReturnReceivedByStoreResponse429) & {
+  headers: Headers;
+};
+
+export type confirmReturnReceivedByStoreResponse = (confirmReturnReceivedByStoreResponseSuccess | confirmReturnReceivedByStoreResponseError)
+
+export const getConfirmReturnReceivedByStoreUrl = (storeId: string,
+    orderId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/orders/${orderId}/return-received`
+}
+
+/**
+ * Permissão da loja: `orders`. Só para pedido de entrega cuja corrida terminou em `returned_to_store` (a operação declara a devolução; a loja confirma). Cancela o pedido e estorna tudo, inclusive a taxa de entrega (DEC-039e). 409 `RETURN_NOT_PENDING` se não há devolução aguardando ou já foi confirmada.
+ * @summary Loja confirma que recebeu a mercadoria devolvida (SEC-143)
+ */
+export const confirmReturnReceivedByStore = async (storeId: string,
+    orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<confirmReturnReceivedByStoreResponse> => {
+
+  return apiFetch<confirmReturnReceivedByStoreResponse>(getConfirmReturnReceivedByStoreUrl(storeId,orderId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type cancelOrderByStoreResponse200 = {
   data: StoreOrder
   status: 200
@@ -17725,7 +18321,7 @@ export const getCreateOrderUrl = () => {
  *
  * **Idempotência (obrigatória):** header `Idempotency-Key` (8 a 80 caracteres, gerado pelo app ao abrir o checkout e reaproveitado em toda repetição). Repetir a mesma chave com o mesmo corpo devolve o MESMO pedido, com o estado atual (200, sem novo estoque reservado nem nova cobrança); mesma chave com corpo diferente é 409 `IDEMPOTENCY_KEY_REUSED`. A chave vale 24 h. Tocar duas vezes em "Pagar" nunca gera dois pedidos.
  *
- * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (opcional) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
+ * **Conferência (RN-05):** `cartRevision` é a `revision` da sacola que o cliente viu. `expectedTotalCents` (obrigatório, SEC-147) é o total que o cliente viu: se o frete ou o desconto mudaram e o total difere, também responde 409 `CART_CHANGED`. Se a sacola mudou ou se preço ou estoque mudaram, responde 409 `CART_CHANGED` com `changes` (o app abre 'Algo mudou na sua sacola'); o cliente aceita com `POST /v1/cart/acknowledge` e repete com a nova `revision`. Nada é cobrado sem o cliente ver o valor.
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
@@ -18233,6 +18829,71 @@ export const cancelExchange = async (id: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelExchangeRequest)
+  }
+);}
+
+
+
+export type contestExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type contestExchangeResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type contestExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type contestExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type contestExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type contestExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type contestExchangeResponseSuccess = (contestExchangeResponse200) & {
+  headers: Headers;
+};
+export type contestExchangeResponseError = (contestExchangeResponse400 | contestExchangeResponse401 | contestExchangeResponse404 | contestExchangeResponse409 | contestExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type contestExchangeResponse = (contestExchangeResponseSuccess | contestExchangeResponseError)
+
+export const getContestExchangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}/contest`
+}
+
+/**
+ * Só recusa da LOJA (a decisão do admin é final), uma vez e em até `contestacao_dias` (7) depois da recusa: 409 `EXCHANGE_NOT_CONTESTABLE` ou `EXCHANGE_CONTEST_EXPIRED`. A troca vai à mediação (`in_mediation`) e a loja e o admin são avisados. Repetir é idempotente (200). Texto de 10 a 500 caracteres. O campo `contestableUntil` da troca diz até quando cabe contestar.
+ * @summary Contestar a recusa da loja (WB-176)
+ */
+export const contestExchange = async (id: string,
+    contestExchangeBody: ContestExchangeBody, options?: Parameters<typeof apiFetch>[1]): Promise<contestExchangeResponse> => {
+
+  return apiFetch<contestExchangeResponse>(getContestExchangeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(contestExchangeBody)
   }
 );}
 
@@ -18785,6 +19446,127 @@ export const listOrderReviews = async (orderId: string, options?: Parameters<typ
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listExchangeMediationsResponse200 = {
+  data: ListExchangeMediations200
+  status: 200
+}
+
+export type listExchangeMediationsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listExchangeMediationsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listExchangeMediationsResponseSuccess = (listExchangeMediationsResponse200) & {
+  headers: Headers;
+};
+export type listExchangeMediationsResponseError = (listExchangeMediationsResponse401 | listExchangeMediationsResponse403) & {
+  headers: Headers;
+};
+
+export type listExchangeMediationsResponse = (listExchangeMediationsResponseSuccess | listExchangeMediationsResponseError)
+
+export const getListExchangeMediationsUrl = (params?: ListExchangeMediationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/exchanges/mediations?${stringifiedParams}` : `/v1/admin/exchanges/mediations`
+}
+
+/**
+ * Mais antiga primeiro, com `overdue` quando passa de `mediacao_dias_uteis` dias úteis e `origin` (`customer_contest`, `store_refusal` ou `inspection_failed`). `refusalNotAllowedByLaw` avisa que a recusa da loja não é permitida por lei (arrependimento; defeito dentro do prazo) e sugere aprovar. Permissão: `exchanges:mediate` (super admin e operação).
+ * @summary Fila "Em mediação" (WB-110)
+ */
+export const listExchangeMediations = async (params?: ListExchangeMediationsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listExchangeMediationsResponse> => {
+
+  return apiFetch<listExchangeMediationsResponse>(getListExchangeMediationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type decideExchangeMediationResponse200 = {
+  data: DecideExchangeMediation200
+  status: 200
+}
+
+export type decideExchangeMediationResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type decideExchangeMediationResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type decideExchangeMediationResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type decideExchangeMediationResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type decideExchangeMediationResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type decideExchangeMediationResponseSuccess = (decideExchangeMediationResponse200) & {
+  headers: Headers;
+};
+export type decideExchangeMediationResponseError = (decideExchangeMediationResponse400 | decideExchangeMediationResponse401 | decideExchangeMediationResponse403 | decideExchangeMediationResponse404 | decideExchangeMediationResponse409) & {
+  headers: Headers;
+};
+
+export type decideExchangeMediationResponse = (decideExchangeMediationResponseSuccess | decideExchangeMediationResponseError)
+
+export const getDecideExchangeMediationUrl = (exchangeId: string,) => {
+
+
+
+
+  return `/v1/admin/exchanges/mediations/${exchangeId}/decision`
+}
+
+/**
+ * `customer` (a favor do cliente): antes de a loja receber o item, a troca é aprovada e segue o fluxo (inclusive a taxa); com o item já na loja, vale a inspeção como aprovada (reembolso ou peça nova). `store`: recusa FINAL, libera a reserva e o cliente não pode contestar de novo. Justificativa de 10 a 200 caracteres, registrada no histórico da troca; as partes são avisadas. 409 `EXCHANGE_NOT_IN_MEDIATION` se já decidida. Permissão: `exchanges:mediate`.
+ * @summary Decidir a mediação (WB-110 C2)
+ */
+export const decideExchangeMediation = async (exchangeId: string,
+    decideExchangeMediationBody: DecideExchangeMediationBody, options?: Parameters<typeof apiFetch>[1]): Promise<decideExchangeMediationResponse> => {
+
+  return apiFetch<decideExchangeMediationResponse>(getDecideExchangeMediationUrl(exchangeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(decideExchangeMediationBody)
   }
 );}
 
