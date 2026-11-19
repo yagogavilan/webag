@@ -75,8 +75,8 @@ describe('Pedir cancelamento em separação (BUG-015)', () => {
   it('a loja recusa com motivo: o pedido segue, o cliente vê a resposta e pode pedir de novo', async () => {
     const r = await inPreparation();
     await ctx.http.post(`/v1/orders/${r.orderId}/cancel-request`).set(bearer(r.buyer.user.accessToken)).send({}).expect(202);
-    await ctx.http.post(`${r.url}/cancel-request/decline`).set(r.owner).send({ reason: 'x' }).expect(400);
-    await ctx.http.post(`${r.url}/cancel-request/decline`).set(r.owner).send({ reason: 'Já está embalado' }).expect(200);
+    await ctx.http.post(`${r.url}/cancel-request/reject`).set(r.owner).send({ reason: 'x' }).expect(400);
+    await ctx.http.post(`${r.url}/cancel-request/reject`).set(r.owner).send({ reason: 'Já está embalado' }).expect(200);
     const view = await customerView(r);
     expect(view.status).toBe('in_preparation');
     expect(view.cancelRequest).toMatchObject({ status: 'refused', decisionNote: 'Já está embalado' });
@@ -84,7 +84,7 @@ describe('Pedir cancelamento em separação (BUG-015)', () => {
     await ctx.http.post(`${r.url}/cancel-request/accept`).set(r.owner).expect(409); // sem pedido pendente
     // outra loja não decide
     const other = await shopWith(ctx, [{ name: 'Outra', priceCents: 1_000, stock: 2 }]);
-    await ctx.http.post(`/v1/stores/${other.store.id}/orders/${r.orderId}/cancel-request/decline`).set(bearer(other.store.owner.accessToken)).send({ reason: 'não é minha' }).expect(404);
+    await ctx.http.post(`/v1/stores/${other.store.id}/orders/${r.orderId}/cancel-request/reject`).set(bearer(other.store.owner.accessToken)).send({ reason: 'não é minha' }).expect(404);
   });
 
   it('sem resposta da loja no prazo, o admin é alertado (uma vez) e pode decidir cancelando', async () => {

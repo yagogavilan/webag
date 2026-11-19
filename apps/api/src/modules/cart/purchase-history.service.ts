@@ -24,7 +24,7 @@ export class PaidPurchaseHistory extends PurchaseHistoryPort {
     const number = norm(address?.number);
     const complement = norm(address?.complement);
     const result = await this.db.execute<{ found: boolean }>(sql`
-      with paid as (
+      with paid as not materialized (
         select o.user_id, o.address from orders o
          where o.paid_at is not null and o.status not in ('cancelled', 'refused', 'expired')
       )

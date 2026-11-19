@@ -130,8 +130,8 @@ export class StoreOrdersController {
   @StorePermission('orders')
   @HttpCode(200)
   @RateLimit(WRITE)
-  @Post(':orderId/cancel-request/decline')
-  async declineCancelRequest(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Body(new ZodPipe(reasonSchema)) body: z.infer<typeof reasonSchema>) {
+  @Post(':orderId/cancel-request/reject')
+  async rejectCancelRequest(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string, @Body(new ZodPipe(reasonSchema)) body: z.infer<typeof reasonSchema>) {
     const id = uuidParam(storeId);
     await this.orders.decideCancelRequest(id, orderIdParam(orderId), p.userId, 'refused', body.reason);
     return this.orders.get(id, orderId, await this.showValues(p.userId, id));

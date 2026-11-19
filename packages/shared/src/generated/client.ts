@@ -7271,7 +7271,7 @@ export type RequestOrderCancelBody = {
   reason?: string;
 };
 
-export type DeclineStoreOrderCancelRequestBody = {
+export type RejectStoreOrderCancelRequestBody = {
   /**
      * @minLength 3
      * @maxLength 200
@@ -20643,73 +20643,73 @@ export const acceptStoreOrderCancelRequest = async (storeId: string,
 
 
 
-export type declineStoreOrderCancelRequestResponse200 = {
+export type rejectStoreOrderCancelRequestResponse200 = {
   data: StoreOrder
   status: 200
 }
 
-export type declineStoreOrderCancelRequestResponse400 = {
+export type rejectStoreOrderCancelRequestResponse400 = {
   data: ValidationErrorResponse
   status: 400
 }
 
-export type declineStoreOrderCancelRequestResponse401 = {
+export type rejectStoreOrderCancelRequestResponse401 = {
   data: UnauthorizedResponse
   status: 401
 }
 
-export type declineStoreOrderCancelRequestResponse403 = {
+export type rejectStoreOrderCancelRequestResponse403 = {
   data: ForbiddenResponse
   status: 403
 }
 
-export type declineStoreOrderCancelRequestResponse404 = {
+export type rejectStoreOrderCancelRequestResponse404 = {
   data: NotFoundResponse
   status: 404
 }
 
-export type declineStoreOrderCancelRequestResponse409 = {
+export type rejectStoreOrderCancelRequestResponse409 = {
   data: ConflictResponse
   status: 409
 }
 
-export type declineStoreOrderCancelRequestResponse429 = {
+export type rejectStoreOrderCancelRequestResponse429 = {
   data: TooManyRequestsResponse
   status: 429
 }
 
-export type declineStoreOrderCancelRequestResponseSuccess = (declineStoreOrderCancelRequestResponse200) & {
+export type rejectStoreOrderCancelRequestResponseSuccess = (rejectStoreOrderCancelRequestResponse200) & {
   headers: Headers;
 };
-export type declineStoreOrderCancelRequestResponseError = (declineStoreOrderCancelRequestResponse400 | declineStoreOrderCancelRequestResponse401 | declineStoreOrderCancelRequestResponse403 | declineStoreOrderCancelRequestResponse404 | declineStoreOrderCancelRequestResponse409 | declineStoreOrderCancelRequestResponse429) & {
+export type rejectStoreOrderCancelRequestResponseError = (rejectStoreOrderCancelRequestResponse400 | rejectStoreOrderCancelRequestResponse401 | rejectStoreOrderCancelRequestResponse403 | rejectStoreOrderCancelRequestResponse404 | rejectStoreOrderCancelRequestResponse409 | rejectStoreOrderCancelRequestResponse429) & {
   headers: Headers;
 };
 
-export type declineStoreOrderCancelRequestResponse = (declineStoreOrderCancelRequestResponseSuccess | declineStoreOrderCancelRequestResponseError)
+export type rejectStoreOrderCancelRequestResponse = (rejectStoreOrderCancelRequestResponseSuccess | rejectStoreOrderCancelRequestResponseError)
 
-export const getDeclineStoreOrderCancelRequestUrl = (storeId: string,
+export const getRejectStoreOrderCancelRequestUrl = (storeId: string,
     orderId: string,) => {
 
 
 
 
-  return `/v1/stores/${storeId}/orders/${orderId}/cancel-request/decline`
+  return `/v1/stores/${storeId}/orders/${orderId}/cancel-request/reject`
 }
 
 /**
  * Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente.
  * @summary A loja recusa o pedido de cancelamento do cliente, com motivo
  */
-export const declineStoreOrderCancelRequest = async (storeId: string,
+export const rejectStoreOrderCancelRequest = async (storeId: string,
     orderId: string,
-    declineStoreOrderCancelRequestBody: DeclineStoreOrderCancelRequestBody, options?: Parameters<typeof apiFetch>[1]): Promise<declineStoreOrderCancelRequestResponse> => {
+    rejectStoreOrderCancelRequestBody: RejectStoreOrderCancelRequestBody, options?: Parameters<typeof apiFetch>[1]): Promise<rejectStoreOrderCancelRequestResponse> => {
 
-  return apiFetch<declineStoreOrderCancelRequestResponse>(getDeclineStoreOrderCancelRequestUrl(storeId,orderId),
+  return apiFetch<rejectStoreOrderCancelRequestResponse>(getRejectStoreOrderCancelRequestUrl(storeId,orderId),
   {
     ...options,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
-    body: JSON.stringify(declineStoreOrderCancelRequestBody)
+    body: JSON.stringify(rejectStoreOrderCancelRequestBody)
   }
 );}
 

@@ -5857,10 +5857,10 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-  /v1/stores/{storeId}/orders/{orderId}/cancel-request/decline:
+  /v1/stores/{storeId}/orders/{orderId}/cancel-request/reject:
     post:
       tags: [store-orders]
-      operationId: declineStoreOrderCancelRequest
+      operationId: rejectStoreOrderCancelRequest
       summary: A loja recusa o pedido de cancelamento do cliente, com motivo
       description: "Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente."
       parameters:

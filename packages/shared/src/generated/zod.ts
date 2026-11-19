@@ -9891,21 +9891,21 @@ export const AcceptStoreOrderCancelRequestResponse = zod.object({
  * Permissão `orders`. O pedido segue em separação. 409 `NO_CANCEL_REQUEST` se não há pedido pendente.
  * @summary A loja recusa o pedido de cancelamento do cliente, com motivo
  */
-export const DeclineStoreOrderCancelRequestParams = zod.object({
+export const RejectStoreOrderCancelRequestParams = zod.object({
   "storeId": zod.uuid(),
   "orderId": zod.uuid()
 })
 
-export const declineStoreOrderCancelRequestBodyReasonMin = 3;
-export const declineStoreOrderCancelRequestBodyReasonMax = 200;
+export const rejectStoreOrderCancelRequestBodyReasonMin = 3;
+export const rejectStoreOrderCancelRequestBodyReasonMax = 200;
 
 
 
-export const DeclineStoreOrderCancelRequestBody = zod.object({
-  "reason": zod.string().min(declineStoreOrderCancelRequestBodyReasonMin).max(declineStoreOrderCancelRequestBodyReasonMax)
+export const RejectStoreOrderCancelRequestBody = zod.object({
+  "reason": zod.string().min(rejectStoreOrderCancelRequestBodyReasonMin).max(rejectStoreOrderCancelRequestBodyReasonMax)
 })
 
-export const DeclineStoreOrderCancelRequestResponse = zod.object({
+export const RejectStoreOrderCancelRequestResponse = zod.object({
   "cancelRequest": zod.union([zod.object({
   "id": zod.uuid(),
   "status": zod.enum(['pending', 'approved', 'refused']),
