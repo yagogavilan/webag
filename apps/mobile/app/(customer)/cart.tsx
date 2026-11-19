@@ -13,7 +13,8 @@ import { Skeleton } from '../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
 import { useToast } from '../../src/components/Toast';
-import { formatEta } from '../../src/features/catalog/format';
+import { etaLabel } from '../../src/features/catalog/eta';
+import { PairWith } from '../../src/features/cart/PairWith';
 import { modeStore } from '../../src/features/catalog/queries';
 import { CartLineItem } from '../../src/features/cart/CartLineItem';
 import { CouponSection } from '../../src/features/cart/CouponSection';
@@ -109,7 +110,7 @@ export default function CartScreen() {
 
   const goLogin = () => router.push({ pathname: '/signup', params: { returnTo: '/cart', context: 'checkout' } });
 
-  const header = <Header title={t('cart.title')} />;
+  const header = <Header large title={t('cart.title')} />;
 
   if (cart.isLoading) {
     return (
@@ -190,13 +191,14 @@ export default function CartScreen() {
     }
   };
 
-  const total = summary ? formatMoney(summary.totalCents) : formatMoney(view.subtotalCents);
+  const totalCents = summary ? summary.totalCents : view.subtotalCents;
+  const total = formatMoney(totalCents);
   const footer = (
     <View style={styles.footer}>
       {cta.banner ? <Banner testID={cta.banner.testID} text={cta.banner.text} tone={cta.banner.tone} /> : null}
       <View accessible accessibilityLabel={t('cart.totalA11y', { value: total })} style={styles.footerTotal}>
         <Text variant="bodyStrong">{summary ? t('cart.total') : t('cart.visitorTotal')}</Text>
-        <Text testID="cart.total" variant="title2">
+        <Text testID="cart.total" variant="priceStrong">
           {total}
         </Text>
       </View>
@@ -226,6 +228,7 @@ export default function CartScreen() {
                 {t('cart.addMore')}
               </Text>
             </Pressable>
+            <PairWith excludeProductIds={view.lines.map((l) => l.productId)} onOpen={(id) => router.push(`/product/${id}`)} storeId={view.storeId} />
             <CouponSection coupon={view.coupon} discountCents={summary?.discountCents ?? 0} guest={!cart.authed} onApply={onApplyCoupon} onGuest={goLogin} online={online} onRemove={onRemoveCoupon} />
             {summary ? <PriceSummary couponCode={view.coupon?.applied ? view.coupon.code : undefined} pickup={mode === 'pickup'} summary={summary} /> : <VisitorSummary subtotalCents={view.subtotalCents} />}
           </View>
@@ -246,10 +249,10 @@ export default function CartScreen() {
 }
 
 function StoreHeader({ view, onOpen }: { view: CartView; onOpen: () => void }) {
-  const eta = view.etaMin !== null && view.etaMax !== null ? t('cart.eta', { eta: formatEta(view.etaMin, view.etaMax) }) : null;
+  const eta = view.etaMin !== null && view.etaMax !== null ? etaLabel({ etaMinMinutes: view.etaMin, etaMaxMinutes: view.etaMax, eta: view.eta }) : null;
   return (
     <View style={styles.store} testID="cart.store">
-      {view.logoUrls ? <RemoteImage alt={t('catalog.logoAlt', { name: view.storeName })} height={theme.size.controlSm} urls={view.logoUrls} width={theme.size.controlSm} /> : null}
+      {view.logoUrls ? <RemoteImage alt={t('catalog.logoAlt', { name: view.storeName })} height={theme.size.controlSm} radius={14} urls={view.logoUrls} width={theme.size.controlSm} /> : null}
       <View style={styles.storeTexts}>
         <Text numberOfLines={1} variant="bodyStrong">
           {view.storeName}

@@ -455,6 +455,8 @@ export const ptBR = {
     tabAccount: 'Conta',
   },
   cart: {
+    pairWith: 'Peça também',
+    summaryTitle: 'Resumo de valores',
     title: 'Sacola',
     store: 'Pedido na {name}',
     eta: 'Entrega em {eta}',

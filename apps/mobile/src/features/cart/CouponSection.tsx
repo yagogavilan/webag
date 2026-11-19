@@ -33,7 +33,7 @@ export function CouponSection({ coupon, discountCents, online, guest, onApply, o
     return (
       <View style={styles.wrap}>
         <View style={styles.chip} testID="cart.coupon-chip">
-          <Tag color={theme.color.text.brand} size={theme.size.iconSm} />
+          <Tag color={theme.color.action.primary} duo={theme.color.brand[300]} size={theme.size.iconSm} weight="duotone" />
           <Text accessibilityLabel={rejected ? t('cart.couponRejected', { code: coupon.code }) : t('cart.couponChip', { code: coupon.code, value: formatMoney(discountCents) })} style={styles.chipText} variant="label">
             {rejected ? coupon.code : t('cart.couponChip', { code: coupon.code, value: formatMoney(discountCents) })}
           </Text>
@@ -89,7 +89,7 @@ export function CouponSection({ coupon, discountCents, online, guest, onApply, o
         style={styles.toggle}
         testID="cart.coupon-toggle"
       >
-        <Tag color={theme.color.text.brand} size={theme.size.iconMd} />
+        <Tag color={theme.color.action.primary} duo={theme.color.brand[300]} size={theme.size.iconMd} weight="duotone" />
         <Text style={styles.chipText} variant="label">
           {t('cart.couponToggle')}
         </Text>
@@ -108,7 +108,7 @@ export function CouponSection({ coupon, discountCents, online, guest, onApply, o
 const styles = StyleSheet.create({
   wrap: { gap: theme.space[2], paddingVertical: theme.space[2] },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin, paddingLeft: theme.space[3], borderRadius: theme.radius.md, backgroundColor: theme.color.action.primarySubtle },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin, paddingLeft: theme.space[3], borderRadius: theme.radius.lg, backgroundColor: theme.color.action.primarySubtle },
   chipText: { flex: 1 },
   remove: { alignItems: 'center', justifyContent: 'center', minWidth: theme.size.touchMin, minHeight: theme.size.touchMin },
   form: { gap: theme.space[3] },

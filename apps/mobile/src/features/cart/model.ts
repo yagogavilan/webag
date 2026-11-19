@@ -1,3 +1,4 @@
+import { readEta } from '../catalog/eta';
 import type { Cart } from '@webag/shared';
 import type { CartState } from './store';
 
@@ -52,6 +53,8 @@ export interface CartView {
   opensAt: string | null;
   etaMin: number | null;
   etaMax: number | null;
+  /** Faixa do servidor para o endereço da sacola (DEC-053); ausente em servidor antigo. */
+  eta?: import('../catalog/eta').EtaLike | null;
   lines: CartLine[];
   coupon: { code: string; applied: boolean; rejection: string | null } | null;
   /** Só com a sacola do servidor; visitante vê o subtotal e o resto é calculado ao entrar. */
@@ -75,6 +78,7 @@ export function fromServer(cart: Cart): CartView | null {
     opensAt: cart.store.opensAt,
     etaMin: cart.store.etaMinMinutes,
     etaMax: cart.store.etaMaxMinutes,
+    eta: readEta(cart.delivery),
     lines: cart.items.map((i) => ({
       key: i.variantId,
       variantId: i.variantId,

@@ -12,41 +12,61 @@ export interface HeaderProps {
   onBack?: (() => void) | false;
   right?: ReactNode;
   subtitle?: string;
+  /** Título de cartaz (46) sob a barra de voltar: Sacola, Pedidos, Conta. */
+  large?: boolean;
 }
 
 /** Header de 56 com voltar de 48. Título à esquerda no Android e centralizado no iOS (design-system.md §8). */
-export function Header({ title, onBack, right, subtitle }: HeaderProps) {
+export function Header({ title, onBack, right, subtitle, large = false }: HeaderProps) {
   const router = useRouter();
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const centered = Platform.OS === 'ios';
   return (
-    <View style={styles.bar}>
-      {onBack === false ? (
-        <View style={styles.slot} />
-      ) : (
-        <Pressable
-          accessibilityLabel={t('common.back')}
-          accessibilityRole="button"
-          android_ripple={{ color: theme.color.action.primarySubtlePressed, borderless: true }}
-          hitSlop={theme.hitSlopFor(theme.size.iconMd)}
-          onPress={onBack ?? goBack}
-          style={styles.slot}
-          testID="header.back"
-        >
-          <CaretLeft color={theme.color.text.primary} size={theme.size.iconMd} />
-        </Pressable>
-      )}
-      <View style={[styles.titleBox, centered && styles.titleCentered]}>
-        <Text accessibilityRole="header" numberOfLines={2} variant="title2">
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text color="secondary" variant="caption">
-            {subtitle}
-          </Text>
-        ) : null}
+    <View>
+      <View style={styles.bar}>
+        {onBack === false ? (
+          <View style={styles.slot} />
+        ) : (
+          <Pressable
+            accessibilityLabel={t('common.back')}
+            accessibilityRole="button"
+            android_ripple={{ color: theme.color.action.primarySubtlePressed, borderless: true }}
+            hitSlop={theme.hitSlopFor(theme.size.iconMd)}
+            onPress={onBack ?? goBack}
+            style={styles.slot}
+            testID="header.back"
+          >
+            <CaretLeft color={theme.color.text.primary} size={theme.size.iconMd} weight="bold" />
+          </Pressable>
+        )}
+        {large ? (
+          <View style={styles.flex} />
+        ) : (
+          <View style={[styles.titleBox, centered && styles.titleCentered]}>
+            <Text accessibilityRole="header" numberOfLines={2} variant="title1">
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text color="secondary" variant="caption">
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        )}
+        <View style={styles.right}>{right}</View>
       </View>
-      <View style={styles.right}>{right}</View>
+      {large ? (
+        <View style={styles.large}>
+          <Text accessibilityRole="header" variant="poster">
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text color="secondary" variant="caption">
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -58,7 +78,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: theme.space[1],
   },
-  slot: { width: theme.size.touchMin, height: theme.size.touchMin, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1 },
+  large: { paddingHorizontal: theme.layout.screenPaddingX, paddingBottom: theme.space[2] },
+  slot: {
+    width: theme.size.touchMin,
+    height: theme.size.touchMin,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   titleBox: { flex: 1, paddingVertical: theme.space[2] },
   titleCentered: { alignItems: 'center' },
   right: { minWidth: theme.size.touchMin, alignItems: 'flex-end', justifyContent: 'center' },

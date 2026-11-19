@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { BarsDivisor } from '../../art/BarsDivisor';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Info } from '../../components/icons';
 import { Text, type TextProps } from '../../components/Text';
@@ -41,6 +42,9 @@ export function PriceSummary({ summary, couponCode, pickup }: PriceSummaryProps)
         : formatMoney(summary.deliveryCents);
   return (
     <View style={styles.wrap} testID="cart.summary">
+      <Text accessibilityRole="header" variant="title1">
+        {t('cart.summaryTitle')}
+      </Text>
       <Row label={t('cart.subtotal')} testID="cart.subtotal" value={formatMoney(summary.subtotalCents)} />
       <Row label={pickup ? t('cart.pickup') : t('cart.delivery')} testID="cart.delivery" value={delivery} />
       {summary.serviceFeeCents > 0 ? (
@@ -60,8 +64,8 @@ export function PriceSummary({ summary, couponCode, pickup }: PriceSummaryProps)
           {t('cart.minimumTotal')}
         </Text>
       ) : null}
-      <View style={styles.divider} />
-      <Row a11yValue={formatMoney(summary.totalCents)} label={t('cart.total')} testID="cart.summary-total" value={formatMoney(summary.totalCents)} variant="title1" />
+      <BarsDivisor />
+      <Row a11yValue={formatMoney(summary.totalCents)} label={t('cart.total')} testID="cart.summary-total" value={formatMoney(summary.totalCents)} variant="priceStrong" />
       <BottomSheet onClose={() => setFeeOpen(false)} title={t('cart.serviceFeeTitle')} visible={feeOpen}>
         <Text>{t('cart.serviceFeeText')}</Text>
       </BottomSheet>
@@ -70,7 +74,7 @@ export function PriceSummary({ summary, couponCode, pickup }: PriceSummaryProps)
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: theme.space[2], paddingVertical: theme.space[3] },
+  wrap: { gap: theme.space[2], paddingVertical: theme.space[4], borderTopWidth: theme.borderWidth.strong, borderTopColor: theme.color.neutral[900], marginTop: theme.space[4] },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.space[3], minHeight: theme.space[6] },
   label: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1], flexShrink: 1 },
   info: { alignItems: 'center', justifyContent: 'center', minWidth: theme.size.touchMin, minHeight: theme.size.touchMin, marginVertical: -theme.space[3] },

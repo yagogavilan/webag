@@ -66,3 +66,15 @@ export function deliveryEta(d: DeliveryEtaSource, from?: Date): { start: string;
   if (d.etaMaxMinutes > MAX_ETA_MINUTES) return null;
   return etaWindow(d.etaMinMinutes, d.etaMaxMinutes, from);
 }
+
+/** Lê `eta` (aditivo no contrato, DEC-053) de qualquer objeto da API, sem depender de o tipo gerado já ter o campo. */
+export function readEta(source: unknown): EtaLike | null {
+  const eta = (source as { eta?: EtaLike | null } | null | undefined)?.eta;
+  return eta && typeof eta.fromAt === 'string' && typeof eta.toAt === 'string' ? eta : null;
+}
+
+/** "Chega entre 15:40 e 16:40" a partir da faixa do servidor, ou da conta local (agora + minutos). `null` = fora da área. */
+export function etaLabel(d: DeliveryEtaSource, from?: Date): string | null {
+  const w = deliveryEta(d, from);
+  return w ? `Chega entre ${w.start} e ${w.end}` : null;
+}

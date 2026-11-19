@@ -34,7 +34,7 @@ function CartLineItemBase({ line, quantity, onQuantity, onRemove }: CartLineItem
         accessibilityLabel={[line.name, line.variantLabel, unavailable ? t('cart.warnSoldOut') : `${quantity} x ${formatMoney(line.unitPriceCents)}, ${t('cart.itemTotal', { value: total })}`].filter(Boolean).join(', ')}
         style={styles.row}
       >
-        <RemoteImage alt={line.name} height={THUMB} urls={line.urls} width={THUMB} />
+        <RemoteImage alt={line.name} height={THUMB} radius={theme.radius.lg} urls={line.urls} width={THUMB} />
         <View style={styles.texts}>
           <Text numberOfLines={2} variant="bodyStrong">
             {line.name}
@@ -50,7 +50,7 @@ function CartLineItemBase({ line, quantity, onQuantity, onRemove }: CartLineItem
       {unavailable ? null : (
         <View style={styles.actions}>
           <QuantityStepper max={Math.max(1, line.maxQuantity)} onChange={(n) => onQuantity(line, n)} onRemove={() => onRemove(line)} removeLabel={t('cart.remove', { name: line.name })} testID={`cart.item-${line.key}-qty`} value={quantity} />
-          <Text variant="price">{total}</Text>
+          <Text variant="priceStrong">{total}</Text>
         </View>
       )}
       {warning ? (

@@ -101,7 +101,7 @@ describe('Sacola da conta (S1)', () => {
     expect(screen.getByTestId('cart.delivery').props.accessibilityLabel).toBe('Entrega, R$ 5,00');
     expect(screen.getByText('Taxa de serviço')).toBeOnTheScreen();
     expect(screen.getByTestId('cart.total')).toHaveTextContent('R$ 186,80');
-    expect(screen.getByText('Entrega em 30 a 45 min')).toBeOnTheScreen();
+    expect(screen.getByText(/Chega entre \d{2}:\d{2} e \d{2}:\d{2}/)).toBeOnTheScreen();
   });
 
   it('entrega grátis aparece como "Grátis"', async () => {
