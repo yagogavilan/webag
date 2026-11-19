@@ -139,7 +139,7 @@ Os testes E2E da API usam banco real: `E2E_DEPS=1` com Postgres e Redis no ar (o
 
 - **Mercado Pago real, push real e Sentry do app/painel não foram exercitados** (dependem de contas do fundador). Estão prontos para ligar só com chaves.
 - **App no navegador**: abre com `pnpm web` (DEC-058), com os limites descritos em "Abrir o app". Captura do roteiro: `docs/qa/relatorios/app-web-sacola.png`.
-- Não existe botão "pagar de mentira" dentro do app: use `pnpm pagar`.
+- O botão "Simular pagamento" do app depende de uma rota de dev por pedido que a API ainda não expõe (`docs/gestao/fila-mobile.md`): enquanto isso, use `pnpm pagar`.
 
 ## Como o time trabalha
 

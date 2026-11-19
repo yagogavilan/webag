@@ -26,6 +26,13 @@ export function resolvePaymentMode(raw: string | undefined, env: AppEnv): Paymen
 
 export const PAYMENT_MODE: PaymentMode = resolvePaymentMode(process.env.EXPO_PUBLIC_PAYMENT_MODE, APP_ENV);
 
+/**
+ * "Simular pagamento" na tela do PIX (DT-065): só com o provedor simulado e fora de produção. Em `production` o `PAYMENT_MODE` nunca é
+ * `fake`, então o botão não existe no build de loja; a rota de simulação da API também não (404, SEC-035/SEC-135).
+ */
+export const canSimulatePayment = (env: AppEnv, mode: PaymentMode): boolean => env !== 'production' && mode === 'fake';
+export const SIMULATE_PAYMENT_ENABLED: boolean = canSimulatePayment(APP_ENV, PAYMENT_MODE);
+
 /** Chave PÚBLICA do Mercado Pago (a de teste no sandbox). Nunca o access token. */
 export const MP_PUBLIC_KEY: string = process.env.EXPO_PUBLIC_MP_PUBLIC_KEY ?? '';
 

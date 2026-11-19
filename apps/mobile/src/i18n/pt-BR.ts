@@ -853,6 +853,11 @@ export const ptBR = {
     tooMany: 'Muitas tentativas com cartão. Pague com PIX ou tente em 1 hora.',
   },
   pix: {
+    simulate: 'Simular pagamento',
+    simulateHint: 'Só em desenvolvimento',
+    simulateDone: 'Pagamento simulado. Aguardando a confirmação do servidor.',
+    simulateMissing: 'A API não tem a rota de simulação deste pedido. Use pnpm pagar na raiz do projeto.',
+    simulateError: 'Não foi possível simular o pagamento.',
     title: 'Pague com PIX',
     store: 'Pedido na {store}',
     amountA11y: 'Valor, {value}',

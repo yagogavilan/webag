@@ -15,6 +15,9 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { EmptyState, ErrorState } from '../../../src/components/StateViews';
 import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
+import { simulatePayment } from '../../../src/api/dev-api';
+import { ApiError } from '../../../src/api/problem';
+import { SIMULATE_PAYMENT_ENABLED } from '../../../src/features/checkout/config';
 import { useCartParams } from '../../../src/features/cart/hooks';
 import { orderKey, paymentKey, useOrder, useOrderPayment } from '../../../src/features/checkout/hooks';
 import { reorderItems } from '../../../src/features/orders/reorder';
@@ -58,6 +61,7 @@ export default function PixScreen() {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [threeDsOpen, setThreeDsOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [simulating, setSimulating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announced = useRef(new Set<number>());
@@ -115,6 +119,21 @@ export default function PixScreen() {
     setShowAlreadyPaid(true);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopied(false), 3000);
+  };
+
+  // DT-065: só em desenvolvimento. O servidor confirma; o app apenas relê o pedido e o pagamento.
+  const onSimulate = async () => {
+    setSimulating(true);
+    try {
+      await simulatePayment(id);
+      toast.show(t('pix.simulateDone'));
+      await Promise.all([order.refetch(), payment.refetch()]);
+    } catch (error) {
+      void haptic('error');
+      toast.show(error instanceof ApiError && error.status === 404 ? t('pix.simulateMissing') : t('pix.simulateError'));
+    } finally {
+      setSimulating(false);
+    }
   };
 
   const onAlreadyPaid = async () => {
@@ -244,6 +263,15 @@ export default function PixScreen() {
         testID="pix.copy"
         {...(pix ? {} : { disabled: true })}
       />
+      {SIMULATE_PAYMENT_ENABLED && pix ? (
+        <Button
+          label={t('pix.simulate')}
+          loading={simulating}
+          onPress={() => void onSimulate()}
+          testID="pix.simulate"
+          variant="secondary"
+        />
+      ) : null}
       <View style={styles.links}>
         {showAlreadyPaid ? <Button label={t('pix.alreadyPaid')} onPress={() => void onAlreadyPaid()} testID="pix.already-paid" variant="text" /> : null}
         <Button label={t('pix.viewOrders')} onPress={askLeave} testID="pix.view-orders" variant="text" />
