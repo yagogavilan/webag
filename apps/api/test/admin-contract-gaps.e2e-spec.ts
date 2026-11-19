@@ -19,7 +19,7 @@ describe('Admin web: reason, versão em parâmetros, códigos de recuperação, 
   });
 
   const lastAudit = async (action: string, targetId: string) => {
-    const rows = await ctx.db.select().from(auditLog).where(and(eq(auditLog.action, action), eq(auditLog.targetId, targetId)));
+    const rows = await ctx.db.select().from(auditLog).where(and(eq(auditLog.action, action), eq(auditLog.targetId, targetId))).orderBy(auditLog.at, auditLog.id); // BUG-019: sem ordem a "última" linha dependia do heap
     return rows.at(-1);
   };
 

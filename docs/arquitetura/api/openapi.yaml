@@ -1809,6 +1809,85 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/availability:
+    get:
+      tags: [logistics]
+      operationId: getLogisticsAvailability
+      summary: Horário e pausas da logística agora (BUG-016)
+      description: "`open=false` com `closedBy` `HOURS` (fora de `logistica_horario`/`logistica_dias`, Brasília; `opensAt` = próxima abertura) ou `PAUSED`. `pauses` lista as pausas abertas (geral = `cityId` nulo)."
+      responses:
+        '200':
+          description: Estado atual
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [open, closedBy, opensAt, pauses]
+                properties:
+                  open: { type: boolean }
+                  closedBy: { type: [string, 'null'], enum: [HOURS, PAUSED, null] }
+                  opensAt: { type: [string, 'null'], format: date-time }
+                  pauses: { type: array, items: { $ref: '#/components/schemas/LogisticsPause' } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/pause:
+    post:
+      tags: [logistics]
+      operationId: pauseLogistics
+      summary: Pausar as entregas, geral ou de uma cidade, com motivo (BUG-016, DEC-039c)
+      description: "Enquanto pausada, o carrinho bloqueia a entrega com `LOGISTICS_CLOSED` (só retirada) e a descoberta mostra a entrega indisponível. Auditado. Repetir a mesma pausa devolve a existente."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                cityId: { type: [string, 'null'], format: uuid, description: 'Nulo = todas as cidades' }
+                reason: { type: string, minLength: 3, maxLength: 200 }
+      responses:
+        '200':
+          description: Pausa ativa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogisticsPause'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/logistics/resume:
+    post:
+      tags: [logistics]
+      operationId: resumeLogistics
+      summary: Liberar a entrega pausada (geral ou de uma cidade)
+      description: "409 `NOT_PAUSED` se não há pausa ativa nesse escopo. Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                cityId: { type: [string, 'null'], format: uuid }
+      responses:
+        '204':
+          description: Liberada
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /v1/admin/logistics/deliveries/assign-batch:
     post:
       tags: [logistics]
@@ -10643,6 +10722,14 @@ components:
         average: { type: [number, 'null'], description: 'Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações' }
         count: { type: integer }
         isNew: { type: boolean, description: 'Mostrar "Novo" no lugar da nota' }
+    LogisticsPause:
+      type: object
+      required: [id, cityId, reason, pausedAt]
+      properties:
+        id: { type: string, format: uuid }
+        cityId: { type: [string, 'null'], format: uuid }
+        reason: { type: string }
+        pausedAt: { type: string, format: date-time }
     EtaRange:
       type: object
       required: [minMinutes, maxMinutes, fromAt, toAt]
@@ -10657,6 +10744,7 @@ components:
       required: [available, feeCents, freeShipping, freeAboveCents, minOrderCents, etaMinMinutes, etaMaxMinutes]
       properties:
         eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.' }
+        logisticsOpensAt: { type: [string, 'null'], format: date-time, description: 'BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.' }
         available: { type: boolean, description: 'Entrega na posição consultada (dentro do raio e de uma faixa)' }
         feeCents: { type: [integer, 'null'], description: Taxa para a posição, antes de "grátis acima de X" }
         freeShipping: { type: boolean, description: Taxa R$ 0 nessa posição }
@@ -10787,6 +10875,8 @@ components:
             etaMinMinutes: { type: integer, description: 'DEC-053: início da faixa calculada (sem posição, só preparo + despacho).' }
             etaMaxMinutes: { type: integer }
             eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: com posição e dentro do teto; senão nulo.' }
+            logisticsClosed: { type: boolean, description: 'BUG-016: logística fora do horário ou pausada para esta posição (só retirada)' }
+            logisticsOpensAt: { type: [string, 'null'], format: date-time }
             acceptsDelivery: { type: boolean }
         pickup:
           type: object

@@ -1696,7 +1696,7 @@ export const PreviewDeliveryFeeQueryParams = zod.object({
 
 export const PreviewDeliveryFeeResponse = zod.object({
   "available": zod.boolean(),
-  "reason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('NO_FEE_TABLE'),zod.literal(null)]).nullable(),
+  "reason": zod.union([zod.literal('OUT_OF_RANGE'),zod.literal('NO_FEE_TABLE'),zod.literal('LOGISTICS_CLOSED'),zod.literal(null)]).nullable(),
   "distanceM": zod.int().nullable(),
   "fee": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -1974,6 +1974,56 @@ export const GetDeliveryResponse = zod.object({
   "at": zod.iso.datetime({"offset":true}).optional()
 })).optional()
 }))
+
+
+/**
+ * `open=false` com `closedBy` `HOURS` (fora de `logistica_horario`/`logistica_dias`, Brasília; `opensAt` = próxima abertura) ou `PAUSED`. `pauses` lista as pausas abertas (geral = `cityId` nulo).
+ * @summary Horário e pausas da logística agora (BUG-016)
+ */
+export const GetLogisticsAvailabilityResponse = zod.object({
+  "open": zod.boolean(),
+  "closedBy": zod.union([zod.literal('HOURS'),zod.literal('PAUSED'),zod.literal(null)]).nullable(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "pauses": zod.array(zod.object({
+  "id": zod.uuid(),
+  "cityId": zod.uuid().nullable(),
+  "reason": zod.string(),
+  "pausedAt": zod.iso.datetime({"offset":true})
+}))
+})
+
+
+/**
+ * Enquanto pausada, o carrinho bloqueia a entrega com `LOGISTICS_CLOSED` (só retirada) e a descoberta mostra a entrega indisponível. Auditado. Repetir a mesma pausa devolve a existente.
+ * @summary Pausar as entregas, geral ou de uma cidade, com motivo (BUG-016, DEC-039c)
+ */
+export const pauseLogisticsBodyReasonMin = 3;
+export const pauseLogisticsBodyReasonMax = 200;
+
+
+
+export const PauseLogisticsBody = zod.object({
+  "cityId": zod.uuid().nullish().describe('Nulo = todas as cidades'),
+  "reason": zod.string().min(pauseLogisticsBodyReasonMin).max(pauseLogisticsBodyReasonMax)
+})
+
+export const PauseLogisticsResponse = zod.object({
+  "id": zod.uuid(),
+  "cityId": zod.uuid().nullable(),
+  "reason": zod.string(),
+  "pausedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * 409 `NOT_PAUSED` se não há pausa ativa nesse escopo. Auditado.
+ * @summary Liberar a entrega pausada (geral ou de uma cidade)
+ */
+export const ResumeLogisticsBody = zod.object({
+  "cityId": zod.uuid().nullish()
+})
+
+export const ResumeLogisticsResponse = zod.void()
 
 
 /**
@@ -6576,6 +6626,7 @@ export const GetHomeResponse = zod.object({
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
@@ -6641,6 +6692,7 @@ export const GetHomeResponse = zod.object({
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
@@ -6674,6 +6726,7 @@ export const GetHomeResponse = zod.object({
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
@@ -6815,6 +6868,7 @@ export const SearchStoresResponse = zod.object({
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
   "feeCents": zod.int().nullable().describe('Taxa para a posição'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
@@ -7008,6 +7062,8 @@ export const GetBrowseStoreResponse = zod.object({
   "fromAt": zod.iso.datetime({"offset":true}),
   "toAt": zod.iso.datetime({"offset":true})
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: com posição e dentro do teto; senão nulo.'),
+  "logisticsClosed": zod.boolean().optional().describe('BUG-016: logística fora do horário ou pausada para esta posição (só retirada)'),
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish(),
   "acceptsDelivery": zod.boolean()
 }),
   "pickup": zod.object({
@@ -7464,6 +7520,7 @@ export const GetCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7509,7 +7566,7 @@ export const GetCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -7597,6 +7654,7 @@ export const ClearCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7642,7 +7700,7 @@ export const ClearCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -7743,6 +7801,7 @@ export const SetCartItemResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7788,7 +7847,7 @@ export const SetCartItemResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -7880,6 +7939,7 @@ export const RemoveCartItemResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -7925,7 +7985,7 @@ export const RemoveCartItemResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -8021,6 +8081,7 @@ export const ApplyCartCouponResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8066,7 +8127,7 @@ export const ApplyCartCouponResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -8153,6 +8214,7 @@ export const RemoveCartCouponResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8198,7 +8260,7 @@ export const RemoveCartCouponResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -8286,6 +8348,7 @@ export const AcknowledgeCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8331,7 +8394,7 @@ export const AcknowledgeCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -8432,6 +8495,7 @@ export const MergeCartResponse = zod.object({
   "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
 })]),
   "delivery": zod.object({
+  "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
   "eta": zod.union([zod.object({
   "minMinutes": zod.int(),
   "maxMinutes": zod.int(),
@@ -8477,7 +8541,7 @@ export const MergeCartResponse = zod.object({
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
-  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
+  "blockers": zod.array(zod.enum(['EMPTY', 'ITEM_UNAVAILABLE', 'STORE_UNAVAILABLE', 'STORE_CLOSED', 'BELOW_MINIMUM', 'OUT_OF_RANGE', 'LOGISTICS_CLOSED', 'NEEDS_ADDRESS', 'PICKUP_UNAVAILABLE', 'ABOVE_MAX_ORDER', 'NEW_STORE_LIMIT'])),
   "opensAt": zod.iso.datetime({"offset":true}).nullable(),
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
@@ -9231,7 +9295,7 @@ export const CancelOrderByStoreResponse = zod.object({
  *
  * **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
  *
- * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+ * **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016: fora do horário da logística ou pausada; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrderHeaderIdempotencyKeyMin = 8;
