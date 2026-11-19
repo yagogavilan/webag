@@ -14,3 +14,12 @@
 8. [ ] BUG-010 / I8: teto de concorrência no processamento de imagens (sharp).
 9. [ ] DT-038 (DEC-032a): modo `staging` (APP_ENV=staging) aceita provedor `fake` e credencial `TEST-` do Mercado Pago; produção recusa os dois. Atualizar env.prod.example e o guia de deploy.
 10. [ ] DT-039 (DEC-032b): Sentry plugável na API (sem DSN = desligado), com máscara de PII.
+
+## PRIORIDADE ZERO (DEC-033, veto do Security no pagamento): fazer ANTES do resto da fila
+0.1 [ ] SEC-130: estorno recusado pelo provedor (conta MP da loja desconectada/trocada) NÃO pode ficar `failed` em silêncio: nova tentativa com backoff, alerta ao admin e ao financeiro, fila de pendências visível, e o cliente recebe estorno por outro caminho (cobertura da Webag até o teto, DEC-020a) quando esgotar.
+0.2 [ ] SEC-131: teto de pedidos pendentes por conta/dispositivo (SEC-064) e expiração da reserva; teste: uma conta não reserva 180 de 200 unidades.
+0.3 [ ] SEC-132 = BUG-009 = WB-225: teto de exposição da loja nova (R$ 500, 30 dias ou 20 pedidos; parâmetros) aplicado no pedido, com tela/API.
+0.4 [ ] SEC-134: o pedido só aceita pagamento cujas tentativas ele criou (referência + dono + valor); teste de pagar pedido alheio com R$ 0,01.
+0.5 [ ] SEC-133 (cartão aprovado na criação confere comissão e recebedor), SEC-136 (timeout de cartão sem pedido: reconciliar/estornar), SEC-137 a 140 (OAuth com PKCE, mascarar erro de refresh e CPF nos logs).
+0.6 [ ] SEC-039: estorno pelo admin (total e parcial) com auditoria, antes do G4.
+Depois de 0.x o Security reverifica. NUNCA troque de branch nem faça push fora de `claude/admiring-lamport-62tq1a`.
