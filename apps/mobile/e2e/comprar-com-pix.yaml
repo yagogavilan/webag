@@ -62,7 +62,9 @@ appId: br.com.webag.app
 - tapOn:
     id: pix.copy
 - assertVisible: Código copiado
-# (aprovar no provedor fake aqui) -> a tela muda sozinha
+# provedor `fake` fora de produção: "Simular pagamento" pede ao SERVIDOR para aprovar; a tela muda sozinha ao ler o status
+- tapOn:
+    id: pix.simulate
 - extendedWaitUntil:
     visible:
       id: confirmed.title
