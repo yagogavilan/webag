@@ -23,7 +23,7 @@ function familyForWeight(weight: number): string {
   return native.fontFamily.regular;
 }
 
-/** Fredoka (titulos, numeros de marca): @expo-google-fonts/fredoka -> Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold. */
+/** Outfit (titulos, numeros de marca): @expo-google-fonts/fredoka -> Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold. */
 function displayFamilyForWeight(weight: number): string {
   if (weight >= 700) return native.fontFamily.displayBold;
   if (weight >= 600) return native.fontFamily.displaySemibold;

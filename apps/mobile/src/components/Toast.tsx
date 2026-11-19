@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   host: { position: 'absolute', left: 0, right: 0, paddingHorizontal: theme.layout.screenPaddingX, zIndex: theme.zIndex.toast },
   toast: {
     backgroundColor: theme.color.surface.inverse,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     paddingHorizontal: theme.space[4],
     paddingVertical: theme.space[3],
     flexDirection: 'row',

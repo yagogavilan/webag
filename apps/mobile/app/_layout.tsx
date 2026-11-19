@@ -1,3 +1,4 @@
+import { Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold } from '@expo-google-fonts/outfit';
 import {
   Figtree_400Regular,
   Figtree_600SemiBold,
@@ -56,6 +57,9 @@ export default function RootLayout() {
     Figtree_400Regular,
     Figtree_600SemiBold,
     Figtree_700Bold,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
   });
   const [timedOut, setTimedOut] = useState(false);
   const [localReady, setLocalReady] = useState(false);

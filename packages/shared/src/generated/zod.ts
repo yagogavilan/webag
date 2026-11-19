@@ -2441,8 +2441,8 @@ export const CompleteResetPasswordResponse = zod.object({
 
 
 export const CreateUploadBody = zod.object({
-  "storeId": zod.uuid().optional().describe('Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`)'),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
+  "storeId": zod.uuid().optional().describe('Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`) e `exchange_photo` (foto de troca do cliente, privada, até 5 MB, re-codificada sem EXIF; também proíbe `storeId`)'),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner', 'exchange_photo']),
   "contentType": zod.string(),
   "sizeBytes": zod.int().min(1)
 })
@@ -2467,7 +2467,7 @@ export const CompleteUploadParams = zod.object({
 
 export const CompleteUploadResponse = zod.object({
   "id": zod.uuid(),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner', 'exchange_photo']),
   "status": zod.enum(['pending', 'ready', 'rejected']),
   "contentType": zod.string().nullish(),
   "sizeBytes": zod.int().nullish(),
@@ -2489,7 +2489,7 @@ export const GetUploadParams = zod.object({
 
 export const GetUploadResponse = zod.object({
   "id": zod.uuid(),
-  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner']),
+  "purpose": zod.enum(['store_logo', 'store_cover', 'product_image', 'store_document', 'banner', 'exchange_photo']),
   "status": zod.enum(['pending', 'ready', 'rejected']),
   "contentType": zod.string().nullish(),
   "sizeBytes": zod.int().nullish(),
@@ -8986,3 +8986,1318 @@ export const GetOrderPaymentResponse = zod.object({
   "declineReason": zod.string().nullable().describe('Texto pt-BR seguro para mostrar'),
   "updatedAt": zod.iso.datetime({"offset":true})
 })
+
+
+/**
+ * Por item e por tipo (arrependimento, defeito, tamanho/cor): se está elegível, o prazo (`deadline`, 'Você tem até DD/MM', contado da ENTREGA confirmada), o motivo do bloqueio em `reason.code` (`EXCHANGE_WINDOW_EXPIRED`, `EXCHANGE_STORE_NO_VOLUNTARY`, `EXCHANGE_PRODUCT_NO_VOLUNTARY`, `EXCHANGE_VOLUNTARY_LIMIT`, `EXCHANGE_ALREADY_OPEN`, `EXCHANGE_ITEM_ALREADY_EXCHANGED`, `EXCHANGE_ORDER_NOT_DELIVERED`), a taxa de coleta em casa (`pickupFee`, cobrada só se a loja aprovar) e as variações com estoque. Pedido de outra conta: 404.
+ * @summary O que dá para trocar neste pedido (WB-170)
+ */
+export const GetExchangeOptionsParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const GetExchangeOptionsResponse = zod.object({
+  "orderId": zod.uuid(),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullable(),
+  "pickupAvailable": zod.boolean(),
+  "items": zod.array(zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "quantity": zod.int().optional(),
+  "openExchange": zod.object({
+  "id": zod.uuid().optional(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']).optional()
+}).nullish(),
+  "options": zod.array(zod.object({
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']).optional(),
+  "eligible": zod.boolean().optional(),
+  "reason": zod.object({
+  "code": zod.string().optional(),
+  "message": zod.string().optional()
+}).nullish(),
+  "deadline": zod.iso.datetime({"offset":true}).nullish(),
+  "pickupFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+})).optional(),
+  "variants": zod.array(zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "available": zod.boolean().optional(),
+  "current": zod.boolean().optional()
+})).optional()
+}))
+})
+
+
+/**
+ * Exige `Idempotency-Key`. Um pedido de troca = um item de pedido ENTREGUE. Fotos: `photoIds` de uploads com finalidade `exchange_photo` (1 a 5 em defeito). Arrependimento nasce aprovado na hora (a loja é avisada) e é sempre reembolso (item e taxa de entrega paga); defeito e tamanho/cor esperam a loja por `troca_resposta_h` (24 h) e, sem resposta, o sistema aprova. Tamanho/cor: 1 troca por pedido; a taxa de coleta só é cobrada DEPOIS da aprovação (`awaiting_fee`) e só na coleta em casa. A reserva do tamanho novo nasce na aprovação. Erros: 422 `EXCHANGE_*` (ver exchange-options), 409 `EXCHANGE_NO_STOCK`.
+ * @summary Pedir troca ou devolução de um item (WB-170, WB-178)
+ */
+export const CreateExchangeParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const createExchangeHeaderIdempotencyKeyMin = 8;
+export const createExchangeHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateExchangeHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createExchangeHeaderIdempotencyKeyMin).max(createExchangeHeaderIdempotencyKeyMax)
+})
+
+export const createExchangeBodyDescriptionMax = 500;
+
+export const createExchangeBodyPhotoIdsMax = 5;
+
+
+
+export const CreateExchangeBody = zod.object({
+  "orderItemId": zod.uuid(),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.enum(['size', 'color']).optional().describe('Obrigatório em `size_color`.'),
+  "description": zod.string().max(createExchangeBodyDescriptionMax).optional(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']).optional().describe('Padrão: `refund` no arrependimento, `replace` nos demais.'),
+  "newVariantId": zod.uuid().optional().describe('Variação desejada (com `replace`); em defeito, omitido = a mesma peça.'),
+  "photoIds": zod.array(zod.uuid()).max(createExchangeBodyPhotoIdsMax).optional()
+})
+
+export const CreateExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Paginada por cursor, da mais recente para a mais antiga.
+ * @summary Minhas trocas
+ */
+export const listExchangesQueryCursorMax = 200;
+
+export const listExchangesQueryLimitDefault = 20;
+export const listExchangesQueryLimitMax = 50;
+
+
+
+export const ListExchangesQueryParams = zod.object({
+  "cursor": zod.string().max(listExchangesQueryCursorMax).optional(),
+  "limit": zod.int().min(1).max(listExchangesQueryLimitMax).default(listExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListExchangesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Linha do tempo, valores (taxa, diferença, reembolso), corridas e fotos (URL assinada curta). `storeCode` (6 caracteres, troca na loja) só aparece ao cliente. Troca de outra conta: 404.
+ * @summary Acompanhar a troca (WB-171)
+ */
+export const GetExchangeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Libera a reserva do tamanho novo, cancela a corrida e estorna a taxa já paga. Depois que o motoboy está a caminho: 409 `EXCHANGE_NOT_CANCELLABLE`.
+ * @summary Cancelar a troca antes da coleta
+ */
+export const CancelExchangeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const cancelExchangeBodyReasonMax = 200;
+
+
+
+export const CancelExchangeBody = zod.object({
+  "reason": zod.string().max(cancelExchangeBodyReasonMax).optional()
+})
+
+export const CancelExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Estado da última tentativa (PIX copia e cola, 3DS). Somente leitura.
+ * @summary Pagamento da taxa de coleta e da diferença
+ */
+export const GetExchangePaymentParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetExchangePaymentResponse = zod.object({
+  "exchangeId": zod.uuid(),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded']),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "pix": zod.union([zod.object({
+  "copyPaste": zod.string(),
+  "qrCodeBase64": zod.string().nullish(),
+  "expiresAt": zod.iso.datetime({"offset":true})
+}),zod.null()]).optional(),
+  "installments": zod.int().optional(),
+  "threeDsUrl": zod.string().nullish(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística.
+ * @summary Pagar a taxa de coleta e a diferença de preço
+ */
+export const PayExchangeParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const payExchangeBodyCardInstallmentsMax = 3;
+
+export const payExchangeBodyPayerDocumentRegExp = new RegExp('^[0-9]{11}$');
+
+
+export const PayExchangeBody = zod.object({
+  "paymentMethod": zod.enum(['pix', 'card']),
+  "card": zod.object({
+  "token": zod.string(),
+  "installments": zod.int().min(1).max(payExchangeBodyCardInstallmentsMax),
+  "paymentMethodId": zod.string().optional(),
+  "issuerId": zod.string().optional()
+}).optional(),
+  "payerDocument": zod.string().regex(payExchangeBodyPayerDocumentRegExp).optional()
+})
+
+export const PayExchangeResponse = zod.object({
+  "exchangeId": zod.uuid(),
+  "method": zod.enum(['pix', 'card']),
+  "status": zod.enum(['pending', 'pending_3ds', 'approved', 'declined', 'expired', 'cancelled', 'refunded']),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "pix": zod.union([zod.object({
+  "copyPaste": zod.string(),
+  "qrCodeBase64": zod.string().nullish(),
+  "expiresAt": zod.iso.datetime({"offset":true})
+}),zod.null()]).optional(),
+  "installments": zod.int().optional(),
+  "threeDsUrl": zod.string().nullish(),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão da loja `exchanges`. `scope`: pending (aguardando resposta), in_progress, history.
+ * @summary Fila de trocas da loja (WB-172)
+ */
+export const ListStoreExchangesParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listStoreExchangesQueryCursorMax = 200;
+
+export const listStoreExchangesQueryLimitDefault = 20;
+export const listStoreExchangesQueryLimitMax = 50;
+
+
+
+export const ListStoreExchangesQueryParams = zod.object({
+  "cursor": zod.string().max(listStoreExchangesQueryCursorMax).optional(),
+  "limit": zod.int().min(1).max(listStoreExchangesQueryLimitMax).default(listStoreExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)'),
+  "scope": zod.enum(['pending', 'in_progress', 'history']).optional()
+})
+
+export const ListStoreExchangesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Troca de outra loja: 404.
+ * @summary Detalhe da troca para a loja
+ */
+export const GetStoreExchangeParams = zod.object({
+  "storeId": zod.uuid(),
+  "id": zod.uuid()
+})
+
+export const GetStoreExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Congela taxa e diferença, reserva o tamanho novo. Com taxa a pagar vai a `awaiting_fee`; sem nada a pagar, libera a coleta na fila da logística (ou o código do balcão). Sem estoque do tamanho pedido: 409 `EXCHANGE_NO_STOCK`. Repetir é idempotente.
+ * @summary Loja aprova a troca
+ */
+export const AcceptExchangeParams = zod.object({
+  "storeId": zod.uuid(),
+  "id": zod.uuid()
+})
+
+export const AcceptExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Motivo obrigatório. Tamanho/cor vira `rejected`; defeito vai à mediação; arrependimento não pode ser recusado (409 `EXCHANGE_CANNOT_REJECT`). Recusa nunca gera cobrança.
+ * @summary Loja recusa a troca
+ */
+export const RefuseExchangeParams = zod.object({
+  "storeId": zod.uuid(),
+  "id": zod.uuid()
+})
+
+export const refuseExchangeBodyReasonMin = 3;
+export const refuseExchangeBodyReasonMax = 200;
+
+
+
+export const RefuseExchangeBody = zod.object({
+  "reason": zod.string().min(refuseExchangeBodyReasonMin).max(refuseExchangeBodyReasonMax)
+})
+
+export const RefuseExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * `ok: true` segue a resolução: reembolso (item e, no arrependimento, a taxa de entrega paga; cupom proporcional), troca no balcão ou liberação da reentrega pela logística (a peça nova só sai depois da antiga conferida). `ok: false` (com `reason`) vai à mediação. Troca na loja exige o `code` do cliente (5 tentativas, depois 429 `EXCHANGE_CODE_LOCKED`); coleta em casa exige a coleta confirmada (409 `ITEM_NOT_COLLECTED`).
+ * @summary Loja confere o item recebido (WB-173)
+ */
+export const ReceiveExchangeParams = zod.object({
+  "storeId": zod.uuid(),
+  "id": zod.uuid()
+})
+
+export const receiveExchangeBodyReasonMin = 3;
+export const receiveExchangeBodyReasonMax = 200;
+
+export const receiveExchangeBodyCodeMin = 6;
+export const receiveExchangeBodyCodeMax = 6;
+
+
+
+export const ReceiveExchangeBody = zod.object({
+  "ok": zod.boolean(),
+  "reason": zod.string().min(receiveExchangeBodyReasonMin).max(receiveExchangeBodyReasonMax).optional().describe('Obrigatório com `ok=false`.'),
+  "returnToStock": zod.boolean().optional().describe('Padrão: sim, exceto em defeito.'),
+  "code": zod.string().min(receiveExchangeBodyCodeMin).max(receiveExchangeBodyCodeMax).optional().describe('Troca na loja: código do cliente.')
+})
+
+export const ReceiveExchangeResponse = zod.object({
+  "id": zod.uuid(),
+  "number": zod.string().describe('Protocolo (TR-XXXXX).'),
+  "orderId": zod.uuid(),
+  "orderNumber": zod.string(),
+  "status": zod.enum(['requested', 'awaiting_fee', 'approved', 'item_received', 'completed', 'rejected', 'cancelled', 'expired', 'in_mediation']),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']),
+  "reasonCode": zod.union([zod.literal('size'),zod.literal('color'),zod.literal(null)]).nullish(),
+  "description": zod.string().nullish(),
+  "method": zod.enum(['pickup_at_home', 'drop_at_store']),
+  "resolution": zod.enum(['replace', 'refund']),
+  "quantity": zod.int(),
+  "item": zod.object({
+  "orderItemId": zod.uuid().optional(),
+  "name": zod.string().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url()).describe('Largura em pixels para a URL WebP; vazio se sem imagem')
+}).optional(),
+  "unitPrice": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).nullish(),
+  "newVariant": zod.object({
+  "variantId": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string()).optional()
+}).nullish(),
+  "fee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "difference": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "totalDue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "feeDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "feePaid": zod.boolean().optional(),
+  "refund": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "answerDeadlineAt": zod.iso.datetime({"offset":true}),
+  "windowEndsAt": zod.iso.datetime({"offset":true}),
+  "itemDueAt": zod.iso.datetime({"offset":true}).nullish(),
+  "autoApproved": zod.boolean().optional(),
+  "decidedBy": zod.union([zod.literal('customer'),zod.literal('store'),zod.literal('system'),zod.literal('admin'),zod.literal(null)]).nullish(),
+  "decisionReason": zod.string().nullish(),
+  "photoCount": zod.int().optional(),
+  "storeCode": zod.string().nullish().describe('Só ao cliente, na troca na loja já aprovada.'),
+  "photos": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "url": zod.string().nullish().describe('URL assinada de curta duração.')
+})).optional(),
+  "timeline": zod.array(zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().optional(),
+  "actor": zod.string().optional(),
+  "reason": zod.string().nullish(),
+  "at": zod.iso.datetime({"offset":true}).optional()
+})).optional(),
+  "runs": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "kind": zod.enum(['exchange_pickup', 'exchange_return']).optional(),
+  "status": zod.string().optional()
+})).optional(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Só pedido ENTREGUE, até `avaliacao_janela_dias` (30) depois da entrega (422 `REVIEW_WINDOW_CLOSED`; 409 `ORDER_NOT_DELIVERED`). Com `productId` (produto que está no pedido) avalia o produto e aceita `fit` ("Como vestiu?"); sem `productId` avalia a loja e `fit` é recusado. Uma por produto e uma da loja por pedido; sem edição: repetir devolve 409 `REVIEW_ALREADY_EXISTS` (o app trata como já enviada). Pedido de outra conta: 404.
+ * @summary Avaliar um produto ou a loja de um pedido entregue (WB-031, WB-247)
+ */
+export const CreateOrderReviewParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const createOrderReviewBodyRatingMax = 5;
+
+export const createOrderReviewBodyCommentMax = 500;
+
+
+
+export const CreateOrderReviewBody = zod.object({
+  "productId": zod.uuid().optional().describe('Produto do pedido; ausente = avaliação da loja.'),
+  "rating": zod.int().min(1).max(createOrderReviewBodyRatingMax),
+  "comment": zod.string().max(createOrderReviewBodyCommentMax).optional(),
+  "fit": zod.enum(['small', 'ok', 'large']).optional().describe('Como vestiu? Só em avaliação de produto.')
+})
+
+export const createOrderReviewResponseOneRatingMax = 5;
+
+
+
+export const CreateOrderReviewResponse = zod.object({
+  "id": zod.uuid(),
+  "rating": zod.int().min(1).max(createOrderReviewResponseOneRatingMax),
+  "comment": zod.string().nullable(),
+  "fit": zod.union([zod.literal('small'),zod.literal('ok'),zod.literal('large'),zod.literal(null)]).nullish().describe('Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.'),
+  "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
+  "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "storeReply": zod.string().nullable(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "productId": zod.uuid().nullish()
+}))
+
+
+/**
+ * Para o app saber o que ainda falta avaliar. Pedido de outra conta: 404.
+ * @summary Avaliações que o cliente já fez neste pedido
+ */
+export const ListOrderReviewsParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const listOrderReviewsResponseDataItemOneRatingMax = 5;
+
+
+
+export const ListOrderReviewsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "rating": zod.int().min(1).max(listOrderReviewsResponseDataItemOneRatingMax),
+  "comment": zod.string().nullable(),
+  "fit": zod.union([zod.literal('small'),zod.literal('ok'),zod.literal('large'),zod.literal(null)]).nullish().describe('Como vestiu (WB-247): small = pequeno, ok = fiel ao tamanho, large = grande.'),
+  "reviewer": zod.string().describe('Primeiro nome e inicial do último (\'Maria S.\')'),
+  "verifiedPurchase": zod.boolean().describe('\'Compra verificada\''),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "storeReply": zod.string().nullable(),
+  "storeRepliedAt": zod.iso.datetime({"offset":true}).nullable()
+}).and(zod.object({
+  "productId": zod.uuid().nullish()
+})))
+})
+
+
+/**
+ * Permissão de admin `exchanges:report` (operação, financeiro e super admin). Período em dias de Brasília, no máximo 366 dias. Traz pedidos entregues, trocas por tipo, taxa de troca por loja (com `alert` acima de `troca_taxa_alerta_pct`), tamanho/cor com e sem tabela de medidas, resolvida como troca ou reembolso, aprovação automática, mediações e tempo até resolver. Receita da taxa e custo das corridas (`feeRevenue`, `logisticsCost`, `netLogisticsCost`) só para financeiro e super admin. `format=csv` exporta por loja e é auditado.
+ * @summary Relatório de trocas por loja e categoria (WB-248)
+ */
+export const getExchangesReportQueryFormatDefault = `json`;
+
+export const GetExchangesReportQueryParams = zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date(),
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional(),
+  "type": zod.enum(['withdrawal', 'defect', 'size_color']).optional(),
+  "format": zod.enum(['json', 'csv']).default(getExchangesReportQueryFormatDefault)
+})
+
+export const GetExchangesReportResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "totals": zod.object({
+  "deliveredOrders": zod.int().optional(),
+  "exchanges": zod.int().optional(),
+  "ratePct": zod.number().optional(),
+  "byType": zod.record(zod.string(), zod.int()).optional(),
+  "sizeColorWithSizeChart": zod.int().optional(),
+  "sizeColorWithoutSizeChart": zod.int().optional(),
+  "resolvedAsExchange": zod.int().optional(),
+  "resolvedAsRefund": zod.int().optional(),
+  "autoApproved": zod.int().optional(),
+  "mediations": zod.int().optional(),
+  "avgResolutionHours": zod.number().nullish(),
+  "alertThresholdPct": zod.int().optional(),
+  "feeRevenue": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "logisticsCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "netLogisticsCost": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "runsWithoutCost": zod.int().optional()
+}),
+  "byStore": zod.array(zod.object({
+  "storeId": zod.uuid().optional(),
+  "storeName": zod.string().nullish(),
+  "deliveredOrders": zod.int().optional(),
+  "exchanges": zod.int().optional(),
+  "ratePct": zod.number().optional(),
+  "alert": zod.boolean().optional(),
+  "byType": zod.record(zod.string(), zod.int()).optional()
+})),
+  "byCategory": zod.array(zod.object({
+  "categoryId": zod.uuid().nullish(),
+  "categoryName": zod.string().nullish(),
+  "exchanges": zod.int().optional(),
+  "byType": zod.record(zod.string(), zod.int()).optional(),
+  "sizeColorWithSizeChart": zod.int().optional(),
+  "sizeColorWithoutSizeChart": zod.int().optional()
+}))
+})
+
+
+/**
+ * Token do Expo (`ExponentPushToken[...]`) e plataforma. Idempotente. O token é do aparelho: se outra conta entrar no mesmo aparelho, o token passa a ela e a anterior deixa de receber. Push transacional (pedido e troca) não exige consentimento; marketing exige (`marketing_push`). O push nunca leva dado pessoal nem o código de retirada.
+ * @summary Registrar o aparelho para push (RF-NOT-01)
+ */
+export const registerPushDeviceBodyTokenRegExp = new RegExp('^Expo(nent)?PushToken\\[[A-Za-z0-9_-]{10,80}\\]$');
+
+
+export const RegisterPushDeviceBody = zod.object({
+  "token": zod.string().regex(registerPushDeviceBodyTokenRegExp),
+  "platform": zod.enum(['android', 'ios'])
+})
+
+export const RegisterPushDeviceResponse = zod.void()
+
+
+/**
+ * Só o dono do token revoga; token de outra conta é ignorado (204, sem revelar nada). Chame no logout.
+ * @summary Desligar o push neste aparelho (logout)
+ */
+export const RevokePushDeviceBody = zod.object({
+  "token": zod.string()
+})
+
+export const RevokePushDeviceResponse = zod.void()
+
+
+/**
+ * Permissão da loja `sales_values` (dono ou funcionário com a permissão): total de vendas (itens menos cupom da loja, sem frete nem taxa de serviço), número de pedidos e ticket médio. Sem comissão nem líquido (esses são só do dono). Pedido pago e ainda não cancelado conta pelo dia do pagamento (Brasília).
+ * @summary Vendas do período (WB-075)
+ */
+export const GetStoreSalesParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreSalesQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. Período de no máximo 366 dias.')
+})
+
+export const GetStoreSalesResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "orders": zod.int(),
+  "gross": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "averageTicket": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})
+
+
+/**
+ * Permissão da loja `finance` (só o dono, RN-13). Vendas, comissão cobrada e devolvida, tarifa do provedor, estornos, líquido (do ledger) e o que ainda está para entrar. `receivable` é INFORMATIVO: em split o dinheiro cai direto na conta do Mercado Pago da loja e a Webag não retém nem repassa (DEC-016): `pending` = pedido ainda não entregue, `inGrace` = entregue há menos de `repasse_carencia_dias`, `released` = passou a carência.
+ * @summary Resumo financeiro do dono (WB-076)
+ */
+export const GetStoreFinanceSummaryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreFinanceSummaryQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. Período de no máximo 366 dias.')
+})
+
+export const GetStoreFinanceSummaryResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "sales": zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "orders": zod.int(),
+  "gross": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "averageTicket": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}),
+  "commission": zod.object({
+  "charged": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "returned": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "net": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}),
+  "providerFees": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "refunds": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "net": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "receivable": zod.object({
+  "informational": zod.boolean().optional(),
+  "graceDays": zod.int().optional(),
+  "pending": zod.object({
+  "orders": zod.int().optional(),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).optional(),
+  "inGrace": zod.object({
+  "orders": zod.int().optional(),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).optional(),
+  "released": zod.object({
+  "orders": zod.int().optional(),
+  "amount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).optional()
+})
+})
+
+
+/**
+ * Permissão da loja `finance`. Um registro por pedido pago do período, do mais recente ao mais antigo, com vendas, comissão, tarifa do provedor, estornos, líquido e situação. Paginado por cursor.
+ * @summary Extrato por pedido (WB-077)
+ */
+export const GetStoreStatementParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getStoreStatementQueryLimitDefault = 20;
+export const getStoreStatementQueryLimitMax = 50;
+
+export const getStoreStatementQueryCursorMax = 200;
+
+
+
+export const GetStoreStatementQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. Período de no máximo 366 dias.'),
+  "limit": zod.int().min(1).max(getStoreStatementQueryLimitMax).default(getStoreStatementQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)'),
+  "cursor": zod.string().max(getStoreStatementQueryCursorMax).optional()
+})
+
+export const GetStoreStatementResponse = zod.object({
+  "data": zod.array(zod.object({
+  "orderId": zod.uuid(),
+  "number": zod.string(),
+  "paidAt": zod.iso.datetime({"offset":true}),
+  "orderStatus": zod.string(),
+  "gross": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "providerFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "refunds": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "net": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "payoutStatus": zod.enum(['pending', 'in_grace', 'released'])
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão da loja `finance`. UTF-8 com BOM, separador `;`, valores em reais com vírgula; até 5.000 pedidos mais recentes do período. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo. A exportação é auditada (`store.finance.export`). Limite de 20 por hora.
+ * @summary Extrato exportável em CSV (WB-077)
+ */
+export const GetStoreStatementCsvParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const GetStoreStatementCsvQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. Período de no máximo 366 dias.')
+})
+
+export const GetStoreStatementCsvResponse = zod.string()

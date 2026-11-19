@@ -4,6 +4,7 @@ import { theme } from '../theme';
 import { Button } from './Button';
 import type { IconComponent } from './icons';
 import { MapPinLine, WarningCircle, WifiSlash } from './icons';
+import { SpeedLines } from './SpeedLines';
 import { Text } from './Text';
 
 interface StateShape {
@@ -16,12 +17,17 @@ interface StateShape {
   testID?: string;
 }
 
-/** Molde único de vazio e erro: círculo `surface.sunken` 120 com ícone 64, título, texto e 1 ação (§3.1). */
+/** Molde único de vazio e erro (identidade v2): tile `tile.1` 120 com ícone duotone 64 e as linhas de velocidade da marca, título, texto e 1 ação. */
 function StateShell({ icon: Icon, title, text, actionLabel, onAction, link, testID }: StateShape) {
   return (
     <View accessibilityLiveRegion="polite" style={styles.shell} testID={testID}>
-      <View style={styles.circle}>
-        <Icon color={theme.color.text.brand} size={theme.size.iconEmpty} weight="duotone" />
+      <View style={styles.art}>
+        <View style={styles.lines}>
+          <SpeedLines thickness={6} />
+        </View>
+        <View style={styles.circle}>
+          <Icon color={theme.color.text.brand} size={theme.size.iconEmpty} weight="duotone" />
+        </View>
       </View>
       <Text variant="title2" style={styles.center}>
         {title}
@@ -69,9 +75,11 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.color.surface.sunken,
+    backgroundColor: theme.color.tile[1],
     alignItems: 'center',
     justifyContent: 'center',
   },
+  art: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', minHeight: 120 },
+  lines: { position: 'absolute', left: theme.space[4], top: theme.space[2], opacity: 0.8 },
   center: { textAlign: 'center' },
 });

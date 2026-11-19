@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   box: {
     width: theme.size.touchMin,
     height: theme.size.controlLg,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.control,
     borderWidth: theme.borderWidth.hairline,
     borderColor: theme.color.border.strong,
     backgroundColor: theme.color.surface.card,

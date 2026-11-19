@@ -101,7 +101,7 @@ function variantStyle(variant: ButtonVariant, pressed: boolean, disabled: boolea
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.pill,
     minWidth: 96,
     paddingHorizontal: theme.space[4],
     paddingVertical: theme.space[2],

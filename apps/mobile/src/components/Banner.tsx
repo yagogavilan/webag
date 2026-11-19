@@ -47,7 +47,7 @@ export function Banner({ tone, text, actionLabel, onAction, footer, testID }: Ba
 }
 
 const styles = StyleSheet.create({
-  box: { borderWidth: theme.borderWidth.hairline, borderRadius: theme.radius.md, padding: theme.space[3], gap: theme.space[2] },
+  box: { borderWidth: theme.borderWidth.hairline, borderRadius: theme.radius.lg, padding: theme.space[3], gap: theme.space[2] },
   row: { flexDirection: 'row', gap: theme.space[2], alignItems: 'flex-start' },
   text: { flex: 1 },
   action: { alignSelf: 'flex-start' },

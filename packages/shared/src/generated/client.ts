@@ -1274,10 +1274,11 @@ export const UploadCreateRequestPurpose = {
   product_image: 'product_image',
   store_document: 'store_document',
   banner: 'banner',
+  exchange_photo: 'exchange_photo',
 } as const;
 
 export interface UploadCreateRequest {
-  /** Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`) */
+  /** Obrigatório, exceto para `banner` (admin, sem loja; proíbe `storeId`) e `exchange_photo` (foto de troca do cliente, privada, até 5 MB, re-codificada sem EXIF; também proíbe `storeId`) */
   storeId?: string;
   purpose: UploadCreateRequestPurpose;
   contentType: string;
@@ -1307,6 +1308,7 @@ export const MediaAssetPurpose = {
   product_image: 'product_image',
   store_document: 'store_document',
   banner: 'banner',
+  exchange_photo: 'exchange_photo',
 } as const;
 
 export type MediaAssetStatus = typeof MediaAssetStatus[keyof typeof MediaAssetStatus];
@@ -4201,6 +4203,564 @@ export interface CancelOrderRequest {
   reason?: string;
 }
 
+export type ExchangeType = typeof ExchangeType[keyof typeof ExchangeType];
+
+
+export const ExchangeType = {
+  withdrawal: 'withdrawal',
+  defect: 'defect',
+  size_color: 'size_color',
+} as const;
+
+export type ExchangeStatus = typeof ExchangeStatus[keyof typeof ExchangeStatus];
+
+
+export const ExchangeStatus = {
+  requested: 'requested',
+  awaiting_fee: 'awaiting_fee',
+  approved: 'approved',
+  item_received: 'item_received',
+  completed: 'completed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  in_mediation: 'in_mediation',
+} as const;
+
+/**
+ * Obrigatório em `size_color`.
+ */
+export type CreateExchangeRequestReasonCode = typeof CreateExchangeRequestReasonCode[keyof typeof CreateExchangeRequestReasonCode];
+
+
+export const CreateExchangeRequestReasonCode = {
+  size: 'size',
+  color: 'color',
+} as const;
+
+export type CreateExchangeRequestMethod = typeof CreateExchangeRequestMethod[keyof typeof CreateExchangeRequestMethod];
+
+
+export const CreateExchangeRequestMethod = {
+  pickup_at_home: 'pickup_at_home',
+  drop_at_store: 'drop_at_store',
+} as const;
+
+/**
+ * Padrão: `refund` no arrependimento, `replace` nos demais.
+ */
+export type CreateExchangeRequestResolution = typeof CreateExchangeRequestResolution[keyof typeof CreateExchangeRequestResolution];
+
+
+export const CreateExchangeRequestResolution = {
+  replace: 'replace',
+  refund: 'refund',
+} as const;
+
+export interface CreateExchangeRequest {
+  orderItemId: string;
+  type: ExchangeType;
+  /** Obrigatório em `size_color`. */
+  reasonCode?: CreateExchangeRequestReasonCode;
+  /** @maxLength 500 */
+  description?: string;
+  method: CreateExchangeRequestMethod;
+  /** Padrão: `refund` no arrependimento, `replace` nos demais. */
+  resolution?: CreateExchangeRequestResolution;
+  /** Variação desejada (com `replace`); em defeito, omitido = a mesma peça. */
+  newVariantId?: string;
+  /** @maxItems 5 */
+  photoIds?: string[];
+}
+
+export interface CancelExchangeRequest {
+  /** @maxLength 200 */
+  reason?: string;
+}
+
+export interface RefuseExchangeRequest {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+}
+
+export interface ReceiveExchangeRequest {
+  ok: boolean;
+  /**
+     * Obrigatório com `ok=false`.
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason?: string;
+  /** Padrão: sim, exceto em defeito. */
+  returnToStock?: boolean;
+  /**
+     * Troca na loja: código do cliente.
+     * @minLength 6
+     * @maxLength 6
+     */
+  code?: string;
+}
+
+export type PayExchangeRequestPaymentMethod = typeof PayExchangeRequestPaymentMethod[keyof typeof PayExchangeRequestPaymentMethod];
+
+
+export const PayExchangeRequestPaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type PayExchangeRequestCard = {
+  token: string;
+  /**
+     * @minimum 1
+     * @maximum 3
+     */
+  installments: number;
+  paymentMethodId?: string;
+  issuerId?: string;
+};
+
+export interface PayExchangeRequest {
+  paymentMethod: PayExchangeRequestPaymentMethod;
+  card?: PayExchangeRequestCard;
+  /** @pattern ^[0-9]{11}$ */
+  payerDocument?: string;
+}
+
+export type ExchangePaymentMethod = typeof ExchangePaymentMethod[keyof typeof ExchangePaymentMethod];
+
+
+export const ExchangePaymentMethod = {
+  pix: 'pix',
+  card: 'card',
+} as const;
+
+export type ExchangePaymentStatus = typeof ExchangePaymentStatus[keyof typeof ExchangePaymentStatus];
+
+
+export const ExchangePaymentStatus = {
+  pending: 'pending',
+  pending_3ds: 'pending_3ds',
+  approved: 'approved',
+  declined: 'declined',
+  expired: 'expired',
+  cancelled: 'cancelled',
+  refunded: 'refunded',
+} as const;
+
+export type ExchangePaymentPix = {
+  copyPaste: string;
+  /** @nullable */
+  qrCodeBase64?: string | null;
+  expiresAt: string;
+} | null;
+
+export interface ExchangePayment {
+  exchangeId: string;
+  method: ExchangePaymentMethod;
+  status: ExchangePaymentStatus;
+  amount: Money;
+  fee: Money;
+  difference: Money;
+  pix?: ExchangePaymentPix;
+  installments?: number;
+  /** @nullable */
+  threeDsUrl?: string | null;
+  updatedAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type ExchangeReasonCode = typeof ExchangeReasonCode[keyof typeof ExchangeReasonCode] | null;
+
+
+export const ExchangeReasonCode = {
+  size: 'size',
+  color: 'color',
+} as const;
+
+export type ExchangeMethod = typeof ExchangeMethod[keyof typeof ExchangeMethod];
+
+
+export const ExchangeMethod = {
+  pickup_at_home: 'pickup_at_home',
+  drop_at_store: 'drop_at_store',
+} as const;
+
+export type ExchangeResolution = typeof ExchangeResolution[keyof typeof ExchangeResolution];
+
+
+export const ExchangeResolution = {
+  replace: 'replace',
+  refund: 'refund',
+} as const;
+
+export type ExchangeItemAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeItem = {
+  orderItemId?: string;
+  name?: string;
+  attributes?: ExchangeItemAttributes;
+  image?: ImageUrls;
+  unitPrice?: Money;
+} | null;
+
+export type ExchangeNewVariantAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeNewVariant = {
+  variantId?: string;
+  attributes?: ExchangeNewVariantAttributes;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ExchangeDecidedBy = typeof ExchangeDecidedBy[keyof typeof ExchangeDecidedBy] | null;
+
+
+export const ExchangeDecidedBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type ExchangePhotosItem = {
+  id?: string;
+  /**
+     * URL assinada de curta duração.
+     * @nullable
+     */
+  url?: string | null;
+};
+
+export type ExchangeTimelineItem = {
+  /** @nullable */
+  from?: string | null;
+  to?: string;
+  actor?: string;
+  /** @nullable */
+  reason?: string | null;
+  at?: string;
+};
+
+export type ExchangeRunsItemKind = typeof ExchangeRunsItemKind[keyof typeof ExchangeRunsItemKind];
+
+
+export const ExchangeRunsItemKind = {
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type ExchangeRunsItem = {
+  id?: string;
+  kind?: ExchangeRunsItemKind;
+  status?: string;
+};
+
+export interface Exchange {
+  id: string;
+  /** Protocolo (TR-XXXXX). */
+  number: string;
+  orderId: string;
+  orderNumber: string;
+  status: ExchangeStatus;
+  type: ExchangeType;
+  /** @nullable */
+  reasonCode?: ExchangeReasonCode;
+  /** @nullable */
+  description?: string | null;
+  method: ExchangeMethod;
+  resolution: ExchangeResolution;
+  quantity: number;
+  /** @nullable */
+  item?: ExchangeItem;
+  /** @nullable */
+  newVariant?: ExchangeNewVariant;
+  fee: Money;
+  difference: Money;
+  totalDue: Money;
+  /** @nullable */
+  feeDueAt?: string | null;
+  feePaid?: boolean;
+  refund: Money;
+  answerDeadlineAt: string;
+  windowEndsAt: string;
+  /** @nullable */
+  itemDueAt?: string | null;
+  autoApproved?: boolean;
+  /** @nullable */
+  decidedBy?: ExchangeDecidedBy;
+  /** @nullable */
+  decisionReason?: string | null;
+  photoCount?: number;
+  /**
+     * Só ao cliente, na troca na loja já aprovada.
+     * @nullable
+     */
+  storeCode?: string | null;
+  photos?: ExchangePhotosItem[];
+  timeline?: ExchangeTimelineItem[];
+  runs?: ExchangeRunsItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExchangePage {
+  data: Exchange[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type ExchangeOptionsItemsItemAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeOptionsItemsItemOpenExchange = {
+  id?: string;
+  status?: ExchangeStatus;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ExchangeOptionsItemsItemOptionsItemReason = {
+  code?: string;
+  message?: string;
+} | null;
+
+export type ExchangeOptionsItemsItemOptionsItem = {
+  type?: ExchangeType;
+  eligible?: boolean;
+  /** @nullable */
+  reason?: ExchangeOptionsItemsItemOptionsItemReason;
+  /** @nullable */
+  deadline?: string | null;
+  pickupFee?: Money;
+};
+
+export type ExchangeOptionsItemsItemVariantsItemAttributes = {[key: string]: string};
+
+export type ExchangeOptionsItemsItemVariantsItem = {
+  variantId?: string;
+  attributes?: ExchangeOptionsItemsItemVariantsItemAttributes;
+  available?: boolean;
+  current?: boolean;
+};
+
+export type ExchangeOptionsItemsItem = {
+  orderItemId?: string;
+  name?: string;
+  attributes?: ExchangeOptionsItemsItemAttributes;
+  quantity?: number;
+  /** @nullable */
+  openExchange?: ExchangeOptionsItemsItemOpenExchange;
+  options?: ExchangeOptionsItemsItemOptionsItem[];
+  variants?: ExchangeOptionsItemsItemVariantsItem[];
+};
+
+export interface ExchangeOptions {
+  orderId: string;
+  /** @nullable */
+  deliveredAt: string | null;
+  pickupAvailable: boolean;
+  items: ExchangeOptionsItemsItem[];
+}
+
+/**
+ * Como vestiu? Só em avaliação de produto.
+ */
+export type CreateReviewRequestFit = typeof CreateReviewRequestFit[keyof typeof CreateReviewRequestFit];
+
+
+export const CreateReviewRequestFit = {
+  small: 'small',
+  ok: 'ok',
+  large: 'large',
+} as const;
+
+export interface CreateReviewRequest {
+  /** Produto do pedido; ausente = avaliação da loja. */
+  productId?: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  /** @maxLength 500 */
+  comment?: string;
+  /** Como vestiu? Só em avaliação de produto. */
+  fit?: CreateReviewRequestFit;
+}
+
+export type OrderReview = Review & ({
+  /** @nullable */
+  productId?: string | null;
+});
+
+export type ExchangesReportPeriod = {
+  from?: string;
+  to?: string;
+};
+
+export type ExchangesReportTotalsByType = {[key: string]: number};
+
+export type ExchangesReportTotals = {
+  deliveredOrders?: number;
+  exchanges?: number;
+  ratePct?: number;
+  byType?: ExchangesReportTotalsByType;
+  sizeColorWithSizeChart?: number;
+  sizeColorWithoutSizeChart?: number;
+  resolvedAsExchange?: number;
+  resolvedAsRefund?: number;
+  autoApproved?: number;
+  mediations?: number;
+  /** @nullable */
+  avgResolutionHours?: number | null;
+  alertThresholdPct?: number;
+  feeRevenue?: Money;
+  logisticsCost?: Money;
+  netLogisticsCost?: Money;
+  runsWithoutCost?: number;
+};
+
+export type ExchangesReportByStoreItemByType = {[key: string]: number};
+
+export type ExchangesReportByStoreItem = {
+  storeId?: string;
+  /** @nullable */
+  storeName?: string | null;
+  deliveredOrders?: number;
+  exchanges?: number;
+  ratePct?: number;
+  alert?: boolean;
+  byType?: ExchangesReportByStoreItemByType;
+};
+
+export type ExchangesReportByCategoryItemByType = {[key: string]: number};
+
+export type ExchangesReportByCategoryItem = {
+  /** @nullable */
+  categoryId?: string | null;
+  /** @nullable */
+  categoryName?: string | null;
+  exchanges?: number;
+  byType?: ExchangesReportByCategoryItemByType;
+  sizeColorWithSizeChart?: number;
+  sizeColorWithoutSizeChart?: number;
+};
+
+export interface ExchangesReport {
+  period: ExchangesReportPeriod;
+  totals: ExchangesReportTotals;
+  byStore: ExchangesReportByStoreItem[];
+  byCategory: ExchangesReportByCategoryItem[];
+}
+
+export type RegisterPushDeviceRequestPlatform = typeof RegisterPushDeviceRequestPlatform[keyof typeof RegisterPushDeviceRequestPlatform];
+
+
+export const RegisterPushDeviceRequestPlatform = {
+  android: 'android',
+  ios: 'ios',
+} as const;
+
+export interface RegisterPushDeviceRequest {
+  /** @pattern ^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,80}\]$ */
+  token: string;
+  platform: RegisterPushDeviceRequestPlatform;
+}
+
+export interface RevokePushDeviceRequest {
+  token: string;
+}
+
+export type StoreSalesPeriod = {
+  from?: string;
+  to?: string;
+};
+
+export interface StoreSales {
+  period: StoreSalesPeriod;
+  orders: number;
+  gross: Money;
+  averageTicket: Money;
+}
+
+export type StoreFinanceSummaryPeriod = {
+  from?: string;
+  to?: string;
+};
+
+export type StoreFinanceSummaryCommission = {
+  charged?: Money;
+  returned?: Money;
+  net?: Money;
+};
+
+export interface ReceivableBucket {
+  orders?: number;
+  amount?: Money;
+}
+
+export type StoreFinanceSummaryReceivable = {
+  informational?: boolean;
+  graceDays?: number;
+  pending?: ReceivableBucket;
+  inGrace?: ReceivableBucket;
+  released?: ReceivableBucket;
+};
+
+export interface StoreFinanceSummary {
+  period: StoreFinanceSummaryPeriod;
+  sales: StoreSales;
+  commission: StoreFinanceSummaryCommission;
+  providerFees: Money;
+  refunds: Money;
+  net: Money;
+  receivable: StoreFinanceSummaryReceivable;
+}
+
+export type StatementLinePayoutStatus = typeof StatementLinePayoutStatus[keyof typeof StatementLinePayoutStatus];
+
+
+export const StatementLinePayoutStatus = {
+  pending: 'pending',
+  in_grace: 'in_grace',
+  released: 'released',
+} as const;
+
+export interface StatementLine {
+  orderId: string;
+  number: string;
+  paidAt: string;
+  orderStatus: string;
+  gross: Money;
+  commission: Money;
+  providerFee: Money;
+  refunds: Money;
+  net: Money;
+  payoutStatus: StatementLinePayoutStatus;
+}
+
+export interface StatementPage {
+  data: StatementLine[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -5103,6 +5663,95 @@ export const ListOrdersScope = {
   active: 'active',
   past: 'past',
 } as const;
+
+export type ListExchangesParams = {
+  /** @maxLength 200 */
+  cursor?: string;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListStoreExchangesParams = {
+  /** @maxLength 200 */
+  cursor?: string;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+  scope?: ListStoreExchangesScope;
+};
+
+export type ListStoreExchangesScope = typeof ListStoreExchangesScope[keyof typeof ListStoreExchangesScope];
+
+
+export const ListStoreExchangesScope = {
+  pending: 'pending',
+  in_progress: 'in_progress',
+  history: 'history',
+} as const;
+
+export type ListOrderReviews200 = {
+  data: OrderReview[];
+};
+
+export type GetExchangesReportParams = {
+  from: string;
+  to: string;
+  storeId?: string;
+  categoryId?: string;
+  type?: ExchangeType;
+  format?: GetExchangesReportFormat;
+};
+
+export type GetExchangesReportFormat = typeof GetExchangesReportFormat[keyof typeof GetExchangesReportFormat];
+
+
+export const GetExchangesReportFormat = {
+  json: 'json',
+  csv: 'csv',
+} as const;
+
+export type GetStoreSalesParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
+  to: string;
+};
+
+export type GetStoreFinanceSummaryParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
+  to: string;
+};
+
+export type GetStoreStatementParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
+  to: string;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+  /** @maxLength 200 */
+  cursor?: string;
+};
+
+export type GetStoreStatementCsvParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
+  to: string;
+};
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -17305,6 +17954,1278 @@ export const getGetOrderPaymentUrl = (orderId: string,) => {
 export const getOrderPayment = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getOrderPaymentResponse> => {
 
   return apiFetch<getOrderPaymentResponse>(getGetOrderPaymentUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getExchangeOptionsResponse200 = {
+  data: ExchangeOptions
+  status: 200
+}
+
+export type getExchangeOptionsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getExchangeOptionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getExchangeOptionsResponseSuccess = (getExchangeOptionsResponse200) & {
+  headers: Headers;
+};
+export type getExchangeOptionsResponseError = (getExchangeOptionsResponse401 | getExchangeOptionsResponse404) & {
+  headers: Headers;
+};
+
+export type getExchangeOptionsResponse = (getExchangeOptionsResponseSuccess | getExchangeOptionsResponseError)
+
+export const getGetExchangeOptionsUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/exchange-options`
+}
+
+/**
+ * Por item e por tipo (arrependimento, defeito, tamanho/cor): se está elegível, o prazo (`deadline`, 'Você tem até DD/MM', contado da ENTREGA confirmada), o motivo do bloqueio em `reason.code` (`EXCHANGE_WINDOW_EXPIRED`, `EXCHANGE_STORE_NO_VOLUNTARY`, `EXCHANGE_PRODUCT_NO_VOLUNTARY`, `EXCHANGE_VOLUNTARY_LIMIT`, `EXCHANGE_ALREADY_OPEN`, `EXCHANGE_ITEM_ALREADY_EXCHANGED`, `EXCHANGE_ORDER_NOT_DELIVERED`), a taxa de coleta em casa (`pickupFee`, cobrada só se a loja aprovar) e as variações com estoque. Pedido de outra conta: 404.
+ * @summary O que dá para trocar neste pedido (WB-170)
+ */
+export const getExchangeOptions = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getExchangeOptionsResponse> => {
+
+  return apiFetch<getExchangeOptionsResponse>(getGetExchangeOptionsUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createExchangeResponse201 = {
+  data: Exchange
+  status: 201
+}
+
+export type createExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createExchangeResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createExchangeResponseSuccess = (createExchangeResponse201) & {
+  headers: Headers;
+};
+export type createExchangeResponseError = (createExchangeResponse401 | createExchangeResponse404 | createExchangeResponse409 | createExchangeResponse422 | createExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type createExchangeResponse = (createExchangeResponseSuccess | createExchangeResponseError)
+
+export const getCreateExchangeUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/exchanges`
+}
+
+/**
+ * Exige `Idempotency-Key`. Um pedido de troca = um item de pedido ENTREGUE. Fotos: `photoIds` de uploads com finalidade `exchange_photo` (1 a 5 em defeito). Arrependimento nasce aprovado na hora (a loja é avisada) e é sempre reembolso (item e taxa de entrega paga); defeito e tamanho/cor esperam a loja por `troca_resposta_h` (24 h) e, sem resposta, o sistema aprova. Tamanho/cor: 1 troca por pedido; a taxa de coleta só é cobrada DEPOIS da aprovação (`awaiting_fee`) e só na coleta em casa. A reserva do tamanho novo nasce na aprovação. Erros: 422 `EXCHANGE_*` (ver exchange-options), 409 `EXCHANGE_NO_STOCK`.
+ * @summary Pedir troca ou devolução de um item (WB-170, WB-178)
+ */
+export const createExchange = async (orderId: string,
+    createExchangeRequest: CreateExchangeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createExchangeResponse> => {
+
+  return apiFetch<createExchangeResponse>(getCreateExchangeUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createExchangeRequest)
+  }
+);}
+
+
+
+export type listExchangesResponse200 = {
+  data: ExchangePage
+  status: 200
+}
+
+export type listExchangesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listExchangesResponseSuccess = (listExchangesResponse200) & {
+  headers: Headers;
+};
+export type listExchangesResponseError = (listExchangesResponse401) & {
+  headers: Headers;
+};
+
+export type listExchangesResponse = (listExchangesResponseSuccess | listExchangesResponseError)
+
+export const getListExchangesUrl = (params?: ListExchangesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/exchanges?${stringifiedParams}` : `/v1/exchanges`
+}
+
+/**
+ * Paginada por cursor, da mais recente para a mais antiga.
+ * @summary Minhas trocas
+ */
+export const listExchanges = async (params?: ListExchangesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listExchangesResponse> => {
+
+  return apiFetch<listExchangesResponse>(getListExchangesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type getExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getExchangeResponseSuccess = (getExchangeResponse200) & {
+  headers: Headers;
+};
+export type getExchangeResponseError = (getExchangeResponse401 | getExchangeResponse404) & {
+  headers: Headers;
+};
+
+export type getExchangeResponse = (getExchangeResponseSuccess | getExchangeResponseError)
+
+export const getGetExchangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}`
+}
+
+/**
+ * Linha do tempo, valores (taxa, diferença, reembolso), corridas e fotos (URL assinada curta). `storeCode` (6 caracteres, troca na loja) só aparece ao cliente. Troca de outra conta: 404.
+ * @summary Acompanhar a troca (WB-171)
+ */
+export const getExchange = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getExchangeResponse> => {
+
+  return apiFetch<getExchangeResponse>(getGetExchangeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type cancelExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type cancelExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type cancelExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type cancelExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type cancelExchangeResponseSuccess = (cancelExchangeResponse200) & {
+  headers: Headers;
+};
+export type cancelExchangeResponseError = (cancelExchangeResponse401 | cancelExchangeResponse404 | cancelExchangeResponse409 | cancelExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type cancelExchangeResponse = (cancelExchangeResponseSuccess | cancelExchangeResponseError)
+
+export const getCancelExchangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}/cancel`
+}
+
+/**
+ * Libera a reserva do tamanho novo, cancela a corrida e estorna a taxa já paga. Depois que o motoboy está a caminho: 409 `EXCHANGE_NOT_CANCELLABLE`.
+ * @summary Cancelar a troca antes da coleta
+ */
+export const cancelExchange = async (id: string,
+    cancelExchangeRequest: CancelExchangeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<cancelExchangeResponse> => {
+
+  return apiFetch<cancelExchangeResponse>(getCancelExchangeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(cancelExchangeRequest)
+  }
+);}
+
+
+
+export type getExchangePaymentResponse200 = {
+  data: ExchangePayment
+  status: 200
+}
+
+export type getExchangePaymentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getExchangePaymentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getExchangePaymentResponseSuccess = (getExchangePaymentResponse200) & {
+  headers: Headers;
+};
+export type getExchangePaymentResponseError = (getExchangePaymentResponse401 | getExchangePaymentResponse404) & {
+  headers: Headers;
+};
+
+export type getExchangePaymentResponse = (getExchangePaymentResponseSuccess | getExchangePaymentResponseError)
+
+export const getGetExchangePaymentUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}/payment`
+}
+
+/**
+ * Estado da última tentativa (PIX copia e cola, 3DS). Somente leitura.
+ * @summary Pagamento da taxa de coleta e da diferença
+ */
+export const getExchangePayment = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getExchangePaymentResponse> => {
+
+  return apiFetch<getExchangePaymentResponse>(getGetExchangePaymentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type payExchangeResponse200 = {
+  data: ExchangePayment
+  status: 200
+}
+
+export type payExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type payExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type payExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type payExchangeResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type payExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type payExchangeResponseSuccess = (payExchangeResponse200) & {
+  headers: Headers;
+};
+export type payExchangeResponseError = (payExchangeResponse401 | payExchangeResponse404 | payExchangeResponse409 | payExchangeResponse422 | payExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type payExchangeResponse = (payExchangeResponseSuccess | payExchangeResponseError)
+
+export const getPayExchangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/exchanges/${id}/payment`
+}
+
+/**
+ * Só em `awaiting_fee` (depois da aprovação da loja), dentro de `troca_taxa_pagamento_h`. Cobrança na conta da Webag (sem split): a taxa é receita da Webag. Valor = taxa + diferença positiva. Repetir com o PIX pendente devolve o mesmo pagamento. A confirmação vem só do webhook assinado (SEC-035); aprovado, a troca vai a `approved` e a coleta entra na fila da logística.
+ * @summary Pagar a taxa de coleta e a diferença de preço
+ */
+export const payExchange = async (id: string,
+    payExchangeRequest: PayExchangeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<payExchangeResponse> => {
+
+  return apiFetch<payExchangeResponse>(getPayExchangeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(payExchangeRequest)
+  }
+);}
+
+
+
+export type listStoreExchangesResponse200 = {
+  data: ExchangePage
+  status: 200
+}
+
+export type listStoreExchangesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreExchangesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreExchangesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreExchangesResponseSuccess = (listStoreExchangesResponse200) & {
+  headers: Headers;
+};
+export type listStoreExchangesResponseError = (listStoreExchangesResponse401 | listStoreExchangesResponse403 | listStoreExchangesResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreExchangesResponse = (listStoreExchangesResponseSuccess | listStoreExchangesResponseError)
+
+export const getListStoreExchangesUrl = (storeId: string,
+    params?: ListStoreExchangesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/exchanges?${stringifiedParams}` : `/v1/stores/${storeId}/exchanges`
+}
+
+/**
+ * Permissão da loja `exchanges`. `scope`: pending (aguardando resposta), in_progress, history.
+ * @summary Fila de trocas da loja (WB-172)
+ */
+export const listStoreExchanges = async (storeId: string,
+    params?: ListStoreExchangesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreExchangesResponse> => {
+
+  return apiFetch<listStoreExchangesResponse>(getListStoreExchangesUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type getStoreExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreExchangeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreExchangeResponseSuccess = (getStoreExchangeResponse200) & {
+  headers: Headers;
+};
+export type getStoreExchangeResponseError = (getStoreExchangeResponse401 | getStoreExchangeResponse403 | getStoreExchangeResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreExchangeResponse = (getStoreExchangeResponseSuccess | getStoreExchangeResponseError)
+
+export const getGetStoreExchangeUrl = (storeId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exchanges/${id}`
+}
+
+/**
+ * Troca de outra loja: 404.
+ * @summary Detalhe da troca para a loja
+ */
+export const getStoreExchange = async (storeId: string,
+    id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreExchangeResponse> => {
+
+  return apiFetch<getStoreExchangeResponse>(getGetStoreExchangeUrl(storeId,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type acceptExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type acceptExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acceptExchangeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type acceptExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type acceptExchangeResponseSuccess = (acceptExchangeResponse200) & {
+  headers: Headers;
+};
+export type acceptExchangeResponseError = (acceptExchangeResponse401 | acceptExchangeResponse403 | acceptExchangeResponse404 | acceptExchangeResponse409 | acceptExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type acceptExchangeResponse = (acceptExchangeResponseSuccess | acceptExchangeResponseError)
+
+export const getAcceptExchangeUrl = (storeId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exchanges/${id}/accept`
+}
+
+/**
+ * Congela taxa e diferença, reserva o tamanho novo. Com taxa a pagar vai a `awaiting_fee`; sem nada a pagar, libera a coleta na fila da logística (ou o código do balcão). Sem estoque do tamanho pedido: 409 `EXCHANGE_NO_STOCK`. Repetir é idempotente.
+ * @summary Loja aprova a troca
+ */
+export const acceptExchange = async (storeId: string,
+    id: string, options?: Parameters<typeof apiFetch>[1]): Promise<acceptExchangeResponse> => {
+
+  return apiFetch<acceptExchangeResponse>(getAcceptExchangeUrl(storeId,id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type refuseExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type refuseExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type refuseExchangeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type refuseExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type refuseExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type refuseExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type refuseExchangeResponseSuccess = (refuseExchangeResponse200) & {
+  headers: Headers;
+};
+export type refuseExchangeResponseError = (refuseExchangeResponse401 | refuseExchangeResponse403 | refuseExchangeResponse404 | refuseExchangeResponse409 | refuseExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type refuseExchangeResponse = (refuseExchangeResponseSuccess | refuseExchangeResponseError)
+
+export const getRefuseExchangeUrl = (storeId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exchanges/${id}/refuse`
+}
+
+/**
+ * Motivo obrigatório. Tamanho/cor vira `rejected`; defeito vai à mediação; arrependimento não pode ser recusado (409 `EXCHANGE_CANNOT_REJECT`). Recusa nunca gera cobrança.
+ * @summary Loja recusa a troca
+ */
+export const refuseExchange = async (storeId: string,
+    id: string,
+    refuseExchangeRequest: RefuseExchangeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<refuseExchangeResponse> => {
+
+  return apiFetch<refuseExchangeResponse>(getRefuseExchangeUrl(storeId,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(refuseExchangeRequest)
+  }
+);}
+
+
+
+export type receiveExchangeResponse200 = {
+  data: Exchange
+  status: 200
+}
+
+export type receiveExchangeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type receiveExchangeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type receiveExchangeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type receiveExchangeResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type receiveExchangeResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type receiveExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type receiveExchangeResponseSuccess = (receiveExchangeResponse200) & {
+  headers: Headers;
+};
+export type receiveExchangeResponseError = (receiveExchangeResponse401 | receiveExchangeResponse403 | receiveExchangeResponse404 | receiveExchangeResponse409 | receiveExchangeResponse422 | receiveExchangeResponse429) & {
+  headers: Headers;
+};
+
+export type receiveExchangeResponse = (receiveExchangeResponseSuccess | receiveExchangeResponseError)
+
+export const getReceiveExchangeUrl = (storeId: string,
+    id: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/exchanges/${id}/receive`
+}
+
+/**
+ * `ok: true` segue a resolução: reembolso (item e, no arrependimento, a taxa de entrega paga; cupom proporcional), troca no balcão ou liberação da reentrega pela logística (a peça nova só sai depois da antiga conferida). `ok: false` (com `reason`) vai à mediação. Troca na loja exige o `code` do cliente (5 tentativas, depois 429 `EXCHANGE_CODE_LOCKED`); coleta em casa exige a coleta confirmada (409 `ITEM_NOT_COLLECTED`).
+ * @summary Loja confere o item recebido (WB-173)
+ */
+export const receiveExchange = async (storeId: string,
+    id: string,
+    receiveExchangeRequest: ReceiveExchangeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<receiveExchangeResponse> => {
+
+  return apiFetch<receiveExchangeResponse>(getReceiveExchangeUrl(storeId,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(receiveExchangeRequest)
+  }
+);}
+
+
+
+export type createOrderReviewResponse201 = {
+  data: OrderReview
+  status: 201
+}
+
+export type createOrderReviewResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createOrderReviewResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createOrderReviewResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createOrderReviewResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createOrderReviewResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createOrderReviewResponseSuccess = (createOrderReviewResponse201) & {
+  headers: Headers;
+};
+export type createOrderReviewResponseError = (createOrderReviewResponse401 | createOrderReviewResponse404 | createOrderReviewResponse409 | createOrderReviewResponse422 | createOrderReviewResponse429) & {
+  headers: Headers;
+};
+
+export type createOrderReviewResponse = (createOrderReviewResponseSuccess | createOrderReviewResponseError)
+
+export const getCreateOrderReviewUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/reviews`
+}
+
+/**
+ * Só pedido ENTREGUE, até `avaliacao_janela_dias` (30) depois da entrega (422 `REVIEW_WINDOW_CLOSED`; 409 `ORDER_NOT_DELIVERED`). Com `productId` (produto que está no pedido) avalia o produto e aceita `fit` ("Como vestiu?"); sem `productId` avalia a loja e `fit` é recusado. Uma por produto e uma da loja por pedido; sem edição: repetir devolve 409 `REVIEW_ALREADY_EXISTS` (o app trata como já enviada). Pedido de outra conta: 404.
+ * @summary Avaliar um produto ou a loja de um pedido entregue (WB-031, WB-247)
+ */
+export const createOrderReview = async (orderId: string,
+    createReviewRequest: CreateReviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createOrderReviewResponse> => {
+
+  return apiFetch<createOrderReviewResponse>(getCreateOrderReviewUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createReviewRequest)
+  }
+);}
+
+
+
+export type listOrderReviewsResponse200 = {
+  data: ListOrderReviews200
+  status: 200
+}
+
+export type listOrderReviewsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listOrderReviewsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listOrderReviewsResponseSuccess = (listOrderReviewsResponse200) & {
+  headers: Headers;
+};
+export type listOrderReviewsResponseError = (listOrderReviewsResponse401 | listOrderReviewsResponse404) & {
+  headers: Headers;
+};
+
+export type listOrderReviewsResponse = (listOrderReviewsResponseSuccess | listOrderReviewsResponseError)
+
+export const getListOrderReviewsUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/orders/${orderId}/reviews`
+}
+
+/**
+ * Para o app saber o que ainda falta avaliar. Pedido de outra conta: 404.
+ * @summary Avaliações que o cliente já fez neste pedido
+ */
+export const listOrderReviews = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<listOrderReviewsResponse> => {
+
+  return apiFetch<listOrderReviewsResponse>(getListOrderReviewsUrl(orderId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getExchangesReportResponse200ApplicationJson = {
+  data: ExchangesReport
+  status: 200
+}
+
+export type getExchangesReportResponse200TextCsv = {
+  data: string
+  status: 200
+}
+
+export type getExchangesReportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getExchangesReportResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getExchangesReportResponseSuccess = (getExchangesReportResponse200ApplicationJson | getExchangesReportResponse200TextCsv) & {
+  headers: Headers;
+};
+export type getExchangesReportResponseError = (getExchangesReportResponse401 | getExchangesReportResponse403) & {
+  headers: Headers;
+};
+
+export type getExchangesReportResponse = (getExchangesReportResponseSuccess | getExchangesReportResponseError)
+
+export const getGetExchangesReportUrl = (params: GetExchangesReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/exchanges/report?${stringifiedParams}` : `/v1/admin/exchanges/report`
+}
+
+/**
+ * Permissão de admin `exchanges:report` (operação, financeiro e super admin). Período em dias de Brasília, no máximo 366 dias. Traz pedidos entregues, trocas por tipo, taxa de troca por loja (com `alert` acima de `troca_taxa_alerta_pct`), tamanho/cor com e sem tabela de medidas, resolvida como troca ou reembolso, aprovação automática, mediações e tempo até resolver. Receita da taxa e custo das corridas (`feeRevenue`, `logisticsCost`, `netLogisticsCost`) só para financeiro e super admin. `format=csv` exporta por loja e é auditado.
+ * @summary Relatório de trocas por loja e categoria (WB-248)
+ */
+export const getExchangesReport = async (params: GetExchangesReportParams, options?: Parameters<typeof apiFetch>[1]): Promise<getExchangesReportResponse> => {
+
+  return apiFetch<getExchangesReportResponse>(getGetExchangesReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type registerPushDeviceResponse204 = {
+  data: void
+  status: 204
+}
+
+export type registerPushDeviceResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type registerPushDeviceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type registerPushDeviceResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type registerPushDeviceResponseSuccess = (registerPushDeviceResponse204) & {
+  headers: Headers;
+};
+export type registerPushDeviceResponseError = (registerPushDeviceResponse400 | registerPushDeviceResponse401 | registerPushDeviceResponse429) & {
+  headers: Headers;
+};
+
+export type registerPushDeviceResponse = (registerPushDeviceResponseSuccess | registerPushDeviceResponseError)
+
+export const getRegisterPushDeviceUrl = () => {
+
+
+
+
+  return `/v1/me/push-devices`
+}
+
+/**
+ * Token do Expo (`ExponentPushToken[...]`) e plataforma. Idempotente. O token é do aparelho: se outra conta entrar no mesmo aparelho, o token passa a ela e a anterior deixa de receber. Push transacional (pedido e troca) não exige consentimento; marketing exige (`marketing_push`). O push nunca leva dado pessoal nem o código de retirada.
+ * @summary Registrar o aparelho para push (RF-NOT-01)
+ */
+export const registerPushDevice = async (registerPushDeviceRequest: RegisterPushDeviceRequest, options?: Parameters<typeof apiFetch>[1]): Promise<registerPushDeviceResponse> => {
+
+  return apiFetch<registerPushDeviceResponse>(getRegisterPushDeviceUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(registerPushDeviceRequest)
+  }
+);}
+
+
+
+export type revokePushDeviceResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokePushDeviceResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type revokePushDeviceResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type revokePushDeviceResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type revokePushDeviceResponseSuccess = (revokePushDeviceResponse204) & {
+  headers: Headers;
+};
+export type revokePushDeviceResponseError = (revokePushDeviceResponse400 | revokePushDeviceResponse401 | revokePushDeviceResponse429) & {
+  headers: Headers;
+};
+
+export type revokePushDeviceResponse = (revokePushDeviceResponseSuccess | revokePushDeviceResponseError)
+
+export const getRevokePushDeviceUrl = () => {
+
+
+
+
+  return `/v1/me/push-devices/revoke`
+}
+
+/**
+ * Só o dono do token revoga; token de outra conta é ignorado (204, sem revelar nada). Chame no logout.
+ * @summary Desligar o push neste aparelho (logout)
+ */
+export const revokePushDevice = async (revokePushDeviceRequest: RevokePushDeviceRequest, options?: Parameters<typeof apiFetch>[1]): Promise<revokePushDeviceResponse> => {
+
+  return apiFetch<revokePushDeviceResponse>(getRevokePushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(revokePushDeviceRequest)
+  }
+);}
+
+
+
+export type getStoreSalesResponse200 = {
+  data: StoreSales
+  status: 200
+}
+
+export type getStoreSalesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreSalesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreSalesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreSalesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreSalesResponseSuccess = (getStoreSalesResponse200) & {
+  headers: Headers;
+};
+export type getStoreSalesResponseError = (getStoreSalesResponse400 | getStoreSalesResponse401 | getStoreSalesResponse403 | getStoreSalesResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreSalesResponse = (getStoreSalesResponseSuccess | getStoreSalesResponseError)
+
+export const getGetStoreSalesUrl = (storeId: string,
+    params: GetStoreSalesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/sales?${stringifiedParams}` : `/v1/stores/${storeId}/finance/sales`
+}
+
+/**
+ * Permissão da loja `sales_values` (dono ou funcionário com a permissão): total de vendas (itens menos cupom da loja, sem frete nem taxa de serviço), número de pedidos e ticket médio. Sem comissão nem líquido (esses são só do dono). Pedido pago e ainda não cancelado conta pelo dia do pagamento (Brasília).
+ * @summary Vendas do período (WB-075)
+ */
+export const getStoreSales = async (storeId: string,
+    params: GetStoreSalesParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreSalesResponse> => {
+
+  return apiFetch<getStoreSalesResponse>(getGetStoreSalesUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreFinanceSummaryResponse200 = {
+  data: StoreFinanceSummary
+  status: 200
+}
+
+export type getStoreFinanceSummaryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreFinanceSummaryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreFinanceSummaryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreFinanceSummaryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreFinanceSummaryResponseSuccess = (getStoreFinanceSummaryResponse200) & {
+  headers: Headers;
+};
+export type getStoreFinanceSummaryResponseError = (getStoreFinanceSummaryResponse400 | getStoreFinanceSummaryResponse401 | getStoreFinanceSummaryResponse403 | getStoreFinanceSummaryResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreFinanceSummaryResponse = (getStoreFinanceSummaryResponseSuccess | getStoreFinanceSummaryResponseError)
+
+export const getGetStoreFinanceSummaryUrl = (storeId: string,
+    params: GetStoreFinanceSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/summary?${stringifiedParams}` : `/v1/stores/${storeId}/finance/summary`
+}
+
+/**
+ * Permissão da loja `finance` (só o dono, RN-13). Vendas, comissão cobrada e devolvida, tarifa do provedor, estornos, líquido (do ledger) e o que ainda está para entrar. `receivable` é INFORMATIVO: em split o dinheiro cai direto na conta do Mercado Pago da loja e a Webag não retém nem repassa (DEC-016): `pending` = pedido ainda não entregue, `inGrace` = entregue há menos de `repasse_carencia_dias`, `released` = passou a carência.
+ * @summary Resumo financeiro do dono (WB-076)
+ */
+export const getStoreFinanceSummary = async (storeId: string,
+    params: GetStoreFinanceSummaryParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreFinanceSummaryResponse> => {
+
+  return apiFetch<getStoreFinanceSummaryResponse>(getGetStoreFinanceSummaryUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreStatementResponse200 = {
+  data: StatementPage
+  status: 200
+}
+
+export type getStoreStatementResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreStatementResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreStatementResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreStatementResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreStatementResponseSuccess = (getStoreStatementResponse200) & {
+  headers: Headers;
+};
+export type getStoreStatementResponseError = (getStoreStatementResponse400 | getStoreStatementResponse401 | getStoreStatementResponse403 | getStoreStatementResponse404) & {
+  headers: Headers;
+};
+
+export type getStoreStatementResponse = (getStoreStatementResponseSuccess | getStoreStatementResponseError)
+
+export const getGetStoreStatementUrl = (storeId: string,
+    params: GetStoreStatementParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/statement?${stringifiedParams}` : `/v1/stores/${storeId}/finance/statement`
+}
+
+/**
+ * Permissão da loja `finance`. Um registro por pedido pago do período, do mais recente ao mais antigo, com vendas, comissão, tarifa do provedor, estornos, líquido e situação. Paginado por cursor.
+ * @summary Extrato por pedido (WB-077)
+ */
+export const getStoreStatement = async (storeId: string,
+    params: GetStoreStatementParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreStatementResponse> => {
+
+  return apiFetch<getStoreStatementResponse>(getGetStoreStatementUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getStoreStatementCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type getStoreStatementCsvResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getStoreStatementCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getStoreStatementCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getStoreStatementCsvResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getStoreStatementCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getStoreStatementCsvResponseSuccess = (getStoreStatementCsvResponse200) & {
+  headers: Headers;
+};
+export type getStoreStatementCsvResponseError = (getStoreStatementCsvResponse400 | getStoreStatementCsvResponse401 | getStoreStatementCsvResponse403 | getStoreStatementCsvResponse404 | getStoreStatementCsvResponse429) & {
+  headers: Headers;
+};
+
+export type getStoreStatementCsvResponse = (getStoreStatementCsvResponseSuccess | getStoreStatementCsvResponseError)
+
+export const getGetStoreStatementCsvUrl = (storeId: string,
+    params: GetStoreStatementCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/finance/statement.csv?${stringifiedParams}` : `/v1/stores/${storeId}/finance/statement.csv`
+}
+
+/**
+ * Permissão da loja `finance`. UTF-8 com BOM, separador `;`, valores em reais com vírgula; até 5.000 pedidos mais recentes do período. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo. A exportação é auditada (`store.finance.export`). Limite de 20 por hora.
+ * @summary Extrato exportável em CSV (WB-077)
+ */
+export const getStoreStatementCsv = async (storeId: string,
+    params: GetStoreStatementCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<getStoreStatementCsvResponse> => {
+
+  return apiFetch<getStoreStatementCsvResponse>(getGetStoreStatementCsvUrl(storeId,params),
   {
     ...options,
     method: 'GET'

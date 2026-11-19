@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   label: {},
   box: {
     minHeight: theme.size.controlLg,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.control,
     backgroundColor: theme.color.surface.card,
     flexDirection: 'row',
     alignItems: 'center',

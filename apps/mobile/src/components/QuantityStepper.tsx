@@ -78,7 +78,7 @@ export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, t
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', height: theme.size.touchMin, borderRadius: theme.radius.md, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card },
+  wrap: { flexDirection: 'row', alignItems: 'center', height: theme.size.touchMin, borderRadius: theme.radius.pill, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card },
   btn: { width: theme.size.touchMin, height: theme.size.touchMin, alignItems: 'center', justifyContent: 'center' },
   value: { minWidth: 40, textAlign: 'center' },
 });

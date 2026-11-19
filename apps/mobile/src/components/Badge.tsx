@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.space[1],
     paddingHorizontal: theme.space[2],
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.pill,
     alignSelf: 'flex-start',
   },
 });

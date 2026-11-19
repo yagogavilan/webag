@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 72,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: theme.borderWidth.hairline,
     borderColor: theme.color.border.default,
     backgroundColor: theme.color.surface.card,

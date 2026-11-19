@@ -24,6 +24,7 @@ const PRESENTATION: Record<OrderStatus, { key: MessageKey; tone: BadgeTone; icon
   received: { key: 'orders.status.received', tone: 'info', icon: Hourglass },
   accepted: { key: 'orders.status.accepted', tone: 'info', icon: CheckCircle },
   in_preparation: { key: 'orders.status.in_preparation', tone: 'info', icon: Package },
+  ready_for_collection: { key: 'orders.status.ready_for_collection', tone: 'info', icon: Clock },
   out_for_delivery: { key: 'orders.status.out_for_delivery', tone: 'info', icon: Truck },
   ready_for_pickup: { key: 'orders.status.ready_for_pickup', tone: 'success', icon: Storefront },
   delivered: { key: 'orders.status.delivered', tone: 'success', icon: CheckCircle },
@@ -37,7 +38,7 @@ export function presentStatus(status: OrderStatus): StatusPresentation {
   return { label: t(p.key), tone: p.tone, icon: p.icon };
 }
 
-export const ACTIVE_STATUSES: readonly OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'out_for_delivery', 'ready_for_pickup'];
+export const ACTIVE_STATUSES: readonly OrderStatus[] = ['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
 export const FAILED_STATUSES: readonly OrderStatus[] = ['cancelled', 'refused', 'expired'];
 
 export const isActive = (status: OrderStatus): boolean => ACTIVE_STATUSES.includes(status);
@@ -57,14 +58,17 @@ export interface TimelineStep {
   at: string | null;
 }
 
-/** Os 5 passos da spec S7. Entrega: "Saiu para entrega"; retirada: "Pronto para retirada". */
+/** Passos da linha do tempo. Entrega: 6 (inclui "Aguardando motoboy"); retirada: 5 ("Pronto para retirada"). */
 export function timelineSteps(order: Pick<Order, 'status' | 'mode' | 'timeline'>): TimelineStep[] {
-  const fourth: OrderStatus = order.mode === 'pickup' ? 'ready_for_pickup' : 'out_for_delivery';
-  const path: OrderStatus[] = ['received', 'accepted', 'in_preparation', fourth, 'delivered'];
+  const path: OrderStatus[] =
+    order.mode === 'pickup'
+      ? ['received', 'accepted', 'in_preparation', 'ready_for_pickup', 'delivered']
+      : ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'delivered'];
   const labels: Record<string, MessageKey> = {
     received: 'orders.step.received',
     accepted: 'orders.step.accepted',
     in_preparation: 'orders.step.in_preparation',
+    ready_for_collection: 'orders.step.ready_for_collection',
     out_for_delivery: 'orders.step.out_for_delivery',
     ready_for_pickup: 'orders.step.ready_for_pickup',
     delivered: 'orders.step.delivered',

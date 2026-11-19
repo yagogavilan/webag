@@ -127,7 +127,7 @@ export const tokens = {
   "font": {
     "family": {
       "web": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
-      "display": "\"Fredoka\", \"Figtree\", ui-rounded, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif"
+      "display": "\"Outfit\", \"Figtree\", ui-rounded, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif"
     },
     "size": {
       "xs": 12,
@@ -342,9 +342,9 @@ export const tokens = {
       "regular": "Figtree_400Regular",
       "semibold": "Figtree_600SemiBold",
       "bold": "Figtree_700Bold",
-      "displayMedium": "Fredoka_500Medium",
-      "displaySemibold": "Fredoka_600SemiBold",
-      "displayBold": "Fredoka_700Bold"
+      "displayMedium": "Outfit_500Medium",
+      "displaySemibold": "Outfit_600SemiBold",
+      "displayBold": "Outfit_700Bold"
     },
     "maxFontSizeMultiplier": {
       "default": 1.5,

@@ -1,9 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ExpoConfig } from 'expo/config';
+
+/** Cor de marca lida do tema ativo de packages/tokens (fonte única; ícone e splash usam a mesma). */
+function readBrand(): string {
+  const dir = join(__dirname, '..', '..', 'packages', 'tokens');
+  const theme = (JSON.parse(readFileSync(join(dir, 'tokens.json'), 'utf8')) as { $theme: string }).$theme;
+  const file = JSON.parse(readFileSync(join(dir, 'theme', `${theme}.json`), 'utf8')) as {
+    color: { brand: Record<string, string> };
+  };
+  return file.color.brand['500'] as string;
+}
+const BRAND = readBrand();
 
 /**
  * Configuração do app. Tudo aqui é embutido no binário (público): nada de segredo.
  * Variáveis por ambiente: EXPO_PUBLIC_* (infra/env.example no dev; EAS Environment Variables nos builds, ver eas.json e
- * docs/deploy/checklist-publicacao-lojas.md). Ícone, splash e ícone adaptativo: assets/ (gerados de docs/design/assets).
+ * docs/deploy/checklist-publicacao-lojas.md). Ícone, splash e ícone adaptativo: assets/ (pnpm --filter @webag/mobile assets; símbolo v4a de docs/design/logo).
  */
 const config: ExpoConfig = {
   name: 'Webag',
@@ -25,7 +38,11 @@ const config: ExpoConfig = {
   android: {
     // Edge-to-edge é obrigatório no SDK atual: telas usam safe areas.
     package: 'br.com.webag.app',
-    adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#00696F' },
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      monochromeImage: './assets/adaptive-monochrome.png',
+      backgroundColor: BRAND,
+    },
     // SEC-012 / MASVS-STORAGE (revisão Onda 1, SEC-120): sem backup automático no Google Drive. Endereços (AsyncStorage) e o
     // id do aparelho não saem do aparelho; o SecureStore restaurado em outro aparelho não decifra e só geraria erro.
     allowBackup: false,
@@ -38,10 +55,10 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-font',
-    // Splash (identidade.md): fundo brand.600, símbolo branco de 96 px centralizado.
+    // Splash (identidade v2): fundo na cor de marca, símbolo v4a branco (~115 px) centralizado.
     [
       'expo-splash-screen',
-      { image: './assets/splash-icon.png', imageWidth: 96, backgroundColor: '#00696F' },
+      { image: './assets/splash-icon.png', imageWidth: 240, backgroundColor: BRAND },
     ],
     'expo-secure-store',
     [

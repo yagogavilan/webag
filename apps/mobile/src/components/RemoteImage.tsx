@@ -23,7 +23,7 @@ export interface RemoteImageProps {
  * Imagem da API com cache em disco e memória (expo-image), carregamento progressivo (fundo neutro + fade de 200 ms) e
  * tamanho adequado à tela. Falhou ou não existe: placeholder neutro, sem ícone quebrado (§5 do design system).
  */
-export function RemoteImage({ urls, width, height, aspectRatio, alt, radius = theme.radius.md, priority = 'normal', style, testID }: RemoteImageProps) {
+export function RemoteImage({ urls, width, height, aspectRatio, alt, radius = theme.radius.lg, priority = 'normal', style, testID }: RemoteImageProps) {
   const uri = pickImageUrl(urls, width);
   const box: { width: DimensionValue; height?: number; aspectRatio?: number } = { width };
   if (height !== undefined) box.height = height;

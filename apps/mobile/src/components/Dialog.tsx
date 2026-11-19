@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     maxWidth: theme.layout.formMaxWidth,
     maxHeight: '90%',
     backgroundColor: theme.color.surface.card,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.xl,
     ...theme.shadows.lg,
   },
   content: { padding: theme.space[5], gap: theme.space[3] },
