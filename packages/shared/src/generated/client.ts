@@ -2779,6 +2779,13 @@ export type AdminBanner = Banner & ({
   endsAt: string;
   active: boolean;
   live: boolean;
+  impressions?: number;
+  clicks?: number;
+  /**
+     * Taxa de cliques em % (1 casa); nula sem impressão
+     * @nullable
+     */
+  ctrPct?: number | null;
 });
 
 export interface AdminBannerList {
@@ -2961,6 +2968,9 @@ export interface Home {
   mode: HomeMode;
   /** Nenhuma loja visível na posição */
   empty: boolean;
+  /** Destaques fixados pelo admin (WB-115 C4): vêm antes dos automáticos e só se a loja é visível neste ponto */
+  highlightStores?: StoreCard[];
+  highlightProducts?: ProductCard[];
   /** @maxItems 10 */
   nearbyStores: StoreCard[];
   /** @maxItems 10 */
@@ -5231,6 +5241,188 @@ export interface PushCampaignPage {
   nextCursor: string | null;
 }
 
+export type PlatformCouponKind = typeof PlatformCouponKind[keyof typeof PlatformCouponKind];
+
+
+export const PlatformCouponKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+  free_shipping: 'free_shipping',
+} as const;
+
+export type PlatformCouponStatus = typeof PlatformCouponStatus[keyof typeof PlatformCouponStatus];
+
+
+export const PlatformCouponStatus = {
+  scheduled: 'scheduled',
+  live: 'live',
+  paused: 'paused',
+  ended: 'ended',
+  exhausted: 'exhausted',
+} as const;
+
+export interface PlatformCoupon {
+  id: string;
+  code: string;
+  kind: PlatformCouponKind;
+  /** Percentual (1-100) ou centavos; 0 no frete grátis */
+  value: number;
+  /** @nullable */
+  percentCapCents: number | null;
+  minOrderCents: number;
+  startsAt: string;
+  endsAt: string;
+  /** @nullable */
+  maxUses: number | null;
+  perCustomerLimit: number;
+  firstPurchaseOnly: boolean;
+  active: boolean;
+  status: PlatformCouponStatus;
+  uses: number;
+  discountTotal: Money;
+  orders: number;
+  notice: string;
+  createdAt: string;
+}
+
+export interface PlatformCouponPage {
+  data: PlatformCoupon[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type PlatformCouponCreateKind = typeof PlatformCouponCreateKind[keyof typeof PlatformCouponCreateKind];
+
+
+export const PlatformCouponCreateKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+  free_shipping: 'free_shipping',
+} as const;
+
+export interface PlatformCouponCreate {
+  /**
+     * @minLength 4
+     * @maxLength 20
+     */
+  code: string;
+  kind: PlatformCouponCreateKind;
+  /** @minimum 0 */
+  value?: number;
+  /**
+     * Só no percentual
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /** @minimum 0 */
+  minOrderCents?: number;
+  startsAt: string;
+  endsAt: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  firstPurchaseOnly?: boolean;
+}
+
+export interface PlatformCouponPatch {
+  /** @minimum 0 */
+  value?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /** @minimum 0 */
+  minOrderCents?: number;
+  endsAt?: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  firstPurchaseOnly?: boolean;
+  active?: boolean;
+}
+
+export type HighlightKind = typeof HighlightKind[keyof typeof HighlightKind];
+
+
+export const HighlightKind = {
+  store: 'store',
+  product: 'product',
+} as const;
+
+export interface Highlight {
+  id: string;
+  kind: HighlightKind;
+  targetId: string;
+  /** @nullable */
+  targetName: string | null;
+  /** @nullable */
+  cityId: string | null;
+  startsAt: string;
+  endsAt: string;
+  position: number;
+  active: boolean;
+  targetUnavailable: boolean;
+  live: boolean;
+}
+
+export interface HighlightList {
+  data: Highlight[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export type HighlightCreateKind = typeof HighlightCreateKind[keyof typeof HighlightCreateKind];
+
+
+export const HighlightCreateKind = {
+  store: 'store',
+  product: 'product',
+} as const;
+
+export interface HighlightCreate {
+  kind: HighlightCreateKind;
+  targetId: string;
+  /** @nullable */
+  cityId?: string | null;
+  startsAt: string;
+  endsAt: string;
+  /**
+     * @minimum 0
+     * @maximum 999
+     */
+  position?: number;
+  active?: boolean;
+}
+
+export interface HighlightPatch {
+  /** @nullable */
+  cityId?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  /**
+     * @minimum 0
+     * @maximum 999
+     */
+  position?: number;
+  active?: boolean;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -6563,6 +6755,41 @@ export type CancelPushCampaignBody = {
      * @maxLength 200
      */
   reason: string;
+};
+
+export type ListPlatformCouponsParams = {
+  status?: ListPlatformCouponsStatus;
+  /** @maxLength 20 */
+  q?: string;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListPlatformCouponsStatus = typeof ListPlatformCouponsStatus[keyof typeof ListPlatformCouponsStatus];
+
+
+export const ListPlatformCouponsStatus = {
+  scheduled: 'scheduled',
+  live: 'live',
+  paused: 'paused',
+  ended: 'ended',
+  exhausted: 'exhausted',
+} as const;
+
+export type RecordBannerEventBodyType = typeof RecordBannerEventBodyType[keyof typeof RecordBannerEventBodyType];
+
+
+export const RecordBannerEventBodyType = {
+  impression: 'impression',
+  click: 'click',
+} as const;
+
+export type RecordBannerEventBody = {
+  type: RecordBannerEventBodyType;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -22216,5 +22443,523 @@ export const markPushCampaignOpened = async (id: string, options?: Parameters<ty
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type listPlatformCouponsResponse200 = {
+  data: PlatformCouponPage
+  status: 200
+}
+
+export type listPlatformCouponsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listPlatformCouponsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listPlatformCouponsResponseSuccess = (listPlatformCouponsResponse200) & {
+  headers: Headers;
+};
+export type listPlatformCouponsResponseError = (listPlatformCouponsResponse401 | listPlatformCouponsResponse403) & {
+  headers: Headers;
+};
+
+export type listPlatformCouponsResponse = (listPlatformCouponsResponseSuccess | listPlatformCouponsResponseError)
+
+export const getListPlatformCouponsUrl = (params?: ListPlatformCouponsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/coupons?${stringifiedParams}` : `/v1/admin/coupons`
+}
+
+/**
+ * `coupons:read` (super admin, operação e financeiro). Só escopo `platform` (cupom de loja é do lojista). `uses` não conta uso devolvido. `status`: scheduled, live, paused, ended, exhausted.
+ * @summary Cupons da plataforma (uso, desconto total e pedidos)
+ */
+export const listPlatformCoupons = async (params?: ListPlatformCouponsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listPlatformCouponsResponse> => {
+
+  return apiFetch<listPlatformCouponsResponse>(getListPlatformCouponsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createPlatformCouponResponse201 = {
+  data: PlatformCoupon
+  status: 201
+}
+
+export type createPlatformCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createPlatformCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createPlatformCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createPlatformCouponResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createPlatformCouponResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createPlatformCouponResponseSuccess = (createPlatformCouponResponse201) & {
+  headers: Headers;
+};
+export type createPlatformCouponResponseError = (createPlatformCouponResponse400 | createPlatformCouponResponse401 | createPlatformCouponResponse403 | createPlatformCouponResponse409 | createPlatformCouponResponse429) & {
+  headers: Headers;
+};
+
+export type createPlatformCouponResponse = (createPlatformCouponResponseSuccess | createPlatformCouponResponseError)
+
+export const getCreatePlatformCouponUrl = () => {
+
+
+
+
+  return `/v1/admin/coupons`
+}
+
+/**
+ * `coupons:write` (super admin e operação). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * @summary Criar cupom da plataforma (custo da Webag)
+ */
+export const createPlatformCoupon = async (platformCouponCreate: PlatformCouponCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createPlatformCouponResponse> => {
+
+  return apiFetch<createPlatformCouponResponse>(getCreatePlatformCouponUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(platformCouponCreate)
+  }
+);}
+
+
+
+export type getPlatformCouponResponse200 = {
+  data: PlatformCoupon
+  status: 200
+}
+
+export type getPlatformCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getPlatformCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getPlatformCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getPlatformCouponResponseSuccess = (getPlatformCouponResponse200) & {
+  headers: Headers;
+};
+export type getPlatformCouponResponseError = (getPlatformCouponResponse401 | getPlatformCouponResponse403 | getPlatformCouponResponse404) & {
+  headers: Headers;
+};
+
+export type getPlatformCouponResponse = (getPlatformCouponResponseSuccess | getPlatformCouponResponseError)
+
+export const getGetPlatformCouponUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/coupons/${id}`
+}
+
+/**
+ * @summary Detalhe e relatório de uso do cupom
+ */
+export const getPlatformCoupon = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<getPlatformCouponResponse> => {
+
+  return apiFetch<getPlatformCouponResponse>(getGetPlatformCouponUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updatePlatformCouponResponse200 = {
+  data: PlatformCoupon
+  status: 200
+}
+
+export type updatePlatformCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updatePlatformCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updatePlatformCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updatePlatformCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updatePlatformCouponResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updatePlatformCouponResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type updatePlatformCouponResponseSuccess = (updatePlatformCouponResponse200) & {
+  headers: Headers;
+};
+export type updatePlatformCouponResponseError = (updatePlatformCouponResponse400 | updatePlatformCouponResponse401 | updatePlatformCouponResponse403 | updatePlatformCouponResponse404 | updatePlatformCouponResponse409 | updatePlatformCouponResponse429) & {
+  headers: Headers;
+};
+
+export type updatePlatformCouponResponse = (updatePlatformCouponResponseSuccess | updatePlatformCouponResponseError)
+
+export const getUpdatePlatformCouponUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/coupons/${id}`
+}
+
+/**
+ * Pausar vale na hora (`active: false`). Depois do 1º uso `value` e `percentCapCents` não mudam (409 `COUPON_IN_USE`); `maxUses` não pode ficar abaixo dos usos. Código e tipo nunca mudam.
+ * @summary Pausar, reativar, prorrogar ou mudar limites
+ */
+export const updatePlatformCoupon = async (id: string,
+    platformCouponPatch: PlatformCouponPatch, options?: Parameters<typeof apiFetch>[1]): Promise<updatePlatformCouponResponse> => {
+
+  return apiFetch<updatePlatformCouponResponse>(getUpdatePlatformCouponUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(platformCouponPatch)
+  }
+);}
+
+
+
+export type listHighlightsResponse200 = {
+  data: HighlightList
+  status: 200
+}
+
+export type listHighlightsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listHighlightsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listHighlightsResponseSuccess = (listHighlightsResponse200) & {
+  headers: Headers;
+};
+export type listHighlightsResponseError = (listHighlightsResponse401 | listHighlightsResponse403) & {
+  headers: Headers;
+};
+
+export type listHighlightsResponse = (listHighlightsResponseSuccess | listHighlightsResponseError)
+
+export const getListHighlightsUrl = () => {
+
+
+
+
+  return `/v1/admin/highlights`
+}
+
+/**
+ * Permissão `banners:read`. `targetUnavailable`: o item foi inativado e o destaque some do app sozinho (WB-115 C2).
+ * @summary Destaques fixados na Início (loja ou produto)
+ */
+export const listHighlights = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listHighlightsResponse> => {
+
+  return apiFetch<listHighlightsResponse>(getListHighlightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createHighlightResponse201 = {
+  data: Highlight
+  status: 201
+}
+
+export type createHighlightResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createHighlightResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createHighlightResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createHighlightResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createHighlightResponseSuccess = (createHighlightResponse201) & {
+  headers: Headers;
+};
+export type createHighlightResponseError = (createHighlightResponse400 | createHighlightResponse401 | createHighlightResponse403 | createHighlightResponse422) & {
+  headers: Headers;
+};
+
+export type createHighlightResponse = (createHighlightResponseSuccess | createHighlightResponseError)
+
+export const getCreateHighlightUrl = () => {
+
+
+
+
+  return `/v1/admin/highlights`
+}
+
+/**
+ * Permissão `banners:write`. Item inativo: 400; no máximo 12 destaques ativos (422 `HIGHLIGHT_LIMIT`). Entram ANTES dos critérios automáticos e só para quem enxerga o item (RN-03). `cityId` nulo = todas.
+ * @summary Fixar uma loja ou produto na Início
+ */
+export const createHighlight = async (highlightCreate: HighlightCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createHighlightResponse> => {
+
+  return apiFetch<createHighlightResponse>(getCreateHighlightUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(highlightCreate)
+  }
+);}
+
+
+
+export type updateHighlightResponse200 = {
+  data: Highlight
+  status: 200
+}
+
+export type updateHighlightResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateHighlightResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateHighlightResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateHighlightResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateHighlightResponseSuccess = (updateHighlightResponse200) & {
+  headers: Headers;
+};
+export type updateHighlightResponseError = (updateHighlightResponse400 | updateHighlightResponse401 | updateHighlightResponse403 | updateHighlightResponse404) & {
+  headers: Headers;
+};
+
+export type updateHighlightResponse = (updateHighlightResponseSuccess | updateHighlightResponseError)
+
+export const getUpdateHighlightUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/highlights/${id}`
+}
+
+/**
+ * @summary Editar período, cidade, ordem ou pausar o destaque
+ */
+export const updateHighlight = async (id: string,
+    highlightPatch: HighlightPatch, options?: Parameters<typeof apiFetch>[1]): Promise<updateHighlightResponse> => {
+
+  return apiFetch<updateHighlightResponse>(getUpdateHighlightUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(highlightPatch)
+  }
+);}
+
+
+
+export type deleteHighlightResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteHighlightResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteHighlightResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteHighlightResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteHighlightResponseSuccess = (deleteHighlightResponse204) & {
+  headers: Headers;
+};
+export type deleteHighlightResponseError = (deleteHighlightResponse401 | deleteHighlightResponse403 | deleteHighlightResponse404) & {
+  headers: Headers;
+};
+
+export type deleteHighlightResponse = (deleteHighlightResponseSuccess | deleteHighlightResponseError)
+
+export const getDeleteHighlightUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/highlights/${id}`
+}
+
+/**
+ * @summary Remover o destaque
+ */
+export const deleteHighlight = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<deleteHighlightResponse> => {
+
+  return apiFetch<deleteHighlightResponse>(getDeleteHighlightUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type recordBannerEventResponse204 = {
+  data: void
+  status: 204
+}
+
+export type recordBannerEventResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type recordBannerEventResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type recordBannerEventResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type recordBannerEventResponseSuccess = (recordBannerEventResponse204) & {
+  headers: Headers;
+};
+export type recordBannerEventResponseError = (recordBannerEventResponse400 | recordBannerEventResponse404 | recordBannerEventResponse429) & {
+  headers: Headers;
+};
+
+export type recordBannerEventResponse = (recordBannerEventResponseSuccess | recordBannerEventResponseError)
+
+export const getRecordBannerEventUrl = (bannerId: string,) => {
+
+
+
+
+  return `/v1/banners/${bannerId}/events`
+}
+
+/**
+ * Público, 240/min por IP. Só conta banner no ar. Sem dado do cliente nem do aparelho (WB-115 C5).
+ * @summary O app avisa a impressão ou o clique de um banner
+ */
+export const recordBannerEvent = async (bannerId: string,
+    recordBannerEventBody: RecordBannerEventBody, options?: Parameters<typeof apiFetch>[1]): Promise<recordBannerEventResponse> => {
+
+  return apiFetch<recordBannerEventResponse>(getRecordBannerEventUrl(bannerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(recordBannerEventBody)
   }
 );}

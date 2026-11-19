@@ -7006,6 +7006,210 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/coupons:
+    get:
+      tags: [marketing]
+      operationId: listPlatformCoupons
+      summary: Cupons da plataforma (uso, desconto total e pedidos)
+      description: "`coupons:read` (super admin, operação e financeiro). Só escopo `platform` (cupom de loja é do lojista). `uses` não conta uso devolvido. `status`: scheduled, live, paused, ended, exhausted."
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, live, paused, ended, exhausted] } }
+        - { name: q, in: query, schema: { type: string, maxLength: 20 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformCouponPage' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [marketing]
+      operationId: createPlatformCoupon
+      summary: Criar cupom da plataforma (custo da Webag)
+      description: "`coupons:write` (super admin e operação). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlatformCouponCreate' }
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformCoupon' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/coupons/{id}:
+    get:
+      tags: [marketing]
+      operationId: getPlatformCoupon
+      summary: Detalhe e relatório de uso do cupom
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Cupom
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformCoupon' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [marketing]
+      operationId: updatePlatformCoupon
+      summary: Pausar, reativar, prorrogar ou mudar limites
+      description: "Pausar vale na hora (`active: false`). Depois do 1º uso `value` e `percentCapCents` não mudam (409 `COUPON_IN_USE`); `maxUses` não pode ficar abaixo dos usos. Código e tipo nunca mudam."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlatformCouponPatch' }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformCoupon' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/highlights:
+    get:
+      tags: [marketing]
+      operationId: listHighlights
+      summary: Destaques fixados na Início (loja ou produto)
+      description: "Permissão `banners:read`. `targetUnavailable`: o item foi inativado e o destaque some do app sozinho (WB-115 C2)."
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HighlightList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [marketing]
+      operationId: createHighlight
+      summary: Fixar uma loja ou produto na Início
+      description: "Permissão `banners:write`. Item inativo: 400; no máximo 12 destaques ativos (422 `HIGHLIGHT_LIMIT`). Entram ANTES dos critérios automáticos e só para quem enxerga o item (RN-03). `cityId` nulo = todas."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HighlightCreate' }
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Highlight' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/admin/highlights/{id}:
+    patch:
+      tags: [marketing]
+      operationId: updateHighlight
+      summary: Editar período, cidade, ordem ou pausar o destaque
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HighlightPatch' }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Highlight' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [marketing]
+      operationId: deleteHighlight
+      summary: Remover o destaque
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/banners/{bannerId}/events:
+    post:
+      tags: [home]
+      operationId: recordBannerEvent
+      summary: O app avisa a impressão ou o clique de um banner
+      description: "Público, 240/min por IP. Só conta banner no ar. Sem dado do cliente nem do aparelho (WB-115 C5)."
+      security: []
+      parameters:
+        - { name: bannerId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type]
+              properties: { type: { type: string, enum: [impression, click] } }
+      responses:
+        '204':
+          description: Registrado
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -9621,6 +9825,9 @@ components:
             endsAt: { type: string, format: date-time }
             active: { type: boolean }
             live: { type: boolean }
+            impressions: { type: integer }
+            clicks: { type: integer }
+            ctrPct: { type: [number, 'null'], description: 'Taxa de cliques em % (1 casa); nula sem impressão' }
     AdminBannerList:
       type: object
       required: [data, nextCursor]
@@ -9724,6 +9931,8 @@ components:
       properties:
         mode: { type: string, enum: [delivery, pickup] }
         empty: { type: boolean, description: Nenhuma loja visível na posição }
+        highlightStores: { type: array, items: { $ref: '#/components/schemas/StoreCard' }, description: 'Destaques fixados pelo admin (WB-115 C4): vêm antes dos automáticos e só se a loja é visível neste ponto' }
+        highlightProducts: { type: array, items: { $ref: '#/components/schemas/ProductCard' } }
         nearbyStores: { type: array, items: { $ref: '#/components/schemas/StoreCard' }, maxItems: 10 }
         newStores: { type: array, items: { $ref: '#/components/schemas/StoreCard' }, maxItems: 10 }
         offers: { type: array, items: { $ref: '#/components/schemas/ProductCard' }, maxItems: 10 }
@@ -11152,3 +11361,100 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/PushCampaign' } }
         nextCursor: { type: [string, 'null'] }
+    PlatformCoupon:
+      type: object
+      required: [id, code, kind, value, percentCapCents, minOrderCents, startsAt, endsAt, maxUses, perCustomerLimit, firstPurchaseOnly, active, status, uses, discountTotal, orders, notice, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        kind: { type: string, enum: [percent, fixed, free_shipping] }
+        value: { type: integer, description: "Percentual (1-100) ou centavos; 0 no frete grátis" }
+        percentCapCents: { type: [integer, 'null'] }
+        minOrderCents: { type: integer }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'] }
+        perCustomerLimit: { type: integer }
+        firstPurchaseOnly: { type: boolean }
+        active: { type: boolean }
+        status: { type: string, enum: [scheduled, live, paused, ended, exhausted] }
+        uses: { type: integer }
+        discountTotal: { $ref: '#/components/schemas/Money' }
+        orders: { type: integer }
+        notice: { type: string }
+        createdAt: { type: string, format: date-time }
+    PlatformCouponPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/PlatformCoupon' } }
+        nextCursor: { type: [string, 'null'] }
+    PlatformCouponCreate:
+      type: object
+      additionalProperties: false
+      required: [code, kind, startsAt, endsAt]
+      properties:
+        code: { type: string, minLength: 4, maxLength: 20 }
+        kind: { type: string, enum: [percent, fixed, free_shipping] }
+        value: { type: integer, minimum: 0 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1, description: "Só no percentual" }
+        minOrderCents: { type: integer, minimum: 0 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100 }
+        firstPurchaseOnly: { type: boolean }
+    PlatformCouponPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        value: { type: integer, minimum: 0 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0 }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100 }
+        firstPurchaseOnly: { type: boolean }
+        active: { type: boolean }
+    Highlight:
+      type: object
+      required: [id, kind, targetId, targetName, cityId, startsAt, endsAt, position, active, targetUnavailable, live]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [store, product] }
+        targetId: { type: string, format: uuid }
+        targetName: { type: [string, 'null'] }
+        cityId: { type: [string, 'null'], format: uuid }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        position: { type: integer }
+        active: { type: boolean }
+        targetUnavailable: { type: boolean }
+        live: { type: boolean }
+    HighlightList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Highlight' } }
+        nextCursor: { type: 'null' }
+    HighlightCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, targetId, startsAt, endsAt]
+      properties:
+        kind: { type: string, enum: [store, product] }
+        targetId: { type: string, format: uuid }
+        cityId: { type: [string, 'null'], format: uuid }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        position: { type: integer, minimum: 0, maximum: 999 }
+        active: { type: boolean }
+    HighlightPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        cityId: { type: [string, 'null'], format: uuid }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        position: { type: integer, minimum: 0, maximum: 999 }
+        active: { type: boolean }

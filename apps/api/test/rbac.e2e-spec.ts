@@ -133,6 +133,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'POST /v1/auth/password/reset/complete',
         'POST /v1/auth/refresh',
         'POST /v1/auth/register',
+        'POST /v1/banners/:bannerId/events',
         'POST /v1/privacy/requests',
         'POST /v1/webhooks/:provider',
       ].sort(),

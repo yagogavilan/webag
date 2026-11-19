@@ -6229,7 +6229,10 @@ export const ListAdminBannersResponse = zod.object({
   "startsAt": zod.iso.datetime({"offset":true}),
   "endsAt": zod.iso.datetime({"offset":true}),
   "active": zod.boolean(),
-  "live": zod.boolean()
+  "live": zod.boolean(),
+  "impressions": zod.int().optional(),
+  "clicks": zod.int().optional(),
+  "ctrPct": zod.number().nullish().describe('Taxa de cliques em % (1 casa); nula sem impressão')
 }))),
   "nextCursor": zod.null()
 })
@@ -6363,6 +6366,57 @@ export const getHomeResponseBestSellersMax = 10;
 export const GetHomeResponse = zod.object({
   "mode": zod.enum(['delivery', 'pickup']),
   "empty": zod.boolean().describe('Nenhuma loja visível na posição'),
+  "highlightStores": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "logo": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "mainCategoryId": zod.uuid().nullable(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable().describe('Próxima abertura (UTC) quando fechada; nulo se pausada sem prazo ou sem horário'),
+  "distanceM": zod.int().describe('Linha reta em metros'),
+  "rating": zod.object({
+  "average": zod.number().nullable().describe('Média com 1 casa; nula antes de `avaliacao_min_exibicao` (3) avaliações'),
+  "count": zod.int(),
+  "isNew": zod.boolean().describe('Mostrar "Novo" no lugar da nota')
+}),
+  "delivery": zod.object({
+  "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
+  "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
+  "minOrderCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}),
+  "pickupEnabled": zod.boolean(),
+  "acceptsExchange": zod.boolean().describe('Troca voluntária ativa (prazo maior que 0)')
+})).optional().describe('Destaques fixados pelo admin (WB-115 C4): vêm antes dos automáticos e só se a loja é visível neste ponto'),
+  "highlightProducts": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "image": zod.object({
+  "urls": zod.record(zod.string(), zod.url())
+}),
+  "price": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "originalPrice": zod.union([zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('Preço antes da promoção vigente'),
+  "discountPercent": zod.int().nullable(),
+  "categoryId": zod.uuid().nullable(),
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "open": zod.boolean(),
+  "opensAt": zod.iso.datetime({"offset":true}).nullable(),
+  "distanceM": zod.int()
+})
+})).optional(),
   "nearbyStores": zod.array(zod.object({
   "id": zod.uuid(),
   "name": zod.string(),
@@ -11839,3 +11893,305 @@ export const MarkPushCampaignOpenedParams = zod.object({
 })
 
 export const MarkPushCampaignOpenedResponse = zod.void()
+
+
+/**
+ * `coupons:read` (super admin, operação e financeiro). Só escopo `platform` (cupom de loja é do lojista). `uses` não conta uso devolvido. `status`: scheduled, live, paused, ended, exhausted.
+ * @summary Cupons da plataforma (uso, desconto total e pedidos)
+ */
+export const listPlatformCouponsQueryQMax = 20;
+
+export const listPlatformCouponsQueryLimitMax = 100;
+
+
+
+export const ListPlatformCouponsQueryParams = zod.object({
+  "status": zod.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']).optional(),
+  "q": zod.string().max(listPlatformCouponsQueryQMax).optional(),
+  "limit": zod.int().min(1).max(listPlatformCouponsQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListPlatformCouponsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().describe('Percentual (1-100) ou centavos; 0 no frete grátis'),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "firstPurchaseOnly": zod.boolean(),
+  "active": zod.boolean(),
+  "status": zod.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']),
+  "uses": zod.int(),
+  "discountTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "orders": zod.int(),
+  "notice": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * `coupons:write` (super admin e operação). Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * @summary Criar cupom da plataforma (custo da Webag)
+ */
+export const createPlatformCouponBodyCodeMin = 4;
+export const createPlatformCouponBodyCodeMax = 20;
+
+export const createPlatformCouponBodyValueMin = 0;
+
+
+export const createPlatformCouponBodyMinOrderCentsMin = 0;
+
+
+export const createPlatformCouponBodyPerCustomerLimitMax = 100;
+
+
+
+export const CreatePlatformCouponBody = zod.object({
+  "code": zod.string().min(createPlatformCouponBodyCodeMin).max(createPlatformCouponBodyCodeMax),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(createPlatformCouponBodyValueMin).optional(),
+  "percentCapCents": zod.int().min(1).nullish().describe('Só no percentual'),
+  "minOrderCents": zod.int().min(createPlatformCouponBodyMinOrderCentsMin).optional(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().min(1).nullish(),
+  "perCustomerLimit": zod.int().min(1).max(createPlatformCouponBodyPerCustomerLimitMax).optional(),
+  "firstPurchaseOnly": zod.boolean().optional()
+})
+
+export const CreatePlatformCouponResponse = zod.object({
+  "id": zod.uuid(),
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().describe('Percentual (1-100) ou centavos; 0 no frete grátis'),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "firstPurchaseOnly": zod.boolean(),
+  "active": zod.boolean(),
+  "status": zod.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']),
+  "uses": zod.int(),
+  "discountTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "orders": zod.int(),
+  "notice": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * @summary Detalhe e relatório de uso do cupom
+ */
+export const GetPlatformCouponParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetPlatformCouponResponse = zod.object({
+  "id": zod.uuid(),
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().describe('Percentual (1-100) ou centavos; 0 no frete grátis'),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "firstPurchaseOnly": zod.boolean(),
+  "active": zod.boolean(),
+  "status": zod.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']),
+  "uses": zod.int(),
+  "discountTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "orders": zod.int(),
+  "notice": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Pausar vale na hora (`active: false`). Depois do 1º uso `value` e `percentCapCents` não mudam (409 `COUPON_IN_USE`); `maxUses` não pode ficar abaixo dos usos. Código e tipo nunca mudam.
+ * @summary Pausar, reativar, prorrogar ou mudar limites
+ */
+export const UpdatePlatformCouponParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const updatePlatformCouponBodyValueMin = 0;
+
+
+export const updatePlatformCouponBodyMinOrderCentsMin = 0;
+
+
+export const updatePlatformCouponBodyPerCustomerLimitMax = 100;
+
+
+
+export const UpdatePlatformCouponBody = zod.object({
+  "value": zod.int().min(updatePlatformCouponBodyValueMin).optional(),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(updatePlatformCouponBodyMinOrderCentsMin).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "maxUses": zod.int().min(1).nullish(),
+  "perCustomerLimit": zod.int().min(1).max(updatePlatformCouponBodyPerCustomerLimitMax).optional(),
+  "firstPurchaseOnly": zod.boolean().optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdatePlatformCouponResponse = zod.object({
+  "id": zod.uuid(),
+  "code": zod.string(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().describe('Percentual (1-100) ou centavos; 0 no frete grátis'),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "firstPurchaseOnly": zod.boolean(),
+  "active": zod.boolean(),
+  "status": zod.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']),
+  "uses": zod.int(),
+  "discountTotal": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "orders": zod.int(),
+  "notice": zod.string(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Permissão `banners:read`. `targetUnavailable`: o item foi inativado e o destaque some do app sozinho (WB-115 C2).
+ * @summary Destaques fixados na Início (loja ou produto)
+ */
+export const ListHighlightsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['store', 'product']),
+  "targetId": zod.uuid(),
+  "targetName": zod.string().nullable(),
+  "cityId": zod.uuid().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "position": zod.int(),
+  "active": zod.boolean(),
+  "targetUnavailable": zod.boolean(),
+  "live": zod.boolean()
+})),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Permissão `banners:write`. Item inativo: 400; no máximo 12 destaques ativos (422 `HIGHLIGHT_LIMIT`). Entram ANTES dos critérios automáticos e só para quem enxerga o item (RN-03). `cityId` nulo = todas.
+ * @summary Fixar uma loja ou produto na Início
+ */
+export const createHighlightBodyPositionMin = 0;
+export const createHighlightBodyPositionMax = 999;
+
+
+
+export const CreateHighlightBody = zod.object({
+  "kind": zod.enum(['store', 'product']),
+  "targetId": zod.uuid(),
+  "cityId": zod.uuid().nullish(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "position": zod.int().min(createHighlightBodyPositionMin).max(createHighlightBodyPositionMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const CreateHighlightResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['store', 'product']),
+  "targetId": zod.uuid(),
+  "targetName": zod.string().nullable(),
+  "cityId": zod.uuid().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "position": zod.int(),
+  "active": zod.boolean(),
+  "targetUnavailable": zod.boolean(),
+  "live": zod.boolean()
+})
+
+
+/**
+ * @summary Editar período, cidade, ordem ou pausar o destaque
+ */
+export const UpdateHighlightParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const updateHighlightBodyPositionMin = 0;
+export const updateHighlightBodyPositionMax = 999;
+
+
+
+export const UpdateHighlightBody = zod.object({
+  "cityId": zod.uuid().nullish(),
+  "startsAt": zod.iso.datetime({"offset":true}).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "position": zod.int().min(updateHighlightBodyPositionMin).max(updateHighlightBodyPositionMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateHighlightResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['store', 'product']),
+  "targetId": zod.uuid(),
+  "targetName": zod.string().nullable(),
+  "cityId": zod.uuid().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "position": zod.int(),
+  "active": zod.boolean(),
+  "targetUnavailable": zod.boolean(),
+  "live": zod.boolean()
+})
+
+
+/**
+ * @summary Remover o destaque
+ */
+export const DeleteHighlightParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DeleteHighlightResponse = zod.void()
+
+
+/**
+ * Público, 240/min por IP. Só conta banner no ar. Sem dado do cliente nem do aparelho (WB-115 C5).
+ * @summary O app avisa a impressão ou o clique de um banner
+ */
+export const RecordBannerEventParams = zod.object({
+  "bannerId": zod.uuid()
+})
+
+export const RecordBannerEventBody = zod.object({
+  "type": zod.enum(['impression', 'click'])
+})
+
+export const RecordBannerEventResponse = zod.void()
