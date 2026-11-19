@@ -264,3 +264,12 @@ Parecer técnico para o G4: **COM RESSALVAS**. Os dois primeiros itens entram an
 | Z3.8 [ ] A-09 (doc) | Esta fila ainda mostra R.1 a R.7 (linhas 61 a 68) e a lista "ABERTOS" (linha 78: Q.1 a Q.3, DT-059 a DT-064) como abertas, embora os commits `98a2b14`, `c1064dc`, `bdafb19`, `8cd5202` e `5f2f1b8` as tenham entregue | Marcar o estado real (dono: backend-dev) |
 | Z3.9 [ ] A-10 (Baixa) | `catalog/catalog.module.ts:27` (`SqlOpenOrders.hasOpenOrders`): a lista de estados 'em andamento' não tem `ready_for_collection` (a lista de pedidos ativos do cliente em `orders.service.ts` `listForCustomer` tem). Produto de um pedido pronto para coleta da Webag pode ser arquivado (WB-060 C5 / O2-PRD-06) | Incluir `ready_for_collection` (ideal: uma constante de estados ativos exportada pelo módulo de pedidos) e um teste do 409 `OPEN_ORDERS` nesse estado |
 | Z3.10 [ ] A-13 (Média, CI) | `apps/api/test/dt060-finance-csv.e2e-spec.ts:84-86`: `select` em `audit_log` sem `ORDER BY` seguido de `audits.at(-1)`; falhou na execução completa do tech-lead (808 de 809) e passa isolado | Filtrar pelo `storeId` do teste (ou `orderBy` por data) e procurar o mesmo padrão (`.at(-1)` sobre `select` sem `orderBy`) em outros e2e; rodar o e2e completo a frio e sem reordenação do vitest |
+
+## Z3 BLOQUEANTES ANTES DO RC (CEO, DEC-076)
+
+| ID | O que fazer |
+|---|---|
+| A-01 (Alta) | Criar `LOJISTA_WEB_URL` e usar nos links do e-mail B2 (`notifications.service.ts:69`) e do convite de funcionário (`team.service.ts:72`); documentar em env.example/env.prod.example/guia de deploy; teste com hosts separados. |
+| A-02 (Média) | Migração 0055: índice `order_cancel_requests_open_uq` por `kind`; encerrar o pedido de cancelamento de preparo pendente quando o pedido sai de `in_preparation`; teste do 500. |
+| A-13 (Média, CI) | `dt060-finance-csv.e2e-spec.ts:84-86`: `.at(-1)` sem ORDER BY: corrigir. |
+| A-03, A-04, A-05, A-07, A-08, A-10 | Itens Z3.x da fila, se couberem sem risco (A-03: incluir `acceptedEtaToAt` na impressão digital da idempotência no app e no servidor de forma consistente). |
