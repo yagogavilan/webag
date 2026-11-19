@@ -113,21 +113,26 @@ Paralelo: BE (seed completo, scripts) + QA (carga) + TL (docs de arquitetura).
 | Entregável | Seed conforme `backlog.md` §4 (4 cidades, 12+ lojas de 6+ categorias, pedidos em todos os estados RN-07, trocas RN-11, 1 divergência de conciliação, credenciais demo por perfil); teste de carga da API (k6 ou similar) com relatório e gargalos corrigidos; ADRs, modelo de dados, OpenAPI e design system atualizados |
 | Critério de saída | `docker compose up` com seed abre todos os fluxos (incluindo trocas, corridas e pedidos em atraso para o alerta de ETA); relatório de carga em `docs/qa/`; docs (ADR-011/012, modelo de dados, DS v3) sem divergência do código |
 
-### Onda 8 — Revisão final e entrega (etapas finais) (A FAZER)
-Sequência (as marcadas "||" rodam em paralelo, máx. 3):
-| # | Etapa | Agentes | Saída |
-|---|---|---|---|
-| 8.1 | Teste funcional de todos os fluxos + regressão | QA | `docs/qa/relatorio-funcional.md`; bugs Crítico/Alto corrigidos (BE/MB) |
-| 8.2 || | Revisão heurística de Nielsen (10 heurísticas, todas as telas) | DS | `docs/design/revisao-nielsen.md` com achados e severidade |
-| 8.3 || | Revisão de segurança final (ASVS/MASVS, dependências, segredos, LGPD) | SEC | parecer G4 em `docs/seguranca/` |
-| 8.4 | Teste de usabilidade com tarefas reais (comprar em menos de 2 min, cadastrar loja, aprovar loja, pedir troca), contando toques, telas e palavras | QA + DS | `docs/qa/usabilidade.md` (simulado por roteiro, pois sem usuários reais: marcar `[HIPÓTESE]`) |
-| 8.5 | Correção de tudo que for Crítico/Alto/Média viável; reteste | BE + MB + QA | bugs fechados ou aceitos pelo CEO |
-| 8.6 | Capturas de todas as telas | QA (+ MB) | `docs/telas/` indexado |
-| 8.7 | Guia de deploy (VPS com Docker + opção gerenciada), Dockerfiles de produção, backup do banco, checklist das lojas | TL + BE | `docs/arquitetura/deploy.md`, `docs/gestao/checklist-lojas.md` |
-| 8.7b | Pré-requisitos do fundador para G4/G5 (aparelho real, credenciais MP sandbox, contas, textos jurídicos): lista em `status.md` | PM + fundador | itens 1 a 19 do `status.md` |
-| 8.8 | README (Windows, macOS, Linux; credenciais demo; onde pegar chaves MP e webhook) | TL | `README.md` |
-| 8.9 | **G4**: QA e Security aprovam | QA, SEC | pareceres escritos |
-| 8.10 | Merge do branch `claude/admiring-lamport-62tq1a` para `main` e tag `v1.0.0` | PM/CEO | **Exige autorização do fundador (R-17).** **G5 (publicação nas lojas) não é automático:** exige autorização do fundador (CLAUDE.md §7) |
+### Onda 8 — Fechamento (A FAZER; tarefas e donos em `board.md` T8-00 a T8-13)
+Estado de entrada (2026-11-19): Security G4 aprovado com ressalvas; QA preliminar reprovado por evidência; backend entregou BUG-019 a 025 e SEC-180 com e2e 763/763 em 3 execuções; mobile-dev integra o contrato W/Y.
+| # | Etapa | Agentes | Dependência | Saída |
+|---|---|---|---|---|
+| 8.0 | Integrar contrato e **congelar o HEAD** de teste | MB | contrato do BE pronto | commit de congelamento no board |
+| 8.1 | Reteste completo no HEAD: 3 e2e seguidos, web, app, Playwright real, BUG-010 e 019 a 025, SEC-166/176/180 no app | QA | 8.0 | `docs/qa/relatorios/` e `qa/bugs/` atualizados |
+| 8.2 | Revisão funcional final | QA | 8.1 | `docs/qa/relatorio-funcional.md` |
+| 8.3 | Heurísticas de Nielsen, todas as telas v3 (paralelo) | DS | 8.0 | `docs/design/revisao-nielsen.md` (achados com severidade) |
+| 8.4 | Usabilidade simulada (`qa/roteiros-usabilidade.md`), 4 tarefas: **comprar, cadastrar loja, aprovar loja, pedir troca**, com cliques, telas e palavras por tarefa; `[HIPÓTESE]` (sem usuários reais) (paralelo) | QA + DS | 8.0 | `docs/qa/usabilidade.md` |
+| 8.5 | Acessibilidade e 3G simulado | QA | 8.0 | seção no relatório funcional; aparelho real só o fundador |
+| 8.6 | Capturas em `docs/telas/` com índice, por tela e estado (carregando, vazio, erro, sucesso): app, painel do lojista, admin e landing | QA (+ MB) | 8.0 | `docs/telas/README.md` |
+| 8.7 | Teste de carga k6 (script em `qa/carga/`): **execução em staging é do fundador**; QA analisa | Fundador, QA | staging | relatório de carga; sem ele, carga fica ressalva |
+| 8.8 | Correção de Crítico/Alto/Média viável e reteste | BE + MB + QA | 8.1 a 8.6 | bugs fechados ou aceitos pelo CEO |
+| 8.9 | Parecer final do Security (SEC-180, 176, 178, 179, 129; dependências; segredos; LGPD) | SEC | 8.8 | `docs/seguranca/` |
+| 8.10 | **G4 final**: pareceres de QA e Security | QA, SEC | 8.8, 8.9 | pareceres escritos |
+| 8.11 | README, guia de deploy, checklist das lojas, relatório final curto | TL + PM | 8.10 | `README.md`, `docs/deploy/` |
+| 8.12 | **Decisão do G5** (checklist, textos jurídicos, contas, pareceres) | CEO | 8.10 + itens 4 a 10 do `status.md` | registro em `decisoes.md`; sem autorização escrita não publica |
+| 8.13 | Merge para `main` e tag `v1.0.0` | CEO | **autorização do fundador (R-17)** | tag |
+
+Regra: 8.1 não começa com o HEAD móvel. Máximo 3 agentes em paralelo. Itens do fundador (aparelho real, MP sandbox, k6 em staging) agrupados numa sessão única (R-25); sem eles o G4 sai "com ressalvas" explícitas.
 
 ## 4. Pontos de revisão (resumo)
 
