@@ -32,8 +32,6 @@ export function PixRing({ seconds }: { seconds: number }) {
             cy={SIZE / 2}
             fill="none"
             r={RADIUS}
-            rotation={-90}
-            origin={`${SIZE / 2}, ${SIZE / 2}`}
             stroke={color}
             strokeDasharray={`${LENGTH * fraction} ${LENGTH}`}
             strokeLinecap="round"
@@ -55,5 +53,6 @@ export function PixRing({ seconds }: { seconds: number }) {
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: theme.space[2] },
   ring: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
-  svg: { position: 'absolute' },
+  // o arco começa no topo: gira o SVG inteiro. `origin`/`rotation` no Circle viram o atributo `transform-origin` no react-native-web e acendem o aviso vermelho do React
+  svg: { position: 'absolute', transform: [{ rotate: '-90deg' }] },
 });
