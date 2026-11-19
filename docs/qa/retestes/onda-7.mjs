@@ -185,11 +185,9 @@ async function bug015() {
   const early = await api('POST', `/v1/orders/${nrEarly.order.id}/not-received`, { token: c.token });
   record('BUG-015n', '"não recebi" com o pedido ainda recebido: 409 ORDER_NOT_REPORTABLE', early.status === 409, `HTTP ${early.status}`);
   await adminCall('POST', `/v1/admin/orders/${nrEarly.order.id}/cancel`, { reason: 'Reteste QA BUG-015: limpar', refund: true });
-  // RN-07: a auto-conclusão de 24 h vale "salvo não recebi do cliente (abre disputa)"
-  sql(`update delivery_events set created_at = created_at - interval '25 hours' where delivery_id = '${deliveryId}'`);
-  console.log('  ... aguardando a auto-conclusão de 24 h (varredura de 5 min) para ver se o "não recebi" a impede (RN-07)');
-  const concluded = await waitFor(async () => (await status(c, order.id)) === 'delivered', { timeoutMs: 330_000, everyMs: 10_000 });
-  record('BUG-015o', 'RN-07: "não recebi" impede a auto-conclusão em 24 h (o pedido NÃO vira delivered sozinho)', !concluded, `status final=${await status(c, order.id)}`);
+  // RN-07: a auto-conclusão de 24 h vale "salvo não recebi do cliente (abre disputa)". delivery_events é append-only (trigger): não dá para
+  // recuar o relógio da corrida pelo banco; o teste está em repro/qa-notreceived-autoconclude.e2e-spec.ts (relógio injetado) e FALHA hoje (BUG-020).
+  notTested('BUG-015o', 'RN-07: "não recebi" impede a auto-conclusão em 24 h', 'não executável pela API real (histórico append-only); ver repro/qa-notreceived-autoconclude.e2e-spec.ts: FALHA (pedido vira delivered), BUG-020');
   void s;
 }
 
