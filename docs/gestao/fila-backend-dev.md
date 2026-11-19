@@ -210,6 +210,10 @@ Ligado e verificado contra a API local do HEAD (capturas `docs/qa/relatorios/cap
 | Z.7 [x] | `Delivery.lateCancelRequest.arriveSoonMinutes` e a nota padrão da recusa usam `entrega_cancel_resposta_min`. |
 | Z.2, Z.3 | Cortados pela DEC-071 (WB-255 C5, WB-257 C6): sem trabalho. Z.4 e Z.5: aceitos (DEC-071/072). Z.6: PO. |
 
+| Pedidos da fila do CEO [x] | `OrderSummary.eta {fromAt, toAt, minMinutes, maxMinutes} \| null` (U8.5; nula em retirada) e **logística contínua só no seed de dev** (`logistica_horario` 00:00-23:59 e `logistica_dias` seg_dom, só se ainda no padrão de fábrica e sem edição; produção mantém o real; `README`). Não criei o `LOGISTICS_HOURS_OVERRIDE`: o seed resolve a demo sem uma variável nova. E2E `u85-order-summary-eta`. |
+
+**Verificação (backend-dev, 2026-11-19, `3ce2ff8`):** `eslint .` e `tsc --noEmit` (api, shared, web, mobile) limpos; unitários 317/317 (43 arquivos); **3 E2E completos seguidos, banco e Redis próprios: 801/801, 0 pulados, 0 falhas nas 3** (546 s, 526 s, 531 s; 103 arquivos). A 1ª tentativa achou 1 falha de teste causada pelo B2 (`lastCode` pegava o último e-mail, que passou a ser o aviso de pedido novo ao dono): o helper agora pega o último e-mail COM código, e as 3 execuções foram refeitas do zero.
+
 **Dúvidas ao PO (não inventei regra):**
 1. **WB-192 C6 x liga/desliga:** o PRD diz que o alerta de pedido e de timeout "nunca desligam"; o pedido do CEO foi liga/desliga por loja. Implementei o desligar SÓ do canal e-mail (push do app e som do painel seguem), padrão ligado. Confirme ou eu removo o interruptor. Hoje a loja que desliga e não abre o painel perde o pedido por timeout.
 2. **Lembrete x timeout:** se o admin pôr `loja_aceite_lembrete_min` >= `loja_aceite_timeout_min`, o lembrete nunca sai (a varredura cancela antes). Falta regra de validação (sugestão: lembrete <= timeout - 2). E a loja não recebe aviso de que o pedido foi cancelado por timeout (WB-192 C6 fala em "timeout").
