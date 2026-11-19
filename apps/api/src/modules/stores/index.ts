@@ -12,3 +12,4 @@ export { hoursToday, isOpen, nextOpening, type OpeningInput } from './domain/ope
 export { ExposureLimitService } from './exposure-limit.service.js';
 export { evaluateExposureLimit, type ExposureLimit } from './exposure-limit.js';
 export { DeliveryQuoteRegistry, type DeliveryQuoter, type DeliveryQuoteSummary } from './delivery-quote.registry.js';
+export { businessDeadline, isOverdue } from './domain/business-days.js';

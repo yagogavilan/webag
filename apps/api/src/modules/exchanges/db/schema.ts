@@ -65,6 +65,13 @@ export const exchangeRequests = pgTable(
     answerDeadlineAt: timestamp({ withTimezone: true }).notNull(),
     /** Prazo legal/da loja do tipo, calculado na criação (a tela mostra "Você tem até"). */
     windowEndsAt: timestamp({ withTimezone: true }).notNull(),
+    /** DT-050: lembretes à loja (12 h e 4 h antes do fim do SLA de resposta); cada um sai uma vez. */
+    reminder12SentAt: timestamp({ withTimezone: true }),
+    reminder4SentAt: timestamp({ withTimezone: true }),
+    /** WB-176: o cliente contestou a recusa da loja (uma vez, até `contestacao_dias`); `mediation_started_at` conta o prazo da mediação. */
+    contestedAt: timestamp({ withTimezone: true }),
+    contestationText: varchar({ length: 500 }),
+    mediationStartedAt: timestamp({ withTimezone: true }),
     decidedAt: timestamp({ withTimezone: true }),
     decidedBy: text({ enum: EXCHANGE_ACTORS }),
     autoApproved: boolean().notNull().default(false),

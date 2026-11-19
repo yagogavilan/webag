@@ -50,3 +50,10 @@ P.3 [ ] Corrigir o teste de cupom em `orders.e2e` (2º pedido sai sem cupom e ma
 ## Lacunas de contrato apontadas pelo app real (2026-11-19, mobile-dev) — próxima rodada do backend
 B.1 [ ] Troca: expor a diferença de preço (pagar/receber), o prazo final "até DD/MM" já na entrada de troca do pedido, ação "levar à loja" depois de aprovada, contestação de recusa e "não recebi meu pedido" (contrato hoje não oferece).
 B.2 [ ] Cartão em produção: o app só oferece PIX porque a página segura do Mercado Pago (Bricks/3DS) não existe. Backend: endpoint de criação de intenção de cartão para a página segura; web: rota pública `/pagar/cartao` (apps/web, sem login do painel, SEC-106). Ver pendencias-contrato-mobile.md itens 9 a 16.
+
+## ONDA 6 do back-end (DEC-045): prioridade depois de P.1 a P.3
+O6.1 [ ] **BLOQUEIA G5:** exportar meus dados (arquivo, assíncrono, link seguro, só com senha/step-up) e excluir conta (WB-213/214, SEC-096: só senha; anonimização do que a lei obriga a reter, prazos fiscais), pedidos de titulares (DSR) com fila no admin (docs/produto/prd/lgpd.md).
+O6.2 [ ] Realtime por ticket de uso único (`POST /v1/realtime/tickets`, 60 s, atrelado a usuário e loja/admin) e `commissionPct` na API da loja; rotas de disputa/mediação de troca para o admin (AT3); "Revelar contato" com auditoria (SEC-144); série de vendas por dia para o gráfico do lojista.
+O6.3 [ ] Push segmentado do admin (WB-197: segmento mínimo `push_mkt_min_segmento`, consentimento de marketing, agendamento) e banners/destaques/cupons da plataforma que faltarem; textos legais já existem.
+O6.4 [ ] Relatórios do admin: pedidos, GMV, novas lojas, novos clientes, recompra, cancelamentos, com filtros e exportação CSV (brief §3.3).
+O6.5 [ ] Ajuda do cliente e do lojista (WB-227), denúncia de produto/loja e moderação, avaliação de resposta do lojista; B.1 e B.2 (cartão seguro) da seção anterior.

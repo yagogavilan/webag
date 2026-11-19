@@ -39,6 +39,9 @@ const paySchema = z
   })
   .refine((v) => v.paymentMethod !== 'card' || v.card !== undefined, { message: 'Informe o cartão.', path: ['card'] })
   .refine((v) => v.paymentMethod !== 'pix' || v.card === undefined, { message: 'Cartão só com paymentMethod=card.', path: ['card'] });
+const contestSchema = z.strictObject({ text: z.string().trim().min(10).max(500) });
+const mediationQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const mediationDecision = z.strictObject({ decision: z.enum(['customer', 'store']), reason: z.string().trim().min(10).max(200) });
 const rejectSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) });
 const receiveSchema = z.strictObject({
   ok: z.boolean(),
@@ -88,6 +91,15 @@ export class ExchangesController {
   @Post('exchanges/:id/cancel')
   async cancel(@CurrentPrincipal() p: Principal, @Param('id') id: string, @Body(new ZodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>) {
     await this.exchanges.cancelByCustomer(p.userId, idParam(id), body.reason ?? null);
+    return this.exchanges.getForCustomer(p.userId, id);
+  }
+
+  /** WB-176: contestar a recusa da loja (uma vez, até `contestacao_dias`); a troca vai à mediação. Repetir é idempotente. */
+  @HttpCode(200)
+  @RateLimit({ name: 'exchange-contest', limit: 10, windowSeconds: 3600 })
+  @Post('exchanges/:id/contest')
+  async contest(@CurrentPrincipal() p: Principal, @Param('id') id: string, @Body(new ZodPipe(contestSchema)) body: z.infer<typeof contestSchema>) {
+    await this.exchanges.contest(p.userId, idParam(id), body.text);
     return this.exchanges.getForCustomer(p.userId, id);
   }
 
@@ -182,5 +194,27 @@ export class ExchangesAdminController {
       return this.report.toCsv(result);
     }
     return result;
+  }
+}
+
+/** Mediação de trocas (WB-110): fila por prazo e decisão com justificativa. Operação e super admin. */
+@Controller('v1/admin/exchanges/mediations')
+export class ExchangeMediationAdminController {
+  constructor(private readonly exchanges: ExchangesService) {}
+
+  @AdminOnly('exchanges:mediate')
+  @Get()
+  list(@Query(new ZodPipe(mediationQuery)) query: z.infer<typeof mediationQuery>) {
+    return this.exchanges.mediationQueue(query);
+  }
+
+  /** `customer` aprova a troca (segue o fluxo, inclusive a taxa); `store` recusa em definitivo. Justificativa obrigatória; as partes são avisadas. */
+  @AdminOnly('exchanges:mediate')
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-exchange-mediation', limit: 120, windowSeconds: 3600 })
+  @Post(':exchangeId/decision')
+  async decide(@Param('exchangeId') exchangeId: string, @Body(new ZodPipe(mediationDecision)) body: z.infer<typeof mediationDecision>, @Ctx() ctx: RequestContext) {
+    await this.exchanges.decideMediation(idParam(exchangeId), body.decision, body.reason, ctx);
+    return { status: 'decided' as const };
   }
 }

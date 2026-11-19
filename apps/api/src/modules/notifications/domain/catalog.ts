@@ -1,4 +1,4 @@
-import type { ExchangeEvent } from '../../exchanges/exchange-events.bus.js';
+import type { ExchangeEvent, ExchangeReminder } from '../../exchanges/exchange-events.bus.js';
 import type { OrderEvent } from '../../orders/order-events.bus.js';
 
 export interface Notice {
@@ -73,7 +73,10 @@ export function customerExchangeNotice(e: ExchangeEvent): Notice | null {
     case 'approved':
       return { push: { title: 'Troca aprovada', body: `Troca ${e.number} aprovada. Veja o próximo passo no app.`, data } };
     case 'rejected':
-      return { push: { title: 'Troca recusada', body: `A loja recusou a troca ${e.number}.${reason} Você pode contestar pelo app.`, data } };
+      // Recusa da loja pode ser contestada; a decisão do admin na mediação é final (WB-176 C5).
+      return e.actor === 'admin'
+        ? { push: { title: 'Decisão da Webag', body: `Depois da análise, a troca ${e.number} foi recusada.${reason} Você ainda pode procurar um órgão de defesa do consumidor.`, data } }
+        : { push: { title: 'Troca recusada', body: `A loja recusou a troca ${e.number}.${reason} Você pode contestar pelo app.`, data } };
     case 'in_mediation':
       return { push: { title: 'Troca em análise', body: `A troca ${e.number} está em análise pela Webag.`, data } };
     case 'item_received':
@@ -86,6 +89,12 @@ export function customerExchangeNotice(e: ExchangeEvent): Notice | null {
     default:
       return null;
   }
+}
+
+/** Lembrete do fim do SLA de resposta da troca (DT-050): depois do prazo a troca é aprovada automaticamente. */
+export function storeExchangeReminderNotice(r: ExchangeReminder): Notice {
+  const what = exchangeWord[r.type] ?? 'troca';
+  return { push: { title: `Troca vence em ${r.hoursLeft} h`, body: `Responda a ${what} ${r.number} em até ${r.hoursLeft} horas; depois disso aprovamos automaticamente.`, data: { type: 'store_exchange', exchangeId: r.exchangeId, storeId: r.storeId } } };
 }
 
 export function storeExchangeNotice(e: ExchangeEvent): Notice | null {

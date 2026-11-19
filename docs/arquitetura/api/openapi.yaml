@@ -5786,6 +5786,40 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/exchanges/{id}/contest:
+    post:
+      tags: [exchanges]
+      operationId: contestExchange
+      summary: Contestar a recusa da loja (WB-176)
+      description: "Só recusa da LOJA (a decisão do admin é final), uma vez e em até `contestacao_dias` (7) depois da recusa: 409 `EXCHANGE_NOT_CONTESTABLE` ou `EXCHANGE_CONTEST_EXPIRED`. A troca vai à mediação (`in_mediation`) e a loja e o admin são avisados. Repetir é idempotente (200). Texto de 10 a 500 caracteres. O campo `contestableUntil` da troca diz até quando cabe contestar."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: { type: string, minLength: 10, maxLength: 500 }
+      responses:
+        '200':
+          description: Em mediação
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /v1/exchanges/{id}/payment:
     get:
       tags: [exchanges]
@@ -6011,6 +6045,87 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/admin/exchanges/mediations:
+    get:
+      tags: [exchanges]
+      operationId: listExchangeMediations
+      summary: Fila "Em mediação" (WB-110)
+      description: "Mais antiga primeiro, com `overdue` quando passa de `mediacao_dias_uteis` dias úteis e `origin` (`customer_contest`, `store_refusal` ou `inspection_failed`). `refusalNotAllowedByLaw` avisa que a recusa da loja não é permitida por lei (arrependimento; defeito dentro do prazo) e sugere aprovar. Permissão: `exchanges:mediate` (super admin e operação)."
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Fila
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        number: { type: string }
+                        orderId: { type: string, format: uuid }
+                        storeId: { type: string, format: uuid }
+                        type: { type: string, enum: [withdrawal, defect, size_color] }
+                        resolution: { type: string, enum: [replace, refund] }
+                        origin: { type: string, enum: [customer_contest, store_refusal, inspection_failed] }
+                        storeReason: { type: [string, 'null'] }
+                        customerText: { type: [string, 'null'] }
+                        photoCount: { type: integer }
+                        startedAt: { type: string, format: date-time }
+                        deadlineAt: { type: string, format: date-time }
+                        overdue: { type: boolean }
+                        refusalNotAllowedByLaw: { type: boolean }
+                  nextCursor: { type: [string, 'null'] }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/exchanges/mediations/{exchangeId}/decision:
+    post:
+      tags: [exchanges]
+      operationId: decideExchangeMediation
+      summary: Decidir a mediação (WB-110 C2)
+      description: "`customer` (a favor do cliente): antes de a loja receber o item, a troca é aprovada e segue o fluxo (inclusive a taxa); com o item já na loja, vale a inspeção como aprovada (reembolso ou peça nova). `store`: recusa FINAL, libera a reserva e o cliente não pode contestar de novo. Justificativa de 10 a 200 caracteres, registrada no histórico da troca; as partes são avisadas. 409 `EXCHANGE_NOT_IN_MEDIATION` se já decidida. Permissão: `exchanges:mediate`."
+      parameters:
+        - { name: exchangeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision, reason]
+              properties:
+                decision: { type: string, enum: [customer, store] }
+                reason: { type: string, minLength: 10, maxLength: 200 }
+      responses:
+        '200':
+          description: Decidida
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [decided] }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /v1/admin/exchanges/report:
     get:
       tags: [exchanges]
@@ -9770,6 +9885,8 @@ components:
         autoApproved: { type: boolean }
         decidedBy: { type: [string, 'null'], enum: [customer, store, system, admin, null] }
         decisionReason: { type: [string, 'null'] }
+        contestableUntil: { type: [string, 'null'], format: date-time, description: 'Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.' }
+        contested: { type: boolean }
         photoCount: { type: integer }
         storeCode: { type: [string, 'null'], description: 'Só ao cliente, na troca na loja já aprovada.' }
         photos:

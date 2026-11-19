@@ -4,12 +4,12 @@ import { memberHasStorePermission } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { MailService } from '../../platform/mail/mail.service.js';
-import { ExchangeEventBus, type ExchangeEvent } from '../exchanges/index.js';
+import { ExchangeEventBus, type ExchangeEvent, type ExchangeReminder } from '../exchanges/index.js';
 import { storeMembers, users } from '../identity/db/schema.js';
 import { OrderEventBus, type OrderEvent } from '../orders/index.js';
 import { stores } from '../stores/db/schema.js';
 import { pushDevices } from './db/schema.js';
-import { customerExchangeNotice, customerOrderNotice, storeExchangeNotice, storeOrderNotice, type Notice } from './domain/catalog.js';
+import { customerExchangeNotice, customerOrderNotice, storeExchangeNotice, storeExchangeReminderNotice, storeOrderNotice, type Notice } from './domain/catalog.js';
 import { PushTransport } from './push.transport.js';
 
 /**
@@ -31,6 +31,7 @@ export class NotificationsService implements OnModuleInit {
   onModuleInit(): void {
     this.orderBus.subscribe((event) => this.onOrder(event));
     this.exchangeBus.subscribe((event) => this.onExchange(event));
+    this.exchangeBus.subscribeReminder((reminder) => this.onExchangeReminder(reminder));
   }
 
   private async onOrder(e: OrderEvent): Promise<void> {
@@ -38,6 +39,11 @@ export class NotificationsService implements OnModuleInit {
     await this.deliver([e.userId], customerOrderNotice(e, store?.name ?? 'A loja'));
     const notice = storeOrderNotice(e);
     if (notice) await this.deliver(await this.storeUserIds(e.storeId), notice);
+  }
+
+  /** DT-050: lembrete à loja 12 h e 4 h antes de a troca ser aprovada sozinha (só a loja; o cliente não recebe). */
+  private async onExchangeReminder(r: ExchangeReminder): Promise<void> {
+    await this.deliver(await this.storeUserIds(r.storeId, 'exchanges'), storeExchangeReminderNotice(r));
   }
 
   private async onExchange(e: ExchangeEvent): Promise<void> {

@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
-import { and, asc, count, eq, inArray, lte, ne } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
@@ -20,6 +20,7 @@ import { generateOrderNumber } from '../orders/order-number.js';
 import { PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
 import { paymentAttempts } from '../payments/db/schema.js';
 import { stores } from '../stores/db/schema.js';
+import { businessDeadline } from '../stores/index.js';
 import { exchangeEvents, exchangeRequests, OPEN_EXCHANGE_STATUSES, type ExchangeActor, type ExchangeStatus } from './db/schema.js';
 import { approvalMode, collectionFeeCents, evaluateEligibility, EXCHANGE_TYPES, priceDifferenceCents, refundCents, storeAnswerDeadline, windowDays, DAY_MS, type EligibilityReason, type ExchangeType } from './domain/eligibility.js';
 import { canExchangeTransition } from './domain/state.js';
@@ -405,7 +406,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       const to: ExchangeStatus = ex.type === 'defect' ? 'in_mediation' : 'rejected';
       if (!canExchangeTransition(ex.status, to, 'store')) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', `A troca está em "${ex.status}".`);
       const now = new Date();
-      await tx.update(exchangeRequests).set({ status: to, decidedAt: now, decidedBy: 'store', decisionReason: reason.slice(0, 200), updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
+      await tx.update(exchangeRequests).set({ status: to, decidedAt: now, decidedBy: 'store', decisionReason: reason.slice(0, 200), updatedAt: now, ...(to === 'in_mediation' ? { mediationStartedAt: now } : {}) }).where(eq(exchangeRequests.id, ex.id));
       await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: ex.status, toStatus: to, actor: 'store', actorUserId: userId, reason: reason.slice(0, 200) });
       event = this.eventOf(ex, ex.status, to, 'store', reason, now);
     });
@@ -621,6 +622,38 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   }
 
   /**
+   * Item conferido e aprovado (pela loja no balcão/recebimento OU pelo admin na mediação): devolve ao estoque se couber, agenda o
+   * reembolso (resolução `refund` ou diferença de preço negativa) e conclui; coleta em casa com peça nova libera a reentrega.
+   * `ex` deve estar `approved` (loja) ou `in_mediation` com o item já recebido (admin).
+   */
+  private async passInspection(tx: Tx, ex: ExchangeRow, order: OrderRow, item: ItemRow, by: { actor: 'store' | 'admin'; userId: string | null }, returnToStock: boolean, reason: string | null = null): Promise<{ event: ExchangeEvent; refund: PendingRefund | null }> {
+    const now = new Date();
+    if (returnToStock && item.stockState === 'sold') await this.inventory.restock(tx, [{ variantId: item.variantId, quantity: ex.quantity }]);
+    let refund: PendingRefund | null = null;
+    let refunded = 0;
+    if (ex.resolution === 'refund') {
+      refunded = await this.refundAmount(tx, ex, order, item);
+      refund = await this.scheduleOrderRefund(tx, order, refunded, `exchange_${ex.type}`, `exchange-refund:${ex.id}`, by.actor, by.userId);
+    } else if (ex.differenceCents < 0) {
+      refunded = -ex.differenceCents;
+      refund = await this.scheduleOrderRefund(tx, order, refunded, 'exchange_price_difference', `exchange-diff:${ex.id}`, by.actor, by.userId);
+    }
+    const base = { receivedAt: ex.receivedAt ?? now, returnToStock, updatedAt: now, ...(refund ? { refundCents: refund.amountCents, refundedAt: now } : {}) };
+    const finishNow = ex.resolution === 'refund' || ex.method === 'drop_at_store';
+    if (finishNow) {
+      if (ex.resolution === 'replace') await this.commitReservation(tx, ex);
+      await tx.update(exchangeRequests).set({ ...base, status: 'completed', completedAt: now }).where(eq(exchangeRequests.id, ex.id));
+      await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: ex.status, toStatus: 'completed', actor: by.actor, actorUserId: by.userId, reason: reason?.slice(0, 200) ?? (ex.resolution === 'refund' ? 'Item conferido: reembolso' : 'Troca feita no balcão') });
+      return { event: this.eventOf(ex, ex.status, 'completed', by.actor, reason, now), refund };
+    }
+    // Coleta em casa com peça nova: a conferência libera a reentrega (DEC-038f); conclui quando a segunda corrida entrega.
+    await tx.update(exchangeRequests).set({ ...base, status: 'item_received' }).where(eq(exchangeRequests.id, ex.id));
+    await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: ex.status, toStatus: 'item_received', actor: by.actor, actorUserId: by.userId, reason: reason?.slice(0, 200) ?? 'Item conferido: peça nova liberada para entrega' });
+    await this.createRun(tx, { ...ex, status: 'item_received' }, order, 'exchange_return');
+    return { event: this.eventOf(ex, ex.status, 'item_received', by.actor, reason, now), refund };
+  }
+
+  /**
    * A loja confere o item (WB-173): OK segue a resolução; reprovado vai à mediação (a loja não recusa sozinha depois de receber).
    * Troca na loja exige o código do balcão (5 tentativas). Coleta em casa exige a coleta confirmada pela logística.
    */
@@ -649,38 +682,15 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
       if (!input.ok) {
         if (!input.reason || input.reason.trim().length < 3) throw errors.validation([{ field: 'reason', message: 'Explique o motivo da reprovação.' }]);
-        await tx.update(exchangeRequests).set({ status: 'in_mediation', receivedAt: now, decisionReason: input.reason.trim().slice(0, 200), updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
+        await tx.update(exchangeRequests).set({ status: 'in_mediation', receivedAt: now, mediationStartedAt: now, decisionReason: input.reason.trim().slice(0, 200), updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
         await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'approved', toStatus: 'in_mediation', actor: 'store', actorUserId: userId, reason: input.reason.trim().slice(0, 200) });
         events.push(this.eventOf(ex, 'approved', 'in_mediation', 'store', input.reason.trim(), now));
         return;
       }
 
-      const returnToStock = input.returnToStock ?? ex.type !== 'defect';
-      if (returnToStock && item.stockState === 'sold') await this.inventory.restock(tx, [{ variantId: item.variantId, quantity: ex.quantity }]);
-      let refund: PendingRefund | null = null;
-      let refunded = 0;
-      if (ex.resolution === 'refund') {
-        refunded = await this.refundAmount(tx, ex, order, item);
-        refund = await this.scheduleOrderRefund(tx, order, refunded, `exchange_${ex.type}`, `exchange-refund:${ex.id}`, 'store', userId);
-      } else if (ex.differenceCents < 0) {
-        refunded = -ex.differenceCents;
-        refund = await this.scheduleOrderRefund(tx, order, refunded, 'exchange_price_difference', `exchange-diff:${ex.id}`, 'store', userId);
-      }
-      refunds.push(refund);
-      const base = { receivedAt: now, returnToStock, updatedAt: now, ...(refund ? { refundCents: refund.amountCents, refundedAt: now } : {}) };
-      const finishNow = ex.resolution === 'refund' || ex.method === 'drop_at_store';
-      if (finishNow) {
-        if (ex.resolution === 'replace') await this.commitReservation(tx, ex);
-        await tx.update(exchangeRequests).set({ ...base, status: 'completed', completedAt: now }).where(eq(exchangeRequests.id, ex.id));
-        await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'approved', toStatus: 'completed', actor: 'store', actorUserId: userId, reason: ex.resolution === 'refund' ? 'Item conferido: reembolso' : 'Troca feita no balcão' });
-        events.push(this.eventOf(ex, 'approved', 'completed', 'store', null, now));
-      } else {
-        // Coleta em casa com peça nova: a conferência libera a reentrega (DEC-038f); conclui quando a segunda corrida entrega.
-        await tx.update(exchangeRequests).set({ ...base, status: 'item_received' }).where(eq(exchangeRequests.id, ex.id));
-        await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'approved', toStatus: 'item_received', actor: 'store', actorUserId: userId, reason: 'Item conferido: peça nova liberada para entrega' });
-        await this.createRun(tx, { ...ex, status: 'item_received' }, order, 'exchange_return');
-        events.push(this.eventOf(ex, 'approved', 'item_received', 'store', null, now));
-      }
+      const passed = await this.passInspection(tx, ex, order, item, { actor: 'store', userId }, input.returnToStock ?? ex.type !== 'defect');
+      refunds.push(passed.refund);
+      events.push(passed.event);
     });
     if (codeError === 'locked') throw new AppError(429, 'EXCHANGE_CODE_LOCKED', 'Código bloqueado', { detail: 'Muitos códigos errados. Fale com o suporte da Webag.' });
     if (codeError === 'wrong') {
@@ -695,7 +705,8 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   // =================================================================== varredura (SLA, taxa não paga, prazo do item)
 
   /** Aprovação automática após o SLA da loja, cancelamento por taxa não paga e expiração por item não entregue. Idempotente. */
-  async sweep(now = new Date()): Promise<{ autoApproved: number; feeExpired: number; itemExpired: number }> {
+  async sweep(now = new Date()): Promise<{ autoApproved: number; feeExpired: number; itemExpired: number; reminders: number }> {
+    const reminders = await this.remindStoreDeadlines(now);
     const pending = await this.db.select({ id: exchangeRequests.id, at: exchangeRequests.createdAt }).from(exchangeRequests).where(and(eq(exchangeRequests.status, 'requested'), lte(exchangeRequests.answerDeadlineAt, now))).limit(100);
     let autoApproved = 0;
     for (const row of pending) {
@@ -717,7 +728,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     }
     const feeExpired = await this.closeDue('awaiting_fee', exchangeRequests.feeDueAt, now, 'cancelled', 'Taxa de troca não paga no prazo', false);
     const itemExpired = await this.closeDue('approved', exchangeRequests.itemDueAt, now, 'expired', 'Item não entregue no prazo', false);
-    return { autoApproved, feeExpired, itemExpired };
+    return { autoApproved, feeExpired, itemExpired, reminders };
   }
 
   private async closeDue(status: ExchangeStatus, column: AnyPgColumn, now: Date, to: 'cancelled' | 'expired', reason: string, refundFee: boolean): Promise<number> {
@@ -743,6 +754,140 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       }
     }
     return closed;
+  }
+
+  // =================================================================== lembretes do SLA da loja (DT-050)
+
+  /**
+   * Avisa a loja 12 h e 4 h antes do fim do SLA de resposta (depois, a troca é aprovada sozinha). Cada lembrete sai UMA vez: a
+   * reivindicação é um UPDATE condicional, então duas instâncias ou duas varreduras não duplicam. Se o SLA já nasce com menos de
+   * 12 h (parâmetro baixo), só o lembrete de 4 h sai.
+   */
+  async remindStoreDeadlines(now = new Date()): Promise<number> {
+    const within = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
+    const due = await this.db
+      .select()
+      .from(exchangeRequests)
+      .where(and(eq(exchangeRequests.status, 'requested'), sql`${exchangeRequests.answerDeadlineAt} > ${now.toISOString()}::timestamptz`, lte(exchangeRequests.answerDeadlineAt, within(12))))
+      .orderBy(asc(exchangeRequests.answerDeadlineAt))
+      .limit(200);
+    let sent = 0;
+    for (const ex of due) {
+      const hoursLeft = ex.answerDeadlineAt.getTime() <= within(4).getTime() ? 4 : 12;
+      const column = hoursLeft === 4 ? exchangeRequests.reminder4SentAt : exchangeRequests.reminder12SentAt;
+      const claimed = await this.db
+        .update(exchangeRequests)
+        .set(hoursLeft === 4 ? { reminder4SentAt: now, reminder12SentAt: ex.reminder12SentAt ?? now } : { reminder12SentAt: now })
+        .where(and(eq(exchangeRequests.id, ex.id), eq(exchangeRequests.status, 'requested'), isNull(column)))
+        .returning({ id: exchangeRequests.id });
+      if (claimed.length === 0) continue;
+      sent += 1;
+      await this.bus.emitReminder({ exchangeId: ex.id, number: ex.number, storeId: ex.storeId, type: ex.type, hoursLeft, deadlineAt: ex.answerDeadlineAt });
+    }
+    return sent;
+  }
+
+  // =================================================================== contestação e mediação (WB-176, WB-110)
+
+  /**
+   * O cliente contesta uma recusa da loja (WB-176): só recusa da LOJA (a do admin é final), uma vez e em até `contestacao_dias`;
+   * a troca vai à mediação e a loja e o admin são avisados pelo evento. Repetir devolve a troca como está (idempotente).
+   */
+  async contest(userId: string, exchangeId: string, text: string): Promise<void> {
+    let event: ExchangeEvent | null = null;
+    const days = await this.params.getNumber('contestacao_dias');
+    await this.db.transaction(async (tx) => {
+      const [probe] = await tx.select({ id: exchangeRequests.id }).from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, userId)));
+      if (!probe) throw errors.notFound('Troca não encontrada.');
+      const { ex } = await this.lockFor(tx, exchangeId);
+      if (ex.status === 'in_mediation' && ex.contestedAt) return;
+      if (ex.status !== 'rejected' || ex.decidedBy !== 'store' || ex.contestedAt) {
+        throw errors.conflict('EXCHANGE_NOT_CONTESTABLE', 'Esta troca não pode ser contestada', ex.decidedBy === 'admin' ? 'A decisão da Webag é final. Você ainda pode procurar um órgão de defesa do consumidor.' : 'Só uma recusa da loja pode ser contestada, uma vez.');
+      }
+      const until = new Date((ex.decidedAt ?? ex.updatedAt).getTime() + days * DAY_MS);
+      if (Date.now() > until.getTime()) throw errors.conflict('EXCHANGE_CONTEST_EXPIRED', 'Prazo para contestar encerrado', `O prazo de ${days} dias para contestar terminou.`);
+      if (!canExchangeTransition(ex.status, 'in_mediation', 'customer')) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', `A troca está em "${ex.status}".`);
+      const now = new Date();
+      await tx.update(exchangeRequests).set({ status: 'in_mediation', contestedAt: now, contestationText: text.slice(0, 500), mediationStartedAt: now, updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
+      await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'rejected', toStatus: 'in_mediation', actor: 'customer', actorUserId: userId, reason: text.slice(0, 200) });
+      event = this.eventOf(ex, 'rejected', 'in_mediation', 'customer', text, now);
+    });
+    if (event) await this.bus.emit(event);
+  }
+
+  /** Fila "Em mediação" do admin (WB-110 C1/C5): a mais antiga primeiro; `overdue` quando passa de `mediacao_dias_uteis` dias úteis. */
+  async mediationQueue(query: { cursor?: string | undefined; limit?: unknown }) {
+    const [days, limit] = [await this.params.getNumber('mediacao_dias_uteis'), parseLimit(query.limit)];
+    const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
+    const startedAt = sql`coalesce(${exchangeRequests.mediationStartedAt}, ${exchangeRequests.updatedAt})`;
+    const rows = await this.db
+      .select()
+      .from(exchangeRequests)
+      .where(and(eq(exchangeRequests.status, 'in_mediation'), cursor ? sql`(${startedAt}, ${exchangeRequests.id}) > (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : undefined))
+      .orderBy(asc(startedAt), asc(exchangeRequests.id))
+      .limit(limit + 1);
+    const slice = rows.slice(0, limit);
+    const now = new Date();
+    const data = slice.map((ex) => {
+      const start = ex.mediationStartedAt ?? ex.updatedAt;
+      const deadline = businessDeadline(start, days);
+      return {
+        id: ex.id,
+        number: ex.number,
+        orderId: ex.orderId,
+        storeId: ex.storeId,
+        type: ex.type,
+        resolution: ex.resolution,
+        // origem: contestação do cliente, defeito recusado pela loja ou inspeção reprovada (item já na loja)
+        origin: ex.contestedAt ? ('customer_contest' as const) : ex.receivedAt ? ('inspection_failed' as const) : ('store_refusal' as const),
+        storeReason: ex.decisionReason,
+        customerText: ex.contestationText,
+        photoCount: ex.photoIds.length,
+        startedAt: start.toISOString(),
+        deadlineAt: deadline.toISOString(),
+        overdue: now.getTime() > deadline.getTime(),
+        // arrependimento e defeito dentro do prazo não admitem recusa da loja (CDC): o admin vê o alerta e a sugestão de aprovar (WB-110 C3)
+        refusalNotAllowedByLaw: ex.type === 'withdrawal' || (ex.type === 'defect' && ex.windowEndsAt.getTime() >= start.getTime()),
+      };
+    });
+    const last = slice.at(-1);
+    return { data, nextCursor: rows.length > limit && last ? encodeCursor({ at: (last.mediationStartedAt ?? last.updatedAt).toISOString(), id: last.id }) : null };
+  }
+
+  /**
+   * Decisão do admin na mediação (WB-110 C2): `customer` (a favor do cliente) ou `store`. Justificativa obrigatória e auditoria
+   * pelo histórico da troca. A favor do cliente: antes de a loja receber o item, a troca é APROVADA (segue o fluxo, inclusive a
+   * taxa); com o item já na loja, vale a inspeção como aprovada (reembolso/peça nova). A favor da loja: recusa FINAL (libera a
+   * reserva; o cliente não pode contestar de novo). As partes são avisadas pelo evento.
+   */
+  async decideMediation(exchangeId: string, decision: 'customer' | 'store', reason: string, ctx: RequestContext): Promise<void> {
+    const adminId = ctx.principal?.userId ?? null;
+    const events: ExchangeEvent[] = [];
+    let refund: PendingRefund | null = null;
+    await this.db.transaction(async (tx) => {
+      const { ex, order, item } = await this.lockFor(tx, exchangeId);
+      if (ex.status !== 'in_mediation') throw errors.conflict('EXCHANGE_NOT_IN_MEDIATION', 'A troca não está em mediação', `A troca está em "${ex.status}".`);
+      const now = new Date();
+      if (decision === 'store') {
+        if (!canExchangeTransition(ex.status, 'rejected', 'admin')) throw errors.conflict('INVALID_EXCHANGE_TRANSITION', 'Transição não permitida', `A troca está em "${ex.status}".`);
+        await this.releaseReservation(tx, ex);
+        await this.deliveries.cancelForExchangeInTx(tx, ex.id, 'Mediação: decisão a favor da loja', { id: adminId, role: 'admin' }, ctx);
+        await tx.update(exchangeRequests).set({ status: 'rejected', decidedAt: now, decidedBy: 'admin', decisionReason: reason.slice(0, 200), updatedAt: now }).where(eq(exchangeRequests.id, ex.id));
+        await tx.insert(exchangeEvents).values({ exchangeId: ex.id, fromStatus: 'in_mediation', toStatus: 'rejected', actor: 'admin', actorUserId: adminId, reason: reason.slice(0, 200) });
+        events.push(this.eventOf(ex, 'in_mediation', 'rejected', 'admin', reason, now));
+        return;
+      }
+      if (ex.receivedAt) {
+        // O item já está na loja e a inspeção foi reprovada: o admin a reverte e o fluxo segue como se tivesse passado.
+        const passed = await this.passInspection(tx, ex, order, item, { actor: 'admin', userId: adminId }, ex.type !== 'defect', reason);
+        refund = passed.refund;
+        events.push(passed.event);
+      } else {
+        events.push((await this.approveInTx(tx, ex, order, item, { actor: 'admin', userId: adminId, reason, auto: false })).event);
+      }
+    });
+    await this.finishRefund(refund);
+    for (const event of events) await this.bus.emit(event);
   }
 
   // =================================================================== leitura
@@ -777,6 +922,9 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       autoApproved: ex.autoApproved,
       decidedBy: ex.decidedBy,
       decisionReason: ex.decisionReason,
+      /** WB-176: o cliente pode contestar uma recusa da loja até esta data (uma vez); nulo quando não cabe. */
+      contestableUntil: ex.status === 'rejected' && ex.decidedBy === 'store' && !ex.contestedAt ? new Date((ex.decidedAt ?? ex.updatedAt).getTime() + (await this.params.getNumber('contestacao_dias')) * DAY_MS).toISOString() : null,
+      contested: ex.contestedAt !== null,
       photoCount: ex.photoIds.length,
       createdAt: ex.createdAt.toISOString(),
       updatedAt: ex.updatedAt.toISOString(),

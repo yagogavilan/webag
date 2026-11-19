@@ -54,6 +54,8 @@ export const ADMIN_PERMISSIONS = {
   'logistics:contact': [SUPER, OPS, FIN, SUP],
   /** WB-248: relatório de trocas por loja e categoria; custos só para super admin e financeiro (checado no controller). */
   'exchanges:report': [SUPER, OPS, FIN],
+  /** WB-110: fila de mediação e decisão sobre trocas contestadas ou com inspeção reprovada; operação e super admin. */
+  'exchanges:mediate': [SUPER, OPS],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */

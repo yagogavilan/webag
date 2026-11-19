@@ -16,12 +16,39 @@ export interface ExchangeEvent {
   at: Date;
 }
 
+/** Lembrete à loja do fim do SLA de resposta (DT-050): não muda o estado, só avisa. */
+export interface ExchangeReminder {
+  exchangeId: string;
+  number: string;
+  storeId: string;
+  type: string;
+  /** Horas que faltam (12 ou 4) para a aprovação automática. */
+  hoursLeft: number;
+  deadlineAt: Date;
+}
+
 type Handler = (event: ExchangeEvent) => Promise<void> | void;
+type ReminderHandler = (reminder: ExchangeReminder) => Promise<void> | void;
 
 @Injectable()
 export class ExchangeEventBus {
   private readonly logger = new Logger(ExchangeEventBus.name);
   private readonly handlers: Handler[] = [];
+  private readonly reminderHandlers: ReminderHandler[] = [];
+
+  subscribeReminder(handler: ReminderHandler): void {
+    this.reminderHandlers.push(handler);
+  }
+
+  async emitReminder(reminder: ExchangeReminder): Promise<void> {
+    for (const handler of this.reminderHandlers) {
+      try {
+        await handler(reminder);
+      } catch (error) {
+        this.logger.warn(`handler de lembrete da troca ${reminder.number} falhou: ${(error as Error).message}`);
+      }
+    }
+  }
 
   subscribe(handler: Handler): void {
     this.handlers.push(handler);

@@ -27,7 +27,7 @@ const RULES: Record<ExchangeStatus, readonly { to: ExchangeStatus; actors: reado
     { to: 'rejected', actors: ['admin'] },
   ],
   completed: [],
-  rejected: [],
+  rejected: [{ to: 'in_mediation', actors: ['customer'] }], // contestação do cliente (WB-176), uma vez e dentro do prazo
   cancelled: [],
   expired: [],
 };
