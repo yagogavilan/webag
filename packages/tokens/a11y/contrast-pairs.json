@@ -49,5 +49,12 @@
   { "id": "icone (tinta) em tile 3 (nao texto)", "fg": "color.tileInk.3", "bg": "color.tile.3", "min": 3, "expected": 5.3 },
   { "id": "icone (tinta) em tile 4 (nao texto)", "fg": "color.tileInk.4", "bg": "color.tile.4", "min": 3, "expected": 5.84 },
   { "id": "icone (tinta) em tile 5 (nao texto)", "fg": "color.tileInk.5", "bg": "color.tile.5", "min": 3, "expected": 6.33 },
-  { "id": "icone (tinta) em tile 6 (nao texto)", "fg": "color.tileInk.6", "bg": "color.tile.6", "min": 3, "expected": 5.76 }
+  { "id": "icone (tinta) em tile 6 (nao texto)", "fg": "color.tileInk.6", "bg": "color.tile.6", "min": 3, "expected": 5.76 },
+  { "id": "texto noite sobre acento lima (selo, adesivo, marca-texto)", "fg": "color.accent.onBase", "bg": "color.accent.base", "min": 4.5, "expected": 15.3 },
+  { "id": "acento lima sobre noite (acao em fundo noite, contador)", "fg": "color.accent.base", "bg": "color.surface.ink", "min": 4.5, "expected": 15.3 },
+  { "id": "texto branco sobre noite (barra da sacola, cabecalho de acompanhamento)", "fg": "color.text.onInk", "bg": "color.surface.ink", "min": 4.5, "expected": 17.59 },
+  { "id": "texto secundario claro sobre noite", "fg": "color.text.onInkMuted", "bg": "color.surface.ink", "min": 4.5, "expected": 11.6 },
+  { "id": "texto secundario em fundo de estudio (foto de produto)", "fg": "color.text.secondary", "bg": "color.surface.studio", "min": 4.5, "expected": 5.84 },
+  { "id": "TEXTO GRANDE branco sobre marca (cabecalho, celebracao: >= 24 px ou >= 19 px negrito)", "fg": "color.neutral.0", "bg": "color.brand.500", "min": 3, "expected": 4.29 },
+  { "id": "texto sobre acao primaria (botao v3)", "fg": "color.neutral.0", "bg": "color.action.primary", "min": 4.5, "expected": 6.04 }
 ]

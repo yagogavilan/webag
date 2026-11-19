@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button } from '../../src/components/Button';
 import { BottomSheet } from '../../src/components/BottomSheet';
-import { ArrowsDownUp, CaretLeft, MagnifyingGlass, Sliders, Storefront, X } from '../../src/components/icons';
+import { ArrowsDownUp, CaretLeft, Sliders, Storefront, X } from '../../src/components/icons';
 import { IconButton } from '../../src/components/IconButton';
 import { RadioListItem } from '../../src/components/RadioListItem';
 import { Screen } from '../../src/components/Screen';
@@ -183,7 +183,7 @@ export default function ResultsScreen() {
       <View>
         <EmptyState
           actionLabel={filtered ? t('results.clearFilters') : tab === 'products' ? t('results.seeStores') : t('results.clearFilters')}
-          icon={MagnifyingGlass}
+          art="search"
           onAction={() => (filtered ? clearFilters() : tab === 'products' ? setTab('stores') : router.replace('/'))}
           testID="results.empty"
           text={filtered ? undefined : t('results.emptyText')}

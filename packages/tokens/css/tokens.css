@@ -43,6 +43,9 @@
   --wb-color-surface-inverse: #1C1721;
   --wb-color-surface-hero: #C02EF0;
   --wb-color-surface-hero-deep: #6A1580;
+  --wb-color-surface-studio: #EEEAF1;
+  --wb-color-surface-ink: #1C1721;
+  --wb-color-surface-paper: #FAF8FB;
   --wb-color-text-primary: #1C1721;
   --wb-color-text-secondary: #5F566A;
   --wb-color-text-on-brand: #FFFFFF;
@@ -56,6 +59,8 @@
   --wb-color-text-danger: #B3261E;
   --wb-color-text-info: #28569E;
   --wb-color-text-on-hero: #FFFFFF;
+  --wb-color-text-on-ink: #FFFFFF;
+  --wb-color-text-on-ink-muted: #D6CFDB;
   --wb-color-border-subtle: #E8E3EB;
   --wb-color-border-default: #D6CFDB;
   --wb-color-border-strong: #837A8A;
@@ -75,7 +80,7 @@
   --wb-color-overlay-backdrop: rgba(28, 23, 33, 0.48);
   --wb-color-skeleton-base: #E8E3EB;
   --wb-color-skeleton-highlight: #F3F0F5;
-  --wb-color-accent-base: #FFC93C;
+  --wb-color-accent-base: #D6FF4A;
   --wb-color-accent-on-base: #1C1721;
   --wb-color-tile-1: #F6E0FA;
   --wb-color-tile-2: #FFE3D1;
@@ -90,7 +95,7 @@
   --wb-color-tile-ink-5: #7A4E00;
   --wb-color-tile-ink-6: #A3214F;
   --wb-font-family-web: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --wb-font-family-display: "Outfit", "Figtree", ui-rounded, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --wb-font-family-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --wb-font-size-xs: 12px;
   --wb-font-size-sm: 14px;
   --wb-font-size-md: 16px;
@@ -98,10 +103,15 @@
   --wb-font-size-xl: 24px;
   --wb-font-size-2xl: 32px;
   --wb-font-size-3xl: 40px;
+  --wb-font-size-4xl: 46px;
+  --wb-font-size-5xl: 58px;
+  --wb-font-size-6xl: 68px;
+  --wb-font-size-7xl: 92px;
   --wb-font-weight-regular: 400;
   --wb-font-weight-medium: 500;
   --wb-font-weight-semibold: 600;
   --wb-font-weight-bold: 700;
+  --wb-font-weight-extrabold: 800;
   --wb-font-line-height-xs: 16px;
   --wb-font-line-height-sm: 20px;
   --wb-font-line-height-md: 24px;
@@ -109,6 +119,10 @@
   --wb-font-line-height-xl: 32px;
   --wb-font-line-height-2xl: 40px;
   --wb-font-line-height-3xl: 48px;
+  --wb-font-line-height-4xl: 48px;
+  --wb-font-line-height-5xl: 60px;
+  --wb-font-line-height-6xl: 68px;
+  --wb-font-line-height-7xl: 88px;
   --wb-space-0: 0px;
   --wb-space-1: 4px;
   --wb-space-2: 8px;
@@ -139,26 +153,41 @@
   --wb-radius-2xl: 32px;
   --wb-radius-full: 999px;
   --wb-radius-tag: 8px;
-  --wb-radius-control: 12px;
-  --wb-radius-card: 16px;
-  --wb-radius-sheet: 24px;
+  --wb-radius-control: 14px;
+  --wb-radius-card: 24px;
+  --wb-radius-sheet: 32px;
   --wb-radius-hero: 32px;
   --wb-radius-pill: 999px;
+  --wb-radius-button: 16px;
+  --wb-radius-sticker: 8px;
+  --wb-radius-seal: 7px;
   --wb-border-width-hairline: 1px;
   --wb-border-width-strong: 2px;
   --wb-shadow-none: none;
   --wb-shadow-sm: 0 1px 2px rgba(28, 23, 33, 0.08);
   --wb-shadow-md: 0 4px 12px rgba(28, 23, 33, 0.10);
   --wb-shadow-lg: 0 8px 24px rgba(28, 23, 33, 0.14);
+  --wb-shadow-hard: 3px 3px 0 {color.neutral.900};
+  --wb-shadow-hard-lg: 4px 4px 0 {color.neutral.900};
   --wb-motion-duration-fast: 150ms;
   --wb-motion-duration-base: 250ms;
   --wb-motion-duration-slow: 400ms;
   --wb-motion-duration-shimmer: 1200ms;
   --wb-motion-duration-fly: 400ms;
   --wb-motion-duration-celebrate: 1200ms;
+  --wb-motion-duration-bars-in: 500ms;
+  --wb-motion-duration-cascade: 550ms;
+  --wb-motion-duration-cascade-step: 55ms;
+  --wb-motion-duration-count: 450ms;
+  --wb-motion-duration-confetti: 1500ms;
+  --wb-motion-duration-stage: 450ms;
+  --wb-motion-duration-bob: 2400ms;
+  --wb-motion-duration-shake: 350ms;
+  --wb-motion-duration-loader: 900ms;
   --wb-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --wb-motion-easing-enter: cubic-bezier(0, 0, 0, 1);
   --wb-motion-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --wb-motion-cascade-max: 8;
   --wb-opacity-disabled: 0.38;
   --wb-opacity-hover: 0.08;
   --wb-opacity-pressed: 0.12;
@@ -175,6 +204,8 @@
   --wb-z-index-sheet: 20;
   --wb-z-index-toast: 30;
   --wb-z-index-modal: 40;
+  --wb-shape-lean: -8;
+  --wb-shape-cut-height: 64;
 }
 
 /* Movimento reduzido: sem animacao de deslocamento; so troca de estado. */
@@ -191,28 +222,28 @@
   font-family: var(--wb-font-family-display);
   font-size: 40px;
   line-height: 48px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .wb-text-display {
   font-family: var(--wb-font-family-display);
   font-size: 32px;
   line-height: 40px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .wb-text-title1 {
   font-family: var(--wb-font-family-display);
   font-size: 24px;
   line-height: 32px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .wb-text-title2 {
   font-family: var(--wb-font-family-display);
   font-size: 20px;
   line-height: 28px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .wb-text-body {
@@ -254,7 +285,7 @@
 .wb-text-price {
   font-size: 20px;
   line-height: 28px;
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
@@ -270,6 +301,47 @@
   font-size: 40px;
   line-height: 48px;
   font-weight: 700;
+}
+
+.wb-text-poster {
+  font-family: var(--wb-font-family-display);
+  font-size: 46px;
+  line-height: 48px;
+  font-weight: 800;
+}
+
+.wb-text-celebrate {
+  font-family: var(--wb-font-family-display);
+  font-size: 58px;
+  line-height: 60px;
+  font-weight: 800;
+}
+
+.wb-text-price-xl {
+  font-family: var(--wb-font-family-display);
+  font-size: 68px;
+  line-height: 68px;
+  font-weight: 800;
+}
+
+.wb-text-numeral-xl {
+  font-family: var(--wb-font-family-display);
+  font-size: 92px;
+  line-height: 88px;
+  font-weight: 800;
+}
+
+.wb-text-price-strong {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-text-sticker {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 800;
 }
 
 /* Anel de foco padrao (WCAG 2.4.7). Aplicar em todo controle interativo. */

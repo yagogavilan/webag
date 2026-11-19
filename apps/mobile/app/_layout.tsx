@@ -1,8 +1,9 @@
-import { Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold } from '@expo-google-fonts/outfit';
+import { BricolageGrotesque_600SemiBold, BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import {
   Figtree_400Regular,
   Figtree_600SemiBold,
   Figtree_700Bold,
+  Figtree_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/figtree';
 import { configureApiClient } from '@webag/shared';
@@ -57,9 +58,10 @@ export default function RootLayout() {
     Figtree_400Regular,
     Figtree_600SemiBold,
     Figtree_700Bold,
-    Outfit_500Medium,
-    Outfit_600SemiBold,
-    Outfit_700Bold,
+    Figtree_800ExtraBold,
+    BricolageGrotesque_600SemiBold,
+    BricolageGrotesque_700Bold,
+    BricolageGrotesque_800ExtraBold,
   });
   const [timedOut, setTimedOut] = useState(false);
   const [localReady, setLocalReady] = useState(false);

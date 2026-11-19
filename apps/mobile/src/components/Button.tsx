@@ -1,28 +1,32 @@
 import { type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { BarsLoader } from '../art/Bars';
+import { Pressy } from '../motion';
 import { theme } from '../theme';
 import { Text } from './Text';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'onBrand' | 'onBrandText';
+export type ButtonVariant = 'primary' | 'secondary' | 'text' | 'destructive' | 'onBrand' | 'onBrandText' | 'ink' | 'onInk';
 export type ButtonSize = 'lg' | 'md';
 
 export interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   label: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** Enviando: mostra spinner, fica inerte e anuncia "ocupado". Largura se mantém. */
+  /** Enviando: as 3 barras da marca no lugar do ícone, botão inerte e "ocupado" anunciado. Largura se mantém. */
   loading?: boolean;
   /** Rótulo alternativo enquanto carrega ("Entrando…"). */
   loadingLabel?: string;
   icon?: ReactNode;
+  /** Valor à direita do rótulo ("Adicionar    R$ 79,90"): tira a dúvida "quanto vou pagar" (direcao-v3.md §4.4). */
+  value?: string;
   /** Sobre fundo escuro (toast): texto na cor `text.inverseAction`. */
   onInverse?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
 /**
- * Botão do design system (§3.1). Em formulários ele NUNCA começa desabilitado: o erro aparece ao tocar (DEC-024d).
- * `disabled` é só para inércia com motivo no rótulo (ex.: "Tente às 14:47").
+ * Botão do design system v3: raio 16, 56 de altura (md 48), ação #A21FBE com texto branco (6,0:1), rótulo à esquerda e valor à direita.
+ * Em formulários ele NUNCA começa desabilitado: o erro aparece ao tocar (DEC-024d). `disabled` é só para inércia com motivo no rótulo.
  */
 export function Button({
   label,
@@ -31,6 +35,7 @@ export function Button({
   loading = false,
   loadingLabel,
   icon,
+  value,
   onInverse,
   disabled,
   onPress,
@@ -39,84 +44,87 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const inert = Boolean(disabled) || loading;
-  const textColor = onInverse
-    ? theme.color.text.inverseAction
-    : variant === 'primary' || variant === 'destructive' || variant === 'onBrandText'
-      ? theme.color.text.onBrand
-      : theme.color.text.brand;
+  const spec = palette(variant, Boolean(disabled), Boolean(onInverse));
   const shownLabel = loading && loadingLabel ? loadingLabel : label;
-
   return (
-    <Pressable
+    <Pressy
+      accessibilityLabel={accessibilityLabel ?? (value ? `${shownLabel}, ${value}` : shownLabel)}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? shownLabel}
       accessibilityState={{ disabled: inert, busy: loading }}
-      android_ripple={{ color: theme.color.action.primarySubtlePressed }}
+      android_ripple={{ color: spec.ripple }}
       disabled={inert}
+      feedback="light"
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.base,
-        size === 'lg' ? styles.lg : styles.md,
-        variantStyle(variant, pressed, Boolean(disabled)),
-        loading && styles.loading,
-        style,
-      ]}
+      style={[styles.base, size === 'lg' ? styles.lg : styles.md, { backgroundColor: spec.bg }, spec.border ? { borderColor: spec.border, borderWidth: theme.borderWidth.strong } : null, style]}
       {...rest}
     >
-      <View style={styles.row}>
-        {loading ? <ActivityIndicator color={textColor} size="small" /> : icon}
-        <Text
-          variant="label"
-          style={[
-            { color: disabled ? theme.color.action.disabledText : textColor },
-            styles.label,
-          ]}
-        >
-          {shownLabel}
-        </Text>
+      <View style={[styles.row, value ? styles.spread : styles.center]}>
+        <View style={styles.left}>
+          {loading ? <BarsLoader color={spec.fg} style={styles.loader} /> : icon}
+          <Text style={[styles.label, { color: spec.fg }]} variant="label">
+            {shownLabel}
+          </Text>
+        </View>
+        {value ? (
+          <Text style={[styles.value, { color: spec.fg }]} variant="priceStrong">
+            {value}
+          </Text>
+        ) : null}
       </View>
-    </Pressable>
+    </Pressy>
   );
 }
 
-function variantStyle(variant: ButtonVariant, pressed: boolean, disabled: boolean): ViewStyle {
-  if (disabled) {
-    return { backgroundColor: theme.color.action.disabledFill, borderColor: 'transparent' };
-  }
+interface Spec {
+  bg: string;
+  fg: string;
+  border?: string;
+  ripple: string;
+}
+
+function palette(variant: ButtonVariant, disabled: boolean, onInverse: boolean): Spec {
+  const c = theme.color;
+  if (disabled) return { bg: c.action.disabledFill, fg: c.action.disabledText, ripple: 'transparent' };
+  if (onInverse) return { bg: 'transparent', fg: c.text.inverseAction, ripple: c.action.primaryPressed };
   switch (variant) {
     case 'primary':
-      return { backgroundColor: pressed ? theme.color.action.primaryPressed : theme.color.action.primary };
+      return { bg: c.action.primary, fg: c.text.onBrand, ripple: c.action.primaryPressed };
     case 'destructive':
-      return { backgroundColor: pressed ? theme.color.action.destructivePressed : theme.color.action.destructive };
+      return { bg: c.action.destructive, fg: c.text.onBrand, ripple: c.action.destructivePressed };
     case 'secondary':
-      return {
-        backgroundColor: pressed ? theme.color.action.primarySubtle : 'transparent',
-        borderColor: theme.color.action.secondaryBorder,
-        borderWidth: theme.borderWidth.strong,
-      };
+      return { bg: 'transparent', fg: c.text.brand, border: c.action.secondaryBorder, ripple: c.action.primarySubtlePressed };
     case 'text':
-      return { backgroundColor: pressed ? theme.color.action.primarySubtle : 'transparent' };
-    // Sobre a tela inundada de roxo (pedido confirmado): pílula branca com texto de marca, ou só texto branco.
+      return { bg: 'transparent', fg: c.text.brand, ripple: c.action.primarySubtlePressed };
+    // Sobre o roxo da marca: branco com texto noite (o texto branco pequeno sobre #C02EF0 reprova AA).
     case 'onBrand':
-      return { backgroundColor: pressed ? theme.color.brand[100] : theme.color.neutral[0] };
+      return { bg: c.neutral[0], fg: c.neutral[900], ripple: c.brand[100] };
     case 'onBrandText':
-      return { backgroundColor: pressed ? theme.color.action.primaryPressed : 'transparent' };
+      return { bg: 'transparent', fg: c.neutral[0], ripple: c.action.primaryPressed };
+    // Estado "feito" e barra da sacola: noite com rótulo lima.
+    case 'ink':
+      return { bg: c.surface.ink, fg: c.accent.base, ripple: c.neutral[800] };
+    // Ação sobre fundo noite: lima com texto noite (15,3:1).
+    case 'onInk':
+      return { bg: c.accent.base, fg: c.accent.onBase, ripple: c.neutral[0] };
   }
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.radius.pill,
+    borderRadius: theme.radius.button,
     minWidth: 96,
-    paddingHorizontal: theme.space[4],
+    paddingHorizontal: theme.space[5],
     paddingVertical: theme.space[2],
-    alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   md: { minHeight: theme.size.controlMd },
   lg: { minHeight: theme.size.controlLg, alignSelf: 'stretch' },
-  loading: { opacity: 0.9 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space[2] },
+  row: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2] },
+  spread: { justifyContent: 'space-between' },
+  center: { justifyContent: 'center' },
+  left: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], flexShrink: 1 },
+  loader: { transform: [{ scale: 0.5 }], width: 28, height: 18, marginLeft: -6 },
   label: { textAlign: 'center', flexShrink: 1 },
+  value: { fontVariant: ['tabular-nums'] },
 });

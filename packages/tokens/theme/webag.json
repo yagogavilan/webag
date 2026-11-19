@@ -29,8 +29,8 @@
       "900": "#1C1721"
     },
     "accent": {
-      "$description": "Acento de apoio 'sol' (HIPOTESE, validar com o fundador). Uso: selo de promocao, destaque de preco riscado, no maximo ~3% da tela. Sempre com texto escuro (onBase); nunca texto amarelo sobre branco; nunca como estado de alerta.",
-      "base": "#FFC93C",
+      "$description": "Acento lima (DEC-052, direcao v3). Uso: selo de oferta, adesivo, marca-texto, contador, 'agora', acao sobre fundo noite. Maximo ~5% da tela, sempre com texto escuro (onBase); nunca texto lima sobre branco; nunca como estado de alerta.",
+      "base": "#D6FF4A",
       "onBase": "{color.neutral.900}"
     },
     "tile": {
@@ -53,10 +53,15 @@
     },
     "surface": {
       "hero": "{color.brand.500}",
-      "heroDeep": "{color.brand.800}"
+      "heroDeep": "{color.brand.800}",
+      "studio": "#EEEAF1",
+      "ink": "{color.neutral.900}",
+      "paper": "{color.neutral.50}"
     },
     "text": {
-      "onHero": "{color.neutral.0}"
+      "onHero": "{color.neutral.0}",
+      "onInk": "{color.neutral.0}",
+      "onInkMuted": "{color.neutral.300}"
     }
   }
 }

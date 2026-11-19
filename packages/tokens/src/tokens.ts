@@ -59,7 +59,10 @@ export const tokens = {
       "brandSubtle": "#FBF1FD",
       "inverse": "#1C1721",
       "hero": "#C02EF0",
-      "heroDeep": "#6A1580"
+      "heroDeep": "#6A1580",
+      "studio": "#EEEAF1",
+      "ink": "#1C1721",
+      "paper": "#FAF8FB"
     },
     "text": {
       "primary": "#1C1721",
@@ -74,7 +77,9 @@ export const tokens = {
       "warning": "#7A4E00",
       "danger": "#B3261E",
       "info": "#28569E",
-      "onHero": "#FFFFFF"
+      "onHero": "#FFFFFF",
+      "onInk": "#FFFFFF",
+      "onInkMuted": "#D6CFDB"
     },
     "border": {
       "subtle": "#E8E3EB",
@@ -104,7 +109,7 @@ export const tokens = {
       "highlight": "#F3F0F5"
     },
     "accent": {
-      "base": "#FFC93C",
+      "base": "#D6FF4A",
       "onBase": "#1C1721"
     },
     "tile": {
@@ -127,7 +132,7 @@ export const tokens = {
   "font": {
     "family": {
       "web": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
-      "display": "\"Outfit\", \"Figtree\", ui-rounded, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif"
+      "display": "\"Bricolage Grotesque\", \"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif"
     },
     "size": {
       "xs": 12,
@@ -136,13 +141,18 @@ export const tokens = {
       "lg": 20,
       "xl": 24,
       "2xl": 32,
-      "3xl": 40
+      "3xl": 40,
+      "4xl": 46,
+      "5xl": 58,
+      "6xl": 68,
+      "7xl": 92
     },
     "weight": {
       "regular": 400,
       "medium": 500,
       "semibold": 600,
-      "bold": 700
+      "bold": 700,
+      "extrabold": 800
     },
     "lineHeight": {
       "xs": 16,
@@ -151,7 +161,11 @@ export const tokens = {
       "lg": 28,
       "xl": 32,
       "2xl": 40,
-      "3xl": 48
+      "3xl": 48,
+      "4xl": 48,
+      "5xl": 60,
+      "6xl": 68,
+      "7xl": 88
     }
   },
   "textStyle": {
@@ -159,28 +173,28 @@ export const tokens = {
       "family": "display",
       "size": 40,
       "lineHeight": 48,
-      "weight": 700,
+      "weight": 800,
       "tabular": false
     },
     "display": {
       "family": "display",
       "size": 32,
       "lineHeight": 40,
-      "weight": 700,
+      "weight": 800,
       "tabular": false
     },
     "title1": {
       "family": "display",
       "size": 24,
       "lineHeight": 32,
-      "weight": 600,
+      "weight": 700,
       "tabular": false
     },
     "title2": {
       "family": "display",
       "size": 20,
       "lineHeight": 28,
-      "weight": 600,
+      "weight": 700,
       "tabular": false
     },
     "body": {
@@ -229,7 +243,7 @@ export const tokens = {
       "family": "text",
       "size": 20,
       "lineHeight": 28,
-      "weight": 700,
+      "weight": 800,
       "tabular": true
     },
     "numeral": {
@@ -244,6 +258,48 @@ export const tokens = {
       "size": 40,
       "lineHeight": 48,
       "weight": 700,
+      "tabular": false
+    },
+    "poster": {
+      "family": "display",
+      "size": 46,
+      "lineHeight": 48,
+      "weight": 800,
+      "tabular": false
+    },
+    "celebrate": {
+      "family": "display",
+      "size": 58,
+      "lineHeight": 60,
+      "weight": 800,
+      "tabular": false
+    },
+    "priceXl": {
+      "family": "display",
+      "size": 68,
+      "lineHeight": 68,
+      "weight": 800,
+      "tabular": false
+    },
+    "numeralXl": {
+      "family": "display",
+      "size": 92,
+      "lineHeight": 88,
+      "weight": 800,
+      "tabular": false
+    },
+    "priceStrong": {
+      "family": "text",
+      "size": 24,
+      "lineHeight": 32,
+      "weight": 800,
+      "tabular": true
+    },
+    "sticker": {
+      "family": "text",
+      "size": 14,
+      "lineHeight": 20,
+      "weight": 800,
       "tabular": false
     }
   },
@@ -282,11 +338,14 @@ export const tokens = {
     "2xl": 32,
     "full": 999,
     "tag": 8,
-    "control": 12,
-    "card": 16,
-    "sheet": 24,
+    "control": 14,
+    "card": 24,
+    "sheet": 32,
     "hero": 32,
-    "pill": 999
+    "pill": 999,
+    "button": 16,
+    "sticker": 8,
+    "seal": 7
   },
   "borderWidth": {
     "hairline": 1,
@@ -296,7 +355,9 @@ export const tokens = {
     "none": "none",
     "sm": "0 1px 2px rgba(28, 23, 33, 0.08)",
     "md": "0 4px 12px rgba(28, 23, 33, 0.10)",
-    "lg": "0 8px 24px rgba(28, 23, 33, 0.14)"
+    "lg": "0 8px 24px rgba(28, 23, 33, 0.14)",
+    "hard": "3px 3px 0 {color.neutral.900}",
+    "hardLg": "4px 4px 0 {color.neutral.900}"
   },
   "motion": {
     "duration": {
@@ -305,13 +366,23 @@ export const tokens = {
       "slow": 400,
       "shimmer": 1200,
       "fly": 400,
-      "celebrate": 1200
+      "celebrate": 1200,
+      "barsIn": 500,
+      "cascade": 550,
+      "cascadeStep": 55,
+      "count": 450,
+      "confetti": 1500,
+      "stage": 450,
+      "bob": 2400,
+      "shake": 350,
+      "loader": 900
     },
     "easing": {
       "standard": "cubic-bezier(0.2, 0, 0, 1)",
       "enter": "cubic-bezier(0, 0, 0, 1)",
       "exit": "cubic-bezier(0.3, 0, 1, 1)"
-    }
+    },
+    "cascadeMax": 8
   },
   "opacity": {
     "disabled": 0.38,
@@ -342,9 +413,11 @@ export const tokens = {
       "regular": "Figtree_400Regular",
       "semibold": "Figtree_600SemiBold",
       "bold": "Figtree_700Bold",
-      "displayMedium": "Outfit_500Medium",
-      "displaySemibold": "Outfit_600SemiBold",
-      "displayBold": "Outfit_700Bold"
+      "displayMedium": "BricolageGrotesque_600SemiBold",
+      "displaySemibold": "BricolageGrotesque_600SemiBold",
+      "displayBold": "BricolageGrotesque_700Bold",
+      "extrabold": "Figtree_800ExtraBold",
+      "displayExtraBold": "BricolageGrotesque_800ExtraBold"
     },
     "maxFontSizeMultiplier": {
       "default": 1.5,
@@ -390,6 +463,12 @@ export const tokens = {
         0,
         1,
         1
+      ],
+      "brand": [
+        0.2,
+        0.8,
+        0.2,
+        1
       ]
     },
     "haptics": {
@@ -398,7 +477,25 @@ export const tokens = {
       "success": "notificationSuccess",
       "warning": "notificationWarning",
       "error": "notificationError"
+    },
+    "spring": {
+      "press": {
+        "damping": 15,
+        "stiffness": 400
+      },
+      "pop": {
+        "damping": 9,
+        "stiffness": 180
+      }
+    },
+    "shadowHard": {
+      "offset": 3,
+      "offsetLg": 4
     }
+  },
+  "shape": {
+    "lean": -8,
+    "cutHeight": 64
   }
 } as const;
 

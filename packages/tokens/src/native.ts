@@ -15,16 +15,18 @@ export interface NativeTextStyle {
 
 /**
  * No RN a familia varia por peso (nao usar fontWeight com fonte customizada no Android).
- * Fontes: @expo-google-fonts/figtree -> Figtree_400Regular, Figtree_600SemiBold, Figtree_700Bold.
+ * Fontes: @expo-google-fonts/figtree -> Figtree_400Regular, Figtree_600SemiBold, Figtree_700Bold, Figtree_800ExtraBold.
  */
 function familyForWeight(weight: number): string {
+  if (weight >= 800) return native.fontFamily.extrabold;
   if (weight >= 700) return native.fontFamily.bold;
   if (weight >= 600) return native.fontFamily.semibold;
   return native.fontFamily.regular;
 }
 
-/** Outfit (titulos, numeros de marca): @expo-google-fonts/fredoka -> Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold. */
+/** Bricolage Grotesque (titulos, numeros de marca): @expo-google-fonts/bricolage-grotesque -> _600SemiBold, _700Bold, _800ExtraBold. */
 function displayFamilyForWeight(weight: number): string {
+  if (weight >= 800) return native.fontFamily.displayExtraBold;
   if (weight >= 700) return native.fontFamily.displayBold;
   if (weight >= 600) return native.fontFamily.displaySemibold;
   return native.fontFamily.displayMedium;
@@ -53,6 +55,12 @@ export const textStyles: Record<TextStyleName, NativeTextStyle> = {
   price: toNative(textStyle.price),
   numeral: toNative(textStyle.numeral),
   numeralBrand: toNative(textStyle.numeralBrand),
+  poster: toNative(textStyle.poster),
+  celebrate: toNative(textStyle.celebrate),
+  priceXl: toNative(textStyle.priceXl),
+  numeralXl: toNative(textStyle.numeralXl),
+  priceStrong: toNative(textStyle.priceStrong),
+  sticker: toNative(textStyle.sticker),
 };
 
 /**
@@ -93,6 +101,12 @@ export const shadows = {
   md: toShadow('md'),
   lg: toShadow('lg'),
 };
+
+/** Sombra "dura" do adesivo (direcao v3): deslocada, sem desfoque. Em RN e uma copia deslocada do elemento (ver Sticker). */
+export const hardShadow = { offset: native.shadowHard.offset, offsetLg: native.shadowHard.offsetLg } as const;
+
+/** Molas do movimento da marca (Reanimated withSpring). */
+export const springs = native.spring;
 
 /** Alvo de toque minimo: 48dp (Material) cobre tambem os 44pt da Apple. */
 export const touchTarget = { minWidth: size.touchMin, minHeight: size.touchMin } as const;

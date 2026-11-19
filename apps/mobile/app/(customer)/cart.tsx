@@ -6,7 +6,7 @@ import { ApiError } from '../../src/api/problem';
 import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
 import { Header } from '../../src/components/Header';
-import { Handbag, Plus } from '../../src/components/icons';
+import { Plus } from '../../src/components/icons';
 import { RemoteImage } from '../../src/components/RemoteImage';
 import { Screen } from '../../src/components/Screen';
 import { Skeleton } from '../../src/components/Skeleton';
@@ -134,7 +134,7 @@ export default function CartScreen() {
   if (!view) {
     return (
       <Screen header={header}>
-        <EmptyState actionLabel={t('cart.emptyAction')} icon={Handbag} onAction={() => router.replace('/')} testID="cart.empty" text={t('cart.emptyText')} title={t('cart.emptyTitle')} />
+        <EmptyState actionLabel={t('cart.emptyAction')} art="bag" onAction={() => router.replace('/')} testID="cart.empty" text={t('cart.emptyText')} title={t('cart.emptyTitle')} />
       </Screen>
     );
   }

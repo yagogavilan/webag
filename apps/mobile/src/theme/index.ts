@@ -1,5 +1,5 @@
 import { tokens } from '@webag/tokens';
-import { hitSlopFor, maxFontSizeMultiplier, shadows, textStyles } from '@webag/tokens/native';
+import { hardShadow, hitSlopFor, maxFontSizeMultiplier, shadows, springs, textStyles } from '@webag/tokens/native';
 
 /**
  * Tema do app: único ponto de acesso aos tokens (docs/design/design-system.md §12).
@@ -15,6 +15,9 @@ export const theme = {
   opacity: tokens.opacity,
   motion: tokens.motion,
   zIndex: tokens.zIndex,
+  shape: tokens.shape,
+  springs,
+  hardShadow,
   text: textStyles,
   maxFont: maxFontSizeMultiplier,
   shadows,

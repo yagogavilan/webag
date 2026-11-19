@@ -1,14 +1,19 @@
 import { type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { SemConexao, VazioBusca, VazioSacola } from '../art/kit.generated';
 import { theme } from '../theme';
 import { Button } from './Button';
 import type { IconComponent } from './icons';
-import { MapPinLine, WarningCircle, WifiSlash } from './icons';
+import { MapPin, WarningCircle } from './icons';
 import { SpeedLines } from './SpeedLines';
 import { Text } from './Text';
 
+export type StateArt = 'bag' | 'search' | 'offline' | 'icon';
+
 interface StateShape {
-  icon: IconComponent;
+  icon?: IconComponent;
+  /** Ilustração do kit v3. `icon` (padrão): ícone duotone num bloco noite com as barras da marca. */
+  art?: StateArt;
   title: string;
   text?: string;
   actionLabel?: string;
@@ -17,19 +22,26 @@ interface StateShape {
   testID?: string;
 }
 
-/** Molde único de vazio e erro (identidade v2): tile `tile.1` 120 com ícone duotone 64 e as linhas de velocidade da marca, título, texto e 1 ação. */
-function StateShell({ icon: Icon, title, text, actionLabel, onAction, link, testID }: StateShape) {
+/** Molde único de vazio, erro e offline (v3): ilustração do kit (sem rosto, sem humor em erro), título em Bricolage, texto e 1 ação. */
+function StateShell({ icon: Icon = MapPin, art = 'icon', title, text, actionLabel, onAction, link, testID }: StateShape) {
   return (
     <View accessibilityLiveRegion="polite" style={styles.shell} testID={testID}>
       <View style={styles.art}>
-        <View style={styles.lines}>
-          <SpeedLines thickness={6} />
-        </View>
-        <View style={styles.circle}>
-          <Icon color={theme.color.text.brand} size={theme.size.iconEmpty} weight="duotone" />
-        </View>
+        {art === 'bag' ? <VazioSacola width={216} /> : null}
+        {art === 'search' ? <VazioBusca width={216} /> : null}
+        {art === 'offline' ? <SemConexao width={216} /> : null}
+        {art === 'icon' ? (
+          <View style={styles.iconArt}>
+            <View style={styles.lines}>
+              <SpeedLines thickness={6} />
+            </View>
+            <View style={styles.block}>
+              <Icon color={theme.color.neutral[0]} duo={theme.color.accent.base} size={theme.size.iconEmpty} weight="duotone" />
+            </View>
+          </View>
+        ) : null}
       </View>
-      <Text variant="title2" style={styles.center}>
+      <Text style={styles.center} variant="title1">
         {title}
       </Text>
       {text ? (
@@ -43,8 +55,8 @@ function StateShell({ icon: Icon, title, text, actionLabel, onAction, link, test
   );
 }
 
-export function EmptyState(props: Omit<StateShape, 'icon'> & { icon?: IconComponent }) {
-  return <StateShell icon={MapPinLine} {...props} />;
+export function EmptyState(props: StateShape) {
+  return <StateShell {...props} />;
 }
 
 export interface ErrorStateProps {
@@ -60,7 +72,8 @@ export function ErrorState({ title, text, onRetry, retryLabel, offline, testID }
   return (
     <StateShell
       actionLabel={retryLabel}
-      icon={offline ? WifiSlash : WarningCircle}
+      art={offline ? 'offline' : 'icon'}
+      icon={WarningCircle}
       testID={testID}
       text={text}
       title={title}
@@ -71,15 +84,9 @@ export function ErrorState({ title, text, onRetry, retryLabel, offline, testID }
 
 const styles = StyleSheet.create({
   shell: { alignItems: 'center', gap: theme.space[3], padding: theme.space[6], alignSelf: 'stretch' },
-  circle: {
-    width: 120,
-    height: 120,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.color.tile[1],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   art: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', minHeight: 120 },
+  iconArt: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', minHeight: 120 },
+  block: { width: 120, height: 120, borderRadius: theme.radius.xl, backgroundColor: theme.color.surface.ink, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-4deg' }] },
   lines: { position: 'absolute', left: theme.space[4], top: theme.space[2], opacity: 0.8 },
   center: { textAlign: 'center' },
 });
