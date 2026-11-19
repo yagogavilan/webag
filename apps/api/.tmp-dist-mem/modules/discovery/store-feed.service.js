@@ -1,0 +1,170 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+import { Inject, Injectable } from '@nestjs/common';
+import { inArray, sql } from 'drizzle-orm';
+import { CacheService } from '../../platform/cache/cache.service.js';
+import { DRIZZLE } from '../../platform/database/database.module.js';
+import { ParametersService } from '../admin/index.js';
+import { MediaService } from '../media/index.js';
+import { mediaAssets } from '../media/db/schema.js';
+import { storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
+import { computeEta, DeliveryFeesService, LogisticsAvailabilityService, pickTier } from '../logistics/index.js';
+import { hoursToday, isOpen, nextOpening } from '../stores/index.js';
+import { pointKey, pointSql } from './geo.js';
+const FEED_TTL_SECONDS = 30;
+const NEW_STORE_DAYS = 30;
+/**
+ * Lojas que o cliente enxerga num ponto (RN-03, RN-04). UMA consulta PostGIS (`ST_DWithin` sobre o GiST de
+ * `stores.location`) devolve os candidatos dentro do raio máximo; a regra final de entrega (raio da loja, faixas
+ * `[de, até)`) usa `deliveryFee`, a MESMA função do checkout e da prévia do lojista. Loja fora do raio some.
+ */
+let StoreFeedService = class StoreFeedService {
+    db;
+    cache;
+    params;
+    media;
+    fees;
+    availability;
+    constructor(db, cache, params, media, fees, availability) {
+        this.db = db;
+        this.cache = cache;
+        this.params = params;
+        this.media = media;
+        this.fees = fees;
+        this.availability = availability;
+    }
+    async at(point, mode) {
+        return this.cache.wrap('feed', `${mode}:${pointKey(point)}`, FEED_TTL_SECONDS, () => this.compute(point, mode));
+    }
+    async compute(point, mode) {
+        const now = new Date();
+        const maxKm = await this.params.getNumber(mode === 'pickup' ? 'retirada_distancia_max_km' : 'raio_max_km');
+        const minRatings = await this.params.getNumber('avaliacao_min_exibicao');
+        const result = await this.db.execute(sql `
+      select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at,
+             s.address_city_id, ss.accepts_delivery,
+             ss.prep_minutes, ss.pickup_enabled, ss.voluntary_exchange_days,
+             ss.paused_until, ss.paused_indefinitely,
+             round(ST_Distance(s.location, ${pointSql(point)}))::int as distance_m,
+             r.avg_rating, coalesce(r.rating_count, 0)::int as rating_count
+        from stores s
+        join store_settings ss on ss.store_id = s.id
+        join cities c on c.id = s.address_city_id and c.active
+        left join lateral (
+          select avg(rating)::float8 as avg_rating, count(*) as rating_count
+            from reviews where store_id = s.id and product_id is null and status = 'published'
+        ) r on true
+       where s.status = 'approved'
+         and s.location is not null
+         and ST_DWithin(s.location, ${pointSql(point)}, ${maxKm * 1000})
+         and exists (select 1 from payment_accounts pa where pa.store_id = s.id and pa.status = 'active')
+         and exists (select 1 from products p where p.store_id = s.id and p.status = 'active' and p.moderation_status in ('ok', 'review'))
+         and ${mode === 'pickup' ? sql `ss.pickup_enabled` : sql `ss.accepts_delivery`}
+    `);
+        const rows = result.rows;
+        if (rows.length === 0)
+            return [];
+        const ids = rows.map((row) => row.id);
+        const today = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+        const [hourRows, holidayRows, extraRows, logoRows] = await Promise.all([
+            this.db.select().from(storeHours).where(inArray(storeHours.storeId, ids)),
+            this.db.select().from(storeHolidays).where(inArray(storeHolidays.storeId, ids)),
+            this.db.select().from(storeExtraCategories).where(inArray(storeExtraCategories.storeId, ids)),
+            this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, rows.map((row) => row.logo_asset_id).filter((id) => id !== null))),
+        ]);
+        const logos = new Map(logoRows.map((asset) => [asset.id, this.media.publicVariants(asset)]));
+        const [freeAbove, minOrder, radiusKm, etaConfig] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km'), this.fees.etaConfig()]);
+        const tableCache = new Map();
+        const feeTables = { get: (cityId) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId) };
+        const feed = [];
+        const logisticsByCity = new Map();
+        for (const row of rows) {
+            if (!logisticsByCity.has(row.address_city_id))
+                logisticsByCity.set(row.address_city_id, await this.availability.status(row.address_city_id, now));
+            const logistics = logisticsByCity.get(row.address_city_id);
+            const distanceM = Number(row.distance_m);
+            // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
+            const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
+            // DEC-053: o ETA (preparo da loja + despacho + deslocamento) acima do teto tira a loja da descoberta ("fora da área").
+            const eta = computeEta(etaConfig, { distanceM, prepMin: row.prep_minutes });
+            const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && eta.withinCeiling && table ? pickTier(table.tiers, distanceM) : null;
+            const fee = picked ? picked.tier.feeCents : null;
+            const deliversHere = fee !== null;
+            if (mode === 'delivery' && !deliversHere)
+                continue; // fora do raio da loja: some da lista (RN-04)
+            const weekly = {};
+            for (const h of hourRows.filter((x) => x.storeId === row.id))
+                (weekly[h.weekday] ??= []).push({ startMin: h.startMin, endMin: h.endMin });
+            const opening = {
+                hours: weekly,
+                holidays: new Set(holidayRows.filter((h) => h.storeId === row.id && h.day >= today).map((h) => h.day)),
+                pausedUntil: row.paused_until,
+                pausedIndefinitely: row.paused_indefinitely,
+            };
+            const open = isOpen(opening, now);
+            const count = Number(row.rating_count);
+            feed.push({
+                id: row.id,
+                name: row.name,
+                description: row.description,
+                mainCategoryId: row.main_category_id,
+                categoryIds: [...new Set([...(row.main_category_id ? [row.main_category_id] : []), ...extraRows.filter((e) => e.storeId === row.id).map((e) => e.categoryId)])],
+                logo: row.logo_asset_id ? (logos.get(row.logo_asset_id) ?? null) : null,
+                approvedAt: new Date(row.approved_at).toISOString(),
+                distanceM,
+                deliversHere,
+                logisticsOpen: logistics.open,
+                logisticsOpensAt: logistics.opensAt?.toISOString() ?? null,
+                feeCents: fee,
+                freeAboveCents: freeAbove,
+                minOrderCents: minOrder,
+                etaMinMinutes: eta.fromMin,
+                etaMaxMinutes: eta.toMin,
+                pickupEnabled: row.pickup_enabled,
+                acceptsExchange: row.voluntary_exchange_days > 0,
+                open,
+                opensAt: open ? null : (nextOpening(opening, now)?.toISOString() ?? null),
+                hoursToday: hoursToday(opening, now),
+                // Média pública só a partir de `avaliacao_min_exibicao` avaliações (RN-12); antes disso, "Novo".
+                ratingAverage: count >= minRatings && row.avg_rating !== null ? Math.round(row.avg_rating * 10) / 10 : null,
+                ratingCount: count,
+                isNew: count < minRatings,
+            });
+        }
+        return feed;
+    }
+    /** Ordem da home e da relevância (RN-03, HIP-032): abertas primeiro, depois ETA (DEC-053), depois distância e avaliação. */
+    static byRelevance(a, b) {
+        if (a.open !== b.open)
+            return a.open ? -1 : 1;
+        if (a.etaMinMinutes + a.etaMaxMinutes !== b.etaMinMinutes + b.etaMaxMinutes)
+            return a.etaMinMinutes + a.etaMaxMinutes - (b.etaMinMinutes + b.etaMaxMinutes); // DEC-053: a mais rápida primeiro
+        if (a.distanceM !== b.distanceM)
+            return a.distanceM - b.distanceM;
+        return (b.ratingAverage ?? 0) - (a.ratingAverage ?? 0) || a.name.localeCompare(b.name);
+    }
+    static isRecent(store, now) {
+        return now.getTime() - new Date(store.approvedAt).getTime() <= NEW_STORE_DAYS * 86_400_000;
+    }
+};
+StoreFeedService = __decorate([
+    Injectable(),
+    __param(0, Inject(DRIZZLE)),
+    __metadata("design:paramtypes", [Object, CacheService,
+        ParametersService,
+        MediaService,
+        DeliveryFeesService,
+        LogisticsAvailabilityService])
+], StoreFeedService);
+export { StoreFeedService };
+//# sourceMappingURL=store-feed.service.js.map
