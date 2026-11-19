@@ -12195,3 +12195,193 @@ export const RecordBannerEventBody = zod.object({
 })
 
 export const RecordBannerEventResponse = zod.void()
+
+
+/**
+ * `reports:operations` (super admin, operação e financeiro). Definições da RN-15: pedido = chegou a RECEBIDO (tem pagamento), data = dia do pagamento em Brasília; GMV = total dos não cancelados/recusados/expirados; ticket = GMV concluído / entregues; cancelamento = (cancelado + recusado) / pedidos; recompra = % de clientes com 2+ entregues em 30 dias do 1º (coorte do período, só com 30 dias completos); novas lojas = aprovadas no período. `variation` compara com o período anterior de mesma duração. `revenue.ledger` sai do LEDGER para o mesmo filtro e bate com `revenue.orders` (snapshot dos pedidos). Sem dado pessoal.
+ * @summary Relatório operacional (KPIs, série por dia, cancelamentos)
+ */
+export const GetOperationsReportQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.'),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional().describe('Pedidos com item da categoria (ou de uma filha)')
+})
+
+export const GetOperationsReportResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}),
+  "timezone": zod.string(),
+  "empty": zod.boolean(),
+  "kpis": zod.object({
+  "orders": zod.int(),
+  "gmv": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "gmvDelivered": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "deliveredOrders": zod.int(),
+  "averageTicket": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "newStores": zod.int(),
+  "newCustomers": zod.int(),
+  "repurchase": zod.object({
+  "cohort": zod.int(),
+  "repurchased": zod.int(),
+  "ratePct": zod.number().nullable()
+}),
+  "cancelledOrders": zod.int(),
+  "cancellationRatePct": zod.number()
+}),
+  "variation": zod.object({
+  "ordersPct": zod.number().nullish(),
+  "gmvPct": zod.number().nullish(),
+  "gmvDeliveredPct": zod.number().nullish(),
+  "averageTicketPct": zod.number().nullish(),
+  "newStoresPct": zod.number().nullish(),
+  "newCustomersPct": zod.number().nullish()
+}).describe('% contra o período anterior de mesma duração; nulo quando o anterior é zero'),
+  "revenue": zod.object({
+  "orders": zod.object({
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "deliveryFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "platformDiscount": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "applicationFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).optional().describe('Snapshot dos pedidos não cancelados'),
+  "ledger": zod.object({
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "serviceFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "deliveryFee": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.'),
+  "platformPromoExpense": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).optional().describe('Valor monetário em centavos.')
+}).optional().describe('Do ledger (vendas menos devoluções) para o mesmo filtro; precisa bater com `orders`')
+}),
+  "series": zod.array(zod.object({
+  "date": zod.iso.date(),
+  "orders": zod.int(),
+  "gmv": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})),
+  "cancellations": zod.array(zod.object({
+  "actor": zod.enum(['customer', 'store', 'system', 'admin']),
+  "reason": zod.string(),
+  "orders": zod.int(),
+  "value": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+}))
+})
+
+
+/**
+ * @summary Indicadores do período em CSV (auditado)
+ */
+export const ExportOperationsReportCsvQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.'),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional().describe('Pedidos com item da categoria (ou de uma filha)')
+})
+
+export const ExportOperationsReportCsvResponse = zod.unknown()
+
+
+/**
+ * Os mesmos filtros do relatório, paginado, mais recentes primeiro; os totais do relatório conferem com esta lista. Sem dado do cliente.
+ * @summary Pedidos do filtro (o "Ver os N pedidos")
+ */
+export const listReportOrdersQueryLimitMax = 100;
+
+
+
+export const ListReportOrdersQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.'),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional().describe('Pedidos com item da categoria (ou de uma filha)'),
+  "status": zod.enum(['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused']).optional(),
+  "limit": zod.int().min(1).max(listReportOrdersQueryLimitMax).optional(),
+  "cursor": zod.string().optional()
+})
+
+export const ListReportOrdersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "number": zod.string(),
+  "store": zod.object({
+  "id": zod.uuid().optional(),
+  "name": zod.string().nullish()
+}),
+  "status": zod.string(),
+  "mode": zod.enum(['delivery', 'pickup']),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "commission": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "paidAt": zod.iso.datetime({"offset":true}),
+  "deliveredAt": zod.iso.datetime({"offset":true}).nullable(),
+  "cancelledBy": zod.string().nullable(),
+  "cancelReason": zod.string().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` (reduza o período ou filtre por loja; o envio por e-mail do link fica para depois). Fórmulas de planilha são neutralizadas.
+ * @summary Pedidos do filtro em CSV (até 10.000 linhas; auditado)
+ */
+export const ExportReportOrdersCsvQueryParams = zod.object({
+  "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
+  "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. No máximo 366 dias.'),
+  "cityId": zod.uuid().optional().describe('Cidade da loja'),
+  "storeId": zod.uuid().optional(),
+  "categoryId": zod.uuid().optional().describe('Pedidos com item da categoria (ou de uma filha)'),
+  "status": zod.string().optional()
+})
+
+export const ExportReportOrdersCsvResponse = zod.unknown()

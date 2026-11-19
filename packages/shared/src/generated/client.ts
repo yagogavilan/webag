@@ -5423,6 +5423,149 @@ export interface HighlightPatch {
   active?: boolean;
 }
 
+export type OperationsReportPeriod = {
+  from?: string;
+  to?: string;
+};
+
+export type OperationsReportKpisRepurchase = {
+  cohort: number;
+  repurchased: number;
+  /** @nullable */
+  ratePct: number | null;
+};
+
+export type OperationsReportKpis = {
+  orders: number;
+  gmv: Money;
+  gmvDelivered: Money;
+  deliveredOrders: number;
+  averageTicket: Money;
+  newStores: number;
+  newCustomers: number;
+  repurchase: OperationsReportKpisRepurchase;
+  cancelledOrders: number;
+  cancellationRatePct: number;
+};
+
+/**
+ * % contra o período anterior de mesma duração; nulo quando o anterior é zero
+ */
+export type OperationsReportVariation = {
+  /** @nullable */
+  ordersPct?: number | null;
+  /** @nullable */
+  gmvPct?: number | null;
+  /** @nullable */
+  gmvDeliveredPct?: number | null;
+  /** @nullable */
+  averageTicketPct?: number | null;
+  /** @nullable */
+  newStoresPct?: number | null;
+  /** @nullable */
+  newCustomersPct?: number | null;
+};
+
+/**
+ * Snapshot dos pedidos não cancelados
+ */
+export type OperationsReportRevenueOrders = {
+  commission?: Money;
+  serviceFee?: Money;
+  deliveryFee?: Money;
+  platformDiscount?: Money;
+  applicationFee?: Money;
+};
+
+/**
+ * Do ledger (vendas menos devoluções) para o mesmo filtro; precisa bater com `orders`
+ */
+export type OperationsReportRevenueLedger = {
+  commission?: Money;
+  serviceFee?: Money;
+  deliveryFee?: Money;
+  platformPromoExpense?: Money;
+};
+
+export type OperationsReportRevenue = {
+  /** Snapshot dos pedidos não cancelados */
+  orders?: OperationsReportRevenueOrders;
+  /** Do ledger (vendas menos devoluções) para o mesmo filtro; precisa bater com `orders` */
+  ledger?: OperationsReportRevenueLedger;
+};
+
+export type OperationsReportSeriesItem = {
+  date: string;
+  orders: number;
+  gmv: Money;
+};
+
+export type OperationsReportCancellationsItemActor = typeof OperationsReportCancellationsItemActor[keyof typeof OperationsReportCancellationsItemActor];
+
+
+export const OperationsReportCancellationsItemActor = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type OperationsReportCancellationsItem = {
+  actor: OperationsReportCancellationsItemActor;
+  reason: string;
+  orders: number;
+  value: Money;
+};
+
+export interface OperationsReport {
+  period: OperationsReportPeriod;
+  timezone: string;
+  empty: boolean;
+  kpis: OperationsReportKpis;
+  /** % contra o período anterior de mesma duração; nulo quando o anterior é zero */
+  variation: OperationsReportVariation;
+  revenue: OperationsReportRevenue;
+  series: OperationsReportSeriesItem[];
+  cancellations: OperationsReportCancellationsItem[];
+}
+
+export type ReportOrderStore = {
+  id?: string;
+  /** @nullable */
+  name?: string | null;
+};
+
+export type ReportOrderMode = typeof ReportOrderMode[keyof typeof ReportOrderMode];
+
+
+export const ReportOrderMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+export interface ReportOrder {
+  id: string;
+  number: string;
+  store: ReportOrderStore;
+  status: string;
+  mode: ReportOrderMode;
+  total: Money;
+  commission: Money;
+  paidAt: string;
+  /** @nullable */
+  deliveredAt: string | null;
+  /** @nullable */
+  cancelledBy: string | null;
+  /** @nullable */
+  cancelReason: string | null;
+}
+
+export interface ReportOrderPage {
+  data: ReportOrder[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 /**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
@@ -6790,6 +6933,77 @@ export const RecordBannerEventBodyType = {
 
 export type RecordBannerEventBody = {
   type: RecordBannerEventBodyType;
+};
+
+export type GetOperationsReportParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
+  /** Pedidos com item da categoria (ou de uma filha) */
+  categoryId?: string;
+};
+
+export type ExportOperationsReportCsvParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
+  /** Pedidos com item da categoria (ou de uma filha) */
+  categoryId?: string;
+};
+
+export type ListReportOrdersParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
+  /** Pedidos com item da categoria (ou de uma filha) */
+  categoryId?: string;
+  status?: ListReportOrdersStatus;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListReportOrdersStatus = typeof ListReportOrdersStatus[keyof typeof ListReportOrdersStatus];
+
+
+export const ListReportOrdersStatus = {
+  received: 'received',
+  accepted: 'accepted',
+  in_preparation: 'in_preparation',
+  ready_for_collection: 'ready_for_collection',
+  out_for_delivery: 'out_for_delivery',
+  ready_for_pickup: 'ready_for_pickup',
+  delivered: 'delivered',
+  cancelled: 'cancelled',
+  refused: 'refused',
+} as const;
+
+export type ExportReportOrdersCsvParams = {
+  /** Dia inicial (Brasília), inclusivo. */
+  from: string;
+  /** Dia final (Brasília), inclusivo. No máximo 366 dias. */
+  to: string;
+  /** Cidade da loja */
+  cityId?: string;
+  storeId?: string;
+  /** Pedidos com item da categoria (ou de uma filha) */
+  categoryId?: string;
+  status?: string;
 };
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
@@ -22961,5 +23175,263 @@ export const recordBannerEvent = async (bannerId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(recordBannerEventBody)
+  }
+);}
+
+
+
+export type getOperationsReportResponse200 = {
+  data: OperationsReport
+  status: 200
+}
+
+export type getOperationsReportResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getOperationsReportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getOperationsReportResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getOperationsReportResponseSuccess = (getOperationsReportResponse200) & {
+  headers: Headers;
+};
+export type getOperationsReportResponseError = (getOperationsReportResponse400 | getOperationsReportResponse401 | getOperationsReportResponse403) & {
+  headers: Headers;
+};
+
+export type getOperationsReportResponse = (getOperationsReportResponseSuccess | getOperationsReportResponseError)
+
+export const getGetOperationsReportUrl = (params: GetOperationsReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/operations?${stringifiedParams}` : `/v1/admin/reports/operations`
+}
+
+/**
+ * `reports:operations` (super admin, operação e financeiro). Definições da RN-15: pedido = chegou a RECEBIDO (tem pagamento), data = dia do pagamento em Brasília; GMV = total dos não cancelados/recusados/expirados; ticket = GMV concluído / entregues; cancelamento = (cancelado + recusado) / pedidos; recompra = % de clientes com 2+ entregues em 30 dias do 1º (coorte do período, só com 30 dias completos); novas lojas = aprovadas no período. `variation` compara com o período anterior de mesma duração. `revenue.ledger` sai do LEDGER para o mesmo filtro e bate com `revenue.orders` (snapshot dos pedidos). Sem dado pessoal.
+ * @summary Relatório operacional (KPIs, série por dia, cancelamentos)
+ */
+export const getOperationsReport = async (params: GetOperationsReportParams, options?: Parameters<typeof apiFetch>[1]): Promise<getOperationsReportResponse> => {
+
+  return apiFetch<getOperationsReportResponse>(getGetOperationsReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportOperationsReportCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportOperationsReportCsvResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportOperationsReportCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportOperationsReportCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportOperationsReportCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportOperationsReportCsvResponseSuccess = (exportOperationsReportCsvResponse200) & {
+  headers: Headers;
+};
+export type exportOperationsReportCsvResponseError = (exportOperationsReportCsvResponse400 | exportOperationsReportCsvResponse401 | exportOperationsReportCsvResponse403 | exportOperationsReportCsvResponse429) & {
+  headers: Headers;
+};
+
+export type exportOperationsReportCsvResponse = (exportOperationsReportCsvResponseSuccess | exportOperationsReportCsvResponseError)
+
+export const getExportOperationsReportCsvUrl = (params: ExportOperationsReportCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/operations.csv?${stringifiedParams}` : `/v1/admin/reports/operations.csv`
+}
+
+/**
+ * @summary Indicadores do período em CSV (auditado)
+ */
+export const exportOperationsReportCsv = async (params: ExportOperationsReportCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportOperationsReportCsvResponse> => {
+
+  return apiFetch<exportOperationsReportCsvResponse>(getExportOperationsReportCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listReportOrdersResponse200 = {
+  data: ReportOrderPage
+  status: 200
+}
+
+export type listReportOrdersResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listReportOrdersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listReportOrdersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listReportOrdersResponseSuccess = (listReportOrdersResponse200) & {
+  headers: Headers;
+};
+export type listReportOrdersResponseError = (listReportOrdersResponse400 | listReportOrdersResponse401 | listReportOrdersResponse403) & {
+  headers: Headers;
+};
+
+export type listReportOrdersResponse = (listReportOrdersResponseSuccess | listReportOrdersResponseError)
+
+export const getListReportOrdersUrl = (params: ListReportOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/orders?${stringifiedParams}` : `/v1/admin/reports/orders`
+}
+
+/**
+ * Os mesmos filtros do relatório, paginado, mais recentes primeiro; os totais do relatório conferem com esta lista. Sem dado do cliente.
+ * @summary Pedidos do filtro (o "Ver os N pedidos")
+ */
+export const listReportOrders = async (params: ListReportOrdersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listReportOrdersResponse> => {
+
+  return apiFetch<listReportOrdersResponse>(getListReportOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportReportOrdersCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportReportOrdersCsvResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportReportOrdersCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportReportOrdersCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportReportOrdersCsvResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type exportReportOrdersCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportReportOrdersCsvResponseSuccess = (exportReportOrdersCsvResponse200) & {
+  headers: Headers;
+};
+export type exportReportOrdersCsvResponseError = (exportReportOrdersCsvResponse400 | exportReportOrdersCsvResponse401 | exportReportOrdersCsvResponse403 | exportReportOrdersCsvResponse422 | exportReportOrdersCsvResponse429) & {
+  headers: Headers;
+};
+
+export type exportReportOrdersCsvResponse = (exportReportOrdersCsvResponseSuccess | exportReportOrdersCsvResponseError)
+
+export const getExportReportOrdersCsvUrl = (params: ExportReportOrdersCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/reports/orders.csv?${stringifiedParams}` : `/v1/admin/reports/orders.csv`
+}
+
+/**
+ * Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` (reduza o período ou filtre por loja; o envio por e-mail do link fica para depois). Fórmulas de planilha são neutralizadas.
+ * @summary Pedidos do filtro em CSV (até 10.000 linhas; auditado)
+ */
+export const exportReportOrdersCsv = async (params: ExportReportOrdersCsvParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportReportOrdersCsvResponse> => {
+
+  return apiFetch<exportReportOrdersCsvResponse>(getExportReportOrdersCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}

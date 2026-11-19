@@ -72,6 +72,8 @@ tags:
     description: Tempo real (Socket.IO /rt) - tickets de uso único para os painéis
   - name: marketing
     description: Marketing do admin (push segmentado, cupons da plataforma, destaques) e métricas de campanha
+  - name: reports
+    description: Relatórios operacionais do admin (RN-15)
 security:
   - bearerAuth: []
 paths:
@@ -7210,6 +7212,111 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/reports/operations:
+    get:
+      tags: [reports]
+      operationId: getOperationsReport
+      summary: Relatório operacional (KPIs, série por dia, cancelamentos)
+      description: "`reports:operations` (super admin, operação e financeiro). Definições da RN-15: pedido = chegou a RECEBIDO (tem pagamento), data = dia do pagamento em Brasília; GMV = total dos não cancelados/recusados/expirados; ticket = GMV concluído / entregues; cancelamento = (cancelado + recusado) / pedidos; recompra = % de clientes com 2+ entregues em 30 dias do 1º (coorte do período, só com 30 dias completos); novas lojas = aprovadas no período. `variation` compara com o período anterior de mesma duração. `revenue.ledger` sai do LEDGER para o mesmo filtro e bate com `revenue.orders` (snapshot dos pedidos). Sem dado pessoal."
+      parameters:
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: cityId, in: query, description: 'Cidade da loja', schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, description: 'Pedidos com item da categoria (ou de uma filha)', schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Relatório
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsReport' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/reports/operations.csv:
+    get:
+      tags: [reports]
+      operationId: exportOperationsReportCsv
+      summary: Indicadores do período em CSV (auditado)
+      parameters:
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: cityId, in: query, description: 'Cidade da loja', schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, description: 'Pedidos com item da categoria (ou de uma filha)', schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: CSV (UTF-8 com BOM, separador ponto e vírgula)
+          content:
+            text/csv:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/reports/orders:
+    get:
+      tags: [reports]
+      operationId: listReportOrders
+      summary: Pedidos do filtro (o "Ver os N pedidos")
+      description: "Os mesmos filtros do relatório, paginado, mais recentes primeiro; os totais do relatório conferem com esta lista. Sem dado do cliente."
+      parameters:
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: cityId, in: query, description: 'Cidade da loja', schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, description: 'Pedidos com item da categoria (ou de uma filha)', schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [received, accepted, in_preparation, ready_for_collection, out_for_delivery, ready_for_pickup, delivered, cancelled, refused] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Página
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportOrderPage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/reports/orders.csv:
+    get:
+      tags: [reports]
+      operationId: exportReportOrdersCsv
+      summary: Pedidos do filtro em CSV (até 10.000 linhas; auditado)
+      description: "Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` (reduza o período ou filtre por loja; o envio por e-mail do link fica para depois). Fórmulas de planilha são neutralizadas."
+      parameters:
+        - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 'Dia final (Brasília), inclusivo. No máximo 366 dias.', schema: { type: string, format: date } }
+        - { name: cityId, in: query, description: 'Cidade da loja', schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, description: 'Pedidos com item da categoria (ou de uma filha)', schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     bearerAuth:
@@ -11458,3 +11565,100 @@ components:
         endsAt: { type: string, format: date-time }
         position: { type: integer, minimum: 0, maximum: 999 }
         active: { type: boolean }
+    OperationsReport:
+      type: object
+      required: [period, timezone, empty, kpis, variation, revenue, series, cancellations]
+      properties:
+        period: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        timezone: { type: string }
+        empty: { type: boolean }
+        kpis:
+          type: object
+          required: [orders, gmv, gmvDelivered, deliveredOrders, averageTicket, newStores, newCustomers, repurchase, cancelledOrders, cancellationRatePct]
+          properties:
+            orders: { type: integer }
+            gmv: { $ref: '#/components/schemas/Money' }
+            gmvDelivered: { $ref: '#/components/schemas/Money' }
+            deliveredOrders: { type: integer }
+            averageTicket: { $ref: '#/components/schemas/Money' }
+            newStores: { type: integer }
+            newCustomers: { type: integer }
+            repurchase:
+              type: object
+              required: [cohort, repurchased, ratePct]
+              properties:
+                cohort: { type: integer }
+                repurchased: { type: integer }
+                ratePct: { type: [number, 'null'] }
+            cancelledOrders: { type: integer }
+            cancellationRatePct: { type: number }
+        variation:
+          type: object
+          description: "% contra o período anterior de mesma duração; nulo quando o anterior é zero"
+          properties:
+            ordersPct: { type: [number, 'null'] }
+            gmvPct: { type: [number, 'null'] }
+            gmvDeliveredPct: { type: [number, 'null'] }
+            averageTicketPct: { type: [number, 'null'] }
+            newStoresPct: { type: [number, 'null'] }
+            newCustomersPct: { type: [number, 'null'] }
+        revenue:
+          type: object
+          properties:
+            orders:
+              type: object
+              description: "Snapshot dos pedidos não cancelados"
+              properties:
+                commission: { $ref: '#/components/schemas/Money' }
+                serviceFee: { $ref: '#/components/schemas/Money' }
+                deliveryFee: { $ref: '#/components/schemas/Money' }
+                platformDiscount: { $ref: '#/components/schemas/Money' }
+                applicationFee: { $ref: '#/components/schemas/Money' }
+            ledger:
+              type: object
+              description: "Do ledger (vendas menos devoluções) para o mesmo filtro; precisa bater com `orders`"
+              properties:
+                commission: { $ref: '#/components/schemas/Money' }
+                serviceFee: { $ref: '#/components/schemas/Money' }
+                deliveryFee: { $ref: '#/components/schemas/Money' }
+                platformPromoExpense: { $ref: '#/components/schemas/Money' }
+        series:
+          type: array
+          items:
+            type: object
+            required: [date, orders, gmv]
+            properties:
+              date: { type: string, format: date }
+              orders: { type: integer }
+              gmv: { $ref: '#/components/schemas/Money' }
+        cancellations:
+          type: array
+          items:
+            type: object
+            required: [actor, reason, orders, value]
+            properties:
+              actor: { type: string, enum: [customer, store, system, admin] }
+              reason: { type: string }
+              orders: { type: integer }
+              value: { $ref: '#/components/schemas/Money' }
+    ReportOrder:
+      type: object
+      required: [id, number, store, status, mode, total, commission, paidAt, deliveredAt, cancelledBy, cancelReason]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        store: { type: object, properties: { id: { type: string, format: uuid }, name: { type: [string, 'null'] } } }
+        status: { type: string }
+        mode: { type: string, enum: [delivery, pickup] }
+        total: { $ref: '#/components/schemas/Money' }
+        commission: { $ref: '#/components/schemas/Money' }
+        paidAt: { type: string, format: date-time }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        cancelledBy: { type: [string, 'null'] }
+        cancelReason: { type: [string, 'null'] }
+    ReportOrderPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ReportOrder' } }
+        nextCursor: { type: [string, 'null'] }

@@ -17,6 +17,7 @@ import { OrdersModule } from './modules/orders/index.js';
 import { ExchangesModule } from './modules/exchanges/index.js';
 import { NotificationsModule } from './modules/notifications/index.js';
 import { RealtimeModule } from './modules/realtime/index.js';
+import { ReportsModule } from './modules/reports/reports.module.js';
 import { MarketingModule } from './modules/marketing/index.js';
 import { PrivacyModule } from './modules/privacy/index.js';
 import { LogisticsModule } from './modules/logistics/index.js';
@@ -114,6 +115,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     FinanceModule,
     PrivacyModule,
     MarketingModule,
+    ReportsModule,
     // Simulação de pagamento: fora de produção apenas (SEC-036).
     ...devModulesFor(process.env.NODE_ENV),
   ],

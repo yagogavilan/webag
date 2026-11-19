@@ -63,6 +63,8 @@ export const ADMIN_PERMISSIONS = {
   'privacy:manage': [SUPER],
   /** WB-197: campanhas de push de marketing (financeiro e suporte não veem). */
   'marketing:push': [SUPER, OPS],
+  /** WB-122: relatórios operacionais (suporte não vê). */
+  'reports:operations': [SUPER, OPS, FIN],
   /** WB-116: cupons da plataforma. Financeiro lê (relatório de uso e custo); só operação e super admin criam e pausam. */
   'coupons:read': [SUPER, OPS, FIN],
   'coupons:write': [SUPER, OPS],
