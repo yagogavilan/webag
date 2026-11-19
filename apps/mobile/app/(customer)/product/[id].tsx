@@ -1,15 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query';
 import type { BrowseProduct, BrowseVariant } from '@webag/shared';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { Palco } from '../../../src/art/Palco';
+import { ProductArt, objectFor } from '../../../src/art/ProductArt';
+import { Pressy } from '../../../src/motion';
 import { fetchProduct } from '../../../src/api/catalog-api';
 import { ApiError } from '../../../src/api/problem';
 import { Badge } from '../../../src/components/Badge';
 import { Banner } from '../../../src/components/Banner';
 import { Button } from '../../../src/components/Button';
 import { Dialog } from '../../../src/components/Dialog';
-import { ArrowsClockwise, CaretLeft, CaretRight, Heart, Package, Star, Storefront, Warning, X } from '../../../src/components/icons';
+import { ArrowsClockwise, Check, CaretLeft, CaretRight, Heart, Package, Star, Storefront, Warning, X } from '../../../src/components/icons';
 import { IconButton } from '../../../src/components/IconButton';
 import { QuantityStepper } from '../../../src/components/QuantityStepper';
 import { RemoteImage } from '../../../src/components/RemoteImage';
@@ -31,6 +35,7 @@ import { t } from '../../../src/i18n';
 import { formatMoney } from '../../../src/lib/format';
 import { haptic } from '../../../src/lib/haptics';
 import { useOnline } from '../../../src/lib/useOnline';
+import { useReducedMotion } from '../../../src/lib/useReducedMotion';
 import { theme } from '../../../src/theme';
 
 /** Sem estoque por produto na API para itens sem variação: teto de quantidade do app. [HIPÓTESE] ver pendencias-contrato-mobile.md */
@@ -203,7 +208,10 @@ export default function ProductScreen() {
   };
 
   const favoriteLabel = favorite.isFavorite ? t('product.unfavorite', { name: product.name }) : t('product.favorite', { name: product.name });
-  const addLabel = added ? t('product.added') : price ? t('product.add', { price: formatMoney(price.cents * qty) }) : t('product.viewBag');
+  const missingNames = hasVariants ? missingAttributes(attributes, selection) : [];
+  const needsChoice = missingNames.length > 0;
+  const addLabel = added ? t('product.added') : needsChoice ? t('product.chooseFirst', { name: missingNames[0] ?? '' }) : t('product.addShort');
+  const addValue = added ? t('product.viewBag') : needsChoice || !price ? undefined : formatMoney(price.cents * qty);
 
   return (
     <Screen
@@ -212,8 +220,18 @@ export default function ProductScreen() {
           <Button label={t('product.seeOthers')} onPress={() => router.push(`/store/${product.store.id}`)} size="lg" testID="product.see-others" />
         ) : (
           <View style={styles.bar}>
-            <QuantityStepper max={maxQty} onChange={setQuantity} testID="product.qty" value={qty} />
-            <Button label={addLabel} loading={adding} onPress={() => void onAdd()} size="lg" style={styles.addButton} testID="product.add" />
+            <QuantityStepper max={maxQty} onChange={setQuantity} size="lg" testID="product.qty" value={qty} />
+            <Button
+              label={addLabel}
+              loading={adding}
+              muted={needsChoice}
+              onPress={() => (added ? router.push('/cart') : void onAdd())}
+              size="lg"
+              style={styles.addButton}
+              testID="product.add"
+              variant={added ? 'ink' : 'primary'}
+              {...(addValue ? { value: addValue } : {})}
+            />
           </View>
         )
       }
@@ -242,9 +260,9 @@ export default function ProductScreen() {
           {allSoldOut ? (
             <Badge label={t('product.allSoldOut')} testID="product.sold-out" />
           ) : price ? (
-            <Price cents={price.cents} discountPercent={price.discountPercent} from={price.from} originalCents={price.originalCents} size="display" testID="product.price" />
+            <Price cents={price.cents} discountPercent={price.discountPercent} from={price.from} originalCents={price.originalCents} size="hero" testID="product.price" />
           ) : null}
-          <Text accessibilityRole="header" numberOfLines={2} variant="title2">
+          <Text accessibilityRole="header" numberOfLines={3} variant="title1">
             {product.name}
           </Text>
           {product.rating ? (
@@ -260,30 +278,43 @@ export default function ProductScreen() {
             <View onLayout={(e) => (variantsY.current = e.nativeEvent.layout.y)} style={styles.variants}>
               {groups.map((group) => {
                 const failed = errorGroups.includes(group.name);
+                const chosen = Boolean(selection[group.name]);
                 return (
-                  <View accessibilityLabel={group.name} accessibilityRole="radiogroup" key={group.name} style={styles.group} testID={`product.group-${group.name}`}>
-                    <Text variant="captionStrong">{selection[group.name] ? `${group.name}: ${selection[group.name]}` : group.name}</Text>
-                    <View style={[styles.optionRow, failed && styles.optionRowError]}>
+                  <ShakeView failed={failed} key={group.name} style={[styles.group, failed && styles.groupError]} testID={`product.group-${group.name}`}>
+                    <View style={styles.groupHead}>
+                      <View style={styles.flex}>
+                        <Text variant="bodyStrong">{chosen ? `${group.name}: ${selection[group.name]}` : group.name}</Text>
+                        <Text color="secondary" variant="caption">
+                          {t('product.chooseOne')}
+                        </Text>
+                      </View>
+                      <View style={[styles.required, chosen && styles.requiredDone]}>
+                        {chosen ? <Check color={theme.color.neutral[0]} size={14} weight="bold" /> : null}
+                        <Text style={chosen ? styles.requiredTextDone : styles.requiredText} variant="micro">
+                          {chosen ? t('product.chosen') : t('product.required')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View accessibilityLabel={group.name} accessibilityRole="radiogroup" style={styles.optionRow}>
                       {group.options.map((option) => {
                         const isSelected = selection[group.name] === option.value;
                         return (
-                          <Pressable
+                          <Pressy
                             accessibilityLabel={option.available ? option.value : t('product.variantSoldOut', { value: option.value })}
                             accessibilityRole="radio"
                             accessibilityState={{ checked: isSelected, selected: isSelected, disabled: !option.available }}
                             disabled={!option.available}
+                            feedback="selection"
                             key={option.value}
-                            onPress={() => {
-                              void haptic('selection');
-                              onChoose(group.name, option.value);
-                            }}
+                            onPress={() => onChoose(group.name, option.value)}
                             style={[styles.option, isSelected && styles.optionSelected, !option.available && styles.optionOff]}
                             testID={`product.variant-${group.name}-${option.value}`}
                           >
-                            <Text color={isSelected ? 'brand' : option.available ? 'primary' : 'disabled'} style={!option.available && styles.struck} variant="label">
+                            <Text color={isSelected ? 'inverse' : option.available ? 'primary' : 'disabled'} variant="label">
                               {option.value}
                             </Text>
-                          </Pressable>
+                            {!option.available ? <View pointerEvents="none" style={styles.strike} /> : null}
+                          </Pressy>
                         );
                       })}
                     </View>
@@ -292,7 +323,7 @@ export default function ProductScreen() {
                         {t('product.variantChoose', { name: group.name })}
                       </Text>
                     ) : null}
-                  </View>
+                  </ShakeView>
                 );
               })}
             </View>
@@ -377,6 +408,21 @@ function TopBar() {
   );
 }
 
+/** `motion.shake`: o grupo balança 2x 8 px quando falta escolher (e háptico de erro, já disparado por quem chama). */
+function ShakeView({ failed, style, children, testID }: { failed: boolean; style: import('react-native').StyleProp<import('react-native').ViewStyle>; children: React.ReactNode; testID?: string }) {
+  const x = useSharedValue(0);
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (failed && !reduced) x.set(withSequence(withTiming(-8, { duration: 60 }), withTiming(8, { duration: 60 }), withTiming(-8, { duration: 60 }), withTiming(8, { duration: 60 }), withTiming(0, { duration: 60 })));
+  }, [failed, reduced, x]);
+  const animated = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  return (
+    <Animated.View style={[style, animated]} testID={testID}>
+      {children}
+    </Animated.View>
+  );
+}
+
 function ReviewsPreview({ reviews, count, loading, onAll }: { reviews: import('@webag/shared').Review[]; count: number; loading: boolean; onAll: () => void }) {
   return (
     <View style={styles.reviews}>
@@ -404,7 +450,17 @@ function Gallery({ images, name, width }: { images: { id: string; urls: Record<s
     list.current?.scrollToOffset({ offset: clamped * width, animated: true });
     setIndex(clamped);
   };
-  if (images.length === 0) return <RemoteImage alt={t('catalog.imageAlt', { name })} aspectRatio={1} radius={0} urls={undefined} width={width} />;
+  if (images.length === 0) {
+    // Sem foto: palco (a sacola da marca) com a peça do kit; com foto do lojista a imagem entra em sangria total (kit-marca-v3.md §6).
+    return (
+      <View accessible accessibilityLabel={t('catalog.imageAlt', { name })} style={[styles.studio, { width, height: width * 0.9 }]} testID="product.gallery">
+        <Palco color={theme.color.brand[500]} eyes={theme.color.surface.studio} rotate={-7} size={width * 0.78} />
+        <View style={styles.studioArt}>
+          <ProductArt color="#4E6E91" name={objectFor(name)} size={width * 0.62} />
+        </View>
+      </View>
+    );
+  }
   return (
     <View testID="product.gallery">
       <FlatList
@@ -466,19 +522,27 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1] },
   variants: { gap: theme.space[4] },
-  group: { gap: theme.space[2] },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[2], padding: 2, borderRadius: theme.radius.md, borderWidth: theme.borderWidth.strong, borderColor: 'transparent' },
-  optionRowError: { borderColor: theme.color.border.danger },
-  option: { minHeight: theme.size.touchMin, minWidth: theme.size.touchMin, paddingHorizontal: theme.space[4], alignItems: 'center', justifyContent: 'center', borderRadius: theme.radius.full, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.strong, backgroundColor: theme.color.surface.card },
-  optionSelected: { borderWidth: theme.borderWidth.strong, borderColor: theme.color.border.focus, backgroundColor: theme.color.surface.brandSubtle },
-  optionOff: { opacity: theme.opacity.disabled + 0.3 },
+  group: { gap: theme.space[3], padding: theme.space[3], borderRadius: theme.radius.lg, backgroundColor: theme.color.surface.sunken },
+  groupError: { borderWidth: theme.borderWidth.strong, borderColor: theme.color.border.danger },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2] },
+  required: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: theme.radius.sticker, backgroundColor: theme.color.neutral[900], paddingHorizontal: 8, paddingVertical: 4 },
+  requiredDone: { backgroundColor: theme.color.feedback.success.base },
+  requiredText: { color: theme.color.neutral[0] },
+  requiredTextDone: { color: theme.color.neutral[0] },
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[2] },
+  option: { minHeight: theme.size.touchMin, minWidth: theme.size.touchMin, paddingHorizontal: theme.space[4], alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: theme.borderWidth.strong, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card, overflow: 'hidden' },
+  optionSelected: { borderColor: theme.color.surface.ink, backgroundColor: theme.color.surface.ink },
+  optionOff: { backgroundColor: theme.color.surface.sunken },
+  strike: { position: 'absolute', left: -8, right: -8, top: '50%', height: 2, backgroundColor: theme.color.neutral[500], transform: [{ rotate: '-30deg' }] },
+  studio: { backgroundColor: theme.color.surface.studio, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  studioArt: { position: 'absolute' },
   struck: { textDecorationLine: 'line-through' },
   inline: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin },
   storeRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space[3], minHeight: theme.size.touchMin + theme.space[2], paddingVertical: theme.space[2], borderTopWidth: theme.borderWidth.hairline, borderBottomWidth: theme.borderWidth.hairline, borderColor: theme.color.border.subtle },
   description: { gap: theme.space[1], alignItems: 'flex-start' },
   reviews: { gap: theme.space[3] },
   bar: { flexDirection: 'row', alignItems: 'center', gap: theme.space[3] },
-  addButton: { flex: 1 },
+  addButton: { flex: 1, alignSelf: 'center' },
   counter: { position: 'absolute', right: theme.space[3], bottom: theme.space[3], backgroundColor: theme.color.overlay.scrim, borderRadius: theme.radius.full, paddingHorizontal: theme.space[3], paddingVertical: theme.space[1] },
   arrows: { position: 'absolute', left: theme.space[2], right: theme.space[2], top: '40%', flexDirection: 'row', justifyContent: 'space-between' },
   fullscreen: { flex: 1, backgroundColor: theme.color.surface.inverse, justifyContent: 'center' },

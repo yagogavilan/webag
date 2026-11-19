@@ -19,6 +19,8 @@ export interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> 
   icon?: ReactNode;
   /** Valor à direita do rótulo ("Adicionar    R$ 79,90"): tira a dúvida "quanto vou pagar" (direcao-v3.md §4.4). */
   value?: string;
+  /** Aparência de inativo, mas ainda recebe o toque (para explicar o que falta: "Escolha o tamanho"). Anunciado como desabilitado. */
+  muted?: boolean;
   /** Sobre fundo escuro (toast): texto na cor `text.inverseAction`. */
   onInverse?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -37,6 +39,7 @@ export function Button({
   icon,
   value,
   onInverse,
+  muted = false,
   disabled,
   onPress,
   style,
@@ -44,13 +47,13 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const inert = Boolean(disabled) || loading;
-  const spec = palette(variant, Boolean(disabled), Boolean(onInverse));
+  const spec = palette(variant, Boolean(disabled) || muted, Boolean(onInverse));
   const shownLabel = loading && loadingLabel ? loadingLabel : label;
   return (
     <Pressy
       accessibilityLabel={accessibilityLabel ?? (value ? `${shownLabel}, ${value}` : shownLabel)}
       accessibilityRole="button"
-      accessibilityState={{ disabled: inert, busy: loading }}
+      accessibilityState={{ disabled: inert || muted, busy: loading }}
       android_ripple={{ color: spec.ripple }}
       disabled={inert}
       feedback="light"

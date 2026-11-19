@@ -50,7 +50,7 @@ describe('Produto (D9)', () => {
     expect(screen.getByTestId('product.variant-Tamanho-42')).toBeChecked();
     expect(screen.getByTestId('product.stock-warning')).toBeOnTheScreen();
     expect(screen.getByText('Últimas 2 unidades')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Adicionar · R$ 89,90' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Adicionar, R$ 89,90' })).toBeOnTheScreen();
   });
 
   it('sem escolher a variação o botão segue ativo, explica o que falta e não adiciona', async () => {
@@ -69,7 +69,7 @@ describe('Produto (D9)', () => {
     const cart = cartStore.get();
     expect(cart.storeId).toBe('s1');
     expect(cart.items[0]).toMatchObject({ productId: 'p1', variantId: 'v40', quantity: 2, variantLabel: '40', unitPriceCents: 8990 });
-    expect(screen.getByRole('button', { name: 'Adicionado' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Adicionado, Ver sacola' })).toBeOnTheScreen();
   });
 
   it('o + para no estoque da variação e avisa "Só 2 em estoque"', async () => {

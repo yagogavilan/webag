@@ -43,11 +43,12 @@ describe('Loja (D8)', () => {
     await renderScreen(<StoreScreen />);
     expect(await screen.findByText('Casa Bela')).toBeOnTheScreen();
     expect(screen.getByTestId('store.rating').props.accessibilityLabel).toContain('4,8 de 5, 120 avaliações');
-    expect(screen.getByText('30 a 45 min · R$ 5,00 · 1,2 km')).toBeOnTheScreen();
-    expect(screen.getByText('Grátis acima de R$ 120,00')).toBeOnTheScreen();
-    expect(screen.getByText('Pedido mínimo R$ 30,00')).toBeOnTheScreen();
-    expect(screen.getByText('Retirada em 20 a 30 min')).toBeOnTheScreen();
-    expect(screen.getByText('Aceita troca')).toBeOnTheScreen();
+    expect(screen.getByTestId('store.eta')).toBeOnTheScreen();
+    expect(screen.getByText('R$ 5,00')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Entrega grátis acima de R$ 120,00')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Pedido mínimo R$ 30,00')).toBeOnTheScreen();
+    expect(screen.getByLabelText(/Retire grátis na loja/)).toBeOnTheScreen();
+    expect(screen.getByLabelText(/Troca em até/)).toBeOnTheScreen();
   });
 
   it('produtos disponíveis primeiro, indisponíveis ao final com selo', async () => {
@@ -85,7 +86,7 @@ describe('Loja (D8)', () => {
   it('barra "Ver sacola" só aparece com itens desta loja', async () => {
     await cartActions.add('s1', 'Casa Bela', { productId: 'a', variantId: 'v-local', name: 'A', variantLabel: null, urls: {}, unitPriceCents: 4500, originalPriceCents: null, quantity: 2, maxQuantity: 9 });
     await renderScreen(<StoreScreen />);
-    expect(await screen.findByRole('button', { name: 'Ver sacola, 2 itens, total R$ 90,00' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'Ver sacola, Casa Bela, 2 itens' })).toBeOnTheScreen();
   });
 
   it('política de trocas abre com a taxa de coleta e os direitos do consumidor', async () => {

@@ -8,7 +8,7 @@ import { t } from '../../i18n';
 import { Pressy } from '../../motion';
 import { theme } from '../../theme';
 import { closedLabel, formatDistance, formatFee, formatRating, ratingA11y } from './format';
-import { etaWindow, formatEtaBand, isBeyondReach } from './eta';
+import { deliveryEta } from './eta';
 
 export interface StoreRowProps {
   store: StoreCard;
@@ -49,9 +49,9 @@ function metaLine(store: StoreCard, approximate: boolean, pickup: boolean): stri
  */
 export function StoreRow({ store, categoryName, approximate = false, pickup = false, onPress, testID }: StoreRowProps) {
   const meta = metaLine(store, approximate, pickup);
-  const outOfArea = !pickup && isBeyondReach(store.delivery);
-  const eta = pickup ? null : formatEtaBand(store.delivery.etaMinMinutes, store.delivery.etaMaxMinutes);
-  const range = pickup ? null : etaWindow(store.delivery.etaMinMinutes, store.delivery.etaMaxMinutes);
+  const range = pickup ? null : deliveryEta(store.delivery);
+  const outOfArea = !pickup && range === null;
+  const eta = range ? `Chega entre ${range.start} e ${range.end}` : null;
   const status = store.open ? t('catalog.open') : closedLabel(store.opensAt);
   const label = [
     store.name,

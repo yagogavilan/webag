@@ -1,13 +1,20 @@
 import { FlashList } from '@shopify/flash-list';
 import type { BrowseProductItem, BrowseStore } from '@webag/shared';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ApiError } from '../../../src/api/problem';
-import { Badge } from '../../../src/components/Badge';
 import { Banner } from '../../../src/components/Banner';
 import { Button } from '../../../src/components/Button';
-import { CaretLeft, ArrowsClockwise, Clock, Heart, Package, Star, ShareNetwork, Storefront, Truck } from '../../../src/components/icons';
+import { CaretLeft, ArrowsClockwise, Heart, Package, Star, ShareNetwork, Storefront, Ticket as TicketIcon } from '../../../src/components/icons';
+import { DiagonalBlock } from '../../../src/components/DiagonalBlock';
+import { Sticker } from '../../../src/components/Sticker';
+import { ProductArt, objectFor } from '../../../src/art/ProductArt';
+import { MiniBag } from '../../../src/features/cart/MiniBag';
+import { Pressy } from '../../../src/motion';
+import { deliveryEta } from '../../../src/features/catalog/eta';
+import { coverColor, initials } from '../../../src/features/catalog/StoreRow';
 import { IconButton } from '../../../src/components/IconButton';
 import { RemoteImage } from '../../../src/components/RemoteImage';
 import { Screen } from '../../../src/components/Screen';
@@ -28,11 +35,13 @@ import { theme } from '../../../src/theme';
 
 type Row =
   | { type: 'header' }
+  | { type: 'highlights' }
   | { type: 'tabs' }
   | { type: 'products'; items: BrowseProductItem[]; key: string }
   | { type: 'state' };
 
 const GAP = theme.space[3];
+const COVER_H = 184;
 
 /** D8. Loja (WB-016): capa, logo, nota, aberta/fechada, taxa e tempo, retirada, trocas e vitrine por seções. Loja fechada é navegável (DEC-022). */
 export default function StoreScreen() {
@@ -59,12 +68,15 @@ export default function StoreScreen() {
     return [...all.filter((p) => p.available), ...all.filter((p) => !p.available)];
   }, [products.data]);
 
+  // Destaques: o que está em oferta na vitrine carregada (só com preço antigo visível; sem oferta, a seção não aparece)
+  const highlights = useMemo(() => items.filter((p) => p.available && p.originalPrice && p.discountPercent).slice(0, 6), [items]);
+
   const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [{ type: 'header' }, { type: 'tabs' }];
+    const out: Row[] = [{ type: 'header' }, ...(highlights.length > 0 ? [{ type: 'highlights' } as const] : []), { type: 'tabs' }];
     for (let i = 0; i < items.length; i += columns) out.push({ type: 'products', items: items.slice(i, i + columns), key: items[i]?.id ?? String(i) });
     if (items.length === 0) out.push({ type: 'state' });
     return out;
-  }, [items, columns]);
+  }, [items, columns, highlights]);
 
   if (store.isError && store.error instanceof ApiError && store.error.status === 404) {
     return (
@@ -100,8 +112,6 @@ export default function StoreScreen() {
 
   const data = store.data;
   const sameStoreCart = cart !== null && cart.storeId === data.id;
-  const cartCount = cart?.count ?? 0;
-  const noun = cartCount === 1 ? t('cart.itemOne') : t('cart.itemMany');
 
   const renderRow = ({ item }: { item: Row }) => {
     switch (item.type) {
@@ -117,6 +127,22 @@ export default function StoreScreen() {
             approximate={point?.approximate ?? true}
             store={data}
           />
+        );
+      case 'highlights':
+        return (
+          <View style={styles.highlights} testID="store.highlights">
+            <Text accessibilityRole="header" style={styles.highlightsTitle} variant="title1">
+              {t('store.highlights')}
+            </Text>
+            <ScrollView contentContainerStyle={styles.highlightsRow} horizontal showsHorizontalScrollIndicator={false}>
+              {highlights.map((p, i) => (
+                <View key={p.id}>
+                  <ProductTile onPress={() => router.push(`/product/${p.id}`)} product={fromBrowseItem(p)} testID={`store.highlight-${p.id}`} width={140} />
+                  {i === 0 ? <Sticker label={t('store.mostOrdered')} rotate={-6} style={styles.stickerPos} /> : null}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
         );
       case 'tabs':
         return (
@@ -165,17 +191,6 @@ export default function StoreScreen() {
   return (
     <Screen
       bottomInset
-      footer={
-        sameStoreCart ? (
-          <Button
-            accessibilityLabel={t('store.cartBarA11y', { count: cartCount, noun, total: formatMoney(cart?.subtotalCents ?? 0) })}
-            label={t('store.cartBar', { count: cartCount, noun, total: formatMoney(cart?.subtotalCents ?? 0) })}
-            onPress={() => router.push('/cart')}
-            size="lg"
-            testID="store.cart-bar"
-          />
-        ) : undefined
-      }
       padded={false}
       scroll={false}
       testID="store.screen"
@@ -190,7 +205,7 @@ export default function StoreScreen() {
         onEndReachedThreshold={0.6}
         renderItem={renderRow}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
+        stickyHeaderIndices={[rows.findIndex((r) => r.type === 'tabs')]}
         testID="store.list"
         ListFooterComponent={
           products.isFetchingNextPage ? (
@@ -206,6 +221,7 @@ export default function StoreScreen() {
           ) : null
         }
       />
+      {sameStoreCart ? <MiniBag testID="store.cart-bar" /> : null}
       <ExchangePolicySheet onClose={() => setSheet(null)} store={data} visible={sheet === 'exchange'} />
       <AboutStoreSheet onClose={() => setSheet(null)} store={data} visible={sheet === 'about'} />
     </Screen>
@@ -223,17 +239,19 @@ function BackBar() {
 
 function SectionTab({ label, selected, onPress, testID }: { label: string; selected: boolean; onPress: () => void; testID: string }) {
   return (
-    <Pressable
+    <Pressy
       accessibilityRole="tab"
       accessibilityState={{ selected }}
+      feedback="selection"
       onPress={onPress}
+      pressedScale={0.97}
       style={[styles.tab, selected && styles.tabSelected]}
       testID={testID}
     >
       <Text color={selected ? 'brand' : 'secondary'} variant="label">
         {label}
       </Text>
-    </Pressable>
+    </Pressy>
   );
 }
 
@@ -251,28 +269,41 @@ interface HeaderProps {
 function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare, pointDefined, approximate }: HeaderProps) {
   const router = useRouter();
   const toast = useToast();
-  const { width } = useWindowDimensions();
-  const coverWidth = Math.min(width, 720);
+  const { top } = useSafeAreaInsets();
   const d = store.delivery;
   const closes = store.open ? closesAtToday(store.hoursToday) : null;
   const status = store.open ? (closes ? t('store.openUntil', { time: closes }) : t('store.open')) : closedLabel(store.opensAt);
   const fee = formatFee(d.feeCents, { approximate });
-  const meta = [formatEta(d.etaMinMinutes, d.etaMaxMinutes), fee ?? undefined, d.distanceM !== null ? formatDistance(d.distanceM) : undefined].filter(Boolean).join(' · ');
-  const freeAbove = d.freeAboveCents > 0 ? t('catalog.freeAbove', { value: formatMoney(d.freeAboveCents) }) : null;
+  const range = pointDefined ? deliveryEta(d) : deliveryEta({ ...d, available: null });
+  const etaBand = range ? t('store.etaBand', { start: range.start, end: range.end }) : t('catalog.outOfArea');
+  const freeAbove = d.freeAboveCents > 0 ? t('store.couponFree', { value: formatMoney(d.freeAboveCents) }) : null;
   const metaA11y = t('store.meta', {
-    eta: formatEta(d.etaMinMinutes, d.etaMaxMinutes),
+    eta: etaBand,
     fee: fee ?? 'a calcular',
     distance: d.distanceM !== null ? formatDistance(d.distanceM) : 'distância indisponível',
   });
   const noDelivery = pointDefined && d.available === false;
   const pickupEta = store.pickup.enabled ? formatEta(store.pickup.prepMinMinutes, store.pickup.prepMaxMinutes) : null;
   const favoriteLabel = favorite.isFavorite ? t('store.unfavorite', { name: store.name }) : t('store.favorite', { name: store.name });
+  const color = coverColor(store.id);
+  const hasCover = Object.keys(store.cover.urls ?? {}).length > 0;
+  const hasLogo = Object.keys(store.logo.urls ?? {}).length > 0;
+  const { width } = useWindowDimensions();
+  const coverWidth = Math.min(width, 720);
 
   return (
     <View>
-      <View>
-        <RemoteImage aspectRatio={16 / 9} priority="high" radius={0} style={{ maxHeight: 320 }} urls={store.cover.urls} width={coverWidth} />
-        <View style={styles.coverActions}>
+      <View style={{ height: COVER_H + top }}>
+        {hasCover ? (
+          <RemoteImage height={COVER_H + top} priority="high" radius={0} urls={store.cover.urls} width={coverWidth} />
+        ) : (
+          <DiagonalBlock color={color} height={COVER_H + top} style={StyleSheet.absoluteFill}>
+            <View pointerEvents="none" style={styles.coverArt}>
+              <ProductArt color="#F2EFE9" ground="rgba(0,0,0,0.35)" name={objectFor(store.name + ' ' + (store.description ?? ''))} size={150} />
+            </View>
+          </DiagonalBlock>
+        )}
+        <View style={[styles.coverActions, { top: top + theme.space[2] }]}>
           <IconButton icon={CaretLeft} label={t('store.back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} overPhoto testID="store.back" />
           <View style={styles.coverRight}>
             <IconButton
@@ -289,22 +320,27 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
             <IconButton icon={ShareNetwork} label={t('store.share')} onPress={onShare} overPhoto testID="store.share" />
           </View>
         </View>
-        <View style={styles.logo}>
-          <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={theme.size.avatarMd} radius={theme.radius.lg} style={styles.logoBorder} urls={store.logo.urls} width={theme.size.avatarMd} />
+        <View style={styles.logoWrap}>
+          <View style={styles.logoShadow} />
+          <View style={styles.logo}>
+            {hasLogo ? (
+              <RemoteImage alt={t('catalog.logoAlt', { name: store.name })} height={60} radius={16} urls={store.logo.urls} width={60} />
+            ) : (
+              <Text style={{ color }} variant="title1">
+                {initials(store.name)}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
 
       <View style={styles.info}>
-        <Text accessibilityRole="header" style={styles.nameSpace} variant="title2">
+        <Text accessibilityRole="header" variant="hero">
           {store.name}
         </Text>
-        <View style={styles.rowWrap}>
-          <Pressable accessibilityLabel={`${t('store.reviews')}, ${ratingA11y(store.rating)}`} accessibilityRole="button" onPress={onReviews} style={styles.rating} testID="store.rating">
-            <Star color={theme.color.rating.star} size={20} weight="fill" />
-            <Text variant="bodyStrong">{formatRating(store.rating)}</Text>
-          </Pressable>
-          <Badge icon={Clock} label={status} tone={store.open ? 'success' : 'neutral'} />
-        </View>
+        <Text color={store.open ? 'success' : 'secondary'} variant="captionStrong">
+          {status}
+        </Text>
 
         {!store.open ? (
           <Banner testID="store.closed-banner" text={store.opensAt ? t('store.closedBanner', { label: closedLabel(store.opensAt) }) : t('store.pausedBanner')} tone="info" />
@@ -324,17 +360,36 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           />
         ) : null}
 
-        <View accessible accessibilityLabel={metaA11y} style={styles.metaBlock}>
-          <MetaLine icon={Truck} text={meta} />
-          {freeAbove ? <MetaLine icon={Truck} text={freeAbove} /> : null}
-          {d.minOrderCents > 0 ? <MetaLine icon={Package} text={t('store.minOrder', { value: formatMoney(d.minOrderCents) })} /> : null}
-          {pickupEta ? <MetaLine icon={Storefront} text={t('store.pickup', { eta: pickupEta })} /> : null}
+        <View accessible accessibilityLabel={metaA11y} style={styles.stats}>
+          <Pressy accessibilityLabel={`${t('store.reviews')}, ${ratingA11y(store.rating)}`} accessibilityRole="button" onPress={onReviews} style={styles.stat} testID="store.rating">
+            <View style={styles.statTop}>
+              <Text variant="title1">{formatRating(store.rating).split(' · ')[0]}</Text>
+              <Star color={theme.color.rating.star} size={16} weight="fill" />
+            </View>
+            <Text color="secondary" variant="caption">
+              {store.rating.isNew || store.rating.average === null ? t('store.reviews') : t('store.reviewsCount', { count: store.rating.count })}
+            </Text>
+          </Pressy>
+          <View style={[styles.stat, styles.statMid]} testID="store.eta">
+            <Text variant="title1">{range ? `${range.start} – ${range.end}` : '—'}</Text>
+            <Text color="secondary" variant="caption">
+              {range ? t('store.etaCaption') : t('catalog.outOfArea')}
+            </Text>
+          </View>
+          <View style={styles.stat}>
+            <Text variant="title1">{fee ?? '—'}</Text>
+            <Text color="secondary" variant="caption">
+              {t('store.feeCaption')}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.rowWrap}>
-          {store.exchangePolicy.voluntaryDays > 0 ? <Badge icon={ArrowsClockwise} label={t('catalog.acceptsExchange')} tone="brand" /> : null}
-          {d.freeShipping ? <Badge icon={Truck} label={t('catalog.freeShipping')} tone="success" /> : null}
-        </View>
+        <ScrollView contentContainerStyle={styles.tickets} horizontal showsHorizontalScrollIndicator={false} style={styles.ticketsScroll}>
+          {freeAbove ? <Ticket label={freeAbove} /> : null}
+          {pickupEta ? <Ticket label={t('store.pickupFree', { address: store.pickup.address ?? store.name })} icon="store" /> : null}
+          {store.exchangePolicy.voluntaryDays > 0 ? <Ticket label={t('store.exchangeTicket', { days: store.exchangePolicy.voluntaryDays })} icon="exchange" /> : null}
+          {d.minOrderCents > 0 ? <Ticket label={t('store.minOrder', { value: formatMoney(d.minOrderCents) })} icon="box" /> : null}
+        </ScrollView>
         <View style={styles.links}>
           <Button label={t('store.exchangePolicy')} onPress={onExchange} testID="store.exchange-policy" variant="text" />
           <Button label={t('store.about')} onPress={onAbout} testID="store.about" variant="text" />
@@ -344,32 +399,45 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
   );
 }
 
-function MetaLine({ icon: Icon, text }: { icon: typeof Truck; text: string }) {
+/** Bilhete de vantagem (cupom, retirada, troca): bloco com recorte, ícone duotone de marca e texto curto. */
+function Ticket({ label, icon = 'coupon' }: { label: string; icon?: 'coupon' | 'store' | 'exchange' | 'box' }) {
+  const Icon = icon === 'store' ? Storefront : icon === 'exchange' ? ArrowsClockwise : icon === 'box' ? Package : TicketIcon;
   return (
-    <View style={styles.metaLine}>
-      <Icon color={theme.color.text.secondary} size={theme.size.iconSm} />
-      <Text color="secondary">{text}</Text>
+    <View accessible accessibilityLabel={label} style={styles.ticket}>
+      <Icon color={theme.color.action.primary} duo={theme.color.brand[300]} size={28} weight="duotone" />
+      <Text numberOfLines={2} style={styles.ticketText} variant="captionStrong">
+        {label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   backBar: { minHeight: theme.size.headerHeight, justifyContent: 'center', paddingHorizontal: theme.space[1] },
-  coverActions: { position: 'absolute', top: theme.space[2], left: theme.space[2], right: theme.space[2], flexDirection: 'row', justifyContent: 'space-between' },
+  coverActions: { position: 'absolute', left: theme.space[3], right: theme.space[3], flexDirection: 'row', justifyContent: 'space-between' },
   coverRight: { flexDirection: 'row', gap: theme.space[2] },
-  logo: { position: 'absolute', left: theme.layout.screenPaddingX, bottom: -theme.size.avatarMd / 2 },
-  logoBorder: { borderWidth: theme.borderWidth.strong, borderColor: theme.color.surface.card },
-  info: { paddingHorizontal: theme.layout.screenPaddingX, paddingTop: theme.size.avatarMd / 2 + theme.space[2], gap: theme.space[2], paddingBottom: theme.space[2] },
-  nameSpace: { paddingTop: theme.space[1] },
-  rowWrap: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.space[2] },
-  rating: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1], minHeight: theme.size.touchMin },
-  metaBlock: { gap: theme.space[1] },
-  metaLine: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2] },
+  coverArt: { position: 'absolute', right: 24, top: 36 },
+  logoWrap: { position: 'absolute', left: theme.layout.screenPaddingX, bottom: -28 },
+  logoShadow: { position: 'absolute', left: theme.hardShadow.offsetLg, top: theme.hardShadow.offsetLg, width: 64, height: 64, borderRadius: 18, backgroundColor: theme.color.surface.ink, transform: [{ rotate: '-6deg' }] },
+  logo: { width: 64, height: 64, borderRadius: 18, backgroundColor: theme.color.neutral[0], alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transform: [{ rotate: '-6deg' }] },
+  info: { paddingHorizontal: theme.layout.screenPaddingX, paddingTop: 40, gap: theme.space[2], paddingBottom: theme.space[2] },
+  stats: { flexDirection: 'row', borderTopWidth: theme.borderWidth.strong, borderTopColor: theme.color.neutral[900], marginTop: theme.space[3] },
+  stat: { flex: 1, paddingVertical: theme.space[3], gap: 2, justifyContent: 'center', minHeight: theme.size.touchMin },
+  statMid: { paddingHorizontal: theme.space[3], borderLeftWidth: theme.borderWidth.hairline, borderRightWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default },
+  statTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ticketsScroll: { marginHorizontal: -theme.layout.screenPaddingX },
+  tickets: { paddingHorizontal: theme.layout.screenPaddingX, gap: theme.space[3], paddingVertical: theme.space[2] },
+  ticket: { width: 200, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: theme.space[3], backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.lg, paddingHorizontal: theme.space[3], paddingVertical: theme.space[2] },
+  ticketText: { flex: 1 },
   links: { flexDirection: 'row', gap: theme.space[2], marginLeft: -theme.space[4] },
-  tabsWrap: { backgroundColor: theme.color.surface.background, borderBottomWidth: theme.borderWidth.hairline, borderBottomColor: theme.color.border.subtle },
+  highlights: { paddingTop: theme.space[4], gap: theme.space[3] },
+  highlightsTitle: { paddingHorizontal: theme.layout.screenPaddingX },
+  highlightsRow: { paddingHorizontal: theme.layout.screenPaddingX, gap: theme.space[3] },
+  stickerPos: { position: 'absolute', left: 8, bottom: 96 },
+  tabsWrap: { backgroundColor: theme.color.surface.card, borderBottomWidth: theme.borderWidth.hairline, borderBottomColor: theme.color.border.subtle },
   tabs: { paddingHorizontal: theme.layout.screenPaddingX, gap: theme.space[2] },
-  tab: { minHeight: theme.size.touchMin, paddingHorizontal: theme.space[3], justifyContent: 'center', borderBottomWidth: theme.borderWidth.strong, borderBottomColor: 'transparent' },
-  tabSelected: { borderBottomColor: theme.color.border.focus },
+  tab: { minHeight: theme.size.touchMin, paddingHorizontal: theme.space[3], justifyContent: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabSelected: { borderBottomColor: theme.color.brand[500] },
   productRow: { flexDirection: 'row', paddingHorizontal: theme.layout.screenPaddingX, paddingTop: theme.space[4] },
   skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, padding: theme.layout.screenPaddingX },
   footerLoading: { flexDirection: 'row', gap: GAP, padding: theme.layout.screenPaddingX, alignItems: 'center' },

@@ -12,11 +12,13 @@ export interface QuantityStepperProps {
   /** Na sacola, o "−" em 1 vira lixeira "Remover" (onda-4 S1). */
   onRemove?: () => void;
   removeLabel?: string;
+  /** `lg`: 56 de altura, para alinhar com o botão primário da barra do produto. */
+  size?: 'md' | 'lg';
   testID?: string;
 }
 
 /** Stepper de 48 com − e + de 48x48. Máximo = estoque: "+" desabilitado (o aviso "Só 3 em estoque" é da tela). Ajustável para o leitor de tela. */
-export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, testID }: QuantityStepperProps) {
+export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, size = 'md', testID }: QuantityStepperProps) {
   const atMin = value <= 1;
   const atMax = value >= max;
   const label = t('product.qty', { n: value });
@@ -34,7 +36,7 @@ export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, t
           else onRemove?.();
         }
       }}
-      style={styles.wrap}
+      style={[styles.wrap, size === 'lg' && styles.wrapLg]}
       testID={testID}
     >
       <Pressable
@@ -56,7 +58,7 @@ export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, t
           <Minus color={atMin ? theme.color.text.disabled : theme.color.text.primary} size={theme.size.iconSm} />
         )}
       </Pressable>
-      <Text style={styles.value} variant="bodyStrong">
+      <Text style={styles.value} variant="priceStrong">
         {value}
       </Text>
       <Pressable
@@ -78,7 +80,8 @@ export function QuantityStepper({ value, max, onChange, onRemove, removeLabel, t
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', height: theme.size.touchMin, borderRadius: theme.radius.pill, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card },
+  wrap: { flexDirection: 'row', alignItems: 'center', height: theme.size.touchMin, borderRadius: theme.radius.button, borderWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card },
+  wrapLg: { height: theme.size.controlLg },
   btn: { width: theme.size.touchMin, height: theme.size.touchMin, alignItems: 'center', justifyContent: 'center' },
   value: { minWidth: 40, textAlign: 'center' },
 });

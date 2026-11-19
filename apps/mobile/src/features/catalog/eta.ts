@@ -33,3 +33,36 @@ export function formatEtaRange(minMinutes: number, maxMinutes: number, from?: Da
 export function isBeyondReach(delivery: { available: boolean; etaMaxMinutes: number }): boolean {
   return !delivery.available || delivery.etaMaxMinutes > MAX_ETA_MINUTES;
 }
+
+export interface EtaLike {
+  fromAt: string;
+  toAt: string;
+}
+
+export interface DeliveryEtaSource {
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  /** Faixa calculada pelo servidor (DEC-053); aditivo: apps/servidores sem o campo caem na conta local. */
+  eta?: EtaLike | null | undefined;
+  available?: boolean | null | undefined;
+}
+
+const clockOf = (iso: string): string | null => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : clock(d);
+};
+
+/**
+ * Faixa de chegada de uma loja/pedido: a do servidor (`eta.fromAt`/`toAt`) quando existe; senão âncora local (agora + minutos).
+ * `null` = fora da área (o servidor diz `available=false`).
+ */
+export function deliveryEta(d: DeliveryEtaSource, from?: Date): { start: string; end: string } | null {
+  if (d.available === false) return null;
+  if (d.eta) {
+    const start = clockOf(d.eta.fromAt);
+    const end = clockOf(d.eta.toAt);
+    if (start && end) return { start, end };
+  }
+  if (d.etaMaxMinutes > MAX_ETA_MINUTES) return null;
+  return etaWindow(d.etaMinMinutes, d.etaMaxMinutes, from);
+}
