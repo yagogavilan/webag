@@ -191,11 +191,18 @@ export class DataExportService implements OnApplicationBootstrap, OnApplicationS
     await this.storage.putObject('private', key, body, 'application/json');
     const validityDays = await this.params.getNumber('exportacao_validade_dias');
     const expiresAt = new Date(now.getTime() + validityDays * 86_400_000);
-    const [updated] = await this.db
-      .update(dataExports)
-      .set({ status: 'ready', readyAt: now, expiresAt, objectKey: key, sizeBytes: body.length, lastError: null })
-      .where(and(eq(dataExports.id, exportId), eq(dataExports.status, 'processing')))
-      .returning({ id: dataExports.id });
+    let updated: { id: string } | undefined;
+    try {
+      [updated] = await this.db
+        .update(dataExports)
+        .set({ status: 'ready', readyAt: now, expiresAt, objectKey: key, sizeBytes: body.length, lastError: null })
+        .where(and(eq(dataExports.id, exportId), eq(dataExports.status, 'processing')))
+        .returning({ id: dataExports.id });
+    } catch (error) {
+      // SEC-164: o arquivo foi enviado mas o banco falhou: sem `objectKey` registrado nada o encontraria depois. Apaga e propaga o erro (o retry refaz).
+      await this.storage.deleteObject('private', key).catch(() => undefined);
+      throw error;
+    }
     if (!updated) {
       await this.storage.deleteObject('private', key); // a conta foi excluída no meio: não deixa arquivo órfão
       return;
@@ -212,6 +219,14 @@ export class DataExportService implements OnApplicationBootstrap, OnApplicationS
     if (!user) throw new Error('usuário inexistente');
     const roles = await this.db.select({ role: t.userRoles.role }).from(t.userRoles).where(eq(t.userRoles.userId, userId));
 
+    const reports = await this.db.select().from(t.contentReports).where(eq(t.contentReports.reporterId, userId)).orderBy(asc(t.contentReports.createdAt)).limit(MAX_ROWS);
+    const campaignsReceived = await this.db
+      .select({ title: t.pushCampaigns.title, sentAt: t.pushCampaignRecipients.sentAt, openedAt: t.pushCampaignRecipients.openedAt })
+      .from(t.pushCampaignRecipients)
+      .innerJoin(t.pushCampaigns, eq(t.pushCampaigns.id, t.pushCampaignRecipients.campaignId))
+      .where(eq(t.pushCampaignRecipients.userId, userId))
+      .orderBy(asc(t.pushCampaignRecipients.sentAt))
+      .limit(MAX_ROWS);
     const addresses = await this.db.select().from(t.userAddresses).where(eq(t.userAddresses.userId, userId)).orderBy(asc(t.userAddresses.createdAt)).limit(MAX_ROWS);
     const orderRows = await this.db
       .select({ order: t.orders, storeName: t.stores.name })
@@ -276,6 +291,9 @@ export class DataExportService implements OnApplicationBootstrap, OnApplicationS
       consents: consentRows.map((c) => ({ purpose: c.purpose, granted: c.granted, textVersion: c.textVersion, channel: c.channel, at: iso(c.createdAt) })),
       termsAcceptances: acceptances.map((a) => ({ document: a.type, version: a.version, acceptedAt: iso(a.a.acceptedAt), ip: a.a.ip, platform: a.a.platform })),
       pushDevices: devices.map((d) => ({ platform: d.platform, registeredAt: iso(d.createdAt), lastSeenAt: iso(d.lastSeenAt) })),
+      // SEC-164 (b): art. 19, II, declaração completa: denúncias feitas pelo titular e campanhas de push recebidas.
+      contentReports: reports.map((r) => ({ target: r.targetType, reason: r.reason, text: r.text, status: r.status, createdAt: iso(r.createdAt) })),
+      pushCampaignsReceived: campaignsReceived.map(({ title, sentAt, openedAt }) => ({ title, receivedAt: iso(sentAt), openedAt: iso(openedAt) })),
       sessions: sessionRows.map((s) => ({ createdAt: iso(s.createdAt), lastUsedAt: iso(s.lastUsedAt), userAgent: s.userAgent, ip: s.ip, revoked: s.revokedAt !== null })),
       couponRedemptions: redemptions.map(({ r, code }) => ({ code, discountCents: r.discountCents, at: iso(r.createdAt) })),
       privacyRequests: requests.map((r) => ({ protocol: r.protocol, type: r.type, status: r.status, receivedAt: iso(r.receivedAt), answeredAt: iso(r.answeredAt), answer: r.answer })),

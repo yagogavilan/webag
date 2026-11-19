@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { DataExportService } from '../src/modules/privacy/data-export.service.js';
@@ -83,6 +84,9 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
     expect(doc.orders[0]).toMatchObject({ number: orderNumber, status: 'delivered', store: shop.store.id ? 'Loja Pedidos' : '' });
     expect(doc.orders[0]!.items[0]).toMatchObject({ name: 'Camiseta Azul', quantity: 1, unitPriceCents: 8_000 });
     expect(doc.consents).toEqual([]);
+    // SEC-164 (b): declaração completa traz também as denúncias feitas e as campanhas de push recebidas.
+    expect(doc).toHaveProperty('contentReports');
+    expect(doc).toHaveProperty('pushCampaignsReceived');
     expect(doc.pushDevices[0]).toEqual(expect.objectContaining({ platform: 'ios' }));
     for (const forbidden of [pushToken, 'passwordHash', 'tokenHash', 'codeHash', 'totpSecret', 'refreshToken', 'Bearer ']) expect(file.text, forbidden).not.toContain(forbidden);
     expect(file.text).not.toContain(shop.store.owner.email); // o dono da loja é terceiro
@@ -162,5 +166,37 @@ describe('Exportar meus dados (WB-212, SEC-008, DEC-015)', () => {
     expect(await memoryStorage(ctx).getObject('private', row!.objectKey!, { maxBytes: 1e6 })).toBeNull();
     expect(await ctx.db.select().from(dataExports).where(eq(dataExports.userId, user.userId))).toHaveLength(0);
     expect(await ctx.db.select().from(dataExportLinks).where(eq(dataExportLinks.exportId, row!.id))).toHaveLength(0);
+  });
+
+  it('SEC-164 (a): se o banco falhar depois do upload, o arquivo é apagado (nada de objeto órfão sem chave registrada); a anonimização apaga também pela chave calculada', async () => {
+    const { DRIZZLE } = await import('../src/platform/database/database.module.js');
+    const user = await createCustomer(ctx);
+    await ask(user.accessToken, STRONG_PASSWORD).expect(202);
+    const [row] = await ctx.db.select().from(dataExports).where(eq(dataExports.userId, user.userId));
+    const key = `exports/${user.userId}/${row!.id}.json`;
+    const db = ctx.app.get(DRIZZLE) as typeof ctx.db;
+    const realUpdate = db.update.bind(db);
+    let armed = true;
+    const spy = vi.spyOn(db, 'update').mockImplementation(((table: Parameters<typeof db.update>[0]) => {
+      const builder = realUpdate(table);
+      if (armed && table === dataExports) {
+        const originalSet = builder.set.bind(builder);
+        // o `ready` (depois do upload) falha uma vez; o resto segue
+        (builder as unknown as { set: (v: Record<string, unknown>) => unknown }).set = (values) => {
+          if (values.status === 'ready') {
+            armed = false;
+            throw new Error('banco caiu depois do upload');
+          }
+          return originalSet(values as never);
+        };
+      }
+      return builder;
+    }) as typeof db.update);
+    try {
+      expect(await service.processQueue()).toMatchObject({ failed: 1 });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await memoryStorage(ctx).getObject('private', key, { maxBytes: 1e6 })).toBeNull(); // sem órfão
   });
 });

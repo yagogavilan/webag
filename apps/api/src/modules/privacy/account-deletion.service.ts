@@ -335,7 +335,11 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       await this.storage.deleteObject('private', photo.objectKey);
       for (const key of Object.values(photo.variants ?? {})) await this.storage.deleteObject('public', key);
     }
-    for (const file of exportFiles) if (file.objectKey) await this.storage.deleteObject('private', file.objectKey);
+    // SEC-164: a chave é calculada pelo id (determinística), não só pelo `objectKey` gravado: o arquivo enviado antes de uma falha do banco também some.
+    for (const file of exportFiles) {
+      if (file.objectKey) await this.storage.deleteObject('private', file.objectKey);
+      await this.storage.deleteObject('private', `exports/${userId}/${file.id}.json`).catch(() => undefined);
+    }
 
     const summary: Record<string, number> = {};
     await this.db.transaction(async (tx) => {
