@@ -69,9 +69,9 @@ export interface OrderFinance {
   serviceFeeCents: number;
   /** O que o cliente paga. */
   totalCents: number;
-  /** Valor bruto da loja: subtotal - cupom da loja + frete. */
+  /** Valor bruto da loja: subtotal - cupom da loja. A taxa de entrega NÃO é da loja (DEC-036a). */
   merchantGrossCents: number;
-  /** `application_fee` do split: comissão + taxa de serviço - desconto da plataforma (>= 0). */
+  /** `application_fee` do split: comissão + taxa de entrega + taxa de serviço - desconto da plataforma (>= 0). */
   applicationFeeCents: number;
   /** Receita da Webag (igual à application_fee; mantida separada para o extrato ler sem confundir). */
   platformRevenueCents: number;
@@ -83,8 +83,9 @@ export interface OrderFinance {
  * RN-10 inteira, em uma função pura (a sacola, o pedido e o ledger leem a mesma conta).
  *  - base = subtotal - cupom da loja; o cupom da loja é rateado entre os itens pelo método do maior resto;
  *  - comissão = soma, por item, de round_half_up(base do item x percentual do item);
- *  - desconto da plataforma limitado à comissão (a Webag nunca paga ao lojista por fora);
- *  - total = bruto da loja - desconto da plataforma + taxa de serviço.
+ *  - taxa de entrega e de serviço são receita da Webag; o lojista recebe itens - cupom da loja - comissão (DEC-036a);
+ *  - desconto da plataforma limitado à `application_fee` (a Webag nunca paga ao lojista por fora);
+ *  - total = bruto da loja + entrega + serviço - desconto da plataforma.
  */
 export function computeOrderFinance(input: OrderFinanceInput): OrderFinance {
   const ints = [input.storeCouponCents, input.platformDiscountCents, input.deliveryFeeCents, input.serviceFeeCents, ...input.items.map((i) => i.subtotalCents)];
@@ -101,9 +102,10 @@ export function computeOrderFinance(input: OrderFinanceInput): OrderFinance {
   });
   const commissionCents = items.reduce((sum, i) => sum + i.commissionCents, 0);
 
-  const platformDiscountCents = Math.min(input.platformDiscountCents, commissionCents);
-  const merchantGrossCents = subtotalCents - input.storeCouponCents + input.deliveryFeeCents;
-  const applicationFeeCents = commissionCents + input.serviceFeeCents - platformDiscountCents;
+  // RN-09/RN-10: o desconto da plataforma sai da parte da Webag (`application_fee` antes do desconto), nunca do lojista.
+  const platformDiscountCents = Math.min(input.platformDiscountCents, commissionCents + input.deliveryFeeCents + input.serviceFeeCents);
+  const merchantGrossCents = subtotalCents - input.storeCouponCents;
+  const applicationFeeCents = commissionCents + input.deliveryFeeCents + input.serviceFeeCents - platformDiscountCents;
   return {
     subtotalCents,
     storeCouponCents: input.storeCouponCents,
@@ -114,7 +116,7 @@ export function computeOrderFinance(input: OrderFinanceInput): OrderFinance {
     platformDiscountCapped: platformDiscountCents < input.platformDiscountCents,
     deliveryFeeCents: input.deliveryFeeCents,
     serviceFeeCents: input.serviceFeeCents,
-    totalCents: merchantGrossCents - platformDiscountCents + input.serviceFeeCents,
+    totalCents: merchantGrossCents + input.deliveryFeeCents - platformDiscountCents + input.serviceFeeCents,
     merchantGrossCents,
     applicationFeeCents,
     platformRevenueCents: applicationFeeCents,

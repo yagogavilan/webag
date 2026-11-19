@@ -68,11 +68,13 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   const pool = app.get<pg.Pool>(PG_POOL);
   const redis = app.get<Redis>(REDIS);
   await redis.connect().catch(() => undefined);
+  const db = drizzle(pool, { schema, casing: 'snake_case' });
+  await seedDeliveryFees(db);
   return {
     app,
     http: withRandomIp(request(app.getHttpServer())),
     mail: mail.current!,
-    db: drizzle(pool, { schema, casing: 'snake_case' }),
+    db,
     pool,
     redis,
     close: () => app.close(),
@@ -136,4 +138,19 @@ export function listRoutes(app: NestExpressApplication): { method: string; path:
     }
   }
   return routes;
+}
+
+/**
+ * Base mínima do modelo da Webag (DEC-036): tabela padrão de entrega com 1 faixa de R$ 5,00 até o raio máximo (15 km) e pedido
+ * mínimo zero, para os testes que não tratam de frete. Teste que trata de frete grava a própria tabela (nova versão) e o
+ * próprio mínimo. Idempotente entre arquivos de teste que compartilham o banco da execução.
+ */
+async function seedDeliveryFees(db: ReturnType<typeof drizzle<typeof schema>>): Promise<void> {
+  const [table] = await db
+    .insert(schema.deliveryFeeTables)
+    .values({ scopeType: 'default', scopeKey: 'default', version: 1, effectiveFrom: new Date(Date.now() - 86_400_000), reason: 'base dos testes' })
+    .onConflictDoNothing()
+    .returning({ id: schema.deliveryFeeTables.id });
+  if (table) await db.insert(schema.deliveryFeeTiers).values({ tableId: table.id, position: 0, fromM: 0, toM: 15_000, feeCents: 500, exchangeFeeCents: 250, expectedCostCents: 0, etaMinutes: 10 });
+  await db.insert(schema.parameters).values({ key: 'pedido_minimo_cents', value: 0 }).onConflictDoNothing();
 }

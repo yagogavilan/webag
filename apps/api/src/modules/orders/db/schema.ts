@@ -47,6 +47,8 @@ export const orders = pgTable(
     /** `application_fee` do split: comissão + taxa de serviço - desconto da plataforma. */
     applicationFeeCents: integer().notNull(),
     finance: jsonb().$type<Record<string, unknown>>().notNull(),
+    /** Faixa da tabela de entrega usada, com distância e taxa de troca (RN-05, DEC-036): mudar a tabela depois não altera o pedido. */
+    deliverySnapshot: jsonb().$type<Record<string, unknown>>(),
     paymentMethod: text({ enum: ['pix', 'card'] }).notNull(),
     paymentAttemptId: uuid().references(() => paymentAttempts.id),
     exchangeVoluntaryDays: integer().notNull().default(0),

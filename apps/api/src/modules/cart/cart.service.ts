@@ -15,7 +15,8 @@ import { stores, storeSettings } from '../stores/db/schema.js';
 import { ExposureLimitService, hoursToday, isOpen, nextOpening, StoreSettingsService, type OpeningInput } from '../stores/index.js';
 import { cartItems, carts, couponRedemptions, coupons } from './db/schema.js';
 import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
-import { serviceFeeCents, startingFee, summarize } from './domain/pricing.js';
+import { serviceFeeCents, summarize } from './domain/pricing.js';
+import { DeliveryFeesService, type DeliveryFeeSnapshot } from '../logistics/index.js';
 
 export abstract class PurchaseHistoryPort {
   /** O cliente já tem pedido pago? (cupom de primeira compra). Sem pedidos (Onda 4), ninguém tem. */
@@ -60,6 +61,7 @@ export class CartService {
     private readonly purchases: PurchaseHistoryPort,
     private readonly commissions: CommissionService,
     private readonly exposure: ExposureLimitService,
+    private readonly fees: DeliveryFeesService,
   ) {}
 
   // ------------------------------------------------------------------ leitura
@@ -195,27 +197,30 @@ export class CartService {
     let deliveryFee = 0;
     let deliveryEstimated = false;
     let deliveryAddress: Awaited<ReturnType<CartService['addressFor']>> = null;
+    let deliverySnapshot: DeliveryFeeSnapshot | null = null;
     const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false };
     if (ctx.mode === 'pickup') {
       if (!settings.pickupEnabled) blockers.push('PICKUP_UNAVAILABLE');
     } else {
       const address = await this.addressFor(userId, ctx.addressId);
       deliveryAddress = address;
-      const tiers = await this.settings.tiers(store.id);
-      delivery.feeFromCents = startingFee(settings.feeMode, settings.feeFixedCents, tiers);
+      // L.1 (DEC-036): a taxa vem da tabela do admin pelo DESTINO; mínimo, frete grátis e raio são globais.
+      const freeAbove = await this.params.getNumber('frete_gratis_acima_cents');
+      delivery.feeFromCents = await this.fees.startingFeeFor(store.addressCityId ?? null);
       if (!address) {
         blockers.push('NEEDS_ADDRESS');
         deliveryEstimated = true;
         delivery.estimated = true;
-        deliveryFee = delivery.feeFromCents;
-        if (settings.freeAboveCents > 0 && subtotal >= settings.freeAboveCents) deliveryFee = 0;
+        deliveryFee = delivery.feeFromCents ?? 0;
+        if (freeAbove > 0 && subtotal >= freeAbove) deliveryFee = 0;
       } else {
         delivery.addressId = address.id;
-        const quote = await this.settings.quoteDelivery(store.id, { lat: address.lat, lng: address.lng }, subtotal);
+        const quote = await this.fees.quote(store.id, { lat: address.lat, lng: address.lng, cityId: address.cityId, neighborhoodId: address.neighborhoodId }, subtotal);
         delivery.available = quote.available;
-        delivery.distanceM = quote.distanceM === null ? null : Math.round(quote.distanceM);
-        if (!quote.available) blockers.push('OUT_OF_RANGE');
+        delivery.distanceM = quote.distanceM;
+        if (!quote.available) blockers.push('OUT_OF_RANGE'); // sem tabela para o destino também some a entrega: o admin vê o alerta na prévia
         deliveryFee = quote.feeCents ?? 0;
+        deliverySnapshot = quote.snapshot;
       }
     }
 
@@ -243,7 +248,8 @@ export class CartService {
       serviceFeeCents: serviceFee,
       coupon: appliedCoupon ? { kind: appliedCoupon.kind, scope: appliedCoupon.scope, value: appliedCoupon.value, percentCapCents: appliedCoupon.percentCapCents } : null,
       commissionPct: await this.params.getNumber('comissao_padrao_pct'),
-      commissionCapCents,
+      // Teto do desconto da plataforma = `application_fee` antes do desconto: comissão + entrega + serviço (RN-09).
+      commissionCapCents: commissionCapCents + deliveryFee + serviceFee,
       minTotalCents: await this.params.getNumber('cupom_total_minimo_cents'),
     });
 
@@ -251,7 +257,8 @@ export class CartService {
     const opening = await this.openingOf(store.id, settings, now);
     if (storeRow.visible && !opening.open) blockers.push('STORE_CLOSED');
     if (hasUnavailable) blockers.push('ITEM_UNAVAILABLE');
-    const missing = subtotal < settings.minOrderCents ? settings.minOrderCents - subtotal : null;
+    const minOrderCents = await this.params.getNumber('pedido_minimo_cents'); // global (DEC-036b)
+    const missing = subtotal < minOrderCents ? minOrderCents - subtotal : null;
     if (missing !== null && subtotal > 0) blockers.push('BELOW_MINIMUM');
     if (result.totalCents > (await this.params.getNumber('pedido_max_cents'))) blockers.push('ABOVE_MAX_ORDER');
     // WB-225 / SEC-062: loja nova tem teto por pedido (R$ 500 por padrão) até completar o prazo ou os pedidos entregues.
@@ -271,7 +278,7 @@ export class CartService {
         opensAt: opening.opensAt,
         etaMinMinutes: settings.etaMinMinutes,
         etaMaxMinutes: settings.etaMaxMinutes,
-        minOrder: money(settings.minOrderCents),
+        minOrder: money(minOrderCents),
       },
       items,
       coupon: couponView,
@@ -288,6 +295,7 @@ export class CartService {
       settings,
       opening,
       address: deliveryAddress,
+      deliverySnapshot,
       coupon: appliedCoupon,
       result,
       blockers,

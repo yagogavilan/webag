@@ -235,15 +235,15 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     }
   }
 
-  /** Cupom da loja reduz a base da comissão; cupom da plataforma é custo da Webag e limitado à comissão (DEC-016). */
+  /** Cupom da loja reduz a base da comissão; cupom da plataforma e frete grátis são custo da Webag, limitados à `application_fee` (DEC-016, DEC-036). */
   private financeOf(quote: NonNullable<Awaited<ReturnType<CartService['quote']>>['quote']>): OrderFinance {
     const { result, coupon } = quote;
     let storeCoupon = 0;
     let platform = 0;
-    let delivery = result.deliveryFeeCents;
+    const delivery = result.deliveryFeeCents;
     if (coupon) {
-      if (coupon.scope === 'platform') platform = result.discountCents;
-      else if (coupon.kind === 'free_shipping') delivery -= result.discountCents; // a loja absorve o frete
+      // DEC-036a: o frete é da Webag; cupom de frete grátis (e todo cupom da plataforma) é custo dela e sai da `application_fee`.
+      if (coupon.scope === 'platform' || coupon.kind === 'free_shipping') platform = result.discountCents;
       else storeCoupon = result.discountCents;
     }
     return computeOrderFinance({
@@ -300,6 +300,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
               totalCents: finance.totalCents,
               commissionCents: finance.commissionCents,
               applicationFeeCents: finance.applicationFeeCents,
+              deliverySnapshot: input.mode === 'delivery' ? (quote.deliverySnapshot as unknown as Record<string, unknown> | null) : null,
               finance: { ...finance, platformDiscountCapped: finance.platformDiscountCapped || quote.result.platformDiscountCapped },
               paymentMethod: input.paymentMethod,
               exchangeVoluntaryDays: settings.voluntaryExchangeDays,

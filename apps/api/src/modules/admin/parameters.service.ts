@@ -84,8 +84,20 @@ export class ParametersService {
     if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
     const problem = validateParameterValue(definition, value);
     if (problem) throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: problem, errors: [{ field: 'value', message: problem }] });
+    await this.assertFreeShippingRule(key, value as number);
     await this.write(definition, value as string | number, reason, ctx, 'parameter.update', expectedUpdatedAt);
     return this.view(key);
+  }
+
+  /** RN-04 / R-17c: entrega grátis acima de X precisa ser estritamente maior que o pedido mínimo (0 desliga o grátis). */
+  private async assertFreeShippingRule(key: string, value: number): Promise<void> {
+    if (key !== 'pedido_minimo_cents' && key !== 'frete_gratis_acima_cents') return;
+    const min = key === 'pedido_minimo_cents' ? value : await this.getNumber('pedido_minimo_cents');
+    const freeAbove = key === 'frete_gratis_acima_cents' ? value : await this.getNumber('frete_gratis_acima_cents');
+    if (freeAbove !== 0 && freeAbove <= min) {
+      const detail = 'O valor para entrega grátis precisa ser maior que o pedido mínimo (ou 0 para desligar).';
+      throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail, errors: [{ field: 'value', message: detail }] });
+    }
   }
 
   /** WB-119 C4: volta ao padrão de seed. */

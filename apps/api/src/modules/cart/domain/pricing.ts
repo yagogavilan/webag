@@ -66,8 +66,8 @@ export function summarize(input: PricingInput): PricingResult {
   let discount = face;
   let platformDiscountCapped = false;
   if (coupon?.scope === 'platform') {
-    // No split o desconto da plataforma não passa da comissão do pedido (WB-116 C6); a base é o subtotal (sem cupom de loja aqui).
-    const cap = input.commissionCapCents ?? commissionCents(subtotalCents, input.commissionPct);
+    // No split o desconto da plataforma não passa da `application_fee` do pedido: comissão + entrega + serviço (WB-116 C6, DEC-036); a base é o subtotal (sem cupom de loja aqui).
+    const cap = input.commissionCapCents ?? commissionCents(subtotalCents, input.commissionPct) + deliveryFeeCents + serviceFeeCents;
     if (discount > cap) {
       discount = cap;
       platformDiscountCapped = true;

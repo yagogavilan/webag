@@ -6,6 +6,7 @@ import { decodeCursor, encodeCursor, parseLimit } from '../../platform/http/pagi
 import { ParametersService } from '../admin/index.js';
 import { productImages, products, productVariants, storeSections } from '../catalog/db/schema.js';
 import { effectivePrice } from '../catalog/domain/price.js';
+import { DeliveryFeesService } from '../logistics/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { users } from '../identity/db/schema.js';
@@ -30,6 +31,7 @@ export class BrowseService {
     private readonly media: MediaService,
     private readonly params: ParametersService,
     private readonly settings: StoreSettingsService,
+    private readonly fees: DeliveryFeesService,
   ) {}
 
   /** Loja visível (RN-03: aprovada, conta de recebimento ativa, produto ativo); qualquer outra coisa é 404. */
@@ -79,7 +81,7 @@ export class BrowseService {
       this.ratingOf(and(eq(reviews.storeId, store.id), sql`${reviews.productId} is null`)!),
       this.db.select().from(storeSections).where(eq(storeSections.storeId, store.id)).orderBy(asc(storeSections.position)),
       this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, [store.logoAssetId, store.coverAssetId].filter((id): id is string => id !== null))),
-      point ? this.settings.quoteDelivery(store.id, point, 0) : null,
+      point ? this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null,
     ]);
     const byId = new Map(assets.map((a) => [a.id, a]));
     const pickupMax = await this.params.getNumber('retirada_distancia_max_km');
@@ -99,8 +101,9 @@ export class BrowseService {
         distanceM: quote?.distanceM == null ? null : Math.round(quote.distanceM),
         feeCents: quote?.feeCents ?? null,
         freeShipping: quote?.freeShipping ?? false,
-        freeAboveCents: settings.freeAboveCents,
-        minOrderCents: settings.minOrderCents,
+        // Mínimo e entrega grátis são globais do admin (DEC-036b).
+        freeAboveCents: await this.params.getNumber('frete_gratis_acima_cents'),
+        minOrderCents: await this.params.getNumber('pedido_minimo_cents'),
         etaMinMinutes: settings.etaMinMinutes,
         etaMaxMinutes: settings.etaMaxMinutes,
         acceptsDelivery: settings.acceptsDelivery,

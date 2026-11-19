@@ -148,6 +148,20 @@
       "when": 1795047940963,
       "tag": "0020_sec140_oauth_pkce",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795048659497,
+      "tag": "0021_l1_delivery_fee_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795048778212,
+      "tag": "0022_l1_order_delivery_snapshot",
+      "breakpoints": true
     }
   ]
 }

@@ -74,7 +74,7 @@ export const ledgerEntries = pgTable(
   {
     id: bigserial({ mode: 'number' }).primaryKey(),
     transactionId: uuid().notNull().references(() => ledgerTransactions.id),
-    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] }).notNull(),
+    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] }).notNull(),
     direction: text({ enum: ['debit', 'credit'] }).notNull(),
     amountCents: integer().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

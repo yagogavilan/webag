@@ -6,7 +6,8 @@ import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { storeDeliveryTiers, storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
-import { deliveryFee, type Tier, type WeeklyHours } from '../stores/index.js';
+import { DeliveryFeesService, pickTier } from '../logistics/index.js';
+import { type WeeklyHours } from '../stores/index.js';
 import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
 import { type GeoPoint, pointKey, pointSql } from './geo.js';
 
@@ -46,11 +47,7 @@ interface StoreRow extends Record<string, unknown> {
   logo_asset_id: string | null;
   approved_at: Date;
   accepts_delivery: boolean;
-  radius_m: number;
-  fee_mode: 'fixed' | 'by_distance';
-  fee_fixed_cents: number;
-  min_order_cents: number;
-  free_above_cents: number;
+  address_city_id: string | null;
   eta_min_minutes: number;
   eta_max_minutes: number;
   pickup_enabled: boolean;
@@ -77,6 +74,7 @@ export class StoreFeedService {
     private readonly cache: CacheService,
     private readonly params: ParametersService,
     private readonly media: MediaService,
+    private readonly fees: DeliveryFeesService,
   ) {}
 
   async at(point: GeoPoint, mode: DiscoveryMode): Promise<FeedStore[]> {
@@ -89,7 +87,7 @@ export class StoreFeedService {
     const minRatings = await this.params.getNumber('avaliacao_min_exibicao');
     const result = await this.db.execute<StoreRow>(sql`
       select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at,
-             ss.accepts_delivery, ss.radius_m, ss.fee_mode, ss.fee_fixed_cents, ss.min_order_cents, ss.free_above_cents,
+             s.address_city_id, ss.accepts_delivery,
              ss.eta_min_minutes, ss.eta_max_minutes, ss.pickup_enabled, ss.voluntary_exchange_days,
              ss.paused_until, ss.paused_indefinitely,
              round(ST_Distance(s.location, ${pointSql(point)}))::int as distance_m,
@@ -122,11 +120,16 @@ export class StoreFeedService {
     ]);
     const logos = new Map(logoRows.map((asset) => [asset.id, this.media.publicVariants(asset)]));
 
+    const [freeAbove, minOrder, radiusKm] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km')]);
+    const tableCache = new Map<string | null, Promise<Awaited<ReturnType<DeliveryFeesService['resolve']>>>>();
+    const feeTables = { get: (cityId: string | null) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId)! };
     const feed: FeedStore[] = [];
     for (const row of rows) {
       const distanceM = Number(row.distance_m);
-      const tiers: Tier[] = tierRows.filter((t) => t.storeId === row.id).map((t) => ({ fromM: t.fromM, toM: t.toM, feeCents: t.feeCents }));
-      const fee = row.accepts_delivery ? deliveryFee({ mode: row.fee_mode, fixedCents: row.fee_fixed_cents, tiers, radiusM: row.radius_m }, distanceM) : null;
+      // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
+      const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
+      const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && table ? pickTier(table.tiers, distanceM) : null;
+      const fee = picked ? picked.tier.feeCents : null;
       const deliversHere = fee !== null;
       if (mode === 'delivery' && !deliversHere) continue; // fora do raio da loja: some da lista (RN-04)
 
@@ -151,8 +154,8 @@ export class StoreFeedService {
         distanceM,
         deliversHere,
         feeCents: fee,
-        freeAboveCents: row.free_above_cents,
-        minOrderCents: row.min_order_cents,
+        freeAboveCents: freeAbove,
+        minOrderCents: minOrder,
         etaMinMinutes: row.eta_min_minutes,
         etaMaxMinutes: row.eta_max_minutes,
         pickupEnabled: row.pickup_enabled,

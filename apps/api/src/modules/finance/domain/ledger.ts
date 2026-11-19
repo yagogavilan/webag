@@ -5,13 +5,13 @@ import { roundHalfUp } from './money.js';
  * Plano de contas (ledger de dupla entrada, SEC-041). Toda transação fecha: soma dos débitos = soma dos créditos.
  *  - provider_clearing: dinheiro cobrado do cliente e ainda não devolvido, no provedor (débito = entrou);
  *  - merchant_payable: o que é da loja (crédito = a favor da loja);
- *  - commission_revenue / service_fee_revenue: receita da Webag (crédito);
+ *  - commission_revenue / service_fee_revenue / delivery_fee_revenue: receita da Webag (crédito; a taxa de entrega é da Webag, DEC-036a);
  *  - platform_promo_expense: desconto da plataforma absorvido pela Webag (débito);
  *  - webag_coverage_cash: dinheiro da própria Webag que devolveu ao cliente um estorno que o provedor não concluiu (DEC-020a);
  *    a parte da loja vira dívida dela em `merchant_payable` (saldo negativo).
  * Em split o provedor repassa direto à loja; o ledger registra a conta, quem move o dinheiro é o provedor (DEC-016).
  */
-export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] as const;
+export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'delivery_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] as const;
 export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
 export const LEDGER_KINDS = ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
@@ -37,6 +37,7 @@ export function saleLines(finance: OrderFinance): LedgerLine[] {
     ...signed('merchant_payable', -finance.merchantNetBeforeProviderFeeCents),
     ...signed('commission_revenue', -finance.commissionCents),
     ...signed('service_fee_revenue', -finance.serviceFeeCents),
+    ...signed('delivery_fee_revenue', -finance.deliveryFeeCents),
   ];
   assertBalanced(lines);
   return lines;
@@ -61,12 +62,14 @@ export function refundLines(finance: OrderFinance, refundedBeforeCents: number, 
   const share = (component: number): number => roundHalfUp(component * after, finance.totalCents) - roundHalfUp(component * refundedBeforeCents, finance.totalCents);
   const commission = share(finance.commissionCents);
   const serviceFee = share(finance.serviceFeeCents);
+  const deliveryFee = share(finance.deliveryFeeCents);
   const promo = share(finance.platformDiscountCents);
-  const merchant = refundCents + promo - commission - serviceFee;
+  const merchant = refundCents + promo - commission - serviceFee - deliveryFee;
   const lines = [
     ...signed(source, -refundCents),
     ...signed('commission_revenue', commission),
     ...signed('service_fee_revenue', serviceFee),
+    ...signed('delivery_fee_revenue', deliveryFee),
     ...signed('platform_promo_expense', -promo),
     ...signed('merchant_payable', merchant),
   ];

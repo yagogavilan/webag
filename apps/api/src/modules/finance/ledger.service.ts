@@ -13,6 +13,8 @@ export interface OrderBalances {
   merchantPayable: number;
   commissionRevenue: number;
   serviceFeeRevenue: number;
+  /** Taxa de entrega: receita da Webag (DEC-036a). */
+  deliveryFeeRevenue: number;
   platformPromoExpense: number;
   paidCents: number;
   refundedCents: number;
@@ -119,6 +121,7 @@ export class LedgerService {
       merchantPayable: credit('merchant_payable'),
       commissionRevenue: credit('commission_revenue'),
       serviceFeeRevenue: credit('service_fee_revenue'),
+      deliveryFeeRevenue: credit('delivery_fee_revenue'),
       platformPromoExpense: account('platform_promo_expense'),
       paidCents: sum('sale', 'provider_clearing', 'debit'),
       refundedCents: sum('refund', 'provider_clearing', 'credit'),
