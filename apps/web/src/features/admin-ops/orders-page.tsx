@@ -8,7 +8,7 @@ import { OrderStatusBadge } from '@/features/orders/status-badge';
 import { PageHeader } from '@/components/panel/page-header';
 import { useSession } from '@/components/panel/session-context';
 import { Button, EmptyState, ErrorState, NoAccessState, SelectField, SkeletonRows, TextField, cx } from '@/components/ui';
-import { MODE_LABEL, ORDER_STATUS_FILTERS, PAYMENT_LABEL, adminOpsApi, adminOpsKeys, type OrderFilters } from '@/lib/api/admin-ops';
+import { ADMIN_ORDER_STATUS_LABEL, MODE_LABEL, ORDER_STATUS_FILTERS, PAYMENT_LABEL, adminOpsApi, adminOpsKeys, type OrderFilters } from '@/lib/api/admin-ops';
 import { formatCents, formatDateTime } from '@/lib/format';
 import { asRoute } from '@/lib/routes';
 import { tid } from '@/lib/testid';
@@ -136,7 +136,7 @@ export function AdminOrdersPage({ initialUserId, initialStoreId }: { initialUser
                       <Link href={asRoute(`/admin/pedidos/${order.id}`)} className={cx('wb-text-body-strong', s.titleLink)} data-testid={T(`open-${order.id}`)}>#{order.number}</Link>
                       <span className={cx('wb-text-caption', s.muted)} style={{ display: 'block' }}>{formatDateTime(order.createdAt)}</span>
                     </td>
-                    <td data-label="Situação"><OrderStatusBadge status={order.status} /></td>
+                    <td data-label="Situação"><OrderStatusBadge status={order.status} label={ADMIN_ORDER_STATUS_LABEL[order.status]} /></td>
                     <td data-label="Loja" className="wb-text-body">{order.store.name}{order.store.city ? ` · ${order.store.city}` : ''}</td>
                     <td data-label="Cliente" className="wb-text-body">{order.customer.name}</td>
                     <td data-label="Tipo e pagamento" className="wb-text-body">{MODE_LABEL[order.mode]} · {PAYMENT_LABEL[order.paymentMethod]}</td>

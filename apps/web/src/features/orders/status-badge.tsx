@@ -21,11 +21,11 @@ const ICON: Record<OrderStatus, IconType> = {
 };
 
 /** StatusBadge do pedido (design-system.md): ícone + texto, nunca só cor. */
-export function OrderStatusBadge({ status, testId }: { status: OrderStatus; testId?: string }) {
+export function OrderStatusBadge({ status, testId, label }: { status: OrderStatus; testId?: string; label?: string }) {
   const Icon = ICON[status];
   return (
     <Badge tone={ORDER_STATUS_TONE[status]} icon={<Icon size={16} weight={status === 'delivered' ? 'fill' : 'regular'} aria-hidden="true" />} testId={testId}>
-      {ORDER_STATUS_LABEL[status]}
+      {label ?? ORDER_STATUS_LABEL[status]}
     </Badge>
   );
 }

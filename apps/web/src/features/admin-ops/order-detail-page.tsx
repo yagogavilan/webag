@@ -82,7 +82,7 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
   return (
     <div className={s.page}>
       {back}
-      <PageHeader title={`Pedido #${order.number}`} description={`${order.store.name}${order.store.city ? ` · ${order.store.city}` : ''}`} action={<span className={s.actions}><OrderStatusBadge status={order.status} testId={T('status')} /><ModeBadge mode={order.mode} /></span>} />
+      <PageHeader title={`Pedido #${order.number}`} description={`${order.store.name}${order.store.city ? ` · ${order.store.city}` : ''}`} action={<span className={s.actions}><OrderStatusBadge status={order.status} label={ADMIN_ORDER_STATUS_LABEL[order.status]} testId={T('status')} /><ModeBadge mode={order.mode} /></span>} />
       {order.disputedAt ? <Banner tone="danger" testId={T('disputed')}>O pagamento foi contestado pelo provedor (chargeback) em {formatFullDateTime(order.disputedAt)}. Não dá para estornar por aqui.</Banner> : null}
       {order.notReceivedAt ? <Banner tone="warning" testId={T('not-received')}>O cliente avisou que não recebeu o pedido em {formatFullDateTime(order.notReceivedAt)}.</Banner> : null}
       {order.status === 'cancelled' && order.cancelReason ? <Banner tone="info" testId={T('cancel-info')}>Cancelado {order.cancelledBy ? `por ${ACTOR_LABEL[order.cancelledBy].toLowerCase()}` : ''}{order.cancelledAt ? ` em ${formatFullDateTime(order.cancelledAt)}` : ''}. Motivo: {order.cancelReason}</Banner> : null}
@@ -328,7 +328,7 @@ function RefundDialog({ order, isSuper, onConfirm, onClose }: { order: AdminOrde
       extra={<TextField label="Valor a estornar (R$)" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.slice(0, 14))} error={touched ? error : undefined} autoComplete="off" data-testid={T('refund-amount')} />}
       precheck={() => {
         setTouched(true);
-        return error ?? null;
+        return error ? 'Confira o valor a estornar.' : null;
       }}
       testIds={{ dialog: T('refund-dialog'), reason: T('refund-reason'), confirm: T('refund-confirm') }}
       onConfirm={(reason) => onConfirm(cents ?? 0, reason, key)}

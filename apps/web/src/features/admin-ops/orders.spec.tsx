@@ -127,7 +127,7 @@ describe('detalhe do pedido e intervenção (B5, WB-108 C2, WB-109)', () => {
     expect(sent).toHaveLength(0);
     await userEvent.type(screen.getByTestId('admin.pedidos.cancel-reason'), 'Loja sem estoque do item.');
     await userEvent.click(screen.getByTestId('admin.pedidos.cancel-confirm'));
-    await userEvent.type(await screen.findByTestId('admin.reauth.totp-input'), '123456');
+    await userEvent.type(await screen.findByLabelText('Dígito 1 de 6'), '123456');
     await waitFor(() => expect(sent).toEqual([{ reason: 'Loja sem estoque do item.', refund: true }]));
   });
 
