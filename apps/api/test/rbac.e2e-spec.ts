@@ -55,6 +55,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'exchanges:read': { method: 'get', path: '/v1/admin/exchange-requests' },
   'exchanges:waive-fee': null,
   'privacy:manage': { method: 'get', path: '/v1/admin/privacy-requests' },
+  'help:read': { method: 'get', path: '/v1/admin/help/faqs' },
+  'help:write': null,
   'marketing:push': { method: 'get', path: '/v1/admin/push/campaigns' },
   'reports:operations': { method: 'get', path: '/v1/admin/reports/operations?from=2026-01-01&to=2026-01-31' },
   'coupons:read': { method: 'get', path: '/v1/admin/coupons' },

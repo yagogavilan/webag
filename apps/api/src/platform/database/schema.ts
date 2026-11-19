@@ -17,3 +17,4 @@ export * from '../../modules/exchanges/db/schema.js';
 export * from '../../modules/notifications/db/schema.js';
 export * from '../../modules/privacy/db/schema.js';
 export * from '../../modules/marketing/db/schema.js';
+export * from '../../modules/feedback/db/schema.js';

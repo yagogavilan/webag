@@ -61,6 +61,9 @@ export const ADMIN_PERMISSIONS = {
   'exchanges:waive-fee': [SUPER, OPS],
   /** WB-217: pedidos de titulares (LGPD) são só do super admin; revelar o e-mail do solicitante exige reautenticação e auditoria. */
   'privacy:manage': [SUPER],
+  /** AJ3 / WB-034: conteúdo da ajuda (perguntas e contatos); operação e super admin editam, os demais leem. */
+  'help:read': [SUPER, OPS, FIN, SUP],
+  'help:write': [SUPER, OPS],
   /** WB-197: campanhas de push de marketing (financeiro e suporte não veem). */
   'marketing:push': [SUPER, OPS],
   /** WB-122: relatórios operacionais (suporte não vê). */

@@ -108,6 +108,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('item_qtd_max', 50, 1, 200, 'Quantidade máxima por item', 'HIP-041'),
   int('enderecos_max', 8, 1, 20, 'Endereços salvos por cliente', 'HIP-041'),
   int('cancelamento_loja_alerta_pct', 10, 1, 50, 'Taxa de cancelamento da loja que gera alerta (%, 30 dias)', 'HIP-008'),
+  int('denuncia_prazo_dias_uteis', 2, 1, 10, 'Prazo para tratar uma denúncia (dias úteis); depois vira Atrasado', 'WB-124'),
 ];
 
 export const PARAMETER_BY_KEY: ReadonlyMap<string, ParameterDefinition> = new Map(
