@@ -80,6 +80,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('dados_cliente_visivel_dias', 30, 0, 90, 'Dias em que o lojista vê dados do cliente após a conclusão', 'HIP-036'),
   int('cupom_total_minimo_cents', 100, 0, 1000, 'Total mínimo cobrado com cupom (centavos)', 'HIP-037'),
   int('estorno_super_admin_cents', 50000, 1000, undefined, 'Acima disto o estorno manual exige super admin (centavos)', 'HIP-039'),
+  int('estorno_cobertura_teto_cents', 30000, 0, 100000, 'Teto por pedido que a Webag cobre quando o provedor não conclui o estorno (centavos)', 'DEC-020a'),
   int('codigo_retirada_digitos', 4, 4, 6, 'Dígitos do código de retirada', 'HIP-040'),
   int('carrinho_validade_dias', 7, 1, 30, 'Validade do carrinho (dias)', 'HIP-041'),
   int('item_qtd_max', 50, 1, 200, 'Quantidade máxima por item', 'HIP-041'),

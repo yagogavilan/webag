@@ -8,6 +8,7 @@ import {
   ProviderTimeoutError,
   type CreateProviderPaymentInput,
   type PaymentProvider,
+  type ProviderContext,
   type ProviderPayment,
   type WebhookNotification,
 } from '../payment-provider.js';
@@ -47,10 +48,10 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
   }
 
   /** Token do lojista (split). Sem conta conectada não cobra: nunca cai para o token da plataforma por engano (SEC-034). */
-  private async clientFor(storeId: string | null, retries: number): Promise<MercadoPagoConfig> {
+  private async clientFor(storeId: string | null, retries: number, accountId?: string | null): Promise<MercadoPagoConfig> {
     let accessToken: string | undefined;
     if (storeId) {
-      accessToken = (await this.sellers.resolve(storeId))?.accessToken;
+      accessToken = (await this.sellers.resolve(storeId, accountId))?.accessToken;
       if (!accessToken) throw new AppError(409, 'STORE_PAYMENT_ACCOUNT_UNAVAILABLE', 'Loja sem conta de recebimento ativa', { detail: 'Esta loja não pode receber pagamentos agora.' });
     } else {
       accessToken = this.config.get('MP_ACCESS_TOKEN', { infer: true });
@@ -92,8 +93,8 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     }
   }
 
-  async getPayment(providerPaymentId: string, context: { storeId: string | null }): Promise<ProviderPayment | null> {
-    const client = await this.clientFor(context.storeId, 2);
+  async getPayment(providerPaymentId: string, context: ProviderContext): Promise<ProviderPayment | null> {
+    const client = await this.clientFor(context.storeId, 2, context.receiverAccountId);
     try {
       return toProviderPayment((await new Payment(client).get({ id: providerPaymentId })));
     } catch (error) {
@@ -102,8 +103,8 @@ export class MercadoPagoPaymentProvider implements PaymentProvider {
     }
   }
 
-  async refund(providerPaymentId: string, amountCents: number, idempotencyKey: string, context: { storeId: string | null }): Promise<{ providerRefundId: string; amountCents: number }> {
-    const client = await this.clientFor(context.storeId, 0);
+  async refund(providerPaymentId: string, amountCents: number, idempotencyKey: string, context: ProviderContext): Promise<{ providerRefundId: string; amountCents: number }> {
+    const client = await this.clientFor(context.storeId, 0, context.receiverAccountId);
     try {
       // `amount` explícito vale para o estorno parcial e para o total (o MP recusa acima do saldo do pagamento).
       // [confirmar no sandbox] como a `application_fee` é devolvida no estorno parcial (proporcional ao MP).

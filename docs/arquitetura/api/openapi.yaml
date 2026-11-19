@@ -1569,6 +1569,86 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/payments/refund-queue:
+    get:
+      tags: [payments]
+      operationId: listRefundQueue
+      summary: Fila de estornos pendentes (SEC-130)
+      description: "Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`."
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, exhausted, covered] } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pendências
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundQueuePage'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/payments/refund-queue/{intentId}/retry:
+    post:
+      tags: [payments]
+      operationId: retryRefundIntent
+      summary: Tentar o estorno de novo agora
+      description: "Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`."
+      parameters:
+        - { name: intentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Estado depois da tentativa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [pending, done, exhausted, covered] }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/payments/refund-queue/{intentId}/cover:
+    post:
+      tags: [payments]
+      operationId: coverRefundIntent
+      summary: Cobertura da Webag (DEC-020a)
+      description: "Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`."
+      parameters:
+        - { name: intentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10, maxLength: 300 }
+      responses:
+        '204':
+          description: Coberto
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /v1/admin/payments/webhook-events/{eventId}/reprocess:
     post:
       tags: [payments]
@@ -5689,6 +5769,27 @@ components:
         details: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
+    RefundQueueItem:
+      type: object
+      required: [id, attemptId, orderReference, amountCents, reason, status, failures, lastErrorCode, nextAttemptAt, coveredAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        attemptId: { type: string, format: uuid }
+        orderReference: { type: string, description: ID do pedido }
+        amountCents: { type: integer }
+        reason: { type: string }
+        status: { type: string, enum: [pending, exhausted, covered] }
+        failures: { type: integer }
+        lastErrorCode: { type: [string, 'null'] }
+        nextAttemptAt: { type: string, format: date-time }
+        coveredAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    RefundQueuePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/RefundQueueItem' } }
+        nextCursor: { type: [string, 'null'] }
     CommissionRateInput:
       type: object
       additionalProperties: false

@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, isNull, ne, gt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, gt, sql } from 'drizzle-orm';
 import { MercadoPagoConfig, OAuth, User } from 'mercadopago';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import type { Env } from '../../platform/config/env.js';
+import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
@@ -142,15 +143,20 @@ export class PaymentAccountService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.sellers.register((storeId) => this.credentialsFor(storeId));
+    this.sellers.register((storeId, accountId) => this.credentialsFor(storeId, accountId));
   }
 
   /**
    * Token do lojista para cobrar/estornar/consultar (só `active`). Renova sozinho quando faltam menos de 30 dias (DT-034):
    * lock por loja e gravação do par novo na mesma transação, porque o `refresh_token` antigo morre ao renovar.
    */
-  async credentialsFor(storeId: string): Promise<{ accessToken: string; providerAccountId: string } | null> {
-    const [row] = await this.db.select().from(paymentAccounts).where(and(eq(paymentAccounts.storeId, storeId), eq(paymentAccounts.status, 'active'), eq(paymentAccounts.provider, this.provider.name)));
+  async credentialsFor(storeId: string, accountId?: string | null): Promise<{ accessToken: string; providerAccountId: string } | null> {
+    // SEC-130: com `accountId` (estorno/re-consulta de pagamento antigo) vale a conta que recebeu, mesmo `disconnected`
+    // (o status desconectado bloqueia só cobrança nova); a mais recente das que têm esse ID, sempre da MESMA loja.
+    const where = accountId
+      ? and(eq(paymentAccounts.storeId, storeId), eq(paymentAccounts.providerAccountId, accountId), eq(paymentAccounts.provider, this.provider.name))
+      : and(eq(paymentAccounts.storeId, storeId), eq(paymentAccounts.status, 'active'), eq(paymentAccounts.provider, this.provider.name));
+    const [row] = await this.db.select().from(paymentAccounts).where(where).orderBy(desc(paymentAccounts.connectedAt)).limit(1);
     if (!row) return null;
     let tokens = this.openTokens(storeId, row.tokensEnc);
     if (row.tokensExpireAt && row.tokensExpireAt.getTime() - Date.now() < 30 * 86_400_000) {
@@ -166,7 +172,7 @@ export class PaymentAccountService implements OnModuleInit {
         });
       } catch (error) {
         // Ainda dentro da validade: segue com o token atual e alerta. Vencido: a cobrança falha e a loja precisa reconectar.
-        this.logger.error(`renovação do token da loja ${storeId} falhou: ${(error as Error).message}`);
+        this.logger.error(`renovação do token da loja ${storeId} falhou: ${safeErrorMessage(error)}`);
         await this.payments.raiseAlert(null, 'payment_token_refresh_failed', { storeId }).catch(() => undefined);
         if (row.tokensExpireAt && row.tokensExpireAt.getTime() <= Date.now()) return null;
       }

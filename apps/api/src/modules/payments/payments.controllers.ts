@@ -1,7 +1,7 @@
-import { Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { z } from 'zod';
-import { AdminOnly, Ctx, Public, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, Public, RequireReauth, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -49,6 +49,13 @@ export class WebhooksController {
   }
 }
 
+const refundQueueQuerySchema = z.strictObject({
+  cursor: z.string().max(200).optional(),
+  limit: z.string().max(4).optional(),
+  status: z.enum(['pending', 'exhausted', 'covered']).optional(),
+});
+const coverRefundSchema = z.strictObject({ reason: z.string().min(10).max(300) });
+
 const alertsQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
   limit: z.string().max(4).optional(),
@@ -67,6 +74,28 @@ export class PaymentsAdminController {
       data: page.data.map((alert) => ({ ...alert, createdAt: alert.createdAt.toISOString(), resolvedAt: alert.resolvedAt?.toISOString() ?? null })),
       nextCursor: page.nextCursor,
     };
+  }
+
+  @AdminOnly('payments:refunds:read')
+  @Get('refund-queue')
+  async refundQueue(@Query(new ZodPipe(refundQueueQuerySchema)) query: z.infer<typeof refundQueueQuerySchema>) {
+    return this.payments.listRefundQueue(query);
+  }
+
+  @AdminOnly('payments:refunds:retry')
+  @RequireReauth()
+  @HttpCode(200)
+  @Post('refund-queue/:intentId/retry')
+  async retryRefund(@Param('intentId') intentId: string, @Ctx() ctx: RequestContext) {
+    return this.payments.retryRefundIntent(uuid(intentId), ctx);
+  }
+
+  @AdminOnly('payments:refunds:cover')
+  @RequireReauth()
+  @HttpCode(204)
+  @Post('refund-queue/:intentId/cover')
+  async coverRefund(@Param('intentId') intentId: string, @Body(new ZodPipe(coverRefundSchema)) body: z.infer<typeof coverRefundSchema>, @Ctx() ctx: RequestContext): Promise<void> {
+    await this.payments.coverRefundIntent(uuid(intentId), body.reason, ctx);
   }
 
   @AdminOnly('payments:webhooks:reprocess')

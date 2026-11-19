@@ -42,6 +42,10 @@ export const ADMIN_PERMISSIONS = {
   'commissions:write': [SUPER, FIN],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
+  /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */
+  'payments:refunds:read': [SUPER, FIN],
+  'payments:refunds:retry': [SUPER, FIN],
+  'payments:refunds:cover': [SUPER],
 } as const satisfies Record<string, readonly AdminProfile[]>;
 
 export type AdminPermission = keyof typeof ADMIN_PERMISSIONS;

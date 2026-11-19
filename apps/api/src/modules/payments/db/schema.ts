@@ -43,6 +43,11 @@ export const paymentAttempts = pgTable(
     externalReference: text().notNull(),
     /** Loja recebedora, resolvida na criação (SEC-034). */
     storeId: uuid(),
+    /**
+     * Conta do provedor que RECEBEU (SEC-130): estorno e re-consulta usam os tokens desta conta, mesmo que a loja a tenha
+     * desconectado ou trocado depois. Nulo em tentativas antigas ou sem loja (cai na conta ativa).
+     */
+    receiverAccountId: text(),
     method: text({ enum: PAYMENT_METHODS }).notNull(),
     status: text({ enum: PAYMENT_STATUSES }).notNull().default('creating'),
     amountCents: integer().notNull(),
@@ -85,7 +90,11 @@ export const paymentRefunds = pgTable(
   ],
 );
 
-export const REFUND_INTENT_STATUSES = ['pending', 'done', 'failed'] as const;
+/**
+ * `pending`: a tentar (com `next_attempt_at`); `done`: estornado no provedor; `exhausted`: esgotou as tentativas e espera o
+ * admin (SEC-130); `covered`: a Webag assumiu o valor e paga o cliente por fora (DEC-020a); `failed`: legado (não é mais gravado).
+ */
+export const REFUND_INTENT_STATUSES = ['pending', 'done', 'failed', 'exhausted', 'covered'] as const;
 
 /**
  * Intenção de estorno (review I4): gravada na transação que trava a tentativa e confere a soma, ANTES de chamar o
@@ -107,6 +116,14 @@ export const paymentRefundIntents = pgTable(
     actorRole: text(),
     requestId: text(),
     providerRefundId: text(),
+    /** Falhas definitivas do provedor até aqui e a próxima tentativa (backoff, SEC-130). */
+    failures: integer().notNull().default(0),
+    nextAttemptAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastErrorCode: text(),
+    /** Cobertura da Webag (DEC-020a): quem assumiu, quando e por quê. */
+    coveredBy: uuid(),
+    coveredAt: timestamp({ withTimezone: true }),
+    coverageReason: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

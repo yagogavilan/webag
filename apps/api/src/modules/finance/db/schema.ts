@@ -60,7 +60,7 @@ export const ledgerTransactions = pgTable(
     orderId: uuid().notNull(),
     storeId: uuid().references(() => stores.id),
     attemptId: uuid().references(() => paymentAttempts.id),
-    kind: text({ enum: ['sale', 'provider_fee', 'refund', 'adjustment'] }).notNull(),
+    kind: text({ enum: ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] }).notNull(),
     dedupeKey: text().notNull(),
     /** Percentuais e valores usados (snapshot): auditável sem refazer a conta. */
     meta: jsonb().$type<Record<string, unknown>>().notNull().default({}),
@@ -74,7 +74,7 @@ export const ledgerEntries = pgTable(
   {
     id: bigserial({ mode: 'number' }).primaryKey(),
     transactionId: uuid().notNull().references(() => ledgerTransactions.id),
-    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense'] }).notNull(),
+    account: text({ enum: ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] }).notNull(),
     direction: text({ enum: ['debit', 'credit'] }).notNull(),
     amountCents: integer().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

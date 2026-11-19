@@ -406,7 +406,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return { orderId: order.id, number: order.number, userId: order.userId, storeId: order.storeId, from: order.status, to, actor, reason, at };
   }
 
-  /** Conclui o estorno agendado (fora da transação). Se o provedor falhar, a intenção `pending` é refeita pela conciliação. */
+  /** Conclui o estorno agendado (fora da transação). Se o provedor recusar, o pagamentos registra backoff e alerta (SEC-130) e a conciliação refaz. */
   async finishRefund(refund: PendingRefund | null): Promise<void> {
     if (!refund) return;
     try {
@@ -512,6 +512,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!UUID_RE.test(attempt.externalReference)) return;
     if (!(await this.ledger.hasSale(attempt.externalReference, tx))) return; // estorno de PIX tardio: nunca houve venda lançada
     await this.ledger.recordRefund(tx, { orderId: attempt.externalReference, refundCents: refund.amountCents, refundKey: refund.idempotencyKey, reason: refund.reason });
+  }
+
+  /** A Webag cobriu um estorno que o provedor não concluiu (DEC-020a): lança a cobertura e a dívida da loja no ledger. */
+  async onRefundCovered(tx: Tx, attempt: PaymentAttempt, coverage: { amountCents: number; idempotencyKey: string; reason: string }): Promise<void> {
+    if (!UUID_RE.test(attempt.externalReference)) return;
+    if (!(await this.ledger.hasSale(attempt.externalReference, tx))) return;
+    await this.ledger.recordCoverage(tx, { orderId: attempt.externalReference, coverageCents: coverage.amountCents, coverageKey: coverage.idempotencyKey, reason: coverage.reason });
   }
 
   // =================================================================== varreduras

@@ -7,7 +7,11 @@ export interface SellerCredentials {
   providerAccountId: string;
 }
 
-export type SellerCredentialsResolver = (storeId: string) => Promise<SellerCredentials | null>;
+/**
+ * `accountId` omitido: conta ATIVA da loja (cobrança nova). Informado: a conta que recebeu aquele pagamento, em qualquer
+ * status (estorno e re-consulta de pedido antigo, SEC-130); nunca a conta de outra loja.
+ */
+export type SellerCredentialsResolver = (storeId: string, accountId?: string | null) => Promise<SellerCredentials | null>;
 
 /**
  * Quem guarda os tokens (módulo de lojas, cifrados) se registra aqui; o adaptador do provedor só pergunta. Evita o ciclo
@@ -21,7 +25,7 @@ export class SellerCredentialsRegistry {
     this.resolver = resolver;
   }
 
-  async resolve(storeId: string): Promise<SellerCredentials | null> {
-    return this.resolver ? this.resolver(storeId) : null;
+  async resolve(storeId: string, accountId?: string | null): Promise<SellerCredentials | null> {
+    return this.resolver ? this.resolver(storeId, accountId) : null;
   }
 }

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ledgerEntries, ledgerTransactions } from './db/schema.js';
@@ -16,6 +16,8 @@ export interface OrderBalances {
   platformPromoExpense: number;
   paidCents: number;
   refundedCents: number;
+  /** Devolvido ao cliente com dinheiro da Webag (cobertura, DEC-020a). */
+  coveredCents: number;
   providerFeeCents: number;
 }
 
@@ -71,12 +73,29 @@ export class LedgerService {
     return this.post(tx, { orderId: input.orderId, storeId: sale.storeId, attemptId: sale.attemptId, kind: 'refund', dedupeKey, meta: { refundCents: input.refundCents, refundedBeforeCents: refundedBefore, reason: input.reason ?? null } }, lines);
   }
 
+  /**
+   * Cobertura da Webag (DEC-020a): o provedor não concluiu o estorno e a Webag devolveu o valor ao cliente com dinheiro dela.
+   * Mesmas partes do estorno (comissão e taxa voltam, a loja fica devendo), mas sai de `webag_coverage_cash`, não do provedor.
+   */
+  async recordCoverage(tx: DbOrTx, input: { orderId: string; coverageCents: number; coverageKey: string; reason?: string }): Promise<boolean> {
+    const [sale] = await tx.select().from(ledgerTransactions).where(and(eq(ledgerTransactions.orderId, input.orderId), eq(ledgerTransactions.kind, 'sale'))).for('update');
+    if (!sale) throw errors.conflict('LEDGER_SALE_NOT_FOUND', 'Pedido sem venda lançada', 'A cobertura só é lançada depois da venda.');
+    const dedupeKey = `coverage:${input.orderId}:${input.coverageKey}`;
+    const [existing] = await tx.select({ id: ledgerTransactions.id }).from(ledgerTransactions).where(eq(ledgerTransactions.dedupeKey, dedupeKey));
+    if (existing) return false;
+    const finance = (sale.meta as { finance: OrderFinance }).finance;
+    const before = await this.refundedCents(tx, input.orderId);
+    const lines = refundLines(finance, before, input.coverageCents, 'webag_coverage_cash');
+    return this.post(tx, { orderId: input.orderId, storeId: sale.storeId, attemptId: sale.attemptId, kind: 'coverage', dedupeKey, meta: { coverageCents: input.coverageCents, refundedBeforeCents: before, reason: input.reason ?? null } }, lines);
+  }
+
+  /** Devolvido ao cliente, por estorno do provedor OU por cobertura da Webag (base das partes proporcionais). */
   private async refundedCents(tx: DbOrTx, orderId: string): Promise<number> {
     const [row] = await tx
-      .select({ total: sql<string>`coalesce(sum(case when ${ledgerEntries.account} = 'provider_clearing' and ${ledgerEntries.direction} = 'credit' then ${ledgerEntries.amountCents} else 0 end), 0)` })
+      .select({ total: sql<string>`coalesce(sum(case when ${ledgerEntries.account} in ('provider_clearing', 'webag_coverage_cash') and ${ledgerEntries.direction} = 'credit' then ${ledgerEntries.amountCents} else 0 end), 0)` })
       .from(ledgerEntries)
       .innerJoin(ledgerTransactions, eq(ledgerEntries.transactionId, ledgerTransactions.id))
-      .where(and(eq(ledgerTransactions.orderId, orderId), eq(ledgerTransactions.kind, 'refund')));
+      .where(and(eq(ledgerTransactions.orderId, orderId), inArray(ledgerTransactions.kind, ['refund', 'coverage'])));
     return Number(row?.total ?? 0);
   }
 
@@ -103,6 +122,7 @@ export class LedgerService {
       platformPromoExpense: account('platform_promo_expense'),
       paidCents: sum('sale', 'provider_clearing', 'debit'),
       refundedCents: sum('refund', 'provider_clearing', 'credit'),
+      coveredCents: sum('coverage', 'webag_coverage_cash', 'credit'),
       providerFeeCents: sum('provider_fee', 'provider_clearing', 'credit'),
     };
   }

@@ -58,15 +58,24 @@ export class ProviderTimeoutError extends Error {
   }
 }
 
+/**
+ * Quem consulta/estorna. `receiverAccountId` é a conta que recebeu o pagamento (gravada na tentativa, SEC-130): o token usado
+ * é o DELA, mesmo que a loja tenha desconectado ou trocado de conta. Ausente: conta ativa da loja.
+ */
+export interface ProviderContext {
+  storeId: string | null;
+  receiverAccountId?: string | null;
+}
+
 export interface PaymentProvider {
   readonly name: 'fake' | 'mercadopago';
   createPayment(input: CreateProviderPaymentInput): Promise<ProviderPayment>;
-  getPayment(providerPaymentId: string, context: { storeId: string | null }): Promise<ProviderPayment | null>;
+  getPayment(providerPaymentId: string, context: ProviderContext): Promise<ProviderPayment | null>;
   refund(
     providerPaymentId: string,
     amountCents: number,
     idempotencyKey: string,
-    context: { storeId: string | null },
+    context: ProviderContext,
   ): Promise<{ providerRefundId: string; amountCents: number }>;
   /** O provedor exige o CPF do pagador neste método? (`PAYER_DOCUMENT_REQUIRED`). Ausente = não exige. */
   requiresPayerDocument?(method: PaymentMethod): boolean;

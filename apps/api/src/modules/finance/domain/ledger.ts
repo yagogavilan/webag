@@ -6,12 +6,14 @@ import { roundHalfUp } from './money.js';
  *  - provider_clearing: dinheiro cobrado do cliente e ainda não devolvido, no provedor (débito = entrou);
  *  - merchant_payable: o que é da loja (crédito = a favor da loja);
  *  - commission_revenue / service_fee_revenue: receita da Webag (crédito);
- *  - platform_promo_expense: desconto da plataforma absorvido pela Webag (débito).
+ *  - platform_promo_expense: desconto da plataforma absorvido pela Webag (débito);
+ *  - webag_coverage_cash: dinheiro da própria Webag que devolveu ao cliente um estorno que o provedor não concluiu (DEC-020a);
+ *    a parte da loja vira dívida dela em `merchant_payable` (saldo negativo).
  * Em split o provedor repassa direto à loja; o ledger registra a conta, quem move o dinheiro é o provedor (DEC-016).
  */
-export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense'] as const;
+export const LEDGER_ACCOUNTS = ['provider_clearing', 'merchant_payable', 'commission_revenue', 'service_fee_revenue', 'platform_promo_expense', 'webag_coverage_cash'] as const;
 export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
-export const LEDGER_KINDS = ['sale', 'provider_fee', 'refund', 'adjustment'] as const;
+export const LEDGER_KINDS = ['sale', 'provider_fee', 'refund', 'coverage', 'adjustment'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
 export interface LedgerLine {
@@ -53,7 +55,7 @@ export function providerFeeLines(feeCents: number): LedgerLine[] {
  * arredondados (a soma de vários parciais é igual ao estorno total, sem perder centavo). A diferença de arredondamento
  * fica com a loja (RN-01): `merchant_payable` é o complemento que fecha a transação.
  */
-export function refundLines(finance: OrderFinance, refundedBeforeCents: number, refundCents: number): LedgerLine[] {
+export function refundLines(finance: OrderFinance, refundedBeforeCents: number, refundCents: number, source: 'provider_clearing' | 'webag_coverage_cash' = 'provider_clearing'): LedgerLine[] {
   const after = refundedBeforeCents + refundCents;
   if (refundCents <= 0 || after > finance.totalCents) throw new Error('estorno fora do valor pago');
   const share = (component: number): number => roundHalfUp(component * after, finance.totalCents) - roundHalfUp(component * refundedBeforeCents, finance.totalCents);
@@ -62,7 +64,7 @@ export function refundLines(finance: OrderFinance, refundedBeforeCents: number, 
   const promo = share(finance.platformDiscountCents);
   const merchant = refundCents + promo - commission - serviceFee;
   const lines = [
-    ...signed('provider_clearing', -refundCents),
+    ...signed(source, -refundCents),
     ...signed('commission_revenue', commission),
     ...signed('service_fee_revenue', serviceFee),
     ...signed('platform_promo_expense', -promo),
