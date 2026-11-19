@@ -120,7 +120,7 @@ export const itemCountLabel = (n: number): string => (n === 1 ? t('orders.itemOn
  * se vier e NUNCA calcula horário sozinho.
  */
 export type SummaryEta = { fromAt: string; toAt: string } | null | undefined;
-export const summaryEta = (order: OrderSummary): SummaryEta => (order as OrderSummary & { eta?: SummaryEta }).eta;
+export const summaryEta = (order: OrderSummary): SummaryEta => order.eta;
 
 /** "Caixa de som +1": o que é o pedido, pelo nome do 1º item (U8.5). */
 export const firstItemLabel = (order: OrderSummary): string => (order.itemCount > 1 ? `${order.firstItemName} +${order.itemCount - 1}` : order.firstItemName);
