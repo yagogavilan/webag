@@ -1,9 +1,10 @@
-import { eq, sql } from 'drizzle-orm';
-import sharp from 'sharp';
+import { randomUUID } from 'node:crypto';
+import { and, eq, sql } from 'drizzle-orm';
 import { PasswordService } from '../src/modules/identity/password.service.js';
 import { renderVariant } from '../src/modules/media/image.processor.js';
 import type { Db } from '../src/platform/database/database.module.js';
 import { banners, categories, cities, coupons, favorites, legalDocuments, mediaAssets, products, reviews, stores, termsAcceptances, userAddresses, userRoles, users } from '../src/platform/database/schema.js';
+import { bannerImage, type BannerArt } from './banner-art.js';
 import { DEV_SEED_MERCHANT_PASSWORD, seedStores, type SeedOnda2Options, type SeedStore } from './onda2.js';
 
 /**
@@ -106,11 +107,6 @@ const COMMENTS: Record<number, string[]> = {
   1: ['Não gostei da experiência.'],
 };
 
-async function bannerImage(hue: number): Promise<Buffer> {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},75%,58%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360},70%,38%)"/></linearGradient></defs><rect width="1200" height="600" fill="url(#g)"/><circle cx="950" cy="300" r="230" fill="rgba(255,255,255,0.22)"/><circle cx="950" cy="300" r="130" fill="rgba(255,255,255,0.30)"/><rect x="80" y="230" width="520" height="40" rx="20" fill="rgba(255,255,255,0.55)"/><rect x="80" y="300" width="380" height="28" rx="14" fill="rgba(255,255,255,0.40)"/></svg>`;
-  return sharp(Buffer.from(svg)).png().toBuffer();
-}
-
 export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise<void> {
   const log = options.log ?? (() => undefined);
   if (options.production || process.env.NODE_ENV === 'production') throw new Error('Seed de demonstração não roda em produção');
@@ -193,34 +189,50 @@ export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise
     for (const product of someProducts.slice(i, i + 2)) await db.insert(favorites).values({ userId, productId: product.id }).onConflictDoNothing();
   }
 
-  // 6. Banners 2:1 (precisam de armazenamento para as imagens; sem ele, a home fica sem banner).
-  const [existingBanner] = await db.select({ id: banners.id }).from(banners).limit(1);
-  if (!existingBanner && options.storage) {
+  // 6. Banners 2:1 (arte SÓLIDA do kit v3, gerada em `banner-art.ts`; precisam de armazenamento para as imagens; sem ele, a home fica sem banner).
+  // Idempotente por banner: os ARQUIVOS (`media/<asset>/<largura>.webp`) são reenviados a cada execução (cobre o armazenamento recriado, o bucket
+  // vazio e a troca de arte), e a linha do banner só nasce quando a home ainda não tem nenhum (não mexe em banner curado no admin).
+  if (options.storage) {
+    const storage = options.storage;
     try {
       const [admin] = await db.select().from(users).where(eq(users.email, process.env.SEED_ADMIN_EMAIL ?? 'admin@webag.local'));
       const ownerId = admin?.id ?? customerIds[0]!;
       const mercado = (await db.select().from(categories)).find((c) => c.name === 'Mercado');
-      const bannerSeeds = [
-        { title: 'Frete grátis acima de R$ 50', hue: 150, destinationType: 'coupon' as const, destinationCode: 'FRETEGRATIS', destinationId: null as string | null },
-        { title: 'Tudo para o seu mercado', hue: 20, destinationType: 'category' as const, destinationCode: null as string | null, destinationId: mercado?.id ?? null },
-        { title: 'Novidades na Moda Passo Firme', hue: 300, destinationType: 'store' as const, destinationCode: null as string | null, destinationId: firstStore?.id ?? null },
+      const [anyBanner] = await db.select({ id: banners.id }).from(banners).limit(1);
+      const bannerSeeds: (BannerArt & { title: string; destinationType: 'coupon' | 'category' | 'store'; destinationCode: string | null; destinationId: string | null })[] = [
+        { title: 'Frete grátis acima de R$ 50', theme: 'lime', object: 'bag', lines: ['Frete grátis', 'acima de R$ 50'], cta: 'Usar cupom', destinationType: 'coupon', destinationCode: 'FRETEGRATIS', destinationId: null },
+        { title: 'Tudo para o seu mercado', theme: 'ink', object: 'basket', lines: ['Tudo para o', 'seu mercado'], cta: 'Ver mercado', destinationType: 'category', destinationCode: null, destinationId: mercado?.id ?? null },
+        { title: 'Novidades na Moda Passo Firme', theme: 'purple', object: 'sneaker', lines: ['Novidades na', 'Moda Passo Firme'], cta: 'Ver loja', destinationType: 'store', destinationCode: null, destinationId: firstStore?.id ?? null },
       ];
+      let uploaded = 0;
       for (const [position, b] of bannerSeeds.entries()) {
-        const base = await bannerImage(b.hue);
-        const [asset] = await db.insert(mediaAssets).values({ ownerUserId: ownerId, storeId: null, purpose: 'banner', status: 'ready', objectKey: `seed/banner-${position}`, declaredContentType: 'image/png', declaredSizeBytes: base.length, contentType: 'image/png', sizeBytes: base.length, width: 1200, height: 600, expiresAt: new Date(), completedAt: new Date() }).returning();
-        if (!asset) continue;
+        const base = await bannerImage(b);
+        const objectKey = `seed/banner-${position}`;
+        const [existing] = await db.select().from(mediaAssets).where(and(eq(mediaAssets.objectKey, objectKey), eq(mediaAssets.purpose, 'banner')));
+        if (!existing && anyBanner) continue; // home já curada: não cria banner de demonstração
+        const assetId = existing?.id ?? randomUUID();
+        // Arquivos ANTES das linhas: se o armazenamento falhar, não sobra registro apontando para arquivo inexistente.
         const variants: Record<string, string> = {};
         for (const width of [400, 800, 1200]) {
-          const key = `media/${asset.id}/${width}.webp`;
-          await options.storage.putObject('public', key, await renderVariant(base, width), 'image/webp');
+          const key = `media/${assetId}/${width}.webp`;
+          await storage.putObject('public', key, await renderVariant(base, width), 'image/webp');
           variants[String(width)] = key;
+          uploaded += 1;
         }
-        await db.update(mediaAssets).set({ variants }).where(eq(mediaAssets.id, asset.id));
-        await db.insert(banners).values({ title: b.title, imageAssetId: asset.id, cityId: null, destinationType: b.destinationType, destinationId: b.destinationId, destinationCode: b.destinationCode, startsAt: new Date(Date.now() - 86_400_000), endsAt: new Date(Date.now() + 60 * 86_400_000), position });
+        if (!existing) {
+          await db.insert(mediaAssets).values({ id: assetId, ownerUserId: ownerId, storeId: null, purpose: 'banner', status: 'ready', objectKey, declaredContentType: 'image/png', declaredSizeBytes: base.length, contentType: 'image/png', sizeBytes: base.length, width: 1200, height: 600, variants, expiresAt: new Date(), completedAt: new Date() });
+          await db.insert(banners).values({ title: b.title, imageAssetId: assetId, cityId: null, destinationType: b.destinationType, destinationId: b.destinationId, destinationCode: b.destinationCode, startsAt: new Date(Date.now() - 86_400_000), endsAt: new Date(Date.now() + 60 * 86_400_000), position });
+        } else {
+          await db.update(mediaAssets).set({ variants, contentType: 'image/png', sizeBytes: base.length, width: 1200, height: 600, status: 'ready' }).where(eq(mediaAssets.id, assetId));
+        }
+        // A URL pública tem de resolver (bucket público inexistente ou sem leitura anônima = 404/403 aqui, e o app mostraria imagem quebrada).
+        const url = storage.publicUrl(variants['800']!);
+        const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5_000) }).catch(() => null);
+        if (!res?.ok) log(`ATENÇÃO: ${url} respondeu ${res ? res.status : 'sem resposta'}: confira o bucket público e a leitura anônima (storage-init) e o S3_PUBLIC_URL`);
       }
-      log('banners da home: 3 criados');
+      log(`banners da home: ${uploaded / 3} com arquivos enviados ao armazenamento`);
     } catch (error) {
-      log(`armazenamento indisponível (${error instanceof Error ? error.message.slice(0, 80) : 'erro'}): home segue sem banner`);
+      log(`armazenamento indisponível (${error instanceof Error ? error.message.slice(0, 120) : 'erro'}): home segue sem banner. Suba o storage e o storage-init e rode o seed de novo`);
     }
   }
   log(`seed da Onda 3 concluído. Clientes de teste: cliente.<nome>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD}); cupons: BEMVINDO10, FRETEGRATIS, LOJA5`);
