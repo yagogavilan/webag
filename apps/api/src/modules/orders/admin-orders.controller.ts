@@ -13,6 +13,7 @@ const refundSchema = z.strictObject({
   reason: z.string().trim().min(10).max(300),
 });
 
+const cancelSchema = z.strictObject({ reason: z.string().trim().min(10).max(300), refund: z.boolean().default(true) });
 const returnSchema = z.strictObject({ reason: z.string().trim().min(10).max(300) });
 
 /** Ações do admin sobre pedidos (SEC-039). A lista/detalhe de pedidos do admin entra com o painel (Onda 4D). */
@@ -35,6 +36,22 @@ export class AdminOrdersController {
     if (!UUID.test(orderId)) throw errors.notFound();
     const key = parseIdempotencyKey(idempotencyKey, true)!;
     const result = await this.orders.adminRefund(orderId, { amountCents: body.amountCents, reason: body.reason, idempotencyKey: key }, ctx);
+    return {
+      status: result.status,
+      refunded: { amount: result.refundedCents, currency: 'BRL' },
+      remaining: { amount: result.remainingCents, currency: 'BRL' },
+    };
+  }
+
+  /** BUG-011 / RN-08: cancelamento pelo admin (motivo obrigatório, auditado), com estorno do saldo por padrão; a loja e a logística param de tratar o pedido. */
+  @AdminOnly('orders:refund')
+  @RequireReauth()
+  @HttpCode(200)
+  @RateLimit({ name: 'admin-order-cancel', limit: 60, windowSeconds: 3600 })
+  @Post(':orderId/cancel')
+  async cancel(@Param('orderId') orderId: string, @Body(new ZodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>, @Ctx() ctx: RequestContext) {
+    if (!UUID.test(orderId)) throw errors.notFound();
+    const result = await this.orders.adminCancel(orderId, { reason: body.reason, refund: body.refund }, ctx);
     return {
       status: result.status,
       refunded: { amount: result.refundedCents, currency: 'BRL' },

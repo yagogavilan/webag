@@ -39,7 +39,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
   }
   const refundTotal = async (attemptId: string) => (await ctx.db.select().from(paymentRefunds).where(eq(paymentRefunds.attemptId, attemptId))).reduce((s, r) => s + r.amountCents, 0);
 
-  it.fails('BUG-011 (RN-08, WB-109, SEC-151): o admin estorna o pedido TODO e o pedido deixa de estar ativo (a loja não aceita nem a logística despacha pedido já devolvido)', async () => {
+  it('BUG-011 (RN-08, WB-109, SEC-151): o admin estorna o pedido TODO e o pedido deixa de estar ativo (a loja não aceita nem a logística despacha pedido já devolvido)', async () => {
     const o = await paidOrder();
     const r = await ctx.http.post(`/v1/admin/orders/${o.orderId}/refunds`).set(bearer(superAdmin.accessToken)).set('Idempotency-Key', randomUUID()).send({ amountCents: o.attempt.amountCents, reason: 'estorno total para teste de QA' });
     expect(r.status).toBe(200);
@@ -48,7 +48,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect((await ctx.http.post(`${o.url}/accept`).set(bearer(o.shop.store.owner.accessToken)).send({})).status).toBeGreaterThanOrEqual(409); // obtido: 200
   });
 
-  it.fails('BUG-011b (RN-08 "Qualquer estado | admin | cancelar e estornar"): existe rota do admin para cancelar o pedido com motivo e estorno', async () => {
+  it('BUG-011b (RN-08 "Qualquer estado | admin | cancelar e estornar"): existe rota do admin para cancelar o pedido com motivo e estorno', async () => {
     const o = await paidOrder();
     const res = await ctx.http.post(`/v1/admin/orders/${o.orderId}/cancel`).set(bearer(superAdmin.accessToken)).send({ reason: 'cancelamento pelo admin, teste de QA' }); // obtido: 404 (rota não existe)
     expect(res.status).toBe(200);

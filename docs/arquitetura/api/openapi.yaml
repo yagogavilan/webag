@@ -2209,7 +2209,7 @@ paths:
       tags: [orders]
       operationId: adminRefundOrder
       summary: Estorno manual do admin, total ou parcial (SEC-039)
-      description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado."
+      description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Estorno que zera o pedido o leva a `cancelled` (ator admin; estoque devolvido, corrida cancelada); pedido já entregue ou encerrado fica como está (BUG-011). Auditado."
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
@@ -2248,6 +2248,47 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
+  /v1/admin/orders/{orderId}/cancel:
+    post:
+      tags: [orders]
+      operationId: adminCancelOrder
+      summary: Cancelamento do pedido pelo admin (RN-08, BUG-011)
+      description: "Permissão de admin: `orders:refund`. Reautenticação recente e motivo obrigatório; auditado. Cancela o pedido em qualquer estado ativo, devolve o estoque, cancela a corrida em aberto e, por padrão (`refund` = true), estorna o que falta devolver; sem super admin, o estorno conta no limite acumulado (403 `SUPER_ADMIN_REQUIRED`, SEC-142). Pedido entregue ou já encerrado: 409 `ORDER_NOT_CANCELLABLE`. Repetir é idempotente."
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10, maxLength: 300 }
+                refund: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Pedido cancelado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, refunded, remaining]
+                properties:
+                  status: { type: string, enum: [cancelled] }
+                  refunded: { $ref: '#/components/schemas/Money' }
+                  remaining: { $ref: '#/components/schemas/Money' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /v1/admin/payments/alerts:
     get:
       tags: [payments]

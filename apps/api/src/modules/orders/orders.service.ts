@@ -16,7 +16,7 @@ import { computeOrderFinance, LedgerService, type OrderFinance } from '../financ
 import { IdempotencyService } from '../idempotency/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
-import { ADMIN_REFUND_KEY_PREFIX, PaymentsService, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
+import { ADMIN_REFUND_KEY_PREFIX, PaymentsService, type ManualRefundCap, type PaymentAttempt, type PaymentListener } from '../payments/index.js';
 import type { PaymentStatus } from '../payments/db/schema.js';
 import type { ProviderPayment } from '../payments/payment-provider.js';
 import { stores } from '../stores/db/schema.js';
@@ -63,6 +63,15 @@ const declineText = (reason: string | null): string => DECLINE_TEXT[reason ?? ''
 const CARD_PAYMENT_WINDOW_MIN = 30;
 /** Folga antes de a varredura expirar pedido cuja tentativa de pagamento ficou sem resposta. */
 const ORPHAN_GRACE_MS = 2 * 60_000;
+
+interface CloseOrderOptions {
+  /** `false`: encerra sem agendar estorno (o admin já estornou tudo ou escolheu não estornar). */
+  refund?: boolean;
+  /** Estorno agendado por operador sem perfil de super admin conta no limite acumulado (SEC-142). */
+  manualCap?: ManualRefundCap;
+  refundKey?: string;
+  ctx?: RequestContext;
+}
 
 interface PendingRefund {
   attemptId: string;
@@ -381,7 +390,15 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
    * (reserva ou baixa), libera o cupom, AGENDA o estorno quando já havia pagamento e grava o evento. O estorno em si
    * (chamada ao provedor) sai depois do commit por `finishRefund`.
    */
-  async closeOrder(tx: Tx, order: OrderRow, to: 'cancelled' | 'refused' | 'expired', actor: OrderActor, reason: string | null, actorUserId: string | null): Promise<{ event: OrderEvent; refund: PendingRefund | null }> {
+  async closeOrder(
+    tx: Tx,
+    order: OrderRow,
+    to: 'cancelled' | 'refused' | 'expired',
+    actor: OrderActor,
+    reason: string | null,
+    actorUserId: string | null,
+    opts: CloseOrderOptions = {},
+  ): Promise<{ event: OrderEvent; refund: PendingRefund | null }> {
     if (!canTransition(order.status, to, actor, order.mode)) throw errors.conflict('INVALID_TRANSITION', 'Transição não permitida', `O pedido não pode ir de ${order.status} para ${to}.`);
     const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
     const reserved = items.filter((i) => i.stockState === 'reserved').map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
@@ -392,13 +409,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     await tx.update(couponRedemptions).set({ releasedAt: new Date() }).where(and(eq(couponRedemptions.orderId, order.id), isNull(couponRedemptions.releasedAt)));
 
     let refund: PendingRefund | null = null;
-    if (refundDueOnCancel(order.status) && order.paymentAttemptId) {
+    if (opts.refund !== false && refundDueOnCancel(order.status) && order.paymentAttemptId) {
       const [attempt] = await tx.select().from(paymentAttempts).where(eq(paymentAttempts.id, order.paymentAttemptId));
       if (attempt) {
         const remaining = attempt.amountCents - (await this.payments.refundedOrPendingCents(tx, attempt.id));
         if (remaining > 0) {
-          const key = `order-close:${order.id}`;
-          await this.payments.reserveRefundIntent(tx, attempt.id, remaining, `order_${to}`, key, { actorId: actorUserId, actorRole: actor, requestId: null });
+          const key = opts.refundKey ?? `order-close:${order.id}`;
+          await this.payments.reserveRefundIntent(tx, attempt.id, remaining, `order_${to}`, key, { actorId: actorUserId, actorRole: opts.ctx?.principal?.adminProfile ?? actor, requestId: opts.ctx?.requestId ?? null }, opts.manualCap);
           refund = { attemptId: attempt.id, amountCents: remaining, reason: `order_${to}`, key };
         }
       }
@@ -406,7 +423,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
 
     // L.4: pedido encerrado com a corrida em aberto (admin cancelando): a corrida acaba junto, na mesma transação.
     if (order.mode === 'delivery' && (order.status === 'ready_for_collection' || order.status === 'out_for_delivery')) {
-      await this.deliveries.cancelForOrderInTx(tx, order.id, reason ?? 'Pedido cancelado', { id: actorUserId, role: actor }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      await this.deliveries.cancelForOrderInTx(tx, order.id, reason ?? 'Pedido cancelado', { id: actorUserId, role: actor }, opts.ctx ?? { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
     }
 
     const now = new Date();
@@ -558,7 +575,58 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     }
     const attempt = await this.payments.getAttempt(order.paymentAttemptId);
     const pending = await this.payments.refundedOrPendingCents(this.db, attempt.id);
+    // BUG-011: estorno que zera o pedido o encerra (a loja não aceita nem a logística despacha pedido já devolvido).
+    if (pending >= attempt.amountCents) await this.cancelAfterFullRefund(orderId, input.reason, ctx);
     return { status, refundedCents: pending, remainingCents: attempt.amountCents - pending };
+  }
+
+  /** Estorno total manual leva o pedido ativo a CANCELADO (ator admin): estoque devolvido, corrida cancelada e auditoria. Pedido já encerrado ou entregue fica como está. */
+  private async cancelAfterFullRefund(orderId: string, reason: string, ctx: RequestContext): Promise<void> {
+    let done: { event: OrderEvent } | null = null;
+    await this.db.transaction(async (tx) => {
+      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+      if (!order || !canTransition(order.status, 'cancelled', 'admin', order.mode)) return;
+      done = await this.closeOrder(tx, order, 'cancelled', 'admin', `Estorno total: ${reason}`, ctx.principal?.userId ?? null, { refund: false, ctx });
+      await this.audit.record(tx, ctx, { action: 'order.cancel_by_full_refund', targetType: 'order', targetId: order.id, before: { status: order.status }, after: { status: 'cancelled' }, reason });
+    });
+    if (done) await this.bus.emit((done as { event: OrderEvent }).event);
+  }
+
+  /**
+   * BUG-011 / RN-08: o admin cancela o pedido em qualquer estado ativo, com motivo (auditado) e, por padrão, estorno do que
+   * falta devolver. Sem super admin, o estorno do cancelamento conta no limite acumulado (SEC-142). Repetir é idempotente.
+   */
+  async adminCancel(orderId: string, input: { reason: string; refund: boolean }, ctx: RequestContext): Promise<{ status: 'cancelled'; refundedCents: number; remainingCents: number }> {
+    let done: { event: OrderEvent; refund: PendingRefund | null } | null = null;
+    let attemptId: string | null = null;
+    await this.db.transaction(async (tx) => {
+      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+      if (!order) throw errors.notFound('Pedido não encontrado.');
+      attemptId = order.paymentAttemptId;
+      if (order.status === 'cancelled' && order.cancelledBy === 'admin') return; // repetição
+      if (!canTransition(order.status, 'cancelled', 'admin', order.mode)) {
+        throw errors.conflict('ORDER_NOT_CANCELLABLE', 'O pedido não pode ser cancelado', `O pedido está em "${order.status}".`, { currentStatus: order.status });
+      }
+      const isSuper = ctx.principal?.adminProfile === 'super_admin';
+      const limit = await this.params.getNumber('estorno_super_admin_cents');
+      const manualCap: ManualRefundCap | undefined = isSuper ? undefined : { perOrderCents: limit, perActorDayCents: await this.params.getNumber('estorno_financeiro_dia_cents') };
+      done = await this.closeOrder(tx, order, 'cancelled', 'admin', input.reason, ctx.principal?.userId ?? null, {
+        refund: input.refund,
+        ...(manualCap ? { manualCap } : {}),
+        refundKey: `${ADMIN_REFUND_KEY_PREFIX}cancel:${order.id}`,
+        ctx,
+      });
+      await this.audit.record(tx, ctx, { action: 'order.admin_cancel', targetType: 'order', targetId: order.id, before: { status: order.status }, after: { status: 'cancelled', refund: input.refund }, reason: input.reason });
+    });
+    const result = done as { event: OrderEvent; refund: PendingRefund | null } | null;
+    if (result) {
+      await this.finishRefund(result.refund);
+      await this.bus.emit(result.event);
+    }
+    if (!attemptId) return { status: 'cancelled', refundedCents: 0, remainingCents: 0 };
+    const attempt = await this.payments.getAttempt(attemptId);
+    const pending = await this.payments.refundedOrPendingCents(this.db, attempt.id);
+    return { status: 'cancelled', refundedCents: pending, remainingCents: attempt.amountCents - pending };
   }
 
   // =================================================================== logística (L.4)
