@@ -28,7 +28,7 @@ describe('BannersPage (MK1)', () => {
   it('lista com impressões, cliques e taxa em texto; pausar manda PATCH e avisa', async () => {
     let live = true;
     const { impl, calls } = mockFetch(
-      (url, init) => (url.pathname.endsWith('/admin/regions/cities') ? json(page([city])) : undefined),
+      (url) => (url.pathname.endsWith('/admin/regions/cities') ? json(page([city])) : undefined),
       (url, init) => (init.method === 'PATCH' ? ((live = false), json(banner({ active: false, live: false }))) : undefined),
       (url) => (url.pathname.endsWith('/admin/banners') ? json(page([banner({ live })])) : undefined),
     );
