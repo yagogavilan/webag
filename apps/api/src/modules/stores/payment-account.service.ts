@@ -104,7 +104,7 @@ export class MercadoPagoOAuthProvider implements PaymentOAuthProvider {
   async exchange(code: string, _context?: unknown, codeVerifier?: string): Promise<ConnectedAccount> {
     const { clientId, clientSecret, redirectUri, platformToken } = this.creds();
     try {
-      const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).create({ body: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri, ...(codeVerifier ? { code_verifier: codeVerifier } : {}) } as never });
+      const tokens = await new OAuth(new MercadoPagoConfig({ accessToken: platformToken, options: { timeout: 8_000, maxRetries: 0 } })).create({ body: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri, ...(codeVerifier ? { code_verifier: codeVerifier } : {}) } });
       if (!tokens.access_token || !tokens.refresh_token || tokens.user_id === undefined) throw new Error('resposta de OAuth incompleta');
       const me = await new User(new MercadoPagoConfig({ accessToken: tokens.access_token, options: { timeout: 8_000, maxRetries: 1 } })).get();
       const holder = (me as { identification?: { number?: string } }).identification?.number ?? '';

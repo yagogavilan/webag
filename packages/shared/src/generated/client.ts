@@ -892,6 +892,38 @@ export interface PaymentAlert {
   resolvedAt: string | null;
 }
 
+export type RefundQueueItemStatus = typeof RefundQueueItemStatus[keyof typeof RefundQueueItemStatus];
+
+
+export const RefundQueueItemStatus = {
+  pending: 'pending',
+  exhausted: 'exhausted',
+  covered: 'covered',
+} as const;
+
+export interface RefundQueueItem {
+  id: string;
+  attemptId: string;
+  /** ID do pedido */
+  orderReference: string;
+  amountCents: number;
+  reason: string;
+  status: RefundQueueItemStatus;
+  failures: number;
+  /** @nullable */
+  lastErrorCode: string | null;
+  nextAttemptAt: string;
+  /** @nullable */
+  coveredAt: string | null;
+  createdAt: string;
+}
+
+export interface RefundQueuePage {
+  data: RefundQueueItem[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 export interface CommissionRateInput {
   /**
      * Percentual (8.5 = 8,50%). null = remove o override.
@@ -3908,6 +3940,30 @@ export type ReceivePaymentWebhookParams = {
   type?: string;
 };
 
+export type AdminRefundOrderBody = {
+  /** @minimum 1 */
+  amountCents: number;
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
+};
+
+export type AdminRefundOrder200Status = typeof AdminRefundOrder200Status[keyof typeof AdminRefundOrder200Status];
+
+
+export const AdminRefundOrder200Status = {
+  done: 'done',
+  queued: 'queued',
+} as const;
+
+export type AdminRefundOrder200 = {
+  status: AdminRefundOrder200Status;
+  refunded: Money;
+  remaining: Money;
+};
+
 export type ListPaymentAlertsParams = {
   openOnly?: boolean;
   /**
@@ -3921,6 +3977,52 @@ export type ListPaymentAlertsParams = {
    * @maximum 50
    */
   limit?: LimitParameter;
+};
+
+export type ListRefundQueueParams = {
+  status?: ListRefundQueueStatus;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListRefundQueueStatus = typeof ListRefundQueueStatus[keyof typeof ListRefundQueueStatus];
+
+
+export const ListRefundQueueStatus = {
+  pending: 'pending',
+  exhausted: 'exhausted',
+  covered: 'covered',
+} as const;
+
+export type RetryRefundIntent200Status = typeof RetryRefundIntent200Status[keyof typeof RetryRefundIntent200Status];
+
+
+export const RetryRefundIntent200Status = {
+  pending: 'pending',
+  done: 'done',
+  exhausted: 'exhausted',
+  covered: 'covered',
+} as const;
+
+export type RetryRefundIntent200 = {
+  status: RetryRefundIntent200Status;
+};
+
+export type CoverRefundIntentBody = {
+  /**
+     * @minLength 10
+     * @maxLength 300
+     */
+  reason: string;
 };
 
 export type ListMyStores200 = {
@@ -8028,6 +8130,76 @@ export const setCategoryCommission = async (categoryId: string,
 
 
 
+export type adminRefundOrderResponse200 = {
+  data: AdminRefundOrder200
+  status: 200
+}
+
+export type adminRefundOrderResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adminRefundOrderResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adminRefundOrderResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adminRefundOrderResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adminRefundOrderResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type adminRefundOrderResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type adminRefundOrderResponseSuccess = (adminRefundOrderResponse200) & {
+  headers: Headers;
+};
+export type adminRefundOrderResponseError = (adminRefundOrderResponse400 | adminRefundOrderResponse401 | adminRefundOrderResponse403 | adminRefundOrderResponse404 | adminRefundOrderResponse409 | adminRefundOrderResponse422) & {
+  headers: Headers;
+};
+
+export type adminRefundOrderResponse = (adminRefundOrderResponseSuccess | adminRefundOrderResponseError)
+
+export const getAdminRefundOrderUrl = (orderId: string,) => {
+
+
+
+
+  return `/v1/admin/orders/${orderId}/refunds`
+}
+
+/**
+ * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
+ * @summary Estorno manual do admin, total ou parcial (SEC-039)
+ */
+export const adminRefundOrder = async (orderId: string,
+    adminRefundOrderBody: AdminRefundOrderBody, options?: Parameters<typeof apiFetch>[1]): Promise<adminRefundOrderResponse> => {
+
+  return apiFetch<adminRefundOrderResponse>(getAdminRefundOrderUrl(orderId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminRefundOrderBody)
+  }
+);}
+
+
+
 export type listPaymentAlertsResponse200 = {
   data: PaymentAlertPage
   status: 200
@@ -8084,6 +8256,191 @@ export const listPaymentAlerts = async (params?: ListPaymentAlertsParams, option
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listRefundQueueResponse200 = {
+  data: RefundQueuePage
+  status: 200
+}
+
+export type listRefundQueueResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listRefundQueueResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listRefundQueueResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listRefundQueueResponseSuccess = (listRefundQueueResponse200) & {
+  headers: Headers;
+};
+export type listRefundQueueResponseError = (listRefundQueueResponse400 | listRefundQueueResponse401 | listRefundQueueResponse403) & {
+  headers: Headers;
+};
+
+export type listRefundQueueResponse = (listRefundQueueResponseSuccess | listRefundQueueResponseError)
+
+export const getListRefundQueueUrl = (params?: ListRefundQueueParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/payments/refund-queue?${stringifiedParams}` : `/v1/admin/payments/refund-queue`
+}
+
+/**
+ * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`.
+ * @summary Fila de estornos pendentes (SEC-130)
+ */
+export const listRefundQueue = async (params?: ListRefundQueueParams, options?: Parameters<typeof apiFetch>[1]): Promise<listRefundQueueResponse> => {
+
+  return apiFetch<listRefundQueueResponse>(getListRefundQueueUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type retryRefundIntentResponse200 = {
+  data: RetryRefundIntent200
+  status: 200
+}
+
+export type retryRefundIntentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type retryRefundIntentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type retryRefundIntentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type retryRefundIntentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type retryRefundIntentResponseSuccess = (retryRefundIntentResponse200) & {
+  headers: Headers;
+};
+export type retryRefundIntentResponseError = (retryRefundIntentResponse401 | retryRefundIntentResponse403 | retryRefundIntentResponse404 | retryRefundIntentResponse409) & {
+  headers: Headers;
+};
+
+export type retryRefundIntentResponse = (retryRefundIntentResponseSuccess | retryRefundIntentResponseError)
+
+export const getRetryRefundIntentUrl = (intentId: string,) => {
+
+
+
+
+  return `/v1/admin/payments/refund-queue/${intentId}/retry`
+}
+
+/**
+ * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`.
+ * @summary Tentar o estorno de novo agora
+ */
+export const retryRefundIntent = async (intentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<retryRefundIntentResponse> => {
+
+  return apiFetch<retryRefundIntentResponse>(getRetryRefundIntentUrl(intentId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type coverRefundIntentResponse204 = {
+  data: void
+  status: 204
+}
+
+export type coverRefundIntentResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type coverRefundIntentResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type coverRefundIntentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type coverRefundIntentResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type coverRefundIntentResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type coverRefundIntentResponseSuccess = (coverRefundIntentResponse204) & {
+  headers: Headers;
+};
+export type coverRefundIntentResponseError = (coverRefundIntentResponse401 | coverRefundIntentResponse403 | coverRefundIntentResponse404 | coverRefundIntentResponse409 | coverRefundIntentResponse422) & {
+  headers: Headers;
+};
+
+export type coverRefundIntentResponse = (coverRefundIntentResponseSuccess | coverRefundIntentResponseError)
+
+export const getCoverRefundIntentUrl = (intentId: string,) => {
+
+
+
+
+  return `/v1/admin/payments/refund-queue/${intentId}/cover`
+}
+
+/**
+ * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`.
+ * @summary Cobertura da Webag (DEC-020a)
+ */
+export const coverRefundIntent = async (intentId: string,
+    coverRefundIntentBody: CoverRefundIntentBody, options?: Parameters<typeof apiFetch>[1]): Promise<coverRefundIntentResponse> => {
+
+  return apiFetch<coverRefundIntentResponse>(getCoverRefundIntentUrl(intentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(coverRefundIntentBody)
   }
 );}
 

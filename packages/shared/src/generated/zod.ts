@@ -1515,6 +1515,47 @@ export const SetCategoryCommissionResponse = zod.object({
 
 
 /**
+ * Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Auditado.
+ * @summary Estorno manual do admin, total ou parcial (SEC-039)
+ */
+export const AdminRefundOrderParams = zod.object({
+  "orderId": zod.uuid()
+})
+
+export const adminRefundOrderHeaderIdempotencyKeyMin = 8;
+export const adminRefundOrderHeaderIdempotencyKeyMax = 80;
+
+
+
+export const AdminRefundOrderHeader = zod.object({
+  "Idempotency-Key": zod.string().min(adminRefundOrderHeaderIdempotencyKeyMin).max(adminRefundOrderHeaderIdempotencyKeyMax)
+})
+
+
+export const adminRefundOrderBodyReasonMin = 10;
+export const adminRefundOrderBodyReasonMax = 300;
+
+
+
+export const AdminRefundOrderBody = zod.object({
+  "amountCents": zod.int().min(1),
+  "reason": zod.string().min(adminRefundOrderBodyReasonMin).max(adminRefundOrderBodyReasonMax)
+})
+
+export const AdminRefundOrderResponse = zod.object({
+  "status": zod.enum(['done', 'queued']),
+  "refunded": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "remaining": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.')
+})
+
+
+/**
  * Permissão de admin: `payments:alerts:read` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Alertas de conciliação e divergência
  */
@@ -1542,6 +1583,74 @@ export const ListPaymentAlertsResponse = zod.object({
 })),
   "nextCursor": zod.string().nullable()
 })
+
+
+/**
+ * Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Permissão de admin: `payments:refunds:read`.
+ * @summary Fila de estornos pendentes (SEC-130)
+ */
+export const listRefundQueueQueryCursorMax = 200;
+
+export const listRefundQueueQueryLimitDefault = 20;
+export const listRefundQueueQueryLimitMax = 50;
+
+
+
+export const ListRefundQueueQueryParams = zod.object({
+  "status": zod.enum(['pending', 'exhausted', 'covered']).optional(),
+  "cursor": zod.string().max(listRefundQueueQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listRefundQueueQueryLimitMax).default(listRefundQueueQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+})
+
+export const ListRefundQueueResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attemptId": zod.uuid(),
+  "orderReference": zod.string().describe('ID do pedido'),
+  "amountCents": zod.int(),
+  "reason": zod.string(),
+  "status": zod.enum(['pending', 'exhausted', 'covered']),
+  "failures": zod.int(),
+  "lastErrorCode": zod.string().nullable(),
+  "nextAttemptAt": zod.iso.datetime({"offset":true}),
+  "coveredAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. Auditado. Permissão de admin: `payments:refunds:retry`.
+ * @summary Tentar o estorno de novo agora
+ */
+export const RetryRefundIntentParams = zod.object({
+  "intentId": zod.uuid()
+})
+
+export const RetryRefundIntentResponse = zod.object({
+  "status": zod.enum(['pending', 'done', 'exhausted', 'covered'])
+})
+
+
+/**
+ * Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Permissão de admin: `payments:refunds:cover`.
+ * @summary Cobertura da Webag (DEC-020a)
+ */
+export const CoverRefundIntentParams = zod.object({
+  "intentId": zod.uuid()
+})
+
+export const coverRefundIntentBodyReasonMin = 10;
+export const coverRefundIntentBodyReasonMax = 300;
+
+
+
+export const CoverRefundIntentBody = zod.object({
+  "reason": zod.string().min(coverRefundIntentBodyReasonMin).max(coverRefundIntentBodyReasonMax)
+})
+
+export const CoverRefundIntentResponse = zod.void()
 
 
 /**

@@ -210,9 +210,13 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
       expect((list.body.data as { attemptId: string }[]).some((a) => a.attemptId === pix.id)).toBe(true);
     });
 
-    it('ID desconhecido: descarta o evento e alerta; só financeiro e super admin veem os alertas', async () => {
+    it('ID desconhecido: adia o evento por alguns minutos (SEC-136) e depois descarta e alerta; só financeiro e super admin veem os alertas', async () => {
       const unknown = `fk${'ab'.repeat(12)}`;
       await payments.receiveWebhook(fake.signedNotification(unknown, 'payment.updated'));
+      await payments.processDue();
+      await payments.drain();
+      expect((await ctx.db.select().from(webhookEvents).where(eq(webhookEvents.providerPaymentId, unknown)))[0]?.status).toBe('pending');
+      await ctx.db.update(webhookEvents).set({ receivedAt: new Date(Date.now() - 11 * 60_000), nextAttemptAt: new Date() }).where(eq(webhookEvents.providerPaymentId, unknown));
       await payments.processDue();
       await payments.drain();
       const [event] = await ctx.db.select().from(webhookEvents).where(eq(webhookEvents.providerPaymentId, unknown));
