@@ -9,8 +9,8 @@
 
 Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some em silêncio; o cliente fica sem o dinheiro e o admin sem alerta), SEC-131 (sem teto de pedidos pendentes; 1 conta reservou 180 de 200 unidades em segundos) e SEC-132 (teto da loja nova do DEC-020b inexistente, mesmo item do BUG-009). O núcleo do pagamento está **bem feito**: assinatura, antirreplay, re-consulta, conferência de valor/recebedor/comissão, idempotência, IDOR e reserva atômica resistiram a todos os ataques abaixo.
 
-- **Sem objeção** a o mobile-dev integrar o checkout contra o `fake`/sandbox do MP enquanto o back-end corrige, **desde que** o ambiente não seja público até o SEC-135 ser corrigido.
-- **Para virar APROVADO COM RESSALVAS:** corrigir SEC-130, SEC-131, SEC-132 e SEC-134 (pequeno e confirmado), com os testes de "Como verificar". O security-engineer reverifica só esses pontos. Os Médios SEC-133, SEC-135 e SEC-136 têm prazo até o G4; o SEC-135 vale **antes de subir o staging** do DT-038 (já commitado em `6f3113c`). Baixos: ondas seguintes.
+- **Sem objeção** a o mobile-dev integrar o checkout contra o `fake`/sandbox do MP enquanto o back-end corrige, **desde que** o staging não receba clientes reais.
+- **Para virar APROVADO COM RESSALVAS:** corrigir SEC-130, SEC-131, SEC-132 e SEC-134 (pequeno e confirmado), com os testes de "Como verificar". O security-engineer reverifica só esses pontos. Os Médios SEC-133 e SEC-136 têm prazo até o G4. SEC-135 já foi parcialmente corrigido pelo backend-dev (`7d370c2`) e o que resta é Baixo. Baixos: ondas seguintes.
 - **Pendência de escopo (não é achado):** endpoint de estorno do admin (SEC-039) e a cobertura do DEC-020a ainda não existem. Sem eles, os alertas `conciliation_mismatch`, `creation_unresolved` e o SEC-130 não têm como ser resolvidos pela operação. Precisa estar pronto antes do G4.
 
 ## Achados
@@ -22,7 +22,7 @@ Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some e
 | SEC-132 | Alta | SEC-062/DEC-020b ausente: limite de exposição da loja nova não é aplicado (= BUG-009) | backend-dev | Aberto |
 | SEC-133 | Média | Cartão aprovado na resposta da criação entra como pago sem a conferência do SEC-034 | backend-dev | Aberto |
 | SEC-134 | Média | O gancho do pedido aceita qualquer tentativa com `external_reference` = pedido, sem conferir valor, loja e vínculo | backend-dev | Aberto |
-| SEC-135 | Média | Rotas `/v1/dev/payments` ativas em todo `NODE_ENV != production`, sem dono nem papel; risco direto para o staging do DT-038 | backend-dev | Aberto |
+| SEC-135 | Média → Baixa | Rotas `/v1/dev/payments` sem dono nem papel, registradas no staging do DT-038 | backend-dev | Parcialmente corrigido (`7d370c2`) |
 | SEC-136 | Média | Cartão com timeout na criação: cobrança pode existir no MP, o webhook é descartado e não há estorno automático | backend-dev | Aberto |
 | SEC-137 | Baixa | Validação de assinatura própria em vez do `WebhookSignatureValidator` do SDK (SEC-032) | backend-dev | Aberto |
 | SEC-138 | Baixa | Código de retirada de 4 dígitos sem limite de erros por pedido | backend-dev | Aberto |
@@ -64,10 +64,11 @@ Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some e
 - **Correção recomendada:** no gancho, se `order.paymentAttemptId` existir e for diferente, ou se valor/loja divergirem: não pagar, alerta `order_attempt_mismatch` e (se aprovado) estorno automático do SEC-040.
 - **Como verificar:** e2e com tentativa de valor menor e `external_reference` = pedido → pedido segue `awaiting_payment`, alerta e estorno.
 
-### SEC-135 | Severidade: Média | Status: Aberto
+### SEC-135 | Severidade: Média (residual Baixa) | Status: Parcialmente corrigido
 - **Onde:** `payments/payments.dev.ts:15-61` (rotas exigem só login, sem dono da tentativa nem papel; `GET :attemptId` devolve a tentativa de qualquer um, com o PIX copia e cola) e `:67-70` (`devModulesFor`). Atualizado pelo commit `6f3113c` (DT-038), que entrou durante esta revisão: com `NODE_ENV=production` + `APP_ENV=staging` + `PAYMENT_PROVIDER=fake` o módulo **é registrado** (`app.module.ts:106`), e `infra/docker-compose.prod.yml` aceita `APP_ENV` por variável.
 - **Problema:** em produção real está correto (verificado: módulo não registrado; boot recusa `fake` e `TEST-` sem `APP_ENV=staging`; o staging mantém as demais travas de `env.ts:139-186`, o que é bom). Mas o staging fica na internet (o app precisa alcançá-lo) e lá **qualquer conta aprova pagamento de qualquer pedido, por qualquer valor** (confirmado por teste, combinado com SEC-134). E a fronteira entre "staging" e "produção" é uma única variável no mesmo arquivo de env: `APP_ENV=staging` + `PAYMENT_PROVIDER=fake` num servidor com lojistas reais vira "pedido pago sem dinheiro" (o risco que o DEC-032 quis evitar).
 - **Correção recomendada:** (1) rotas dev no staging só com `@AdminOnly` (ou papel de testador) **e** conferência de que `externalReference` é pedido do próprio usuário com `amountCents` = total do pedido; fora disso 404; (2) em `APP_ENV=staging`, recusar no boot credencial **de produção** do MP (`APP_USR-` que não seja de usuário de teste) e exigir `API_PUBLIC_URL` diferente do domínio de produção (lista em env), para que staging e produção não possam ser confundidos; (3) e-mails/push do staging com prefixo "[TESTE]" e banner no app; (4) checklist do deploy: staging com banco, Redis, bucket e segredos próprios.
+- **Atualização (2026-11-19, leitura de código, sem rodar o teste):** o `7d370c2` faz `devModulesFor` registrar as rotas só em `development`/`test`; o staging não as tem mais. Com isso o item (1) cai e o "staging confundido com produção" deixa de dar pedido pago sem dinheiro (o `fake` sem simulação nunca aprova). Restam, como Baixa: itens (2) a (4) e recusar no boot do staging o `FAKE_PAYMENT_WEBHOOK_SECRET` padrão (`env.ts:101`, valor público no repositório). Se o staging precisar simular aprovação, a rota volta só com `@AdminOnly` e conferência de dono e valor do pedido.
 - **Como verificar:** `production-boot.e2e-spec.ts`: staging com `APP_USR-` de produção → boot falha; staging com usuário comum em `POST /v1/dev/payments` → 404/403; com pedido de outro usuário → 404.
 
 ### SEC-136 | Severidade: Média | Status: Aberto
