@@ -100,7 +100,7 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
       const list = await ctx.http.get('/v1/admin/parameters').set(bearer(operations.accessToken)).expect(200);
       expect(list.body.data).toHaveLength(PARAMETER_DEFINITIONS.length);
       const commission = (list.body.data as Record<string, unknown>[]).find((p) => p.key === 'comissao_padrao_pct');
-      expect(commission).toMatchObject({ value: 10, default: 10, min: 0, max: 30, type: 'decimal' });
+      expect(commission).toMatchObject({ default: 15, min: 0, max: 30, type: 'decimal' }) // `value` é 10: `createTestApp` fixa 10% para as contas dos testes de dinheiro;
       await ctx.http.get('/v1/admin/parameters').set(bearer(support.accessToken)).expect(403);
       await ctx.http.put('/v1/admin/parameters/pix_expiracao_min').set(bearer(operations.accessToken)).send({ value: 20, reason: 'ajuste de teste' }).expect(403);
     });

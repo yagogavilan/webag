@@ -77,7 +77,8 @@ describe('Finanças: comissão por loja/categoria e ledger de dupla entrada (WB-
       await ctx.db.insert(parameters).values({ key: 'comissao_padrao_pct', value: 25 }).onConflictDoUpdate({ target: parameters.key, set: { value: 25 } });
       const [sale] = await ctx.db.select().from(ledgerTransactions).where(eq(ledgerTransactions.orderId, orderId));
       expect((sale!.meta as { finance: { commissionCents: number } }).finance.commissionCents).toBe(1350);
-      await ctx.db.delete(parameters).where(eq(parameters.key, 'comissao_padrao_pct'));
+      // Volta ao 10% fixado por `createTestApp` (apagar a linha devolveria o padrão de produção, 15%, e mudaria as contas dos testes seguintes).
+      await ctx.db.insert(parameters).values({ key: 'comissao_padrao_pct', value: 10 }).onConflictDoUpdate({ target: parameters.key, set: { value: 10 } });
     });
   });
 

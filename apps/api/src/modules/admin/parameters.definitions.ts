@@ -33,7 +33,9 @@ export const DISABLED_PARAMETERS: Readonly<Record<string, string>> = {
 };
 
 export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
-  { key: 'comissao_padrao_pct', type: 'decimal', default: 10, min: 0, max: 30, description: 'Comissão padrão sobre o subtotal de produtos (%)', ref: 'HIP-001' },
+  { key: 'comissao_padrao_pct', type: 'decimal', default: 15, min: 0, max: 30, description: 'Comissão padrão sobre o subtotal de produtos (%)', ref: 'HIP-001' },
+  { key: 'taxa_provedor_pix_pct', type: 'decimal', default: 0.99, min: 0, max: 10, description: 'Tarifa estimada do provedor no PIX (%), só para o "Você recebe" do lojista; a tarifa real vem do provedor e é a que vale no extrato', ref: 'HIP-C02' },
+  { key: 'taxa_provedor_cartao_pct', type: 'decimal', default: 4.98, min: 0, max: 15, description: 'Tarifa estimada do provedor no cartão (%), só para o "Você recebe" do lojista; a tarifa real vem do provedor e é a que vale no extrato', ref: 'HIP-C02' },
   { key: 'taxa_servico_tipo', type: 'enum', default: 'nenhuma', values: ['nenhuma', 'fixa', 'percentual'], description: 'Tipo da taxa de serviço ao cliente', ref: 'HIP-003' },
   int('taxa_servico_valor', 0, 0, 5000, 'Taxa de serviço: centavos (fixa) ou pontos-base de % (percentual, até 50,00%)', 'HIP-003'),
   int('pix_expiracao_min', 15, 5, 60, 'Validade do PIX (min)', 'HIP-006'),
@@ -80,7 +82,7 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('troca_taxa_pagamento_h', 24, 1, 72, 'Prazo para o cliente pagar a taxa da coleta depois da aprovação (h); sem pagamento a troca é cancelada', 'HIP-T05'),
   int('taxa_coleta_max_cents', 3000, 0, 10000, 'Teto da taxa de coleta da troca voluntária (centavos)', 'HIP-018'),
   int('troca_taxa_alerta_pct', 25, 5, 100, 'Taxa de troca (trocas / pedidos entregues, %) por loja acima da qual o relatório destaca e alerta (WB-248)', 'WB-248'),
-  int('troca_resposta_h', 24, 4, 120, 'SLA da loja para responder à troca (h); sem resposta a troca é aprovada automaticamente (DEC-037)', 'HIP-T03'),
+  int('troca_resposta_h', 24, 6, 72, 'SLA da loja para responder à troca (h); sem resposta a troca é aprovada automaticamente (DEC-037)', 'HIP-T03'),
   int('coleta_agendamento_dias_uteis', 3, 1, 10, 'Agendamento da coleta (dias úteis)', 'HIP-019'),
   int('coleta_atrasada_dias_uteis', 1, 1, 5, 'Novo prazo da coleta atrasada, a contar do aviso ao cliente (dias úteis)', 'DEC-062'),
   int('coleta_entrega_item_dias', 7, 1, 10, 'Prazo do cliente para entregar o item (dias)', 'HIP-019'),
@@ -145,7 +147,8 @@ export function validateParameterValue(definition: ParameterDefinition, value: u
     case 'decimal': {
       if (typeof value !== 'number' || !Number.isFinite(value)) return 'Informe um número.';
       if (definition.type === 'int' && !Number.isInteger(value)) return 'Informe um número inteiro.';
-      if (definition.type === 'decimal' && Math.round(value * 100) !== value * 100)
+      // Tolerância de ponto flutuante: 4,98 x 100 = 498,00000000000006 (não é "3 casas").
+      if (definition.type === 'decimal' && Math.abs(value * 100 - Math.round(value * 100)) > 1e-6)
         return 'Use no máximo 2 casas decimais.';
       if (definition.min !== undefined && value < definition.min) return `O valor mínimo é ${definition.min}.`;
       if (definition.max !== undefined && value > definition.max) return `O valor máximo é ${definition.max}.`;

@@ -28,6 +28,8 @@ export interface ParameterView {
 }
 
 const CACHE_TTL_MS = 10_000;
+/** DEC-064e / DEC-072: alcance mínimo (km) que os parâmetros de ETA precisam garantir ao serem salvos. */
+export const MIN_REACH_KM = 3;
 
 @Injectable()
 export class ParametersService {
@@ -108,19 +110,23 @@ export class ParametersService {
    * >= preparo padrão + despacho + 5 min (senão nenhuma loja alcança ninguém) e `entrega_faixa_min` <= `entrega_max_min` / 4.
    */
   private async assertEtaRules(key: string, value: number): Promise<void> {
-    const keys = ['entrega_max_min', 'entrega_faixa_min', 'entrega_preparo_padrao_min', 'entrega_despacho_min'];
+    const keys = ['entrega_max_min', 'entrega_faixa_min', 'entrega_preparo_padrao_min', 'entrega_despacho_min', 'entrega_rota_fator_pct', 'entrega_min_por_km'];
     if (!keys.includes(key)) return;
     const next = async (k: string): Promise<number> => (k === key ? value : this.getNumber(k));
-    const [max, band, prep, dispatch, factor, perKm] = await Promise.all([next('entrega_max_min'), next('entrega_faixa_min'), next('entrega_preparo_padrao_min'), next('entrega_despacho_min'), this.getNumber('entrega_rota_fator_pct'), this.getNumber('entrega_min_por_km')]);
+    const [max, band, prep, dispatch, factor, perKm] = await Promise.all([next('entrega_max_min'), next('entrega_faixa_min'), next('entrega_preparo_padrao_min'), next('entrega_despacho_min'), next('entrega_rota_fator_pct'), next('entrega_min_por_km')]);
     const reachKm = maxDistanceForCeilingM({ defaultPrepMin: prep, dispatchMin: dispatch, routeFactorPct: factor, minPerKm: perKm, bandMin: band, maxMin: max }, prep) / 1000;
-    const preview = `Com estes valores a entrega alcança até ${reachKm.toFixed(1).replace('.', ',')} km da loja.`;
-    const fail = (detail: string): never => {
-      throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: `${detail} ${preview}`, errors: [{ field: 'value', message: detail }], extensions: { reachKm } });
+    // Trunca (não arredonda): 2,99 km nunca aparece como "3,0 km" ao lado de "mínimo 3 km".
+    const km = (Math.floor(reachKm * 10) / 10).toFixed(1).replace('.', ',');
+    const preview = `Com estes valores a entrega alcança até ${km} km da loja.`;
+    const fail = (detail: string, withPreview = true): never => {
+      throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: withPreview ? `${detail} ${preview}` : detail, errors: [{ field: 'value', message: detail }], extensions: { reachKm } });
     };
     if (max - band < prep + dispatch + 5) {
       fail(`O teto (${max} min) menos a folga (${band} min) precisa cobrir preparo (${prep}) + despacho (${dispatch}) + 5 min, ou seja, teto de pelo menos ${prep + dispatch + 5 + band} min; senão nenhuma loja alcança ninguém.`);
     }
     if (band > max / 4) fail(`A folga (${band} min) não pode passar de um quarto do teto (${max} min).`);
+    // DEC-064e / DEC-072 (HIP-P08): alcance mínimo da plataforma. Abaixo de 3 km a entrega some para quase todo mundo.
+    if (reachKm < MIN_REACH_KM) fail(`Com estes valores a entrega alcança só ${km} km (mínimo ${MIN_REACH_KM} km).`, false);
   }
 
   /** WB-119 C4: volta ao padrão de seed. */

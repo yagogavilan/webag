@@ -166,7 +166,9 @@ describe('Lacunas B.1 (troca e pedido) e B.2 (cartão na página segura)', () =>
 
       // A página (sem login) lê só o valor e o provedor.
       const page = (await ctx.http.get(`/v1/card-intents/${token}`).expect(200)).body;
-      expect(page).toMatchObject({ amount: { amount: view.totalCents }, provider: 'fake', installmentsMax: 3 });
+      // D-09: o máximo de parcelas vem dos parâmetros (`parcelas_max` 3, parcela mínima de R$ 30) e do total desta intenção.
+      const expectedMax = [3, 2].find((n) => Math.floor(view.totalCents / n) >= 3000) ?? 1;
+      expect(page).toMatchObject({ amount: { amount: view.totalCents }, provider: 'fake', installmentsMax: expectedMax, installmentMinCents: 3000 });
       expect(JSON.stringify(page)).not.toContain(user.userId);
       expect(JSON.stringify(page)).not.toContain(shop.store.id);
       await ctx.http.get('/v1/card-intents/token-que-nao-existe-00000000').expect(410);

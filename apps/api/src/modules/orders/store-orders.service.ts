@@ -49,6 +49,10 @@ export function storeActions(order: Pick<OrderRow, 'status' | 'mode'>, deliveryS
  * outra loja é 404 (SEC-020). A loja só vê pedido que chegou a ser PAGO (`paid_at`); o que expirou sem pagamento não existe
  * para ela. Dado do cliente por minimização (LGPD): primeiro nome, e telefone só enquanto o pedido está em andamento.
  */
+/** DEC-072 / RN-14: o dado pessoal do cliente (telefone, endereço) só chega à loja enquanto o pedido está em andamento. */
+const ACTIVE_STATUSES: readonly string[] = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
+const hasActiveOrderData = (status: string): boolean => ACTIVE_STATUSES.includes(status);
+
 @Injectable()
 export class StoreOrdersService {
   constructor(
@@ -151,7 +155,7 @@ export class StoreOrdersService {
       this.db.select({ name: users.name, phone: users.phone }).from(users).where(eq(users.id, order.userId)),
       this.orders.cancelRequestOf(order.id),
     ]);
-    const active = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'].includes(order.status);
+    const active = hasActiveOrderData(order.status);
     const delivery = order.mode === 'delivery' ? await this.deliveries.forOrder(order.id) : null;
     const [courier] = delivery?.courierId ? await this.db.select({ name: couriers.name }).from(couriers).where(eq(couriers.id, delivery.courierId)) : [];
     const finance = order.finance as { merchantNetBeforeProviderFeeCents?: number };
@@ -170,7 +174,8 @@ export class StoreOrdersService {
       cancelRequest,
       customer: { firstName: firstName(customer?.name), phone: active && order.mode === 'delivery' ? (customer?.phone ?? null) : null },
       items: items.map((i) => ({ name: i.name, attributes: i.attributes, image: { urls: i.image }, quantity: i.quantity, unitPrice: showValues ? money(i.unitPriceCents) : null, lineTotal: showValues ? money(i.lineTotalCents) : null })),
-      delivery: order.mode === 'delivery' && order.address ? { address: order.address, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
+      // DEC-072 (HIP-036 não vale; RN-14): o endereço do cliente só chega à loja com o pedido ATIVO; depois de concluído ou cancelado vai vazio.
+      delivery: order.mode === 'delivery' && order.address ? { address: active ? order.address : {}, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
       // O código de retirada NUNCA é mostrado à loja: é o cliente quem o informa no balcão.
       pickup: order.mode === 'pickup' && order.pickup ? order.pickup : null,
       values: showValues
@@ -193,12 +198,14 @@ export class StoreOrdersService {
       this.db.select({ name: users.name }).from(users).where(eq(users.id, order.userId)),
     ]);
     const address = order.address as { street?: string; number?: string; complement?: string | null; neighborhood?: string } | null;
+    const active = hasActiveOrderData(order.status);
     return {
       number: order.number,
       mode: order.mode,
       createdAt: order.createdAt.toISOString(),
       customerFirstName: firstName(customer?.name),
-      destination: order.mode === 'delivery' && address ? [address.street, address.number, address.complement, address.neighborhood].filter(Boolean).join(', ') : 'Retirada na loja',
+      // DEC-072: sem pedido ativo a comanda não leva o endereço.
+      destination: order.mode === 'delivery' ? (active && address ? [address.street, address.number, address.complement, address.neighborhood].filter(Boolean).join(', ') : 'Entrega') : 'Retirada na loja',
       items: items.map((i) => ({ quantity: i.quantity, name: i.name, attributes: i.attributes })),
     };
   }

@@ -6,6 +6,7 @@ import type { Env } from '../../platform/config/env.js';
 import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
 import { errors } from '../../platform/http/app-error.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
+import { ParametersService } from '../admin/index.js';
 import { PrincipalService } from '../identity/index.js';
 import { OrdersService, type CreateOrderInput } from './orders.service.js';
 
@@ -38,6 +39,7 @@ export class CardIntentService {
     private readonly config: ConfigService<Env, true>,
     private readonly principals: PrincipalService,
     private readonly orders: OrdersService,
+    private readonly params: ParametersService,
   ) {}
 
   private key(token: string): string {
@@ -71,11 +73,22 @@ export class CardIntentService {
   /** O que a página segura mostra: valor e provedor. Não consome a intenção e não devolve nada do pedido além do total. */
   async view(token: string) {
     const intent = await this.read(token, false);
+    // D-09 / DEC-072: as MESMAS regras do pagamento (`parcelas_max` e `parcela_min_cents`); a página não oferece parcela que o servidor recusaria.
+    const [maxInstallments, minInstallmentCents] = await Promise.all([this.params.getNumber('parcelas_max'), this.params.getNumber('parcela_min_cents')]);
+    const total = intent.input.expectedTotalCents;
+    let installmentsMax = 1;
+    for (let n = maxInstallments; n > 1; n -= 1) {
+      if (Math.floor(total / n) >= minInstallmentCents) {
+        installmentsMax = n;
+        break;
+      }
+    }
     return {
-      amount: { amount: intent.input.expectedTotalCents, currency: 'BRL' as const },
+      amount: { amount: total, currency: 'BRL' as const },
       provider: this.config.get('PAYMENT_PROVIDER', { infer: true }),
       publicKey: this.config.get('MP_PUBLIC_KEY', { infer: true }) ?? null,
-      installmentsMax: 3,
+      installmentsMax,
+      installmentMinCents: minInstallmentCents,
       expiresAt: intent.expiresAt,
     };
   }

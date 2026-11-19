@@ -60,6 +60,15 @@ export class StoresService {
     return this.commission.viewForStore(storeId);
   }
 
+  /**
+   * WB-242 C1 / D-02: tarifa ESTIMADA do provedor (% por meio de pagamento) para o "Você recebe" (preço - comissão - tarifa). Quem paga a tarifa é
+   * o lojista (HIP-004). A tarifa real vem do provedor e é a do extrato; aqui é só o aviso "cerca de" antes da venda.
+   */
+  async providerFeeView(): Promise<{ pixPct: number; cardPct: number }> {
+    const [pixPct, cardPct] = await Promise.all([this.params.getNumber('taxa_provedor_pix_pct'), this.params.getNumber('taxa_provedor_cartao_pct')]);
+    return { pixPct, cardPct };
+  }
+
   async getStore(storeId: string, executor: DbOrTx = this.db): Promise<Store> {
     const [store] = await executor.select().from(stores).where(eq(stores.id, storeId));
     if (!store) throw errors.notFound('Loja não encontrada.');

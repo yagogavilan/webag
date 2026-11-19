@@ -9916,6 +9916,13 @@ components:
             properties:
               categoryId: { type: string, format: uuid }
               pct: { type: number }
+        providerFeePct:
+          type: [object, 'null']
+          description: "Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O 'Você recebe' é preço - comissão - tarifa, dito 'cerca de'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)"
+          required: [pix, card]
+          properties:
+            pix: { type: number }
+            card: { type: number }
         role:
           type: string
           description: Só em /stores/mine
@@ -13085,7 +13092,8 @@ components:
         amount: { $ref: '#/components/schemas/Money' }
         provider: { type: string, enum: [fake, mercadopago] }
         publicKey: { type: [string, 'null'] }
-        installmentsMax: { type: integer }
+        installmentsMax: { type: integer, description: "Maior número de parcelas que o servidor aceita para ESTE total: `parcelas_max` limitado pela parcela mínima (`parcela_min_cents`). Mínimo 1 (só à vista)" }
+        installmentMinCents: { type: integer, description: "Valor mínimo da parcela, em centavos (`parcela_min_cents`)" }
         expiresAt: { type: string, format: date-time }
     CardIntentPayRequest:
       type: object

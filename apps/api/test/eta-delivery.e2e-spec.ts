@@ -89,7 +89,7 @@ describe('ETA de entrega em até 2 h (DEC-053)', () => {
       await ctx.redis.flushdb();
       const after = (await home(origin)).nearbyStores[0].delivery.etaMinMinutes as number;
       expect(after).toBeGreaterThan(before);
-      await useParam(ctx, 'entrega_min_por_km', 20); // 6 km x 1,3 x 20 = 156 min: acima do teto
+      await useParam(ctx, 'entrega_min_por_km', 17); // 6 km x 1,3 x 17 = 133 min: acima do que cabe no teto (alcance de 3,1 km, o mínimo que a validação aceita)
       await ctx.redis.flushdb();
       expect((await home(origin)).nearbyStores).toEqual([]);
     } finally {
@@ -121,8 +121,8 @@ describe('ETA de entrega em até 2 h (DEC-053)', () => {
     expect(paid.etaFromAt!.getTime()).toBeGreaterThanOrEqual(row.etaFromAt!.getTime());
     expect(paid.etaToAt!.getTime() - paid.etaFromAt!.getTime()).toBe((row.etaMaxMinutes - row.etaMinMinutes) * 60_000);
 
-    // Endereço fora do alcance (teto no menor valor que a validação do BUG-022 aceita, 60 min, e um endereço a ~7 km): a sacola bloqueia e o pedido não nasce.
-    await useParam(ctx, 'entrega_max_min', 60);
+    // Endereço fora do alcance (teto no menor valor que a validação aceita, 74 min = alcance mínimo de 3 km, e um endereço a ~7 km): a sacola bloqueia e o pedido não nasce.
+    await useParam(ctx, 'entrega_max_min', 74);
     const far = await customerAt(ctx, { lat: shop.origin.lat + 0.06, lng: shop.origin.lng });
     try {
       await addToCart(ctx, far.user, shop.variants[0]!, 1).expect(200);

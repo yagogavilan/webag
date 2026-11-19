@@ -73,6 +73,8 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   await seedDeliveryFees(db);
   // SEC-169: os testes usam pontos isolados no mapa que não batem com o CEP do endereço; a conferência liga só no teste dela.
   await app.get(ParametersService).update('endereco_pino_max_m', 0, 'testes usam pontos isolados', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
+  // DEC-072: o padrão de produção da comissão é 15%, mas os testes de dinheiro usam contas redondas de 10%; o padrão real é testado em `dec072-rules`.
+  await app.get(ParametersService).update('comissao_padrao_pct', 10, 'testes de dinheiro usam 10%', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
   return {
     app,
     http: withRandomIp(request(app.getHttpServer())),

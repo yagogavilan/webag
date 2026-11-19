@@ -47,13 +47,15 @@ export async function presentStore(
   store: Store,
   viewer: 'owner' | 'staff' | 'admin',
 ) {
-  const [extra, logo, cover, open, commission] = await Promise.all([
+  const [extra, logo, cover, open, commission, providerFee] = await Promise.all([
     services.stores.extraCategoryIds(store.id),
     store.logoAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : Promise.resolve([]),
     store.coverAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.coverAssetId)) : Promise.resolve([]),
     services.stores.openReviewItems(store.id),
     // RN-13: o financeiro (comissão) é do dono e do admin; o funcionário não vê.
     viewer === 'staff' ? Promise.resolve(null) : services.stores.commissionView(store.id),
+    // WB-242 C1: a tarifa estimada do provedor entra no "Você recebe"; é financeiro, então segue a regra da comissão (funcionário não vê).
+    viewer === 'staff' ? Promise.resolve(null) : services.stores.providerFeeView(),
   ]);
   return {
     id: store.id,
@@ -82,6 +84,8 @@ export async function presentStore(
     commissionPct: commission?.pct ?? null,
     commissionSource: commission?.source ?? null,
     commissionCategories: commission?.categories ?? [],
+    /** Tarifa estimada do provedor (%) por meio de pagamento, para o "Você recebe". Funcionário: nulo. */
+    providerFeePct: providerFee ? { pix: providerFee.pixPct, card: providerFee.cardPct } : null,
   };
 }
 
