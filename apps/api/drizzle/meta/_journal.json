@@ -281,6 +281,13 @@
       "when": 1795096153627,
       "tag": "0039_s62_ip_truncation",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795097328125,
+      "tag": "0040_q2_logistics_pauses",
+      "breakpoints": true
     }
   ]
 }

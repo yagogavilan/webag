@@ -244,6 +244,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       ['ITEM_UNAVAILABLE', 'ITEM_UNAVAILABLE', 'Item indisponível'],
       ['BELOW_MINIMUM', 'BELOW_MINIMUM', 'Pedido abaixo do mínimo'],
       ['OUT_OF_RANGE', 'OUT_OF_RANGE', 'Fora da área de entrega'],
+      ['LOGISTICS_CLOSED', 'LOGISTICS_CLOSED', 'Entrega indisponível agora'], // BUG-016: fora do horário ou pausada; só retirada
       ['NEEDS_ADDRESS', 'ADDRESS_REQUIRED', 'Escolha o endereço de entrega'],
       ['PICKUP_UNAVAILABLE', 'PICKUP_UNAVAILABLE', 'Retirada indisponível'],
       ['ABOVE_MAX_ORDER', 'ABOVE_MAX_ORDER', 'Pedido acima do limite'],

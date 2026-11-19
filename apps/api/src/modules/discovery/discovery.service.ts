@@ -11,6 +11,8 @@ import { presentEta } from '../logistics/index.js';
 import { pgArray } from './sql-array.js';
 
 const SECTION_SIZE = 10;
+const BEST_SELLER_DAYS = 30;
+const BEST_SELLER_MIN_ORDERS = 5;
 const HOME_TTL_SECONDS = 30;
 const MIN_QUERY_LENGTH = 2;
 
@@ -24,7 +26,7 @@ export const presentStoreCard = (store: FeedStore) => ({
   distanceM: store.distanceM,
   rating: { average: store.ratingAverage, count: store.ratingCount, isNew: store.isNew },
   delivery: store.deliversHere
-    ? { available: true, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: presentEta({ minMinutes: store.etaMinMinutes, maxMinutes: store.etaMaxMinutes }, new Date()) }
+    ? { available: store.logisticsOpen, logisticsOpensAt: store.logisticsOpen ? null : store.logisticsOpensAt, feeCents: store.feeCents, freeShipping: store.feeCents === 0, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: presentEta({ minMinutes: store.etaMinMinutes, maxMinutes: store.etaMaxMinutes }, new Date()) }
     : { available: false, feeCents: null, freeShipping: false, freeAboveCents: store.freeAboveCents, minOrderCents: store.minOrderCents, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes, eta: null },
   pickupEnabled: store.pickupEnabled,
   acceptsExchange: store.acceptsExchange,
@@ -98,11 +100,32 @@ export class DiscoveryService {
         nearbyStores: nearby.map(presentStoreCard),
         newStores: newest.map(presentStoreCard),
         offers: offers.map(presentProductCard),
-        // Mais vendidos (RN-03): precisa de pedidos (Onda 4); até lá a seção vem vazia e é ocultada.
-        bestSellers: [] as ReturnType<typeof presentProductCard>[],
+        // Mais vendidos (RN-03, BUG-018): produtos com pelo menos 5 pedidos pagos nos últimos 30 dias nas lojas desta região, por unidades.
+        bestSellers: mode === 'delivery' ? (await this.bestSellers(feed, now)).map(presentProductCard) : [],
         availableCategoryIds: await this.availableCategories(feed),
       };
     });
+  }
+
+  /** RN-03: unidades em pedidos pagos (não cancelados) dos últimos 30 dias, só de produtos com 5+ pedidos, nas lojas visíveis no ponto. */
+  private async bestSellers(feed: FeedStore[], now: Date): Promise<ProductCard[]> {
+    if (feed.length === 0) return [];
+    const since = new Date(now.getTime() - BEST_SELLER_DAYS * 86_400_000);
+    const rows = await this.db.execute<{ product_id: string; units: number }>(sql`
+      select oi.product_id, sum(oi.quantity)::int as units
+        from order_items oi
+        join orders o on o.id = oi.order_id
+       where o.store_id = any(${pgArray(feed.map((s) => s.id), 'uuid')})
+         and o.paid_at >= ${since.toISOString()}::timestamptz
+         and o.status not in ('cancelled', 'refused', 'expired', 'awaiting_payment')
+       group by oi.product_id
+      having count(distinct o.id) >= ${BEST_SELLER_MIN_ORDERS}
+       order by units desc, oi.product_id
+       limit ${SECTION_SIZE * 3}`);
+    if (rows.rows.length === 0) return [];
+    const rank = new Map(rows.rows.map((r, i) => [r.product_id, i]));
+    const cards = await this.products.query(feed, { productIds: [...rank.keys()], sort: 'relevance', offset: 0, limit: rank.size });
+    return cards.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)).slice(0, SECTION_SIZE);
   }
 
   private async highlights(feed: FeedStore[], mode: DiscoveryMode, now: Date) {

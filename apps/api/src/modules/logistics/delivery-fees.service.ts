@@ -6,6 +6,7 @@ import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import { cities, neighborhoods } from '../admin/db/schema.js';
 import { DeliveryQuoteRegistry, StoresService } from '../stores/index.js';
+import { LogisticsAvailabilityService } from './logistics-availability.service.js';
 import { deliveryFeeTables, deliveryFeeTiers } from './db/schema.js';
 import { computeEta, type EtaConfig, type EtaEstimate } from './domain/eta.js';
 import { applyFreeShipping, pickTier, startingFee, validateFeeTiers, type FeeScopeType, type FeeTier } from './domain/fees.js';
@@ -34,7 +35,9 @@ export interface DeliveryFeeSnapshot {
 
 export interface DeliveryQuote {
   available: boolean;
-  reason: 'OUT_OF_RANGE' | 'NO_FEE_TABLE' | null;
+  reason: 'OUT_OF_RANGE' | 'NO_FEE_TABLE' | 'LOGISTICS_CLOSED' | null;
+  /** BUG-016: quando `reason = LOGISTICS_CLOSED` por horário, a próxima abertura (pausa não tem previsão). */
+  logisticsOpensAt?: Date | null;
   distanceM: number | null;
   /** Taxa cobrada do cliente, já com a entrega grátis aplicada. */
   feeCents: number | null;
@@ -72,6 +75,7 @@ export class DeliveryFeesService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly stores: StoresService,
     private readonly registry: DeliveryQuoteRegistry,
+    private readonly availability: LogisticsAvailabilityService,
   ) {}
 
   /** A prévia do painel do lojista usa a MESMA conta (cidade da loja como destino aproximado, sem endereço). */
@@ -125,6 +129,9 @@ export class DeliveryFeesService implements OnModuleInit {
     const [etaConfig, settings] = await Promise.all([this.etaConfig(), this.stores.getSettings(storeId)]);
     const eta = computeEta(etaConfig, { distanceM, prepMin: settings.prepMinutes });
     if (!eta.withinCeiling) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
+    // BUG-016 / DEC-039c: fora do horário da logística ou pausada (geral ou da cidade de destino), só retirada.
+    const logistics = await this.availability.status(destination.cityId ?? null, now);
+    if (!logistics.open) return { ...base, available: false, reason: 'LOGISTICS_CLOSED', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, logisticsOpensAt: logistics.opensAt, snapshot: null };
     const table = await this.resolve(destination, now);
     const picked = table ? pickTier(table.tiers, distanceM) : null;
     if (!table || !picked) return { ...base, available: false, reason: table ? 'OUT_OF_RANGE' : 'NO_FEE_TABLE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };

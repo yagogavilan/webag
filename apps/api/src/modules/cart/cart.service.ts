@@ -49,7 +49,7 @@ export type Notice =
   | { code: 'MERGE_KEPT_ACCOUNT_CART'; message: string }
   | { code: 'MERGE_ITEM_SKIPPED'; message: string; variantId: string };
 
-export type Blocker = 'EMPTY' | 'ITEM_UNAVAILABLE' | 'STORE_UNAVAILABLE' | 'STORE_CLOSED' | 'BELOW_MINIMUM' | 'OUT_OF_RANGE' | 'NEEDS_ADDRESS' | 'PICKUP_UNAVAILABLE' | 'ABOVE_MAX_ORDER' | 'NEW_STORE_LIMIT';
+export type Blocker = 'EMPTY' | 'ITEM_UNAVAILABLE' | 'STORE_UNAVAILABLE' | 'STORE_CLOSED' | 'BELOW_MINIMUM' | 'OUT_OF_RANGE' | 'LOGISTICS_CLOSED' | 'NEEDS_ADDRESS' | 'PICKUP_UNAVAILABLE' | 'ABOVE_MAX_ORDER' | 'NEW_STORE_LIMIT';
 
 /** Produto comprável agora (RN-03): ativo, não pausado/removido pela moderação, variação ativa. */
 const isBuyable = (product: typeof products.$inferSelect, variant: typeof productVariants.$inferSelect): boolean =>
@@ -100,7 +100,7 @@ export class CartService {
       store: null,
       items: [],
       coupon: null,
-      delivery: { mode: 'delivery' as CartMode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null },
+      delivery: { mode: 'delivery' as CartMode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null, logisticsOpensAt: null },
       summary: this.presentSummary(zero, { deliveryEstimated: false, missingForMinimumCents: null }),
       checkout: { canCheckout: false, blockers: ['EMPTY' as Blocker], opensAt: null },
       notices,
@@ -209,7 +209,7 @@ export class CartService {
     let deliveryAddress: Awaited<ReturnType<CartService['addressFor']>> = null;
     let deliverySnapshot: DeliveryFeeSnapshot | null = null;
     let etaEstimate: EtaEstimate | null = null; // DEC-053: ETA do endereço escolhido (gravado no pedido)
-    const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean; eta: EtaView | null } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null };
+    const delivery: { mode: CartMode; addressId: string | null; available: boolean | null; distanceM: number | null; feeFromCents: number | null; estimated: boolean; eta: EtaView | null; logisticsOpensAt: string | null } = { mode: ctx.mode, addressId: null, available: null, distanceM: null, feeFromCents: null, estimated: false, eta: null, logisticsOpensAt: null };
     if (ctx.mode === 'pickup') {
       if (!settings.pickupEnabled) blockers.push('PICKUP_UNAVAILABLE');
     } else {
@@ -228,8 +228,10 @@ export class CartService {
         delivery.addressId = address.id;
         const quote = await this.fees.quote(store.id, { lat: address.lat, lng: address.lng, cityId: address.cityId, neighborhoodId: address.neighborhoodId }, subtotal);
         delivery.available = quote.available;
+        delivery.logisticsOpensAt = quote.reason === 'LOGISTICS_CLOSED' ? (quote.logisticsOpensAt?.toISOString() ?? null) : null;
         delivery.distanceM = quote.distanceM;
-        if (!quote.available) blockers.push('OUT_OF_RANGE'); // sem tabela para o destino também some a entrega: o admin vê o alerta na prévia
+        // BUG-016: logística fechada/pausada é outro bloqueio (o app oferece só retirada e mostra "Entrega volta às HH:MM").
+        if (!quote.available) blockers.push(quote.reason === 'LOGISTICS_CLOSED' ? 'LOGISTICS_CLOSED' : 'OUT_OF_RANGE'); // sem tabela para o destino também some a entrega: o admin vê o alerta na prévia
         deliveryFee = quote.feeCents ?? 0;
         deliverySnapshot = quote.snapshot;
         if (quote.available) etaEstimate = quote.eta;

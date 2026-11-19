@@ -108,6 +108,9 @@ export class BrowseService {
       delivery: {
         // Sem posição, só os dados da loja; com posição, o que vale para ela (a mesma conta do checkout).
         available: quote?.available ?? null,
+        // BUG-016: fechada por horário/pausa a entrega some e o app mostra "Entrega volta às HH:MM" (nulo em pausa do admin).
+        logisticsClosed: quote?.reason === 'LOGISTICS_CLOSED',
+        logisticsOpensAt: quote?.reason === 'LOGISTICS_CLOSED' ? (quote.logisticsOpensAt?.toISOString() ?? null) : null,
         distanceM: quote?.distanceM == null ? null : Math.round(quote.distanceM),
         feeCents: quote?.feeCents ?? null,
         freeShipping: quote?.freeShipping ?? false,

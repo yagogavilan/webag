@@ -155,4 +155,7 @@ async function seedDeliveryFees(db: ReturnType<typeof drizzle<typeof schema>>): 
   await db.insert(schema.parameters).values({ key: 'pedido_minimo_cents', value: 0 }).onConflictDoNothing();
   // SEC-154: o padrão de produção é 72 h de arrependimento; os testes de exclusão existentes assumem a anonimização na hora e os que tratam do prazo ajustam o parâmetro.
   await db.insert(schema.parameters).values({ key: 'exclusao_arrependimento_horas', value: 0 }).onConflictDoNothing();
+  // BUG-016: o horário de produção da logística (seg a sáb, 09:00 às 20:00) deixaria os testes dependentes do relógio; aqui ela fica aberta o dia todo. Os testes do horário ajustam o parâmetro.
+  await db.insert(schema.parameters).values({ key: 'logistica_horario', value: '00:00-23:59' }).onConflictDoNothing();
+  await db.insert(schema.parameters).values({ key: 'logistica_dias', value: 'seg_dom' }).onConflictDoNothing();
 }

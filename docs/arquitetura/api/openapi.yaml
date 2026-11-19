@@ -5644,7 +5644,7 @@ paths:
 
         **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
 
-        **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+        **Erros 409:** `CART_CHANGED`, `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016: fora do horário da logística ou pausada; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
       parameters:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
       requestBody:
@@ -8911,7 +8911,7 @@ components:
       required: [available, reason, distanceM, fee, freeShipping, belowMinimum, minOrder, etaMinutes, expectedCost, exchangeFee, expectedMargin]
       properties:
         available: { type: boolean }
-        reason: { type: [string, 'null'], enum: [OUT_OF_RANGE, NO_FEE_TABLE, null] }
+        reason: { type: [string, 'null'], enum: [OUT_OF_RANGE, NO_FEE_TABLE, LOGISTICS_CLOSED, null] }
         distanceM: { type: [integer, 'null'] }
         fee: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
         freeShipping: { type: boolean }
@@ -11069,7 +11069,7 @@ components:
         canCheckout: { type: boolean }
         blockers:
           type: array
-          items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER, NEW_STORE_LIMIT] }
+          items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, LOGISTICS_CLOSED, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER, NEW_STORE_LIMIT] }
         opensAt: { type: [string, 'null'], format: date-time }
         newStoreMaxOrder: { $ref: '#/components/schemas/Money', description: Teto por pedido da loja nova, quando o limite está ativo (WB-225) }
     Cart:
@@ -11098,6 +11098,7 @@ components:
           type: object
           required: [mode, addressId, available, distanceM, feeFromCents, estimated]
           properties:
+            logisticsOpensAt: { type: [string, 'null'], format: date-time, description: 'BUG-016: com o bloqueio `LOGISTICS_CLOSED` por horário, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.' }
             eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa para o endereço da sacola; nulo sem endereço ou fora do alcance (então `available=false` e o bloqueio `OUT_OF_RANGE`). É a mesma conta gravada no pedido.' }
             mode: { type: string, enum: [delivery, pickup] }
             addressId: { type: [string, 'null'], format: uuid }

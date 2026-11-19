@@ -54,7 +54,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect(res.status).toBe(200);
   });
 
-  it.fails('BUG-012 (WB-233 C6): cancelar a corrida (pedido cancelado, loja desistiu) leva o motivo ao pedido: o pedido não fica em "pronto para coleta" sem corrida', async () => {
+  it('BUG-012 (WB-233 C6): cancelar a corrida (pedido cancelado, loja desistiu) leva o motivo ao pedido: o pedido não fica em "pronto para coleta" sem corrida', async () => {
     const o = await paidOrder();
     await ctx.http.post(`${o.url}/accept`).set(bearer(o.shop.store.owner.accessToken)).send({}).expect(200);
     await ctx.http.post(`${o.url}/status`).set(bearer(o.shop.store.owner.accessToken)).send({ status: 'ready_for_collection' }).expect(200);
@@ -71,7 +71,7 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect(results.filter((r) => r.status === 201)).toHaveLength(1); // obtido: 2 pedidos (2 reservas e, no cartão, 2 cobranças). Em sequência a 2ª já é recusada (sacola esvaziada)
   });
 
-  it.fails('BUG-014 (WB-026 C3, RN-07): retirada não feita em retirada_prazo_horas (48 h) é cancelada pelo sistema com estorno total', async () => {
+  it('BUG-014 (WB-026 C3, RN-07): retirada não feita em retirada_prazo_horas (48 h) é cancelada pelo sistema com estorno total', async () => {
     const o = await paidOrder('pickup');
     await ctx.http.post(`${o.url}/accept`).set(bearer(o.shop.store.owner.accessToken)).send({}).expect(200);
     await ctx.http.post(`${o.url}/status`).set(bearer(o.shop.store.owner.accessToken)).send({ status: 'ready_for_pickup' }).expect(200);
@@ -92,14 +92,14 @@ describe('Lacunas confirmadas (comportamento especificado ainda não entregue)',
     expect(paths.some((p) => /request-cancel|cancel-request/.test(p))).toBe(true); // obtido: nenhuma
   });
 
-  it.fails('BUG-016 (WB-230 C6, RN-18, DEC-039c): horário da logística e "pausar entregas" existem como parâmetro/rota do admin', async () => {
+  it('BUG-016 (WB-230 C6, RN-18, DEC-039c): horário da logística e "pausar entregas" existem como parâmetro/rota do admin', async () => {
     const res = await ctx.http.get('/v1/admin/parameters').set(bearer(superAdmin.accessToken)).expect(200);
     const keys = JSON.stringify(res.body);
     expect(keys).toContain('logistica_horario'); // obtido: parâmetro inexistente; checkout oferece entrega 24 h e não há como pausar
     void orders;
   });
 
-  it.fails('BUG-018 (WB-012 C3, RN-03): "Mais vendidos" aparece na home com 5+ pedidos pagos nos últimos 30 dias na região', async () => {
+  it('BUG-018 (WB-012 C3, RN-03): "Mais vendidos" aparece na home com 5+ pedidos pagos nos últimos 30 dias na região', async () => {
     const shop = await shopWith(ctx, [{ name: 'Campeão de Vendas', priceCents: 3_000, stock: 50 }]);
     for (let i = 0; i < 5; i++) {
       const buyer = await customerAt(ctx, shop.origin);

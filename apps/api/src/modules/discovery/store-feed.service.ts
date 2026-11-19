@@ -6,7 +6,7 @@ import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { storeExtraCategories, storeHolidays, storeHours } from '../stores/db/schema.js';
-import { computeEta, DeliveryFeesService, pickTier } from '../logistics/index.js';
+import { computeEta, DeliveryFeesService, LogisticsAvailabilityService, pickTier } from '../logistics/index.js';
 import { type WeeklyHours } from '../stores/index.js';
 import { hoursToday, isOpen, nextOpening, type OpeningInput } from '../stores/index.js';
 import { type GeoPoint, pointKey, pointSql } from './geo.js';
@@ -24,6 +24,9 @@ export interface FeedStore {
   approvedAt: string;
   distanceM: number;
   deliversHere: boolean;
+  /** BUG-016: a logística da Webag está aberta agora para a cidade da loja (horário e pausa); fechada = só retirada. */
+  logisticsOpen: boolean;
+  logisticsOpensAt: string | null;
   feeCents: number | null;
   freeAboveCents: number;
   minOrderCents: number;
@@ -74,6 +77,7 @@ export class StoreFeedService {
     private readonly params: ParametersService,
     private readonly media: MediaService,
     private readonly fees: DeliveryFeesService,
+    private readonly availability: LogisticsAvailabilityService,
   ) {}
 
   async at(point: GeoPoint, mode: DiscoveryMode): Promise<FeedStore[]> {
@@ -122,7 +126,10 @@ export class StoreFeedService {
     const tableCache = new Map<string | null, Promise<Awaited<ReturnType<DeliveryFeesService['resolve']>>>>();
     const feeTables = { get: (cityId: string | null) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId)! };
     const feed: FeedStore[] = [];
+    const logisticsByCity = new Map<string | null, Awaited<ReturnType<LogisticsAvailabilityService['status']>>>();
     for (const row of rows) {
+      if (!logisticsByCity.has(row.address_city_id)) logisticsByCity.set(row.address_city_id, await this.availability.status(row.address_city_id, now));
+      const logistics = logisticsByCity.get(row.address_city_id)!;
       const distanceM = Number(row.distance_m);
       // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
       const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
@@ -153,6 +160,8 @@ export class StoreFeedService {
         approvedAt: new Date(row.approved_at).toISOString(),
         distanceM,
         deliversHere,
+        logisticsOpen: logistics.open,
+        logisticsOpensAt: logistics.opensAt?.toISOString() ?? null,
         feeCents: fee,
         freeAboveCents: freeAbove,
         minOrderCents: minOrder,
