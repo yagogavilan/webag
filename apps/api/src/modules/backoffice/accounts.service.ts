@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, notExists, or, sql, type SQL } from 'drizzle-orm';
+import { ConfigService } from '@nestjs/config';
+import { and, desc, eq, inArray, notExists, sql, type SQL } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import type { Env } from '../../platform/config/env.js';
+import { hmacHex } from '../../platform/crypto/crypto.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -11,8 +14,18 @@ import { orders } from '../orders/db/schema.js';
 import { stores } from '../stores/db/schema.js';
 import { AdminStoresService } from '../stores/index.js';
 import { escapeLike, maskEmail, maskName, maskPhone } from '../../platform/http/pii-mask.js';
+import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js';
+import { emailSchema, phoneSchema } from '../identity/auth.schemas.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Só caracteres de um celular digitado (dígitos, espaço, parênteses, +, hífen): vira busca por celular COMPLETO, nunca por trecho. */
+const PHONE_LIKE = /^[\d\s().+-]+$/;
+/** SEC-181: buscas por minuto de cada admin (além do limite por IP do controller). */
+export const USER_SEARCH_PER_ADMIN_PER_MIN = 60;
+/** SEC-183: o motivo do bloqueio é nota INTERNA (user_status_history e auditoria); o lojista e a equipe dele recebem só este texto. */
+export const OWNER_BLOCKED_SUSPENSION_REASON = 'A conta do responsável pela loja foi bloqueada. Fale com o suporte.';
+
+type SearchTerm = { kind: 'id' | 'email' | 'phone' | 'name'; match: SQL | null };
 
 export interface AccountQuery {
   q?: string | undefined;
@@ -34,39 +47,65 @@ export class AccountsService {
     private readonly audit: AuditService,
     private readonly sessions: SessionService,
     private readonly adminStores: AdminStoresService,
+    private readonly limiter: RateLimitService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   private notAdmin(): SQL {
     return notExists(this.db.select({ one: sql`1` }).from(adminProfiles).where(eq(adminProfiles.userId, users.id)));
   }
 
-  async search(query: AccountQuery): Promise<Page<ReturnType<AccountsService['presentRow']>>> {
+  /**
+   * SEC-181: a busca NUNCA desfaz o mascaramento. ID e e-mail só pelo valor inteiro (e-mail normalizado), celular só completo (10 ou 11 dígitos, DDD
+   * incluído); formato incompleto ou inválido devolve lista vazia, sem dizer o motivo. Só o NOME aceita trecho (3+ caracteres): o suporte precisa
+   * dele e a resposta mostra apenas "Nome S.". Não há índice trigram em e-mail ou celular. Cada busca com termo é auditada (tipo, HMAC do termo,
+   * número de resultados; nunca o termo) e limitada por admin.
+   */
+  private classify(q: string): SearchTerm {
+    if (UUID_RE.test(q)) return { kind: 'id', match: eq(users.id, q.toLowerCase()) };
+    if (q.includes('@')) {
+      const email = emailSchema.safeParse(q);
+      return { kind: 'email', match: email.success ? eq(users.email, email.data) : null };
+    }
+    if (PHONE_LIKE.test(q)) {
+      const phone = phoneSchema.safeParse(q);
+      return { kind: 'phone', match: phone.success ? eq(users.phone, phone.data) : null };
+    }
+    return q.length >= 3 ? { kind: 'name', match: sql`lower(${users.name}) like ${`%${escapeLike(q.toLowerCase())}%`}` } : { kind: 'name', match: null };
+  }
+
+  async search(admin: Principal, query: AccountQuery, ctx: RequestContext): Promise<Page<ReturnType<AccountsService['presentRow']>>> {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const q = query.q?.trim() ?? '';
-    const digits = q.replace(/\D/g, '');
-    const text = `%${escapeLike(q.toLowerCase())}%`;
-    const matches: SQL | undefined =
-      q === ''
-        ? undefined
-        : UUID_RE.test(q)
-          ? eq(users.id, q.toLowerCase())
-          : or(sql`lower(${users.name}) like ${text}`, sql`${users.email} like ${text}`, digits.length >= 4 ? sql`${users.phone} like ${`%${digits}%`}` : undefined);
-    const rows = await this.db
-      .select()
-      .from(users)
-      .where(
-        and(
-          this.notAdmin(),
-          matches,
-          query.status ? eq(users.status, query.status) : undefined,
-          query.role ? inArray(users.id, this.db.select({ id: userRoles.userId }).from(userRoles).where(eq(userRoles.role, query.role))) : undefined,
-          timestampCursorBefore(users.createdAt, users.id, cursor),
-        ),
-      )
-      .orderBy(...timestampOrderDesc(users.createdAt, users.id))
-      .limit(limit + 1);
+    const term = q === '' ? null : this.classify(q);
+    if (term) await this.limiter.enforce(`rl:admin-user-search:admin:${admin.userId}`, USER_SEARCH_PER_ADMIN_PER_MIN, 60);
+    const rows =
+      term && term.match === null
+        ? []
+        : await this.db
+            .select()
+            .from(users)
+            .where(
+              and(
+                this.notAdmin(),
+                term?.match ?? undefined,
+                query.status ? eq(users.status, query.status) : undefined,
+                query.role ? inArray(users.id, this.db.select({ id: userRoles.userId }).from(userRoles).where(eq(userRoles.role, query.role))) : undefined,
+                timestampCursorBefore(users.createdAt, users.id, cursor),
+              ),
+            )
+            .orderBy(...timestampOrderDesc(users.createdAt, users.id))
+            .limit(limit + 1);
     const page = rows.slice(0, limit);
+    if (term) {
+      // Falha fechada: sem auditoria, sem resposta. O termo vai só como HMAC (celular tem 10^9 combinações: um sha256 puro se reverte por força bruta).
+      await this.audit.recordStandalone(ctx, {
+        action: 'user.search',
+        targetType: 'user_search',
+        after: { termType: term.kind, termDigest: hmacHex(this.config.get('AUTH_HMAC_KEY', { infer: true }), `user-search:${term.kind}:${q.toLowerCase()}`), results: page.length },
+      });
+    }
     const ids = page.map((u) => u.id);
     const [roleRows, memberRows] =
       ids.length === 0 ? [[], []] : await Promise.all([this.db.select().from(userRoles).where(inArray(userRoles.userId, ids)), this.db.select({ userId: storeMembers.userId }).from(storeMembers).where(inArray(storeMembers.userId, ids))]);
@@ -151,7 +190,7 @@ export class AccountsService {
     const failedStoreIds: string[] = [];
     for (const store of owned) {
       try {
-        await this.adminStores.suspend(store.id, admin, `Dono bloqueado: ${reason}`.slice(0, 300), ctx);
+        await this.adminStores.suspend(store.id, admin, OWNER_BLOCKED_SUSPENSION_REASON, ctx); // SEC-183: texto neutro; o motivo real fica só no histórico e na auditoria do bloqueio
         suspendedStoreIds.push(store.id);
       } catch {
         failedStoreIds.push(store.id);

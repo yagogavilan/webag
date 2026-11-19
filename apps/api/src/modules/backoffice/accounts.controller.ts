@@ -13,7 +13,7 @@ const userId = (value: string): string => {
 };
 
 const searchSchema = z.strictObject({
-  q: z.string().trim().min(2, 'Digite ao menos 2 caracteres.').max(100).optional(),
+  q: z.string().trim().min(3, 'Digite ao menos 3 caracteres.').max(100).optional(),
   role: z.enum(['customer', 'merchant']).optional(),
   status: z.enum(['active', 'blocked', 'deleted']).optional(),
   cursor: z.string().max(200).optional(),
@@ -29,8 +29,8 @@ export class AccountsController {
   @AdminOnly('users:read')
   @RateLimit({ name: 'admin-user-search', limit: 120, windowSeconds: 60 })
   @Get()
-  search(@Query(new ZodPipe(searchSchema)) query: z.infer<typeof searchSchema>) {
-    return this.accounts.search(query);
+  search(@CurrentPrincipal() principal: Principal, @Query(new ZodPipe(searchSchema)) query: z.infer<typeof searchSchema>, @Ctx() ctx: RequestContext) {
+    return this.accounts.search(principal, query, ctx);
   }
 
   @AdminOnly('users:read')

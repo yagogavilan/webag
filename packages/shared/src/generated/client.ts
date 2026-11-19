@@ -7723,7 +7723,7 @@ export type ListAdminAlertKinds200 = {
 
 export type SearchAdminUsersParams = {
   /**
-   * @minLength 2
+   * @minLength 3
    * @maxLength 100
    */
   q?: string;
@@ -14884,7 +14884,7 @@ export const getSearchAdminUsersUrl = (params?: SearchAdminUsersParams,) => {
 }
 
 /**
- * Busca por trecho do nome, do e-mail ou do celular (4 dígitos ou mais) ou pelo ID exato; sem `q` lista os mais recentes. Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
+ * Busca (SEC-181, o mascaramento não pode ser desfeito pela busca): **nome por trecho** (3 caracteres ou mais), **e-mail só inteiro** (valor exato, sem diferenciar caixa), **celular só completo** (10 ou 11 dígitos com DDD, com ou sem formatação) ou **ID exato**. E-mail ou celular incompleto, ou em outro formato, devolve lista vazia (200), nunca 400 nem pista do motivo. Cada busca com `q` é auditada (`user.search`: tipo, HMAC do termo e número de resultados; nunca o termo) e limitada a 60 por minuto por admin, além do limite por IP (429). Sem `q` lista os mais recentes (não audita). Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
  * @summary Buscar clientes e lojistas (B4, WB-102)
  */
 export const searchAdminUsers = async (params?: SearchAdminUsersParams, options?: Parameters<typeof apiFetch>[1]): Promise<searchAdminUsersResponse> => {
