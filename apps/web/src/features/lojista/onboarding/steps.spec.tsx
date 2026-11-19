@@ -223,13 +223,16 @@ describe('Step4 (L6): conta de recebimento', () => {
     expect(JSON.parse(String(calls.find((c) => c.url.pathname.endsWith('/auth/reauth'))?.init.body))).toEqual({ password: 'minha-senha' });
   });
 
-  it('negou a autorização: aviso e etapa pendente; "Conectar depois" segue para a revisão sem salvar nada', async () => {
+  it('negou a autorização: aviso e etapa pendente; "Salvar e continuar depois" volta ao painel e diz que o envio fica bloqueado (U8.8)', async () => {
     const { impl, calls } = mockFetch();
     vi.stubGlobal('fetch', impl);
     renderLojista(<Step4 store={fakeStore({ step: 3 })} next="/lojista/onboarding/revisao" oauth={{ denied: true }} />);
     expect(T('etapa4', 'denied')).toHaveTextContent('Você não autorizou a conexão. Sem ela, a loja não recebe.');
+    expect(T('etapa4', 'connect-later')).toHaveTextContent('Salvar e continuar depois');
+    expect(screen.queryByText('Conectar depois')).toBeNull();
     await userEvent.click(T('etapa4', 'connect-later'));
-    expect(push).toHaveBeenCalledWith('/lojista/onboarding/revisao');
+    expect(push).toHaveBeenCalledWith('/lojista');
+    expect(screen.getAllByText('Rascunho salvo. Sem a conta de recebimento não dá para enviar para análise.').length).toBeGreaterThan(0);
     expect(calls.filter((c) => c.init.method && c.init.method !== 'GET')).toHaveLength(0);
   });
 
@@ -281,7 +284,11 @@ describe('Revisão (L7)', () => {
     const notConnected = { ...complete, payout: { status: 'not_connected' as const, maskedAccount: null, simulated: false } };
     expect(missingItems(notConnected)).toEqual([{ text: 'conta de recebimento (Mercado Pago)', step: 4 }]);
     renderLojista(<Review store={notConnected} />);
-    expect(T('revisao', 'payout-banner')).toHaveTextContent('Falta conectar o Mercado Pago.');
+    expect(T('revisao', 'payout-banner')).toHaveTextContent('Falta conectar a conta de recebimento (Etapa 4). Sem ela não dá para enviar para análise.');
+    // tocar em enviar: continua 1 aviso só (o da Etapa 4), sem repetir na lista "Falta:"
+    await userEvent.click(T('revisao', 'submit'));
+    expect(screen.queryByTestId('lojista.revisao.missing-list')).toBeNull();
+    expect(screen.getAllByText(/Etapa 4/)).toHaveLength(1);
   });
 
   it('mostra o documento mascarado e envia para análise', async () => {

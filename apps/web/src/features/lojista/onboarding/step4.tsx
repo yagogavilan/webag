@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useReauth } from '@/components/panel/reauth';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Banner, Button, SkeletonRows, ui } from '@/components/ui';
+import { Banner, Button, SkeletonRows, ui, useToast } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
 import { supportHref } from '@/lib/lojista-access';
@@ -40,6 +40,7 @@ export function Step4({ store, next, backHref, oauth }: Props) {
   const router = useRouter();
   const client = useQueryClient();
   const reauth = useReauth();
+  const toast = useToast();
   const handled = useRef(false);
   const [connecting, setConnecting] = useState(false);
   const [checking, setChecking] = useState(Boolean(oauth?.state && oauth.code));
@@ -90,8 +91,10 @@ export function Step4({ store, next, backHref, oauth }: Props) {
     router.push(next as never);
   }
 
+  /** Volta ao painel com o rascunho guardado. Não promete adiar o que a Revisão bloqueia: sem a conta, o envio não acontece. */
   function later() {
-    router.push(next as never);
+    toast.show('Rascunho salvo. Sem a conta de recebimento não dá para enviar para análise.');
+    router.push('/lojista' as never);
   }
 
   return (
@@ -109,7 +112,7 @@ export function Step4({ store, next, backHref, oauth }: Props) {
       extraAction={
         !connected ? (
           <Button variant="text" onClick={later} disabled={connecting} data-testid={ltid('etapa4', 'connect-later')}>
-            Conectar depois
+            Salvar e continuar depois
           </Button>
         ) : null
       }
@@ -169,7 +172,7 @@ export function Step4({ store, next, backHref, oauth }: Props) {
       {problem === 'expired' ? <Banner tone="warning" testId={ltid('etapa4', 'expired')}>Link expirado. Conecte de novo.</Banner> : null}
       {!connected ? (
         <p className={`wb-text-caption ${ui.muted}`} style={{ margin: 0 }}>
-          A loja só vai ao ar depois de conectar.
+          Sem a conta de recebimento não dá para enviar para análise.
         </p>
       ) : null}
     </StepFrame>

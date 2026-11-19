@@ -35,7 +35,7 @@ export function onboardingRedirect(store: MerchantStore | null, step: Onboarding
     return '/lojista';
   }
   const done = store?.step ?? 0;
-  // A revisão abre com as etapas 1 a 3 prontas: conectar o Mercado Pago pode ficar para depois (L6, "Conectar depois").
+  // A revisão abre com as etapas 1 a 3 prontas; sem a conta de recebimento ela mostra o aviso da Etapa 4 e bloqueia o envio.
   const wanted = step === 'revisao' ? 4 : Number(step);
   return wanted > done + 1 ? onboardingPath(resumeStep(store)) : null;
 }

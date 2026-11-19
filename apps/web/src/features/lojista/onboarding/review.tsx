@@ -58,6 +58,8 @@ export function Review({ store, backHref }: { store: MerchantStore; backHref?: s
   const categories = useQuery({ queryKey: ['lojista', 'categories'], queryFn: () => apiRequest<CategoryTree>('lojista', 'categories'), staleTime: 5 * 60_000 });
   const missing = serverMissing.length > 0 ? serverMissing : missingItems(store);
   const connected = store.payout.status === 'connected';
+  // A conta de recebimento tem o seu próprio aviso (com o link da Etapa 4): fora da lista, para não avisar duas vezes
+  const missingOther = missing.filter((item) => item.step !== 4);
   const edit = (step: 1 | 2 | 3 | 4) => `${onboardingPath(String(step) as '1')}?de=revisao`;
 
   if (store.status === 'in_review') return <Submitted store={store} />;
@@ -89,16 +91,16 @@ export function Review({ store, backHref }: { store: MerchantStore; backHref?: s
     <StepFrame screen="revisao" title="Confira e envie" backHref={backHref} submitLabel="Enviar para análise" busyLabel="Enviando…" busy={busy} onSubmit={submit} error={formError ? <SaveError message={formError} /> : null}>
       {categories.isPending ? <SkeletonRows rows={1} height={24} label="Carregando o resumo" /> : null}
       {!connected ? (
-        <Banner tone="info" testId={ltid('revisao', 'payout-banner')}>
-          Falta conectar o Mercado Pago. Conecte antes de enviar: a loja só vai ao ar depois de conectar.
+        <Banner tone={showMissing ? 'danger' : 'info'} testId={ltid('revisao', 'payout-banner')}>
+          Falta conectar a conta de recebimento (<Link href={`${onboardingPath('4')}?de=revisao` as never}>Etapa 4</Link>). Sem ela não dá para enviar para análise.
         </Banner>
       ) : null}
-      {showMissing && missing.length > 0 ? (
+      {showMissing && missingOther.length > 0 ? (
         <Banner tone="danger" testId={ltid('revisao', 'missing-list')}>
           <div>
             <strong>Falta:</strong>
             <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
-              {missing.map((item) => (
+              {missingOther.map((item) => (
                 <li key={item.text}>
                   {item.text} (<Link href={`${onboardingPath(String(item.step) as '1')}?de=revisao` as never}>Etapa {item.step}</Link>)
                 </li>
