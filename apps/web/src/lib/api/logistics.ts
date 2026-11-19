@@ -1,8 +1,8 @@
-import type { Courier, Delivery as ApiDelivery, DeliveryDetail as ApiDeliveryDetail, DeliveryStatus } from '@webag/shared';
+import type { AdminRespondLateCancelBody, CancelRequest, Courier, Delivery as ApiDelivery, DeliveryDetail as ApiDeliveryDetail, DeliveryStatus, GetLogisticsStats200 } from '@webag/shared';
 import { apiRequest } from './client';
 
 /** Logística do admin (Onda 4D, DEC-036): fila de coleta, motoboys, atribuição, status e custo. Operação e super admin despacham. */
-export type { Courier, DeliveryStatus };
+export type { CancelRequest, Courier, DeliveryStatus, GetLogisticsStats200 as LogisticsStats };
 
 /**
  * Corrida com a promessa de entrega (DEC-053). O contrato publica o FIM da faixa (`etaToAt`), o atraso calculado pelo servidor
@@ -11,11 +11,6 @@ export type { Courier, DeliveryStatus };
  */
 interface EtaFields {
   etaFromAt?: string | null;
-  /** Declarados aqui também para o web compilar antes de o cliente gerado trazer o contrato da DEC-053 (idênticos ao openapi.yaml). */
-  etaToAt?: string | null;
-  overdue?: boolean;
-  overdueMinutes?: number | null;
-  area?: { key: string | null; readyCount: number } | null;
 }
 export type Delivery = ApiDelivery & EtaFields;
 export type DeliveryKind = 'delivery' | 'exchange_pickup' | 'exchange_return';
@@ -47,7 +42,20 @@ export interface StatusBody {
   code?: string;
   failReason?: FailReason;
   overrideReason?: string;
+  /** WB-262: a hora real da entrega (só `delivered`). Acima de 5 min de recuo o motivo é obrigatório; `other` exige a nota. */
+  deliveredAt?: string;
+  deliveredAtReason?: DeliveredAtReason;
+  deliveredAtNote?: string;
 }
+export type DeliveredAtReason = 'courier_notified_late' | 'no_signal' | 'other';
+export const DELIVERED_AT_REASONS: { id: DeliveredAtReason; label: string }[] = [
+  { id: 'courier_notified_late', label: 'O motoboy avisou depois' },
+  { id: 'no_signal', label: 'Ele ficou sem sinal' },
+  { id: 'other', label: 'Outro motivo' },
+];
+/** Recuo da hora real da entrega: até 5 min sem motivo, até 60 min com motivo (WB-262). */
+export const DELIVERED_AT_FREE_MIN = 5;
+export const DELIVERED_AT_MAX_BACK_MIN = 60;
 
 const A = 'admin' as const;
 const base = 'admin/logistics';
@@ -62,6 +70,10 @@ export const logisticsApi = {
   setCost: (id: string, body: { costCents: number; reason?: string }) => apiRequest<Delivery>(A, `${base}/deliveries/${id}/cost`, { method: 'PUT', body }),
   revealContact: (id: string, reason: string) => apiRequest<{ contact: NonNullable<DeliveryDetail['contact']> }>(A, `${base}/deliveries/${id}/contact-reveal`, { method: 'POST', body: { reason } }),
   assignBatch: (body: { deliveryIds: string[]; courierId: string; addressConfirmed?: boolean }) => apiRequest<BatchResult>(A, `${base}/deliveries/assign-batch`, { method: 'POST', body, idempotencyKey: `batch-${[...body.deliveryIds].sort().join('').replace(/-/g, '').slice(0, 40)}-${body.courierId.slice(0, 8)}` }),
+  /** Indicadores do dia ou do piloto (`logistics:report`: super admin, operação e financeiro; suporte recebe 403). */
+  stats: (from: string, to: string) => apiRequest<GetLogisticsStats200>(A, `${base}/stats`, { query: { from, to } }),
+  /** WB-255 C6: `arrive_soon` avisa o cliente que chega logo; `accept` aceita o cancelamento e a corrida volta à loja. */
+  respondLateCancel: (orderId: string, body: AdminRespondLateCancelBody) => apiRequest<{ status?: string }>(A, `admin/orders/${orderId}/late-cancel/respond`, { method: 'POST', body }),
   couriers: (query: { q?: string; active?: boolean; limit?: number } = {}) => apiRequest<CourierList>(A, `${base}/couriers`, { query: { q: query.q, active: query.active === undefined ? undefined : String(query.active), limit: query.limit } }),
   createCourier: (body: { name: string; phone: string; note?: string | null; documentsChecked: boolean }) => apiRequest<Courier>(A, `${base}/couriers`, { method: 'POST', body }),
   updateCourier: (id: string, body: { name?: string; phone?: string; note?: string | null; active?: boolean }) => apiRequest<Courier>(A, `${base}/couriers/${id}`, { method: 'PATCH', body }),
@@ -73,6 +85,7 @@ export const logisticsKeys = {
   done: ['admin', 'logistics', 'deliveries', 'done'] as const,
   detail: (id: string) => ['admin', 'logistics', 'delivery', id] as const,
   couriers: ['admin', 'logistics', 'couriers'] as const,
+  stats: (day: string) => ['admin', 'logistics', 'stats', day] as const,
 };
 
 export const KIND_LABEL: Record<DeliveryKind, string> = { delivery: 'Entrega', exchange_pickup: 'Coleta de troca', exchange_return: 'Troca ida e volta' };
@@ -187,4 +200,22 @@ export function sortQueueByEta(rows: Delivery[], now: number): Delivery[] {
   const etaRank = (row: Delivery) => ({ late: 0, ending: 1, on_time: 2 })[etaLevel(row, now) ?? 'on_time'];
   const rank = { late: 0, warning: 1, normal: 2 } as const;
   return [...rows].sort((a, b) => etaRank(a) - etaRank(b) || rank[waitLevel(a)] - rank[waitLevel(b)] || Date.parse(a.readyAt) - Date.parse(b.readyAt));
+}
+
+/** Pedido de cancelamento por atraso ainda sem resposta (a faixa "Responda em 06:58" da Logística). */
+export function pendingLateCancel(delivery: Pick<Delivery, 'lateCancelRequest'>): CancelRequest | null {
+  const request = delivery.lateCancelRequest;
+  return request && request.status === 'pending' ? request : null;
+}
+
+/** "mm:ss" que faltam para `respondBy`; zero ou negativo vira "00:00" (o sistema aceita sozinho). */
+export function countdownText(respondBy: string, now: number): string {
+  const left = Math.max(0, Math.round((Date.parse(respondBy) - now) / 1000));
+  return `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+}
+
+const brasiliaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** Dia civil de Brasília (AAAA-MM-DD), o mesmo de `from`/`to` dos indicadores. */
+export function brasiliaToday(now: number): string {
+  return brasiliaDay.format(new Date(now));
 }

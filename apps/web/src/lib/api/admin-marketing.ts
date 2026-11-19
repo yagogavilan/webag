@@ -1,9 +1,9 @@
-import type { AdminBanner, AdminBannerList, CreateBannerRequest, Highlight, HighlightCreate, HighlightList, HighlightPatch, PlatformCoupon, PlatformCouponCreate, PlatformCouponPage, PlatformCouponPatch, PushCampaign, PushCampaignCreate, PushCampaignPage, PushEstimate, PushSegment, UpdateBannerRequest } from '@webag/shared';
+import type { AdminBanner, AdminBannerList, CreateBannerRequest, Highlight, HighlightCreate, HighlightList, HighlightPatch, PlatformCoupon, PlatformCouponCreate, PlatformCouponDetail, PlatformCouponPage, PlatformCouponPatch, PushCampaign, PushCampaignCreate, PushCampaignPage, PushEstimate, PushSegment, UpdateBannerRequest } from '@webag/shared';
 import { apiRequest } from './client';
 import { postToStorage } from '@/lib/image/upload';
 
 /** Marketing do admin (Onda 6): banners e destaques, push segmentado e cupons da plataforma. Tipos do contrato gerado. */
-export type { AdminBanner, CreateBannerRequest, Highlight, HighlightCreate, PlatformCoupon, PlatformCouponCreate, PushCampaign, PushCampaignCreate, PushEstimate, PushSegment };
+export type { AdminBanner, CreateBannerRequest, Highlight, HighlightCreate, PlatformCoupon, PlatformCouponDetail, PlatformCouponCreate, PushCampaign, PushCampaignCreate, PushEstimate, PushSegment };
 const A = 'admin' as const;
 
 export const marketingApi = {
@@ -20,6 +20,7 @@ export const marketingApi = {
   createCampaign: (body: PushCampaignCreate, idempotencyKey: string) => apiRequest<PushCampaign>(A, 'admin/push/campaigns', { method: 'POST', body, idempotencyKey }),
   cancelCampaign: (id: string, reason: string) => apiRequest<PushCampaign>(A, `admin/push/campaigns/${id}/cancel`, { method: 'POST', body: { reason } }),
   coupons: (cursor?: string) => apiRequest<PlatformCouponPage>(A, 'admin/coupons', { query: { cursor, limit: 50 } }),
+  couponDetail: (id: string) => apiRequest<PlatformCouponDetail>(A, `admin/coupons/${id}`),
   createCoupon: (body: PlatformCouponCreate) => apiRequest<PlatformCoupon>(A, 'admin/coupons', { method: 'POST', body }),
   updateCoupon: (id: string, body: PlatformCouponPatch) => apiRequest<PlatformCoupon>(A, `admin/coupons/${id}`, { method: 'PATCH', body }),
   /** Imagem do banner (2:1): política, armazenamento, confirmação (ADR-005). Devolve o `assetId` para criar o banner. */
@@ -37,6 +38,7 @@ export const marketingKeys = {
   highlights: ['admin', 'highlights'] as const,
   campaigns: ['admin', 'push', 'campaigns'] as const,
   coupons: ['admin', 'coupons'] as const,
+  coupon: (id: string) => ['admin', 'coupons', id] as const,
 };
 
 export const PUSH_WINDOW = 'entre 9h e 20h';
