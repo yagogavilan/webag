@@ -3,7 +3,15 @@
 - **Data:** 2026-11-18 | **Revisor:** security-engineer | **Base:** `main` em `6bbdb2f` (commits `d0054ea`, `1cb99f6`, `fa06951`, `0893f16` "onda 4" e os checkpoints `264a32a`/`6bbdb2f` do painel do lojista). Trabalho do backend-dev não commitado (ledger, tempo real) ficou **fora**.
 - **Escopo:** `apps/api/src/modules/payments/*` (adaptador Mercado Pago real com SDK oficial `mercadopago@3.6.2`, fake, webhook, conciliação, estorno), `orders/*` (criação, máquina de estados, painel da loja), `cart` (cotação), `catalog/inventory.service.ts` (reserva), `stores/payment-account.service.ts` (OAuth do lojista), `finance/domain/commission.ts` (split), `platform/config/env.ts`, `platform/crypto/crypto.ts`, redação de log em `app.module.ts`.
 - **Referências:** `requisitos-seguranca.md` (SEC-030..048, SEC-060..067, SEC-072), `threat-model-auth-pagamento.md`, `revisao-adrs.md` (SEC-104/105), ADR-002, ADR-010, DEC-014/016/020/032.
-- **Status do documento:** parte 1 (leitura de código). Parte 2 (testes e ataques executados) e parecer final abaixo, quando concluídos.
+- **Status do documento:** completo (parte 1: leitura de código; parte 2: testes e ataques executados; parecer).
+
+## Parecer: REPROVADO para liberar o checkout do app em produção (G4)
+
+Três achados **Altos** confirmados por teste: SEC-130 (estorno que falha some em silêncio; o cliente fica sem o dinheiro e o admin sem alerta), SEC-131 (sem teto de pedidos pendentes; 1 conta reservou 180 de 200 unidades em segundos) e SEC-132 (teto da loja nova do DEC-020b inexistente, mesmo item do BUG-009). O núcleo do pagamento está **bem feito**: assinatura, antirreplay, re-consulta, conferência de valor/recebedor/comissão, idempotência, IDOR e reserva atômica resistiram a todos os ataques abaixo.
+
+- **Sem objeção** a o mobile-dev integrar o checkout contra o `fake`/sandbox do MP enquanto o back-end corrige, **desde que** o ambiente não seja público (SEC-135).
+- **Para virar APROVADO COM RESSALVAS:** corrigir SEC-130, SEC-131, SEC-132 e SEC-134 (pequeno e confirmado), com os testes de "Como verificar". O security-engineer reverifica só esses pontos. Os Médios SEC-133, SEC-135 e SEC-136 têm prazo até o G4; o SEC-135 precisa entrar junto com o DT-038 (staging). Baixos: ondas seguintes.
+- **Pendência de escopo (não é achado):** endpoint de estorno do admin (SEC-039) e a cobertura do DEC-020a ainda não existem. Sem eles, os alertas `conciliation_mismatch`, `creation_unresolved` e o SEC-130 não têm como ser resolvidos pela operação. Precisa estar pronto antes do G4.
 
 ## Achados
 
@@ -52,7 +60,7 @@
 ### SEC-134 | Severidade: Média | Status: Aberto
 - **Onde:** `orders/orders.service.ts:430-458` (`onAttemptTransition`/`markPaid`).
 - **Problema:** qualquer tentativa cujo `external_reference` seja o UUID de um pedido paga aquele pedido: não confere `attempt.amountCents === order.totalCents`, `attempt.storeId === order.storeId` nem `attempt.id === order.paymentAttemptId` (a linha 434 vincula a primeira que chegar). Em produção só `createOnce` cria tentativas, então hoje não é explorável lá; é a última barreira se surgir "tentar pagar de novo", ferramenta de admin ou outro chamador.
-- **Cenário de ataque:** ver SEC-135 (fora de produção, qualquer logado paga pedido alheio com R$ 0,01). Em produção, bug futuro de outro módulo vira pedido pago por valor menor.
+- **Cenário de ataque:** **confirmado por teste** fora de produção: o atacante cria pela rota dev uma tentativa de R$ 0,01 com `externalReference` = pedido da vítima (total R$ 205,00), aprova, e o pedido da vítima vai a `received` (pago), mesmo com outra tentativa já vinculada. Em produção, bug futuro de outro módulo vira pedido pago por valor menor.
 - **Correção recomendada:** no gancho, se `order.paymentAttemptId` existir e for diferente, ou se valor/loja divergirem: não pagar, alerta `order_attempt_mismatch` e (se aprovado) estorno automático do SEC-040.
 - **Como verificar:** e2e com tentativa de valor menor e `external_reference` = pedido → pedido segue `awaiting_payment`, alerta e estorno.
 
@@ -91,6 +99,29 @@
 - **Problema:** (a) o `state` está correto (256 bits, hash no banco, uso único, 10 min, ligado a usuário, sessão e loja; callback por POST, então `code` não entra no log de acesso), mas sem PKCE uma injeção de `code` depende só do `state`. O SDK 3.6.2 não expõe `code_challenge`; o MP documenta PKCE opcional por aplicação [HIPÓTESE, confirmar no painel do MP]. (b) Mensagem de erro do MP na renovação vai ao log sem `safeErrorMessage`. (c) `maskPii` não cobre CPF (11 dígitos), que vai ao MP no PIX quando exigido.
 - **Correção recomendada:** ligar PKCE (S256) se o painel permitir, montando a URL manualmente; `safeErrorMessage` em `:169`; acrescentar CPF/CNPJ ao `maskPii`.
 - **Como verificar:** teste de `maskPii('12345678901')` → mascarado; URL de autorização com `code_challenge_method=S256`.
+
+## Parte 2: testes e ataques executados (2026-11-19)
+
+Postgres e Redis reais, provedor `fake` (mesmo caminho de assinatura e re-consulta do real). Os ataques rodaram num spec temporário fora do repositório (não versionado; os cenários estão descritos aqui para o backend-dev transformar em teste de regressão).
+
+| Verificação | Resultado |
+|---|---|
+| Unitários `payments`, `orders`, `platform/config` (inclui assinatura e mapeamento do MP) | 5 arquivos, 65 testes OK |
+| E2E `payments`, `payments-hardening`, `orders`, `production-boot`, `stores-team-payment`, `store-orders` | 85 de 86 OK. A falha é `store-orders` "detalhe..." (404), do checkpoint em andamento do painel do lojista (`6bbdb2f`); não é achado de segurança, avisar o backend-dev |
+| Webhook sem `x-signature`, segredo errado, `ts` de 10 min, IPN legado `?topic=&id=`, assinatura de outro `data.id`, `data.id` duplicado na query | 401 em todos, nada enfileirado |
+| Mesma notificação 2x + 5 concorrentes + `type` trocado na query; corpo com `data.id` falso | 1 evento gravado, os demais `duplicate: true`; o corpo é ignorado; pedido pago 1 vez (1 evento `received`) |
+| Pagamento aprovado com valor 1 centavo menor / recebedor de outra conta / comissão zerada / `external_reference` de outro pedido | Pedido segue `awaiting_payment`, tentativa `divergent`, alerta `conciliation_mismatch` com o campo certo (SEC-034 OK) |
+| IDOR: cliente B em `GET/payment/cancel` do pedido de A; dono da loja B pela rota da loja B e pela da loja A (`get`, `refuse`, `accept`) | 404 em todos; pedido de A intacto |
+| Corrida pela última unidade (2 pedidos simultâneos) | 201 e 409 `STOCK_CONFLICT`; reservado 1/1 |
+| PIX pago depois de o pedido expirar, notificação repetida | 1 estorno total (R$ 45,00), pedido segue `expired` (SEC-040 OK) |
+| **SEC-131:** 6 pedidos PIX seguidos da mesma conta | 6 x 201; 180 de 200 unidades reservadas |
+| **SEC-130:** pedido pago, provedor recusa o estorno (409 conta indisponível), loja recusa; provedor volta; 2 conciliações | Pedido `refused`, intenção `failed`, 0 estornos, **nenhum alerta**, cliente vê pagamento `approved` |
+| **SEC-133:** cartão aprovado na criação com `application_fee` 0 e recebedor errado | 201, pedido `received` (pago) |
+| **SEC-134/135:** rota dev, atacante paga pedido alheio com R$ 0,01 e lê a tentativa da vítima | Pedido da vítima `received`; `GET /v1/dev/payments/:id` devolve o PIX copia e cola da vítima |
+| Busca de segredos no diff da Onda 4 (`APP_USR-`, `TEST-`, `-----BEGIN`, `client_secret`) | Nada |
+| `pnpm audit --audit-level high` | 0 Alta/Crítica (5 Moderadas, de dev, já avaliadas na `revisao-onda1.md`) |
+
+**Não coberto:** chamada real ao Mercado Pago (sandbox não acessível daqui; pendências `[confirmar no sandbox]` do adaptador: `ts` do webhook, qual segredo assina pagamento criado com token do lojista, `application_fee` em `fee_details`, estorno parcial, CPF no PIX, PKCE); ledger e tempo real (não commitados); app mobile (Brick, WebView, 3DS, SEC-037); pentest dinâmico. Pentest externo antes de escalar continua recomendado.
 
 ## Controles verificados e corretos (leitura de código)
 
