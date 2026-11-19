@@ -133,3 +133,15 @@ W.8 [ ] Lojista, Pedidos (§2.1): campo `readyByAt` no pedido em preparo ("Marqu
 | Memória | Investigar o crescimento de memória da API (302 para 651 MB em rajada, sem voltar): perfil rápido e correção se for vazamento. |
 | F1-F8 | `docs/gestao/fila-mobile.md`: F1 rota dev `POST /v1/dev/orders/{orderId}/payment/{approve,decline,expire}` e F2 compensação no contrato; demais conforme custo. |
 - **Verificação final (backend-dev, 2026-11-19, `claude/admiring-lamport-62tq1a`):** `eslint src test seed` limpo; `tsc --noEmit` limpo (api, shared, web e mobile contra o cliente regenerado); unitários 300/300 (38 arquivos); **E2E COMPLETO 705 passam, 1 pulado, 0 falhas (83 arquivos)**, banco e Redis próprios. Nas rodadas intermediárias o E2E acusou fragilidade de teste (não de produto): os testes de conciliação de pagamento dependiam de haver menos de 200 pagamentos antigos no banco compartilhado (agora `reconcileFirst`), e dois testes de coorte usavam cidade inventada com CEP de outra (agora `fakeCepCityIs`, porque o município do CEP passou a ser sempre conferido).
+
+## X. Do PO em 2026-11-19 (DEC-060 a DEC-066) — fazer depois da seção W
+
+| Item | O que fazer |
+|---|---|
+| WB-259 (F3) | Estorno com valor, meio e status na API; prazo em texto fixo por meio. |
+| WB-260 (F4) | `unavailableReason` (hoje a pausa aparece como "fora da área", o que é falso). |
+| WB-261 (F6a) | 409 `ETA_CHANGED` só quando o fim da faixa piorou. |
+| WB-262 | `deliveredAt`: operação informa a hora real, recuo até 60 min, auditado. |
+| Coleta atrasada | Parâmetro `coleta_atrasada_dias_uteis` = 1 (backend usou 3 dias). |
+| Privacidade V.6 | Anonimização apaga cupom pessoal não usado e `push_campaign_recipients`. |
+| DT-059/060/062 | Conforme DEC-060/062 (teto de usos obrigatório no cupom global; 2 CSVs; limite 10.000 linhas = 422). |
