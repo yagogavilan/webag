@@ -5,6 +5,7 @@ import { restoreFees } from './helpers/fees.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
 import { addToCart, cartView, customerAt, placeOrder, shopWith } from './helpers/orders.js';
 import { ParametersService } from '../src/modules/admin/index.js';
+import { DeliveryFeesService } from '../src/modules/logistics/index.js';
 
 const system = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 
@@ -112,5 +113,30 @@ describe('Horário e pausa da logística da Webag (BUG-016)', () => {
     // quem não despacha não pausa
     const finance = await createAdmin(ctx, 'finance');
     await ctx.http.post('/v1/admin/logistics/pause').set(bearer(finance.accessToken)).send({ reason: 'sem permissão' }).expect(403);
+  });
+
+  /** BUG-021 (RN-19 item 2): a entrega só é oferecida se o FIM da faixa cair antes do fechamento; relógio injetado (sem depender da hora do teste). */
+  it('o fim da faixa precisa cair antes do fechamento: 19:40 com fechamento às 20:00 não oferece entrega ("volta às 09:00"); a borda é exclusiva', async () => {
+    const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 3_000, stock: 20 }]);
+    const [city] = await ctx.db.select().from(cities).where(eq(cities.name, 'Francisco Morato'));
+    const fees = ctx.app.get(DeliveryFeesService);
+    const destination = { lat: shop.origin.lat, lng: shop.origin.lng, cityId: city!.id };
+    await ctx.app.get(ParametersService).update('logistica_horario', '09:00-20:00', 'teste do fim da faixa', system);
+    // Amanhã (as tabelas de taxa já vigoram) no horário de Brasília; seg_dom: o dia da semana não interfere.
+    const tomorrow = new Date(Date.now() + 86_400_000 + (-3 * 3_600_000));
+    const brt = (hh: number, mm: number) => new Date(Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), hh + 3, mm));
+    const probe = await fees.quote(shop.store.id, destination, 3_000, brt(12, 0));
+    expect(probe.available, JSON.stringify(probe)).toBe(true);
+    const toMin = probe.eta!.toMin;
+
+    const closing = brt(20, 0).getTime();
+    const at = (minutesBeforeClosing: number) => new Date(closing - minutesBeforeClosing * 60_000);
+    const justFits = await fees.quote(shop.store.id, destination, 3_000, at(toMin + 1)); // fim da faixa = 19:59
+    expect(justFits.available).toBe(true);
+    const edge = await fees.quote(shop.store.id, destination, 3_000, at(toMin)); // fim da faixa = 20:00 (fechamento exclusivo)
+    expect(edge).toMatchObject({ available: false, reason: 'LOGISTICS_CLOSED' });
+    const late = await fees.quote(shop.store.id, destination, 3_000, brt(19, 40)); // o caso do QA: 19:40 prometendo ~20:50
+    expect(late).toMatchObject({ available: false, reason: 'LOGISTICS_CLOSED' });
+    expect(late.logisticsOpensAt!.getTime()).toBe(brt(9, 0).getTime() + 86_400_000); // próxima abertura: depois de amanhã 09:00 (Brasília não tem horário de verão)
   });
 });

@@ -55,3 +55,15 @@ export function nextLogisticsOpening(hours: LogisticsHours, now: Date): Date {
   }
   return new Date(now.getTime() + DAY_MS);
 }
+
+/**
+ * RN-19 item 2 (BUG-021): o fim da faixa de chegada (`endAt`) precisa cair ANTES do fechamento do dia em que o pedido é feito. Fim da faixa
+ * em outro dia (passou da meia-noite) ou depois do fechamento = a entrega não é oferecida.
+ */
+export function endsBeforeClosing(hours: LogisticsHours, now: Date, endAt: Date): boolean {
+  const { startMin, endMin } = parseWindow(hours.window);
+  // Operação contínua (00:00 até 23:59 ou mais): não há fechamento no dia; só o dia da chegada precisa ser de operação.
+  if (startMin === 0 && endMin >= 23 * 60 + 59) return OPEN_WEEKDAYS[hours.days].includes(brt(endAt).weekday);
+  if (brt(now).dayStartUtc !== brt(endAt).dayStartUtc) return false;
+  return isLogisticsOpen(hours, endAt);
+}

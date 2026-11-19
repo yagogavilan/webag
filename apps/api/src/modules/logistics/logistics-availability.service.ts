@@ -5,7 +5,7 @@ import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import { logisticsPauses } from './db/schema.js';
-import { isLogisticsOpen, nextLogisticsOpening, type LogisticsDays } from './domain/hours.js';
+import { endsBeforeClosing, isLogisticsOpen, nextLogisticsOpening, type LogisticsDays } from './domain/hours.js';
 
 export interface LogisticsStatus {
   open: boolean;
@@ -28,12 +28,15 @@ export class LogisticsAvailabilityService {
     private readonly audit: AuditService,
   ) {}
 
-  /** `cityId` = cidade de DESTINO; pausa geral (sem cidade) vale para todas. */
-  async status(cityId: string | null, now = new Date()): Promise<LogisticsStatus> {
+  /**
+   * `cityId` = cidade de DESTINO; pausa geral (sem cidade) vale para todas. `arriveByMin` = fim da faixa de chegada em minutos a partir de
+   * agora (RN-19 item 2, BUG-021): se o fim da faixa passa do fechamento, a entrega não é oferecida ("volta às HH:MM" = próxima abertura).
+   */
+  async status(cityId: string | null, now = new Date(), arriveByMin?: number): Promise<LogisticsStatus> {
     const [pause] = await this.activePause(cityId);
     if (pause) return { open: false, closedBy: 'PAUSED', opensAt: null, pauseReason: pause.reason };
     const hours = { window: String(await this.params.get('logistica_horario')), days: String(await this.params.get('logistica_dias')) as LogisticsDays };
-    if (isLogisticsOpen(hours, now)) return { open: true, closedBy: null, opensAt: null, pauseReason: null };
+    if (isLogisticsOpen(hours, now) && (arriveByMin === undefined || endsBeforeClosing(hours, now, new Date(now.getTime() + arriveByMin * 60_000)))) return { open: true, closedBy: null, opensAt: null, pauseReason: null };
     return { open: false, closedBy: 'HOURS', opensAt: nextLogisticsOpening(hours, now), pauseReason: null };
   }
 

@@ -130,7 +130,8 @@ export class DeliveryFeesService implements OnModuleInit {
     const eta = computeEta(etaConfig, { distanceM, prepMin: settings.prepMinutes });
     if (!eta.withinCeiling) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
     // BUG-016 / DEC-039c: fora do horário da logística ou pausada (geral ou da cidade de destino), só retirada.
-    const logistics = await this.availability.status(destination.cityId ?? null, now);
+    // RN-19 item 2 (BUG-021): o fim da faixa precisa cair antes do fechamento, não só "aberto agora".
+    const logistics = await this.availability.status(destination.cityId ?? null, now, eta.toMin);
     if (!logistics.open) return { ...base, available: false, reason: 'LOGISTICS_CLOSED', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, logisticsOpensAt: logistics.opensAt, snapshot: null };
     const table = await this.resolve(destination, now);
     const picked = table ? pickTier(table.tiers, distanceM) : null;
