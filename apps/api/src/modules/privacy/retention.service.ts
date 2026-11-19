@@ -8,6 +8,8 @@ import { ParametersService } from '../admin/index.js';
 import { retentionRuns } from './db/schema.js';
 
 const DAY = 86_400_000;
+/** SEC-162: folga sobre o prazo de defeito em produto durável antes de apagar os tokens do dono excluído. */
+const OWNER_TOKEN_EXTRA_DAYS = 30;
 const BATCH = 5_000;
 
 export interface RetentionResult {
@@ -60,10 +62,11 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async execute(id: string, now: Date): Promise<RetentionResult> {
-    const [accessMonths, photoDays, rejectedDays] = await Promise.all([
+    const [accessMonths, photoDays, rejectedDays, durableDays] = await Promise.all([
       this.params.getNumber('retencao_log_acesso_meses'),
       this.params.getNumber('retencao_foto_troca_dias'),
       this.params.getNumber('retencao_loja_reprovada_dias'),
+      this.params.getNumber('troca_defeito_duravel_dias'),
     ]);
     const ago = (days: number) => new Date(now.getTime() - days * DAY);
     const counts: Record<string, number> = {};
@@ -88,6 +91,8 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
     await step('exchangePhotos', () => this.exchangePhotos(ago(photoDays)));
     await step('rejectedStoreDocuments', () => this.rejectedStoreDocuments(ago(rejectedDays)));
     await step('orphanUploads', () => this.orphanUploads(now));
+    // SEC-162 / DEC-063 (d): tokens do Mercado Pago de quem excluiu a conta duram `troca_defeito_duravel_dias` + 30 dias (cobrir estorno de defeito), sem parâmetro novo.
+    await step('deletedOwnerPaymentTokens', () => this.deletedOwnerPaymentTokens(ago(durableDays + OWNER_TOKEN_EXTRA_DAYS)));
 
     await this.db.update(retentionRuns).set({ finishedAt: new Date(), counts, errors: errs }).where(eq(retentionRuns.id, id));
     if (errs.length > 0) {
@@ -151,6 +156,19 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
       removed += docs.length;
     }
     return removed;
+  }
+
+  /**
+   * SEC-162: a conta do dono foi excluída (anonimização concluída) há mais de `cutoff`: a conta de recebimento da loja vira `disconnected` e o
+   * segredo cifrado é apagado (`tokens_enc` = ''), então nem estorno nem consulta voltam a usar o token. O provedor não oferece rota de
+   * revogação ao vendedor: o token fica sem uso e vence sozinho. Idempotente (só linhas com segredo).
+   */
+  private async deletedOwnerPaymentTokens(cutoff: Date): Promise<number> {
+    const res = await this.db.execute(sql`
+      update payment_accounts pa set status = 'disconnected', disconnected_at = coalesce(pa.disconnected_at, now()), tokens_enc = '', tokens_expire_at = null
+      where pa.tokens_enc <> '' and exists (
+        select 1 from account_deletions d where d.store_id = pa.store_id and d.status = 'completed' and d.requested_at < ${cutoff.toISOString()}::timestamptz)`);
+    return res.rowCount ?? 0;
   }
 
   /** DT-032: upload que ficou `pending` (o cliente nunca completou) ou foi rejeitado não tem finalidade depois de 24 h / 7 dias. */

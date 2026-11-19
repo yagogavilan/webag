@@ -161,6 +161,7 @@ export class PaymentAccountService implements OnModuleInit {
       : and(eq(paymentAccounts.storeId, storeId), eq(paymentAccounts.status, 'active'), eq(paymentAccounts.provider, this.provider.name));
     const [row] = await this.db.select().from(paymentAccounts).where(where).orderBy(desc(paymentAccounts.connectedAt)).limit(1);
     if (!row) return null;
+    if (!row.tokensEnc) return null; // SEC-162: tokens apagados pela retenção (dono excluído há mais de 120 dias)
     let tokens = this.openTokens(storeId, row.tokensEnc);
     if (row.tokensExpireAt && row.tokensExpireAt.getTime() - Date.now() < 30 * 86_400_000) {
       try {

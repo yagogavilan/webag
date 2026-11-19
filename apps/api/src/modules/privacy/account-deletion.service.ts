@@ -371,6 +371,14 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       await count('staffMemberships', tx.delete(t.storeMembers).where(and(eq(t.storeMembers.userId, userId), eq(t.storeMembers.role, 'staff'))).returning({ userId: t.storeMembers.userId }));
       if (originalEmail) await tx.delete(t.invitations).where(eq(t.invitations.email, originalEmail));
 
+      // DEC-063 (a)/(b): cupom pessoal (compensação por atraso) NÃO usado é apagado, junto com os resgates já liberados dele; o USADO fica só
+      // como registro de resgate do pedido (a casca anonimizada). `push_campaign_recipients`: as linhas por destinatário saem; os totais da
+      // campanha (contadores em `push_campaigns`) ficam.
+      const unusedPersonal = sql`select c.id from coupons c where c.owner_user_id = ${userId}::uuid and not exists (select 1 from coupon_redemptions r where r.coupon_id = c.id and r.released_at is null)`;
+      await tx.execute(sql`delete from coupon_redemptions where coupon_id in (${unusedPersonal})`);
+      summary.personalCouponsDeleted = (await tx.execute(sql`delete from coupons where id in (${unusedPersonal}) returning 1`)).rows.length;
+      await count('pushCampaignRecipients', tx.delete(t.pushCampaignRecipients).where(eq(t.pushCampaignRecipients.userId, userId)).returning({ id: t.pushCampaignRecipients.id }));
+
       // Consentimento e aceite (`consents`, `terms_acceptances`) são PROVA append-only (trigger do banco; LGPD art. 7, I e 8, § 2): ficam
       // ligados à casca anonimizada do usuário e não identificam a pessoa sem os outros dados, que acabaram de sair. [validar com o jurídico]
 
