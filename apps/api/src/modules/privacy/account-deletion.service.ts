@@ -11,7 +11,7 @@ import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js
 import { sha256Hex } from '../../platform/crypto/crypto.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import * as t from '../../platform/database/schema.js';
-import { AuthService, PasswordService, SessionService } from '../identity/index.js';
+import { AuthService, CodeService, PasswordService, SessionService } from '../identity/index.js';
 import { ACTIVE_STATUSES } from '../orders/domain/state.js';
 import { OPEN_EXCHANGE_STATUSES } from '../exchanges/db/schema.js';
 import { accountDeletions, dataExportLinks, dataExports, privacyRequestEvents, privacyRequests } from './db/schema.js';
@@ -64,6 +64,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     private readonly audit: AuditService,
     private readonly mail: MailService,
     private readonly limiter: RateLimitService,
+    private readonly codes: CodeService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -199,12 +200,15 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
    * Arrependimento (WB-213, período configurável): e-mail e senha da conta fechada, antes de `effective_at`. A resposta de falha é a
    * mesma do login (não revela se a conta existe nem se está em exclusão).
    */
-  async cancel(email: string, password: string, ctx: RequestContext): Promise<void> {
+  async cancel(email: string, password: string, ctx: RequestContext, code?: string): Promise<void> {
     const invalid = () => new AppError(401, 'INVALID_CREDENTIALS', 'E-mail ou senha incorretos', { detail: 'E-mail ou senha incorretos.' });
     const ip = ctx.ip ?? 'unknown';
     const key = `deletion-cancel:${sha256Hex(email)}:${ip}`;
     const { count, ttlSeconds } = await this.limiter.hit(key, 3600);
     if (count > 5) throw errors.tooMany(ttlSeconds || 3600, 'Muitas tentativas. Tente novamente mais tarde.');
+    // SEC-168: limite por e-mail SEM o IP (um botnet com IPs diferentes não escapa): 10 por hora.
+    const byEmail = await this.limiter.hit(`deletion-cancel:email:${sha256Hex(email)}`, 3600);
+    if (byEmail.count > 10) throw errors.tooMany(byEmail.ttlSeconds || 3600, 'Muitas tentativas. Tente novamente mais tarde.');
 
     const [row] = await this.db
       .select({ user: t.users, deletion: accountDeletions })
@@ -212,7 +216,23 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       .innerJoin(accountDeletions, and(eq(accountDeletions.userId, t.users.id), eq(accountDeletions.status, 'pending')))
       .where(eq(t.users.email, email));
     const passwordOk = await this.passwords.verify(row?.user.passwordHash ?? null, password);
-    if (!row || !passwordOk || row.deletion.effectiveAt <= new Date() || row.user.status !== 'deleted') throw invalid();
+    if (!row || !passwordOk || row.deletion.effectiveAt <= new Date() || row.user.status !== 'deleted') {
+      // SEC-168: a falha soma no contador POR CONTA (o mesmo do login, `lfa`), de qualquer origem; o step-up do login passa a valer aqui.
+      if (row) await this.limiter.hit(`lfa:${row.user.id}`, 3600);
+      throw invalid();
+    }
+    // SEC-168: conta sob ataque (step-up do login ativo) não reabre só com a senha. E-mail confirmado: exige o código enviado ao e-mail;
+    // não confirmado: a mesma resposta genérica de senha errada (nunca revela o motivo).
+    const accountFails = await this.limiter.peek(`lfa:${row.user.id}`);
+    if (accountFails.count >= (await this.params.getNumber('login_stepup_falhas_h'))) {
+      if (row.user.emailVerifiedAt === null) throw invalid();
+      if (!code) {
+        await this.codes.enforceSendLimits(sha256Hex(email), 'delete_web', email, ctx);
+        await this.codes.issue(row.user.id, 'delete_web', email);
+        throw errors.forbidden('LOGIN_CODE_REQUIRED', 'Para sua segurança, confirme com o código enviado ao seu e-mail.');
+      }
+      await this.codes.verify(row.user.id, 'delete_web', code); // 400 `CODE_INVALID`/`CODE_EXPIRED`; uso único
+    }
 
     const restored = await this.db.transaction(async (tx) => {
       const [done] = await tx

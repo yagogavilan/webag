@@ -197,10 +197,11 @@ export function accountDeletionRequestedEmail(effectiveAt: Date): Body {
   const date = effectiveAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   return {
     subject: 'Recebemos o pedido para excluir sua conta Webag',
-    text: `Sua conta Webag foi fechada. Você pode se arrepender até ${date}: entre com e-mail e senha e confirme que quer manter a conta. Depois dessa data a exclusão é definitiva.\n\n${footer}`,
+    text: `Sua conta Webag foi fechada. Você pode se arrepender até ${date}: entre com e-mail e senha e confirme que quer manter a conta. Depois dessa data a exclusão é definitiva.\nNão foi você? Abra o app Webag, cancele a exclusão e troque a senha o quanto antes.\n\n${footer}`,
     html: html('Pedido de exclusão recebido', [
       'Sua conta Webag foi fechada.',
       `Você pode se arrepender até ${date}: entre com e-mail e senha e confirme que quer manter a conta. Depois dessa data a exclusão é definitiva.`,
+      'Não foi você? Abra o app Webag, cancele a exclusão e troque a senha o quanto antes.',
     ]),
   };
 }

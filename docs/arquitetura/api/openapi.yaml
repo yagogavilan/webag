@@ -6672,7 +6672,7 @@ paths:
       tags: [privacy]
       operationId: cancelAccountDeletion
       summary: Arrependimento - cancelar a exclusão da conta
-      description: "Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP."
+      description: "SEC-168: limite de 5 por hora por e-mail e IP e 10 por hora por e-mail (sem o IP). Só vale enquanto há período de arrependimento (`exclusao_arrependimento_horas` > 0) e antes de `effectiveAt`. E-mail e senha; qualquer falha responde 401 `INVALID_CREDENTIALS`, igual ao login (não revela se a conta existe nem se está em exclusão). 5 tentativas por hora por e-mail e IP."
       security: []
       requestBody:
         required: true
@@ -6687,6 +6687,11 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: "SEC-168: conta sob ataque (as falhas somam no contador por conta, o mesmo do login). Com e-mail confirmado: `LOGIN_CODE_REQUIRED`, o código `delete_web` vai ao e-mail e a chamada se repete com `code`. Sem e-mail confirmado a resposta é a 401 genérica."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '429':
           $ref: '#/components/responses/TooManyRequests'
   /v1/me/data-exports:
@@ -12171,6 +12176,7 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
+        code: { type: string, pattern: '^[0-9]{6}$', description: 'SEC-168: código de 6 dígitos enviado ao e-mail depois do 403 `LOGIN_CODE_REQUIRED` (uso único).' }
     DataExportStatus:
       type: object
       required: [id, status, requestedAt, readyAt, expiresAt, sizeBytes]

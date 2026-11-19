@@ -15,7 +15,7 @@ const deleteAccountSchema = z.strictObject({ password: passwordSchema });
 const webStartSchema = z.strictObject({ email: emailSchema, password: passwordSchema.optional() });
 const webVerifySchema = z.strictObject({ email: emailSchema, code: codeSchema });
 const webTicketSchema = z.strictObject({ deleteTicket: z.string().min(20).max(200) });
-const cancelDeletionSchema = z.strictObject({ email: emailSchema, password: passwordSchema });
+const cancelDeletionSchema = z.strictObject({ email: emailSchema, password: passwordSchema, code: z.string().regex(/^\d{6}$/).optional() });
 
 /** WB-213: excluir minha conta (cliente, lojista dono ou funcionário). Admin tem outro caminho (WB-101). */
 @Controller('v1/me/deletion')
@@ -93,7 +93,7 @@ export class AccountDeletionPublicController {
   @HttpCode(204)
   @RateLimit({ name: 'account-deletion-cancel', limit: 10, windowSeconds: 3600 })
   async cancel(@Ctx() ctx: RequestContext, @Body(new ZodPipe(cancelDeletionSchema)) body: z.infer<typeof cancelDeletionSchema>): Promise<void> {
-    await this.deletion.cancel(body.email, body.password, ctx);
+    await this.deletion.cancel(body.email, body.password, ctx, body.code);
   }
 }
 
