@@ -44,6 +44,8 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   { key: 'entrega_min_por_km', type: 'decimal', default: 6, min: 1, max: 30, description: 'ETA: minutos de deslocamento por km de rota', ref: 'DEC-053' },
   int('entrega_faixa_min', 15, 0, 60, 'ETA: folga da faixa para cada lado da estimativa (min)', 'DEC-053'),
   int('entrega_max_min', 120, 30, 240, 'ETA: teto da estimativa; acima disso a loja não entrega para o endereço ("fora da área")', 'DEC-053'),
+  { key: 'logistica_horario', type: 'window', default: '09:00-20:00', description: 'Horário em que a Webag despacha entregas (Brasília); fora dele só retirada, com "Entrega volta às HH:MM" (DEC-039c)', ref: 'DEC-039c' },
+  { key: 'logistica_dias', type: 'enum', default: 'seg_sab', values: ['seg_sab', 'seg_sex', 'seg_dom'], description: 'Dias em que a logística abre (seg_sab = segunda a sábado)', ref: 'DEC-039c' },
   int('entrega_lote_max', 4, 2, 10, 'Corridas da mesma área que a Logística atribui de uma vez ao mesmo motoboy (lote, DEC-053)', 'DEC-053'),
   int('entrega_custo_max_cents', 15000, 1000, 100000, 'Custo máximo lançável por corrida ao motoboy (centavos, SEC-145)', 'SEC-145'),
   int('entrega_custo_alerta_cents', 5000, 500, 100000, 'Custo por corrida acima do qual exige motivo e alerta o financeiro (centavos; também acima de 1,5x o previsto da faixa, SEC-145)', 'SEC-145'),

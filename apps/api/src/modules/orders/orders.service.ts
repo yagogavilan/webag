@@ -438,7 +438,12 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
 
     // L.4: pedido encerrado com a corrida em aberto (admin cancelando): a corrida acaba junto, na mesma transação.
     if (order.mode === 'delivery' && (order.status === 'ready_for_collection' || order.status === 'out_for_delivery')) {
-      await this.deliveries.cancelForOrderInTx(tx, order.id, reason ?? 'Pedido cancelado', { id: actorUserId, role: actor }, opts.ctx ?? { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      this.closingOrders.add(order.id); // a corrida cancelada abaixo não pode cancelar o pedido de novo (BUG-012)
+      try {
+        await this.deliveries.cancelForOrderInTx(tx, order.id, reason ?? 'Pedido cancelado', { id: actorUserId, role: actor }, opts.ctx ?? { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      } finally {
+        this.closingOrders.delete(order.id);
+      }
     }
 
     const now = new Date();
@@ -728,6 +733,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     await this.payments.raiseAlert(null, 'delivery_ready', { orderId: order.id, orderNumber: order.number, storeId: order.storeId }).catch(() => undefined);
   }
 
+  private readonly closingOrders = new Set<string>();
   private readonly pendingDeliveryEvents = new Map<string, { events: OrderEvent[]; refund: PendingRefund | null }>();
 
   /**
@@ -756,8 +762,14 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!order) return;
     const who: OrderActor = actor.role === 'system' ? 'system' : 'admin';
     const events: OrderEvent[] = [];
-    const refund: PendingRefund | null = null;
-    if (to === 'out_for_delivery' && order.status === 'ready_for_collection') {
+    let refund: PendingRefund | null = null;
+    if (to === 'cancelled' && order.mode === 'delivery' && order.status === 'ready_for_collection' && !this.closingOrders.has(order.id)) {
+      // BUG-012 / WB-233 C6 / RN-18: a operação cancelou a corrida antes da coleta (loja desistiu, sem motoboy): o pedido pago não pode
+      // ficar "pronto para coleta" sem corrida e sem desfecho. Vai a CANCELADO (ator admin), estoque devolvido e estorno total.
+      const closed = await this.closeOrder(tx, order, 'cancelled', 'admin', reason ? `Entrega cancelada pela operação: ${reason}` : 'Entrega cancelada pela operação', actor.id);
+      events.push(closed.event);
+      refund = closed.refund;
+    } else if (to === 'out_for_delivery' && order.status === 'ready_for_collection') {
       const event = await this.advance(tx, order, 'out_for_delivery', who, actor.id, 'Motoboy coletou o pedido');
       if (event) events.push(event);
       await this.refreshEtaOnDispatch(tx, order);
@@ -823,11 +835,46 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   // =================================================================== varreduras
 
   /** PIX vencido, tentativa órfã e timeout de aceite da loja (RN-07). Idempotente; roda a cada ~20 s. */
-  async sweep(now = new Date()): Promise<{ expiredPix: number; orphans: number; acceptTimeouts: number }> {
+  async sweep(now = new Date()): Promise<{ expiredPix: number; orphans: number; acceptTimeouts: number; pickupExpired: number }> {
     const expiredPix = await this.payments.expireDue(now);
     const orphans = await this.expireOrphans(now);
     const acceptTimeouts = await this.timeoutAccept(now);
-    return { expiredPix, orphans, acceptTimeouts };
+    const pickupExpired = await this.expirePickups(now);
+    return { expiredPix, orphans, acceptTimeouts, pickupExpired };
+  }
+
+  /**
+   * BUG-014 / WB-026 C3 / RN-07: retirada não feita em `retirada_prazo_horas` (padrão 48 h, contadas de "pronto para retirada") é
+   * cancelada pelo sistema com estorno total e estoque devolvido. Idempotente: o pedido encerrado sai da consulta.
+   */
+  private async expirePickups(now: Date): Promise<number> {
+    const hours = await this.params.getNumber('retirada_prazo_horas');
+    const cutoff = new Date(now.getTime() - hours * 3_600_000);
+    const due = await this.db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, 'ready_for_pickup'),
+          sql`(select max(e.at) from order_events e where e.order_id = ${orders.id} and e.to_status = 'ready_for_pickup') <= ${cutoff.toISOString()}::timestamptz`,
+        ),
+      )
+      .limit(50);
+    let n = 0;
+    for (const { id } of due) {
+      let done: { event: OrderEvent; refund: PendingRefund | null } | null = null;
+      await this.db.transaction(async (tx) => {
+        const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for('update');
+        if (!order || order.status !== 'ready_for_pickup') return;
+        done = await this.closeOrder(tx, order, 'cancelled', 'system', `Retirada não realizada em ${hours} h`, null);
+      });
+      if (!done) continue;
+      const result = done as { event: OrderEvent; refund: PendingRefund | null };
+      n++;
+      await this.finishRefund(result.refund);
+      await this.bus.emit(result.event);
+    }
+    return n;
   }
 
   private async expireOrphans(now: Date): Promise<number> {

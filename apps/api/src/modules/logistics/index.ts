@@ -9,3 +9,5 @@ export { DeliveriesService, type CreateDeliveryInput, type Delivery, type Delive
 export { couriers, deliveries, deliveryEvents } from './db/schema.js';
 export { DELIVERY_STATUSES, type DeliveryStatus, type DeliveryKind } from './domain/state.js';
 export type { DeliveryMessageData } from './domain/whatsapp.js';
+export { LogisticsAvailabilityService, type LogisticsStatus } from './logistics-availability.service.js';
+export { logisticsPauses } from './db/schema.js';

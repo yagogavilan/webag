@@ -9,11 +9,13 @@ import { LogisticsReportService } from './logistics-report.service.js';
 import { DeliveriesService } from './deliveries.service.js';
 import { DeliveryFeesAdminController } from './delivery-fees.controller.js';
 import { DeliveryFeesService } from './delivery-fees.service.js';
+import { LogisticsAvailabilityController } from './logistics-availability.controller.js';
+import { LogisticsAvailabilityService } from './logistics-availability.service.js';
 
 @Module({
   imports: [AdminModule, FinanceModule, PaymentsModule, StoresModule],
-  controllers: [DeliveryFeesAdminController, CouriersAdminController, DeliveriesAdminController, LogisticsReportsController],
-  providers: [DeliveryFeesService, CouriersService, DeliveriesService, LogisticsReportService],
-  exports: [DeliveryFeesService, CouriersService, DeliveriesService],
+  controllers: [LogisticsAvailabilityController, DeliveryFeesAdminController, CouriersAdminController, DeliveriesAdminController, LogisticsReportsController],
+  providers: [LogisticsAvailabilityService, DeliveryFeesService, CouriersService, DeliveriesService, LogisticsReportService],
+  exports: [LogisticsAvailabilityService, DeliveryFeesService, CouriersService, DeliveriesService],
 })
 export class LogisticsModule {}

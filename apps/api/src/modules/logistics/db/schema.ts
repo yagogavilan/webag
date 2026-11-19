@@ -144,3 +144,21 @@ export const deliveryEvents = pgTable(
   },
   (t) => [index('delivery_events_delivery_idx').on(t.deliveryId, t.createdAt)],
 );
+
+/**
+ * Pausa da entrega da Webag (BUG-016, DEC-039c): geral (`city_id` nulo) ou de uma cidade, com motivo; vale até `resumed_at`.
+ * Uma pausa aberta por escopo. O horário normal é o parâmetro `logistica_horario`.
+ */
+export const logisticsPauses = pgTable(
+  'logistics_pauses',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    cityId: uuid(),
+    reason: text().notNull(),
+    pausedBy: uuid().references(() => users.id),
+    pausedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    resumedAt: timestamp({ withTimezone: true }),
+    resumedBy: uuid().references(() => users.id),
+  },
+  (t) => [uniqueIndex('logistics_pauses_open_uq').on(sql`coalesce(${t.cityId}, '00000000-0000-0000-0000-000000000000'::uuid)`).where(sql`${t.resumedAt} is null`)],
+);
