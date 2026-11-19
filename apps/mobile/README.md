@@ -9,7 +9,7 @@ pnpm --filter @webag/mobile dev          # Metro; abra no Expo Go ou em dev buil
 EXPO_PUBLIC_API_URL=http://10.0.2.2:3000 pnpm --filter @webag/mobile android   # emulador Android: localhost é o próprio emulador
 ```
 
-Variáveis (todas públicas, embutidas no app): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPPORT_WHATSAPP` (opcional, só dígitos com DDI). Ver `infra/env.example`.
+Variáveis (todas públicas, embutidas no app): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_URL`, `EXPO_PUBLIC_APP_ENV`, `EXPO_PUBLIC_PAYMENT_MODE`, `EXPO_PUBLIC_MP_PUBLIC_KEY`, `EXPO_PUBLIC_SUPPORT_WHATSAPP` (opcional, só dígitos com DDI). Ver `infra/env.example`. Os scripts `dev`, `android` e `ios` leem o `.env` **da raiz do repositório** (o Expo, sozinho, só leria um `.env` dentro de `apps/mobile`); depois de mudar uma variável, reinicie o Metro com `--clear` se o valor antigo persistir. No celular físico use o IP da máquina em vez de `localhost` (API e site público). Para concluir um pedido PIX em desenvolvimento, rode `pnpm pagar` na raiz.
 
 ## Verificar
 

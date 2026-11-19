@@ -7,7 +7,7 @@ Contrato: `docs/arquitetura/api/openapi.yaml` (fonte da verdade; `/docs` serve o
 pnpm run setup     # na raiz: .env, docker compose (Postgres, Redis, Mailpit), migrações e seed (não confundir com o `pnpm setup` embutido do pnpm)
 pnpm dev           # API em http://localhost:3000, e-mails em http://localhost:8025 (Mailpit)
 ```
-Admin de desenvolvimento: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` do `.env` (o primeiro login exige configurar o TOTP: `POST /v1/admin/totp/setup` e `/confirm`).
+Admin de desenvolvimento: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` do `.env` (o primeiro login exige configurar o TOTP: `POST /v1/admin/totp/setup` e `/confirm`). Sem app autenticador: `pnpm totp <segredo>` (na raiz) imprime o código atual. Teste de fumaça de ponta a ponta contra a API rodando: `pnpm smoke`. Aprovar o PIX simulado de um pedido feito no app: `pnpm pagar`. O `pnpm dev` lê o `.env` da raiz (sem isso as rotas `/v1/dev/payments` não existiriam, porque dependem de `NODE_ENV=development`).
 Sem Docker: `SKIP_DOCKER=1 pnpm run setup` com Postgres 16+ e Redis próprios (`DATABASE_URL`, `REDIS_URL`).
 
 ## Banco
