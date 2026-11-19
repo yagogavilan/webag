@@ -153,7 +153,7 @@ describe('Estorno recusado pelo provedor (SEC-130)', () => {
     await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
     const res = await placeOrder(ctx, user, addressId, { paymentMethod: 'card', card: { token: 'fake_tok_charged_timeout', installments: 1 } });
     expect(res.status, JSON.stringify(res.body)).toBeGreaterThanOrEqual(400); // o cliente vê o timeout e a cobrança ficou do lado do provedor
-    const stuck = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.amountCents, 6_673))).at(-1)!;
+    const stuck = (await ctx.db.select().from(paymentAttempts).where(eq(paymentAttempts.amountCents, 6_673)).orderBy(paymentAttempts.createdAt, paymentAttempts.id)).at(-1)!;
     expect(stuck).toMatchObject({ status: 'creating', providerPaymentId: null });
     const orphan = (await fake.findByReference(stuck.externalReference))[0]!;
     expect(orphan).toMatchObject({ status: 'approved', amountCents: 6_673 });

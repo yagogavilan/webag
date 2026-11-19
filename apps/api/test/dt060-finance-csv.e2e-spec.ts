@@ -81,7 +81,7 @@ describe('CSV financeiros do piloto: Receita por pedido e Estornos (DT-060)', ()
     expect(cents(after.rows[0]!.estornos)).toBe(order.totalCents);
     expect(cents(after.rows[0]!.liquido_lojista)).toBe(b2.merchantPayable);
     // auditoria da exportação (C4)
-    const audits = await ctx.db.select().from(auditLog).where(sql`${auditLog.action} = 'report.export' and ${auditLog.targetId} = 'finance_revenue'`);
+    const audits = await ctx.db.select().from(auditLog).where(sql`${auditLog.action} = 'report.export' and ${auditLog.targetId} = 'finance_revenue'`).orderBy(auditLog.at, auditLog.id); // A-13: sem ordem o "último" dependia do heap
     expect(audits.length).toBeGreaterThanOrEqual(2);
     expect(audits.at(-1)?.after).toMatchObject({ storeId: a.shop.store.id, rows: 1 });
     // período sem pedido: só o cabeçalho

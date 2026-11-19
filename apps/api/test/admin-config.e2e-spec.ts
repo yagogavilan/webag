@@ -25,7 +25,7 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
   });
 
   const auditOf = (action: string, targetId: string) =>
-    ctx.db.select().from(auditLog).where(and(eq(auditLog.action, action), eq(auditLog.targetId, targetId)));
+    ctx.db.select().from(auditLog).where(and(eq(auditLog.action, action), eq(auditLog.targetId, targetId))).orderBy(auditLog.at, auditLog.id); // A-13: ordem estável para `.at(-1)`
 
   describe('regiões (WB-118)', () => {
     it('operação cria cidade e bairro com auditoria; suporte só lê; inativa some do app público', async () => {

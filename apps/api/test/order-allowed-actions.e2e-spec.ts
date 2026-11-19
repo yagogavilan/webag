@@ -79,7 +79,7 @@ describe('allowedActions do cliente por estado e por prazo da entrega', () => {
   it('o prazo de avaliação é o parâmetro do admin, não 30 fixo', async () => {
     const { ParametersService } = await import('../src/modules/admin/index.js');
     const params = ctx.app.get(ParametersService);
-    const spy = vi.spyOn(params, 'getNumber').mockImplementation(async (key: string) => (key === 'avaliacao_janela_dias' ? 7 : 30));
+    const spy = vi.spyOn(params, 'getNumber').mockImplementation((key: string) => Promise.resolve(key === 'avaliacao_janela_dias' ? 7 : 30));
     try {
       await set({ deliveredAt: new Date(Date.now() - 8 * DAY), exchangeVoluntaryDays: 7 });
       expect(await actions()).not.toContain('rate');
