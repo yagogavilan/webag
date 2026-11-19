@@ -46,6 +46,8 @@ export const ADMIN_PERMISSIONS = {
   /** L.3: logística da Webag. Operação e super admin despacham e registram custo; financeiro e suporte só leem. */
   'logistics:read': [SUPER, OPS, FIN, SUP],
   'logistics:write': [SUPER, OPS],
+  /** WB-248: relatório de trocas por loja e categoria; custos só para super admin e financeiro (checado no controller). */
+  'exchanges:report': [SUPER, OPS, FIN],
   'payments:alerts:read': [SUPER, FIN],
   'payments:webhooks:reprocess': [SUPER, FIN],
   /** SEC-130: fila de estornos recusados pelo provedor; tentar de novo é do financeiro, cobrir com dinheiro da Webag é só do super admin. */

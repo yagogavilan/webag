@@ -8,13 +8,14 @@ import { MediaModule } from '../media/index.js';
 import { PaymentsModule } from '../payments/index.js';
 import { StoresModule } from '../stores/index.js';
 import { ExchangeEventBus } from './exchange-events.bus.js';
-import { ExchangesController, StoreExchangesController } from './exchanges.controllers.js';
+import { ExchangesAdminController, ExchangesController, StoreExchangesController } from './exchanges.controllers.js';
+import { ExchangesReportService } from './exchanges-report.service.js';
 import { ExchangesService } from './exchanges.service.js';
 
 @Module({
   imports: [AdminModule, CatalogModule, IdempotencyModule, IdentityModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
-  controllers: [ExchangesController, StoreExchangesController],
-  providers: [ExchangesService, ExchangeEventBus],
+  controllers: [ExchangesController, StoreExchangesController, ExchangesAdminController],
+  providers: [ExchangesService, ExchangesReportService, ExchangeEventBus],
   exports: [ExchangesService, ExchangeEventBus],
 })
 export class ExchangesModule {}

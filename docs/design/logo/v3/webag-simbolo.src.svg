@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v3, conceito A "Sacola Veloz". Simbolo isolado, cor solida #C02EF0, sem gradiente.
+     viewBox 0 0 160 104. Unidade de traco t = 14 (alca e barras tem a mesma espessura).
+     Sacola: corpo rect 56,34 96x70 rx18 + alca em semi-elipse (centro 104,44, rx34, ry37, traco 14),
+     tudo inclinado 8 graus (skewX -8, compensado por translate 14.6 para o canto inferior esquerdo ficar em x=56).
+     Barras de velocidade: 3 pilulas horizontais (nao inclinadas), alturas 14, vao 14, alinhadas ao topo e a base do corpo. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 104" width="160" height="104" role="img" aria-labelledby="wb-simbolo-t">
+  <title id="wb-simbolo-t">Webag</title>
+  <g id="barras" fill="#C02EF0">
+    <rect x="34" y="34" width="23" height="14" rx="7"/>
+    <rect x="0" y="62" width="49" height="14" rx="7"/>
+    <rect x="18" y="90" width="31" height="14" rx="7"/>
+  </g>
+  <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#C02EF0">
+    <rect x="56" y="34" width="96" height="70" rx="18"/>
+    <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#C02EF0" stroke-width="14"/>
+  </g>
+</svg>

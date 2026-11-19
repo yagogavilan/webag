@@ -1,13 +1,15 @@
 import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { CurrentPrincipal, StorePermission, type Principal } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { parseIdempotencyKey } from '../idempotency/index.js';
 import { uuidParam } from '../stores/index.js';
 import { EXCHANGE_TYPES } from './domain/eligibility.js';
+import { AuditService } from '../admin/index.js';
+import { ExchangesReportService } from './exchanges-report.service.js';
 import { ExchangesService } from './exchanges.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -144,5 +146,41 @@ export class StoreExchangesController {
   async receive(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('id') id: string, @Body(new ZodPipe(receiveSchema)) body: z.infer<typeof receiveSchema>) {
     await this.exchanges.receive(uuidParam(storeId), idParam(id), p.userId, body);
     return this.exchanges.getForStore(storeId, id);
+  }
+}
+
+const reportSchema = z
+  .strictObject({
+    from: z.iso.date(),
+    to: z.iso.date(),
+    storeId: z.uuid().optional(),
+    categoryId: z.uuid().optional(),
+    type: z.enum(EXCHANGE_TYPES).optional(),
+    format: z.enum(['json', 'csv']).optional(),
+  })
+  .refine((v) => v.from <= v.to, { message: 'O início do período não pode ser depois do fim.', path: ['from'] })
+  .refine((v) => (Date.parse(v.to) - Date.parse(v.from)) / 86_400_000 <= 366, { message: 'Período de no máximo 366 dias.', path: ['to'] });
+
+/** WB-248: relatório de trocas por loja e categoria. Operação, financeiro e super admin; custos só financeiro e super admin. */
+@Controller('v1/admin/exchanges')
+export class ExchangesAdminController {
+  constructor(
+    private readonly report: ExchangesReportService,
+    private readonly audit: AuditService,
+  ) {}
+
+  @AdminOnly('exchanges:report')
+  @Get('report')
+  async get(@Query(new ZodPipe(reportSchema)) query: z.infer<typeof reportSchema>, @Ctx() ctx: RequestContext, @Res({ passthrough: true }) res: Response) {
+    const profile = ctx.principal?.adminProfile;
+    const result = await this.report.report(query, profile === 'super_admin' || profile === 'finance');
+    if (query.format === 'csv') {
+      // Exportação é auditada (WB-248 C4).
+      await this.audit.recordStandalone(ctx, { action: 'exchange.report.export', targetType: 'report', targetId: 'exchanges', after: { from: query.from, to: query.to, storeId: query.storeId ?? null } });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="trocas-${query.from}-${query.to}.csv"`);
+      return this.report.toCsv(result);
+    }
+    return result;
   }
 }
