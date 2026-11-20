@@ -839,8 +839,9 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   private readonly pendingDeliveryEvents = new Map<string, { events: OrderEvent[]; refund: PendingRefund | null }>();
 
   /**
-   * DEC-053: com o motoboy a caminho, só falta o deslocamento. A faixa é atualizada SÓ se ficar mais cedo que a prometida: nunca
-   * empurra a promessa para depois (o atraso continua visível e a corrida mantém o prazo original).
+   * DEC-053 / A-06 (DEC-076): com o motoboy a caminho, só falta o deslocamento. A faixa NOVA é só informativa (colunas `eta_dispatch_*`, o que a tela
+   * mostra) e só se ficar mais cedo que a prometida. A PROMESSA (`etaFromAt`/`etaToAt`, a faixa que o cliente aceitou) não muda: atraso,
+   * cancelamento sem custo e compensação medem por ela.
    */
   private async refreshEtaOnDispatch(tx: Tx, order: OrderRow): Promise<void> {
     const snapshotEta = (order.deliverySnapshot as { eta?: { travelMin?: number } | null } | null)?.eta;
@@ -850,7 +851,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const toAt = new Date(now + (snapshotEta.travelMin + band) * 60_000);
     if (toAt.getTime() >= order.etaToAt.getTime()) return;
     const fromAt = new Date(now + Math.max(5, snapshotEta.travelMin - band) * 60_000);
-    await tx.update(orders).set({ etaFromAt: fromAt, etaToAt: toAt }).where(eq(orders.id, order.id));
+    await tx.update(orders).set({ etaDispatchFromAt: fromAt, etaDispatchToAt: toAt }).where(eq(orders.id, order.id));
   }
 
   /**

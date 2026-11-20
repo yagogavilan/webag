@@ -1,7 +1,10 @@
 /** Faixa de chegada do pedido (DEC-053), no formato do contrato; `null` em pedido anterior à regra ou sem entrega. */
-export function etaOfOrder(order: { etaMinMinutes: number; etaMaxMinutes: number; etaFromAt: Date | null; etaToAt: Date | null }) {
+export function etaOfOrder(order: { etaMinMinutes: number; etaMaxMinutes: number; etaFromAt: Date | null; etaToAt: Date | null; etaDispatchFromAt?: Date | null; etaDispatchToAt?: Date | null }) {
   if (!order.etaFromAt || !order.etaToAt) return null;
-  return { minMinutes: order.etaMinMinutes, maxMinutes: order.etaMaxMinutes, fromAt: order.etaFromAt.toISOString(), toAt: order.etaToAt.toISOString() };
+  // A-06: depois do despacho a tela mostra a faixa informativa (mais curta); a promessa que mede o atraso é `etaToAt`.
+  const from = order.etaDispatchFromAt ?? order.etaFromAt;
+  const to = order.etaDispatchToAt ?? order.etaToAt;
+  return { minMinutes: order.etaMinMinutes, maxMinutes: order.etaMaxMinutes, fromAt: from.toISOString(), toAt: to.toISOString() };
 }
 
 /**

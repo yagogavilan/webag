@@ -33,6 +33,9 @@ export const orders = pgTable(
     /** DEC-053: faixa de chegada em horário de relógio, gravada na criação (nulo em pedido anterior à regra ou de retirada). */
     etaFromAt: timestamp({ withTimezone: true }),
     etaToAt: timestamp({ withTimezone: true }),
+    /** A-06 / DEC-076: faixa INFORMATIVA depois do despacho (motoboy a caminho, só falta o deslocamento). É só o que a tela mostra; a promessa (atraso, cancelamento sem custo, compensação) segue em `etaFromAt`/`etaToAt`, a que o cliente aceitou. */
+    etaDispatchFromAt: timestamp({ withTimezone: true }),
+    etaDispatchToAt: timestamp({ withTimezone: true }),
     pickup: jsonb().$type<{ address: string; instructions: string | null; prepMinMinutes: number; prepMaxMinutes: number } | null>(),
     /** Código de retirada (4 dígitos), só mostrado depois de pago. */
     pickupCode: varchar({ length: 6 }),

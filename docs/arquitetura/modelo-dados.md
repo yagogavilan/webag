@@ -207,3 +207,4 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0053 b3_b4_alert_resolution_user_status_history | `payment_alerts.resolved_by`, `resolution_note`; `user_status_history` |
 | 0054 sec182_previous_user_status | `account_deletions.previous_user_status` |
 | 0055 a02_cancel_requests_open_per_kind | Índice `order_cancel_requests_open_uq` passa a ser por `(order_id, kind)` (A-02) |
+| 0056 a06_eta_dispatch_informative | `orders.eta_dispatch_from_at`, `eta_dispatch_to_at`: faixa INFORMATIVA depois do despacho; a promessa (`eta_from_at`/`eta_to_at`) não muda (A-06, DEC-076) |

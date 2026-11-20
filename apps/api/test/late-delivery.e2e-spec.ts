@@ -153,6 +153,28 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
     expect((await orderRow(ctx, r.orderId)).status).toBe('out_for_delivery');
   });
 
+  it('A-06 (DEC-076): com o motoboy a caminho a faixa mostrada encurta, mas a PROMESSA (etaToAt, a que o cliente aceitou) não muda; o atraso mede pela promessa', async () => {
+    const r = await readyForCollection();
+    const before = await orderRow(ctx, r.orderId);
+    const m = await courier();
+    await ctx.http.post(`${base}/deliveries/${r.delivery.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: m.id }).expect(200);
+    await act(r.delivery.id, { action: 'confirm' }).expect(200);
+    await act(r.delivery.id, { action: 'picked_up' }).expect(200);
+    const after = await orderRow(ctx, r.orderId);
+    expect(after.status).toBe('out_for_delivery');
+    expect(after.etaToAt!.getTime()).toBe(before.etaToAt!.getTime());
+    expect(after.etaFromAt!.getTime()).toBe(before.etaFromAt!.getTime());
+    expect(after.etaDispatchToAt).not.toBeNull();
+    expect(after.etaDispatchToAt!.getTime()).toBeLessThan(after.etaToAt!.getTime());
+    const shown = (await view(r)).delivery.eta as { toAt: string };
+    expect(shown.toAt).toBe(after.etaDispatchToAt!.toISOString()); // a tela mostra a informativa
+    // o atraso mede pela promessa: depois da faixa MOSTRADA mas antes do fim prometido, não há atraso
+    await ctx.db.update(orders).set({ etaToAt: new Date(Date.now() + 5 * 60_000), etaDispatchToAt: minutesAgo(3) }).where(eq(orders.id, r.orderId));
+    expect((await view(r)).delay.late).toBe(false);
+    await ctx.db.update(orders).set({ etaToAt: minutesAgo(3) }).where(eq(orders.id, r.orderId));
+    expect((await view(r)).delay.late).toBe(true);
+  });
+
   it('A-02: pedido de cancelamento "em separação" pendente não bloqueia o "Pedir cancelamento" por atraso (antes: 500 por violação do índice único); ao sair de separação ele fica superseded', async () => {
     const r = await readyOrder();
     const store = bearer(r.shop.store.owner.accessToken);
