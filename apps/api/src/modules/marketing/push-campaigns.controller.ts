@@ -7,6 +7,7 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { IdempotencyService, parseIdempotencyKey } from '../idempotency/index.js';
 import { CAMPAIGN_STATUSES } from './db/schema.js';
 import { PushCampaignsService } from './push-campaigns.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idParam = (value: string): string => {
@@ -36,7 +37,7 @@ const createSchema = z.strictObject({
   scheduleAt: z.coerce.date().optional(),
   expectedRecipients: z.number().int().min(0),
 });
-const listSchema = z.strictObject({ status: z.enum(CAMPAIGN_STATUSES).optional(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const listSchema = z.strictObject({ status: z.enum(CAMPAIGN_STATUSES).optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
 const cancelSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) });
 
 /** WB-197: push segmentado do admin (super admin e operação; financeiro e suporte não veem). */

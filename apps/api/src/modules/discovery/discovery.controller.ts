@@ -6,6 +6,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { DiscoveryService } from './discovery.service.js';
 import { geoQuery } from './geo.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const bool = z.enum(['true']).transform(() => true);
 const money = z.coerce.number().int().min(0).max(9_999_999);
@@ -18,7 +19,7 @@ const common = {
   minRating: z.coerce.number().min(1).max(5).optional(),
   acceptsExchange: bool.optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 };
 const homeQuery = z.strictObject({ ...geoQuery, mode: z.enum(['delivery', 'pickup']).default('delivery') });
 const storesQuery = z.strictObject({ ...common, sort: z.enum(['relevance', 'distance', 'rating', 'fee', 'eta']).default('relevance') });

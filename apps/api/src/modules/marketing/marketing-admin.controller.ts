@@ -6,6 +6,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { HighlightsService } from './highlights.service.js';
 import { PlatformCouponsService } from './platform-coupons.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idParam = (value: string): string => {
@@ -37,7 +38,7 @@ const couponPatch = z.strictObject({
   firstPurchaseOnly: z.boolean().optional(),
   active: z.boolean().optional(),
 });
-const couponList = z.strictObject({ status: z.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']).optional(), q: z.string().trim().min(1).max(20).optional(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const couponList = z.strictObject({ status: z.enum(['scheduled', 'live', 'paused', 'ended', 'exhausted']).optional(), q: z.string().trim().min(1).max(20).optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
 
 /** WB-116: cupons da plataforma (custo da Webag). */
 @Controller('v1/admin/coupons')

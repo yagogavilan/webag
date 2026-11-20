@@ -15,6 +15,7 @@ import { LegalService } from './legal.service.js';
 import { MaintenanceService } from './maintenance.service.js';
 import { ParametersService } from './parameters.service.js';
 import { RegionsService } from './regions.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const id = (value: string): string => {
@@ -75,7 +76,7 @@ const auditQuerySchema = z.strictObject({
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const auditExportQuerySchema = auditQuerySchema.omit({ cursor: true, limit: true });
 

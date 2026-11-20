@@ -7103,7 +7103,7 @@ export type LatParameter = number;
 export type LngParameter = number;
 
 /**
- * Itens por página (padrão 20, máximo 50)
+ * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
  */
 export type LimitParameter = number;
 
@@ -7123,7 +7123,7 @@ export type ListAuditLogParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7193,7 +7193,7 @@ export type ListCouriersParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7219,7 +7219,7 @@ export type ListDeliveriesParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7700,7 +7700,7 @@ export type ListAdminAlertsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7736,7 +7736,7 @@ export type SearchAdminUsersParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7819,7 +7819,7 @@ export type ListPaymentAlertsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7834,7 +7834,7 @@ export type ListRefundQueueParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7899,7 +7899,7 @@ export type ListAdminStoresParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -7942,7 +7942,7 @@ export type ListProductsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8002,7 +8002,7 @@ export type AdminListProductsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8037,7 +8037,7 @@ export type ListMyCouponsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8117,7 +8117,7 @@ export type SearchStoresParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8194,7 +8194,7 @@ export type SearchProductsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8264,7 +8264,7 @@ export type ListBrowseStoreProductsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8319,7 +8319,7 @@ export type ListFavoritesParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8403,7 +8403,7 @@ export type ListStoreOrdersParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8427,7 +8427,7 @@ export type ListOrdersParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8461,7 +8461,7 @@ export type ListExchangesParams = {
   /** @maxLength 200 */
   cursor?: string;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8480,7 +8480,7 @@ export type ListStoreExchangesParams = {
   /** @maxLength 200 */
   cursor?: string;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8626,7 +8626,7 @@ export type GetStoreStatementParams = {
   /** Dia final (Brasília), inclusivo. Período de no máximo 366 dias. */
   to: string;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */
@@ -8654,7 +8654,7 @@ export type ListPrivacyRequestsParams = {
    */
   cursor?: CursorParameter;
   /**
-   * Itens por página (padrão 20, máximo 50)
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
    * @minimum 1
    * @maximum 50
    */

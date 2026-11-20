@@ -1299,7 +1299,7 @@ export const ListAuditLogQueryParams = zod.object({
   "from": zod.iso.datetime({"offset":true}).optional(),
   "to": zod.iso.datetime({"offset":true}).optional(),
   "cursor": zod.string().max(listAuditLogQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listAuditLogQueryLimitMax).default(listAuditLogQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listAuditLogQueryLimitMax).default(listAuditLogQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListAuditLogResponse = zod.object({
@@ -1795,7 +1795,7 @@ export const ListCouriersQueryParams = zod.object({
   "q": zod.string().max(listCouriersQueryQMax).optional(),
   "active": zod.boolean().optional(),
   "cursor": zod.string().max(listCouriersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listCouriersQueryLimitMax).default(listCouriersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listCouriersQueryLimitMax).default(listCouriersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListCouriersResponse = zod.object({
@@ -1899,7 +1899,7 @@ export const ListDeliveriesQueryParams = zod.object({
   "storeId": zod.uuid().optional(),
   "cityId": zod.uuid().optional(),
   "cursor": zod.string().max(listDeliveriesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listDeliveriesQueryLimitMax).default(listDeliveriesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listDeliveriesQueryLimitMax).default(listDeliveriesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListDeliveriesResponse = zod.object({
@@ -2903,7 +2903,7 @@ export const ListAdminAlertsQueryParams = zod.object({
   "severity": zod.enum(['critical', 'warning', 'info']).optional(),
   "kind": zod.string().regex(listAdminAlertsQueryKindRegExp).optional().describe('Tipo exato (ver `/v1/admin/alerts/kinds`)'),
   "cursor": zod.string().max(listAdminAlertsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listAdminAlertsQueryLimitMax).default(listAdminAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listAdminAlertsQueryLimitMax).default(listAdminAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListAdminAlertsResponse = zod.object({
@@ -3061,7 +3061,7 @@ export const SearchAdminUsersQueryParams = zod.object({
   "role": zod.enum(['customer', 'merchant']).optional(),
   "status": zod.enum(['active', 'blocked', 'deleted']).optional(),
   "cursor": zod.string().max(searchAdminUsersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(searchAdminUsersQueryLimitMax).default(searchAdminUsersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(searchAdminUsersQueryLimitMax).default(searchAdminUsersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const SearchAdminUsersResponse = zod.object({
@@ -3496,7 +3496,7 @@ export const listPaymentAlertsQueryLimitMax = 50;
 export const ListPaymentAlertsQueryParams = zod.object({
   "openOnly": zod.boolean().optional(),
   "cursor": zod.string().max(listPaymentAlertsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listPaymentAlertsQueryLimitMax).default(listPaymentAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listPaymentAlertsQueryLimitMax).default(listPaymentAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListPaymentAlertsResponse = zod.object({
@@ -3526,7 +3526,7 @@ export const listRefundQueueQueryLimitMax = 50;
 export const ListRefundQueueQueryParams = zod.object({
   "status": zod.enum(['pending', 'exhausted', 'covered']).optional(),
   "cursor": zod.string().max(listRefundQueueQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listRefundQueueQueryLimitMax).default(listRefundQueueQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listRefundQueueQueryLimitMax).default(listRefundQueueQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListRefundQueueResponse = zod.object({
@@ -4995,7 +4995,7 @@ export const listAdminStoresQueryLimitMax = 50;
 export const ListAdminStoresQueryParams = zod.object({
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']).optional().describe('Padrão: in_review'),
   "cursor": zod.string().max(listAdminStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listAdminStoresQueryLimitMax).default(listAdminStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listAdminStoresQueryLimitMax).default(listAdminStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListAdminStoresResponse = zod.object({
@@ -6234,7 +6234,7 @@ export const ListProductsQueryParams = zod.object({
   "sectionId": zod.uuid().optional(),
   "lowStock": zod.enum(['true']).optional(),
   "cursor": zod.string().max(listProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listProductsQueryLimitMax).default(listProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listProductsQueryLimitMax).default(listProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListProductsResponse = zod.object({
@@ -7136,7 +7136,7 @@ export const AdminListProductsQueryParams = zod.object({
   "to": zod.iso.datetime({"offset":true}).optional(),
   "q": zod.string().max(adminListProductsQueryQMax).optional(),
   "cursor": zod.string().max(adminListProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(adminListProductsQueryLimitMax).default(adminListProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(adminListProductsQueryLimitMax).default(adminListProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const AdminListProductsResponse = zod.object({
@@ -7247,7 +7247,7 @@ export const listMyCouponsQueryLimitMax = 50;
 export const ListMyCouponsQueryParams = zod.object({
   "status": zod.enum(['available', 'used', 'expired', 'all']).default(listMyCouponsQueryStatusDefault),
   "cursor": zod.string().max(listMyCouponsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listMyCouponsQueryLimitMax).default(listMyCouponsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listMyCouponsQueryLimitMax).default(listMyCouponsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListMyCouponsResponse = zod.object({
@@ -7884,7 +7884,7 @@ export const SearchStoresQueryParams = zod.object({
   "acceptsExchange": zod.enum(['true']).optional(),
   "sort": zod.enum(['relevance', 'distance', 'rating', 'fee', 'eta']).default(searchStoresQuerySortDefault),
   "cursor": zod.string().max(searchStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(searchStoresQueryLimitMax).default(searchStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(searchStoresQueryLimitMax).default(searchStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const SearchStoresResponse = zod.object({
@@ -7971,7 +7971,7 @@ export const SearchProductsQueryParams = zod.object({
   "acceptsExchange": zod.enum(['true']).optional(),
   "sort": zod.enum(['relevance', 'price_asc', 'distance', 'rating', 'discount']).default(searchProductsQuerySortDefault),
   "cursor": zod.string().max(searchProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(searchProductsQueryLimitMax).default(searchProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(searchProductsQueryLimitMax).default(searchProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const SearchProductsResponse = zod.object({
@@ -8160,7 +8160,7 @@ export const listBrowseStoreProductsQueryLimitMax = 50;
 export const ListBrowseStoreProductsQueryParams = zod.object({
   "sectionId": zod.uuid().optional(),
   "cursor": zod.string().max(listBrowseStoreProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listBrowseStoreProductsQueryLimitMax).default(listBrowseStoreProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listBrowseStoreProductsQueryLimitMax).default(listBrowseStoreProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListBrowseStoreProductsResponse = zod.object({
@@ -8378,7 +8378,7 @@ export const listFavoritesQueryLimitMax = 50;
 export const ListFavoritesQueryParams = zod.object({
   "kind": zod.enum(['store', 'product']).optional(),
   "cursor": zod.string().max(listFavoritesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listFavoritesQueryLimitMax).default(listFavoritesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listFavoritesQueryLimitMax).default(listFavoritesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListFavoritesResponse = zod.object({
@@ -9623,7 +9623,7 @@ export const ListStoreOrdersQueryParams = zod.object({
   "scope": zod.enum(['new', 'in_progress', 'history']).optional(),
   "number": zod.string().regex(listStoreOrdersQueryNumberRegExp).optional().describe('Busca pelo código do pedido'),
   "cursor": zod.string().max(listStoreOrdersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listStoreOrdersQueryLimitMax).default(listStoreOrdersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listStoreOrdersQueryLimitMax).default(listStoreOrdersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListStoreOrdersResponse = zod.object({
@@ -10655,7 +10655,7 @@ export const listOrdersQueryLimitMax = 50;
 export const ListOrdersQueryParams = zod.object({
   "scope": zod.enum(['active', 'past']).optional(),
   "cursor": zod.string().max(listOrdersQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listOrdersQueryLimitMax).default(listOrdersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listOrdersQueryLimitMax).default(listOrdersQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListOrdersResponse = zod.object({
@@ -11753,7 +11753,7 @@ export const listExchangesQueryLimitMax = 50;
 
 export const ListExchangesQueryParams = zod.object({
   "cursor": zod.string().max(listExchangesQueryCursorMax).optional(),
-  "limit": zod.int().min(1).max(listExchangesQueryLimitMax).default(listExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listExchangesQueryLimitMax).default(listExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListExchangesResponse = zod.object({
@@ -12224,7 +12224,7 @@ export const listStoreExchangesQueryLimitMax = 50;
 
 export const ListStoreExchangesQueryParams = zod.object({
   "cursor": zod.string().max(listStoreExchangesQueryCursorMax).optional(),
-  "limit": zod.int().min(1).max(listStoreExchangesQueryLimitMax).default(listStoreExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)'),
+  "limit": zod.int().min(1).max(listStoreExchangesQueryLimitMax).default(listStoreExchangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)'),
   "scope": zod.enum(['pending', 'in_progress', 'history']).optional()
 })
 
@@ -13035,7 +13035,7 @@ export const getStoreStatementQueryCursorMax = 200;
 export const GetStoreStatementQueryParams = zod.object({
   "from": zod.iso.date().describe('Dia inicial (Brasília), inclusivo.'),
   "to": zod.iso.date().describe('Dia final (Brasília), inclusivo. Período de no máximo 366 dias.'),
-  "limit": zod.int().min(1).max(getStoreStatementQueryLimitMax).default(getStoreStatementQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)'),
+  "limit": zod.int().min(1).max(getStoreStatementQueryLimitMax).default(getStoreStatementQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)'),
   "cursor": zod.string().max(getStoreStatementQueryCursorMax).optional()
 })
 
@@ -13249,7 +13249,7 @@ export const ListPrivacyRequestsQueryParams = zod.object({
   "status": zod.enum(['new', 'in_progress', 'answered']).optional(),
   "overdue": zod.boolean().optional().describe('Só os abertos com o prazo vencido'),
   "cursor": zod.string().max(listPrivacyRequestsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
-  "limit": zod.int().min(1).max(listPrivacyRequestsQueryLimitMax).default(listPrivacyRequestsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50)')
+  "limit": zod.int().min(1).max(listPrivacyRequestsQueryLimitMax).default(listPrivacyRequestsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
 export const ListPrivacyRequestsResponse = zod.object({

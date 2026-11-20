@@ -7,6 +7,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AuditService, alertKindsVisibleTo } from '../admin/index.js';
 import { ReportsService } from './reports.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const ORDER_STATUSES = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup', 'delivered', 'cancelled', 'refused'] as const;
 const base = {
@@ -17,7 +18,7 @@ const base = {
   categoryId: z.uuid().optional(),
 };
 const filters = z.strictObject(base);
-const listQuery = z.strictObject({ ...base, status: z.enum(ORDER_STATUSES).optional(), cursor: z.string().max(300).optional(), limit: z.string().max(4).optional() });
+const listQuery = z.strictObject({ ...base, status: z.enum(ORDER_STATUSES).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
 const financeQuery = z.strictObject({ from: z.iso.date(), to: z.iso.date(), cityId: z.uuid().optional(), storeId: z.uuid().optional() });
 const csvQuery = z.strictObject({ ...base, status: z.enum(ORDER_STATUSES).optional() });
 

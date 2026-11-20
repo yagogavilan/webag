@@ -399,7 +399,7 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
 
   it('BUG-017 / WB-241 C7: coleta sem motoboy depois de `coleta_agendamento_dias_uteis` dias úteis fica "Atrasada", alerta o admin uma vez e avisa o cliente do novo prazo', async () => {
     const { d, id, run } = await paidPickup();
-    const listed = async () => ((await ctx.http.get(`${base}/deliveries`).query({ kind: 'exchange_pickup', limit: '100' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; overdue: boolean }[]).find((x) => x.id === run.id)!;
+    const listed = async () => ((await ctx.http.get(`${base}/deliveries`).query({ kind: 'exchange_pickup', limit: '50' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; overdue: boolean }[]).find((x) => x.id === run.id)!;
     expect(await listed()).toMatchObject({ overdue: false });
     await ctx.db.update(deliveries).set({ readyAt: new Date(Date.now() - 8 * 86_400_000) }).where(eq(deliveries.id, run.id)); // 8 dias corridos = pelo menos 5 úteis
     expect(await listed()).toMatchObject({ overdue: true });

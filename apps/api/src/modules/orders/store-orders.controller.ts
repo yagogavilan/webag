@@ -8,12 +8,13 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { PrincipalService } from '../identity/index.js';
 import { uuidParam } from '../stores/index.js';
 import { StoreOrdersService } from './store-orders.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const listSchema = z.strictObject({
   scope: z.enum(['new', 'in_progress', 'history']).optional(),
   number: z.string().trim().regex(/^WB-[A-Za-z0-9]{5}$/).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const reasonSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) });
 const statusSchema = z.strictObject({

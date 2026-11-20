@@ -1,4 +1,5 @@
 import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { z } from 'zod';
 import { errors } from './app-error.js';
 
 export const DEFAULT_LIMIT = 20;
@@ -15,6 +16,16 @@ export function parseLimit(raw: unknown): number {
   if (!Number.isInteger(value) || value < 1) return DEFAULT_LIMIT;
   return Math.min(value, MAX_LIMIT);
 }
+
+/**
+ * BUG-027: `limit` da query nas listas paginadas (contrato `Limit`: inteiro de 1 a 50). Fora da faixa ou não numérico = 400 VALIDATION_FAILED
+ * (antes era ajustado em silêncio). Continua string para os serviços, que chamam `parseLimit` (padrão 20 quando ausente).
+ */
+export const limitQuery = z
+  .string()
+  .regex(/^\d{1,3}$/, 'limit deve ser um inteiro de 1 a 50.')
+  .refine((value) => Number(value) >= 1 && Number(value) <= MAX_LIMIT, 'limit deve ser um inteiro de 1 a 50.')
+  .optional();
 
 export const encodeCursor = (payload: Record<string, string | number>): string =>
   Buffer.from(JSON.stringify(payload)).toString('base64url');

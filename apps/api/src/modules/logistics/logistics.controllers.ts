@@ -13,6 +13,7 @@ import { CouriersService } from './couriers.service.js';
 import { DELIVERED_AT_REASONS, DeliveriesService, type Delivery, type DeliveryEvent, type DeliveryListExtras, type LateCancelRequestView } from './deliveries.service.js';
 import { ACTIVE_STATUSES, DELIVERY_KINDS, DELIVERY_STATUSES, NOT_DELIVERED_REASONS } from './domain/state.js';
 import type { DeliveryMessageData } from './domain/whatsapp.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const uuid = (value: string): string => {
@@ -131,7 +132,7 @@ const courierPatch = z.strictObject({
   note: z.string().trim().max(100).nullable().optional(),
   active: z.boolean().optional(),
 });
-const courierQuery = z.strictObject({ q: z.string().max(60).optional(), active: z.enum(['true', 'false']).optional(), cursor: z.string().max(300).optional(), limit: z.string().max(4).optional() });
+const courierQuery = z.strictObject({ q: z.string().max(60).optional(), active: z.enum(['true', 'false']).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
 const listQuery = z.strictObject({
   tab: z.enum(['active', 'done']).optional(),
   status: z.enum(DELIVERY_STATUSES).optional(),
@@ -140,7 +141,7 @@ const listQuery = z.strictObject({
   storeId: z.uuid().optional(),
   cityId: z.uuid().optional(),
   cursor: z.string().max(300).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const assignBody = z.strictObject({ courierId: z.uuid(), addressConfirmed: z.boolean().optional() });
 const assignBatchBody = z.strictObject({ deliveryIds: z.array(z.uuid()).min(2).max(10), courierId: z.uuid(), addressConfirmed: z.boolean().optional() });

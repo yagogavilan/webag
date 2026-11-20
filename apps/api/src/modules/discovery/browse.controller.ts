@@ -6,10 +6,11 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { uuidParam } from '../stores/index.js';
 import { BrowseService } from './browse.service.js';
 import { geoQuery } from './geo.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const storeQuery = z.strictObject({ lat: geoQuery.lat.optional(), lng: geoQuery.lng.optional() }).refine((v) => (v.lat === undefined) === (v.lng === undefined), { message: 'Informe latitude e longitude juntas.', path: ['lat'] });
-const listQuery = z.strictObject({ sectionId: z.uuid().optional(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
-const pageQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const listQuery = z.strictObject({ sectionId: z.uuid().optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
+const pageQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 
 const SHORT = 'public, max-age=30';
 

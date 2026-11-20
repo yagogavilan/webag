@@ -244,7 +244,7 @@ describe('Admin: regiões, categorias, parâmetros, flags, termos e auditoria (W
       expect(second.body.data[0].id).toBeLessThan(first.body.data[0].id);
       const byAction = await ctx.http.get('/v1/admin/audit-log').query({ action: 'city.create' }).set(sa()).expect(200);
       expect((byAction.body.data as { action: string }[]).every((r) => r.action === 'city.create')).toBe(true);
-      await ctx.http.get('/v1/admin/audit-log').query({ limit: '1000' }).set(sa()).expect(200).then((r) => expect(r.body.data.length).toBeLessThanOrEqual(50));
+      await ctx.http.get('/v1/admin/audit-log').query({ limit: '1000' }).set(sa()).expect(400);
       await ctx.http.get('/v1/admin/audit-log').query({ cursor: '###' }).set(sa()).expect(400);
       await ctx.http.get('/v1/admin/audit-log').query({ desconhecido: 'x' }).set(sa()).expect(400);
     });

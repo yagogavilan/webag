@@ -8,6 +8,7 @@ import { ContentReportsService, REMOVAL_REASONS } from './content-reports.servic
 import { HELP_AUDIENCES, REPORT_REASONS, REPORT_TARGETS } from './db/schema.js';
 import { HelpService } from './help.service.js';
 import { StoreReviewsService } from './store-reviews.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idParam = (value: string): string => {
@@ -97,7 +98,7 @@ export class AdminHelpController {
 // ---------------------------------------------------------------- denúncias
 
 const reportSchema = z.strictObject({ targetType: z.enum(REPORT_TARGETS), targetId: z.uuid(), reason: z.enum(REPORT_REASONS), text: z.string().trim().max(200).optional() });
-const queueQuery = z.strictObject({ targetType: z.enum(REPORT_TARGETS), status: z.enum(['open', 'handled']).optional(), cursor: z.string().max(300).optional(), limit: z.string().max(4).optional() });
+const queueQuery = z.strictObject({ targetType: z.enum(REPORT_TARGETS), status: z.enum(['open', 'handled']).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
 const keepSchema = z.strictObject({ note: z.string().trim().min(3).max(200).optional() });
 const removeSchema = z.strictObject({ reasonCode: z.enum(REMOVAL_REASONS), note: z.string().trim().max(150).optional() });
 const targetParam = (type: string): (typeof REPORT_TARGETS)[number] => {
@@ -168,7 +169,7 @@ export class AdminContentReportsController {
 
 // -------------------------------------------------- avaliações no painel da loja
 
-const reviewsQuery = z.strictObject({ replied: z.enum(['true', 'false']).transform((v) => v === 'true').optional(), rating: z.coerce.number().int().min(1).max(5).optional(), cursor: z.string().max(300).optional(), limit: z.string().max(4).optional() });
+const reviewsQuery = z.strictObject({ replied: z.enum(['true', 'false']).transform((v) => v === 'true').optional(), rating: z.coerce.number().int().min(1).max(5).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
 const replySchema = z.strictObject({ text: z.string().trim().min(1).max(500) });
 
 /** Avaliações da loja e resposta pública do lojista (permissão `reviews`; funcionário sem ela: 403, outra loja: 404). */

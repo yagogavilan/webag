@@ -116,7 +116,8 @@ describe('Busca de produtos e lojas com filtros (WB-013, WB-014)', () => {
     expect(pages).toBe(3);
     expect(seen).toEqual(Array.from({ length: 7 }, (_, i) => `Caneta ${i + 1}`));
     await ctx.http.get(`/v1/search/products?${q(origin, '&cursor=@@@')}`).expect(400);
-    await products(origin, '&limit=1000'); // não estoura: vira o máximo
+    await ctx.http.get(`/v1/search/products?${q(origin, '&limit=1000')}`).expect(400); // BUG-027: fora de 1 a 50 é recusado
+    await products(origin, '&limit=50');
   });
 
   it('sugestões após 2 caracteres: produtos, lojas e categorias; com 1 caractere, vazio', async () => {

@@ -9,6 +9,7 @@ import { parseIdempotencyKey } from '../idempotency/index.js';
 import { CardIntentService } from './card-intent.service.js';
 import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const orderIdParam = (value: string): string => {
@@ -48,7 +49,7 @@ const intentSchema = z.strictObject({
 const intentPaySchema = z.strictObject({
   card: z.strictObject({ token: z.string().min(8).max(200), installments: z.number().int().min(1).max(3), paymentMethodId: z.string().max(40).optional(), issuerId: z.string().max(40).optional() }),
 });
-const listSchema = z.strictObject({ scope: z.enum(['active', 'past']).optional(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const listSchema = z.strictObject({ scope: z.enum(['active', 'past']).optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
 const cancelSchema = z.strictObject({ reason: z.string().trim().max(200).optional() });
 
 /** Pedidos do cliente. Tudo filtra pelo `userId` do token: pedido de outra conta é 404 (SEC-020). */

@@ -5,6 +5,7 @@ import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AccountsService } from './accounts.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const userId = (value: string): string => {
@@ -17,7 +18,7 @@ const searchSchema = z.strictObject({
   role: z.enum(['customer', 'merchant']).optional(),
   status: z.enum(['active', 'blocked', 'deleted']).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const reasonSchema = z.strictObject({ reason: z.string().trim().min(10, 'Informe o motivo (mínimo 10 caracteres).').max(300) });
 

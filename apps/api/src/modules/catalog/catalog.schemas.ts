@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 /** Faixa de preço e estoque é validada no serviço (422 com código), não aqui: o painel mostra o motivo no campo. */
 const money = z.number().int();
@@ -59,7 +60,7 @@ export const listProductsSchema = z.strictObject({
   sectionId: z.uuid().optional(),
   lowStock: z.enum(['true']).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 
 export const bulkSchema = z.strictObject({
@@ -88,7 +89,7 @@ export const adminProductsQuerySchema = z.strictObject({
   to: isoDate.optional(),
   q: z.string().trim().max(80).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 
 export const moderateSchema = z.strictObject({

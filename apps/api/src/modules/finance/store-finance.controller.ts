@@ -8,6 +8,7 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AuditService } from '../admin/index.js';
 import { errors } from '../../platform/http/app-error.js';
 import { StoreFinanceService, type StatementLine } from './store-finance.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 /** Local (não importa de `stores`): `stores` depende de `finance` (comissão efetiva) e o ciclo derrubaria o boot. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -17,7 +18,7 @@ const uuidParam = (value: string): string => {
 };
 
 const period = z
-  .strictObject({ from: z.iso.date(), to: z.iso.date(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() })
+  .strictObject({ from: z.iso.date(), to: z.iso.date(), cursor: z.string().max(200).optional(), limit: limitQuery })
   .refine((v) => v.from <= v.to, { message: 'O início do período não pode ser depois do fim.', path: ['from'] })
   .refine((v) => (Date.parse(v.to) - Date.parse(v.from)) / 86_400_000 <= 366, { message: 'Período de no máximo 366 dias.', path: ['to'] });
 

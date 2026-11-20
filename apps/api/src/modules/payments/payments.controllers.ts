@@ -7,6 +7,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import type { PaymentAttempt } from './payments.service.js';
 import { PaymentsService } from './payments.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const uuid = (value: string): string => {
@@ -51,14 +52,14 @@ export class WebhooksController {
 
 const refundQueueQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
   status: z.enum(['pending', 'exhausted', 'covered']).optional(),
 });
 const coverRefundSchema = z.strictObject({ reason: z.string().min(10).max(300) });
 
 const alertsQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
   openOnly: z.enum(['true', 'false']).optional(),
 });
 

@@ -7,6 +7,7 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { emailSchema } from '../identity/index.js';
 import { DSR_STATUSES, DSR_TYPES } from './db/schema.js';
 import { DsrService } from './dsr.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const uuid = (value: string): string => {
@@ -20,7 +21,7 @@ const listSchema = z.strictObject({
   status: z.enum(DSR_STATUSES).optional(),
   overdue: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   cursor: z.string().max(300).optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional(),
+  limit: limitQuery,
 });
 const revealSchema = z.strictObject({ reason: z.string().trim().min(10).max(300) });
 const answerSchema = z.strictObject({ answer: z.string().trim().min(5).max(1000) });

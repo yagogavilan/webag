@@ -6,6 +6,7 @@ import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { ALERT_AREAS, ALERT_SEVERITIES } from '../admin/index.js';
 import { AlertsService } from './alerts.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const alertId = (value: string): string => {
@@ -19,7 +20,7 @@ const alertsQuerySchema = z.strictObject({
   severity: z.enum(ALERT_SEVERITIES).optional(),
   kind: z.string().regex(/^[a-z_]{3,60}$/).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const resolveSchema = z.strictObject({ note: z.string().trim().min(5, 'Escreva uma nota de ao menos 5 caracteres.').max(300) });
 

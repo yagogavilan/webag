@@ -8944,7 +8944,7 @@ components:
     Limit:
       name: limit
       in: query
-      description: Itens por página (padrão 20, máximo 50)
+      description: 'Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)'
       schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
   responses:
     ValidationError:

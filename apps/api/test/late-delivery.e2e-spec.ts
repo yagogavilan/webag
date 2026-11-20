@@ -421,7 +421,7 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
     const plain = await outForDelivery();
     await late(r.orderId, 20);
     expect((await cancelLate(r)).status).toBe(200); // em saída, o cancelamento por atraso vira PEDIDO à operação
-    const find = async () => ((await ctx.http.get(`${base}/deliveries`).query({ limit: '100' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; lateAlertedAt: string | null; lateCancelRequest: { status: string; requestedAt: string; respondBy: string } | null }[]);
+    const find = async () => ((await ctx.http.get(`${base}/deliveries`).query({ limit: '50' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; lateAlertedAt: string | null; lateCancelRequest: { status: string; requestedAt: string; respondBy: string } | null }[]);
     const mine = (await find()).find((d) => d.id === r.delivery.id)!;
     expect(mine.lateCancelRequest).toMatchObject({ status: 'pending', decidedAt: null, decidedBy: null });
     expect(Date.parse(mine.lateCancelRequest!.respondBy) - Date.parse(mine.lateCancelRequest!.requestedAt)).toBe(10 * 60_000); // entrega_cancel_resposta_min

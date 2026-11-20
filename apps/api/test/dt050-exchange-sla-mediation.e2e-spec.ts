@@ -142,7 +142,7 @@ describe('SLA da troca, contestação e mediação (DT-050)', () => {
 
   // ---------------------------------------------------------------------------------------- mediação
 
-  const queue = (admin: { accessToken: string }) => ctx.http.get('/v1/admin/exchanges/mediations?limit=100').set(bearer(admin.accessToken));
+  const queue = (admin: { accessToken: string }) => ctx.http.get('/v1/admin/exchanges/mediations?limit=50').set(bearer(admin.accessToken));
   const decide = (admin: { accessToken: string }, id: string, body: Record<string, unknown>) => ctx.http.post(`/v1/admin/exchanges/mediations/${id}/decision`).set(bearer(admin.accessToken)).send(body);
 
   it('fila de mediação: operação lê, suporte não; mais antiga primeiro; "atrasado" depois de mediacao_dias_uteis; origem da disputa', async () => {

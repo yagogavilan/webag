@@ -9,6 +9,7 @@ import { AdminOrdersReadService } from './admin-orders-read.service.js';
 import { ORDER_STATUSES } from './domain/state.js';
 import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const refundSchema = z.strictObject({
@@ -33,7 +34,7 @@ const listQuerySchema = z.strictObject({
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 
 const cancelSchema = z.strictObject({ reason: z.string().trim().min(10).max(300), refund: z.boolean().default(true) });

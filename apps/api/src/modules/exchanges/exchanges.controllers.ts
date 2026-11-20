@@ -12,6 +12,7 @@ import { EXCHANGE_TYPES } from './domain/eligibility.js';
 import { AuditService } from '../admin/index.js';
 import { ExchangesReportService } from './exchanges-report.service.js';
 import { ExchangesService } from './exchanges.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idParam = (value: string): string => {
@@ -29,7 +30,7 @@ const createSchema = z.strictObject({
   newVariantId: z.uuid().optional(),
   photoIds: z.array(z.uuid()).max(5).optional(),
 });
-const listSchema = z.strictObject({ cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const listSchema = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 const storeListSchema = listSchema.extend({ scope: z.enum(['pending', 'in_progress', 'history']).optional() });
 const cancelSchema = z.strictObject({ reason: z.string().trim().max(200).optional() });
 const paySchema = z
@@ -41,7 +42,7 @@ const paySchema = z
   .refine((v) => v.paymentMethod !== 'card' || v.card !== undefined, { message: 'Informe o cartão.', path: ['card'] })
   .refine((v) => v.paymentMethod !== 'pix' || v.card === undefined, { message: 'Cartão só com paymentMethod=card.', path: ['card'] });
 const contestSchema = z.strictObject({ text: z.string().trim().min(10).max(500) });
-const mediationQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const mediationQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 const mediationDecision = z.strictObject({ decision: z.enum(['customer', 'store']), reason: z.string().trim().min(10).max(200) });
 const rejectSchema = z.strictObject({ reason: z.string().trim().min(3).max(200) });
 const receiveSchema = z.strictObject({
@@ -234,7 +235,7 @@ const adminListSchema = z.strictObject({
   storeId: z.uuid().optional(),
   q: z.string().trim().min(3).max(12).optional(),
   cursor: z.string().max(200).optional(),
-  limit: z.string().max(4).optional(),
+  limit: limitQuery,
 });
 const waiveSchema = z.strictObject({ reason: z.string().trim().min(10).max(160) });
 

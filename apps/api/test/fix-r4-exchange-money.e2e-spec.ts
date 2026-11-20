@@ -142,7 +142,7 @@ describe('Troca e financeiro da loja: dinheiro (R.4, I4, I6, I12)', () => {
 
     const base = `/v1/stores/${d.shop.store.id}/finance`;
     const summary = (await ctx.http.get(`${base}/summary?${range}`).set(owner(d)).expect(200)).body;
-    const statement = (await ctx.http.get(`${base}/statement?${range}&limit=100`).set(owner(d)).expect(200)).body;
+    const statement = (await ctx.http.get(`${base}/statement?${range}&limit=50`).set(owner(d)).expect(200)).body;
     expect(statement.data.map((l: { orderId: string }) => l.orderId)).toContain(second.body.id); // o pago e cancelado aparece
     const sum = (statement.data as { net: { amount: number } }[]).reduce((s, l) => s + l.net.amount, 0);
     expect(sum).toBe(summary.net.amount);

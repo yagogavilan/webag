@@ -6,8 +6,9 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { uuidParam } from '../stores/index.js';
 import { FavoritesService } from './favorites.service.js';
 import { SearchHistoryService } from './search-history.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
-const listQuery = z.strictObject({ kind: z.enum(['store', 'product']).optional(), cursor: z.string().max(200).optional(), limit: z.string().max(4).optional() });
+const listQuery = z.strictObject({ kind: z.enum(['store', 'product']).optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
 const recordSchema = z.strictObject({ term: z.string().trim().min(2, 'Digite ao menos 2 letras.').max(80) });
 
 /** Favoritos e histórico de buscas da conta logada (WB-019, WB-015). O dono é sempre o `userId` do token. */

@@ -24,9 +24,10 @@ import {
 } from './stores.schemas.js';
 import { presentStore, uuidParam } from './stores.controllers.js';
 import { StoresService } from './stores.service.js';
+import { limitQuery } from '../../platform/http/pagination.js';
 
 type In<T extends z.ZodType> = z.infer<T>;
-const listQuery = z.strictObject({ status: z.enum(STORE_STATUSES).optional(), cursor: z.string().max(300).optional(), limit: z.coerce.number().int().min(1).max(50).optional() });
+const listQuery = z.strictObject({ status: z.enum(STORE_STATUSES).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
 const SECTION_SCHEMAS = {
   hours: hoursSchema,
   holidays: holidaysSchema,
