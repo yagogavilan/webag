@@ -153,6 +153,36 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
     expect((await orderRow(ctx, r.orderId)).status).toBe('out_for_delivery');
   });
 
+  it('A-02: pedido de cancelamento "em separação" pendente não bloqueia o "Pedir cancelamento" por atraso (antes: 500 por violação do índice único); ao sair de separação ele fica superseded', async () => {
+    const r = await readyOrder();
+    const store = bearer(r.shop.store.owner.accessToken);
+    await ctx.http.post(`${r.url}/status`).set(store).send({ status: 'in_preparation' }).expect(200);
+    await ctx.http.post(`/v1/orders/${r.orderId}/cancel-request`).set(bearer(r.buyer.user.accessToken)).send({ reason: 'mudei de ideia' }).expect(202);
+    const prep = () => ctx.db.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, r.orderId), eq(orderCancelRequests.kind, 'preparation')));
+    expect((await prep())[0]).toMatchObject({ status: 'pending' });
+    // a loja não responde e marca pronto: o pedido de separação deixa de ficar pendente
+    await ctx.http.post(`${r.url}/status`).set(store).send({ status: 'ready_for_collection' }).expect(200);
+    expect((await prep())[0]).toMatchObject({ status: 'superseded', decidedBy: 'system' });
+    expect((await ctx.http.post(`${r.url}/cancel-request/accept`).set(store).send({})).status).not.toBe(200); // a loja não aprova mais o que foi encerrado
+    const [delivery] = await ctx.db.select().from(deliveries).where(eq(deliveries.orderId, r.orderId));
+    const m = await courier();
+    await ctx.http.post(`${base}/deliveries/${delivery!.id}/assign`).set(bearer(ops.accessToken)).send({ courierId: m.id }).expect(200);
+    await act(delivery!.id, { action: 'confirm' }).expect(200);
+    await act(delivery!.id, { action: 'picked_up' }).expect(200);
+    await late(r.orderId, 20);
+    const res = await cancelLate(r);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.delay.cancelRequest).toMatchObject({ status: 'pending' });
+    expect(await ctx.db.select().from(orderCancelRequests).where(and(eq(orderCancelRequests.orderId, r.orderId), eq(orderCancelRequests.status, 'pending')))).toHaveLength(1);
+  });
+
+  it('A-02 (índice): pedido de separação pendente e pedido por atraso pendente coexistem no banco, mas dois do MESMO tipo, não', async () => {
+    const r = await readyOrder();
+    await ctx.db.insert(orderCancelRequests).values({ orderId: r.orderId, kind: 'preparation' });
+    await ctx.db.insert(orderCancelRequests).values({ orderId: r.orderId, kind: 'late' });
+    await expect(ctx.db.insert(orderCancelRequests).values({ orderId: r.orderId, kind: 'late' })).rejects.toThrow();
+  });
+
   it('Z.7 / D-15: o "chego em até N min" é o parâmetro `entrega_cancel_resposta_min` (não um 10 fixo): a corrida traz o número e a nota padrão da recusa o usa', async () => {
     const r = await outForDelivery();
     await late(r.orderId, 20);

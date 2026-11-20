@@ -590,6 +590,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       .set({ status: to, updatedAt: now, ...(to === 'accepted' ? { acceptedAt: now, acceptDeadlineAt: null } : {}), ...(to === 'delivered' ? { deliveredAt: deliveredAt ?? now } : {}) })
       .where(eq(orders.id, order.id));
     await tx.insert(orderEvents).values({ orderId: order.id, fromStatus: order.status, toStatus: to, actor, actorUserId, reason: reason?.slice(0, 200) ?? null });
+    // A-02: o pedido de cancelamento "em separação" só vale enquanto o pedido está em separação; ao sair, deixa de ficar pendente (a loja não responde mais a ele).
+    if (order.status === 'in_preparation') {
+      await tx
+        .update(orderCancelRequests)
+        .set({ status: 'superseded', decidedAt: now, decidedBy: 'system', decisionNote: 'Encerrado: o pedido saiu de separação antes da resposta' })
+        .where(and(eq(orderCancelRequests.orderId, order.id), eq(orderCancelRequests.kind, 'preparation'), eq(orderCancelRequests.status, 'pending')));
+    }
     return this.eventOf(order, to, actor, reason, now);
   }
 

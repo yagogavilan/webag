@@ -142,7 +142,7 @@ export const CANCEL_REQUEST_KINDS = ['preparation', 'late'] as const;
 
 /**
  * Pedido de cancelamento do cliente com o pedido EM SEPARAÇÃO (BUG-015, WB-028 C2): a loja decide em `cancelamento_resposta_min`
- * (10 min); sem resposta, o admin é alertado e decide (cancelando o pedido). Uma solicitação aberta por pedido.
+ * (10 min); sem resposta, o admin é alertado e decide (cancelando o pedido). Uma solicitação aberta por pedido E por tipo (A-02: `late` e `preparation` não se bloqueiam).
  */
 export const orderCancelRequests = pgTable(
   'order_cancel_requests',
@@ -158,5 +158,5 @@ export const orderCancelRequests = pgTable(
     decisionNote: varchar({ length: 200 }),
     alertedAt: timestamp({ withTimezone: true }),
   },
-  (t) => [uniqueIndex('order_cancel_requests_open_uq').on(t.orderId).where(sql`${t.status} = 'pending'`), index('order_cancel_requests_order_idx').on(t.orderId, t.requestedAt)],
+  (t) => [uniqueIndex('order_cancel_requests_open_uq').on(t.orderId, t.kind).where(sql`${t.status} = 'pending'`), index('order_cancel_requests_order_idx').on(t.orderId, t.requestedAt)],
 );
