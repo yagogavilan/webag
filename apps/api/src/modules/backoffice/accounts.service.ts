@@ -173,6 +173,7 @@ export class AccountsService {
    * pedidos em andamento seguem para a decisão do admin (nada é cancelado aqui). Auditado. Conta de admin, já bloqueada ou excluída: 409.
    */
   async block(admin: Principal, id: string, reason: string, ctx: RequestContext) {
+    const profile = adminProfileOf(admin); // A-04: antes de qualquer efeito; sem perfil não há "perfil padrão"
     let historyId = '';
     await this.db.transaction(async (tx) => {
       const user = await this.loadUser(id, tx, true);
@@ -199,11 +200,12 @@ export class AccountsService {
     if (suspendedStoreIds.length > 0) {
       await this.db.update(userStatusHistory).set({ suspendedStoreIds }).where(eq(userStatusHistory.id, historyId));
     }
-    return { ...(await this.detail(ctx.principal?.adminProfile ?? 'super_admin', id)), suspendedStoreIds, failedStoreIds };
+    return { ...(await this.detail(profile, id)), suspendedStoreIds, failedStoreIds };
   }
 
   /** Desbloqueia com motivo. A loja suspensa junto NÃO volta sozinha: o admin a reativa pela tela de lojas, de propósito (WB-102 C3 reverte o usuário). */
   async unblock(admin: Principal, id: string, reason: string, ctx: RequestContext) {
+    const profile = adminProfileOf(admin);
     await this.db.transaction(async (tx) => {
       const user = await this.loadUser(id, tx, true);
       if (user.status !== 'blocked') throw errors.conflict('USER_NOT_BLOCKED', 'Este usuário não está bloqueado');
@@ -211,6 +213,12 @@ export class AccountsService {
       await tx.insert(userStatusHistory).values({ userId: id, action: 'unblocked', reason, actorId: admin.userId });
       await this.audit.record(tx, ctx, { action: 'user.unblock', targetType: 'user', targetId: id, before: { status: 'blocked' }, after: { status: 'active' }, reason });
     });
-    return this.detail(ctx.principal?.adminProfile ?? 'super_admin', id);
+    return this.detail(profile, id);
   }
+}
+
+/** A-04: o perfil de quem age vem do `Principal` recebido; ausente = 403 (nunca o mais privilegiado por omissão). */
+function adminProfileOf(admin: Principal): AdminProfile {
+  if (!admin.adminProfile) throw errors.forbidden();
+  return admin.adminProfile;
 }

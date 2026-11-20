@@ -89,6 +89,7 @@ export class ParametersService {
     if (problem) throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail: problem, errors: [{ field: 'value', message: problem }] });
     await this.assertFreeShippingRule(key, value as number);
     await this.assertEtaRules(key, value as number);
+    await this.assertAcceptReminderRule(key, value as number);
     await this.write(definition, value as string | number, reason, ctx, 'parameter.update', expectedUpdatedAt);
     return this.view(key);
   }
@@ -100,6 +101,20 @@ export class ParametersService {
     const freeAbove = key === 'frete_gratis_acima_cents' ? value : await this.getNumber('frete_gratis_acima_cents');
     if (freeAbove !== 0 && freeAbove <= min) {
       const detail = 'O valor para entrega grátis precisa ser maior que o pedido mínimo (ou 0 para desligar).';
+      throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail, errors: [{ field: 'value', message: detail }] });
+    }
+  }
+
+  /**
+   * A-08: o lembrete de aceite precisa sair ao menos 2 min antes do cancelamento por falta de aceite (`lembrete <= timeout - 2`); com o
+   * lembrete igual ou maior que o prazo, o aviso "Aceite agora" (push e e-mail B2) nunca seria enviado.
+   */
+  private async assertAcceptReminderRule(key: string, value: number): Promise<void> {
+    if (key !== 'loja_aceite_lembrete_min' && key !== 'loja_aceite_timeout_min') return;
+    const reminder = key === 'loja_aceite_lembrete_min' ? value : await this.getNumber('loja_aceite_lembrete_min');
+    const timeout = key === 'loja_aceite_timeout_min' ? value : await this.getNumber('loja_aceite_timeout_min');
+    if (reminder > timeout - 2) {
+      const detail = `O lembrete de aceite (${reminder} min) precisa sair pelo menos 2 min antes do prazo para aceitar (${timeout} min). Ajuste o outro parâmetro antes, se for o caso.`;
       throw errors.unprocessable('PARAMETER_OUT_OF_RANGE', 'Valor fora da faixa', { detail, errors: [{ field: 'value', message: detail }] });
     }
   }
@@ -135,6 +150,7 @@ export class ParametersService {
     if (!definition) throw errors.notFound('Parâmetro não encontrado.');
     if (definition.legalFloor) throw errors.unprocessable('PARAMETER_LOCKED', 'Parâmetro fixo por lei', { detail: 'Piso legal de troca não é editável (DEC-011).' });
     await this.assertEtaRules(key, definition.default as number);
+    await this.assertAcceptReminderRule(key, definition.default as number);
     await this.write(definition, definition.default, reason, ctx, 'parameter.reset', expectedUpdatedAt);
     return this.view(key);
   }

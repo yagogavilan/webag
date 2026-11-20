@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { MIN_ORDERS_FOR_CANCEL_ALERT, OrderEventBus, OrdersService, type OrderEvent } from '../src/modules/orders/index.js';
 import { orders, paymentAlerts } from '../src/platform/database/schema.js';
 import { generateOrderNumber } from '../src/modules/orders/order-number.js';
+import { ParametersService } from '../src/modules/admin/index.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { restoreFees, useParam } from './helpers/fees.js';
 import { ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
@@ -76,6 +77,18 @@ describe('Parâmetros do admin ligados ao comportamento (BUG-017)', () => {
     await ctx.db.update(orders).set({ paidAt: new Date(Date.now() - 6 * 60_000) }).where(eq(orders.id, other.id));
     await svc.sweep(new Date());
     expect(events.filter((e) => e.orderId === other.id && e.notice === 'accept_reminder')).toHaveLength(0);
+    await useParam(ctx, 'loja_aceite_lembrete_min', 5);
+  });
+
+  it('A-08: lembrete de aceite precisa sair >= 2 min antes do prazo (validação cruzada nos dois sentidos); 422 e valor inalterado', async () => {
+    const ctxSys = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
+    const params = ctx.app.get(ParametersService);
+    for (const [key, value] of [['loja_aceite_lembrete_min', 9], ['loja_aceite_lembrete_min', 10], ['loja_aceite_timeout_min', 6]] as const) {
+      await expect(params.update(key, value, 'teste A-08', ctxSys)).rejects.toMatchObject({ code: 'PARAMETER_OUT_OF_RANGE', status: 422 });
+    }
+    expect(await params.getNumber('loja_aceite_lembrete_min')).toBe(5);
+    expect(await params.getNumber('loja_aceite_timeout_min')).toBe(10);
+    await useParam(ctx, 'loja_aceite_lembrete_min', 8); // exatamente timeout - 2 passa
     await useParam(ctx, 'loja_aceite_lembrete_min', 5);
   });
 
