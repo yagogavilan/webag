@@ -1,0 +1,21 @@
+
+=== pedidos ===
+PASS  B5-q | busca q: trecho do número, e-mail EXATO, ID do pedido e ID do cliente acham; e-mail PARCIAL não acha (sem oráculo)  [número=true e-mail=true parcial=0 idPedido=true idCliente=true]
+PASS  B5-filtros | filtros: status (lista), mode, paymentMethod, storeId, userId, city (sem caixa), from, to  [status=2 pickup=1 entrega=2 pix=3 cartão=0 loja=3 cidade=3/0 from=3/0 to=0]
+PASS  B5-invalid | parâmetros inválidos (status, mode, método, UUID, data, cursor, q de 1 letra): 400, nunca 500  [400,400,400,400,400,400,400,400]
+PASS  B5-f-limit | INFORMATIVO: limit=51 e limit=0 não dão 400 (contrato: 1 a 50); a API ajusta e nunca devolve mais de 50  [limit=51 -> 200 (50 linhas); limit=0 -> 200 (20 linhas); limit=abc -> 200]
+PASS  B5-page | paginação por cursor (2+1) sem repetir nem perder pedido do cliente  [p1=2 p2=1 únicos=3]
+PASS  B5-page-max | limit máximo 50 respeitado  [50 linhas]
+PASS  B5-mask | detalhe mascarado: nome abreviado, e-mail/celular parciais, endereço só bairro/cidade/UF (sem rua, número, CEP, complemento)  [Beatriz F. | q***@seed.webag.local | (11) 9****-4937 | {"neighborhood":"Centro","city":"Francisco Morato","state":"SP","logistics":null}]
+PASS  SEC184-1 | comissão, application_fee e líquido da loja só para quem tem commissions:read (super, financeiro); operação e suporte recebem null  [super={"amount":359,"currency":"BRL"} fin={"amount":359,"currency":"BRL"} ops=null sup=null]
+PASS  SEC184-2 | a LISTA para a operação não traz comissão nem application_fee  [campos ausentes na lista]
+PASS  B5-actions | allowedActions por perfil: cancelar/estornar só super e financeiro; operação e suporte sem ação  [{"super":["cancel","refund"],"operations":[],"finance":["cancel","refund"],"support":[]}]
+PASS  B5-rbac | operação e suporte NÃO cancelam nem estornam (403) e o pedido segue intacto  [cancelar ops/sup=403/403; estornar ops/sup=403/403; status=accepted]
+PASS  B5-refund | financeiro estorna parcial (200/201); acima do teto acumulado (soma) é 403 SUPER_ADMIN_REQUIRED; super admin estorna  [fin=200 acima=403 SUPER_ADMIN_REQUIRED super=200]
+PASS  B5-cancel | financeiro cancela: pedido cancelled (ator admin), estoque devolvido, corrida cancelada, estorno somando o total, repetir é idempotente  [HTTP 200; cancelled|admin; repetir 200; estornado=2996 de 2996; estoque 4992->4996; corrida=]
+PASS  B5-cancel-delivered | pedido já entregue não é cancelável (409 ORDER_NOT_CANCELLABLE)  [409 ORDER_NOT_CANCELLABLE]
+PASS  B5-cancel-store | a loja não aceita mais o pedido cancelado pelo admin  [HTTP 409]
+PASS  A07-1 | busca q de pedidos é auditada (order.search) sem gravar o termo  [linhas=51; vazamento do e-mail=0]
+PASS  A07-2 | busca q de pedidos limitada a 60/min por admin (429)  [primeiro 429 na requisição 61 de 70]
+
+RESUMO: 17 passaram, 0 falharam, 0 não testadas

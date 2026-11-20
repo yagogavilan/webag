@@ -1,0 +1,13 @@
+
+=== b2 ===
+PASS  B2-1 | pedido novo pago: o dono recebe e-mail com link do pedido  [assunto "Novo pedido WB-SSXHU em Mercadinho Boa Compra: aceite em até 10 min"]
+PASS  A01-1 | o link do e-mail usa o host do LOJISTA (LOJISTA_WEB_URL), não o do admin  [http://lojista.webag.test/lojista/pedidos/2a8e515f-bd47-4485-b6b5-ac7cdcdad7e5]
+PASS  B2-2 | o e-mail não traz dado pessoal do cliente nem valor em R$  [sem e-mail, telefone, nome nem R$ no texto]
+PASS  B2-3 | o e-mail traz prazo para aceitar e itens  [Novo pedido pago em Mercadinho Boa Compra. Pedido WB-SSXHU (Retirada na loja) - 4x Banana prata (kg) Aceite até 22:22 (horário de Brasília), em 10 min. Sem resposta até lá o pedido é cancelado e o cliente é estornado. Abrir o pedido no pain]
+PASS  B2-4 | um só e-mail por pedido novo (dedupe atômico)  [1 e-mail(s) com o número WB-SSXHU]
+PASS  B2-5 | com o e-mail desligado nenhum e-mail sai, e o pedido segue visível ao lojista (alerta no painel não desliga)  [PUT notifications 204; e-mail=false]
+PASS  A01-2 | convite de funcionário: link no host do LOJISTA  [201 http://lojista.webag.test/lojista/convite?token=8g3-jjzEmB6rXtaFsK4VTZ]
+PASS  A01-3 | convite de admin: link no host do ADMIN  [http://admin.webag.test/convite?token=WpzbER5ARl7ysL6RU3saz6o4Dl0K2oYlDRrHPZx95F]
+PASS  A08-1 | lembrete de aceite >= timeout - 1 é recusado (422); timeout - 2 é aceito  [timeout=10; 9->422; 8->200]
+
+RESUMO: 9 passaram, 0 falharam, 0 não testadas

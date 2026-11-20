@@ -119,14 +119,18 @@ async function bugsInner() {
 
   // ---- BUG-021: fim da faixa x fechamento da logística
   const c = await newCustomer();
+  const nowMin = Number(brtHhmm(0).slice(0, 2)) * 60 + Number(brtHhmm(0).slice(3));
   const closingIn = async (minutes) => {
-    await setParam('logistica_horario', `${brtHhmm(-120)}-${brtHhmm(minutes)}`, 'Reteste QA BUG-021');
+    // RC: a janela precisa caber no mesmo dia (início < fim). Perto da meia-noite de Brasília o caso não é executável: devolve `skipped` (vira NÃO TESTADO).
+    if (nowMin + minutes > 1438) return { skipped: true, cart: null, placed: { order: null, res: { status: 'n/a' } } };
+    await setParam('logistica_horario', `${nowMin - 120 < 0 ? '00:00' : brtHhmm(-120)}-${brtHhmm(minutes)}`, 'Reteste QA BUG-021');
     const { cart } = await cartOf(c, 'delivery');
     const placed = await place(c, 'delivery');
     return { cart: cart.data, placed };
   };
   const near = await closingIn(20);
-  record('BUG-021a', 'faltando 20 min para o fechamento a entrega NÃO é oferecida (faixa termina depois) e o servidor recusa criar o pedido', JSON.stringify(near.cart?.checkout).includes('LOGISTICS_CLOSED') && !near.placed.order, `faixa=${JSON.stringify(near.cart?.delivery?.eta)}; checkout=${JSON.stringify(near.cart?.checkout).slice(0, 140)}; criar pedido HTTP ${near.placed.res.status} ${near.placed.res.data?.code ?? ''}`);
+  if (near.skipped) notTested('BUG-021a', 'faltando 20 min para o fechamento a entrega NÃO é oferecida', 'janela cruza a meia-noite de Brasília neste horário');
+  else record('BUG-021a', 'faltando 20 min para o fechamento a entrega NÃO é oferecida (faixa termina depois) e o servidor recusa criar o pedido', JSON.stringify(near.cart?.checkout).includes('LOGISTICS_CLOSED') && !near.placed.order, `faixa=${JSON.stringify(near.cart?.delivery?.eta)}; checkout=${JSON.stringify(near.cart?.checkout).slice(0, 140)}; criar pedido HTTP ${near.placed.res.status} ${near.placed.res.data?.code ?? ''}`);
   if (near.placed.order) await api('POST', `/v1/orders/${near.placed.order.id}/cancel`, { token: c.token, body: {} });
   // os cartões da descoberta têm cache de 30 s (HOME_TTL): o parâmetro recém-salvo aparece neles em até ~30 s; o checkout é imediato
   let card = null;
@@ -135,13 +139,15 @@ async function bugsInner() {
     card = feed.data?.data?.find((x) => x.name === 'Mercadinho Boa Compra');
     return card?.delivery?.unavailableReason === 'LOGISTICS_CLOSED';
   }, { timeoutMs: 45_000, everyMs: 3_000 });
-  record('BUG-021b', 'o cartão da descoberta mostra a mesma coisa (unavailableReason LOGISTICS_CLOSED, mesma conta; cache de até 30 s)', card?.delivery?.unavailableReason === 'LOGISTICS_CLOSED' && card?.delivery?.available === false, `available=${card?.delivery?.available}; unavailableReason=${card?.delivery?.unavailableReason}`);
+  if (!near.skipped) record('BUG-021b', 'o cartão da descoberta mostra a mesma coisa (unavailableReason LOGISTICS_CLOSED, mesma conta; cache de até 30 s)', card?.delivery?.unavailableReason === 'LOGISTICS_CLOSED' && card?.delivery?.available === false, `available=${card?.delivery?.available}; unavailableReason=${card?.delivery?.unavailableReason}`);
   const wide = await closingIn(240);
-  record('BUG-021c', 'com o fechamento 4 h depois a entrega é oferecida e o pedido nasce (sem falso bloqueio)', Boolean(wide.placed.order) && !JSON.stringify(wide.cart?.checkout).includes('LOGISTICS_CLOSED'), `HTTP ${wide.placed.res.status}; faixa=${JSON.stringify(wide.cart?.delivery?.eta)}`);
+  if (wide.skipped) notTested('BUG-021c', 'com o fechamento 4 h depois a entrega é oferecida', 'janela de 4 h cruza a meia-noite de Brasília neste horário (a operação contínua 00:00-23:59 é exercitada em LOG-3 e nas regressões)');
+  else record('BUG-021c', 'com o fechamento 4 h depois a entrega é oferecida e o pedido nasce (sem falso bloqueio)', Boolean(wide.placed.order) && !JSON.stringify(wide.cart?.checkout).includes('LOGISTICS_CLOSED'), `HTTP ${wide.placed.res.status}; faixa=${JSON.stringify(wide.cart?.delivery?.eta)}`);
   if (wide.placed.order) await api('POST', `/v1/orders/${wide.placed.order.id}/cancel`, { token: c.token, body: {} });
   // borda: fim da faixa == fechamento (exclusivo?) com a faixa vista na sacola
-  const eta = wide.cart?.delivery?.eta;
-  if (eta?.maxMinutes) {
+  const eta = wide.cart?.delivery?.eta ?? (await cartOf(c, 'delivery')).cart.data?.delivery?.eta;
+  if (eta?.maxMinutes && nowMin + eta.maxMinutes + 1 > 1438) notTested('BUG-021d', 'borda: fechando 1 min depois do fim da faixa oferece; 2 min antes NÃO oferece', 'janela cruza a meia-noite de Brasília neste horário');
+  if (eta?.maxMinutes && nowMin + eta.maxMinutes + 1 <= 1438) {
     const edge = await closingIn(eta.maxMinutes + 1);
     const over = await closingIn(eta.maxMinutes - 2);
     record('BUG-021d', `borda: fechando 1 min depois do fim da faixa (${eta.maxMinutes} min) oferece; 2 min antes do fim da faixa NÃO oferece`, Boolean(edge.placed.order) && !over.placed.order, `+1: pedido HTTP ${edge.placed.res.status}; -2: pedido HTTP ${over.placed.res.status} ${over.placed.res.data?.code ?? ''}`);

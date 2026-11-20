@@ -1,0 +1,15 @@
+
+=== a02 ===
+PASS  A02-1 | pedido de cancelamento de preparo pendente + a loja marca pronto: o pedido avança e o pedido de cancelamento é ENCERRADO (superseded)  [pedir=202 pendentes=1; pronto=200; estado do pedido de preparo=superseded]
+PASS  A02-2 | depois do atraso: "Pedir cancelamento" por atraso responde 200/202 (NÃO 500 por índice duplicado)  [pedido=out_for_delivery delay.late=true; cancel-late HTTP 200 {"id":"0ce305f9-1b44-411e-a597-822c8edad41b","number":"WB-X9WQB","status":"out_for_delivery","mode":"delivery","createdAt":"2026-11-20T01:21:27.634Z","updatedAt]
+PASS  A02-3 | os dois pedidos convivem por tipo (preparation:superseded e late:pending ou late:accepted)  [late:pending,preparation:superseded]
+PASS  A02-4 | preparo recusado pela loja e depois atraso: cancelar por atraso funciona  [recusar=200; late=200]
+
+=== a06 ===
+PASS  A06-1 | a sacola mostra a faixa (delivery.eta) e o pedido criado com acceptedEtaToAt guarda a promessa  [sacola eta={"minMinutes":21,"maxMinutes":51,"fromAt":"2026-11-20T01:42:30.129Z","toAt":"2026-11-20T02:12:30.129Z"}; pedido 201]
+PASS  A06-2 | o fim da promessa gravada no pedido (eta_to_at) na criação fica dentro de 5 min do fim que o cliente aceitou (tolerância do ETA_CHANGED); no pagamento a faixa é reancorada (DEC-053)  [aceito=2026-11-20T02:12:30.129Z; gravado=2026-11-20T02:12:30.000Z (diferença 0s)]
+PASS  A06-3 | ao sair para a entrega a faixa INFORMATIVA encurta (eta_dispatch_to_at < eta_to_at) e a promessa (eta_to_at) não muda  [dispatch=1795138651 promessa=1795140751 (logo após o pagamento 1795140751); informativa mais curta=true]
+PASS  A06-4 | faixa informativa vencida com a promessa ainda no futuro: o pedido NÃO está atrasado e "cancelar sem custo" é recusado (409)  [delay={"late":false,"canCancelWithoutCost":false,"cancelAvailableAt":"2026-11-20T02:01:31.422Z","cancelMode":null,"respondWithinMin":10,"cancelRequest":null}; cancel-late=409 LATE_CANCEL_NOT_AVAILABLE; faixa mostrada={"minMinutes":21,"maxMinutes":51,"fromAt":"2026-11-20T01:26:31.173Z","toAt":"2026-11-20T01:37:31.173Z"}]
+PASS  A06-5 | só depois do fim da PROMESSA (faixa aceita) o pedido passa a atrasado  [delay={"late":true,"canCancelWithoutCost":false,"cancelAvailableAt":"2026-11-20T01:31:33.103Z","cancelMode":null,"respondWithinMin":10,"cancelRequest":null}]
+
+RESUMO: 9 passaram, 0 falharam, 0 não testadas

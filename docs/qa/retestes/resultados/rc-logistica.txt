@@ -1,0 +1,7 @@
+
+=== logistica ===
+PASS  LOG-1 | fora do horário da logística (02:00-03:00): entrega recusada (422 LOGISTICS_CLOSED), retirada segue (201)  [entrega=422 LOGISTICS_CLOSED; retirada=201]
+PASS  LOG-2 | a loja, a sacola e o cartão da busca dizem por quê e quando volta (unavailableReason / logisticsClosed / opensAt)  [cartão da busca (após 32 s)={"available":false,"unavailableReason":"LOGISTICS_CLOSED","logisticsOpensAt":"2026-11-20T05:00:00.000Z","feeCents":600,"freeShipping":false,"freeAboveCents":0,"minOrderCents":2000,"etaMinMinutes":21,"etaMaxMinutes":51,"eta":{"minMinutes":21; loja={}; sacola={"mode":"delivery","addressId":"aea82fef-0236-4920-acaf-9bfff55c57eb","available":false,"distanceM":80,"feeFromCents":600,"estimated":false,"eta":null,"logisticsOpensAt":"2026-11-20T05:00:00.000Z"}]
+PASS  LOG-3 | pausa geral da logística recusa entrega (LOGISTICS_PAUSED/CLOSED) e ao retomar volta a aceitar  [pausar=200; entrega=422 LOGISTICS_CLOSED; retomar=204; depois=201 ]
+
+RESUMO: 3 passaram, 0 falharam, 0 não testadas

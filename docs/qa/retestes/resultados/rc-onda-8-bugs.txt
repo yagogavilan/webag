@@ -1,0 +1,18 @@
+
+=== bugs ===
+PASS  BUG-023a | o cupom de seed BEMVINDO10 (primeira compra) tem teto de usos (max_uses = 100)  [max_uses=100]
+PASS  BUG-023b | nenhum cupom da plataforma ativo sem teto no banco semeado  [sem teto e ativos=0]
+PASS  BUG-022a | entrega_max_min=40, 59 e entrega_faixa_min=60 são recusados (422 PARAMETER_OUT_OF_RANGE)  [40=422 PARAMETER_OUT_OF_RANGE; 59=422; faixa60=422]
+PASS  BUG-022b | entrega_min_por_km=60 (zera o alcance: 60 min por km) é recusado (4xx) e o negativo também  [min_por_km=60 HTTP 422 {"type":"https://api.webag.com.br/errors/parameter-out-of-range","title":"Valor fora da faixa","status":422,"detail":"O valor máximo é 30.","code":"PARAMETER_OU; -5 HTTP 422]
+PASS  BUG-022c | a recusa traz o teto mínimo e a prévia do alcance em km (mensagem útil ao admin)  [{"type":"https://api.webag.com.br/errors/parameter-out-of-range","title":"Valor fora da faixa","status":422,"detail":"O teto (40 min) menos a folga (15 min) precisa cobrir preparo (20) + despacho (15) + 5 min, ou seja, teto de pelo menos 55 min; senão nenhuma loja alcança ninguém. Com estes valores ]
+PASS  BUG-022d | um valor válido (110) é aceito e o efeito aparece no alcance; reset volta ao padrão (120)  [HTTP 200]
+PASS  BUG-022e | restaurar o padrão funciona  [HTTP 200 {"key":"entrega_max_min","value":120,"default":120,"type":"int","min":30,"max":240,"values":null,"de]
+PASS  BUG-021a | faltando 20 min para o fechamento a entrega NÃO é oferecida (faixa termina depois) e o servidor recusa criar o pedido  [faixa=null; checkout={"canCheckout":false,"blockers":["LOGISTICS_CLOSED"],"opensAt":null}; criar pedido HTTP 422 LOGISTICS_CLOSED]
+PASS  BUG-021b | o cartão da descoberta mostra a mesma coisa (unavailableReason LOGISTICS_CLOSED, mesma conta; cache de até 30 s)  [available=false; unavailableReason=LOGISTICS_CLOSED]
+N/T   BUG-021c | com o fechamento 4 h depois a entrega é oferecida  [NÃO TESTADO: janela de 4 h cruza a meia-noite de Brasília neste horário (a operação contínua 00:00-23:59 é exercitada em LOG-3 e nas regressões)]
+PASS  BUG-025-3001 | preflight do bucket privado devolve Allow-Origin e POST para http://localhost:3001  [HTTP 200; origin=http://localhost:3001; methods=GET, PUT, POST, HEAD]
+PASS  BUG-025-3101 | preflight do bucket privado devolve Allow-Origin e POST para http://localhost:3101  [HTTP 200; origin=http://localhost:3101; methods=GET, PUT, POST, HEAD]
+PASS  BUG-025-8081 | preflight do bucket privado devolve Allow-Origin e POST para http://localhost:8081  [HTTP 200; origin=http://localhost:8081; methods=GET, PUT, POST, HEAD]
+PASS  BUG-025-up | upload real de foto de produto pelo POST assinado com Origin do navegador: 204 no bucket com Allow-Origin e complete 200  [etapa=ok; complete HTTP 200; Allow-Origin=http://localhost:3101]
+
+RESUMO: 13 passaram, 0 falharam, 1 não testadas

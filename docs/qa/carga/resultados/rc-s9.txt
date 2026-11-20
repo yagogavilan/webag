@@ -1,0 +1,250 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: docs/qa/carga/s9-imagens.k6.js
+        output: -
+
+     scenarios: (100.00%) 2 scenarios, 15 max VUs, 1m15s max duration (incl. graceful stop):
+              * envio: 10 looping VUs for 45s (exec: envio, gracefulStop: 30s)
+              * leitura: 5.00 iterations/s for 45s (maxVUs: 5, exec: leitura, gracefulStop: 30s)
+
+
+running (0m01.0s), 10/15 VUs, 3 complete and 0 interrupted iterations
+envio     [   1% ] 10 VUs   00.4s/45s 
+leitura   [   1% ] 0/5 VUs  00.4s/45s  5.00 iters/s
+
+running (0m02.0s), 10/15 VUs, 8 complete and 0 interrupted iterations
+envio     [   3% ] 10 VUs   01.4s/45s 
+leitura   [   3% ] 0/5 VUs  01.4s/45s  5.00 iters/s
+
+running (0m03.0s), 10/15 VUs, 23 complete and 0 interrupted iterations
+envio     [   5% ] 10 VUs   02.4s/45s 
+leitura   [   5% ] 0/5 VUs  02.4s/45s  5.00 iters/s
+
+running (0m04.0s), 10/15 VUs, 42 complete and 0 interrupted iterations
+envio     [   8% ] 10 VUs   03.4s/45s 
+leitura   [   8% ] 0/5 VUs  03.4s/45s  5.00 iters/s
+
+running (0m05.0s), 10/15 VUs, 54 complete and 0 interrupted iterations
+envio     [  10% ] 10 VUs   04.4s/45s 
+leitura   [  10% ] 0/5 VUs  04.4s/45s  5.00 iters/s
+
+running (0m06.0s), 10/15 VUs, 69 complete and 0 interrupted iterations
+envio     [  12% ] 10 VUs   05.4s/45s 
+leitura   [  12% ] 0/5 VUs  05.4s/45s  5.00 iters/s
+
+running (0m07.0s), 10/15 VUs, 81 complete and 0 interrupted iterations
+envio     [  14% ] 10 VUs   06.4s/45s 
+leitura   [  14% ] 0/5 VUs  06.4s/45s  5.00 iters/s
+
+running (0m08.0s), 10/15 VUs, 100 complete and 0 interrupted iterations
+envio     [  16% ] 10 VUs   07.4s/45s 
+leitura   [  16% ] 0/5 VUs  07.4s/45s  5.00 iters/s
+
+running (0m09.0s), 10/15 VUs, 115 complete and 0 interrupted iterations
+envio     [  19% ] 10 VUs   08.4s/45s 
+leitura   [  19% ] 0/5 VUs  08.4s/45s  5.00 iters/s
+
+running (0m10.0s), 10/15 VUs, 130 complete and 0 interrupted iterations
+envio     [  21% ] 10 VUs   09.4s/45s 
+leitura   [  21% ] 0/5 VUs  09.4s/45s  5.00 iters/s
+
+running (0m11.0s), 10/15 VUs, 146 complete and 0 interrupted iterations
+envio     [  23% ] 10 VUs   10.4s/45s 
+leitura   [  23% ] 0/5 VUs  10.4s/45s  5.00 iters/s
+
+running (0m12.0s), 10/15 VUs, 160 complete and 0 interrupted iterations
+envio     [  25% ] 10 VUs   11.4s/45s 
+leitura   [  25% ] 0/5 VUs  11.4s/45s  5.00 iters/s
+
+running (0m13.0s), 10/15 VUs, 173 complete and 0 interrupted iterations
+envio     [  28% ] 10 VUs   12.4s/45s 
+leitura   [  28% ] 0/5 VUs  12.4s/45s  5.00 iters/s
+
+running (0m14.0s), 10/15 VUs, 192 complete and 0 interrupted iterations
+envio     [  30% ] 10 VUs   13.4s/45s 
+leitura   [  30% ] 0/5 VUs  13.4s/45s  5.00 iters/s
+
+running (0m15.0s), 11/15 VUs, 202 complete and 0 interrupted iterations
+envio     [  32% ] 10 VUs   14.4s/45s 
+leitura   [  32% ] 1/5 VUs  14.4s/45s  5.00 iters/s
+
+running (0m16.0s), 10/15 VUs, 222 complete and 0 interrupted iterations
+envio     [  34% ] 10 VUs   15.4s/45s 
+leitura   [  34% ] 0/5 VUs  15.4s/45s  5.00 iters/s
+
+running (0m17.0s), 10/15 VUs, 237 complete and 0 interrupted iterations
+envio     [  36% ] 10 VUs   16.4s/45s 
+leitura   [  36% ] 0/5 VUs  16.4s/45s  5.00 iters/s
+
+running (0m18.0s), 10/15 VUs, 247 complete and 0 interrupted iterations
+envio     [  39% ] 10 VUs   17.4s/45s 
+leitura   [  39% ] 0/5 VUs  17.4s/45s  5.00 iters/s
+
+running (0m19.0s), 10/15 VUs, 269 complete and 0 interrupted iterations
+envio     [  41% ] 10 VUs   18.4s/45s 
+leitura   [  41% ] 0/5 VUs  18.4s/45s  5.00 iters/s
+
+running (0m20.0s), 10/15 VUs, 281 complete and 0 interrupted iterations
+envio     [  43% ] 10 VUs   19.4s/45s 
+leitura   [  43% ] 0/5 VUs  19.4s/45s  5.00 iters/s
+
+running (0m21.0s), 10/15 VUs, 295 complete and 0 interrupted iterations
+envio     [  45% ] 10 VUs   20.4s/45s 
+leitura   [  45% ] 0/5 VUs  20.4s/45s  5.00 iters/s
+
+running (0m22.0s), 10/15 VUs, 316 complete and 0 interrupted iterations
+envio     [  48% ] 10 VUs   21.4s/45s 
+leitura   [  48% ] 0/5 VUs  21.4s/45s  5.00 iters/s
+
+running (0m23.0s), 10/15 VUs, 327 complete and 0 interrupted iterations
+envio     [  50% ] 10 VUs   22.4s/45s 
+leitura   [  50% ] 0/5 VUs  22.4s/45s  5.00 iters/s
+
+running (0m24.0s), 10/15 VUs, 343 complete and 0 interrupted iterations
+envio     [  52% ] 10 VUs   23.4s/45s 
+leitura   [  52% ] 0/5 VUs  23.4s/45s  5.00 iters/s
+
+running (0m25.0s), 10/15 VUs, 358 complete and 0 interrupted iterations
+envio     [  54% ] 10 VUs   24.4s/45s 
+leitura   [  54% ] 0/5 VUs  24.4s/45s  5.00 iters/s
+
+running (0m26.0s), 10/15 VUs, 372 complete and 0 interrupted iterations
+envio     [  56% ] 10 VUs   25.4s/45s 
+leitura   [  56% ] 0/5 VUs  25.4s/45s  5.00 iters/s
+
+running (0m27.0s), 10/15 VUs, 386 complete and 0 interrupted iterations
+envio     [  59% ] 10 VUs   26.4s/45s 
+leitura   [  59% ] 0/5 VUs  26.4s/45s  5.00 iters/s
+
+running (0m28.0s), 10/15 VUs, 405 complete and 0 interrupted iterations
+envio     [  61% ] 10 VUs   27.4s/45s 
+leitura   [  61% ] 0/5 VUs  27.4s/45s  5.00 iters/s
+
+running (0m29.0s), 10/15 VUs, 418 complete and 0 interrupted iterations
+envio     [  63% ] 10 VUs   28.4s/45s 
+leitura   [  63% ] 0/5 VUs  28.4s/45s  5.00 iters/s
+
+running (0m30.0s), 10/15 VUs, 434 complete and 0 interrupted iterations
+envio     [  65% ] 10 VUs   29.4s/45s 
+leitura   [  65% ] 0/5 VUs  29.4s/45s  5.00 iters/s
+
+running (0m31.0s), 10/15 VUs, 466 complete and 0 interrupted iterations
+envio     [  68% ] 10 VUs   30.4s/45s 
+leitura   [  68% ] 0/5 VUs  30.4s/45s  5.00 iters/s
+
+running (0m32.0s), 10/15 VUs, 931 complete and 0 interrupted iterations
+envio     [  70% ] 10 VUs   31.4s/45s 
+leitura   [  70% ] 0/5 VUs  31.4s/45s  5.00 iters/s
+
+running (0m33.0s), 11/15 VUs, 1452 complete and 0 interrupted iterations
+envio     [  72% ] 10 VUs   32.4s/45s 
+leitura   [  72% ] 1/5 VUs  32.4s/45s  5.00 iters/s
+
+running (0m34.0s), 10/15 VUs, 2091 complete and 0 interrupted iterations
+envio     [  74% ] 10 VUs   33.4s/45s 
+leitura   [  74% ] 0/5 VUs  33.4s/45s  5.00 iters/s
+
+running (0m35.0s), 11/15 VUs, 2804 complete and 0 interrupted iterations
+envio     [  76% ] 10 VUs   34.4s/45s 
+leitura   [  76% ] 1/5 VUs  34.4s/45s  5.00 iters/s
+
+running (0m36.0s), 10/15 VUs, 3462 complete and 0 interrupted iterations
+envio     [  79% ] 10 VUs   35.4s/45s 
+leitura   [  79% ] 0/5 VUs  35.4s/45s  5.00 iters/s
+
+running (0m37.0s), 10/15 VUs, 4143 complete and 0 interrupted iterations
+envio     [  81% ] 10 VUs   36.4s/45s 
+leitura   [  81% ] 0/5 VUs  36.4s/45s  5.00 iters/s
+
+running (0m38.0s), 10/15 VUs, 4909 complete and 0 interrupted iterations
+envio     [  83% ] 10 VUs   37.4s/45s 
+leitura   [  83% ] 0/5 VUs  37.4s/45s  5.00 iters/s
+
+running (0m39.0s), 10/15 VUs, 5555 complete and 0 interrupted iterations
+envio     [  85% ] 10 VUs   38.4s/45s 
+leitura   [  85% ] 0/5 VUs  38.4s/45s  5.00 iters/s
+
+running (0m40.0s), 10/15 VUs, 6177 complete and 0 interrupted iterations
+envio     [  88% ] 10 VUs   39.4s/45s 
+leitura   [  88% ] 0/5 VUs  39.4s/45s  5.00 iters/s
+
+running (0m41.0s), 10/15 VUs, 6862 complete and 0 interrupted iterations
+envio     [  90% ] 10 VUs   40.4s/45s 
+leitura   [  90% ] 0/5 VUs  40.4s/45s  5.00 iters/s
+
+running (0m42.0s), 10/15 VUs, 7536 complete and 0 interrupted iterations
+envio     [  92% ] 10 VUs   41.4s/45s 
+leitura   [  92% ] 0/5 VUs  41.4s/45s  5.00 iters/s
+
+running (0m43.0s), 10/15 VUs, 8224 complete and 0 interrupted iterations
+envio     [  94% ] 10 VUs   42.4s/45s 
+leitura   [  94% ] 0/5 VUs  42.4s/45s  5.00 iters/s
+
+running (0m44.0s), 10/15 VUs, 8822 complete and 0 interrupted iterations
+envio     [  96% ] 10 VUs   43.4s/45s 
+leitura   [  96% ] 0/5 VUs  43.4s/45s  5.00 iters/s
+
+running (0m45.0s), 10/15 VUs, 9534 complete and 0 interrupted iterations
+envio     [  99% ] 10 VUs   44.4s/45s 
+leitura   [  99% ] 0/5 VUs  44.4s/45s  5.00 iters/s
+
+running (0m46.0s), 01/15 VUs, 9794 complete and 0 interrupted iterations
+envio   ↓ [ 100% ] 10 VUs   45s 
+leitura ✓ [ 100% ] 0/5 VUs  45s  5.00 iters/s
+
+
+  █ THRESHOLDS 
+
+    erros_5xx
+    ✓ 'count==0' count=0
+
+    lat_home_durante
+    ✓ 'p(95)<1000' p(95)=24.69ms
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 9795    212.685599/s
+    checks_succeeded...: 100.00% 9795 out of 9795
+    checks_failed......: 0.00%   0 out of 9795
+
+    ✓ home 200
+    ✓ válida aceita (200) ou fila cheia (422 tempo)
+    ✓ PNG gigante recusado (422)
+    ✓ upload criado ou limitado (429)
+
+    CUSTOM
+    erros_5xx......................: 0      0/s
+    lat_complete...................: avg=764.71ms min=18.44ms  med=893.99ms max=1.6s     p(90)=1.26s   p(95)=1.39s  
+    lat_home_durante...............: avg=9.39ms   min=1.96ms   med=6.12ms   max=183.99ms p(90)=15.78ms p(95)=24.69ms
+    uploads_aceitos................: 286    6.210115/s
+    uploads_recusados_422..........: 139    3.018203/s
+
+    HTTP
+    http_req_duration..............: avg=34.35ms  min=715.96µs med=2.31ms   max=1.6s     p(90)=11.49ms p(95)=26.67ms
+      { expected_response:true }...: avg=230.92ms min=1.96ms   med=13.25ms  max=1.6s     p(90)=1.07s   p(95)=1.23s  
+    http_req_failed................: 87.04% 9287 out of 10669
+    http_reqs......................: 10669  231.663364/s
+
+    EXECUTION
+    iteration_duration.............: avg=46.32ms  min=802.13µs med=2.36ms   max=1.89s    p(90)=7.4ms   p(95)=16.43ms
+    iterations.....................: 9795   212.685599/s
+    vus............................: 1      min=1             max=11
+    vus_max........................: 15     min=15            max=15
+
+    NETWORK
+    data_received..................: 13 MB  278 kB/s
+    data_sent......................: 70 MB  1.5 MB/s
+
+
+
+
+running (0m46.1s), 00/15 VUs, 9795 complete and 0 interrupted iterations
+envio   ✓ [ 100% ] 10 VUs   45s 
+leitura ✓ [ 100% ] 0/5 VUs  45s  5.00 iters/s

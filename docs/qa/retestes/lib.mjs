@@ -150,7 +150,11 @@ export async function setParam(key, value, reason = 'Reteste QA Onda 7') {
   if (r.status !== 200) throw new Error(`parâmetro ${key}=${value}: HTTP ${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
   return r.data;
 }
+// O seed de DESENVOLVIMENTO deixa a logística aberta 24 h, todos os dias (logistica_horario 00:00-23:59, logistica_dias seg_dom); o padrão do código é
+// 09:00-20:00, seg_sab. "Restaurar o padrão" desses dois parâmetros fecharia a entrega à noite e derrubaria o resto da rodada: aqui voltam ao valor do seed.
+const SEED_OVERRIDES = { logistica_horario: '00:00-23:59', logistica_dias: 'seg_dom' };
 export async function resetParam(key) {
+  if (SEED_OVERRIDES[key]) return adminCall('PUT', `/v1/admin/parameters/${key}`, { value: SEED_OVERRIDES[key], reason: 'Reteste QA: voltar ao valor do seed de desenvolvimento' });
   return adminCall('POST', `/v1/admin/parameters/${key}/reset`, { reason: 'Reteste QA Onda 7: restaurar padrão' });
 }
 

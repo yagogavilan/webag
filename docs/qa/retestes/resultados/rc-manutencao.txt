@@ -1,0 +1,9 @@
+
+=== manutencao ===
+PASS  MAN-1 | só o super admin liga (operação e financeiro 403); todo perfil lê o estado; estado inicial desligado  [público={"active":false,"message":null,"expectedBackAt":null}; ops=403 fin=403 suporte lê=200]
+PASS  MAN-2 | ligar exige motivo (400 sem); ligado, o público informa active, mensagem e quem mudou fica no admin  [sem motivo=400; ligar=200; público={"active":true,"message":"Voltamos em instantes (reteste QA)","expectedBackAt":null}]
+PASS  MAN-3 | com manutenção: pedido novo (PIX retirada e entrega) e intenção de cartão respondem 503 MAINTENANCE  [pix=503 MAINTENANCE; entrega=503; cartão=503 MAINTENANCE]
+PASS  MAN-4 | leitura, sacola, lista de pedidos, painel admin, PAGAR o pedido já criado e a loja aceitá-lo seguem normais  [home=200 loja=200 sacola=200 pedidos=200 admin=200 pagar-antigo=received aceitar=200]
+PASS  MAN-5 | ligar de novo é idempotente; desligar volta a aceitar pedido em até 15 s (cache); liga e desliga ficam na auditoria  [de novo=200; desligar=200; pedido volta=true; auditoria on/off=2/1]
+
+RESUMO: 5 passaram, 0 falharam, 0 não testadas

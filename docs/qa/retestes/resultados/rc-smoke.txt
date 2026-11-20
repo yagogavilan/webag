@@ -1,0 +1,52 @@
+
+> webag@ smoke /tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/rc/wb
+> node scripts/smoke.mjs
+
+[smoke] API: http://localhost:3400
+
+1. Saúde e contrato
+  ok   GET /health
+  ok   GET /health/ready (banco e Redis no ar)
+  ok   GET /docs (contrato OpenAPI)
+
+2. Logins de demonstração
+  ok   cliente novo cadastrado (smoke.1795136440101@seed.webag.local)
+  ok   cliente: login com a conta recém-criada
+  ok   e-mail com o código de confirmação chegou ao Mailpit
+  ok   e-mail do cliente confirmado com o código
+  ok   lojista (dono): lojista.mercadinho-boa-compra@seed.webag.local
+  ok   lojista (funcionário): funcionario.mercadinho-boa-compra@seed.webag.local
+  ok   admin: senha aceita e o 2º fator (TOTP) é exigido (já configurado; use scripts/totp.mjs com o segredo guardado)
+
+3. Catálogo
+  ok   lojas por perto (busca geográfica PostGIS) devolve o Mercadinho Boa Compra
+  ok   catálogo da loja devolve produtos disponíveis
+  ok   produto "Banana prata (kg)" tem variação
+  ok   endereço do cliente cadastrado
+
+4. Pedido de RETIRADA do início ao fim (PIX simulado)
+  ok   [pickup] item na sacola
+  ok   [pickup] sacola com total calculado pelo servidor (2396 centavos)
+  ok   [pickup] pedido criado aguardando o PIX
+  ok   [pickup] tentativa de pagamento localizada no banco
+  ok   [pickup] PIX simulado aprovado (mesmo caminho do webhook real)
+  ok   [pickup] pedido virou "received" (pago)
+  ok   funcionário aceita o pedido
+  ok   funcionário NÃO acessa a conta de recebimento (HTTP 403)
+  ok   em separação
+  ok   dono marca pronto para retirada
+  ok   cliente vê o código de retirada de 4 dígitos
+  ok   retirada concluída com o código
+
+5. Pedido de ENTREGA até a coleta pelo motoboy (PIX simulado)
+  ok   [delivery] item na sacola
+  ok   [delivery] sacola com total calculado pelo servidor (2996 centavos)
+  ok   [delivery] pedido criado aguardando o PIX
+  ok   [delivery] tentativa de pagamento localizada no banco
+  ok   [delivery] PIX simulado aprovado (mesmo caminho do webhook real)
+  ok   [delivery] pedido virou "received" (pago)
+  ok   dono aceita
+  ok   em separação
+  ok   pronto para coleta (corrida da logística criada)
+
+[smoke] TUDO CERTO

@@ -1,0 +1,18 @@
+
+=== janelas ===
+PASS  JAN-0 | pedido entregue agora: "Avaliar" e "Pedir troca" disponíveis (allowedActions)  [["contact_store","report_not_received","rate","request_exchange"]; deliveredAt=undefined]
+PASS  JAN-1 | "Avaliar": vale até 30 dias DEPOIS DA ENTREGA (deliveredAt), fecha depois; o updated_at do pedido não conta  [[["30d - 1h",["contact_store","rate","request_exchange"]],["30d + 1h",["contact_store","request_exchange"]]]]
+PASS  JAN-2 | servidor: avaliação fora da janela 422 REVIEW_WINDOW_CLOSED; dentro 201; repetir 409  [fora=422 REVIEW_WINDOW_CLOSED; dentro=201; repetir=409]
+PASS  JAN-3 | "Pedir troca": contagem pela entrega (deliveredAt); arrependimento some depois de 7 dias; sem nenhum tipo no prazo a ação some  [[["7d - 2h",true,"withdrawal:true,defect:true,size_color:false"],["7d + 2h",true,"withdrawal:false,defect:true,size_color:false"],["31d",true,"withdrawal:false,defect:true,size_color:false"],["91d",false,"withdrawal:false,defect:false,size_color:false"]]]
+PASS  JAN-4 | servidor: arrependimento aos 6d22h é aceito (201) e aos 7d2h é recusado (409/422)  [6d22h=201 ; 7d2h=422 EXCHANGE_WINDOW_EXPIRED]
+
+=== vocerecebe ===
+PASS  VR-1 | "Você recebe": a tarifa do provedor vem dos parâmetros (padrão 0,99 PIX e 4,98 cartão; muda e volta) e a comissão efetiva também  [padrão={"pix":0.99,"card":4.98} alterado={"pix":2,"card":7.5} voltou={"pix":0.99,"card":4.98} comissão=15]
+PASS  VR-2 | ranking do lojista traz youReceive por produto (líquido antes da tarifa)  [200 {"period":{"from":"2026-11-01","to":"2026-11-30"},"data":[{"productId":"b270ecb1-0095-4355-bab5-e9fec6cbc677","name":"Banana prata (kg)","image":{"urls":{"160":"http://localhost:9000/webag-public/medi]
+PASS  VR-3 | o extrato do lojista mostra o pedido com comissão e tarifa do provedor (soma conferida no financeiro)  [200 {"data":[{"orderId":"eaf245e5-09f8-48a9-803d-7e703d744bbd","number":"WB-CGJGF","paidAt":"2026-11-20T01:24:05.507Z","orderStatus":"received","gross":{"amount":2396,"currency":"BRL"},"commission":{"amou]
+
+=== banners ===
+PASS  BAN-1 | GET /v1/banners devolve os 3 banners do seed, cada um com 3 tamanhos (400, 800, 1200) e TODOS os arquivos existem (200, image/webp, com bytes)  [3 banners, 9 arquivos; []; exemplo ["Frete grátis acima de R$ 50","400",200,"image/webp",6122]]
+PASS  BAN-2 | a home do app traz banners (mesma lista) ou o app os busca em /v1/banners  [home 200; chaves: mode,empty,highlightStores,highlightProducts,nearbyStores,newStores,offers,bestSellers,availableCategoryIds]
+
+RESUMO: 10 passaram, 0 falharam, 0 não testadas
