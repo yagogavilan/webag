@@ -102,18 +102,35 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
       />
       {!online ? <Banner tone="warning" offline>Sem conexão. Mostrando o que já carregou.</Banner> : null}
       <div className={s.toolbar}>
-        <TextField
-          className={s.search}
-          label="Buscar produto"
-          type="search"
-          inputMode="search"
-          autoComplete="off"
-          maxLength={80}
-          placeholder="Nome do produto"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          data-testid={T('search-input')}
-        />
+        <div className={s.searchRow}>
+          <TextField
+            className={s.search}
+            label="Buscar produto"
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            maxLength={80}
+            placeholder="Nome do produto"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            data-testid={T('search-input')}
+          />
+          {products.length > 0 ? (
+            <Button
+              variant="text"
+              size="sm"
+              className={s.selectToggle}
+              aria-pressed={selecting}
+              onClick={() => {
+                if (selecting) setSelected(new Set());
+                setSelecting(!selecting);
+              }}
+              data-testid={T('select-mode')}
+            >
+              {selecting ? 'Cancelar seleção' : 'Selecionar'}
+            </Button>
+          ) : null}
+        </div>
         <div className={s.chips} role="group" aria-label="Filtrar produtos">
           {FILTERS.map((item) => (
             <button key={item.id} type="button" className={cx(ui.chip, 'wb-text-body')} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} data-testid={T(`filter-${item.id}`)}>
@@ -121,21 +138,6 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
             </button>
           ))}
         </div>
-        {products.length > 0 ? (
-          <Button
-            variant="text"
-            size="sm"
-            className={s.selectToggle}
-            aria-pressed={selecting}
-            onClick={() => {
-              if (selecting) setSelected(new Set());
-              setSelecting(!selecting);
-            }}
-            data-testid={T('select-mode')}
-          >
-            {selecting ? 'Cancelar seleção' : 'Selecionar'}
-          </Button>
-        ) : null}
       </div>
 
       {list.isPending ? <SkeletonRows rows={6} height={72} label="Carregando os produtos" /> : null}

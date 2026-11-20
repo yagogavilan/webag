@@ -150,6 +150,12 @@ fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; 
   padding: 0;
   transition: background var(--wb-motion-duration-fast) var(--wb-motion-easing-standard);
 }
+.switch::before {
+  /* alvo de toque de 48 px sem mudar o desenho de 52x32 */
+  content: '';
+  position: absolute;
+  inset: -8px -2px;
+}
 .switch::after {
   content: '';
   position: absolute;
