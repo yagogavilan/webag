@@ -49,7 +49,7 @@ Descartados e por quê: **contagem regressiva** (exige data); **fundador falando
 | Tipografia | Bricolage Grotesque 800 (títulos, numerais), Figtree 600 a 800 (adesivos, aviso). Mínimo 32 px (aviso); títulos 128 a 300 px |
 | Cor | Roxo `#C02EF0`, noite `#1C1721`, lima `#D6FF4A`, branco. Sem gradiente, sem sombra com desfoque, sem emoji |
 | Contraste | Branco sobre roxo 4,29:1 (só texto >= 104 px, passa AA para texto grande); lima sobre noite 15,3:1; noite sobre lima 15,3:1; branco sobre noite 17,6:1. O aviso pequeno ("Telas do app em teste.") fica em caixa noite para dar 17,6:1 também sobre o roxo |
-| Movimento | Corte seco entre cenas, sem transição. Dentro da cena: subida de 30 a 60 px com `out3`/`out5` em 0,14 a 0,28 s; barras crescem em 60 ms de intervalo; adesivo salta com `back` curto (sobressalto <= 20%). Nada flutua, nada em loop |
+| Movimento | Corte seco entre cenas, sem transição e **sem quadro vazio**: no quadro do corte numeral, título, logo e "Em breve." já estão opacos (só deslocam 8 px em 3 quadros). Aparelho entra de baixo (260 px) em 6 quadros (0,20 s), `out5`, opaco desde o 1º quadro. Fade só em elementos que entram depois do corte (2ª frase da cena B, adesivo, cartão do CTA). **Todo o conteúdo de cada cena de 2 s fica opaco até 0,40 s após o corte (>= 1,6 s legível antes do próximo corte).** Adesivo salta com `back` curto (sobressalto <= 20%). Nada flutua, nada em loop. Respiro só no hold final (12,75 a 15,00 s) |
 | Tela real | `docs/telas/04-app-loja.png`, `09-app-pix.png`, `11-app-acompanhamento.png`; moldura: retângulo arredondado noite, sem notch |
 | Sem trilha | O MP4 sai com silêncio. Trilha: ver §6 |
 
@@ -59,14 +59,14 @@ Compasso: 2,0 s por cena a 120 BPM (4/4). Microeventos em múltiplos de 0,25 s. 
 
 | Tempo | Cena | O que aparece | Texto na tela | Movimento | Transição | Som desejado |
 |---|---|---|---|---|---|---|
-| 0,00 a 2,00 | **A. Gancho** (fundo noite) | Cartaz tipográfico à esquerda, 5 linhas de 224 px. "fechou" sobre marca-texto lima inclinado | A loja / **fechou** / antes de / você / chegar. | Quadro 0 já mostra "A loja fechou". "antes de" em 0,25, "você" em 0,50, "chegar." em 0,75 (cada uma sobe 34 px em 0,14 s). Resto parado até 2,0 (tempo de leitura) | Entra seco, sem fade de abertura | Kick grave seco em 0,00. Três estalos secos (0,25, 0,50, 0,75) |
-| 2,00 a 4,00 | **B. Marca** (fundo roxo) | Logo branco (símbolo + "webag") de 800 px no centro, frase de 104 px abaixo | Escolha no app. / Receba **em casa.** | Corte seco para o roxo. Barras crescem da esquerda em 2,00 / 2,06 / 2,12; sacola salta (0,8 a 1,0) em 2,10; palavra entra da direita em 2,24. Linha 1 em 2,50; linha 2 em 3,00 | Corte seco de noite para roxo | Kick + clap fortes em 2,00 (maior acento do primeiro terço). Três toques curtos nas barras. Estalo em 2,50 e em 3,00 |
-| 4,00 a 6,00 | **C. Passo 1** (noite) | Numeral "1" lima de 640 px à esquerda; título 128 px; aparelho à direita com a tela da loja; adesivo | **Escolha a loja.** Adesivo: "Tempo e taxa antes de pedir" | Numeral sobe em 4,00; título em 4,08 e 4,16; aparelho sobe 300 px em 0,28 s (4,12 a 4,40); adesivo salta em 5,00 | Corte seco | Kick + clap em 4,00. Subida curta de ruído (<= 0,3 s) no aparelho. Click grave em 5,00 |
-| 6,00 a 8,00 | **D. Passo 2** (roxo) | Igual a C, com a tela do PIX (valor e contador) | **Pague com PIX.** Adesivo: "Confirma sozinho" | Mesmo padrão em 6,00 / 6,08 / 6,16 / 6,12 / 7,00 | Corte seco | Mesmo acento de C em 6,00 e 7,00 |
-| 8,00 a 10,00 | **E. Passo 3** (noite) | Igual a C, com a tela de acompanhamento (cartão noite com a faixa de horário) | **Acompanhe até a porta.** Adesivo: "Fale com a loja pelo WhatsApp" | Mesmo padrão em 8,00 / 8,08 / 8,16 / 8,12 / 9,00 | Corte seco | Mesmo acento de C em 8,00 e 9,00 |
-| 10,00 a 12,00 | **G1. Em breve** (roxo) | Logo branco pequeno no topo (y 300); "Em" e "breve." de 300 px, "breve." sobre marca-texto lima | Em / **breve.** | "Em" sobe 40 px em 10,00; "breve." salta de 90% a 100% em 10,04 | Corte seco | Acento mais forte do vídeo: kick + sub grave com cauda de ~0,5 s em 10,00 |
+| 0,00 a 2,00 | **A. Gancho** (fundo noite) | Cartaz tipográfico à esquerda, 5 linhas de 224 px. "fechou" sobre marca-texto lima inclinado | A loja / **fechou** / antes de / você / chegar. | Quadro 0 já mostra "A loja fechou". "antes de" em 0,10, "você" em 0,20, "chegar." em 0,30 (cada uma sobe 24 px em 0,10 s); frase completa e opaca em 0,36 s. Resto parado até 2,0 (1,6 s de leitura) | Entra seco, sem fade de abertura | Kick grave seco em 0,00. Três estalos secos (0,10, 0,20, 0,30; semicolcheias a 120 BPM seriam 0,125 / 0,25 / 0,375, mas atrasam a frase completa para 0,43 s) |
+| 2,00 a 4,00 | **B. Marca** (fundo roxo) | Logo branco (símbolo + "webag") de 800 px no centro, frase de 104 px abaixo | Escolha no app. / Receba **em casa.** | Corte seco para o roxo; logo inteiro e "Escolha no app." já em cena em 2,00. Barras partem de 40% e crescem em 2,00 / 2,03 / 2,07 (0,15 s); sacola de 80% a 100% em 2,00; palavra desliza 36 px em 2,00 a 2,13; linha 1 desloca 8 px em 0,10 s. Linha 2 em 2,25 (opaca em 2,32) | Corte seco de noite para roxo | Kick + clap fortes em 2,00 (maior acento do primeiro terço). Estalo em 2,25 |
+| 4,00 a 6,00 | **C. Passo 1** (noite) | Numeral "1" lima de 640 px à esquerda; título 128 px; aparelho à direita com a tela da loja; adesivo | **Escolha a loja.** Adesivo: "Tempo e taxa antes de pedir" | Em 4,00 numeral e título já opacos (deslocam 8 px em 0,10 s); aparelho sobe 260 px em 0,20 s (4,00 a 4,20), opaco desde 4,00; adesivo salta em 4,25 (opaco em 4,33) | Corte seco | Kick + clap em 4,00. Subida curta de ruído (<= 0,2 s) no aparelho. Click grave em 4,25 |
+| 6,00 a 8,00 | **D. Passo 2** (roxo) | Igual a C, com a tela do PIX (valor e contador) | **Pague com PIX.** Adesivo: "Confirma sozinho" | Mesmo padrão em 6,00 e 6,25 | Corte seco | Mesmo acento de C em 6,00 e 6,25 |
+| 8,00 a 10,00 | **E. Passo 3** (noite) | Igual a C, com a tela de acompanhamento (cartão noite com a faixa de horário) | **Acompanhe até a porta.** Adesivo: "Fale com a loja pelo WhatsApp" | Mesmo padrão em 8,00 e 8,25 | Corte seco | Mesmo acento de C em 8,00 e 8,25 |
+| 10,00 a 12,00 | **G1. Em breve** (roxo) | Logo branco pequeno no topo (y 300); "Em" e "breve." de 300 px, "breve." sobre marca-texto lima | Em / **breve.** | "Em" e "breve." já opacos em 10,00; "Em" desloca 8 px em 0,10 s; "breve." salta de 90% a 100% em 0,18 s | Corte seco | Acento mais forte do vídeo: kick + sub grave com cauda de ~0,5 s em 10,00 |
 | 12,00 a 15,00 | **G2. CTA único** (roxo) | Cartão noite de 912 px com a chamada; sublinhado lima desenha sob a segunda linha | Siga para saber / **quando abrir.** | Cartão sobe 60 px em 12,00 (0,22 s). Sublinhado cresce da esquerda em 12,45 (0,30 s). Parado de 12,75 a 15,00 para a leitura | Sem corte; o cartão entra sobre o fecho | Clap seco em 12,00 e um toque agudo em 12,45. Batida cai de volume (ou filtro passa-baixa) até o fim |
-| 4,00 a 10,00 | Camada fixa | Caixa noite pequena na base (y 1534) | Telas do app em teste. | Estática | | |
+| 4,00 a 10,00 | Camada fixa | Caixa noite pequena à esquerda (y 1462 a 1516, base alinhada ao aparelho; 404 px acima da borda inferior, fora da faixa da interface) | Telas do app em teste. | Estática | | |
 
 Primeiro quadro (miniatura/capa): cena A em 0,0 s tem 2 linhas; uma capa melhor é o quadro de 1,50 s (hook completo). Use `--capa 1.5` no render.
 
@@ -78,7 +78,7 @@ Primeiro quadro (miniatura/capa): cena A em 0,0 s tem 2 linhas; uma capa melhor 
 | Tipo de batida | Instrumental, **sem vocal**, batida seca e curta: kick grave, estalo ou clap no 2 e no 4, chimbal fechado em colcheias. Hip hop instrumental, trap leve ou eletrônica mínima. Nada de pad longo, nada de épico, nada de ukulele/"feliz de comercial" |
 | Andamento | 120 BPM (aceita 112 a 126). Compasso de 2,0 s: cortes em 0, 2, 4, 6, 8, 10 e CTA em 12. A 100 BPM o compasso é 2,4 s; mude `T` no HTML |
 | Início | A faixa precisa **começar na batida 1** (corte o início da música no editor do Instagram); sem fade-in |
-| Acentos | Fortes em 0,00, 2,00 e 10,00; médios em 4,00, 6,00, 8,00 e 12,00; pequenos nos microeventos (0,25 / 0,50 / 0,75 / 2,50 / 3,00 / 5,00 / 7,00 / 9,00 / 12,45) |
+| Acentos | Fortes em 0,00, 2,00 e 10,00; médios em 4,00, 6,00, 8,00 e 12,00; pequenos nos microeventos (0,10 / 0,20 / 0,30 / 2,25 / 4,25 / 6,25 / 8,25 / 12,45) |
 | Fim | A batida cai de volume entre 12,00 e 15,00 para não competir com a leitura; fade-out no último segundo |
 | Volume | Música baixa o bastante para o vídeo ainda ser entendido sem som (ele já é) |
 
@@ -90,7 +90,7 @@ Depois de publicar: ver no Instagram o **Skip Rate** e o gráfico de retenção.
 
 | Critério | Como o vídeo atende |
 |---|---|
-| Gancho nos primeiros 1,5 s | "A loja fechou" no quadro 0; frase completa em 0,89 s |
+| Gancho nos primeiros 1,5 s | "A loja fechou" no quadro 0; frase completa em 0,36 s |
 | Entendido sem som | Todo conteúdo é texto grande; nenhuma informação depende de áudio |
 | Um único CTA | "Siga para saber quando abrir." É a única chamada; "Em breve." é informação, não ação |
 | Contraste AA | Ver §4; texto branco sobre roxo só em corpo >= 104 px |

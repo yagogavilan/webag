@@ -8,7 +8,8 @@
 <style>
 /* Contrato com o render: palco 1080x1920, window.__duration = 15, window.setTime(t) posiciona TUDO no instante t (qualquer ordem).
    Nenhuma CSS animation/transition, nenhum requestAnimationFrame, Date.now ou Math.random. Um único timeline em JS puro (abaixo).
-   Margens seguras do Stories: topo 250 px e base 340 px livres; laterais 84 px. Todo texto fica entre y=270 e y=1575. */
+   Margens seguras do Stories: topo 250 px e base 340 px livres; laterais 84 px. Todo texto fica entre y=270 e y=1575 (o aviso "Telas do app em teste." termina em y=1516, alinhado à base do aparelho).
+   O aparelho atravessa a faixa inferior por ~4 quadros ao entrar (movimento transitório) e repousa em y 590 a 1516. */
 @font-face { font-family: "Bricolage Grotesque"; font-weight: 800; font-display: block; src: url("../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
@@ -39,7 +40,7 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
 .vph { left: 552px; top: 590px; width: 444px; height: 926px; --rf: 56px; --b: 12px; }
 .stk { position: absolute; left: 84px; top: 1160px; transform-origin: 0 50%; }
 .stk .sticker { font-size: 42px; }
-#sNota .nota { position: absolute; left: 84px; top: 1534px; background: var(--noite); color: var(--branco); font: 600 32px/1 var(--texto); padding: 10px 18px 12px; border-radius: 10px; }
+#sNota .nota { position: absolute; left: 84px; top: 1462px; background: var(--noite); color: var(--branco); font: 600 32px/1 var(--texto); padding: 10px 18px 12px; border-radius: 10px; }
 
 /* cena G: fecho */
 #logoG { position: absolute; left: 84px; top: 300px; width: 420px; height: 116px; color: var(--branco); fill: currentColor; }
@@ -185,10 +186,19 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
     if (!TR[id][prop]) TR[id][prop] = [];
     TR[id][prop].push({ t: t, d: d, from: from, to: to, e: EASE[ease || 'out3'] });
   }
-  // entrada seca: sobe dy px e aparece
+  // Regras de corte (ritmo de Stories): no quadro do corte NADA começa invisível. Quem é protagonista da cena
+  // (numeral, título, logo, "Em breve.") já está opaco e legível no 1º quadro; só se desloca 8 px em 3 quadros.
+  // Todo o conteúdo da cena fica opaco até 0,40 s depois do corte, ou seja, >= 1,6 s legível antes do próximo corte (cenas de 2,0 s).
+  // Fade só existe em elementos que entram DEPOIS do corte (linhas de apoio, adesivo, cartão do CTA).
+
+  // entrada que aparece (fade curto) e sobe dy px: só para elementos que NÃO estão no quadro do corte
   function rise(id, t, dy, d, ease) {
     tr(id, 'o', t, d * 0.6, 0, 1, 'lin');
     tr(id, 'y', t, d, dy, 0, ease || 'out3');
+  }
+  // entrada de corte: já opaco no 1º quadro, só desloca dy px (6 a 8) em d (2 a 3 quadros). Sem trilha de opacidade.
+  function snap(id, t, dy, d) {
+    tr(id, 'y', t, d, dy, 0, 'out3');
   }
   // sobressalto curto (adesivo, selo)
   function pop(id, t, d, s0) {
@@ -196,40 +206,42 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
     tr(id, 'sx', t, d, s0, 1, 'back');
     tr(id, 'sy', t, d, s0, 1, 'back');
   }
+  // sobressalto de corte: já opaco, só escala de s0 a 1
+  function bump(id, t, d, s0) {
+    tr(id, 'sx', t, d, s0, 1, 'back');
+    tr(id, 'sy', t, d, s0, 1, 'back');
+  }
 
-  // A  gancho: linhas 1 e 2 no quadro 0; as outras entram em colcheias (0,25 s)
-  rise('aL3', 0.25, 34, 0.14);
-  rise('aL4', 0.50, 34, 0.14);
-  rise('aL5', 0.75, 34, 0.14);
+  // A  gancho: linhas 1 e 2 no quadro 0; as outras em 3, 6 e 9 quadros (0,10 / 0,20 / 0,30 s); frase completa e opaca em 0,36 s
+  rise('aL3', 0.10, 24, 0.10);
+  rise('aL4', 0.20, 24, 0.10);
+  rise('aL5', 0.30, 24, 0.10);
 
-  // B  barras crescem da esquerda (60 ms entre elas), sacola salta, palavra entra, frase em 2 tempos
-  tr('bB1', 'sx', T.B + 0.00, 0.18, 0, 1, 'out3');
-  tr('bB2', 'sx', T.B + 0.06, 0.18, 0, 1, 'out3');
-  tr('bB3', 'sx', T.B + 0.12, 0.18, 0, 1, 'out3');
-  pop('bBag', T.B + 0.10, 0.20, 0.8);
-  tr('bWord', 'x', T.B + 0.24, 0.18, 36, 0, 'out3');
-  tr('bWord', 'o', T.B + 0.24, 0.10, 0, 1, 'lin');
-  rise('bT1', T.B + 0.50, 30, 0.16);
-  rise('bT2', T.B + 1.00, 30, 0.16);
+  // B  corte seco: logo inteiro e 1ª frase já em cena no quadro do corte; barras partem de 40%, sacola de 80%, palavra desliza 36 px
+  tr('bB1', 'sx', T.B + 0.00, 0.15, 0.4, 1, 'out3');
+  tr('bB2', 'sx', T.B + 0.03, 0.15, 0.4, 1, 'out3');
+  tr('bB3', 'sx', T.B + 0.07, 0.15, 0.4, 1, 'out3');
+  bump('bBag', T.B + 0.00, 0.20, 0.8);
+  tr('bWord', 'x', T.B + 0.00, 0.13, 36, 0, 'out5');
+  snap('bT1', T.B + 0.00, 8, 0.10);
+  rise('bT2', T.B + 0.25, 24, 0.12);
 
-  // C, D, E  numeral, título em 2 linhas, aparelho sobe, adesivo no tempo 3 do compasso
+  // C, D, E  numeral e título no quadro do corte (desloca 8 px em 3 quadros); aparelho entra de baixo em 6 quadros
+  // (0,20 s), opaco desde o 1º quadro, easing de saída forte (out5); adesivo em 0,25 s (opaco em 0,33 s)
   function passo(s, p) {
-    rise(p + 'Num', s + 0.00, 50, 0.16);
-    rise(p + 'T1',  s + 0.08, 36, 0.16);
-    rise(p + 'T2',  s + 0.16, 36, 0.16);
-    tr(p + 'Ph', 'o', s + 0.12, 0.08, 0, 1, 'lin');
-    tr(p + 'Ph', 'y', s + 0.12, 0.28, 300, 0, 'out5');
-    pop(p + 'St', s + 1.00, 0.20, 0.6);
+    snap(p + 'Num', s, 8, 0.10);
+    snap(p + 'T1',  s, 8, 0.10);
+    snap(p + 'T2',  s, 8, 0.10);
+    tr(p + 'Ph', 'y', s, 0.20, 260, 0, 'out5');
+    pop(p + 'St', s + 0.25, 0.20, 0.6);
   }
   passo(T.C, 'c');
   passo(T.D, 'd');
   passo(T.E, 'e');
 
-  // G  "Em breve." no corte; chamada única em 12,0 s; sublinhado desenha em 12,45 s
-  rise('gT1', T.G + 0.00, 40, 0.14);
-  tr('gT2', 'o', T.G + 0.04, 0.06, 0, 1, 'lin');
-  tr('gT2', 'sx', T.G + 0.04, 0.18, 0.9, 1, 'back');
-  tr('gT2', 'sy', T.G + 0.04, 0.18, 0.9, 1, 'back');
+  // G  "Em breve." no corte (já opaco); chamada única em 12,0 s; sublinhado desenha em 12,45 s; hold de 12,75 a 15,0 s
+  snap('gT1', T.G + 0.00, 8, 0.10);
+  bump('gT2', T.G + 0.00, 0.18, 0.9);
   rise('gCta', T.G + 2.00, 60, 0.22, 'out5');
   tr('gUl', 'sx', T.G + 2.45, 0.30, 0, 1, 'out3');
 
@@ -259,9 +271,9 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
     if (!isFinite(t)) t = 0;
     if (t < 0) t = 0;
     if (t > DURATION) t = DURATION;
-    var k, a, p, o;
+    var k, a, p, o, ts = t + 1e-6; // tolerância: t=3,9999999 não pode cair num quadro sem cena
     for (k = 0; k < SC.length; k++) {
-      SC[k].el.style.visibility = (t >= SC[k].t0 && t < SC[k].t1) ? 'visible' : 'hidden';
+      SC[k].el.style.visibility = (ts >= SC[k].t0 && ts < SC[k].t1) ? 'visible' : 'hidden';
     }
     for (k = 0; k < ANIM.length; k++) {
       a = ANIM[k]; p = a.p;
