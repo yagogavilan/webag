@@ -304,7 +304,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
       <PageHeader title={detail.store.name ?? 'Loja'} description={`${detail.store.address?.city ?? ''} · enviada para análise`} action={<Badge tone="info" testId={T('status-badge')}>Em análise</Badge>} />
       {notReviewed ? (
         <Banner tone="danger" testId={T('not-reviewed')}>
-          A loja não foi aprovada: o servidor não registrou a abertura {notReviewed.names.length === 1 ? 'do documento' : 'dos documentos'} <strong>{notReviewed.names.join(', ')}</strong>.{' '}
+          A loja não foi aprovada: o servidor não registrou a abertura {notReviewed.names.length === 1 ? 'do documento' : 'dos documentos'} <strong>{notReviewed.names.join('; ')}</strong>.{' '}
           {notReviewed.names.length === 1 ? 'Confira o documento na área ao lado e aprove de novo.' : 'Abra cada um na área ao lado e aprove de novo.'}
         </Banner>
       ) : null}

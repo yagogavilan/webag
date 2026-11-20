@@ -20,11 +20,18 @@ test.describe('Aprovar loja (admin)', () => {
     await page.getByTestId('admin.caso.reveal-document').click();
     await expect(page.getByTestId('admin.caso.value-document')).not.toContainText('•');
 
-    // "Aprovar" só com a checklist completa
+    // "Aprovar" só com a checklist completa e todos os documentos abertos (SEC-188)
     await expect(page.getByTestId('admin.caso.approve')).toBeDisabled();
     await expect(page.getByText('Confira os 6 itens para aprovar.')).toBeVisible();
     for (const id of ['legible', 'document', 'address', 'category', 'contact', 'duplicate']) await page.getByTestId(`admin.caso.check-${id}-ok`).check();
     await expect(page.getByText('Checklist completa. Aprovar liberado.')).toBeVisible();
+    await expect(page.getByTestId('admin.caso.approve')).toBeDisabled();
+    await expect(page.getByTestId('admin.caso.approve-help')).toContainText('Abra');
+    for (const id of first.documents) {
+      await page.getByTestId(`admin.caso.doc-thumb-${id}`).click();
+      await expect(page.getByTestId('admin.caso.doc-image')).toBeVisible();
+    }
+    await expect(page.getByTestId('admin.caso.approve')).toBeEnabled();
     await page.getByTestId('admin.caso.approve').click();
     await expect(page.getByText(`Aprovar ${first.name}?`)).toBeVisible();
     await page.getByTestId('admin.caso.confirm-approve').click();

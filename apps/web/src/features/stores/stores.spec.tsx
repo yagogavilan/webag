@@ -188,7 +188,7 @@ describe('Caso de aprovação (A2)', () => {
   });
 
   const threeDocs = ['d1', 'd2', 'd3'].map((id, i) => ({ id, kind: (['id_front', 'id_back', 'address_proof'] as const)[i]!, uploadedAt: '2026-11-16T11:00:00Z', current: true }));
-  const accessOk = (url: string) => (/^admin\/stores\/s1\/documents\/d\d\/access$/.test(path(url)) ? json({ url: `https://files.test/${path(url).split('/')[4]}.jpg?sig=1`, expiresInSeconds: 300, contentType: 'image/jpeg' }) : undefined);
+  const accessOk = (url: URL) => (/^admin\/stores\/s1\/documents\/d\d\/access$/.test(path(url)) ? json({ url: `https://files.test/${path(url).split('/')[4]}.jpg?sig=1`, expiresInSeconds: 300, contentType: 'image/jpeg' }) : undefined);
 
   it('"Aprovar" também espera a abertura de todos os documentos, mesmo com os 6 itens marcados à mão (SEC-188)', async () => {
     vi.stubGlobal('fetch', mockFetch((url) => (path(url) === 'admin/stores/s1' ? json(detail({}, { documents: threeDocs })) : undefined), accessOk).impl);
