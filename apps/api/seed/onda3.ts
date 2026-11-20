@@ -200,7 +200,8 @@ export async function seedOnda3(db: Db, options: SeedOnda2Options = {}): Promise
       const mercado = (await db.select().from(categories)).find((c) => c.name === 'Mercado');
       const [anyBanner] = await db.select({ id: banners.id }).from(banners).limit(1);
       const bannerSeeds: (BannerArt & { title: string; destinationType: 'coupon' | 'category' | 'store'; destinationCode: string | null; destinationId: string | null })[] = [
-        { title: 'Frete grátis acima de R$ 50', theme: 'lime', object: 'bag', lines: ['Frete grátis', 'acima de R$ 50'], cta: 'Usar cupom', destinationType: 'coupon', destinationCode: 'FRETEGRATIS', destinationId: null },
+        // Copy neutra (HIP-L12: frete grátis desligado no lançamento; DEC-078). Sem cupom no destino, o app não imprime código como selo.
+        { title: 'Entrega pelo Webag', theme: 'lime', object: 'bag', lines: ['Entrega pelo', 'Webag'], cta: 'Ver lojas', destinationType: 'category', destinationCode: null, destinationId: mercado?.id ?? null },
         { title: 'Tudo para o seu mercado', theme: 'ink', object: 'basket', lines: ['Tudo para o', 'seu mercado'], cta: 'Ver mercado', destinationType: 'category', destinationCode: null, destinationId: mercado?.id ?? null },
         { title: 'Novidades na Moda Passo Firme', theme: 'purple', object: 'sneaker', lines: ['Novidades na', 'Moda Passo Firme'], cta: 'Ver loja', destinationType: 'store', destinationCode: null, destinationId: firstStore?.id ?? null },
       ];
