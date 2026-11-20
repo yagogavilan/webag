@@ -41,6 +41,15 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
     await ctx.close();
   });
 
+  /** SEC-188: o servidor só aprova depois que o admin abriu cada documento vigente (como o painel faz no "Conferir tudo"). */
+  const openAll = async (admin: TestAdmin, storeId: string): Promise<string[]> => {
+    const detail = await ctx.http.get(`/v1/admin/stores/${storeId}`).set(bearer(admin.accessToken)).expect(200);
+    const ids = (detail.body.documents as { id: string; current: boolean }[]).filter((d) => d.current).map((d) => d.id);
+    for (const id of ids) await ctx.http.post(`/v1/admin/stores/${storeId}/documents/${id}/access`).set(bearer(admin.accessToken)).send({ reason: 'initial_review' }).expect(200);
+    return ids;
+  };
+  const approveStore = (admin: TestAdmin, storeId: string) => ctx.http.post(`/v1/admin/stores/${storeId}/approve`).set(bearer(admin.accessToken)).send({});
+
   const create = (user: { accessToken: string }, body: Record<string, unknown>) => ctx.http.post('/v1/stores').set(bearer(user.accessToken)).send(body);
 
   describe('dados da loja e CPF/CNPJ (O2-ONB)', () => {
@@ -328,6 +337,7 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({ actorId: ops.userId, reason: 'initial_review' });
 
+      await openAll(ops, store.id);
       const approved = await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
       expect(approved.body.status).toBe('approved');
       expect(ctx.mail.to(m.email).some((mail) => mail.subject.includes('aprovada'))).toBe(true);
@@ -404,12 +414,83 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
       expect(consumed).toBeGreaterThan(3_500_000);
       expect(consumed).toBeLessThan(3_700_000);
       expect(await ctx.db.select().from(storeReviewItems).where(and(eq(storeReviewItems.storeId, store.id)))).toHaveLength(2);
+      await openAll(ops, store.id);
       await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
+    });
+
+    it('SEC-188: a loja só é aprovada depois que o admin abriu cada documento vigente; sem isso, 409 DOCUMENTS_NOT_REVIEWED com os documentos que faltam', async () => {
+      const m = await createMerchant(ctx);
+      const store = await createStoreViaApi(ctx, m, { submit: true });
+      const detail = await ctx.http.get(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).expect(200);
+      const docs = detail.body.documents as { id: string; kind: string }[];
+      expect(docs).toHaveLength(3);
+
+      // nenhum aberto: 409 com um erro por documento, loja segue em análise, tentativa auditada
+      const none = await approveStore(ops, store.id).expect(409);
+      expect(none.body).toMatchObject({ code: 'DOCUMENTS_NOT_REVIEWED', status: 409 });
+      expect(none.body.errors.map((e: { field: string }) => e.field).sort()).toEqual(['documents.address_proof', 'documents.id_back', 'documents.id_front']);
+      expect((await ctx.db.select().from(stores).where(eq(stores.id, store.id)))[0]?.status).toBe('in_review');
+      const blocked = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, store.id), eq(auditLog.action, 'store.approve_blocked')));
+      expect(blocked).toHaveLength(1);
+      expect(blocked[0]).toMatchObject({ actorId: ops.userId, reason: 'documents_not_reviewed' });
+
+      // abriu 2 de 3: ainda 409, agora só com o que falta
+      for (const doc of docs.slice(0, 2)) await ctx.http.post(`/v1/admin/stores/${store.id}/documents/${doc.id}/access`).set(bearer(ops.accessToken)).send({ reason: 'initial_review' }).expect(200);
+      const partial = await approveStore(ops, store.id).expect(409);
+      expect(partial.body.code).toBe('DOCUMENTS_NOT_REVIEWED');
+      expect(partial.body.errors).toHaveLength(1);
+
+      // a conferência é POR ADMIN: outro admin que abriu tudo não vale para quem aprova
+      await openAll(superAdmin, store.id);
+      expect((await approveStore(ops, store.id).expect(409)).body.code).toBe('DOCUMENTS_NOT_REVIEWED');
+
+      // abriu o último: aprova; o registro de visualização é por documento e por admin, com data
+      await ctx.http.post(`/v1/admin/stores/${store.id}/documents/${docs[2]!.id}/access`).set(bearer(ops.accessToken)).send({ reason: 'initial_review' }).expect(200);
+      expect((await approveStore(ops, store.id).expect(200)).body.status).toBe('approved');
+      const views = await ctx.db.select().from(auditLog).where(and(eq(auditLog.action, 'store.document_view'), eq(auditLog.actorId, ops.userId)));
+      const mine = views.filter((v) => docs.some((d) => d.id === v.targetId));
+      expect(new Set(mine.map((v) => v.targetId)).size).toBe(3);
+      expect(mine.every((v) => v.at instanceof Date && v.reason === 'initial_review')).toBe(true);
+    });
+
+    it('SEC-188: documento reenviado exige nova abertura (o antigo, já aberto, não vale)', async () => {
+      const m = await createMerchant(ctx);
+      const store = await createStoreViaApi(ctx, m, { submit: true });
+      await openAll(ops, store.id);
+      await ctx.http.post(`/v1/admin/stores/${store.id}/request-correction`).set(bearer(ops.accessToken)).send({ items: [{ item: 'id_front', reason: 'Foto cortada' }] }).expect(200);
+      const fresh = await uploadFile(ctx, m, { storeId: store.id, purpose: 'store_document', contentType: 'image/jpeg', body: await jpegBuffer(330, 200) });
+      await ctx.http.post(`/v1/stores/${store.id}/documents`).set(bearer(m.accessToken)).send({ kind: 'id_front', uploadId: fresh.completed!.body.id }).expect(204);
+      await ctx.http.post(`/v1/stores/${store.id}/submit`).set(bearer(m.accessToken)).send({}).expect(200);
+
+      const stale = await approveStore(ops, store.id).expect(409);
+      expect(stale.body.code).toBe('DOCUMENTS_NOT_REVIEWED');
+      expect(stale.body.errors.map((e: { field: string }) => e.field)).toEqual(['documents.id_front']);
+      await openAll(ops, store.id);
+      await approveStore(ops, store.id).expect(200);
+    });
+
+    it('SEC-188 por perfil: financeiro, suporte e lojista não aprovam (403) nem abrem documento; sem token 401; decisão repetida segue 409 "já decidida"', async () => {
+      const m = await createMerchant(ctx);
+      const store = await createStoreViaApi(ctx, m, { submit: true });
+      const [doc] = (await ctx.http.get(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).expect(200)).body.documents as { id: string }[];
+      for (const who of [finance, support, m]) {
+        await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(who.accessToken)).send({}).expect(403);
+        await ctx.http.post(`/v1/admin/stores/${store.id}/documents/${doc!.id}/access`).set(bearer(who.accessToken)).send({ reason: 'doubt' }).expect(403);
+      }
+      await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).send({}).expect(401);
+      expect((await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, doc!.id), eq(auditLog.action, 'store.document_view')))).length).toBe(0);
+      // super admin segue o mesmo caminho: sem abrir, 409; abrindo, 200
+      expect((await approveStore(superAdmin, store.id).expect(409)).body.code).toBe('DOCUMENTS_NOT_REVIEWED');
+      await openAll(superAdmin, store.id);
+      await approveStore(superAdmin, store.id).expect(200);
+      // já aprovada: a decisão repetida continua sendo o 409 de "já decidida", não o de documentos
+      expect((await approveStore(superAdmin, store.id).expect(409)).body.code).toBe('STORE_ALREADY_DECIDED');
     });
 
     it('O2-APR-06: duas decisões simultâneas → exatamente uma; a outra recebe 409 "Já decidida por [nome]"', async () => {
       const m = await createMerchant(ctx);
       const store = await createStoreViaApi(ctx, m, { submit: true });
+      await openAll(ops, store.id);
       const results = await Promise.all([
         ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}),
         ctx.http.post(`/v1/admin/stores/${store.id}/reject`).set(bearer(superAdmin.accessToken)).send({ reason: 'Documento ilegível' }),
@@ -447,6 +528,7 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
     it('O2-APR-12/13/14/16: suspender (motivo obrigatório), lojista suspenso não edita nem força visibilidade, reativar volta; admin edita com antes/depois; suporte não edita', async () => {
       const m = await createMerchant(ctx);
       const store = await createStoreViaApi(ctx, m, { submit: true });
+      await openAll(ops, store.id);
       await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
       await ctx.http.post(`/v1/admin/stores/${store.id}/suspend`).set(bearer(ops.accessToken)).send({}).expect(400);
       await ctx.http.post(`/v1/admin/stores/${store.id}/suspend`).set(bearer(ops.accessToken)).send({ reason: 'Denúncia de produto proibido' }).expect(200);
@@ -474,6 +556,7 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
     it('R-23: nome alterado depois de aprovada fica pendente de análise (a loja segue com o nome antigo) e o admin decide', async () => {
       const m = await createMerchant(ctx);
       const store = await createStoreViaApi(ctx, m, { submit: true, name: 'Nome Antigo' });
+      await openAll(ops, store.id);
       await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
       const res = await ctx.http.patch(`/v1/stores/${store.id}/profile`).set(bearer(m.accessToken)).send({ name: 'Nome Novo', description: 'Descrição vale na hora' }).expect(200);
       expect(res.body).toMatchObject({ name: 'Nome Antigo', pendingReview: true, description: 'Descrição vale na hora' });

@@ -17944,7 +17944,7 @@ export const getAccessStoreDocumentUrl = (storeId: string,
 }
 
 /**
- * Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco.
+ * Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco. SEC-188: a abertura (por documento, por admin, com data) é o registro que a aprovação da loja exige (`approveStore`).
  * @summary Abrir documento (URL de 5 min, auditada)
  */
 export const accessStoreDocument = async (storeId: string,
@@ -18005,7 +18005,7 @@ export const getApproveStoreUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `stores:decide`. De "em análise" para "aprovada". 409 `STORE_ALREADY_DECIDED` ("Já decidida por [nome]") se outro admin decidiu antes.
+ * Permissão `stores:decide`. De "em análise" para "aprovada". 409 `STORE_ALREADY_DECIDED` ("Já decidida por [nome]") se outro admin decidiu antes. SEC-188: 409 `DOCUMENTS_NOT_REVIEWED` se QUEM APROVA não abriu (`POST .../documents/{documentId}/access`, auditado como `store.document_view`) cada documento obrigatório vigente da loja; `errors[].field` = `documents.<kind>` do que falta. Documento reenviado é outro documento e exige nova abertura. A tentativa bloqueada é auditada (`store.approve_blocked`).
  * @summary Aprovar a loja
  */
 export const approveStore = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<approveStoreResponse> => {

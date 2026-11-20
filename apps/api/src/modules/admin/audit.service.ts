@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, lt, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, lte, max } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
@@ -73,6 +73,22 @@ export class AuditService {
       requestId: ctx.requestId,
       reason: entry.reason ?? null,
     });
+  }
+
+  /**
+   * Última vez em que `actorId` praticou `action` sobre cada um dos alvos (`targetId`), ou nada se nunca praticou. Serve para provar, no
+   * servidor, que um admin abriu/conferiu um recurso antes de decidir (SEC-188). Lê a mesma trilha append-only que a auditoria mostra.
+   */
+  async lastByActor(executor: DbOrTx, filter: { action: string; targetType: string; actorId: string; targetIds: string[] }): Promise<Map<string, Date>> {
+    if (filter.targetIds.length === 0) return new Map();
+    const rows = await executor
+      .select({ targetId: auditLog.targetId, at: max(auditLog.at) })
+      .from(auditLog)
+      .where(and(eq(auditLog.action, filter.action), eq(auditLog.targetType, filter.targetType), eq(auditLog.actorId, filter.actorId), inArray(auditLog.targetId, filter.targetIds)))
+      .groupBy(auditLog.targetId);
+    const result = new Map<string, Date>();
+    for (const row of rows) if (row.targetId && row.at) result.set(row.targetId, row.at);
+    return result;
   }
 
   /** Registro fora de transação (ex.: acesso negado, onde não há mudança a desfazer). */

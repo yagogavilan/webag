@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
-import { errors } from '../../platform/http/app-error.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { MailService } from '../../platform/mail/mail.service.js';
 import { storeDecisionEmail } from '../../platform/mail/templates.js';
@@ -14,7 +14,7 @@ import { paymentAccounts, storeDocuments, storeReviewItems, storeStatusHistory, 
 import { isOverdue } from './domain/business-days.js';
 import { maskDocument } from './domain/document.js';
 import { canTransitionStore, type StoreStatus } from './domain/state.js';
-import { StoresService, type Store } from './stores.service.js';
+import { REQUIRED_DOCUMENTS, StoresService, type Store } from './stores.service.js';
 
 export type DocumentAccessReason = 'initial_review' | 'doubt' | 'report';
 
@@ -140,10 +140,42 @@ export class AdminStoresService {
     return row?.name ?? null;
   }
 
+  /**
+   * SEC-188: só aprova se ESTE admin abriu (`store.document_view`, auditado em `documentAccessUrl`) cada documento obrigatório VIGENTE da loja.
+   * O reenvio cria um documento novo (outro id), então exige nova abertura. A "Conferir tudo" do painel é só interface: a regra é do servidor.
+   */
   async approve(storeId: string, admin: Principal, ctx: RequestContext): Promise<Store> {
-    const { store } = await this.decide(storeId, admin, 'in_review', 'approved', ctx, (_tx, before) => Promise.resolve({ approvedAt: before.approvedAt ?? new Date(), suspendedAt: null, suspensionReason: null }));
-    await this.notify(store, 'approved');
-    return store;
+    try {
+      const { store } = await this.decide(storeId, admin, 'in_review', 'approved', ctx, async (tx, before) => {
+        await this.assertDocumentsReviewed(tx, before, admin);
+        return { approvedAt: before.approvedAt ?? new Date(), suspendedAt: null, suspensionReason: null };
+      });
+      await this.notify(store, 'approved');
+      return store;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'DOCUMENTS_NOT_REVIEWED') {
+        await this.audit.recordStandalone(ctx, { action: 'store.approve_blocked', targetType: 'store', targetId: storeId, reason: 'documents_not_reviewed', after: { missing: error.problem.errors?.map((e) => e.field) ?? [] } }).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  private async assertDocumentsReviewed(tx: Parameters<Parameters<Db['transaction']>[0]>[0], store: Store, admin: Principal): Promise<void> {
+    const required = REQUIRED_DOCUMENTS[store.documentType];
+    const current = await tx
+      .select({ id: storeDocuments.id, kind: storeDocuments.kind })
+      .from(storeDocuments)
+      .where(and(eq(storeDocuments.storeId, store.id), isNull(storeDocuments.supersededAt), inArray(storeDocuments.kind, [...required])));
+    const viewed = await this.audit.lastByActor(tx, { action: 'store.document_view', targetType: 'store_document', actorId: admin.userId, targetIds: current.map((doc) => doc.id) });
+    const missing = required.filter((kind) => {
+      const doc = current.find((candidate) => candidate.kind === kind);
+      return !doc || !viewed.has(doc.id);
+    });
+    if (missing.length === 0) return;
+    throw new AppError(409, 'DOCUMENTS_NOT_REVIEWED', 'Documentos não conferidos', {
+      detail: missing.length === 1 ? 'Abra o documento que falta antes de aprovar a loja.' : `Abra os ${missing.length} documentos que faltam antes de aprovar a loja.`,
+      errors: missing.map((kind) => ({ field: `documents.${kind}`, message: 'Documento ainda não aberto por você (ou reenviado depois da última abertura).' })),
+    });
   }
 
   /** Pedir correção: um motivo por item reprovado; o prazo do SLA fica pausado até o reenvio. */
