@@ -100,17 +100,22 @@ function StoreData({ detail }: { detail: AdminStoreDetail }) {
   );
 }
 
-function Checklist({ checks, onChange, documents }: { checks: Checks; onChange: (next: Checks) => void; documents: AdminStoreDetail['documents'] }) {
+function Checklist({ checks, onChange, documents, pendingDocs }: { checks: Checks; onChange: (next: Checks) => void; documents: AdminStoreDetail['documents']; /** Documentos ainda não abertos pelo revisor (0 = pode conferir em bloco). */ pendingDocs: number }) {
   const set = (id: CheckId, patch: Partial<Checks[CheckId]>) => onChange({ ...checks, [id]: { ...checks[id], ...patch } });
   const done = checkedCount(checks);
   return (
     <section aria-labelledby="checklist-title" data-testid={T('checklist')}>
       <div className={ui.row} style={{ justifyContent: 'space-between' }}>
         <h3 id="checklist-title" className="wb-text-title2" style={{ margin: 0 }}>Checklist</h3>
-        <Button variant="text" size="sm" onClick={() => onChange(Object.fromEntries(CHECKLIST.map((item) => [item.id, { ...checks[item.id], value: 'ok' as const, note: '' }])) as Checks)} disabled={allOk(checks)} data-testid={T('check-all')}>
+        <Button variant="text" size="sm" onClick={() => onChange(Object.fromEntries(CHECKLIST.map((item) => [item.id, { ...checks[item.id], value: 'ok' as const, note: '' }])) as Checks)} disabled={allOk(checks) || pendingDocs > 0} aria-describedby={pendingDocs > 0 ? 'check-all-help' : undefined} data-testid={T('check-all')}>
           Conferir tudo
         </Button>
       </div>
+      {pendingDocs > 0 ? (
+        <p id="check-all-help" className={cx('wb-text-caption', ui.muted)} style={{ margin: '4px 0 0' }} data-testid={T('check-all-help')}>
+          {pendingDocs === 1 ? 'Abra o documento que falta para conferir tudo de uma vez.' : `Abra os ${pendingDocs} documentos que faltam para conferir tudo de uma vez.`}
+        </p>
+      ) : null}
       <p className={cx('wb-text-caption', ui.muted)} style={{ margin: '4px 0 0' }} aria-live="polite">
         {allOk(checks) ? 'Checklist completa. Aprovar liberado.' : `Conferido ${checks ? CHECKLIST.filter((i) => checks[i.id].value === 'ok').length : 0} de ${CHECKLIST.length}`}
         {done > 0 && problems(checks).length > 0 ? ` · ${problems(checks).length} com problema` : ''}
@@ -169,7 +174,11 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
   const [confirmedEmpty, setConfirmedEmpty] = useState(false);
   const [mobileTab, setMobileTab] = useState<'documents' | 'data' | 'decision'>(canDocuments ? 'documents' : 'data');
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+  const [openedDocs, setOpenedDocs] = useState<ReadonlySet<string>>(new Set());
+  const markOpened = useCallback((id: string) => setOpenedDocs((prev) => (prev.has(id) ? prev : new Set(prev).add(id))), []);
   const current = useMemo(() => detail.documents.filter((doc) => doc.current), [detail.documents]);
+  // Só segura a conferência em bloco quem pode abrir documentos; sem a permissão, o revisor marca item a item como antes.
+  const pendingDocs = canDocuments ? current.filter((doc) => !openedDocs.has(doc.id)).length : 0;
   const complete = allOk(checks);
   const conferred = CHECKLIST.filter((item) => checks[item.id].value === 'ok').length;
 
@@ -232,7 +241,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
     <div className={ui.stack}>
       {decide ? (
         <>
-          <Checklist checks={checks} onChange={setChecks} documents={detail.documents} />
+          <Checklist checks={checks} onChange={setChecks} documents={detail.documents} pendingDocs={pendingDocs} />
           <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>Comissão: padrão da plataforma.</p>
           <p className="wb-text-body" style={{ margin: 0 }} aria-live="polite">
             Conferido {conferred} de {CHECKLIST.length}
@@ -257,7 +266,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
       )}
     </div>
   );
-  const viewer = canDocuments ? <DocumentViewer storeId={storeId} documents={current} reason={ACCESS_REASON_FOR.in_review} selectedId={selectedDoc} onSelect={setSelectedDoc} /> : null;
+  const viewer = canDocuments ? <DocumentViewer storeId={storeId} documents={current} reason={ACCESS_REASON_FOR.in_review} selectedId={selectedDoc} onSelect={setSelectedDoc} onOpened={markOpened} /> : null;
 
   return (
     <div className={ui.stack}>

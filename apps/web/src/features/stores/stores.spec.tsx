@@ -43,7 +43,10 @@ const detail = (over: Partial<AdminStoreDetail['store']> = {}, extra: Partial<Ad
 });
 
 afterEach(() => vi.unstubAllGlobals());
-beforeEach(() => push.mockClear());
+beforeEach(() => {
+  push.mockClear();
+  window.sessionStorage.clear();
+});
 
 describe('catalog', () => {
   it('agrupa os problemas por destino e usa o documento escolhido', () => {
@@ -152,12 +155,53 @@ describe('Caso de aprovação (A2)', () => {
     expect(await screen.findByText('Casa Bela aprovada. Próxima loja da fila.')).toBeInTheDocument();
   });
 
-  it('"Conferir tudo" marca os 6 itens em 1 toque', async () => {
+  it('"Conferir tudo" marca os 6 itens em 1 toque depois de abrir o documento', async () => {
     vi.stubGlobal('fetch', server().impl);
     renderPanel(<StoreCasePage storeId="s1" />, 'super_admin');
-    await screen.findByTestId('admin.caso.approve');
+    await screen.findByTestId('admin.caso.doc-image');
+    await waitFor(() => expect(screen.getByTestId('admin.caso.check-all')).toBeEnabled());
     await userEvent.click(screen.getByTestId('admin.caso.check-all'));
     expect(screen.getByTestId('admin.caso.approve')).toBeEnabled();
+  });
+
+  it('"Conferir tudo" fica desabilitado até os 3 documentos serem abertos (H-34)', async () => {
+    const docs = ['d1', 'd2', 'd3'].map((id, i) => ({ id, kind: (['id_front', 'id_back', 'address_proof'] as const)[i]!, uploadedAt: '2026-11-16T11:00:00Z', current: true }));
+    vi.stubGlobal(
+      'fetch',
+      mockFetch(
+        (url) => (path(url) === 'admin/stores/s1' ? json(detail({}, { documents: docs })) : undefined),
+        (url) => (/^admin\/stores\/s1\/documents\/d\d\/access$/.test(path(url)) ? json({ url: `https://files.test/${path(url).split('/')[4]}.jpg?sig=1`, expiresInSeconds: 300, contentType: 'image/jpeg' }) : undefined),
+      ).impl,
+    );
+    renderPanel(<StoreCasePage storeId="s1" />, 'super_admin');
+    await screen.findByTestId('admin.caso.doc-image');
+    const all = screen.getByTestId('admin.caso.check-all');
+    expect(all).toBeDisabled();
+    expect(screen.getByTestId('admin.caso.check-all-help')).toHaveTextContent('Abra os 2 documentos que faltam');
+    await userEvent.click(screen.getByTestId('admin.caso.doc-thumb-d2'));
+    await waitFor(() => expect(screen.getByTestId('admin.caso.doc-image')).toHaveAttribute('src', expect.stringContaining('d2.jpg')));
+    expect(all).toBeDisabled();
+    await userEvent.click(screen.getByTestId('admin.caso.doc-thumb-d3'));
+    await waitFor(() => expect(screen.getByTestId('admin.caso.doc-image')).toHaveAttribute('src', expect.stringContaining('d3.jpg')));
+    await waitFor(() => expect(screen.getByTestId('admin.caso.check-all')).toBeEnabled(), { timeout: 3000 });
+    expect(screen.queryByTestId('admin.caso.check-all-help')).not.toBeInTheDocument();
+  });
+
+  it('documento que não abre mostra a frase de leitura com "Tentar de novo" e mantém a conferência em bloco travada', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch(
+        (url) => (path(url) === 'admin/stores/s1' ? json(detail()) : undefined),
+        (url) => (path(url) === 'admin/stores/s1/documents/d1/access' ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined),
+      ).impl,
+    );
+    renderPanel(<StoreCasePage storeId="s1" />, 'super_admin');
+    const error = await screen.findByTestId('admin.caso.doc-error');
+    expect(error).toHaveTextContent('Não abriu o documento');
+    expect(error).toHaveTextContent('Tente de novo.');
+    expect(error).not.toHaveTextContent('dados estão salvos');
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
+    expect(screen.getByTestId('admin.caso.check-all')).toBeDisabled();
   });
 
   it('problema exige o texto e vai ao lojista por item, com o documento certo', async () => {

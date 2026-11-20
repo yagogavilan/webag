@@ -20,6 +20,8 @@ interface Props {
   /** Documento selecionado de fora (atalhos `j` e `k`, miniaturas). */
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Chamado quando o documento abriu de verdade (a URL assinada veio); a conferência em bloco só libera depois de abrir todos. */
+  onOpened?: (id: string) => void;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Props {
  * por isso as miniaturas são botões com o nome do documento (uma imagem por miniatura geraria N acessos) e a consulta
  * não refaz sozinha ao voltar o foco da janela.
  */
-export function DocumentViewer({ storeId, documents, reason, selectedId, onSelect }: Props) {
+export function DocumentViewer({ storeId, documents, reason, selectedId, onSelect, onOpened }: Props) {
   const selected = documents.find((doc) => doc.id === selectedId) ?? documents[0];
 
   const access = useQuery({
@@ -40,6 +42,11 @@ export function DocumentViewer({ storeId, documents, reason, selectedId, onSelec
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  const openedId = selected && access.data ? selected.id : null;
+  useEffect(() => {
+    if (openedId) onOpened?.(openedId);
+  }, [openedId, onOpened]);
 
   if (!selected) {
     return (
@@ -66,7 +73,7 @@ export function DocumentViewer({ storeId, documents, reason, selectedId, onSelec
       ) : forbidden ? (
         <Banner tone="danger">Você não tem permissão para abrir documentos.</Banner>
       ) : access.isError || !access.data ? (
-        <ErrorState onRetry={() => void access.refetch()} testId={T('doc-error')} />
+        <ErrorState title="Não abriu o documento" text="Tente de novo." onRetry={() => void access.refetch()} testId={T('doc-error')} />
       ) : (
         <Stage key={`${selected.id}-${access.dataUpdatedAt}`} access={access.data} label={DOCUMENT_NAME[selected.kind]} onReopen={() => void access.refetch()} />
       )}
@@ -123,7 +130,7 @@ function Stage({ access, label, onReopen }: { access: DocumentAccess; label: str
       </div>
       <div ref={stage} className={s.viewerStage} role="group" aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
         {imageFailed ? (
-          <ErrorState onRetry={onReopen} testId={T('doc-error')} />
+          <ErrorState title="Não abriu o documento" text="Tente de novo." onRetry={onReopen} testId={T('doc-error')} />
         ) : expired ? (
           <div className={ui.stack} style={{ padding: 16, textAlign: 'center' }} data-testid={T('doc-expired')}>
             <p className="wb-text-body" style={{ margin: 0 }}>A visualização expirou.</p>

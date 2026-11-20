@@ -41,10 +41,14 @@ export function EmptyState({ icon, title, text, actionLabel, onAction, testId }:
   );
 }
 
-/** Erro: o que houve + o que fazer (§5.3). `slow` é a rede lenta depois de 8 s. */
-export function ErrorState({ onRetry, slow, offline, testId }: { onRetry?: () => void; slow?: boolean; offline?: boolean; testId?: string }) {
-  const title = offline ? 'Sem conexão' : slow ? 'Está demorando' : 'Não conseguimos carregar agora';
-  const text = offline ? 'Conecte-se para continuar. O que já carregou continua aqui.' : slow ? 'Sua conexão parece lenta.' : 'Seus dados estão salvos. Tente de novo em instantes.';
+/**
+ * Erro de LEITURA: o que houve + o que fazer (§5.3). `slow` é a rede lenta depois de 8 s. Nunca diz "seus dados estão salvos":
+ * numa leitura nada foi gravado, e a frase mentiria sobre o que o usuário acabou de tentar. `title` e `text` nomeiam o que
+ * não carregou ("Não carregou os alertas", "Tente de novo.").
+ */
+export function ErrorState({ onRetry, slow, offline, testId, title: titleOverride, text: textOverride }: { onRetry?: () => void; slow?: boolean; offline?: boolean; testId?: string; title?: string; text?: string }) {
+  const title = offline ? 'Sem conexão' : slow ? 'Está demorando' : (titleOverride ?? 'Não conseguimos carregar agora');
+  const text = offline ? 'Conecte-se para continuar. O que já carregou continua aqui.' : slow ? 'Sua conexão parece lenta.' : (textOverride ?? 'Tente de novo em instantes.');
   return (
     <MessageState icon={offline ? WifiSlash : WarningCircle} title={title} text={text} testId={testId ?? 'error-state'} role="alert">
       {onRetry ? <Button onClick={onRetry}>Tentar de novo</Button> : null}

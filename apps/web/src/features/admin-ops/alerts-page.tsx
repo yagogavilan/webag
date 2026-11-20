@@ -76,7 +76,7 @@ export function AlertsPage() {
       {list.isPending ? (
         <SkeletonRows rows={4} height={110} label="Carregando os alertas" />
       ) : list.isError && !list.data ? (
-        <ErrorState offline={offline} onRetry={() => void list.refetch()} testId={T('error')} />
+        <ErrorState offline={offline} title="Não carregou os alertas" text="Tente de novo." onRetry={() => void list.refetch()} testId={T('error')} />
       ) : rows.length === 0 ? (
         <EmptyState
           icon={BellRinging}

@@ -55,6 +55,31 @@ describe('Alertas (B3)', () => {
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
   });
 
+  it('lista com erro 500: frase de leitura, os 4 indicadores seguem e "Tentar de novo" refaz a chamada', async () => {
+    let listCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      mockFetch((url) => {
+        if (path(url) === 'admin/alerts/summary') return json(summary);
+        if (path(url) === 'admin/alerts/kinds') return json(kinds);
+        if (path(url) === 'admin/alerts') {
+          listCalls += 1;
+          return listCalls === 1 ? json({ code: 'X', title: 'x', status: 500 }, 500) : json({ data: [alert()], nextCursor: null });
+        }
+        return undefined;
+      }).impl,
+    );
+    renderPanel(<AlertsPage />);
+    const error = await screen.findByTestId('admin.alertas.error');
+    expect(error).toHaveTextContent('Não carregou os alertas');
+    expect(error).toHaveTextContent('Tente de novo.');
+    expect(error).not.toHaveTextContent('dados estão salvos');
+    for (const id of ['open', 'critical', 'warning', 'oldest']) expect(screen.getByTestId(`admin.alertas.kpi-${id}`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(await screen.findByTestId('admin.alertas.row-a1')).toBeInTheDocument();
+    expect(listCalls).toBe(2);
+  });
+
   it('paginação por cursor: "Ver mais" pede a próxima página', async () => {
     const cursors: (string | null)[] = [];
     vi.stubGlobal(

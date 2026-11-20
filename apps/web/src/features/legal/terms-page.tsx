@@ -29,7 +29,7 @@ export function TermsPage() {
       <PageHeader title="Termos e privacidade" description="Cada documento tem a sua própria sequência de versões. Uma versão publicada nunca é editada." />
       {failed ? (
         <Banner tone="danger" testId={T('error')} action={<Button size="sm" variant="secondary" onClick={() => results.forEach((r) => void r.refetch())}>Tentar de novo</Button>}>
-          Não conseguimos carregar os documentos agora. Seus dados estão salvos.
+          Não carregou os documentos. Tente de novo.
         </Banner>
       ) : null}
       <div className={s.docGrid}>
