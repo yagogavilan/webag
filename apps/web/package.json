@@ -1,0 +1,47 @@
+{
+  "name": "@webag/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Painéis web do Webag: lojista (/lojista) e admin (/admin) no mesmo app (DEC-005)",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource/bricolage-grotesque": "5.3.0",
+    "@fontsource/figtree": "5.3.0",
+    "@phosphor-icons/react": "2.1.10",
+    "@tanstack/react-query": "5.108.0",
+    "@webag/shared": "workspace:*",
+    "@webag/tokens": "workspace:*",
+    "next": "16.4.6",
+    "qrcode": "1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1",
+    "socket.io-client": "4.8.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.12",
+    "@types/node": "24.19.2",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.6",
+    "jsdom": "31.0.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12"
+  }
+}

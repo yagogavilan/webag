@@ -1,0 +1,36 @@
+
+> webag@ smoke /tmp/claude-0/-home-user-webag/93866cff-71c1-52eb-8518-dcff4af86ca9/scratchpad/rc/wb
+> node scripts/smoke.mjs
+
+[smoke] API: http://localhost:3400
+
+1. Saúde e contrato
+  ok   GET /health
+  ok   GET /health/ready (banco e Redis no ar)
+  ok   GET /docs (contrato OpenAPI)
+
+2. Logins de demonstração
+  ok   cliente novo cadastrado (smoke.1795136385963@seed.webag.local)
+  ok   cliente: login com a conta recém-criada
+  ok   e-mail com o código de confirmação chegou ao Mailpit
+  ok   e-mail do cliente confirmado com o código
+  ok   lojista (dono): lojista.mercadinho-boa-compra@seed.webag.local
+  ok   lojista (funcionário): funcionario.mercadinho-boa-compra@seed.webag.local
+  ok   admin: TOTP configurado no primeiro login (10 códigos de recuperação)
+       Segredo TOTP do admin (só desenvolvimento): XDNJPNQMUJ3IUHHDFREOW24HUWJSXFZU
+       Para gerar o código: node scripts/totp.mjs <segredo>   (ou digite o segredo em um app autenticador)
+  ok   admin: login em 2 passos (senha + TOTP)
+
+3. Catálogo
+  ok   lojas por perto (busca geográfica PostGIS) devolve o Mercadinho Boa Compra
+  ok   catálogo da loja devolve produtos disponíveis
+  ok   produto "Banana prata (kg)" tem variação
+  ok   endereço do cliente cadastrado
+
+4. Pedido de RETIRADA do início ao fim (PIX simulado)
+  ok   [pickup] item na sacola
+  ok   [pickup] sacola com total calculado pelo servidor (2396 centavos)
+  FALHA [pickup] pedido criado aguardando o PIX (HTTP 409 {"type":"https://api.webag.com.br/errors/store-closed","title":"Loja fechada","status":409,"detail":"A loja está fechada agora.","code":"STORE_CLOSED","opensAt":"2026-11-20T10:00:00.000Z"})
+
+[smoke] interrompido: pedido não foi criado
+ ELIFECYCLE  Command failed with exit code 1.

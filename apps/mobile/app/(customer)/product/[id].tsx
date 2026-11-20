@@ -1,0 +1,555 @@
+import { useQueryClient } from '@tanstack/react-query';
+import type { BrowseProduct, BrowseVariant } from '@webag/shared';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { Palco } from '../../../src/art/Palco';
+import { ProductArt, objectFor } from '../../../src/art/ProductArt';
+import { Pressy } from '../../../src/motion';
+import { ReportButton } from '../../../src/features/report/ReportSheet';
+import { fetchProduct } from '../../../src/api/catalog-api';
+import { ApiError } from '../../../src/api/problem';
+import { Badge } from '../../../src/components/Badge';
+import { Banner } from '../../../src/components/Banner';
+import { Button } from '../../../src/components/Button';
+import { Dialog } from '../../../src/components/Dialog';
+import { ArrowsClockwise, Check, CaretLeft, CaretRight, Heart, Package, Star, Storefront, Warning, X } from '../../../src/components/icons';
+import { IconButton } from '../../../src/components/IconButton';
+import { QuantityStepper } from '../../../src/components/QuantityStepper';
+import { RemoteImage } from '../../../src/components/RemoteImage';
+import { Screen } from '../../../src/components/Screen';
+import { Skeleton } from '../../../src/components/Skeleton';
+import { EmptyState, ErrorState } from '../../../src/components/StateViews';
+import { Text } from '../../../src/components/Text';
+import { useToast } from '../../../src/components/Toast';
+import { closedLabel, formatRating, ratingA11y } from '../../../src/features/catalog/format';
+import { logoFallback, productFallback } from '../../../src/features/catalog/image';
+import { Price } from '../../../src/features/catalog/Price';
+import { coverColor } from '../../../src/features/catalog/StoreRow';
+import { useProductQuery, useReviewsQuery, useStoreQuery, useDeliveryPoint } from '../../../src/features/catalog/queries';
+import { ReviewItem } from '../../../src/features/catalog/ReviewItem';
+import { buildGroups, findVariant, missingAttributes, selectOption, shownPrice, variantLabel, type Selection } from '../../../src/features/catalog/variants';
+import { useCartActions, type AddOutcome } from '../../../src/features/cart/hooks';
+import type { NewItem } from '../../../src/features/cart/store';
+import { ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
+import { useApplyPendingFavorite, useFavorite } from '../../../src/features/favorites/hooks';
+import { t } from '../../../src/i18n';
+import { formatMoney } from '../../../src/lib/format';
+import { haptic } from '../../../src/lib/haptics';
+import { useOnline } from '../../../src/lib/useOnline';
+import { useReducedMotion } from '../../../src/lib/useReducedMotion';
+import { theme } from '../../../src/theme';
+
+/** Sem estoque por produto na API para itens sem variação: teto de quantidade do app. [HIPÓTESE] ver pendencias-contrato-mobile.md */
+const DEFAULT_MAX_QTY = 10;
+
+/** D9. Produto (WB-017): galeria, preço e promoção, variações com estoque, trocas, avaliações e adicionar à sacola. */
+export default function ProductScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const toast = useToast();
+  const online = useOnline();
+  const client = useQueryClient();
+  const point = useDeliveryPoint();
+  const query = useProductQuery(id);
+  const product = query.data;
+  const store = useStoreQuery(product?.store.id, point);
+  const reviews = useReviewsQuery('product', id);
+  const favorite = useFavorite('product', id, product?.name ?? '');
+  useApplyPendingFavorite(favorite.applyPending, Boolean(product));
+  const { width } = useWindowDimensions();
+
+  const [selection, setSelection] = useState<Selection>({});
+  const [quantity, setQuantity] = useState(1);
+  const [errorGroups, setErrorGroups] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [exchangeOpen, setExchangeOpen] = useState(false);
+  const [conflict, setConflict] = useState<{ currentStoreName: string; itemCount: number; confirm: () => Promise<AddOutcome> } | null>(null);
+  const cartApi = useCartActions();
+  const scroller = useRef<ScrollViewInstance>(null);
+  const variantsY = useRef(0);
+
+  if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
+    return (
+      <Screen header={<TopBar />}>
+        <EmptyState actionLabel={t('product.seeOthers')} icon={Package} onAction={() => router.replace('/')} testID="product.not-found" text={t('product.notFoundText')} title={t('product.notFoundTitle')} />
+      </Screen>
+    );
+  }
+  if (query.isError && !product) {
+    return (
+      <Screen header={<TopBar />}>
+        <ErrorState offline={!online} onRetry={() => void query.refetch()} retryLabel={t('common.tryAgain')} testID="product.error" text={online ? t('states.errorText') : t('states.offlineText')} title={online ? t('states.errorTitle') : t('states.offlineTitle')} />
+      </Screen>
+    );
+  }
+  if (!product) {
+    return (
+      <Screen header={<TopBar />} testID="product.skeleton">
+        <Skeleton height={Math.min(width, 480)} />
+        <Skeleton height={28} width="40%" />
+        <Skeleton height={20} />
+        <Skeleton height={20} width="70%" />
+        <View style={styles.row}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton height={48} key={i} radius={theme.radius.full} width={64} />
+          ))}
+        </View>
+      </Screen>
+    );
+  }
+
+  const variants = product.variants ?? [];
+  const attributes = product.variantAttributes ?? [];
+  const hasVariants = variants.length > 0 && attributes.length > 0;
+  const groups = hasVariants ? buildGroups(attributes, variants, selection) : [];
+  // Produto sem opções (só uma variação padrão): a variação já está escolhida. A sacola sempre trabalha por variação.
+  const selected = hasVariants ? findVariant(attributes, variants, selection) : variants.length === 1 ? variants[0] : undefined;
+  const price = shownPrice(product, variants, selected);
+  const allSoldOut = !product.available || (hasVariants && variants.every((v) => !v.available));
+  const maxQty = selected ? Math.max(1, selected.maxQuantity) : DEFAULT_MAX_QTY;
+  const qty = Math.min(quantity, maxQty);
+  const storeOpen = product.store.open;
+  const exchangeDays = store.data?.exchangePolicy.voluntaryDays ?? 0;
+  const images = [...(product.images ?? [])].sort((a, b) => a.position - b.position);
+  const stockWarning = selected?.lastUnits ? (selected.lastUnits === 1 ? t('product.lastUnit') : t('product.lastUnits', { n: selected.lastUnits })) : null;
+  const atMax = qty >= maxQty && Boolean(selected);
+  const cannotAdd = variants.length === 0;
+  const description = product.description ?? '';
+
+  const onChoose = (name: string, value: string) => {
+    setSelection((prev) => selectOption(attributes, variants, prev, name, value));
+    setErrorGroups((prev) => prev.filter((g) => g !== name));
+    setAdded(false);
+  };
+
+  const buildItem = (v: BrowseVariant, current: BrowseProduct): NewItem => ({
+    productId: current.id,
+    variantId: v.id,
+    name: current.name,
+    variantLabel: hasVariants ? variantLabel(attributes, selection) : null,
+    urls: images[0]?.urls ?? {},
+    unitPriceCents: v.price.amount,
+    originalPriceCents: v.originalPrice?.amount ?? null,
+    quantity: qty,
+    maxQuantity: Math.max(1, v.maxQuantity),
+  });
+
+  const onAdd = async () => {
+    if (adding) return;
+    if (hasVariants) {
+      const missing = missingAttributes(attributes, selection);
+      if (missing.length > 0) {
+        // botão sempre ativo: leva ao grupo e explica (D9 C3); nunca desabilitado sem motivo
+        setErrorGroups(missing);
+        void haptic('error');
+        scroller.current?.scrollTo({ y: Math.max(0, variantsY.current - theme.space[4]), animated: true });
+        return;
+      }
+    }
+    setAdding(true);
+    try {
+      // Confere preço e estoque na hora de adicionar; sem rede segue com o que a tela mostra e avisa (D9 Offline)
+      let fresh: BrowseProduct = product;
+      let checked = false;
+      if (online) {
+        try {
+          fresh = await fetchProduct(product.id);
+          checked = true;
+          client.setQueryData(['product', product.id], fresh);
+        } catch {
+          checked = false;
+        }
+      }
+      const freshVariants = fresh.variants ?? [];
+      const variant = hasVariants ? findVariant(attributes, freshVariants, selection) : freshVariants.length === 1 ? freshVariants[0] : undefined;
+      const base = variant ?? selected;
+      if (!base) return;
+      if (checked && (!fresh.available || !base.available)) {
+        void haptic('error');
+        toast.show(t('cart.warnSoldOut'));
+        return;
+      }
+      const item = buildItem(base, fresh);
+      const shownCents = selected ? selected.price.amount : (product.price?.amount ?? item.unitPriceCents);
+      const outcome = await cartApi.add({ storeId: product.store.id, storeName: product.store.name, item });
+      if (outcome.kind === 'conflict') {
+        setConflict(outcome);
+        return;
+      }
+      if (outcome.kind === 'failed') {
+        void haptic('error');
+        toast.show(outcome.offline ? t('cart.addOffline') : t('cart.addError'));
+        return;
+      }
+      void haptic('light');
+      setAdded(true);
+      setTimeout(() => setAdded(false), 2_000);
+      const viewBag = { label: t('product.viewBag'), onPress: () => router.push('/cart') };
+      if (outcome.adjustedTo !== undefined) toast.show(t('cart.warnQty', { n: outcome.adjustedTo }), viewBag);
+      else if (checked && item.unitPriceCents !== shownCents) toast.show(t('product.promoEnded', { price: formatMoney(item.unitPriceCents) }), viewBag);
+      else toast.show(online ? t('product.addedToast') : t('product.addedOffline'), viewBag);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const confirmSwitch = async () => {
+    if (!conflict) return;
+    const c = conflict;
+    setConflict(null);
+    const outcome = await c.confirm();
+    if (outcome.kind === 'failed') {
+      toast.show(outcome.offline ? t('cart.addOffline') : t('cart.addError'));
+      return;
+    }
+    void haptic('success');
+    toast.show(t('cart.switchDone'), { label: t('product.viewBag'), onPress: () => router.push('/cart') });
+  };
+
+  const favoriteLabel = favorite.isFavorite ? t('product.unfavorite', { name: product.name }) : t('product.favorite', { name: product.name });
+  const missingNames = hasVariants ? missingAttributes(attributes, selection) : [];
+  const needsChoice = missingNames.length > 0;
+  const addLabel = added ? t('product.added') : needsChoice ? t('product.chooseFirst', { name: missingNames[0] ?? '' }) : t('product.addShort');
+  const addValue = added ? t('product.viewBag') : needsChoice || !price ? undefined : formatMoney(price.cents * qty);
+
+  return (
+    <Screen
+      footer={
+        allSoldOut || cannotAdd ? (
+          <Button label={t('product.seeOthers')} onPress={() => router.push(`/store/${product.store.id}`)} size="lg" testID="product.see-others" />
+        ) : (
+          <View style={styles.bar}>
+            <QuantityStepper max={maxQty} onChange={setQuantity} size="lg" testID="product.qty" value={qty} />
+            <Button
+              label={addLabel}
+              loading={adding}
+              muted={needsChoice}
+              onPress={() => (added ? router.push('/cart') : void onAdd())}
+              size="lg"
+              style={styles.addButton}
+              testID="product.add"
+              variant={added ? 'ink' : 'primary'}
+              {...(addValue ? { value: addValue } : {})}
+            />
+          </View>
+        )
+      }
+      padded={false}
+      scroll={false}
+      testID="product.screen"
+    >
+      <ScrollView ref={scroller} showsVerticalScrollIndicator={false}>
+        <Gallery images={images} name={product.name} width={Math.min(width, 480)} />
+        <View style={[styles.floating, styles.floatingLeft]}>
+          <IconButton icon={CaretLeft} label={t('store.back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} overPhoto testID="product.back" />
+        </View>
+        <View style={[styles.floating, styles.floatingRight]}>
+          <IconButton
+            color={favorite.isFavorite ? theme.color.feedback.danger.base : theme.color.text.primary}
+            icon={Heart}
+            label={favoriteLabel}
+            onPress={favorite.toggle}
+            overPhoto
+            testID="product.favorite"
+            weight={favorite.isFavorite ? 'fill' : 'regular'}
+          />
+        </View>
+
+        <View style={styles.body}>
+          {allSoldOut ? (
+            <Badge label={t('product.allSoldOut')} testID="product.sold-out" />
+          ) : price ? (
+            <Price cents={price.cents} discountPercent={price.discountPercent} from={price.from} originalCents={price.originalCents} size="hero" testID="product.price" />
+          ) : null}
+          <Text accessibilityRole="header" numberOfLines={3} variant="title1">
+            {product.name}
+          </Text>
+          {product.rating ? (
+            <View accessible accessibilityLabel={ratingA11y(product.rating)} style={styles.ratingRow}>
+              <Star color={theme.color.rating.star} size={16} weight="fill" />
+              <Text variant="caption">{formatRating(product.rating)}</Text>
+            </View>
+          ) : null}
+
+          {!storeOpen ? <Banner testID="product.closed-banner" text={t('store.closedBanner', { label: closedLabel(product.store.opensAt) })} tone="info" /> : null}
+
+          {hasVariants && !allSoldOut ? (
+            <View onLayout={(e) => (variantsY.current = e.nativeEvent.layout.y)} style={styles.variants}>
+              {groups.map((group) => {
+                const failed = errorGroups.includes(group.name);
+                const chosen = Boolean(selection[group.name]);
+                return (
+                  <ShakeView failed={failed} key={group.name} style={[styles.group, failed && styles.groupError]} testID={`product.group-${group.name}`}>
+                    <View style={styles.groupHead}>
+                      <View style={styles.flex}>
+                        <Text variant="bodyStrong">{chosen ? `${group.name}: ${selection[group.name]}` : group.name}</Text>
+                        <Text color="secondary" variant="caption">
+                          {t('product.chooseOne')}
+                        </Text>
+                      </View>
+                      <View style={[styles.required, chosen && styles.requiredDone]}>
+                        {chosen ? <Check color={theme.color.neutral[0]} size={14} weight="bold" /> : null}
+                        <Text style={chosen ? styles.requiredTextDone : styles.requiredText} variant="micro">
+                          {chosen ? t('product.chosen') : t('product.required')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View accessibilityLabel={group.name} accessibilityRole="radiogroup" style={styles.optionRow}>
+                      {group.options.map((option) => {
+                        const isSelected = selection[group.name] === option.value;
+                        return (
+                          <Pressy
+                            accessibilityLabel={option.available ? option.value : t('product.variantSoldOut', { value: option.value })}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: isSelected, selected: isSelected, disabled: !option.available }}
+                            disabled={!option.available}
+                            feedback="selection"
+                            key={option.value}
+                            onPress={() => onChoose(group.name, option.value)}
+                            style={[styles.option, isSelected && styles.optionSelected, !option.available && styles.optionOff]}
+                            testID={`product.variant-${group.name}-${option.value}`}
+                          >
+                            <Text color={isSelected ? 'inverse' : option.available ? 'primary' : 'disabled'} variant="label">
+                              {option.value}
+                            </Text>
+                            {!option.available ? <View pointerEvents="none" style={styles.strike} /> : null}
+                          </Pressy>
+                        );
+                      })}
+                    </View>
+                    {failed ? (
+                      <Text accessibilityLiveRegion="polite" color="danger" testID="product.variant-error" variant="caption">
+                        {t('product.variantChoose', { name: group.name })}
+                      </Text>
+                    ) : null}
+                  </ShakeView>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {stockWarning ? (
+            <View style={styles.inline} testID="product.stock-warning">
+              <Warning color={theme.color.feedback.warning.base} size={theme.size.iconSm} weight="fill" />
+              <Text color="warning" variant="label">
+                {stockWarning}
+              </Text>
+            </View>
+          ) : null}
+          {atMax ? (
+            <Text color="danger" variant="caption">
+              {t('product.qtyMax', { n: maxQty })}
+            </Text>
+          ) : null}
+
+          {store.data ? (
+            <Pressable accessibilityRole="button" onPress={() => setExchangeOpen(true)} style={styles.inline} testID="product.exchange">
+              <ArrowsClockwise color={theme.color.text.brand} size={theme.size.iconMd} />
+              <Text color="brand" style={styles.flex} variant="label">
+                {exchangeDays > 0 ? t('product.exchange', { days: exchangeDays }) : t('product.exchangeNo')}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          <Pressable accessibilityLabel={`${t('product.seeStore')}, ${product.store.name}`} accessibilityRole="button" onPress={() => router.push(`/store/${product.store.id}`)} style={styles.storeRow} testID="product.store">
+            {store.data ? <RemoteImage fallback={logoFallback(store.data.name, coverColor(store.data.id))} height={40} radius={theme.radius.lg} urls={store.data.logo.urls} width={40} /> : <Storefront color={theme.color.text.secondary} size={theme.size.iconMd} />}
+            <Text style={styles.flex} variant="bodyStrong">
+              {product.store.name}
+            </Text>
+            <Text color="link" variant="label">
+              {t('product.seeStore')}
+            </Text>
+            <CaretRight color={theme.color.text.secondary} size={theme.size.iconSm} />
+          </Pressable>
+
+          {description ? (
+            <View style={styles.description}>
+              <Text numberOfLines={expanded ? undefined : 3}>{description}</Text>
+              {description.length > 140 ? (
+                <Button label={expanded ? t('product.descriptionLess') : t('product.descriptionMore')} onPress={() => setExpanded((e) => !e)} testID="product.description-more" variant="text" />
+              ) : null}
+            </View>
+          ) : null}
+
+          <ReviewsPreview
+            count={product.rating?.count ?? 0}
+            loading={reviews.isLoading}
+            onAll={() => router.push({ pathname: '/reviews', params: { kind: 'product', id: product.id, name: product.name } })}
+            reviews={reviews.data?.pages[0]?.data.slice(0, 3) ?? []}
+          />
+          <ReportButton target="product" targetId={product.id} label={t('report.titleProduct')} testID="product.report" />
+          {!storeOpen && !allSoldOut ? (
+            <Button label={t('product.seeStoreProducts')} onPress={() => router.push(`/store/${product.store.id}`)} variant="text" />
+          ) : null}
+        </View>
+      </ScrollView>
+
+      {store.data ? <ExchangePolicySheet onClose={() => setExchangeOpen(false)} store={store.data} visible={exchangeOpen} /> : null}
+      <Dialog
+        onClose={() => setConflict(null)}
+        testID="cart.switch-dialog"
+        text={conflict ? t('cart.switchText', { count: conflict.itemCount, noun: conflict.itemCount === 1 ? t('cart.itemOne') : t('cart.itemMany'), store: conflict.currentStoreName }) : ''}
+        title={t('cart.switchTitle')}
+        visible={conflict !== null}
+      >
+        <Button label={t('cart.switchKeep')} onPress={() => setConflict(null)} testID="cart.switch-keep" />
+        <Button label={t('cart.switchClear')} onPress={() => void confirmSwitch()} testID="cart.switch-clear" variant="destructive" />
+      </Dialog>
+    </Screen>
+  );
+}
+
+function TopBar() {
+  const router = useRouter();
+  return (
+    <View style={styles.topBar}>
+      <IconButton icon={CaretLeft} label={t('store.back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} testID="product.back" />
+    </View>
+  );
+}
+
+/** `motion.shake`: o grupo balança 2x 8 px quando falta escolher (e háptico de erro, já disparado por quem chama). */
+function ShakeView({ failed, style, children, testID }: { failed: boolean; style: import('react-native').StyleProp<import('react-native').ViewStyle>; children: React.ReactNode; testID?: string }) {
+  const x = useSharedValue(0);
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (failed && !reduced) x.set(withSequence(withTiming(-8, { duration: 60 }), withTiming(8, { duration: 60 }), withTiming(-8, { duration: 60 }), withTiming(8, { duration: 60 }), withTiming(0, { duration: 60 })));
+  }, [failed, reduced, x]);
+  const animated = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  return (
+    <Animated.View style={[style, animated]} testID={testID}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function ReviewsPreview({ reviews, count, loading, onAll }: { reviews: import('@webag/shared').Review[]; count: number; loading: boolean; onAll: () => void }) {
+  return (
+    <View style={styles.reviews}>
+      <Text accessibilityRole="header" variant="title2">
+        {t('product.reviews')}
+      </Text>
+      {loading ? <Skeleton height={56} /> : null}
+      {!loading && reviews.length === 0 ? <Text color="secondary">{t('product.reviewsNone')}</Text> : null}
+      {reviews.map((r) => (
+        <ReviewItem key={r.id} review={r} />
+      ))}
+      {count > 0 ? <Button label={t('product.reviewsAll', { n: count })} onPress={onAll} testID="product.reviews-all" variant="secondary" /> : null}
+    </View>
+  );
+}
+
+/** Galeria 1:1 (deslizar; contador "2/5"; toque abre tela cheia). Setas para quem não usa gesto. */
+function Gallery({ images, name, width }: { images: { id: string; urls: Record<string, string> }[]; name: string; width: number }) {
+  const list = useRef<FlatList>(null);
+  const [index, setIndex] = useState(0);
+  const [full, setFull] = useState(false);
+  const { width: screen, height } = useWindowDimensions();
+  const go = (next: number) => {
+    const clamped = Math.max(0, Math.min(images.length - 1, next));
+    list.current?.scrollToOffset({ offset: clamped * width, animated: true });
+    setIndex(clamped);
+  };
+  if (images.length === 0) {
+    // Sem foto: palco (a sacola da marca) com a peça do kit; com foto do lojista a imagem entra em sangria total (kit-marca-v3.md §6).
+    return (
+      <View accessible accessibilityLabel={t('catalog.imageAlt', { name })} style={[styles.studio, { width, height: width * 0.9 }]} testID="product.gallery">
+        <Palco color={theme.color.brand[500]} eyes={theme.color.surface.studio} rotate={-7} size={width * 0.78} />
+        <View style={styles.studioArt}>
+          <ProductArt color="#4E6E91" name={objectFor(name)} size={width * 0.62} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View testID="product.gallery">
+      <FlatList
+        data={images}
+        decelerationRate="fast"
+        horizontal
+        keyExtractor={(i) => i.id}
+        onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
+        pagingEnabled
+        ref={list}
+        renderItem={({ item, index: i }) => (
+          <Pressable accessibilityLabel={`${t('product.gallery', { n: i + 1, total: images.length })}. ${t('product.galleryOpen')}`} accessibilityRole="imagebutton" onPress={() => setFull(true)} style={{ width }}>
+            <RemoteImage alt={name} aspectRatio={1} fallback={productFallback(name)} priority={i === 0 ? 'high' : 'normal'} radius={0} urls={item.urls} width={width} />
+          </Pressable>
+        )}
+        showsHorizontalScrollIndicator={false}
+      />
+      {images.length > 1 ? (
+        <View style={styles.counter}>
+          <Text color="onBrand" variant="micro">
+            {index + 1}/{images.length}
+          </Text>
+        </View>
+      ) : null}
+      {images.length > 1 ? (
+        <View pointerEvents="box-none" style={styles.arrows}>
+          <IconButton disabled={index === 0} icon={CaretLeft} label={t('product.galleryPrev')} onPress={() => go(index - 1)} overPhoto testID="product.gallery-prev" />
+          <IconButton disabled={index === images.length - 1} icon={CaretRight} label={t('product.galleryNext')} onPress={() => go(index + 1)} overPhoto testID="product.gallery-next" />
+        </View>
+      ) : null}
+      <Modal animationType="fade" onRequestClose={() => setFull(false)} statusBarTranslucent visible={full}>
+        <View style={styles.fullscreen} testID="product.gallery-fullscreen">
+          <ScrollView
+            centerContent
+            contentContainerStyle={styles.fullContent}
+            maximumZoomScale={4}
+            minimumZoomScale={1}
+            // zoom por pinça: nativo no iOS; no Android depende de gesture-handler (pendência registrada)
+            pinchGestureEnabled
+          >
+            <RemoteImage alt={t('product.gallery', { n: index + 1, total: images.length })} aspectRatio={1} radius={0} urls={images[index]?.urls} width={Math.min(screen, height)} />
+          </ScrollView>
+          <View style={styles.fullClose}>
+            <IconButton icon={X} label={t('product.galleryClose')} onPress={() => setFull(false)} overPhoto testID="product.gallery-close" />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  topBar: { minHeight: theme.size.headerHeight, justifyContent: 'center', paddingHorizontal: theme.space[1] },
+  floating: { position: 'absolute', top: theme.space[2] },
+  floatingLeft: { left: theme.space[2] },
+  floatingRight: { right: theme.space[2] },
+  body: { padding: theme.layout.screenPaddingX, gap: theme.space[3], maxWidth: theme.layout.formMaxWidth + theme.space[8], width: '100%', alignSelf: 'center' },
+  row: { flexDirection: 'row', gap: theme.space[2] },
+  flex: { flex: 1 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space[1] },
+  variants: { gap: theme.space[4] },
+  group: { gap: theme.space[3], padding: theme.space[3], borderRadius: theme.radius.lg, backgroundColor: theme.color.surface.sunken },
+  groupError: { borderWidth: theme.borderWidth.strong, borderColor: theme.color.border.danger },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2] },
+  required: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: theme.radius.sticker, backgroundColor: theme.color.neutral[900], paddingHorizontal: 8, paddingVertical: 4 },
+  requiredDone: { backgroundColor: theme.color.feedback.success.base },
+  requiredText: { color: theme.color.neutral[0] },
+  requiredTextDone: { color: theme.color.neutral[0] },
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[2] },
+  option: { minHeight: theme.size.touchMin, minWidth: theme.size.touchMin, paddingHorizontal: theme.space[4], alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: theme.borderWidth.strong, borderColor: theme.color.border.default, backgroundColor: theme.color.surface.card, overflow: 'hidden' },
+  optionSelected: { borderColor: theme.color.surface.ink, backgroundColor: theme.color.surface.ink },
+  optionOff: { backgroundColor: theme.color.surface.sunken },
+  strike: { position: 'absolute', left: -8, right: -8, top: '50%', height: 2, backgroundColor: theme.color.neutral[500], transform: [{ rotate: '-30deg' }] },
+  studio: { backgroundColor: theme.color.surface.studio, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  studioArt: { position: 'absolute' },
+  struck: { textDecorationLine: 'line-through' },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: theme.space[2], minHeight: theme.size.touchMin },
+  storeRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space[3], minHeight: theme.size.touchMin + theme.space[2], paddingVertical: theme.space[2], borderTopWidth: theme.borderWidth.hairline, borderBottomWidth: theme.borderWidth.hairline, borderColor: theme.color.border.subtle },
+  description: { gap: theme.space[1], alignItems: 'flex-start' },
+  reviews: { gap: theme.space[3] },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: theme.space[3] },
+  addButton: { flex: 1, alignSelf: 'center' },
+  counter: { position: 'absolute', right: theme.space[3], bottom: theme.space[3], backgroundColor: theme.color.overlay.scrim, borderRadius: theme.radius.full, paddingHorizontal: theme.space[3], paddingVertical: theme.space[1] },
+  arrows: { position: 'absolute', left: theme.space[2], right: theme.space[2], top: '40%', flexDirection: 'row', justifyContent: 'space-between' },
+  fullscreen: { flex: 1, backgroundColor: theme.color.surface.inverse, justifyContent: 'center' },
+  fullContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+  fullClose: { position: 'absolute', top: theme.space[10], right: theme.space[2] },
+});

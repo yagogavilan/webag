@@ -1,0 +1,2 @@
+DROP INDEX "order_cancel_requests_open_uq";--> statement-breakpoint
+CREATE UNIQUE INDEX "order_cancel_requests_open_uq" ON "order_cancel_requests" USING btree ("order_id","kind") WHERE "order_cancel_requests"."status" = 'pending';

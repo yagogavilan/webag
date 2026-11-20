@@ -1,0 +1,354 @@
+/* GERADO por scripts/build.mjs a partir de tokens.json. Nao edite a mao. */
+/* Regerar: pnpm --filter @webag/tokens build */
+:root {
+  color-scheme: light;
+  --wb-color-brand-50: #FBF1FD;
+  --wb-color-brand-100: #F6E0FA;
+  --wb-color-brand-200: #EDC2F4;
+  --wb-color-brand-300: #E198EC;
+  --wb-color-brand-400: #D370E3;
+  --wb-color-brand-500: #C02EF0;
+  --wb-color-brand-600: #A21FBE;
+  --wb-color-brand-700: #8618A3;
+  --wb-color-brand-800: #6A1580;
+  --wb-color-brand-900: #4A0F58;
+  --wb-color-neutral-0: #FFFFFF;
+  --wb-color-neutral-50: #FAF8FB;
+  --wb-color-neutral-100: #F3F0F5;
+  --wb-color-neutral-200: #E8E3EB;
+  --wb-color-neutral-300: #D6CFDB;
+  --wb-color-neutral-400: #B3ABB9;
+  --wb-color-neutral-500: #837A8A;
+  --wb-color-neutral-600: #5F566A;
+  --wb-color-neutral-700: #443C4C;
+  --wb-color-neutral-800: #2C2632;
+  --wb-color-neutral-900: #1C1721;
+  --wb-color-feedback-success-base: #1B6E3C;
+  --wb-color-feedback-success-subtle: #E5F4EA;
+  --wb-color-feedback-success-border: #9ED1AE;
+  --wb-color-feedback-warning-base: #7A4E00;
+  --wb-color-feedback-warning-subtle: #FFF3D6;
+  --wb-color-feedback-warning-border: #E9B949;
+  --wb-color-feedback-danger-base: #B3261E;
+  --wb-color-feedback-danger-subtle: #FCEAE8;
+  --wb-color-feedback-danger-border: #E8A29D;
+  --wb-color-feedback-info-base: #28569E;
+  --wb-color-feedback-info-subtle: #E8F0FB;
+  --wb-color-feedback-info-border: #9DB8E3;
+  --wb-color-rating-star: #B76E00;
+  --wb-color-surface-background: #FAF8FB;
+  --wb-color-surface-card: #FFFFFF;
+  --wb-color-surface-sunken: #F3F0F5;
+  --wb-color-surface-brand-subtle: #FBF1FD;
+  --wb-color-surface-inverse: #1C1721;
+  --wb-color-surface-hero: #C02EF0;
+  --wb-color-surface-hero-deep: #6A1580;
+  --wb-color-surface-studio: #EEEAF1;
+  --wb-color-surface-ink: #1C1721;
+  --wb-color-surface-paper: #FAF8FB;
+  --wb-color-text-primary: #1C1721;
+  --wb-color-text-secondary: #5F566A;
+  --wb-color-text-on-brand: #FFFFFF;
+  --wb-color-text-brand: #8618A3;
+  --wb-color-text-link: #8618A3;
+  --wb-color-text-inverse: #FFFFFF;
+  --wb-color-text-inverse-action: #EDC2F4;
+  --wb-color-text-disabled: #B3ABB9;
+  --wb-color-text-success: #1B6E3C;
+  --wb-color-text-warning: #7A4E00;
+  --wb-color-text-danger: #B3261E;
+  --wb-color-text-info: #28569E;
+  --wb-color-text-on-hero: #FFFFFF;
+  --wb-color-text-on-ink: #FFFFFF;
+  --wb-color-text-on-ink-muted: #D6CFDB;
+  --wb-color-border-subtle: #E8E3EB;
+  --wb-color-border-default: #D6CFDB;
+  --wb-color-border-strong: #837A8A;
+  --wb-color-border-focus: #A21FBE;
+  --wb-color-border-danger: #B3261E;
+  --wb-color-action-primary: #A21FBE;
+  --wb-color-action-primary-hover: #8618A3;
+  --wb-color-action-primary-pressed: #6A1580;
+  --wb-color-action-primary-subtle: #FBF1FD;
+  --wb-color-action-primary-subtle-pressed: #F6E0FA;
+  --wb-color-action-secondary-border: #A21FBE;
+  --wb-color-action-destructive: #B3261E;
+  --wb-color-action-destructive-pressed: #8C1D18;
+  --wb-color-action-disabled-fill: #E8E3EB;
+  --wb-color-action-disabled-text: #837A8A;
+  --wb-color-overlay-scrim: rgba(28, 23, 33, 0.72);
+  --wb-color-overlay-backdrop: rgba(28, 23, 33, 0.48);
+  --wb-color-skeleton-base: #E8E3EB;
+  --wb-color-skeleton-highlight: #F3F0F5;
+  --wb-color-accent-base: #D6FF4A;
+  --wb-color-accent-on-base: #1C1721;
+  --wb-color-tile-1: #F6E0FA;
+  --wb-color-tile-2: #FFE3D1;
+  --wb-color-tile-3: #D6F2E3;
+  --wb-color-tile-4: #DAE9FB;
+  --wb-color-tile-5: #FFF0BF;
+  --wb-color-tile-6: #FFDCE6;
+  --wb-color-tile-ink-1: #8618A3;
+  --wb-color-tile-ink-2: #A8400A;
+  --wb-color-tile-ink-3: #1B6E3C;
+  --wb-color-tile-ink-4: #28569E;
+  --wb-color-tile-ink-5: #7A4E00;
+  --wb-color-tile-ink-6: #A3214F;
+  --wb-font-family-web: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --wb-font-family-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --wb-font-size-xs: 12px;
+  --wb-font-size-sm: 14px;
+  --wb-font-size-md: 16px;
+  --wb-font-size-lg: 20px;
+  --wb-font-size-xl: 24px;
+  --wb-font-size-2xl: 32px;
+  --wb-font-size-3xl: 40px;
+  --wb-font-size-4xl: 46px;
+  --wb-font-size-5xl: 58px;
+  --wb-font-size-6xl: 68px;
+  --wb-font-size-7xl: 92px;
+  --wb-font-weight-regular: 400;
+  --wb-font-weight-medium: 500;
+  --wb-font-weight-semibold: 600;
+  --wb-font-weight-bold: 700;
+  --wb-font-weight-extrabold: 800;
+  --wb-font-line-height-xs: 16px;
+  --wb-font-line-height-sm: 20px;
+  --wb-font-line-height-md: 24px;
+  --wb-font-line-height-lg: 28px;
+  --wb-font-line-height-xl: 32px;
+  --wb-font-line-height-2xl: 40px;
+  --wb-font-line-height-3xl: 48px;
+  --wb-font-line-height-4xl: 48px;
+  --wb-font-line-height-5xl: 60px;
+  --wb-font-line-height-6xl: 68px;
+  --wb-font-line-height-7xl: 88px;
+  --wb-space-0: 0px;
+  --wb-space-1: 4px;
+  --wb-space-2: 8px;
+  --wb-space-3: 12px;
+  --wb-space-4: 16px;
+  --wb-space-5: 20px;
+  --wb-space-6: 24px;
+  --wb-space-8: 32px;
+  --wb-space-10: 40px;
+  --wb-space-12: 48px;
+  --wb-space-16: 64px;
+  --wb-size-touch-min: 48px;
+  --wb-size-control-sm: 40px;
+  --wb-size-control-md: 48px;
+  --wb-size-control-lg: 56px;
+  --wb-size-icon-sm: 20px;
+  --wb-size-icon-md: 24px;
+  --wb-size-icon-lg: 32px;
+  --wb-size-icon-empty: 64px;
+  --wb-size-header-height: 56px;
+  --wb-size-tab-bar-height: 64px;
+  --wb-size-avatar-md: 56px;
+  --wb-size-thumb: 96px;
+  --wb-radius-sm: 4px;
+  --wb-radius-md: 8px;
+  --wb-radius-lg: 16px;
+  --wb-radius-xl: 24px;
+  --wb-radius-2xl: 32px;
+  --wb-radius-full: 999px;
+  --wb-radius-tag: 8px;
+  --wb-radius-control: 14px;
+  --wb-radius-card: 24px;
+  --wb-radius-sheet: 32px;
+  --wb-radius-hero: 32px;
+  --wb-radius-pill: 999px;
+  --wb-radius-button: 16px;
+  --wb-radius-sticker: 8px;
+  --wb-radius-seal: 7px;
+  --wb-border-width-hairline: 1px;
+  --wb-border-width-strong: 2px;
+  --wb-shadow-none: none;
+  --wb-shadow-sm: 0 1px 2px rgba(28, 23, 33, 0.08);
+  --wb-shadow-md: 0 4px 12px rgba(28, 23, 33, 0.10);
+  --wb-shadow-lg: 0 8px 24px rgba(28, 23, 33, 0.14);
+  --wb-shadow-hard: 3px 3px 0 {color.neutral.900};
+  --wb-shadow-hard-lg: 4px 4px 0 {color.neutral.900};
+  --wb-motion-duration-fast: 150ms;
+  --wb-motion-duration-base: 250ms;
+  --wb-motion-duration-slow: 400ms;
+  --wb-motion-duration-shimmer: 1200ms;
+  --wb-motion-duration-fly: 400ms;
+  --wb-motion-duration-celebrate: 1200ms;
+  --wb-motion-duration-bars-in: 500ms;
+  --wb-motion-duration-cascade: 550ms;
+  --wb-motion-duration-cascade-step: 55ms;
+  --wb-motion-duration-count: 450ms;
+  --wb-motion-duration-confetti: 1500ms;
+  --wb-motion-duration-stage: 450ms;
+  --wb-motion-duration-bob: 2400ms;
+  --wb-motion-duration-shake: 350ms;
+  --wb-motion-duration-loader: 900ms;
+  --wb-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --wb-motion-easing-enter: cubic-bezier(0, 0, 0, 1);
+  --wb-motion-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --wb-motion-cascade-max: 8;
+  --wb-opacity-disabled: 0.38;
+  --wb-opacity-hover: 0.08;
+  --wb-opacity-pressed: 0.12;
+  --wb-breakpoint-sm: 640px;
+  --wb-breakpoint-md: 1024px;
+  --wb-breakpoint-lg: 1280px;
+  --wb-breakpoint-xl: 1536px;
+  --wb-layout-screen-padding-x: 16px;
+  --wb-layout-gutter: 16px;
+  --wb-layout-content-max-width: 1200px;
+  --wb-layout-form-max-width: 480px;
+  --wb-layout-side-width: 248px;
+  --wb-layout-header-overlap: 64px;
+  --wb-layout-header-overlap-mobile: 36px;
+  --wb-z-index-base: 0;
+  --wb-z-index-sticky: 10;
+  --wb-z-index-sheet: 20;
+  --wb-z-index-toast: 30;
+  --wb-z-index-modal: 40;
+  --wb-shape-lean: -8;
+  --wb-shape-cut-height: 64;
+}
+
+/* Movimento reduzido: sem animacao de deslocamento; so troca de estado. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wb-motion-duration-fast: 0ms;
+    --wb-motion-duration-base: 0ms;
+    --wb-motion-duration-slow: 0ms;
+  }
+}
+
+/* Estilos de texto (equivalentes aos textStyle do app). */
+.wb-text-hero {
+  font-family: var(--wb-font-family-display);
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 800;
+}
+
+.wb-text-display {
+  font-family: var(--wb-font-family-display);
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 800;
+}
+
+.wb-text-title1 {
+  font-family: var(--wb-font-family-display);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+}
+
+.wb-text-title2 {
+  font-family: var(--wb-font-family-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.wb-text-body {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+.wb-text-body-strong {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.wb-text-label {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.wb-text-caption {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.wb-text-caption-strong {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.wb-text-micro {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.wb-text-price {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-text-numeral {
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-text-numeral-brand {
+  font-family: var(--wb-font-family-display);
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
+}
+
+.wb-text-poster {
+  font-family: var(--wb-font-family-display);
+  font-size: 46px;
+  line-height: 48px;
+  font-weight: 800;
+}
+
+.wb-text-celebrate {
+  font-family: var(--wb-font-family-display);
+  font-size: 58px;
+  line-height: 60px;
+  font-weight: 800;
+}
+
+.wb-text-price-xl {
+  font-family: var(--wb-font-family-display);
+  font-size: 68px;
+  line-height: 68px;
+  font-weight: 800;
+}
+
+.wb-text-numeral-xl {
+  font-family: var(--wb-font-family-display);
+  font-size: 92px;
+  line-height: 88px;
+  font-weight: 800;
+}
+
+.wb-text-price-strong {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-text-sticker {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 800;
+}
+
+/* Anel de foco padrao (WCAG 2.4.7). Aplicar em todo controle interativo. */
+.wb-focus-ring:focus-visible {
+  outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus);
+  outline-offset: 2px;
+}

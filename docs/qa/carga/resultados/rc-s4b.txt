@@ -1,0 +1,77 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: docs/qa/carga/s4b-estoque.k6.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 40 max VUs, 2m30s max duration (incl. graceful stop):
+              * disputa: 1 iterations for each of 40 VUs (maxDuration: 2m0s, gracefulStop: 30s)
+
+
+Run       [ 100% ] setup()
+disputa   [   0% ]
+
+Run       [ 100% ] setup()
+disputa   [   0% ]
+
+Run       [ 100% ] setup()
+disputa   [   0% ]
+
+Run       [ 100% ] setup()
+disputa   [   0% ]
+time="2026-11-20T02:26:13Z" level=info msg="variante dd0bb680-30bc-47d9-abf7-8fff6c7990dc; estoque 12; 40 clientes" source=console
+
+running (0m05.0s), 40/40 VUs, 0 complete and 0 interrupted iterations
+disputa   [   0% ] 40 VUs  0m00.2s/2m0s  00/40 iters, 1 per VU
+time="2026-11-20T02:26:14Z" level=info msg="pedido 409: {\"type\":\"https://api.webag.com.br/errors/stock-conflict\",\"title\":\"Acabou o estoque\",\"status\":409,\"detail\":\"Acabou o estoque de Banana prata (kg).\",\"code\":\"STOCK" source=console
+time="2026-11-20T02:26:14Z" level=info msg="pedido 409: {\"type\":\"https://api.webag.com.br/errors/stock-conflict\",\"title\":\"Acabou o estoque\",\"status\":409,\"detail\":\"Acabou o estoque de Banana prata (kg).\",\"code\":\"STOCK" source=console
+
+
+  █ THRESHOLDS 
+
+    erros_5xx
+    ✓ 'count==0' count=0
+
+    pedidos_criados
+    ✓ 'count<=3' count=3
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 40      6.722257/s
+    checks_succeeded...: 100.00% 40 out of 40
+    checks_failed......: 0.00%   0 out of 40
+
+    ✓ sem 5xx
+
+    CUSTOM
+    conflitos_409..................: 37     6.218088/s
+    erros_5xx......................: 0      0/s
+    pedidos_criados................: 3      0.504169/s
+
+    HTTP
+    http_req_duration..............: avg=111.3ms min=1.86ms med=37.09ms max=466.49ms p(90)=350.24ms p(95)=368.41ms
+      { expected_response:true }...: avg=87.9ms  min=1.86ms med=32.35ms max=466.49ms p(90)=303.36ms p(95)=339.37ms
+    http_req_failed................: 8.31%  37 out of 445
+    http_reqs......................: 445    74.785108/s
+
+    EXECUTION
+    iteration_duration.............: avg=1.12s   min=1.08s  med=1.12s   max=1.16s    p(90)=1.14s    p(95)=1.15s   
+    iterations.....................: 40     6.722257/s
+    vus............................: 40     min=0         max=40
+    vus_max........................: 40     min=40        max=40
+
+    NETWORK
+    data_received..................: 529 kB 89 kB/s
+    data_sent......................: 183 kB 31 kB/s
+
+
+
+
+running (0m06.0s), 00/40 VUs, 40 complete and 0 interrupted iterations
+disputa ✓ [ 100% ] 40 VUs  0m01.2s/2m0s  40/40 iters, 1 per VU

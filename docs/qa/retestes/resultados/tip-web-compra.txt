@@ -1,0 +1,9 @@
+[compra] caminho entrega-pix
+[compra] sem endereço no aparelho: preenchendo o formulário
+[compra] PIX gerado; aprovando no provedor simulado (botão "Simular pagamento")
+[compra] OK entrega-pix
+[compra] caminho retirada-pix
+[compra] PIX gerado; aprovando no provedor simulado (botão "Simular pagamento")
+[compra] OK retirada-pix
+[compra] caminho cartao
+[compra] OK cartao

@@ -1,0 +1,262 @@
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import type { RequestContext } from '../../platform/auth/decorators.js';
+import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
+import { errors } from '../../platform/http/app-error.js';
+import { AuditService, ParametersService } from '../admin/index.js';
+import { cities, neighborhoods } from '../admin/db/schema.js';
+import { DeliveryQuoteRegistry, StoresService } from '../stores/index.js';
+import { LogisticsAvailabilityService } from './logistics-availability.service.js';
+import { deliveryFeeTables, deliveryFeeTiers } from './db/schema.js';
+import { computeEta, maxDistanceForCeilingM, presentEta, type EtaConfig, type EtaEstimate } from './domain/eta.js';
+import { applyFreeShipping, pickTier, startingFee, validateFeeTiers, type FeeScopeType, type FeeTier } from './domain/fees.js';
+
+export type FeeTable = typeof deliveryFeeTables.$inferSelect & { tiers: FeeTier[] };
+export interface Destination {
+  lat: number;
+  lng: number;
+  cityId?: string | null;
+  neighborhoodId?: string | null;
+}
+
+/** Foto da faixa usada, gravada no pedido (RN-05): mudar a tabela depois não altera pedido já feito. */
+export interface DeliveryFeeSnapshot {
+  tableId: string;
+  scopeType: FeeScopeType;
+  scopeKey: string;
+  version: number;
+  tierPosition: number;
+  distanceM: number;
+  baseFeeCents: number;
+  exchangeFeeCents: number;
+  expectedCostCents: number;
+  etaMinutes: number;
+}
+
+export interface DeliveryQuote {
+  available: boolean;
+  reason: 'OUT_OF_RANGE' | 'NO_FEE_TABLE' | 'LOGISTICS_CLOSED' | null;
+  /** BUG-016: quando `reason = LOGISTICS_CLOSED` por horário, a próxima abertura (pausa não tem previsão). */
+  logisticsOpensAt?: Date | null;
+  distanceM: number | null;
+  /** Taxa cobrada do cliente, já com a entrega grátis aplicada. */
+  feeCents: number | null;
+  freeShipping: boolean;
+  minOrderCents: number;
+  belowMinimum: boolean;
+  /** Estimativa central (min) do ETA calculado (DEC-053); `null` se não há distância. */
+  etaMinutes: number | null;
+  /** ETA completo (faixa e partes), inclusive quando a loja ficou fora do alcance por passar do teto. */
+  eta: EtaEstimate | null;
+  snapshot: DeliveryFeeSnapshot | null;
+}
+
+export interface FeeTableInput {
+  scopeType: FeeScopeType;
+  scopeId?: string | null;
+  tiers: FeeTier[];
+  effectiveFrom?: Date | undefined;
+  reason: string;
+  expectedVersion: number;
+}
+
+const DEFAULT_KEY = 'default';
+
+/**
+ * Tabela de taxa de entrega do admin (L.1, DEC-036): a taxa é da Webag, vem do ENDEREÇO DE DESTINO (bairro > cidade >
+ * padrão) e da faixa de distância em linha reta loja-destino; o raio é global (`raio_max_km`). Uma só função
+ * (`quote`) serve o carrinho, o checkout e a prévia do admin, então os valores não divergem.
+ */
+@Injectable()
+export class DeliveryFeesService implements OnModuleInit {
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Db,
+    private readonly params: ParametersService,
+    private readonly audit: AuditService,
+    private readonly stores: StoresService,
+    private readonly registry: DeliveryQuoteRegistry,
+    private readonly availability: LogisticsAvailabilityService,
+  ) {}
+
+  /** A prévia do painel do lojista usa a MESMA conta (cidade da loja como destino aproximado, sem endereço). */
+  onModuleInit(): void {
+    this.registry.register(async (storeId, point, subtotalCents) => {
+      const store = await this.stores.getStore(storeId);
+      const quote = await this.quote(storeId, { ...point, cityId: store.addressCityId ?? null }, subtotalCents);
+      return { available: quote.available, distanceM: quote.distanceM, feeCents: quote.feeCents, freeShipping: quote.freeShipping, belowMinimum: quote.belowMinimum };
+    });
+  }
+
+  private async tiersOf(tableIds: string[]): Promise<Map<string, FeeTier[]>> {
+    const rows = tableIds.length ? await this.db.select().from(deliveryFeeTiers).where(inArray(deliveryFeeTiers.tableId, tableIds)).orderBy(deliveryFeeTiers.tableId, deliveryFeeTiers.position) : [];
+    const map = new Map<string, FeeTier[]>();
+    for (const r of rows) (map.get(r.tableId) ?? map.set(r.tableId, []).get(r.tableId)!).push({ fromM: r.fromM, toM: r.toM, feeCents: r.feeCents, exchangeFeeCents: r.exchangeFeeCents, expectedCostCents: r.expectedCostCents, etaMinutes: r.etaMinutes });
+    return map;
+  }
+
+  /** Versão em vigor de cada escopo pedido (a de maior `effective_from` já alcançado). */
+  private async inForce(keys: string[], now: Date): Promise<Map<string, FeeTable>> {
+    if (keys.length === 0) return new Map();
+    const rows = await this.db
+      .selectDistinctOn([deliveryFeeTables.scopeKey])
+      .from(deliveryFeeTables)
+      .where(and(inArray(deliveryFeeTables.scopeKey, keys), lte(deliveryFeeTables.effectiveFrom, now)))
+      .orderBy(deliveryFeeTables.scopeKey, desc(deliveryFeeTables.effectiveFrom), desc(deliveryFeeTables.version));
+    const tiers = await this.tiersOf(rows.map((r) => r.id));
+    return new Map(rows.map((r) => [r.scopeKey, { ...r, tiers: tiers.get(r.id) ?? [] }]));
+  }
+
+  /** Tabela do destino: bairro > cidade > padrão geral (WB-236 C2). */
+  async resolve(destination: Pick<Destination, 'cityId' | 'neighborhoodId'>, now = new Date()): Promise<FeeTable | null> {
+    const keys = [destination.neighborhoodId, destination.cityId, DEFAULT_KEY].filter((k): k is string => !!k);
+    const found = await this.inForce(keys, now);
+    for (const key of keys) {
+      const table = found.get(key);
+      if (table) return table;
+    }
+    return null;
+  }
+
+  async quote(storeId: string, destination: Destination, subtotalCents: number, now = new Date()): Promise<DeliveryQuote> {
+    const [radiusKm, minOrderCents, freeAbove] = await Promise.all([this.params.getNumber('raio_max_km'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('frete_gratis_acima_cents')]);
+    const belowMinimum = subtotalCents < minOrderCents;
+    const base = { minOrderCents, belowMinimum };
+    const distance = await this.stores.distanceMeters(storeId, destination);
+    if (distance === null) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM: null, feeCents: null, freeShipping: false, etaMinutes: null, eta: null, snapshot: null };
+    const distanceM = Math.round(distance);
+    if (distanceM > radiusKm * 1000) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: null, eta: null, snapshot: null };
+    // DEC-053: estimativa acima do teto (`entrega_max_min`) = a loja não entrega para o endereço ("fora da área").
+    const [etaConfig, settings] = await Promise.all([this.etaConfig(), this.stores.getSettings(storeId)]);
+    const eta = computeEta(etaConfig, { distanceM, prepMin: settings.prepMinutes });
+    if (!eta.withinCeiling) return { ...base, available: false, reason: 'OUT_OF_RANGE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
+    // BUG-016 / DEC-039c: fora do horário da logística ou pausada (geral ou da cidade de destino), só retirada.
+    // RN-19 item 2 (BUG-021): o fim da faixa precisa cair antes do fechamento, não só "aberto agora".
+    const logistics = await this.availability.status(destination.cityId ?? null, now, eta.toMin);
+    if (!logistics.open) return { ...base, available: false, reason: 'LOGISTICS_CLOSED', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, logisticsOpensAt: logistics.opensAt, snapshot: null };
+    const table = await this.resolve(destination, now);
+    const picked = table ? pickTier(table.tiers, distanceM) : null;
+    if (!table || !picked) return { ...base, available: false, reason: table ? 'OUT_OF_RANGE' : 'NO_FEE_TABLE', distanceM, feeCents: null, freeShipping: false, etaMinutes: eta.estimateMin, eta, snapshot: null };
+    const fee = applyFreeShipping(picked.tier.feeCents, subtotalCents, freeAbove);
+    return {
+      ...base,
+      available: true,
+      reason: null,
+      distanceM,
+      feeCents: fee,
+      freeShipping: fee === 0 && picked.tier.feeCents > 0,
+      etaMinutes: eta.estimateMin,
+      eta,
+      snapshot: { tableId: table.id, scopeType: table.scopeType, scopeKey: table.scopeKey, version: table.version, tierPosition: picked.position, distanceM, baseFeeCents: picked.tier.feeCents, exchangeFeeCents: picked.tier.exchangeFeeCents, expectedCostCents: picked.tier.expectedCostCents, etaMinutes: eta.estimateMin },
+    };
+  }
+
+  /**
+   * W.5 (WB-257): "Prévia para o cliente" do lojista em Minha loja > Entrega e retirada, ANTES de salvar o preparo. É a MESMA conta do `quote` do
+   * checkout (`computeEta` com os mesmos parâmetros, o mesmo teto no FIM da faixa e o mesmo raio), só com o preparo do formulário no lugar do salvo e
+   * sem o que depende do carrinho (subtotal, frete grátis, horário da logística). O destino é um ponto (`lat`/`lng`, distância medida a partir da loja)
+   * ou a distância direta em km. A taxa é a da tabela do destino (cidade/bairro informados, senão o padrão geral) para a faixa da distância.
+   */
+  async previewForStore(storeId: string, input: { lat?: number | undefined; lng?: number | undefined; distanceKm?: number | undefined; prepMin?: number | null | undefined; cityId?: string | null | undefined; neighborhoodId?: string | null | undefined }, now = new Date()) {
+    const [radiusKm, etaConfig, settings] = await Promise.all([this.params.getNumber('raio_max_km'), this.etaConfig(), this.stores.getSettings(storeId)]);
+    const prepMin = input.prepMin ?? settings.prepMinutes ?? etaConfig.defaultPrepMin;
+    const reachKm = Math.min(radiusKm, Math.floor(maxDistanceForCeilingM(etaConfig, prepMin) / 100) / 10);
+    const maxPrepMin = etaConfig.maxMin - etaConfig.dispatchMin - etaConfig.bandMin - 1; // o preparo precisa ser MENOR que a folga (como em `setDelivery`)
+    const measured = input.distanceKm !== undefined ? input.distanceKm * 1000 : input.lat !== undefined && input.lng !== undefined ? await this.stores.distanceMeters(storeId, { lat: input.lat, lng: input.lng }) : null;
+    const base = { prepMin, reachKm, maxPrepMin, radiusKm };
+    if (measured === null) return { ...base, available: false, reason: 'OUT_OF_RANGE' as const, distanceM: null, eta: null, etaRange: null, fee: null };
+    const distanceM = Math.round(measured);
+    const eta = computeEta(etaConfig, { distanceM, prepMin });
+    const table = await this.resolve({ cityId: input.cityId ?? null, neighborhoodId: input.neighborhoodId ?? null }, now);
+    const picked = table ? pickTier(table.tiers, distanceM) : null;
+    const withinRadius = distanceM <= radiusKm * 1000;
+    const available = withinRadius && eta.withinCeiling && picked !== null;
+    const reason = !withinRadius || !eta.withinCeiling ? ('OUT_OF_RANGE' as const) : picked === null ? ('NO_FEE_TABLE' as const) : null;
+    return {
+      ...base,
+      available,
+      reason,
+      distanceM,
+      eta: { estimateMin: eta.estimateMin, fromMin: eta.fromMin, toMin: eta.toMin, prepMin: eta.prepMin, dispatchMin: eta.dispatchMin, travelMin: eta.travelMin, bandMin: etaConfig.bandMin, withinCeiling: eta.withinCeiling },
+      etaRange: presentEta({ minMinutes: eta.fromMin, maxMinutes: eta.toMin }, now),
+      fee: picked ? { amount: picked.tier.feeCents, currency: 'BRL' as const } : null,
+    };
+  }
+
+  /** Parâmetros do ETA (DEC-053), lidos juntos; a mesma conta serve todas as telas. */
+  async etaConfig(): Promise<EtaConfig> {
+    const [defaultPrepMin, dispatchMin, routeFactorPct, minPerKm, bandMin, maxMin] = await Promise.all(
+      ['entrega_preparo_padrao_min', 'entrega_despacho_min', 'entrega_rota_fator_pct', 'entrega_min_por_km', 'entrega_faixa_min', 'entrega_max_min'].map((k) => this.params.getNumber(k)),
+    );
+    return { defaultPrepMin: defaultPrepMin!, dispatchMin: dispatchMin!, routeFactorPct: routeFactorPct!, minPerKm: minPerKm!, bandMin: bandMin!, maxMin: maxMin! };
+  }
+
+  /** "A partir de R$ X" enquanto o endereço é aproximado (WB-237 C1): menor faixa da tabela da cidade (ou do padrão). */
+  async startingFeeFor(cityId: string | null, now = new Date()): Promise<number | null> {
+    const table = await this.resolve({ cityId, neighborhoodId: null }, now);
+    return table ? startingFee(table.tiers) : null;
+  }
+
+  // ------------------------------------------------------------------ admin
+
+  private async scopeKeyOf(scopeType: FeeScopeType, scopeId: string | null | undefined): Promise<string> {
+    if (scopeType === 'default') return DEFAULT_KEY;
+    if (!scopeId) throw errors.validation([{ field: 'scopeId', message: 'Informe a cidade ou o bairro.' }]);
+    const table = scopeType === 'city' ? cities : neighborhoods;
+    const [row] = await this.db.select({ id: table.id }).from(table).where(eq(table.id, scopeId));
+    if (!row) throw errors.notFound(scopeType === 'city' ? 'Cidade não encontrada.' : 'Bairro não encontrado.');
+    return scopeId;
+  }
+
+  /** Cria uma VERSÃO nova da tabela do escopo (histórico; não é retroativa). 409 se outro admin gravou antes. */
+  async put(input: FeeTableInput, ctx: RequestContext): Promise<FeeTable> {
+    const scopeKey = await this.scopeKeyOf(input.scopeType, input.scopeId);
+    const [radiusKm, exchangeMax] = await Promise.all([this.params.getNumber('raio_max_km'), this.params.getNumber('taxa_coleta_max_cents')]);
+    const problem = validateFeeTiers(input.tiers, radiusKm * 1000, exchangeMax);
+    if (problem) throw errors.unprocessable('FEE_TABLE_INVALID', 'Tabela de taxa inválida', { detail: problem, errors: [{ field: 'tiers', message: problem }] });
+    const now = new Date();
+    const effectiveFrom = input.effectiveFrom ?? now;
+    if (effectiveFrom.getTime() < now.getTime() - 60_000) throw errors.unprocessable('FEE_TABLE_RETROACTIVE', 'A tabela não é retroativa', { detail: 'A vigência não pode estar no passado.' });
+    if (effectiveFrom.getTime() > now.getTime() + 90 * 86_400_000) throw errors.unprocessable('FEE_TABLE_TOO_FAR', 'Vigência distante demais', { detail: 'A vigência vai até 90 dias à frente.' });
+
+    const created = await this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`delivery-fee-table:${scopeKey}`}))`);
+      const [latest] = await tx.select({ version: deliveryFeeTables.version }).from(deliveryFeeTables).where(eq(deliveryFeeTables.scopeKey, scopeKey)).orderBy(desc(deliveryFeeTables.version)).limit(1);
+      const current = latest?.version ?? 0;
+      if (current !== input.expectedVersion) throw errors.conflict('FEE_TABLE_CONFLICT', 'Tabela alterada por outra pessoa', 'Outro admin alterou esta tabela. Recarregue para ver a versão atual.');
+      const [table] = await tx
+        .insert(deliveryFeeTables)
+        .values({ scopeType: input.scopeType, scopeKey, version: current + 1, effectiveFrom, reason: input.reason, createdBy: ctx.principal?.userId ?? null })
+        .returning();
+      const sorted = [...input.tiers].sort((a, b) => a.fromM - b.fromM);
+      await tx.insert(deliveryFeeTiers).values(sorted.map((t, position) => ({ tableId: table!.id, position, fromM: t.fromM, toM: t.toM, feeCents: t.feeCents, exchangeFeeCents: t.exchangeFeeCents, expectedCostCents: t.expectedCostCents, etaMinutes: t.etaMinutes })));
+      await this.audit.record(tx, ctx, { action: 'delivery_fee_table.set', targetType: 'delivery_fee_table', targetId: table!.id, after: { scopeType: input.scopeType, scopeKey, version: current + 1, effectiveFrom: effectiveFrom.toISOString(), tiers: sorted }, reason: input.reason });
+      return { ...table!, tiers: sorted };
+    });
+    return created;
+  }
+
+  /** Tabelas em vigor, uma por escopo, mais recentes primeiro (paginação por cursor em `created_at`/`id`). */
+  async list(): Promise<(FeeTable & { scopeName: string })[]> {
+    const rows = await this.db.selectDistinctOn([deliveryFeeTables.scopeKey]).from(deliveryFeeTables).where(lte(deliveryFeeTables.effectiveFrom, new Date())).orderBy(deliveryFeeTables.scopeKey, desc(deliveryFeeTables.effectiveFrom), desc(deliveryFeeTables.version));
+    const tiers = await this.tiersOf(rows.map((r) => r.id));
+    const names = await this.scopeNames(rows);
+    return rows.map((r) => ({ ...r, tiers: tiers.get(r.id) ?? [], scopeName: names.get(r.scopeKey) ?? (r.scopeType === 'default' ? 'Padrão geral' : r.scopeKey) }));
+  }
+
+  /** Histórico de versões do escopo (inclui as futuras), da mais nova à mais antiga. */
+  async history(scopeType: FeeScopeType, scopeId: string | null): Promise<FeeTable[]> {
+    const scopeKey = await this.scopeKeyOf(scopeType, scopeId);
+    const rows = await this.db.select().from(deliveryFeeTables).where(eq(deliveryFeeTables.scopeKey, scopeKey)).orderBy(desc(deliveryFeeTables.version)).limit(50);
+    const tiers = await this.tiersOf(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, tiers: tiers.get(r.id) ?? [] }));
+  }
+
+  private async scopeNames(rows: (typeof deliveryFeeTables.$inferSelect)[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const cityIds = rows.filter((r) => r.scopeType === 'city').map((r) => r.scopeKey);
+    const hoodIds = rows.filter((r) => r.scopeType === 'neighborhood').map((r) => r.scopeKey);
+    if (cityIds.length) for (const c of await this.db.select({ id: cities.id, name: cities.name }).from(cities).where(inArray(cities.id, cityIds))) map.set(c.id, c.name);
+    if (hoodIds.length) for (const n of await this.db.select({ id: neighborhoods.id, name: neighborhoods.name }).from(neighborhoods).where(inArray(neighborhoods.id, hoodIds))) map.set(n.id, n.name);
+    return map;
+  }
+}

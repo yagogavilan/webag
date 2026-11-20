@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v3, conceito A. Logo horizontal BRANCA, para fundo roxo (#C02EF0 ou mais escuro), foto com scrim. Mesma geometria de webag-logo.src.svg.
+     viewBox provisorio 0 0 470 126; mesmo marcador de palavra (fill branco). Sem fundo desenhado: o fundo e do uso. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 126" width="470" height="126" role="img" aria-labelledby="wb-logob-t">
+  <title id="wb-logob-t">Webag</title>
+  <g id="simbolo">
+    <g id="barras" fill="#FFFFFF">
+      <rect x="34" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="31" height="14" rx="7"/>
+    </g>
+    <g id="sacola" transform="translate(14.6 0) skewX(-8)" fill="#FFFFFF">
+      <rect x="56" y="34" width="96" height="70" rx="18"/>
+      <path d="M70 44 A34 37 0 0 1 138 44" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    </g>
+  </g>
+  <!--TEXT2PATH font="outfit-latin-700-normal.woff2" text="webag" size="96" tracking="-2" x="182" y="104" fill="#FFFFFF" id="wordmark"-->
+</svg>

@@ -1,0 +1,34 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { isSessionArea, sessionCookies, writeCookies, type TokenPair } from '@/server/cookies';
+import { csrfProblem } from '@/server/csrf';
+import { areaAllowedOnHost } from '@/server/hosts';
+import { problem } from '@/server/http';
+import { callApi, clientHints, parseJson } from '@/server/upstream';
+
+const bodySchema = z.strictObject({ token: z.string().min(20).max(200), password: z.string().min(1).max(1000) });
+
+/**
+ * Aceitar convite cria a senha e abre a sessão. Admin entra sem 2º fator: o painel só libera a configuração do TOTP.
+ * Funcionário de loja (L10) entra direto, só com o que a permissão libera.
+ */
+export async function POST(request: NextRequest, context: { params: Promise<{ area: string }> }) {
+  const { area } = await context.params;
+  if (!isSessionArea(area)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (!areaAllowedOnHost(area, request.headers)) return problem(404, 'NOT_FOUND', 'Não encontrado');
+  if (csrfProblem(request)) return problem(403, 'CSRF', 'Requisição recusada');
+
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return problem(400, 'VALIDATION_FAILED', 'Dados inválidos');
+
+  // Convite de admin e de funcionário de loja são rotas diferentes na API (cada um com o seu token e papel).
+  const result = await callApi(area === 'admin' ? '/v1/auth/invitations/accept' : '/v1/auth/store-invitations/accept', { method: 'POST', body: JSON.stringify(parsed.data), hints: clientHints(request.headers) });
+  if (result.status !== 200) {
+    return new NextResponse(result.text || null, { status: result.status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+  }
+  const body = parseJson<{ tokens: TokenPair; mfaSetupRequired?: boolean }>(result.text);
+  if (!body) return problem(502, 'BAD_UPSTREAM', 'Resposta inesperada da API');
+  const response = NextResponse.json({ mfaSetupRequired: area === 'admin' ? true : Boolean(body.mfaSetupRequired) }, { headers: { 'cache-control': 'no-store' } });
+  writeCookies(response.cookies, sessionCookies(area, body.tokens));
+  return response;
+}

@@ -1,0 +1,59 @@
+# Fluxo crítico: criar conta (WB-006). Roda contra a API local/staging com seed (cidade Francisco Morato ativa).
+#   maestro test e2e/criar-conta.yaml
+# Cada execução cria um e-mail novo (a conta de teste fica no ambiente; nunca rodar contra produção).
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- evalScript: ${output.email = 'maestro+' + Date.now() + '@webag.test'}
+
+# Primeiro uso: sem endereço o app pergunta onde receber (WB-001), sem exigir login
+- assertVisible: Onde você quer receber?
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- assertVisible: Lojas da sua região
+
+# Visitante abre o cadastro por ação própria
+- tapOn:
+    id: home.signup
+- assertVisible: Criar conta
+
+# Botão ativo: vazio mostra os erros ao tocar (DEC-024d)
+- tapOn:
+    id: auth.signup-submit
+- assertVisible: Digite seu nome.
+- assertVisible: Marque a caixa para continuar.
+
+- tapOn:
+    id: auth.signup-name-input
+- inputText: Maria Teste
+- tapOn:
+    id: auth.signup-email-input
+- inputText: ${output.email}
+- tapOn:
+    id: auth.signup-phone-input
+- inputText: '11999998888'
+- tapOn:
+    id: auth.password-input
+- inputText: Cachorro-Azul-2024
+- assertVisible: Forte
+- tapOn:
+    id: auth.password-confirm-input
+- inputText: Cachorro-Azul-2024
+- hideKeyboard
+- tapOn:
+    id: auth.terms-checkbox
+- tapOn:
+    id: auth.signup-submit
+
+# Sem tela de código no caminho (DEC-015): cai no início, logado, com o aviso para confirmar o e-mail
+- assertVisible: Olá, Maria
+- assertVisible: Confirme seu e-mail para fazer outros pedidos e usar cupons.
+- assertVisible: Código enviado para ${output.email}.
+
+# O código chega por e-mail (Mailpit no ambiente local); a tela de código abre pelo aviso
+- tapOn: Digitar código
+- assertVisible: Confirme seu e-mail
+- assertVisible:
+    id: auth.otp-input

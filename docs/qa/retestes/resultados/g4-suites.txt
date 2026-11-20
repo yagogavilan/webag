@@ -1,0 +1,46 @@
+G4 final: suítes no commit congelado 0d902ab (conteúdo de apps/ e packages/ idêntico ao de 25ce4c7), clone novo, 2026-11-19
+Ambiente: sandbox Linux 4 vCPU, Node 22.23, pnpm 10.28, Docker 29.10; PostgreSQL 18 + PostGIS, Redis 8, RustFS, Mailpit pelo docker compose do repositório (pnpm run setup); API compilada (node dist/main.js) com TRUST_PROXY=1 na porta 3400
+
+--- pnpm run setup (do zero): 28,8 s; 51 migrações (0000 a 0050); seed completo
+--- pnpm smoke: 36 de 36 verificações, 2 s (ver g4-final.md)
+
+--- generate:check
+ Tasks:    1 successful, 1 total
+  Time:    2.218s 
+--- lint
+ Tasks:    6 successful, 6 total
+  Time:    50.302s 
+--- typecheck
+ Tasks:    7 successful, 7 total
+  Time:    26.257s 
+--- build
+ Tasks:    5 successful, 5 total
+Cached:    2 cached, 5 total
+  Time:    57.66s 
+--- API unitários
+ Test Files  41 passed (41)
+      Tests  308 passed (308)
+--- API e2e (banco e Redis reais), 3 execuções completas seguidas
+run 1 exit 1 secs 631
+run 2 exit 0 secs 579
+run 3 exit 0 secs 596
+done
+execução 1: 762 passaram, 1 falharam, 0 ignorados, de 763 testes em 95 arquivos
+execução 2: 763 passaram, 0 falharam, 0 ignorados, de 763 testes em 95 arquivos
+execução 3: 763 passaram, 0 falharam, 0 ignorados, de 763 testes em 95 arquivos
+falha da execução 1: test/seed-onda3.e2e-spec.ts:39 'banners: 3 com imagem 2:1 ...' (expected 2 to be greater than or equal to 3); nas execuções 2 e 3 o arquivo foi para o início da fila (o vitest roda primeiro o que falhou na execução anterior) e passou. Reprodução com cache frio: 2 de 2 falhas (ver BUG-019)
+--- web Vitest
+ Test Files  74 passed (74)
+      Tests  601 passed (601)
+--- web Playwright, API falsa (PW_CHANNEL=chrome)
+  2 skipped
+  46 passed (1.4m)
+--- web Playwright contra a API real (e2e-real, REAL_API_URL=http://localhost:3400, REAL_DB_URL do compose)
+  3 skipped
+  8 passed (1.8m)
+--- app Jest
+Test Suites: 42 passed, 42 total
+Tests:       398 passed, 398 total
+--- packages/shared
+3 de 3
+--- pnpm web (app no navegador) contra a API real: ver g4-app-web-saida.txt (5 verificações)

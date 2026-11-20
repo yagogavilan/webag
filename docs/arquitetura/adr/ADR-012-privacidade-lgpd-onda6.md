@@ -1,0 +1,26 @@
+# ADR-012: Privacidade e LGPD (Onda 6, O6.1): exclusão de conta, exportação, pedidos de titulares e retenção
+
+- **Status:** Aceita (tech-lead: `reviews/onda-8.md`; segurança: `docs/seguranca/revisao-onda6.md` e `revisoes/`; prazos e bases legais seguem `[HIPÓTESE]` até o jurídico, J15)
+- **Data:** 2026-11-19
+- **Autor:** backend-dev
+- **Custo mensal:** sem serviço novo (arquivos de exportação no bucket privado já contratado; ~KB por conta). Sem fila nova: varredura idempotente no mesmo padrão de `OrdersService.sweep`.
+
+## Decisões
+| # | Decisão | Motivo | Alternativa descartada |
+|---|---|---|---|
+| 1 | **Módulo `privacy` próprio**, único autorizado a ler/alterar tabelas de outros módulos para anonimizar e exportar | A regra de LGPD fica em um lugar revisável; espalhar `anonymize()` por 10 módulos garante que um deles seja esquecido. Nenhum módulo importa de `privacy` | Cada módulo expõe `anonymizeUser()` (mais fiel à regra de fronteira, mais fácil de esquecer um) |
+| 2 | **A linha de `users` fica como casca anonimizada** (`deleted-<uuid>@anon.webag.invalid`, nome "Conta excluída", sem celular nem senha); pedidos, itens, pagamentos e ledger ficam intactos | Integridade das chaves e do ledger append-only; relatórios continuam fechando (WB-215 C2). O e-mail original é liberado na hora (WB-213 C6) | Apagar a linha (quebra FK de pedido/ledger) |
+| 3 | **Fecha na hora, anonimiza em `effective_at`** = pedido + `min(exclusao_arrependimento_horas, exclusao_anonimizacao_dias x 24)`. Padrão 0 h: tudo na mesma chamada. Com período > 0: conta `deleted` (login impossível, sessões e push fora), e-mail reservado, e `POST /v1/auth/account-deletion/cancel` (e-mail + senha) reativa | "Período de arrependimento opcional e configurável" sem custo para quem não usa; o limite de 15 dias da LGPD é teto | Período fixo; cancelar com a conta logada (impossível: sessões revogadas) |
+| 4 | **Só a senha** confirma (SEC-096, DEC-014/015), com o mesmo limite de falhas do login (429 depois de `login_falhas`). Admin não exclui por aqui (WB-101) | Apple 5.1.1(v); código por e-mail não prova a conta com e-mail não confirmado | Código + senha |
+| 5 | **Bloqueios**: pedido ativo e troca aberta do titular; dono de loja: pedidos ativos, trocas e estornos pendentes da loja. Dono sem bloqueios: a loja vai para o novo estado terminal `closed` (só nasce daqui; arrependimento reabre no estado anterior) | O PRD pede "encerrar a loja antes", e não existe a ação; fechar junto é o que o dono espera e some da vitrine (`status = approved` já filtra) | Exigir um "encerrar loja" que ainda não existe |
+| 6 | **O que fica, sem identificar a pessoa:** pedidos/itens/valores/pagamentos/ledger (`retencao_fiscal_anos`); endereço do pedido reduzido a cidade/UF; CPF/CNPJ, razão social e documentos da loja do dono (fiscal); `consents` e `terms_acceptances` (prova, append-only por trigger); `access_log` por 6 meses (Marco Civil art. 15; o expurgo apaga) | Obrigação legal e prova | Apagar tudo (descumpre fiscal e o piso do Marco Civil) |
+| 7 | **O que sai:** endereços, favoritos, buscas, sacola, tokens de push, sessões, códigos e tickets, fotos de troca (storage), exportações, contato e nota da corrida (`deliveries.contact`, DT-052), comentário de avaliação, descrição/contestação de troca, convites pelo e-mail, vínculo de funcionário, contato e endereço da loja do dono | WB-213 C3 | — |
+| 8 | **Exportação assíncrona**: `POST /v1/me/data-exports` (senha) enfileira; a varredura monta um JSON no bucket privado (`exports/<user>/<id>.json`), avisa por e-mail (sem link nem dado) e o titular pede, logado, um **link de uso único e 5 min** (`exportacao_link_min`); o arquivo some em `exportacao_validade_dias` | Link por e-mail sofre pré-visualização de antivírus (consome o uso único) e vaza com a caixa de entrada; exigir login mantém WB-212 C3 | Link no e-mail; ZIP (sem biblioteca; JSON basta) |
+| 9 | **Pedidos de titulares (DSR)** com protocolo `PV-0001`, prazo de 15 dias, alerta aos 10, e-mail do solicitante mascarado na lista (revelar = auditoria), só super admin | WB-217 | — |
+| 10 | **Retenção (DT-021)**: job diário idempotente, em lotes, só com contagens no `retention_runs`; falha vira alerta ao admin | WB-215 C1/C3 | Cron externo |
+
+## Consequências
+- Parâmetros novos: `exclusao_arrependimento_horas`, `retencao_log_acesso_meses` (piso 6), `retencao_foto_troca_dias`, `retencao_loja_reprovada_dias`, `exportacao_link_min`. Adendo SEC-185 (2026-11-19): `retencao_bloqueio_anos` (padrão 5, faixa 1 a 10, [HIPÓTESE] a validar com o jurídico) para `user_status_history`, apagado pelo expurgo diário.
+- `consents`/`terms_acceptances` retêm o IP do aceite ligado à casca anonimizada: base "prova/exercício regular de direitos" `[validar com o jurídico]`; se o parecer exigir apagar o IP, é preciso trocar o trigger append-only por um expurgo controlado.
+- Backups: o dado apagado persiste até a rotação (`[validar]` com o tech-lead; `docs/seguranca`).
+- Segurança a revisar: confirmação só por senha, limite de tentativas e resposta idêntica no cancelamento, link de download de uso único, ausência de segredo e de dado de terceiros no arquivo, varredura de "nenhum dado pessoal restante" (teste `privacy-deletion.e2e-spec.ts`).

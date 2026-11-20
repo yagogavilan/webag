@@ -1,0 +1,113 @@
+# CI do monorepo (ADR-006, skill padroes-backend): install → contrato → tokens → lint → typecheck → test → build.
+# Bloqueia merge se falhar (configurar como status obrigatório na proteção do main).
+# Versões das actions: majors conhecidas em 2026-11-18; conferir releases e fixar por SHA quando o security pedir.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+  EXPO_NO_TELEMETRY: '1'
+
+jobs:
+  checks:
+    name: lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgis/postgis:18-3.6-alpine
+        env:
+          POSTGRES_USER: webag
+          POSTGRES_PASSWORD: webag_ci_only
+          POSTGRES_DB: webag
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U webag -d webag"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      # E2E da API contra Postgres/Redis reais (services acima). Credencial descartável, só do CI.
+      E2E_DEPS: '1'
+      DATABASE_URL: postgresql://webag:webag_ci_only@localhost:5432/webag
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # o gitleaks varre o histórico
+
+      - uses: pnpm/action-setup@v4 # versão vem de "packageManager" no package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      # SEC-085: vulnerabilidade Alta ou Crítica derruba o pipeline. Produção: sem exceção. Ferramentas de
+      # desenvolvimento: só passa o que ainda não tem correção publicada (registrado em divida-tecnica.md, DT-024);
+      # qualquer Alta/Crítica com correção disponível bloqueia.
+      - name: Auditoria de dependências (pnpm audit, Alta e Crítica)
+        run: |
+          pnpm audit --prod --audit-level high
+          pnpm audit --audit-level high --ignore-unfixable
+
+      # SEC-085 / CLAUDE.md §7: nenhum segredo no repositório. Binário oficial do gitleaks, sem action de terceiros.
+      - name: Varredura de segredos (gitleaks)
+        run: |
+          GITLEAKS_VERSION=8.28.0
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          # SEC-127: o checksum fica no repositório (publicado em gitleaks_${GITLEAKS_VERSION}_checksums.txt); trocar a versão exige trocar o hash.
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --redact --no-banner --config .gitleaks.toml --exit-code 1 .
+          rm -f gitleaks gitleaks.tar.gz
+
+      - name: Cliente gerado está em dia com o openapi.yaml
+        run: pnpm generate:check
+
+      - name: Tokens gerados em dia e contraste WCAG AA
+        run: |
+          pnpm --filter @webag/tokens build
+          git diff --exit-code -- packages/tokens
+          pnpm --filter @webag/tokens check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Testes (unitários + E2E da API)
+        run: pnpm test
+
+      - name: Build (API, shared, web e bundle do app)
+        run: pnpm build
+
+      - name: Imagem Docker da API (só build, sem push)
+        run: docker build -f apps/api/Dockerfile -t webag-api:ci .
+
+      # DT-040: um erro no Dockerfile do web (ex.: arquivo que o "standalone" não copia) só aparecia no deploy.
+      - name: Imagem Docker do painel web (só build, sem push)
+        run: docker build -f apps/web/Dockerfile -t webag-web:ci .

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v4a "Sacola Trapezio". Icone do app 1024x1024. Fundo SOLIDO #C02EF0 sem cantos (a Apple arredonda; nao exportar com transparencia).
+     Simbolo branco = webag-simbolo-v4a.svg (160x104) a escala 3,2 => ~493 x 330 px. Ponto (82,54,5) do simbolo no centro (512,512) => translate(249.6 337.6).
+     Ponto mais distante do centro: ~266 px (ponta da barra do meio), dentro da area segura do Android adaptativo (raio 313).
+     Camadas Android: fundo = id="fundo"; frente = id="simbolo". Monocromatico (Android 13) = id="simbolo" em uma cor (olhais viram vazados).
+     Guias (id="guias") ocultas: remover display="none" para conferir. Quadrado iOS: raio ~229 px. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="wb-icone-t">
+  <title id="wb-icone-t">Webag</title>
+  <defs>
+    <mask id="wb-olhais" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#FFFFFF"/>
+      <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+      <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect id="fundo" x="0" y="0" width="1024" height="1024" fill="#C02EF0"/>
+  <g id="simbolo" transform="translate(249.6 337.6) scale(3.2)">
+    <g id="barras" fill="#FFFFFF">
+      <rect x="24" y="34" width="23" height="14" rx="7"/>
+      <rect x="0" y="62" width="49" height="14" rx="7"/>
+      <rect x="18" y="90" width="34" height="14" rx="7"/>
+    </g>
+    <g id="sacola" fill="#FFFFFF" mask="url(#wb-olhais)">
+      <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    </g>
+  </g>
+  <g id="guias" display="none" fill="none" stroke="#1C1721" stroke-width="2">
+    <circle cx="512" cy="512" r="313"/>
+    <rect x="0" y="0" width="1024" height="1024" rx="229"/>
+  </g>
+</svg>

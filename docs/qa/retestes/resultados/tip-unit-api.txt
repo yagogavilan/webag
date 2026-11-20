@@ -1,0 +1,24 @@
+
+> @webag/api@0.1.0 test:unit /dev/shm/qa/webag/apps/api
+> vitest run
+
+
+ RUN  v4.1.12 /dev/shm/qa/webag/apps/api
+
+[33m[Nest] 23158  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[MercadoPagoPaymentProvider] [39m[33mMercado Pago: falha ao criar pagamento (status MPConnectionError): The operation was aborted[39m
+[33m[Nest] 23158  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[MercadoPagoPaymentProvider] [39m[33mMercado Pago: falha ao criar pagamento (status 500): boom[39m
+[33m[Nest] 23158  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[MercadoPagoPaymentProvider] [39m[33mMercado Pago: falha ao criar pagamento (status 400): invalid payer secret-text[39m
+[33m[Nest] 23158  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[MercadoPagoPaymentProvider] [39m[33mMercado Pago: falha ao criar pagamento (status 401): invalid token[39m
+[33m[Nest] 23215  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[HttpGeocodingProvider] [39m[33mgeocodificador indisponível: Serviço de CEP indisponível[39m
+[33m[Nest] 23215  - [39m11/20/2026, 5:15:49 AM [33m   WARN[39m [38;5;3m[HttpGeocodingProvider] [39m[33mgeocodificador indisponível: Geocodificador indisponível[39m
+[95m[Nest] 23409  - [39m11/20/2026, 5:15:50 AM [95m  DEBUG[39m [38;5;3m[PushTransport] [39m[95mpush (log): 1 mensagem(ns)[39m
+[33m[Nest] 23409  - [39m11/20/2026, 5:15:50 AM [33m   WARN[39m [38;5;3m[PushTransport] [39m[33mfalha ao enviar push: offline[39m
+[33m[Nest] 23409  - [39m11/20/2026, 5:15:50 AM [33m   WARN[39m [38;5;3m[PushTransport] [39m[33mfalha ao enviar push: Expo respondeu 503[39m
+[31m[Nest] 23492  - [39m11/20/2026, 5:15:52 AM [31m  ERROR[39m [38;5;3m[Health] [39m[31mschema do banco desatualizado: 5 migração(ões) pendente(s) (aplicadas 52 de 57): rode "pnpm db:migrate" (em produção, node dist/platform/database/migrate.js)[39m
+[33m[Nest] 23492  - [39m11/20/2026, 5:15:52 AM [33m   WARN[39m [38;5;3m[Health] [39m[33mschema indisponível: connect ECONNREFUSED 10.0.0.5:5432[39m
+
+ Test Files  46 passed (46)
+      Tests  335 passed (335)
+   Start at  05:15:48
+   Duration  7.78s (transform 1.53s, setup 0ms, import 6.97s, tests 7.15s, environment 4ms)
+

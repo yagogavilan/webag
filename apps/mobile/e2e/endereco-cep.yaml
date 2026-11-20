@@ -1,0 +1,17 @@
+# Fluxo: endereço por CEP com autocompletar (WB-002). Usa o ViaCEP real: precisa de internet.
+#   maestro test e2e/endereco-cep.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.enter-cep
+- tapOn:
+    id: address.cep-input
+- inputText: '07900000'
+- assertVisible: Francisco Morato
+- inputText: '120'
+- tapOn:
+    id: address.submit
+- assertVisible:
+    id: home.address

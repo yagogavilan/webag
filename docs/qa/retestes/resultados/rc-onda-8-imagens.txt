@@ -1,0 +1,11 @@
+
+=== imagens ===
+PASS  BUG-010-prep | há donos de loja semeados para o teste  [12 donos]
+  [info] RSS da API antes: 372 MB; PNG 25MP=0.08 MB; PNG 39,7MP=0.13 MB; JPEG 39,9MP=0.23 MB
+PASS  BUG-010a | 40 uploads simultâneos (10 JPEG 39,9 MP, 20 PNG 25 MP, 10 PNG 39,7 MP) de 12 contas: a API não cai nem devolve 5xx  [total 4845 ms; JPEG ok 10/10; PNG25 ok 20/20; PNG40 ok 0 recusados(422) 10; fora do esperado: nenhum]
+PASS  BUG-010b | a API continua respondendo leituras durante o processamento (p95 de /home abaixo de 1 s, sem erro)  [18 leituras; p95=198 ms; max=198 ms; erros=0]
+PASS  BUG-010c | memória: RSS da API depois da carga não passa de 1 GB (limite sugerido do contêiner: 768 MB a 1 GB)  [RSS antes=372 MB depois=590 MB]
+PASS  BUG-010d | PNG acima do teto de 25 MP é recusado com motivo (422 UPLOAD_REJECTED), não processado  [recusados 10/10; {"type":"https://api.webag.com.br/errors/upload-rejected","title":"Arquivo recusado","status":422,"detail":"A imagem PNG é grande demais (máximo de 25 megapixel]
+PASS  BUG-010e | nenhum upload válido foi recusado por tempo esgotado na fila (honestos não perdem foto no pico)  [recusados por tempo=0; válidos aceitos=30/30]
+
+RESUMO: 6 passaram, 0 falharam, 0 não testadas

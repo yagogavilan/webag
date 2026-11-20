@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200" role="img" aria-label="Nada encontrado">
+  <!-- Busca sem resultado: o olhal da sacola vira lente; dentro dela, as barras "procurando" (uma fora do lugar).
+       Copy de apoio: "Nada com esse nome por aqui" + sugestões. Nunca culpar quem buscou. -->
+  <circle cx="108" cy="92" r="62" fill="#F3F0F5"/>
+  <circle cx="108" cy="92" r="62" fill="none" stroke="#C02EF0" stroke-width="18"/>
+  <g transform="translate(152 140) rotate(40)">
+    <rect x="0" y="-11" width="66" height="22" rx="11" fill="#1C1721"/>
+  </g>
+  <g transform="skewX(-8)">
+    <rect x="96" y="68" width="34" height="12" rx="6" fill="#1C1721"/>
+    <rect x="82" y="88" width="58" height="12" rx="6" fill="#C02EF0"/>
+    <rect x="108" y="108" width="26" height="12" rx="6" fill="#D6FF4A"/>
+  </g>
+</svg>

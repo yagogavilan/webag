@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Padrão Webag (ladrilho 120 x 120)">
+  <!-- Ladrilho repetível: sacola v4a (contorno) + barras, em tom sobre tom. Uso: splash alternativo, fundo de cabeçalho de campanha, embalagem, telas de espera.
+       Regra: só em roxo.800 sobre roxo.500 ou roxo.500 sobre noite. Nunca atrás de texto pequeno. Escala mínima 64 px por ladrilho. -->
+  <rect width="120" height="120" fill="#C02EF0"/>
+  <g fill="none" stroke="#A21FBE" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <polygon points="26,30 58,30 53,52 28,52"/>
+    <path d="M32 30a10 11 0 0 1 20 0"/>
+    <polygon points="86,90 118,90 113,112 88,112" transform="translate(-30 0)"/>
+    <path d="M62 90a10 11 0 0 1 20 0"/>
+  </g>
+  <g fill="#A21FBE">
+    <rect x="70" y="30" width="14" height="6" rx="3"/>
+    <rect x="66" y="42" width="30" height="6" rx="3"/>
+    <rect x="74" y="54" width="20" height="6" rx="3"/>
+    <rect x="6" y="94" width="14" height="6" rx="3"/>
+    <rect x="2" y="106" width="22" height="6" rx="3"/>
+  </g>
+</svg>

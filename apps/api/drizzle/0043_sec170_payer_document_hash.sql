@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "payer_document_hash" varchar(64);

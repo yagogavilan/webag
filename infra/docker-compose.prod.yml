@@ -1,0 +1,402 @@
+# Webag — composição de PRODUÇÃO (um servidor com Docker). Guia: docs/deploy/guia-deploy.md.
+#
+# Não rode este arquivo direto: use o atalho, que aponta para o .env da raiz:
+#   sh infra/scripts/prod.sh up -d --build
+#
+# Serviços: nginx (HTTPS) + certbot, web (painéis), api, migrate (migrações, roda e sai), postgres (PostGIS), redis,
+# storage + storage-init (fotos; perfil storage-local), backup (cron do banco e dos arquivos), seed (só sob demanda).
+# Só o nginx publica portas (80 e 443). Banco, Redis, API e web ficam na rede interna (SEC-114: a API nunca fica exposta).
+name: webag-prod
+
+x-logging: &logging # Sem rotação, o log dos contêineres enche o disco do servidor.
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+networks:
+  webag:
+    ipam:
+      config:
+        # Sub-rede fixa para o nginx ter IP fixo; a API confia no IP declarado (X-Forwarded-For) SÓ por ele (TRUST_PROXY).
+        # Se esta faixa colidir com a rede do seu servidor, troque as duas ocorrências (aqui e em TRUST_PROXY/ipv4_address).
+        - subnet: 172.30.0.0/24
+
+services:
+  # ------------------------------------------------------------------ Banco
+  postgres:
+    image: ${POSTGIS_IMAGE:-postgis/postgis:18-3.6-alpine}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-webag}
+      TZ: UTC
+    # Registra consultas lentas (> 1 s) para diagnóstico.
+    command: ['postgres', '-c', 'log_min_duration_statement=1000']
+    volumes:
+      # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
+      - postgres-data:/var/lib/postgresql
+    networks: [webag]
+    healthcheck:
+      # -h 127.0.0.1 (TCP) de propósito: no 1º boot o servidor temporário de inicialização só escuta no socket local, e um
+      # pg_isready sem -h daria "saudável" cedo demais (a migração conectava nele e falhava quando ele desligava).
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    logging: *logging
+    # Senha obrigatória; AOF ligado (filas de pagamento não podem se perder num reinício).
+    command: ['sh', '-c', 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+    volumes:
+      - redis-data:/data
+    networks: [webag]
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  # ------------------------------------------------------------------ Armazenamento S3 (perfil storage-local)
+  storage:
+    # RustFS (ADR-005). Com Cloudflare R2/AWS S3 este serviço não é usado (apague COMPOSE_PROFILES no .env).
+    profiles: ['storage-local']
+    image: rustfs/rustfs:1.0.6
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?defina S3_ACCESS_KEY no .env}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?defina S3_SECRET_KEY no .env}
+      # Console web desligado em produção (menos superfície). Para abrir temporariamente, veja o guia.
+      RUSTFS_CONSOLE_ENABLE: 'false'
+    volumes:
+      - storage-data:/data
+    networks: [webag]
+
+  storage-init:
+    # Cria os buckets e libera leitura anônima só no público. Roda uma vez e sai (idempotente).
+    profiles: ['storage-local']
+    image: amazon/aws-cli:latest
+    depends_on:
+      - storage
+    logging: *logging
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://storage:9000
+      PUBLIC_BUCKET: ${S3_BUCKET_PUBLIC:-webag-public}
+      PRIVATE_BUCKET: ${S3_BUCKET_PRIVATE:-webag-private}
+    volumes:
+      - ./storage-init.sh:/storage-init.sh:ro
+    entrypoint: ['/bin/sh', '/storage-init.sh']
+    networks: [webag]
+    restart: 'no'
+
+  # ------------------------------------------------------------------ Migrações (job: roda e sai)
+  migrate:
+    image: webag-api:${WEBAG_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: 'no'
+    logging: *logging
+    command: ['node', 'dist/platform/database/migrate.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webag}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [webag]
+    <<: *hardening
+
+  # ------------------------------------------------------------------ API
+  api:
+    image: webag-api:${WEBAG_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    logging: *logging
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # SEC-114/SEC-129: o nginx tem IP fixo; só ele pode declarar o IP do cliente. Sem isto o boot falha em produção.
+      TRUST_PROXY: 172.30.0.10
+      BFF_SHARED_SECRET: ${BFF_SHARED_SECRET:?defina BFF_SHARED_SECRET no .env}
+      API_PUBLIC_URL: https://${API_HOST:?defina API_HOST no .env}
+      ADMIN_WEB_URL: https://${ADMIN_HOST:?defina ADMIN_HOST no .env}
+      # A-01: links do lojista em e-mail (convite de funcionário, pedido novo) vão para o host do lojista; no host do admin /lojista responde 404 (SEC-116).
+      LOJISTA_WEB_URL: https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
+      # B.2: base da página segura de cartão (/pagar/cartao). Base da página segura do cartão (/pagar/cartao): é o SITE PÚBLICO (PUBLIC_HOST), não um painel. O app confere esta URL (EXPO_PUBLIC_WEB_URL).
+      WEB_PUBLIC_URL: https://${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
+      MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}
+      # Origens exatas (sem "*"): os painéis.
+      CORS_ORIGINS: https://${ADMIN_HOST},https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webag}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no .env}
+      AUTH_HMAC_KEY: ${AUTH_HMAC_KEY:?defina AUTH_HMAC_KEY no .env}
+      CODE_HMAC_KEY: ${CODE_HMAC_KEY:?defina CODE_HMAC_KEY no .env}
+      RECOVERY_HMAC_KEY: ${RECOVERY_HMAC_KEY:?defina RECOVERY_HMAC_KEY no .env}
+      MFA_ENC_KEY: ${MFA_ENC_KEY:?defina MFA_ENC_KEY no .env}
+      PAYMENT_TOKEN_ENC_KEY: ${PAYMENT_TOKEN_ENC_KEY:?defina PAYMENT_TOKEN_ENC_KEY no .env}
+      # APP_ENV=staging (DT-038): único modo que aceita pagamento fake, credencial TEST- e geocodificador fake.
+      APP_ENV: ${APP_ENV:-production}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mercadopago}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      # OAuth do split (cada lojista conecta a própria conta). Com PAYMENT_PROVIDER=mercadopago os três são obrigatórios no boot.
+      MP_CLIENT_ID: ${MP_CLIENT_ID:-}
+      MP_CLIENT_SECRET: ${MP_CLIENT_SECRET:-}
+      # Página que recebe `code` e `state` na volta do Mercado Pago: etapa 4 do cadastro, no host do lojista. Cadastre a MESMA URL no app do MP.
+      MP_OAUTH_REDIRECT_URI: ${MP_OAUTH_REDIRECT_URI:-https://${LOJISTA_HOST}/lojista/onboarding/4}
+      MP_OAUTH_PKCE: ${MP_OAUTH_PKCE:-true}
+      MP_PAYER_DOCUMENT_REQUIRED: ${MP_PAYER_DOCUMENT_REQUIRED:-false}
+      # `log` NÃO envia push (só registra); `expo` envia (credenciais FCM/APNs no EAS, conta do fundador).
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-log}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:?defina SMTP_HOST no .env}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?defina SMTP_FROM no .env}
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: ${S3_ENDPOINT:?defina S3_ENDPOINT no .env}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?defina S3_ACCESS_KEY no .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?defina S3_SECRET_KEY no .env}
+      S3_BUCKET_PUBLIC: ${S3_BUCKET_PUBLIC:-webag-public}
+      S3_BUCKET_PRIVATE: ${S3_BUCKET_PRIVATE:-webag-private}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:?defina S3_PUBLIC_URL no .env}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      GEOCODING_PROVIDER: ${GEOCODING_PROVIDER:-http}
+      # SEC-169: vazio = geocodificador desligado (padrão). Nunca o Nominatim público (o boot recusa).
+      GEOCODER_URL: ${GEOCODER_URL:-}
+      GEOCODER_API_KEY: ${GEOCODER_API_KEY:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+    # Sem ports: só o nginx (mesma rede) fala com a API.
+    expose: ['3000']
+    networks: [webag]
+    read_only: true
+    tmpfs:
+      - /tmp
+    <<: *hardening
+
+  # ------------------------------------------------------------------ Painéis web (admin e lojista)
+  web:
+    image: webag-web:${WEBAG_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPPORT_WHATSAPP: ${NEXT_PUBLIC_SUPPORT_WHATSAPP:-}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Endereço INTERNO da API (o navegador nunca fala direto com ela: BFF).
+      API_URL: http://api:3000
+      # SEC-116: cada painel só responde no seu host. Sem estes dois o web recusa tudo.
+      ADMIN_HOST: ${ADMIN_HOST}
+      LOJISTA_HOST: ${LOJISTA_HOST}
+      # Site público (landing, privacidade, exclusão de conta, página do cartão). Sem ele o web responde 404 nessas páginas.
+      PUBLIC_HOST: ${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
+      PUBLIC_URL: https://${PUBLIC_HOST}
+      # Botões de download da página inicial (vazios até o app ser publicado: a página mostra "em breve").
+      PLAY_STORE_URL: ${PLAY_STORE_URL:-}
+      APP_STORE_URL: ${APP_STORE_URL:-}
+      # Origem pública do tempo real (Socket.IO) que o navegador do painel alcança.
+      REALTIME_URL: https://${API_HOST}
+      # Identificação da empresa no rodapé do site (razão social e CNPJ; vazios = o rodapé mostra só "Webag").
+      COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
+      COMPANY_CNPJ: ${COMPANY_CNPJ:-}
+      # Textos legais (/privacidade, /termos, /termos/trocas). SEC-187: os valores de empresa (foro, encarregado, CNPJ...) NÃO vêm mais do
+      # ambiente do web: ficam escritos no texto da versão publicada (ver o serviço `seed`). O web só usa COMPANY_NAME (rodapé) e LEGAL_REVIEWED.
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      LEGAL_REVIEWED: ${LEGAL_REVIEWED:-false}
+      # SEC-178: prazos citados em /excluir-conta. Ajuste junto com os parâmetros do admin (vazio = padrão 72 h, 5 anos, 6 meses, 15 dias).
+      PUBLIC_DELETION_REGRET_HOURS: ${PUBLIC_DELETION_REGRET_HOURS:-}
+      PUBLIC_DELETION_FISCAL_YEARS: ${PUBLIC_DELETION_FISCAL_YEARS:-}
+      PUBLIC_DELETION_ACCESS_LOG_MONTHS: ${PUBLIC_DELETION_ACCESS_LOG_MONTHS:-}
+      PUBLIC_DELETION_ANSWER_DAYS: ${PUBLIC_DELETION_ANSWER_DAYS:-}
+      # SEC-114/SEC-129: IP do cliente vem do cabeçalho que o nginx SOBRESCREVE (proxy_set_header X-Real-IP $remote_addr).
+      WEB_CLIENT_IP_HEADER: x-real-ip
+      BFF_SHARED_SECRET: ${BFF_SHARED_SECRET}
+      # Origem do armazenamento, liberada no CSP para o envio direto de fotos pelo navegador.
+      STORAGE_ORIGIN: ${S3_ENDPOINT}
+    expose: ['3001']
+    networks: [webag]
+    <<: *hardening
+
+  # ------------------------------------------------------------------ HTTPS (nginx + certbot)
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    environment:
+      API_HOST: ${API_HOST}
+      ADMIN_HOST: ${ADMIN_HOST}
+      LOJISTA_HOST: ${LOJISTA_HOST}
+      FILES_HOST: ${FILES_HOST:?defina FILES_HOST no .env}
+      PUBLIC_HOST: ${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
+      # Só estas 5 variáveis são trocadas nos modelos (o resto, como $host, fica intacto).
+      NGINX_ENVSUBST_FILTER: ^(API|ADMIN|LOJISTA|FILES|PUBLIC)_HOST$$
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      # Recarrega o nginx a cada 6 h para pegar o certificado renovado pelo certbot.
+      - ./nginx/entrypoint.d/40-reload-loop.sh:/docker-entrypoint.d/40-reload-loop.sh:ro
+      - certbot-www:/var/www/certbot:ro
+      - certbot-conf:/etc/letsencrypt:ro
+    networks:
+      webag:
+        ipv4_address: 172.30.0.10
+        # A API usa https://FILES_HOST para assinar e ler arquivos: dentro da rede esse nome aponta direto para o nginx
+        # (não depende de o servidor conseguir acessar o próprio IP público).
+        aliases:
+          - ${FILES_HOST}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  certbot:
+    # Renova os certificados do Let's Encrypt (checa 2x por dia; só renova perto de vencer). Emissão inicial: infra/scripts/init-tls.sh.
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    logging: *logging
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done',
+      ]
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-conf:/etc/letsencrypt
+    networks: [webag]
+
+  # ------------------------------------------------------------------ Backup (cron dentro do contêiner)
+  backup:
+    # Backup diário cifrado do Postgres (e dos arquivos, no perfil storage-local) + retenção + envio para fora do servidor.
+    # Restauração e teste: veja o guia (seção "Backup e restauração"). Comandos manuais: backup-postgres, backup-storage,
+    # restore-postgres, test-restore. Ex.: sh infra/scripts/prod.sh exec backup backup-postgres
+    build:
+      context: ./backup
+      args:
+        POSTGIS_IMAGE: ${POSTGIS_IMAGE:-postgis/postgis:18-3.6-alpine}
+    image: webag-backup:${WEBAG_VERSION:-latest}
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-webag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-webag}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?defina BACKUP_PASSPHRASE no .env (guarde também fora do servidor)}
+      BACKUP_CRON: ${BACKUP_CRON:-15 3 * * *}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_REMOTE_KEEP_DAYS: ${BACKUP_REMOTE_KEEP_DAYS:-30}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:-}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:-}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+      # Origem dos arquivos a copiar: só existe com o perfil storage-local (vazio = pula o backup de arquivos).
+      STORAGE_BACKUP_ENDPOINT: ${STORAGE_BACKUP_ENDPOINT:-http://storage:9000}
+      STORAGE_BACKUP_ENABLED: ${STORAGE_BACKUP_ENABLED:-true}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_PUBLIC: ${S3_BUCKET_PUBLIC:-webag-public}
+      S3_BUCKET_PRIVATE: ${S3_BUCKET_PRIVATE:-webag-private}
+    volumes:
+      - backups:/backups
+    networks: [webag]
+
+  # ------------------------------------------------------------------ Seed inicial (sob demanda)
+  seed:
+    # Cria o primeiro administrador e os dados base (categorias, regiões, parâmetros, termos). Idempotente.
+    # Rodar UMA vez, depois do primeiro `up`:  sh infra/scripts/prod.sh run --rm seed
+    profiles: ['tools']
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: tools
+    image: webag-api-tools:${WEBAG_VERSION:-latest}
+    restart: 'no'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webag}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      # SEC-187: valores de empresa escritos NO TEXTO ao gravar a versão dos termos e da privacidade (vazio = "a definir"). Versão publicada não
+      # muda ao trocar estes valores: publique uma versão nova pelo painel.
+      COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      COMPANY_CNPJ: ${COMPANY_CNPJ:-}
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-}
+      DPO_NAME: ${DPO_NAME:-}
+      DPO_EMAIL: ${DPO_EMAIL:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP:-}
+      NEXT_PUBLIC_SUPPORT_WHATSAPP: ${NEXT_PUBLIC_SUPPORT_WHATSAPP:-}
+      FORO_COMARCA: ${FORO_COMARCA:-}
+      HOSTING_PROVIDER: ${HOSTING_PROVIDER:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      MP_LEGAL_NAME: ${MP_LEGAL_NAME:-}
+      AVISO_MUDANCA_DIAS: ${AVISO_MUDANCA_DIAS:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [webag]
+
+volumes:
+  postgres-data:
+  redis-data:
+  storage-data:
+  backups:
+  certbot-www:
+  certbot-conf:

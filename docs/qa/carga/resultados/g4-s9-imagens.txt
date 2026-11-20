@@ -1,0 +1,47 @@
+
+
+  █ THRESHOLDS 
+
+    erros_5xx
+    ✓ 'count==0' count=0
+
+    lat_home_durante
+    ✓ 'p(95)<1000' p(95)=21.05ms
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 19072   416.414052/s
+    checks_succeeded...: 100.00% 19072 out of 19072
+    checks_failed......: 0.00%   0 out of 19072
+
+    ✓ home 200
+    ✓ válida aceita (200) ou fila cheia (422 tempo)
+    ✓ PNG gigante recusado (422)
+    ✓ upload criado ou limitado (429)
+
+    CUSTOM
+    erros_5xx......................: 0      0/s
+    lat_complete...................: avg=630.86ms min=17.65ms  med=560.53ms max=1.47s    p(90)=1.19s   p(95)=1.28s  
+    lat_home_durante...............: avg=9.17ms   min=2.05ms   med=5.51ms   max=173.02ms p(90)=16.77ms p(95)=21.05ms
+    uploads_aceitos................: 279    6.091628/s
+    uploads_recusados_422..........: 134    2.925728/s
+
+    HTTP
+    http_req_duration..............: avg=18.38ms  min=763.58µs med=4.71ms   max=1.47s    p(90)=9.55ms  p(95)=12.97ms
+      { expected_response:true }...: avg=191.82ms min=2.05ms   med=11.48ms  max=1.47s    p(90)=979.6ms p(95)=1.12s  
+    http_req_failed................: 93.24% 18576 out of 19922
+    http_reqs......................: 19922  434.972774/s
+
+    EXECUTION
+    iteration_duration.............: avg=23.72ms  min=827.97µs med=4.76ms   max=1.77s    p(90)=9.03ms  p(95)=11.62ms
+    iterations.....................: 19072  416.414052/s
+    vus............................: 10     min=10             max=10
+    vus_max........................: 15     min=15             max=15
+
+    NETWORK
+    data_received..................: 19 MB  419 kB/s
+    data_sent......................: 74 MB  1.6 MB/s
+
+
+

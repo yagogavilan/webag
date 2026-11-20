@@ -1,0 +1,45 @@
+time="2026-11-19T22:11:19Z" level=info msg="variante 8bd17b05-191e-487f-bbd2-f948e31bf419; estoque 12; 40 clientes" source=console
+time="2026-11-19T22:11:20Z" level=info msg="pedido 409: {\"type\":\"https://api.webag.com.br/errors/stock-conflict\",\"title\":\"Acabou o estoque\",\"status\":409,\"detail\":\"Acabou o estoque de Banana prata (kg).\",\"code\":\"STOCK" source=console
+time="2026-11-19T22:11:20Z" level=info msg="pedido 409: {\"type\":\"https://api.webag.com.br/errors/stock-conflict\",\"title\":\"Acabou o estoque\",\"status\":409,\"detail\":\"Acabou o estoque de Banana prata (kg).\",\"code\":\"STOCK" source=console
+
+
+  █ THRESHOLDS 
+
+    erros_5xx
+    ✓ 'count==0' count=0
+
+    pedidos_criados
+    ✓ 'count<=3' count=3
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 40      7.039867/s
+    checks_succeeded...: 100.00% 40 out of 40
+    checks_failed......: 0.00%   0 out of 40
+
+    ✓ sem 5xx
+
+    CUSTOM
+    conflitos_409..................: 37     6.511877/s
+    erros_5xx......................: 0      0/s
+    pedidos_criados................: 3      0.52799/s
+
+    HTTP
+    http_req_duration..............: avg=89.49ms  min=1.84ms   med=37.66ms  max=320.47ms p(90)=264.34ms p(95)=272.46ms
+      { expected_response:true }...: avg=75.68ms  min=1.84ms   med=34.5ms   max=320.47ms p(90)=266.34ms p(95)=273.43ms
+    http_req_failed................: 8.31%  37 out of 445
+    http_reqs......................: 445    78.318518/s
+
+    EXECUTION
+    iteration_duration.............: avg=881.76ms min=851.34ms med=886.96ms max=918.36ms p(90)=899.48ms p(95)=915.23ms
+    iterations.....................: 40     7.039867/s
+    vus............................: 40     min=0         max=40
+    vus_max........................: 40     min=40        max=40
+
+    NETWORK
+    data_received..................: 533 kB 94 kB/s
+    data_sent......................: 183 kB 32 kB/s
+
+
+

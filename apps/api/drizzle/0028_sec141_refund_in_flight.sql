@@ -1,0 +1,1 @@
+ALTER TABLE "payment_refund_intents" ADD COLUMN "in_flight_until" timestamp with time zone;

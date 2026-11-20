@@ -1,0 +1,3 @@
+ALTER TABLE "products" ADD COLUMN "idempotency_key" varchar(80);--> statement-breakpoint
+CREATE UNIQUE INDEX "products_idempotency_uq" ON "products" USING btree ("store_id","idempotency_key") WHERE "products"."idempotency_key" is not null;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_price_range" CHECK ("products"."base_price_cents" is null or ("products"."base_price_cents" between 1 and 9999999));

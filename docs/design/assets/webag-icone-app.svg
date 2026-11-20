@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Webag">
+  <title>Webag</title>
+  <!-- Fundo sangrado total: as lojas aplicam a mascara. Nao desenhar cantos arredondados. -->
+  <rect width="1024" height="1024" fill="#00696F"/>
+  <g transform="translate(224 219.5) scale(9)">
+    <path d="M22 24V19a10 10 0 0 1 20 0v5" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <rect x="8" y="22" width="48" height="34" rx="8" fill="#FFFFFF"/>
+    <path d="M19 33l6.5 14 6.5-10 6.5 10 6.5-14" fill="none" stroke="#00696F" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

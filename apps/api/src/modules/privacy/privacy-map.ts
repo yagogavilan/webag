@@ -1,0 +1,71 @@
+/**
+ * SEC-167: classificação de privacidade de TODA tabela com chave estrangeira para `users.id`. O E2E `test/sec167-privacy-map.e2e-spec.ts` lê o
+ * catálogo do banco migrado e falha se uma tabela nova com essa FK não estiver aqui: quem a cria decide (e implementa) `delete`, `anonymize` ou
+ * `retain` com a base. Fonte da decisão: `account-deletion.service.ts` (anonimização), `retention.service.ts` (expurgo) e ADR-012.
+ * Limite: o controle é por TABELA. Coluna de texto livre nova numa tabela já classificada continua exigindo revisão (checklist do PR).
+ * As bases legais são recomendação técnica [validar com o jurídico antes do G5].
+ */
+export type PrivacyDecision =
+  | { kind: 'delete' | 'anonymize'; /** O que a decisão faz. */ what: string; /** Onde o código a executa. */ where: string }
+  | { kind: 'retain'; /** Base legal ou razão de reter. */ basis: string; /** Onde está o controle (ou por que não há). */ where: string };
+
+export const PRIVACY_MAP: Record<string, PrivacyDecision> = {
+  access_log: { kind: 'retain', basis: 'Marco Civil art. 15 (guarda de registros de acesso por 6 meses)', where: 'retention.service.ts: purge `access_log` pelo parâmetro de meses' },
+  account_deletions: { kind: 'retain', basis: 'prova do pedido e da execução da exclusão (LGPD art. 37, registro das operações); só contagens, sem dado pessoal', where: 'account-deletion.service.ts' },
+  admin_profiles: { kind: 'retain', basis: 'conta de administração não é excluída pelo autosserviço (`ADMIN_ACCOUNT_NOT_DELETABLE`); encerramento é ato do super admin', where: 'account-deletion.service.ts (recusa) e runbook do super admin' },
+  admin_recovery_codes: { kind: 'retain', basis: 'só o hash do código de recuperação da conta de administração (fora do autosserviço)', where: 'identity (TOTP); conta de admin não é excluída pelo autosserviço' },
+  audit_log: { kind: 'retain', basis: 'trilha de auditoria append-only (segurança e prestação de contas, LGPD art. 7º IX e 37); o autor é a casca anonimizada', where: 'audit.service.ts e trigger append-only 0001' },
+  auth_codes: { kind: 'delete', what: 'expira e é apagado na exclusão e pela retenção (7 dias)', where: 'account-deletion.service.ts `anonymizeOne` e retention.service.ts' },
+  auth_tickets: { kind: 'delete', what: 'apagado na exclusão e pela retenção', where: 'account-deletion.service.ts `anonymizeOne` e retention.service.ts' },
+  banners: { kind: 'retain', basis: 'conteúdo editorial da Webag; só `created_by` do admin autor', where: 'fora do titular cliente; admin não é excluído pelo autosserviço' },
+  carts: { kind: 'delete', what: 'sacola apagada no fechamento da conta e na anonimização', where: 'account-deletion.service.ts `closeAccount` e `anonymizeOne`' },
+  category_commission_rates: { kind: 'retain', basis: 'regra comercial da Webag; só o admin autor', where: 'fora do titular cliente' },
+  consents: { kind: 'retain', basis: 'prova do consentimento (LGPD art. 8º §2º), com o IP truncado (/24, /48) na anonimização; append-only', where: 'account-deletion.service.ts `anonymizeOne` (webag_truncate_ip) e trigger 0047' },
+  content_reports: { kind: 'anonymize', what: 'texto livre da denúncia apagado; o protocolo e o motivo ficam para a moderação', where: 'account-deletion.service.ts `anonymizeOne` (`reportsCleared`)' },
+  content_settings: { kind: 'retain', basis: 'configuração editorial da Webag; só o admin autor', where: 'fora do titular cliente' },
+  coupon_redemptions: { kind: 'retain', basis: 'uso do cupom (limite por cliente, antifraude e vínculo ao pedido fiscal) ligado à casca anonimizada; sem dado pessoal além do id [HIPÓTESE: confirmar a base com o jurídico]', where: 'fora de `anonymizeOne`: o vínculo não identifica sem os demais dados' },
+  coupons: { kind: 'anonymize', what: 'cupom comum é regra comercial e fica; o PESSOAL (compensação por atraso, `owner_user_id`) NÃO usado é apagado, com os resgates já liberados dele; o usado fica só como registro de resgate do pedido (DEC-063a)', where: 'account-deletion.service.ts `anonymizeOne` (`personalCouponsDeleted`)' },
+  couriers: { kind: 'retain', basis: 'cadastro de motoboy da operação; só o admin que o criou (os dados do motoboy seguem a política da operação)', where: 'logistics/couriers.service.ts' },
+  data_exports: { kind: 'delete', what: 'arquivo e linha apagados na exclusão; o link também', where: 'account-deletion.service.ts `anonymizeOne` (SEC-164)' },
+  deliveries: { kind: 'anonymize', what: 'contato do cliente e nota da corrida apagados; o custo e o histórico ficam (fiscal/operação)', where: 'account-deletion.service.ts `anonymizeOne` (`deliveriesCleared`) e retenção do contato da corrida (DT-052)' },
+  delivery_fee_tables: { kind: 'retain', basis: 'tabela de frete da Webag; só o admin autor', where: 'fora do titular cliente' },
+  exchange_events: { kind: 'anonymize', what: 'motivos em texto livre do cliente apagados', where: 'account-deletion.service.ts `anonymizeOne` (`exchangeEventReasonsCleared`)' },
+  exchange_requests: { kind: 'anonymize', what: 'descrição, texto da contestação e fotos apagados; o desfecho fica (fiscal/consumidor)', where: 'account-deletion.service.ts `anonymizeOne` (`exchangesCleared`)' },
+  favorites: { kind: 'delete', what: 'apagado na exclusão', where: 'account-deletion.service.ts `anonymizeOne`' },
+  feature_flags: { kind: 'retain', basis: 'configuração da Webag; só o admin que alterou', where: 'fora do titular cliente' },
+  help_faqs: { kind: 'retain', basis: 'conteúdo editorial da Webag; só o admin autor', where: 'fora do titular cliente' },
+  home_highlights: { kind: 'retain', basis: 'conteúdo editorial da Webag; só o admin autor', where: 'fora do titular cliente' },
+  invitations: { kind: 'delete', what: 'convites pelo e-mail original apagados na exclusão e pela retenção', where: 'account-deletion.service.ts `anonymizeOne` e retention.service.ts' },
+  legal_documents: { kind: 'retain', basis: 'documentos jurídicos versionados (prova do que foi aceito); só o admin que publicou', where: 'fora do titular cliente' },
+  logistics_pauses: { kind: 'retain', basis: 'registro operacional da logística; só o admin que pausou', where: 'fora do titular cliente' },
+  media_assets: { kind: 'anonymize', what: 'fotos de troca do titular apagadas (objeto e linha); imagens de produto e logo pertencem à loja e ficam', where: 'account-deletion.service.ts `anonymizeOne` (`photos`) e retention.service.ts (órfãos)' },
+  maintenance_state: { kind: 'retain', basis: 'estado do modo manutenção da Webag; só o admin que alterou', where: 'fora do titular cliente' },
+  moderation_terms: { kind: 'retain', basis: 'lista de termos da moderação; só o admin autor', where: 'fora do titular cliente' },
+  order_events: { kind: 'anonymize', what: 'motivos em texto livre do cliente apagados; a linha do tempo do pedido fica (fiscal)', where: 'account-deletion.service.ts `anonymizeOne` (`orderEventReasonsCleared`)' },
+  orders: { kind: 'anonymize', what: 'endereço reduzido a cidade/UF e motivo de cancelamento do cliente apagado; o pedido fica pelo prazo fiscal', where: 'account-deletion.service.ts `anonymizeOne` (`ordersAnonymized`, `orderReasonsCleared`)' },
+  parameter_history: { kind: 'retain', basis: 'histórico de parâmetros da Webag (auditoria); só o admin que alterou', where: 'fora do titular cliente' },
+  parameters: { kind: 'retain', basis: 'parâmetros da Webag; só o admin que alterou', where: 'fora do titular cliente' },
+  payment_accounts: { kind: 'retain', basis: 'conta de recebimento da loja pelo prazo fiscal; os tokens OAuth do dono excluído duram `troca_defeito_duravel_dias` + 30 (120) dias, depois a conta vira `disconnected` e o segredo é apagado (DEC-063d, SEC-162)', where: 'retention.service.ts `deletedOwnerPaymentTokens`' },
+  payment_oauth_states: { kind: 'delete', what: 'estado do OAuth apagado na exclusão e pela retenção', where: 'account-deletion.service.ts `anonymizeOne` e retention.service.ts' },
+  privacy_request_events: { kind: 'anonymize', what: 'notas do atendimento viram \'[anonimizado]\'', where: 'account-deletion.service.ts `anonymizeOne`' },
+  privacy_requests: { kind: 'anonymize', what: 'e-mail, mensagem e resposta anonimizados; o protocolo e os prazos ficam (LGPD art. 37)', where: 'account-deletion.service.ts `anonymizeOne`' },
+  product_moderation_events: { kind: 'retain', basis: 'trilha de moderação do catálogo; só o admin autor', where: 'fora do titular cliente' },
+  products: { kind: 'retain', basis: 'catálogo da loja; `moderated_by` é do admin', where: 'fora do titular cliente' },
+  push_campaign_recipients: { kind: 'delete', what: 'linhas por destinatário apagadas na anonimização; os totais da campanha (contadores) ficam (DEC-063b)', where: 'account-deletion.service.ts `anonymizeOne` (`pushCampaignRecipients`); a exportação do titular lê antes (data-export.service.ts)' },
+  push_campaigns: { kind: 'retain', basis: 'campanha da Webag; só o admin autor', where: 'fora do titular cliente' },
+  push_devices: { kind: 'delete', what: 'token de push apagado no fechamento e na anonimização', where: 'account-deletion.service.ts `closeAccount` e `anonymizeOne`' },
+  reviews: { kind: 'anonymize', what: 'comentário e resposta da loja apagados; a nota fica (agregado da loja)', where: 'account-deletion.service.ts `anonymizeOne` (`reviewsCleared`, `storeRepliesCleared`)' },
+  search_history: { kind: 'delete', what: 'apagado na exclusão', where: 'account-deletion.service.ts `anonymizeOne`' },
+  sessions: { kind: 'delete', what: 'revogadas no fechamento, apagadas na anonimização e pela retenção', where: 'account-deletion.service.ts e retention.service.ts' },
+  store_activity: { kind: 'retain', basis: 'registro de atividade da loja (quem fez o quê) pelo prazo fiscal; o autor é a casca', where: 'stores (atividade da loja)' },
+  store_commission_rates: { kind: 'retain', basis: 'regra comercial da loja; só o admin autor', where: 'fora do titular cliente' },
+  store_documents: { kind: 'retain', basis: 'documentos fiscais da loja pelo prazo fiscal (`retencao_fiscal_anos`); reprovados saem pela retenção', where: 'retention.service.ts (`rejectedStoreDocuments`)' },
+  store_members: { kind: 'delete', what: 'vínculo de funcionário apagado; o do dono fica com a loja encerrada', where: 'account-deletion.service.ts `anonymizeOne` (`staffMemberships`)' },
+  store_review_items: { kind: 'retain', basis: 'itens da análise cadastral da loja; só o admin autor', where: 'fora do titular cliente' },
+  store_status_history: { kind: 'retain', basis: 'histórico de status da loja pelo prazo fiscal; o autor é a casca', where: 'fora do titular cliente (loja)' },
+  stores: { kind: 'anonymize', what: 'contato, endereço e coordenada da loja encerrada apagados; CNPJ/CPF e razão social ficam pelo prazo fiscal', where: 'account-deletion.service.ts `anonymizeOne` (bloco da loja)' },
+  terms_acceptances: { kind: 'retain', basis: 'prova do aceite dos termos (LGPD art. 8º §2º), com IP truncado e plataforma reduzida à família; append-only', where: 'account-deletion.service.ts `anonymizeOne` e trigger 0047' },
+  user_addresses: { kind: 'delete', what: 'endereços salvos apagados na exclusão', where: 'account-deletion.service.ts `anonymizeOne`' },
+  user_status_history: { kind: 'retain', basis: 'prova do ato administrativo de bloqueio/desbloqueio (prevenção a fraude e abuso, LGPD art. 7º IX e 37) por `retencao_bloqueio_anos` (padrão 5 anos, SEC-185 [HIPÓTESE: validar o prazo com o jurídico]); depois é apagado. O titular é a casca anonimizada; o motivo é texto livre do admin (a tela orienta a não escrever dado pessoal) e NUNCA vai ao lojista (SEC-183). Resíduo: `audit_log.reason` do `user.block` é append-only e fica pelo prazo da auditoria', where: 'retention.service.ts (passo `userStatusHistory`) e backoffice/accounts.service.ts' },
+  user_roles: { kind: 'retain', basis: 'papéis da casca anonimizada; sem dado pessoal', where: 'identity (papéis)' },
+};

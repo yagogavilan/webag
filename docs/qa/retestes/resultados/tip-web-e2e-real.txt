@@ -1,0 +1,25 @@
+
+> webag@ web:e2e /dev/shm/qa/webag
+> node scripts/web-playwright.mjs e2e real
+
+[web-playwright] suíte API real (site na porta 3201)
+[WebServer] ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+
+Running 12 tests using 1 worker
+
+[WebServer] [web] WEB_TRUSTED_PROXY_HOPS/WEB_CLIENT_IP_HEADER não definidos: o IP do cliente não será enviado à API (limites por IP ficam no IP do BFF).
+  ✓   1 e2e-real/01-cadastrar-loja.e2e.ts:11:3 › Cadastrar loja (lojista) com a API real › cria a conta com código de e-mail, preenche as 4 etapas, envia e acompanha o status (6.6s)
+  ✓   2 e2e-real/01-cadastrar-loja.e2e.ts:114:3 › Cadastrar loja (lojista) com a API real › conta existente sem a loja concluída retoma de onde parou (WB-051 C4) (2.4s)
+  ✓   3 e2e-real/02-aprovar-loja.e2e.ts:10:3 › Aprovar loja (admin) com a API real › abre a loja da fila, vê os documentos (URL assinada, acesso auditado), confere os 6 itens e aprova (3.2s)
+  ✓   4 e2e-real/02-aprovar-loja.e2e.ts:67:3 › Aprovar loja (admin) com a API real › o lojista vê a loja aprovada e a orientação "Cadastre 1 produto" (WB-054 C4) (1.3s)
+  ✓   5 e2e-real/03-moderar-produto.e2e.ts:12:3 › Moderar produto (admin, A4) com a API real › remover com motivo: some da vitrine, avisa o lojista, o lojista não reativa e a auditoria registra (15.5s)
+  ✓   6 e2e-real/04-pedido-entrega-troca.e2e.ts:29:3 › Jornada pelas telas com a API real: aceitar, pronto, motoboy, entrega, troca › a loja aceita o pedido novo, separa e marca "Pronto para coleta"; a entrega nasce na fila e a loja não marca "saiu" (2.5s)
+  ✓   7 e2e-real/04-pedido-entrega-troca.e2e.ts:57:3 › Jornada pelas telas com a API real: aceitar, pronto, motoboy, entrega, troca › a operação atribui o motoboy na tela Logística, abre o WhatsApp sem dado proibido e fecha a entrega só com o código do cliente (26.6s)
+  ✓   8 e2e-real/04-pedido-entrega-troca.e2e.ts:98:3 › Jornada pelas telas com a API real: aceitar, pronto, motoboy, entrega, troca › a loja aprova a troca de tamanho pedida (1 toque); a taxa passa a ser devida e só então; a variação nova fica reservada (1.9s)
+  -   9 e2e-real/05-capturas-v3.e2e.ts:48:3 › capturas v3 com a API real › prepara um pedido atrasado em saída e o cliente pede o cancelamento por atraso (contrato W.3)
+  -  10 e2e-real/05-capturas-v3.e2e.ts:62:3 › capturas v3 com a API real › admin: Início com contagens, Logística com "No prazo hoje" e a faixa do pedido de cancelamento, Cupons e Relatórios
+  -  11 e2e-real/05-capturas-v3.e2e.ts:102:3 › capturas v3 com a API real › lojista: Início com avaliação e "Mais vendidos", Avaliações com distribuição, Entrega com prévia real e "Marque pronto até"
+  ✓  12 e2e-real/06-admin-dec073-leitura.e2e.ts:9:3 › Admin DEC-073 (API real, leitura) › Alertas, Usuários, Pedidos e Modo manutenção abrem com os dados reais (29.1s)
+
+  3 skipped
+  9 passed (1.6m)

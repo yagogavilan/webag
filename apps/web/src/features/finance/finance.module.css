@@ -1,0 +1,54 @@
+/* Financeiro e painel inicial do lojista (onda-5 F1 e H1). Dinheiro fica em Figtree tabular, sem linhas de velocidade (identidade-v2). */
+.page { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.periods { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }
+.chip { min-height: var(--wb-size-touch-min); padding: 0 var(--wb-space-4); border: var(--wb-border-width-strong) solid transparent; border-radius: var(--wb-radius-pill); background: var(--wb-color-surface-sunken); color: var(--wb-color-text-primary); cursor: pointer; font: inherit; font-weight: var(--wb-font-weight-semibold); }
+.chipOn { background: var(--wb-color-brand-100); border-color: var(--wb-color-action-primary); color: var(--wb-color-brand-800); }
+.kpis { display: grid; grid-template-columns: 1fr; gap: var(--wb-space-3); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis > :first-child { grid-column: 1 / -1; } }
+@media (min-width: 1024px) { .kpis { grid-template-columns: 2fr 1fr 1fr; } .kpis > :first-child { grid-column: auto; } }
+.kpi { display: flex; flex-direction: column; gap: var(--wb-space-1); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); color: var(--wb-color-text-primary); min-width: 0; }
+.kpis > :first-child { background: var(--wb-color-surface-card); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); }
+.kpis > :first-child .kpiValue { font-size: 56px; line-height: 60px; }
+.kpiLabel { margin: 0; color: var(--wb-color-text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+.kpiValue { margin: 0; font-family: var(--wb-font-family-display); font-variant-numeric: tabular-nums; font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.03em; overflow-wrap: anywhere; }
+.kpiNote { margin: 0; color: var(--wb-color-text-secondary); }
+.block { display: flex; flex-direction: column; gap: var(--wb-space-3); padding: var(--wb-space-4); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-card); }
+.block h2 { margin: 0; }
+.sum { display: grid; grid-template-columns: 1fr auto; gap: var(--wb-space-2) var(--wb-space-4); margin: 0; }
+.sum dt { color: var(--wb-color-text-secondary); }
+.sum dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.sumStrong { font-weight: var(--wb-font-weight-bold); color: var(--wb-color-text-primary) !important; }
+.todo { display: flex; flex-direction: column; gap: var(--wb-space-2); margin: 0; padding: 0; list-style: none; }
+.todoItem { display: flex; align-items: center; gap: var(--wb-space-3); min-height: 56px; padding: var(--wb-space-2) var(--wb-space-4); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); color: var(--wb-color-text-primary); text-decoration: none; }
+.todoItem:hover { background: var(--wb-color-neutral-200); }
+.todoItem:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.todoUrgent { outline: var(--wb-border-width-strong) solid var(--wb-color-action-primary); outline-offset: -2px; }
+.todoIcon { flex: none; color: var(--wb-color-brand-800); }
+.stmt { display: flex; flex-direction: column; gap: var(--wb-space-2); margin: 0; padding: 0; list-style: none; }
+.stmtRow { display: grid; grid-template-columns: 1fr auto; gap: var(--wb-space-1) var(--wb-space-3); padding: var(--wb-space-3) var(--wb-space-4); border-radius: var(--wb-radius-card); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); background: var(--wb-color-surface-card); }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+.row { display: flex; align-items: center; gap: var(--wb-space-3); flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .todoItem { transition: none; } .todoItem:hover { transform: none; } }
+
+/* Gráfico de vendas por dia (WB-198): barras em CSS; a tabela equivalente cobre leitor de tela e daltonismo. */
+.chart { position: relative; display: flex; flex-direction: column; gap: var(--wb-space-1); }
+.chartMax { color: var(--wb-color-text-secondary); font-variant-numeric: tabular-nums; }
+.bars { display: flex; align-items: stretch; gap: 2px; height: 160px; border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-strong); }
+.barCol { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bar { display: block; width: 100%; max-width: 28px; border-radius: 6px 6px 0 0; background: var(--wb-color-action-primary); }
+.barEmpty { height: 2px; background: var(--wb-color-border-strong); }
+.barLabel { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); white-space: nowrap; color: var(--wb-color-text-secondary); font-size: 11px; line-height: 16px; padding-top: 2px; }
+.chart { padding-bottom: 20px; }
+.chartTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.chartTable th, .chartTable td { padding: var(--wb-space-2); border-bottom: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); text-align: left; }
+.chartTable caption { text-align: left; color: var(--wb-color-text-secondary); padding-bottom: var(--wb-space-1); }
+.chartTable .num { text-align: right; }
+
+/* Linha "Loja aberta" no topo da folha (Início do lojista). */
+.openRow { display: flex; align-items: center; gap: var(--wb-space-3); padding: var(--wb-space-3) var(--wb-space-4); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); flex-wrap: wrap; }
+.openIcon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: var(--wb-radius-lg); background: var(--wb-color-surface-card); color: var(--wb-color-brand-800); flex: none; }
+.openText { flex: 1 1 200px; display: flex; flex-direction: column; min-width: 0; }
+.openHint { color: var(--wb-color-text-secondary); }
+.openLink { color: var(--wb-color-text-link); font-weight: 700; min-height: var(--wb-size-touch-min); display: inline-flex; align-items: center; }
+/* Os números menores (7 dias, ticket médio) cabem sem quebrar o valor em duas linhas ("R$ 53,\n91"). */
+@media (min-width: 640px) { .kpis > :not(:first-child) .kpiValue { font-size: 28px; line-height: 32px; overflow-wrap: normal; white-space: nowrap; } }

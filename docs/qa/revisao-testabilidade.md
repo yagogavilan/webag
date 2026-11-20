@@ -1,0 +1,148 @@
+# Revisão de testabilidade — ondas 1 e 2 (para o PO)
+
+Dono: qa-engineer | Data: 2026-11-18 | Para: product-owner (cópia: security-engineer e tech-lead onde indicado)
+Base: PRDs `admin.md`, `cliente.md`, `lojista.md`, `pagamentos.md`, `lgpd.md`, `notificacoes.md`, `seguranca-acesso.md`, `regras-de-negocio.md` (RN), `requisitos-seguranca.md` (SEC), `decisoes.md` (DEC/HIP). Ondas do `plano-execucao.md`. Os casos que dependem destas respostas estão marcados `R-nn` em `planos/onda-1.md` e `planos/onda-2.md`.
+
+**Como ler.** Cada linha é um critério que um teste não consegue verificar como está escrito, ou que contradiz outro documento. "Recomendação do QA" é uma resposta pronta; se o PO aceitar, basta responder "ok R-nn" e o PRD é ajustado. "Bloqueia" = há caso P0 que não pode ser escrito sem a resposta. Valores com `[HIPÓTESE]` seguem sujeitos a ajuste.
+Legenda do tipo: **C** conflito entre documentos, **V** vago/não testável, **L** lacuna (caso não previsto), **S** lacuna de segurança.
+
+## 1. Conflitos entre documentos (decidir primeiro)
+
+| ID | Tipo | Onde | Problema | Pergunta ao PO | Recomendação do QA | Bloqueia |
+|---|---|---|---|---|---|---|
+| R-01 | C | WB-053 C7 x DEC-020(e) x SEC-047 | O PRD ainda diz "fica Em análise e o admin é alertado ... [confirmar com o security]". DEC-020(e) decidiu que **bloqueia** a ativação até o admin liberar. | Atualizar C7 para bloqueio e escrever como o admin libera (tela, motivo, auditoria) | Bloqueio; remover a anotação de dúvida | Sim (O2-PGT-08) |
+| R-02 | C | DEC-011, HIP-017, WB-119 C5, RN-02 | DEC-011: piso legal "fixo e **não editável**". HIP-017 e WB-119 C5: "editável só por super admin". RN-02 usa a coluna "faixa: piso 7". Não dá para saber se 5 dias é aceito para o super admin. | O super admin pode reduzir abaixo do piso (7 e 30 dias)? | Não: a validação recusa valor menor que o piso para qualquer perfil; o super admin só aumenta. Mudar o piso exige alteração de código e registro em `decisoes.md` | Sim (O1-PAR-05) |
+| R-03 | C | WB-008 C1 x SEC-011 | WB-008: "continuo logado por até 30 dias". SEC-011: 30 dias **deslizantes** e 90 **absolutos**. | Após 90 dias de uso contínuo, o usuário precisa entrar de novo? Há aviso? | Sim, entra de novo no dia 91; texto "Entre de novo por segurança" | Não (O1-LOG-17 assume o SEC) |
+| R-33 | C | WB-194 C1 x SEC-008(d) | WB-194 C1 diz que o e-mail de pedido traz "resumo e valores"; SEC-008(d) proíbe dados do pedido para e-mail **não confirmado**. | Para conta não confirmada, o e-mail de pedido é omitido ou vai sem dados? | Vai com texto genérico ("Recebemos seu pedido, veja no app"), sem itens, valores nem endereço | Sim (O1-COD-16, P0) |
+| R-12 | C | WB-060 C6 x WB-107 C3 x HIP-029 | WB-060 C6: produto de categoria proibida **é recusado** no cadastro. WB-107 C3: produto que casa com a lista **entra em "Revisar"**, "não bloqueado" (HIP-029). A spec de tela (`design/telas/onda-2-lojista-admin.md`, regras de moderação) mostra 2 listas, "Palavras proibidas" e "Categorias proibidas", e diz "Nada é bloqueado sozinho", o que também contradiz WB-060 C6. Duas listas? Duas regras? Além disso, produto pausado/removido pelo admin pode ser reativado pelo lojista? | (a) Há 2 listas (categorias e palavras) ou 1? (b) Qual bloqueia e qual sinaliza? (c) Como casa a palavra (substring, palavra inteira, sem acento)? (d) O lojista reativa o que o admin removeu? | (a) 2 listas: categoria proibida bloqueia (WB-060 C6), palavra suspeita sinaliza (WB-107 C3); (c) palavra inteira, sem caixa e sem acento; (d) não, status de moderação é separado do status do lojista | Sim (O2-PRD-07, O2-MOD-02/03) |
+| R-30 | C | WB-214 C6 / `lgpd.md` pergunta em aberto | A pergunta "exclusão pela web com e-mail não confirmado: senha ou código?" segue aberta no PRD, mas DEC-020(d) respondeu: senha. | Fechar a pergunta e alinhar C6 com SEC-008(c) | Senha (já decidido); remover a pergunta | Não (onda 5) |
+| R-19 | C | WB-150 C3 x SEC-037 | O PRD fala em "cartão de teste com final 0000/0001/0002/0003", mas o PAN nunca chega à API (só o token do Brick). O que o `fake` recebe? | Qual convenção de token o `fake` aceita? | Token de texto `fake_tok_approved`, `_insufficient`, `_3ds`, `_timeout`; documentar no README | Não (O1-PAY-03 assume) |
+| R-34 | C | WB-120 C1 x HIP-D07, WB-226, WB-221 | A lista fechada de flags do C1 não inclui "e-mail não confirmado pode comprar" (HIP-D07/WB-224 C9) nem `codigo_entrega` (WB-226), que dependem de flag. | Lista final das flags da 1.0 | Acrescentar `email_nao_confirmado_compra` e `codigo_entrega` ao C1 | Não |
+
+## 2. Lacunas de segurança e abuso (decidir com o Security)
+
+| ID | Tipo | Onde | Problema | Pergunta | Recomendação do QA | Bloqueia |
+|---|---|---|---|---|---|---|
+| R-06 | S | WB-222 C4, SEC-015 | O código TOTP tem 10^6 possibilidades. O PRD só diz que "falhas contam no limite do WB-221", que é **por conta + IP**: 1.000 tentativas espalhadas em 10 IPs não são freadas. Também não diz se o mesmo código pode ser usado duas vezes na janela de 30 s (replay). | Limite de tentativas de TOTP por conta (qualquer IP) e rejeição de código já usado? | Limite por conta de 5 erros/15 min com espera; código TOTP de uso único por passo (RFC 6238 §5.2). Dono: Security | Sim (O1-ADM-08/09) |
+| R-07 | S | WB-222 C5 | Se o **único** super admin perde o aparelho e os 10 códigos, ninguém pode redefinir o TOTP dele. | Qual é o caminho de recuperação? | Comando de operação (CLI no servidor, exige acesso à infraestrutura) documentado no guia de deploy, auditado; testar na Onda 8. Dono: Security/TL | Não (risco operacional) |
+| R-08 | S | WB-050 C2 | "E-mail já cadastrado como cliente: posso usar a mesma credencial e adicionar o papel de lojista." Não diz como se prova a posse. Se bastar digitar o e-mail no cadastro, abre pré-sequestro e enumeração. | O papel é adicionado só depois de login (reautenticação) da conta existente? O formulário de lojista deve mostrar a mesma tela para e-mail existente e novo? | Sim: e-mail existente → "Entre para continuar" (login), depois adiciona o papel; nunca criar segunda conta nem conceder papel sem autenticar | Sim (O1-LOJ-02, P0) |
+| R-09 | S | WB-075 C1/C4, SEC-017, SEC-008b | (a) "Esse e-mail já participa de outra loja" revela que o e-mail está em uso. (b) Não diz se a conta criada pelo link do convite nasce **confirmada** (o clique prova a posse do e-mail) ou cai na regra de SEC-008b. (c) Funcionário em duas lojas é proibido: qual a razão e é isso mesmo? (d) Dono pode se remover? Transferência de propriedade? (e) Reenviar convite invalida o anterior? | Responder (a) a (e) | (a) mesma mensagem genérica "Não foi possível convidar este e-mail" quando já vinculado; (b) conta nasce confirmada pelo convite; (c) manter a restrição na 1.0 (simplifica RBAC), registrar; (d) dono não se remove; transferência fora da 1.0; (e) sim, invalida | Sim (O2-EQP-05/08/10) |
+| R-11 | S | WB-224 C1, SEC-008(a), SEC-064 | "Dado o 2º pedido, quando tento **pagar**": o limite vale na criação do pedido ou no pagamento aprovado? Com dois checkouts abertos ao mesmo tempo, ambos podem ser pagos antes de o primeiro ser contado. Pedido pago e depois estornado conta? | Onde o limite é aplicado e o que conta como "pedido pago"? | Aplicar na **criação do pedido** (contador atômico por conta: pedidos pagos + pendentes ≤ limite); estornado não conta; teste de concorrência obrigatório | Sim (O1-NCF-05) |
+| R-37 | S | WB-053 | (a) A mesma conta Mercado Pago pode ser vinculada a duas lojas (dois CPF/CNPJ)? (b) Duplo toque em "Conectar" gera dois `state` válidos? | (a) permitido? | (a) Não: 1 conta MP = 1 loja (evita laranja); (b) 1 `state` ativo por loja | Não (O2-PGT-14) |
+| R-36 | S | WB-101 C1 | Convite de admin para e-mail que já é cliente ou lojista: cria segunda conta, converte a existente ou recusa? | Regra | Recusar: admin usa e-mail exclusivo (domínio da Webag) | Não |
+| R-31 | S | WB-006 C3 x SEC-005 | Duas rotas de enumeração de e-mail (`exists` e a mensagem do cadastro). O risco já foi aceito (DEC-017), mas WB-009 não revela, e o cadastro revela. Registro para o parecer do Security, sem ação do PO. | — | Manter como está com os rate limits; QA testa os limites (O1-CAD-07, SEC-005) | Não |
+| R-39 | S | WB-051 C3 x WB-211 C1 | Lojista de cidade não atendida "fica na lista de espera", mas a lista é uma finalidade com consentimento próprio, desmarcado por padrão. | Entra na lista sem consentimento? | Só com checkbox próprio; sem ele, só mostra a mensagem | Não (O2-ONB-06) |
+
+## 3. Critérios vagos ou não testáveis
+
+| ID | Tipo | Onde | Problema | Pergunta | Recomendação do QA | Bloqueia |
+|---|---|---|---|---|---|---|
+| R-04 | V | WB-100 C3 | "30 min sem atividade". Atividade é qualquer requisição autenticada, clique, ou movimento do mouse? Como convive com access de 15 min e refresh de 30 dias? | Definir atividade e o prazo do refresh do admin | Atividade = requisição autenticada iniciada pelo usuário (não polling); refresh do admin vale 30 min deslizantes | Não (O1-ADM-04 assume) |
+| R-05 | V | WB-006 C2 | "score >= médio" e "comum/vazada" não têm escala. SEC-001 pede lista de >= 10 mil no servidor; o medidor do app é outra coisa. | Qual biblioteca/escala e qual nota é "Boa"? | zxcvbn, nota 0-4: 0-1 "Fraca", 2 "Média", 3-4 "Boa"; Continuar ativo só em >= 2 **e** fora da lista; o servidor decide de verdade | Não (O1-CAD-06) |
+| R-10 | V | WB-225 C1, SEC-062, RN-02 | (a) "Até 30 dias da aprovação **ou** até 20 pedidos, o que durar mais" (PRD) x "primeiros 30 dias ou 20 pedidos" (SEC-062): ambíguo. (b) O R$ 500,00 compara com subtotal ou com o total (frete e taxa)? (c) RN-02 diz `loja_nova_pedido_max_cents` = 50000 e o texto cita R$ 500,00: consistente, mas a mensagem ao cliente usa o valor do parâmetro? | Definir (a) e (b) | (a) A loja deixa de ser nova só quando cumpre **as duas** condições (>= 30 dias **e** >= 20 ENTREGUE); (b) total cobrado do cliente (é o que fica exposto); mensagem lê o parâmetro | Sim (O2-NOV-01/04) |
+| R-13 | V | WB-062 C1, RN-05 | Promoção tem "início" e "fim": data ou data e hora? O fim é inclusivo? Em que fuso? | Definir | Data e hora em `America/Sao_Paulo`; início inclusivo, fim **inclusivo até o minuto informado**; UI pede hora, padrão 00:00 e 23:59 | Sim (O2-PRC-01) |
+| R-14 | V | WB-064 C2, HIP-033 | "Notificação 1 vez por variação até o estoque subir": subir para quanto? Basta +1? | Critério de rearme | Rearma quando `disponível > estoque_baixo_un`; alerta de novo ao voltar a `<=` | Não (O2-EST-02) |
+| R-15 | V | WB-103 C1/C2, HIP-030, RN-11 | (a) "dias úteis" sem calendário (feriados nacionais/municipais). (b) WB-103 C2 pede "checagem de CPF/CNPJ duplicado" na fila, mas WB-051 C2 já impede duplicidade: o que a fila mostra? Duplicidade com loja reprovada/suspensa libera o documento? | (a) Calendário? (b) Regra para documento de loja reprovada | (a) Segunda a sexta, sem feriados na 1.0 (documentar; tabela de feriados editável no admin é melhoria); (b) documento de loja reprovada e sem pedidos fica livre; suspensa continua ocupando | Não (O2-APR-02) |
+| R-16 | V | WB-056 C1/C6 | (a) Horário que passa da meia-noite (loja que fecha 01:00)? (b) 12:00 é aberta ou fechada quando o intervalo termina às 12:00? (c) "interação no painel" no C6: o que conta? (d) Feriado: só manual, sem calendário? | Definir | (a) Fora da 1.0: o intervalo termina às 23:59, quem fecha depois divide em dois dias; (b) fim exclusivo (12:00 já é fechada); (c) login, aceitar/recusar/avançar pedido, pausar ou reabrir; (d) só manual | Não (O2-HOR-02/06) |
+| R-17 | V | WB-057 C2/C3/C5, RN-04 | (a) Fronteira de faixa: 2,00 km pertence à faixa 0-2 ou 2-5? (b) Reduzir o raio com faixas já cadastradas. (c) X "maior que o mínimo" quando o mínimo é 0. (d) A "Prévia" usa geocodificação do CEP: de qual provedor? | Definir | (a) faixa `[de, ate)`: o limite superior pertence à próxima; a última inclui o raio; (b) recusar e pedir ajuste das faixas; (c) X > mínimo estrito; X = 0 desliga a opção; (d) ADR-008/TL | Não (O2-ENT-03/04/10) |
+| R-18 | V | WB-051 C1 | O PRD pede "CNPJ com dígito verificador". O CNPJ alfanumérico (letras em parte dos números) passou a ser emitido pela Receita em 2026 [HIPÓTESE: confirmar a data e o algoritmo na fonte da Receita; sem acesso à internet de documentos neste ambiente]. Validador numérico recusaria lojistas legítimos. | Aceitar o formato novo na 1.0? | Sim: validador com os dois formatos; máscara com letras; migrar coluna para texto | Não (O2-ONB-02) |
+| R-21 | V | WB-009 C2/C3 | (a) Nova senha recusada por ser fraca consome o código? (b) Reset de conta bloqueada pelo admin: o que acontece? | Definir | (a) Não consome; (b) senha muda, login segue "Conta indisponível" | Não (O1-RST-03/07) |
+| R-22 | V | WB-119 C3, WB-120 C4 | Flags têm "em até 60 s"; parâmetros não têm prazo de efeito. Edição simultânea de dois admins na mesma chave? | Definir | Parâmetros: mesmo cache de 60 s; edição com controle de versão (409 se a versão mudou) | Não (O1-PAR-07) |
+| R-23 | V | WB-055 C4 | Alterar nome ou CPF/CNPJ "exige nova análise": a loja continua visível e vendendo durante a análise? | Definir | Continua visível com os dados antigos; a mudança só vale após aprovação | Não (O2-PRF-05) |
+| R-24 | V | WB-104 C1 | "Pedidos em andamento ficam sinalizados para ação": qual ação, de quem, com que prazo? | Definir | Admin decide caso a caso (concluir, cancelar com estorno); sinal "Atenção" no WB-108; prazo = `loja_aceite_timeout_min` já cobre RECEBIDO | Não (O2-APR-12) |
+| R-25 | V | WB-061 C1, WB-062 | (a) Estoque tem máximo? (b) Código (SKU) por variação é único na loja? (c) A promoção é do produto ou de cada variação com preço próprio? | Definir | (a) 99.999 (inteiro); (b) único por loja quando informado; (c) promoção só no produto; variação com preço próprio herda o desconto percentual | Não (O2-VAR-01/08) |
+| R-26 | V | WB-059 C2 | Ao desligar, o prazo voluntário "vira 0". Ao religar, volta a 7 (padrão) ou ao valor anterior? | Definir | Padrão `troca_voluntaria_dias_padrao`, loja confirma | Não (O2-TRC-04) |
+| R-27 | V | WB-106 C1/C5 | "Ícone de uma biblioteca fixa": qual? E o nome duplicado compara com ou sem acento e caixa? | Definir | Phosphor (HIP-D03), lista de nomes versionada no código; comparação sem acento e sem caixa | Não (O2 categorias) |
+| R-28 | V | WB-052, WB-218 C2/C3, WB-054 C3 | (a) O admin informa um "motivo" a cada visualização de documento (C2) ou o sistema grava só o contexto? (b) O dono baixa os **próprios** documentos? (c) Reprovação "por item": lista fechada de itens? (d) Reenvio substitui e guarda histórico? | Definir | (a) Motivo obrigatório (lista curta: análise inicial, dúvida, denúncia); (b) dono vê a lista e a data, não baixa; (c) um item por documento exigido + dados da loja; (d) substitui e mantém histórico | Não (O2-DOC-09/16) |
+| R-35 | V | WB-210 C3 | Não diz como a API sinaliza "aceite de nova versão pendente" (bloqueia tudo? só rotas de compra?). | Contrato | Código de erro específico `terms_acceptance_required` em toda rota autenticada exceto aceite, logout e exclusão | Não (O1-CAD-21) |
+| R-38 | V | WB-060 C1 | "Salvar como rascunho é permitido": mínimo para salvar? | Definir | Só o nome; o resto obrigatório apenas ao publicar | Não (O2-PRD-02) |
+| R-40 | V | WB-060 (dep WB-054) x `fluxos.md` §4 | O fluxo do Designer diz que, "enquanto a loja está em análise, o lojista já pode cadastrar produtos"; WB-060 depende de WB-054 e o PRD não diz se produto pode ser criado antes da aprovação. | Pode criar e publicar produto antes de aprovada? | Pode criar e salvar (ficam ATIVOS mas invisíveis, RN-03); a loja só aparece após aprovação + conta ativa + 1 produto ativo | Não (O2-APR-10, O2-E2E-03) |
+| R-32 | V | WB-117 C1/C2, WB-210 C3 | (a) "Usuário ativo" que precisa reaceitar: quem fez login nos últimos X dias? (b) Reaceite dos Termos do Lojista vale para funcionário? (c) Versão publicada é imutável? | Definir | (a) todos os usuários, no próximo uso; (b) funcionário aceita só termos de uso/privacidade; (c) imutável, correção = nova versão | Não (O1-CAT-06/07) |
+| R-20 | V | WB-153 C3 | "Retentativas exponenciais": quantas, com que intervalos, e o que acontece quando o Redis está fora na hora do webhook (a notificação se perde?). | Definir | 5 tentativas (1, 5, 30, 120, 720 min); gravar a notificação no banco antes de enfileirar (outbox) para nunca perder | Não (O1-PAY-16) |
+| R-29 | L | RN-07/RN-11 (existem) x loja; WB-103 x `fluxos.md` §5 | Há tabela de estados para pedido e troca, **mas não para a loja**. Além disso o fluxo do Designer tem 3 desfechos (aprovar, **pedir correção** com status "Aguardando lojista: prazo pausado", recusar), e o PRD tem 2 (aprovar, reprovar com reenvio). Sem tabela não há teste de transição inválida e o SLA de 2 dias úteis não tem regra de pausa. | Tabela de estados e transições da loja, com quem aciona; "pedir correção" e "recusar" são desfechos distintos? | Rascunho → Em análise → Aprovada, Correção pedida (prazo SLA pausado; lojista reenvia e volta a Em análise) ou Recusada (final; novo cadastro só com suporte); Aprovada ↔ Suspensa; nenhuma transição direta de Recusada ou Suspensa para Aprovada | Sim (O2-APR-01) |
+
+## 4. Histórias bem escritas (sem ressalva)
+WB-118 e WB-123 têm critérios mensuráveis e completos (erro, vazio, limite). WB-221 e WB-219/220 trazem números e janelas de tempo testáveis. WB-101 C1 (convite de 48 h) e WB-075 C1 (7 dias) estão exatas e batem com SEC-017.
+
+## 5. Resumo para o PO
+
+| Item | Quantidade |
+|---|---|
+| Pendências abertas | 40 (R-01 a R-40) |
+| Bloqueiam caso P0 (responder antes da sprint) | 11: R-01, R-02, R-06, R-08, R-09, R-10, R-11, R-12, R-13, R-29, R-33 |
+| Conflitos entre documentos | 8 |
+| Lacunas de segurança (também ao Security) | 9 |
+
+Pedido objetivo: responder as 11 que bloqueiam P0 antes de a sub-onda correspondente entrar na sprint (G3). As demais podem ser respondidas "ok, recomendação do QA" sem reunião; o QA ajusta os casos em seguida. Respostas devem voltar como edição nos PRDs (critério reescrito), não só em conversa.
+
+## 6. Status das pendências (PO, 2026-11-18, conforme DEC-023)
+
+Regra aplicada: DEC-023 (a) a (d). Onde nada é dito, foi adotada a recomendação do QA. "PRD" = `docs/produto/prd/`; "RN" = `docs/produto/regras-de-negocio.md`. O QA deve ajustar os casos de `planos/onda-1.md` e `planos/onda-2.md` marcados R-nn.
+
+| ID | Status | Resolvido em | Observação |
+|---|---|---|---|
+| R-01 | Resolvido | `lojista.md` WB-053 C7; `admin.md` WB-103 C6-C7 | Bloqueia (DEC-020e, DEC-023a). Liberação: selo "Titular divergente", motivo obrigatório, TOTP, auditoria |
+| R-02 | Resolvido | `admin.md` WB-119 C5; `lojista.md` WB-059 C2; RN-02; `decisoes.md` HIP-017 | Piso não editável por nenhum perfil (DEC-011, DEC-023b); decisão do QA divergia em "super admin só aumenta": vale só para a parte voluntária |
+| R-03 | Resolvido | `cliente.md` WB-008 C1 | 30 deslizantes, 90 absolutos, "Entre de novo por segurança" |
+| R-04 | Resolvido | `admin.md` WB-100 C3 | Atividade = requisição iniciada pelo usuário; refresh de 30 min |
+| R-05 | Resolvido | `cliente.md` WB-006 C2 | zxcvbn 0-4; servidor decide |
+| R-06 | Fora do escopo do PO | Security (DEC-023e) | Limite de TOTP por conta e código de uso único |
+| R-07 | Fora do escopo do PO | Security/TL (DEC-023e) | Recuperação do super admin |
+| R-08 | Resolvido | `lojista.md` WB-050 C2 | Login antes de ganhar o papel; sem segunda conta |
+| R-09 | Resolvido | `lojista.md` WB-075 C1, C4, C6 | (a) a (e) conforme QA |
+| R-10 | Resolvido | `seguranca-acesso.md` WB-225 C1, C5 | Duas condições (30 dias e 20 pedidos); total cobrado; mensagem lê o parâmetro |
+| R-11 | Resolvido | `seguranca-acesso.md` WB-224 C10 | Contador atômico na criação do pedido; estornado não conta |
+| R-12 | Resolvido | `lojista.md` WB-060 C6-C7; `admin.md` WB-107 C3, C5 | 2 listas; palavra inteira sem acento e caixa; lojista não reativa |
+| R-13 | Resolvido | `lojista.md` WB-062 C1; RN-05 | Data e hora, `America/Sao_Paulo` |
+| R-14 | Resolvido | `lojista.md` WB-064 C2; RN-06 | Rearma acima de `estoque_baixo_un` |
+| R-15 | Resolvido | `admin.md` WB-103 C1-C2; `lojista.md` WB-051 C6; RN-16 | Sem feriados; documento de loja reprovada sem pedidos fica livre |
+| R-16 | Resolvido | `lojista.md` WB-056 C1, C2, C6 | Fim exclusivo; sem virar a meia-noite; feriado manual |
+| R-17 | Resolvido | `lojista.md` WB-057 C2, C3, C5; RN-04 | `[de, até)`; X > mínimo; geocodificação no ADR-008 (TL) |
+| R-18 | Resolvido com `[HIPÓTESE]` | `lojista.md` WB-051 C1 | Data e algoritmo do CNPJ alfanumérico a confirmar na fonte da Receita antes da sprint |
+| R-19 | Resolvido | `pagamentos.md` WB-150 C3 | Tokens `fake_tok_*` |
+| R-20 | Resolvido | `pagamentos.md` WB-153 C3 | 5 tentativas; outbox |
+| R-21 | Resolvido | `cliente.md` WB-009 C5-C6 | Não consome; login segue indisponível |
+| R-22 | Resolvido | `admin.md` WB-119 C6; RN-02 | Cache de 60 s; 409 por versão |
+| R-23 | Resolvido | `lojista.md` WB-055 C4; RN-16 | Loja segue visível com dados antigos |
+| R-24 | Resolvido | `admin.md` WB-104 C1 | Admin decide caso a caso; sinal "Atenção" |
+| R-25 | Resolvido | `lojista.md` WB-061 C1, C5; WB-062 C5; RN-06 | 99.999; SKU único por loja; promoção no produto |
+| R-26 | Resolvido | `lojista.md` WB-059 C2 | Volta ao padrão e a loja confirma |
+| R-27 | Resolvido | `admin.md` WB-106 C1, C5 | Phosphor; comparação sem acento e caixa |
+| R-28 | Resolvido | `lojista.md` WB-052 C3, C6, C7, WB-054 C3; `lgpd.md` WB-218 C2-C3 | (a) a (d) conforme QA |
+| R-29 | Resolvido | RN-16 (nova); `admin.md` WB-103 C3; `lojista.md` WB-054 C3, C5 | Tabela de estados; 3 desfechos; SLA pausado |
+| R-30 | Resolvido | `lgpd.md` WB-214 C6 | Senha (DEC-020d); pergunta encerrada |
+| R-31 | Registrado, sem ação | `cliente.md` WB-006 C3 | Risco aceito (DEC-017); QA testa limites |
+| R-32 | Resolvido | `admin.md` WB-117 C2; `lgpd.md` WB-210 C3 | Todos os usuários; funcionário só termos de uso; versão imutável |
+| R-33 | Resolvido | `notificacoes.md` WB-194 C1 | Só texto genérico (DEC-023c, SEC-008d) |
+| R-34 | Resolvido | `admin.md` WB-120 C1 | Flags `email_nao_confirmado_compra` e `codigo_entrega` na lista |
+| R-35 | Resolvido | `lgpd.md` WB-210 C3 | `terms_acceptance_required` |
+| R-36 | Resolvido | `admin.md` WB-101 C1 | Convite recusado se e-mail já existe |
+| R-37 | Resolvido | `lojista.md` WB-053 C8-C9 | 1 conta MP = 1 loja; 1 `state` ativo |
+| R-38 | Resolvido | `lojista.md` WB-060 C1 | Rascunho só com nome |
+| R-39 | Resolvido | `lojista.md` WB-051 C3 | Lista de espera só com checkbox próprio |
+| R-40 | Resolvido | `lojista.md` WB-054 C6 | Produto criado antes da aprovação fica invisível |
+
+**Totais:** 37 resolvidas (R-18 com `[HIPÓTESE]`), 1 registrada sem ação (R-31), 2 com o Security (R-06, R-07). Dos 11 que bloqueavam P0, 10 estão resolvidas; R-06 segue com o Security.
+
+### Ajustes pedidos ao QA depois de DEC-024 (PO, 2026-11-18)
+
+Origem: respostas ao Designer (DEC-024) e às tabelas Z das ondas 1b, 5 e 6; resumo em `docs/produto/backlog.md` ("Respostas ao Designer"); hipóteses em `decisoes.md` HIP-D11 a HIP-D24. Planos que precisam de ajuste (nome do arquivo em `docs/qa/planos/`; se o plano ainda não existir, já nasce com o critério novo):
+
+| Plano / área | Ajuste | Critério de origem |
+|---|---|---|
+| Cadastro e formulários em geral (onda 1: WB-006, 008, 009; onda 5: contestação, avaliação) | Trocar "botão inativo" por "botão ativo; ao tocar com erro não envia, mostra o erro junto ao campo e leva o foco ao campo". Caso P0 novo: tocar sem preencher nada. Verificar também com leitor de tela | RN-17; WB-006 C2 e C4 |
+| Carrinho (WB-020 C5, pedido mínimo) | Não existe botão de finalizar desabilitado; o botão principal vira "Adicionar mais itens" com "Faltam R$ X" | RN-04, RN-17 |
+| Cadastro (WB-006 C7) | Caso negativo: nenhuma caixa de marketing no cadastro | DEC-024f |
+| Notificações (WB-196 C6) | Oferta única após o 1º pedido pago, "Agora não" sem nova pergunta por 30 dias, e sempre disponível em Conta > Notificações (caixa desmarcada) | HIP-D23 |
+| Banners (WB-115 C1) | Proporção 2:1; o recorte impede outra proporção; o teste de imagem 16:9 passa a ser o caso negativo | DEC-024a |
+| Trocas: pedir (WB-170 C2, C5, C9) | Tamanho/cor **inertes com o motivo** (loja sem troca voluntária e prazo vencido), nunca escondidos; tocar no inerte não dá erro; novo passo "Como devolver" (levar à loja x coleta em casa) | DEC-024b; HIP-D21 |
+| Trocas: taxa de coleta (WB-175 C1 a C8; WB-171 C5; WB-173 C1; WB-177) | **Reescrever o plano:** a troca é criada sem pagamento; a taxa só aparece após a aprovação ("Aprovada, taxa pendente"); loja sem poder agendar enquanto pendente; 48 h sem pagar cancela com motivo e libera a reserva; recusa não gera cobrança nem estorno; cancelar após pagar estorna; taxa R$ 0 em "Levar à loja", defeito e arrependimento. Idempotência do webhook da taxa | DEC-024e; HIP-D09, D21 |
+| Equipe e painel inicial (WB-075 C7, C8; WB-078 C5; WB-072; RN-13) | Nova permissão `vendas_valores`, padrão desligada: sem ela, a API **não devolve** vendas em R$, ticket médio e gráfico (testar a resposta, não só a tela); com ela, vê esses números e continua sem financeiro (403 em WB-076); valores dentro do pedido seguem visíveis com "pedidos". Atividade da equipe (C8) | DEC-024c; HIP-D22 |
+| Admin: parâmetros e flags (WB-119 C1, WB-120 C5, C6) | Quatro chaves novas em RN-02 (`troca_taxa_pagamento_h`, `disputa_comprovante_h`, `estorno_cobertura_teto_cents`, `push_mkt_min_segmento`); desligar PIX e cartão juntos é bloqueado (UI e API 409); selo "Pagamentos: simulado/real" (nunca "simulado" em produção) | HIP-D11, D12 |
+| Admin: intervir no pedido (WB-109 C9, WB-110 C4) | "Cobrir com saldo do Webag" só super admin, até o teto, com TOTP e motivo, vira dívida do lojista; prazo do comprovante de 48 h | HIP-D13, D14 |
+| Ajuda (WB-034 C1) e novo WB-227 | Contatos e horário vêm da configuração do admin (alterar e ver no app e no painel sem deploy); WB-227 é **história nova**: diagnóstico de alertas, "Testar alertas agora" sem criar pedido, Wake Lock sem suporte mostra só a dica; funcionário vê a tela | HIP-D15, D17 |
+| Privacidade (WB-217 C5, C6) | Formulário público do titular: protocolo, prazo de 15 dias, rate limit, resposta idêntica exista ou não conta | HIP-D18 |
+| Lista de espera (WB-004 C2) | 1 inscrição por e-mail e bairro; repetir não duplica nem dá erro | HIP-D19 |
+| Admin: meu perfil (WB-228) | **História nova**: alterar senha com TOTP vigente derruba as outras sessões; "Sair de todos os aparelhos"; minha atividade filtrada. TOTP e códigos de recuperação seguem com o Security | AC6 |
+
+Sem mudança pedida (continuam como estão): R-06/R-07 (TOTP, Security), WB-214 C6 e login do admin em 2 passos. Observação: `prd/lgpd.md` WB-214 mantém duas linhas "C6" (a segunda, antiga, pede confirmar com o Security); vale a primeira (DEC-020d, R-30), e a limpeza do texto fica com o Security por tocar exclusão web.

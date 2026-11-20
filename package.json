@@ -1,0 +1,40 @@
+{
+  "name": "webag",
+  "private": true,
+  "description": "Webag — marketplace regional de bens de consumo (monorepo)",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "web": "pnpm --filter @webag/mobile web",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "generate": "turbo run generate",
+    "generate:check": "turbo run generate --force && git diff --exit-code -- packages/shared/src/generated",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "setup": "node scripts/setup.mjs",
+    "db:migrate": "pnpm --filter @webag/api db:migrate",
+    "db:seed": "pnpm --filter @webag/api db:seed",
+    "bootstrap": "node scripts/setup.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "licencas": "node scripts/gerar-licencas.mjs",
+    "totp": "node scripts/totp.mjs",
+    "pagar": "node scripts/simular-pagamento.mjs",
+    "telas": "node scripts/capture-screens.mjs",
+    "web:compra": "node scripts/web-playwright.mjs compra",
+    "web:smoke": "node scripts/web-playwright.mjs smoke",
+    "web:e2e": "node scripts/web-playwright.mjs e2e"
+  },
+  "devDependencies": {
+    "prettier": "3.10.1",
+    "turbo": "2.11.12",
+    "typescript": "6.0.3"
+  }
+}

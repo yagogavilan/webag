@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Webag v4b "Sacola Alca Dupla". Simbolo isolado, cor solida #C02EF0, sem gradiente. viewBox 0 0 160 104.
+     Estrategias: (1) mesmo corpo em trapezio da v4a, (2) ALCA DUPLA: alca de tras (mais alta, deslocada para a direita) e alca da frente (mais baixa, esquerda),
+     cruzando-se; a da frente abre um vao de 4 unidades na de tras (mascara com traco 22 = 14 + 2x4). Largura total das alcas 72 = 75% do topo do corpo.
+     Sem olhais. Alca de tras: eixo M98 42 A18 34 (apice y8, externo y1). Alca da frente: M76 42 A18 28 (apice y14).
+     Ordem de desenho: alca de tras (mascarada), corpo, alca da frente. Barras como na v4a. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 104" width="160" height="104" role="img" aria-labelledby="wb-v4b-t">
+  <title id="wb-v4b-t">Webag</title>
+  <defs>
+    <mask id="wb-vao-alca" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#FFFFFF"/>
+      <path d="M76 42 A18 28 0 0 1 112 42" fill="none" stroke="#000000" stroke-width="22"/>
+    </mask>
+  </defs>
+  <g id="barras" fill="#C02EF0">
+    <rect x="24" y="34" width="23" height="14" rx="7"/>
+    <rect x="0" y="62" width="49" height="14" rx="7"/>
+    <rect x="18" y="90" width="34" height="14" rx="7"/>
+  </g>
+  <g id="sacola" fill="#C02EF0">
+    <path id="alca-tras" d="M98 42 A18 34 0 0 1 134 42" fill="none" stroke="#C02EF0" stroke-width="14" mask="url(#wb-vao-alca)"/>
+    <polygon id="corpo" points="67,43 145,43 133,95 72,95" stroke="#C02EF0" stroke-width="18" stroke-linejoin="round"/>
+    <path id="alca-frente" d="M76 42 A18 28 0 0 1 112 42" fill="none" stroke="#C02EF0" stroke-width="14"/>
+  </g>
+</svg>

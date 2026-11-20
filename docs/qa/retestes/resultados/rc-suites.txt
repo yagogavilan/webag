@@ -1,0 +1,59 @@
+# Suítes do RC (f622bc9), clone novo, 2026-11-20
+## pnpm generate:check
+ Tasks:    1 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    2.406s 
+## pnpm lint
+ Tasks:    6 successful, 6 total
+Cached:    0 cached, 6 total
+  Time:    57.181s 
+## pnpm typecheck
+ Tasks:    7 successful, 7 total
+Cached:    2 cached, 7 total
+  Time:    28.805s 
+## pnpm build
+ Tasks:    5 successful, 5 total
+Cached:    2 cached, 5 total
+  Time:    1m13.238s 
+## smoke (hora de Brasília fora do horário das lojas, 1ª passagem)
+
+[smoke] interrompido: pedido não foi criado
+ ELIFECYCLE  Command failed with exit code 1.
+## smoke (lojas abertas 24 h por SQL)
+[smoke] API: http://localhost:3400
+[smoke] TUDO CERTO
+## API unit
+ Test Files  45 passed (45)
+      Tests  329 passed (329)
+## API e2e execução 1
+ Test Files  106 passed (106)
+      Tests  827 passed (827)
+   Duration  647.76s (transform 5.39s, setup 0ms, import 164.56s, tests 468.11s, environment 10ms)
+## API e2e execução 2
+ Test Files  106 passed (106)
+      Tests  827 passed (827)
+   Duration  648.36s (transform 4.93s, setup 0ms, import 169.77s, tests 463.67s, environment 8ms)
+## API e2e execução 3
+ Test Files  106 passed (106)
+      Tests  827 passed (827)
+   Duration  600.04s (transform 4.75s, setup 0ms, import 156.56s, tests 429.43s, environment 9ms)
+run 1 exit 0 648s
+run 2 exit 0 650s
+run 3 exit 0 601s
+done
+## web vitest
+ Test Files  79 passed (79)
+      Tests  651 passed (651)
+## app jest
+Test Suites: 45 passed, 45 total
+Tests:       429 passed, 429 total
+Time:        55.586 s
+## shared
+      Tests  3 passed (3)
+## Playwright API falsa
+
+  3 skipped
+  58 passed (2.2m)
+## Playwright API real
+  3 skipped
+  9 passed (1.8m)

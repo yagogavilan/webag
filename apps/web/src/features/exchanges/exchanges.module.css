@@ -1,0 +1,19 @@
+/* Trocas do lojista (onda-5b TL1 e TL2). Aprovar é 1 toque; o prazo de 24 h fica sempre visível, com texto e ícone. */
+.page { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.list { display: flex; flex-direction: column; gap: var(--wb-space-3); margin: 0; padding: 0; list-style: none; max-width: 720px; }
+.card { display: flex; flex-direction: column; gap: var(--wb-space-3); padding: var(--wb-space-4); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-card); }
+.head { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-2); flex-wrap: wrap; }
+.deadline { display: inline-flex; align-items: center; gap: var(--wb-space-1); min-height: 28px; padding: 0 var(--wb-space-3); border-radius: var(--wb-radius-pill); background: var(--wb-color-surface-sunken); color: var(--wb-color-text-primary); }
+.deadlineWarning { background: var(--wb-color-feedback-warning-subtle); color: var(--wb-color-text-warning); }
+.deadlineUrgent, .deadlineLate { background: var(--wb-color-feedback-danger-subtle); color: var(--wb-color-text-danger); }
+.itemRow { display: flex; align-items: center; gap: var(--wb-space-3); }
+.thumb { display: grid; place-items: center; width: 56px; height: 56px; flex: none; border-radius: var(--wb-radius-control); background: var(--wb-color-surface-sunken); color: var(--wb-color-text-secondary); }
+.itemText { min-width: 0; display: flex; flex-direction: column; }
+.ctx { margin: 0; color: var(--wb-color-text-secondary); }
+.actions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
+.actions > * { flex: 1; min-width: 160px; }
+.reasons { display: flex; flex-direction: column; gap: var(--wb-space-3); }
+.block { display: flex; flex-direction: column; gap: var(--wb-space-3); padding: var(--wb-space-4); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-card); }
+.block h2 { margin: 0; }
+.back { display: inline-flex; align-items: center; gap: var(--wb-space-2); min-height: var(--wb-size-touch-min); color: var(--wb-color-text-link); text-decoration: none; align-self: flex-start; }
+.timeline { display: flex; flex-direction: column; gap: var(--wb-space-2); margin: 0; padding: 0; list-style: none; }

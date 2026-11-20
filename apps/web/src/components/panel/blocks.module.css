@@ -1,0 +1,38 @@
+/* Blocos v3 (Kpi, NightBlock, DeadlineBlock). Noite = surface-ink; lima = accent; sem gradiente, sem sombra. */
+.kpiRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--wb-space-3); }
+.kpi { display: flex; flex-direction: column; gap: var(--wb-space-1); padding: var(--wb-space-4) var(--wb-space-5); border-radius: var(--wb-radius-card); min-width: 0; }
+.kpi_neutral { background: var(--wb-color-neutral-100); color: var(--wb-color-text-primary); }
+.kpi_night { background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink); }
+.kpi_warning { background: var(--wb-color-feedback-warning-subtle); color: var(--wb-color-feedback-warning-base); border: var(--wb-border-width-hairline) solid var(--wb-color-feedback-warning-border); }
+.kpi_danger { background: var(--wb-color-feedback-danger-base); color: #fff; }
+.kpiLabel { font-weight: 700; }
+.kpiValue { font-family: var(--wb-font-family-display); font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.kpiHint { opacity: 0.85; }
+
+.lima { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 var(--wb-space-6); border: 0; border-radius: var(--wb-radius-button); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base); font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.lima:hover { filter: brightness(0.95); }
+.lima:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.lima:disabled { opacity: 0.5; cursor: not-allowed; }
+.limaText { color: var(--wb-color-accent-base); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.night { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wb-space-4); padding: var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink); }
+.nightIcon { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: var(--wb-radius-lg); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base); flex: none; }
+.nightBody { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nightTitle, .nightText { margin: 0; }
+.nightTitle { color: var(--wb-color-text-on-ink); }
+.nightText { color: var(--wb-color-text-on-ink-muted); }
+.nightAction { flex: none; width: 100%; display: flex; }
+.nightAction > * { flex: 1; }
+
+.deadline { display: flex; flex-direction: column; gap: 2px; justify-content: center; padding: var(--wb-space-3) var(--wb-space-4); border-radius: var(--wb-radius-lg); min-width: 0; }
+.deadline_ontime, .deadline_none { background: var(--wb-color-neutral-100); color: var(--wb-color-text-primary); }
+.deadline_risk { background: var(--wb-color-feedback-warning-subtle); color: var(--wb-color-feedback-warning-base); border: var(--wb-border-width-strong) solid var(--wb-color-feedback-warning-border); }
+.deadline_late { background: var(--wb-color-feedback-danger-base); color: #fff; }
+.deadlineLabel { display: inline-flex; align-items: center; gap: 4px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; }
+.deadlineValue { font-family: var(--wb-font-family-display); font-size: 40px; line-height: 42px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.deadlineSub { opacity: 0.95; }
+
+@media (min-width: 640px) {
+  .nightAction { width: auto; }
+  .kpiRow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

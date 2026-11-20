@@ -1,0 +1,41 @@
+@page { size: 1280px 720px; margin: 0 }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact }
+body { font-family: "Figtree", "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1C1721; background: #FAF8FB }
+.slide { width: 1280px; height: 720px; padding: 64px 80px; position: relative; overflow: hidden; page-break-after: always; break-after: page; display: flex; flex-direction: column; background: #FAF8FB }
+.slide.brand { background: #A21FBE; color: #fff }
+.slide.dark { background: #1C1721; color: #fff }
+.logo { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 26px; letter-spacing: -0.02em; color: #A21FBE }
+.logo img { width: 40px; height: 40px }
+.brand .logo, .dark .logo { color: #fff }
+.kicker { font-size: 15px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #A21FBE; margin-bottom: 14px }
+.brand .kicker { color: #EDC2F4 }
+h1 { font-size: 68px; line-height: 1.04; letter-spacing: -0.03em; font-weight: 800; max-width: 900px }
+h2 { font-size: 44px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 800; max-width: 900px }
+p.lead { font-size: 24px; line-height: 1.4; color: #5F566A; max-width: 760px; margin-top: 18px }
+.brand p.lead { color: #F6E0FA }
+.grid { display: grid; gap: 24px; margin-top: 36px }
+.g3 { grid-template-columns: repeat(3, 1fr) } .g2 { grid-template-columns: repeat(2, 1fr) } .g4 { grid-template-columns: repeat(4, 1fr) }
+.card { background: #fff; border: 1px solid #E8E3EB; border-radius: 12px; padding: 26px }
+.card h3 { font-size: 24px; margin-bottom: 8px; letter-spacing: -0.01em }
+.card p { font-size: 19px; line-height: 1.4; color: #5F566A }
+.num { font-size: 64px; font-weight: 800; color: #A21FBE; letter-spacing: -0.03em; line-height: 1 }
+.step { display: flex; gap: 18px; align-items: flex-start }
+.step .n { flex: 0 0 52px; height: 52px; border-radius: 26px; background: #A21FBE; color: #fff; font-weight: 800; font-size: 24px; display: grid; place-items: center }
+.step h3 { font-size: 24px; margin-bottom: 4px } .step p { font-size: 19px; color: #5F566A; line-height: 1.4 }
+.shot { margin: 0; display: flex; justify-content: center }
+.shot img { height: 520px; border-radius: 28px; border: 6px solid #1C1721; box-shadow: 0 12px 30px rgba(26,24,22,.18); background: #fff }
+.row { display: flex; gap: 48px; align-items: center; flex: 1 }
+.row .txt { flex: 1 }
+.foot { position: absolute; left: 80px; right: 80px; bottom: 28px; display: flex; justify-content: space-between; font-size: 13px; color: #837A8A }
+.brand .foot, .dark .foot { color: #EDC2F4 }
+.calc { background: #fff; border: 1px solid #E8E3EB; border-radius: 12px; padding: 26px 30px; font-size: 22px; line-height: 1.9 }
+.calc b { font-size: 26px } .calc .res { border-top: 2px solid #A21FBE; margin-top: 10px; padding-top: 10px; color: #A21FBE }
+ul.check { list-style: none; margin-top: 24px } ul.check li { font-size: 24px; line-height: 1.35; padding-left: 40px; position: relative; margin-bottom: 16px }
+ul.check li::before { content: ""; position: absolute; left: 0; top: 6px; width: 22px; height: 22px; border-radius: 11px; background: #A21FBE }
+ul.check li::after { content: ""; position: absolute; left: 7px; top: 11px; width: 8px; height: 4px; border-left: 3px solid #fff; border-bottom: 3px solid #fff; transform: rotate(-45deg) }
+.note { font-size: 15px; color: #837A8A; margin-top: 16px }
+.tag { display: inline-block; background: #F6E0FA; color: #8618A3; font-weight: 700; font-size: 16px; padding: 6px 14px; border-radius: 999px }
+
+.brand .logo img, .dark .logo img { background: #fff; border-radius: 10px; padding: 4px; width: 46px; height: 46px }
+.calc { font-size: 20px; white-space: nowrap }

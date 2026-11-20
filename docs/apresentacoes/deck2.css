@@ -1,0 +1,86 @@
+/* Componentes da apresentação v2 */
+.slide.tint { background: #F6E0FA }
+.slide.hero { padding-bottom: 40px }
+.hero-grid { display: grid; grid-template-columns: 1fr 520px; gap: 30px; align-items: center; flex: 1 }
+.hero-grid.wide { grid-template-columns: 1fr 640px }
+.hero-grid h1 { font-size: 58px }
+.pills { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap }
+.pills span { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35); padding: 9px 18px; border-radius: 999px; font-weight: 700; font-size: 17px }
+.collage { position: relative; display: flex; justify-content: center; align-items: center; height: 600px }
+.collage .ph { margin: 0 -34px }
+.collage2 { position: relative; height: 560px; display: flex; align-items: center }
+
+.ph { border-radius: 11% / 5.2%; box-shadow: 0 18px 40px rgba(26,24,22,.28); background: #fff; display: block }
+.win { border-radius: 10px; border: 1px solid #D6CFDB; box-shadow: 0 16px 38px rgba(26,24,22,.2); background: #fff; display: block }
+
+.phones-row { display: flex; justify-content: center; gap: 44px; margin-top: 22px; align-items: flex-start }
+.phones-row.three { gap: 36px }
+.col { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 300px }
+.cap { text-align: center; display: flex; flex-direction: column; gap: 2px }
+.cap b { font-size: 20px; letter-spacing: -0.01em }
+.cap span { font-size: 16px; color: #5F566A; line-height: 1.3 }
+.slide.brand .cap span { color: #F6E0FA }
+
+.split { display: flex; gap: 56px; align-items: center; flex: 1 }
+.split.rev { flex-direction: row }
+.split-txt { flex: 1; min-width: 0 }
+.split-txt.narrow { flex: 0 0 360px }
+.split-img { display: flex; gap: 28px; align-items: center; justify-content: center }
+.split ul.check li { font-size: 22px }
+.split.wide-split { margin-top: 8px }
+
+.feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 34px }
+.feat-grid.three { grid-template-columns: repeat(3, 1fr) }
+.feat { background: #fff; border: 1px solid #E8E3EB; border-radius: 14px; padding: 24px 26px }
+.feat .ic { width: 40px; height: 40px; border-radius: 12px; background: #F6E0FA; color: #A21FBE; font-weight: 800; font-size: 20px; display: grid; place-items: center; margin-bottom: 14px }
+.feat h3 { font-size: 22px; margin-bottom: 6px; letter-spacing: -0.01em }
+.feat p { font-size: 17px; line-height: 1.38; color: #5F566A }
+.bigline { font-size: 30px; margin-top: 34px; color: #A21FBE; letter-spacing: -0.02em; max-width: 900px }
+
+.timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px 26px; margin-top: 34px }
+.tl { background: #fff; border-radius: 14px; padding: 22px 24px; border: 1px solid #F6E0FA }
+.tl .n, .tcard .n { width: 44px; height: 44px; border-radius: 22px; background: #A21FBE; color: #fff; font-weight: 800; font-size: 21px; display: grid; place-items: center; margin-bottom: 12px }
+.tl h3, .tcard h3 { font-size: 22px; margin-bottom: 4px } .tl p, .tcard p { font-size: 17px; color: #5F566A; line-height: 1.38 }
+
+.trio { display: flex; align-items: stretch; gap: 14px; margin-top: 26px }
+.tcard { flex: 1; background: #fff; border: 1px solid #E8E3EB; border-radius: 14px; padding: 22px 24px }
+.tarrow { align-self: center; font-size: 34px; color: #A21FBE; font-weight: 800 }
+
+.duo { display: flex; gap: 40px; justify-content: center; margin-top: 26px }
+.duo-c { display: flex; flex-direction: column; align-items: center; gap: 14px }
+
+.strip { display: flex; gap: 12px; justify-content: center; margin-top: 30px }
+.strip .mini .ph { height: 300px; box-shadow: none }
+
+.dark-calc { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.3); color: #fff; margin-top: 24px }
+.dark-calc .res { color: #fff; border-top-color: #EDC2F4 }
+.calc b { float: right }
+.calc { width: 100%; white-space: normal; font-size: 21px }
+
+.calc .cr { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0 }
+.calc .cr b { float: none }
+.calc .res { border-top: 2px solid #EDC2F4; margin-top: 8px; padding-top: 10px; font-weight: 700 }
+.dark-calc .res { color: #fff }
+.phones-row { margin-top: 10px }
+.cap span { font-size: 15px }
+
+/* Marca v3: Outfit nos titulos, Figtree no texto, logo horizontal branca */
+@font-face{font-family:'Outfit';font-weight:700;src:url(../design/fonts/candidatas/outfit-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Outfit';font-weight:800;src:url(../design/fonts/candidatas/outfit-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:'Outfit';font-weight:600;src:url(../design/fonts/candidatas/outfit-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:400;src:url(../design/fonts/figtree-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:600;src:url(../design/fonts/figtree-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:700;src:url(../design/fonts/figtree-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Figtree';font-weight:800;src:url(../design/fonts/figtree-latin-800-normal.woff2) format('woff2')}
+h1,h2,.num,.cap b,.feat h3,.tl h3,.tcard h3,.card h3,.bigline,.kicker{font-family:'Outfit','Figtree',sans-serif;letter-spacing:-0.01em}
+h1,h2{font-weight:800}
+.slide.brand{background:#A21FBE}
+.slide.brand.hero{background:#C02EF0}
+.slide.brand .foot,.slide.dark .foot{color:#fff}
+.logo{height:46px}
+.logo img{height:46px;width:auto;background:none;padding:0;border-radius:0}
+.brand .logo img,.dark .logo img{background:none;padding:0;width:auto;height:46px}
+.slide.tint{background:#F6E0FA}
+.kicker{color:#A21FBE}.brand .kicker{color:#fff}
+.ic,.feat .ic{background:#F6E0FA;color:#A21FBE}
+.slide.hero .kicker{opacity:.95}

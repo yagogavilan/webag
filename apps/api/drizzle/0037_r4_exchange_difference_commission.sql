@@ -1,0 +1,1 @@
+ALTER TABLE "exchange_requests" ADD COLUMN "difference_commission_cents" integer DEFAULT 0 NOT NULL;

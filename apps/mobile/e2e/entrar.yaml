@@ -1,0 +1,40 @@
+# Fluxo crítico: entrar (WB-008). Precisa de uma conta de teste já existente (criada por criar-conta.yaml ou pelo seed).
+#   maestro test -e E2E_EMAIL=maria@exemplo.test -e E2E_PASSWORD='Cachorro-Azul-2024' e2e/entrar.yaml
+appId: br.com.webag.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: location.choose-city
+- tapOn: Francisco Morato
+- tapOn:
+    id: home.login
+- assertVisible: Entrar
+
+# Credencial errada: mensagem única e a senha continua no campo
+- tapOn:
+    id: auth.login-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login-password-input
+- inputText: senha-errada-123
+- tapOn:
+    id: auth.login-submit
+- assertVisible: E-mail ou senha incorretos.
+
+# Corrige a senha e entra em 1 passo
+- tapOn:
+    id: auth.login-password-input
+- eraseText: 40
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth.login-submit
+- assertVisible:
+    id: home.account
+- assertVisible: Olá,
+
+# Sair apaga a sessão do aparelho: volta a perguntar onde receber
+- tapOn:
+    id: home.sign-out
+- assertVisible: Onde você quer receber?

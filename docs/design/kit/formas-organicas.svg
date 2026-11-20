@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 140" width="360" height="140" role="img" aria-label="Formas orgânicas Webag">
+  <!-- 3 formas sólidas derivadas da curva da alça e do trapézio (sem gradiente). Uso: fundo de arte de produto em banner, estados vazios, compartilhamento.
+       1) "Alça cheia": arco da alça fechado. 2) "Trapézio mole": corpo com cantos de raio 40%. 3) "Pílula torta": barra de velocidade inclinada e esticada. -->
+  <path d="M10 120V86a54 62 0 0 1 108 0v34z" fill="#C02EF0"/>
+  <path d="M150 34q0-20 20-20h68q22 0 18 20l-12 76q-3 20-23 20h-48q-20 0-22-20z" fill="#1C1721"/>
+  <g transform="translate(286 70) rotate(-24)">
+    <rect x="-56" y="-22" width="112" height="44" rx="22" fill="#D6FF4A"/>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+
+=== usuarios ===
+PASS  SEC181-1 | e-mail PARCIAL (10 formas: prefixo, local sem domínio, só domínio, curinga %, _) nunca devolve a conta: lista vazia 200, sem 400  [[["qa7.17951375",200,0],["qa7.1795137583808.0",200,0],["qa7.1795137583808.0@seed",200,0],["@seed.webag.local",200,0],["a7.1795137583808.0@seed.webag.local",200,0],["qa7.1795137583808.0@seed.webag.loca",200,0],["qa7.",200,0],["qa7.1795137583808.0%",200,0],["%@seed.webag.local",200,0],["_a7.",200,0]]]
+PASS  SEC181-2 | e-mail INTEIRO (também em maiúsculas) acha a conta  [200/1; maiúsculas 1]
+PASS  SEC181-3 | resultado MASCARADO: nome abreviado, e-mail e celular parciais, sem o e-mail real em lugar nenhum da resposta  [Zacarias Q. | q***@seed.webag.local | (11) 9****-8937]
+PASS  SEC181-4 | celular PARCIAL (5, 7, 9 dígitos, fim, DDD+parte) = vazio; celular completo (com e sem formatação) acha  [parciais=[["11987",200,0],["9873789",200,0],["8937",200,0],["119873789",200,0],["(11) 97378",200,0]]; completo=1/1; +55=1]
+PASS  SEC181-5 | ID exato e nome por trecho (3+ letras) acham; 2 caracteres é recusado (400)  [id=1 nome=1 2 letras=400]
+PASS  SEC181-6 | cada busca com q é auditada (user.search) sem gravar o termo; a busca sem q não audita  [linhas=23; termo vazou=false]
+PASS  SEC181-7 | listar sem q (mais recentes) não gera auditoria de busca  [143 -> 143]
+PASS  SEC181-8 | conta de admin nunca aparece na busca e o detalhe é 404  [busca=0 detalhe=404]
+PASS  B4-rbac | users:read = super, operação, suporte (financeiro 403); bloquear = super e operação (suporte e financeiro 403); motivo curto 400  [fin=403 sup=200 sup-block=403 fin-block=403 motivo-curto=400]
+PASS  B4-block | operação bloqueia com motivo: status blocked, sessão derrubada na hora (401), login recusado, repetir 409, histórico mascarado no detalhe  [me antes=200 bloqueio=200 me depois=401 login=403 ACCOUNT_BLOCKED repetir=409 histórico=1]
+PASS  SEC182-1 | conta BLOQUEADA consegue pedir a exclusão (senha certa); fica deleted; ao desistir volta BLOQUEADA (não fura o bloqueio) e o login segue recusado  [start=200 finish=200 status=deleted -> desistir 204 -> blocked; login=403]
+PASS  B4-unblock | desbloquear com motivo reabre o acesso  [200 active; login 200]
+PASS  SEC183-1 | bloquear lojista suspende as lojas dele e o login recusado traz texto neutro (sem motivo interno)  [bloqueio=200 lojas suspensas=1 falhas=0; status lojas=suspended; login=403 {"type":"https://api.webag.com.br/errors/account-blocked","title":"Conta indisponível","status":403,"detail":"Conta indisponível. Fale com o]
+PASS  B4-unblock-merchant | desbloquear o lojista devolve a conta; estado das lojas depois (informativo)  [lojas depois do desbloqueio=suspended (antes suspended)]
+PASS  B4-reactivate | a loja suspensa pelo bloqueio NÃO volta sozinha ao desbloquear (por desenho) e volta com a reativação explícita do admin  [reativar=200; status agora=approved]
+PASS  SEC181-9 | busca limitada a 60 por minuto por admin: o 61º em diante recebe 429  [primeiro 429 na requisição 61; total 429=10/70]
+
+RESUMO: 16 passaram, 0 falharam, 0 não testadas

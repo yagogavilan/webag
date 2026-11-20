@@ -1,0 +1,19 @@
+
+=== bug015 ===
+PASS  BUG-015a | cliente pede o cancelamento em separação: 202 e pedido continua in_preparation  [HTTP 202 {"id":"00b13daf-8f88-4e68-84ca-f57c53fc9655","status":"pending","reason":"Reteste QA BUG-015","requestedAt":"2026-11-20T05:19:55.216Z","respondBy":"2026-11-20T0]
+PASS  BUG-015b | Order.cancelRequest mostra o pedido pendente  [{"id":"00b13daf-8f88-4e68-84ca-f57c53fc9655","status":"pending","reason":"Reteste QA BUG-015","requestedAt":"2026-11-20T05:19:55.216Z","respondBy":"2026-11-20T05:29:55.216Z","decidedAt":null,"decidedBy":null,"decisionNote":null}]
+PASS  BUG-015c | pedir de novo é idempotente (mesma solicitação)  [HTTP 202]
+PASS  BUG-015d | pedido de outra conta: 404 (sem BOLA)  [HTTP 404]
+PASS  BUG-015e | a loja aceita: pedido cancelado e estorno total  [HTTP 200; status=cancelled; pagamento=refunded]
+PASS  BUG-015f | a loja recusa com motivo: o pedido segue em separação  [HTTP 200]
+PASS  BUG-015g | sem resposta da loja em 10 min o admin é alertado (alerta cancel_request_unanswered, uma vez)  [alerted_at=true; alerta visível=true]
+PASS  BUG-015h | o admin decide cancelando (200)  [HTTP 200]
+PASS  BUG-015i | em accepted o pedir-cancelamento é recusado (409, usa o cancelamento direto)  [HTTP 409]
+PASS  BUG-015j | cancelamento direto em accepted funciona e estorna  [HTTP 200]
+PASS  BUG-015k | "não recebi" a caminho: 202 {reported:true}  [HTTP 202 {"reported":true}]
+PASS  BUG-015l | repetir é idempotente (202) e gera UM alerta à operação  [HTTP 202; alertas=1]
+PASS  BUG-015m | "não recebi" em pedido de outra conta: 404  [HTTP 404]
+PASS  BUG-015n | "não recebi" com o pedido ainda recebido: 409 ORDER_NOT_REPORTABLE  [HTTP 409]
+N/T   BUG-015o | RN-07: "não recebi" impede a auto-conclusão em 24 h  [NÃO TESTADO: não executável pela API real (histórico append-only); ver repro/qa-notreceived-autoconclude.e2e-spec.ts: FALHA (pedido vira delivered), BUG-020]
+
+RESUMO: 14 passaram, 0 falharam, 1 não testadas

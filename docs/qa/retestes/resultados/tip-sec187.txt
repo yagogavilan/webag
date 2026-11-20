@@ -1,0 +1,6 @@
+PASS  SEC187-1 | publicar texto com variável de fato contratual ({{COMPANY_CNPJ}}) = 422 LEGAL_VARIABLE_NOT_ALLOWED  [HTTP 422 LEGAL_VARIABLE_NOT_ALLOWED [{"field":"content","message":"Variável não permitida: {{COMPANY_CNPJ}}"},{"field":"content","message":"Variável não permitida: {{DPO_EMAIL}]
+PASS  SEC187-2 | a recusa não criou versão nova  [antes=2]
+PASS  SEC187-3 | variáveis de exibição ({{VIGENCIA}}, {{VERSAO}}, {{SITE_URL}}) são aceitas: 201 versão nova  [HTTP 201 v3]
+PASS  SEC187-4 | a versão 1 publicada segue intacta e a lista mostra as 2 versões  [versões=3]
+
+RESUMO: 4 passaram, 0 falharam, 0 não testadas

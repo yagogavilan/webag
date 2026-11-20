@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="A loja está separando o pedido">
+  <!-- Etapa "Separando": itens entrando na sacola (camiseta e caixa). Fundo noite. No app: itens com "bob" de 5 px, 2,4 s, alternados (Reanimated withRepeat). -->
+  <rect width="200" height="200" fill="#1C1721"/>
+  <g fill="#D6FF4A"><rect x="8" y="92" width="36" height="11" rx="5.5"/><rect x="0" y="114" width="60" height="11" rx="5.5"/><rect x="14" y="136" width="44" height="11" rx="5.5"/></g>
+  <g transform="translate(-14 40) scale(1.32)"><path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke="#C02EF0" stroke-width="14"/></g>
+  <g transform="translate(76 24) rotate(-14) scale(.44)">
+    <path d="M58 34 82 24Q100 42 118 24L142 34 186 72 162 106 144 96V188Q100 196 56 188V96L38 106 14 72Z" fill="#F2EFE9"/>
+    <path d="M82 24Q100 50 118 24L111 21Q100 36 89 21Z" fill="#D6CFDB"/>
+  </g>
+  <g transform="translate(126 44) rotate(12)"><rect width="40" height="34" rx="6" fill="#D6FF4A"/><rect x="17" width="6" height="34" fill="#1C1721"/></g>
+  <g transform="translate(-14 40) scale(1.32)">
+    <polygon points="67,43 145,43 133,95 72,95" fill="#C02EF0" stroke="#C02EF0" stroke-width="18" stroke-linejoin="round"/>
+    <circle cx="80" cy="52" r="4.5" fill="#1C1721"/><circle cx="132" cy="52" r="4.5" fill="#1C1721"/>
+  </g>
+</svg>

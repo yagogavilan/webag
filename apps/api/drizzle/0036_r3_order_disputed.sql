@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "disputed_at" timestamp with time zone;

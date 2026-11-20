@@ -1,0 +1,24 @@
+/* Peças comuns das telas da Onda 6 (marketing, relatórios, titulares, denúncias, ajuda). Só tokens. */
+.page { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.list { display: flex; flex-direction: column; gap: var(--wb-space-3); margin: 0; padding: 0; list-style: none; }
+.card { display: flex; flex-direction: column; gap: var(--wb-space-2); padding: var(--wb-space-4); border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-card); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); flex-wrap: wrap; }
+.start { display: flex; align-items: center; gap: var(--wb-space-3); flex-wrap: wrap; }
+.muted { margin: 0; color: var(--wb-color-text-secondary); }
+.actions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--wb-space-3); margin: 0; padding: 0; list-style: none; }
+.kpi { display: flex; flex-direction: column; gap: 2px; padding: var(--wb-space-4) var(--wb-space-5); border-radius: var(--wb-radius-card); background: var(--wb-color-neutral-100); }
+.kpiValue { margin: 0; font-family: var(--wb-font-family-display); font-variant-numeric: tabular-nums; font-size: 32px; line-height: 38px; font-weight: 800; letter-spacing: -0.03em; }
+.thumb { width: 96px; aspect-ratio: 2 / 1; object-fit: cover; border-radius: var(--wb-radius-md); background: var(--wb-color-surface-sunken); flex: none; }
+.form { display: flex; flex-direction: column; gap: var(--wb-space-4); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--wb-space-3); }
+.split { display: grid; grid-template-columns: 1fr; gap: var(--wb-space-4); }
+@media (min-width: 1024px) { .split { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); align-items: start; } .sticky { position: sticky; top: var(--wb-space-4); } }
+.bigNumber { margin: 0; font-family: var(--wb-font-family-web); font-variant-numeric: tabular-nums; font-size: 40px; line-height: 48px; font-weight: 700; }
+.phone { max-width: 360px; padding: var(--wb-space-3); border-radius: var(--wb-radius-card); background: var(--wb-color-surface-sunken); display: flex; flex-direction: column; gap: 2px; }
+.preview { position: relative; width: 100%; max-width: 480px; aspect-ratio: 2 / 1; border-radius: var(--wb-radius-card); overflow: hidden; background: var(--wb-color-surface-sunken); }
+.preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.previewTitle { position: absolute; left: 0; right: 0; bottom: 0; padding: var(--wb-space-3); color: var(--wb-color-text-on-brand); background: rgba(28, 23, 33, 0.72); }
+.reorder { display: inline-flex; gap: var(--wb-space-1); }
+.pre { white-space: pre-wrap; margin: 0; }
+.chart { width: 100%; height: 180px; }
