@@ -1300,6 +1300,9 @@ route('POST', '/v1/admin/logistics/deliveries/:id/contact-reveal', { perm: 'logi
 });
 route('GET', '/v1/admin/logistics/couriers', { perm: 'logistics:read' }, (req, res, ctx) => {
   const onlyActive = ctx.query.get('active') === 'true';
+  // BUG-027: como a API real, `limit` fora de 1 a 50 é 400 (o painel pediu 100 e a tela de motoboys quebrou)
+  const limit = ctx.query.get('limit');
+  if (limit !== null && !(/^\d{1,3}$/.test(limit) && Number(limit) >= 1 && Number(limit) <= 50)) return void problem(res, 400, 'VALIDATION_ERROR', 'Requisição inválida', 'limit deve ser um inteiro de 1 a 50.', { errors: [{ field: 'limit', message: 'limit deve ser um inteiro de 1 a 50.' }] });
   json(res, 200, { data: [...couriers.values()].filter((c) => !onlyActive || c.active).map(courierView), nextCursor: null });
 });
 route('POST', '/v1/admin/logistics/couriers', { perm: 'logistics:write' }, (req, res, ctx) => {

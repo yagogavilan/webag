@@ -28,6 +28,13 @@ test.describe('Aprovar loja (admin) com a API real', () => {
     await expect(page.getByTestId('admin.caso.approve')).toBeDisabled();
     for (const id of ['legible', 'document', 'address', 'category', 'contact', 'duplicate']) await page.getByTestId(`admin.caso.check-${id}-ok`).check();
     await expect(page.getByText('Checklist completa. Aprovar liberado.')).toBeVisible();
+    // SEC-188: a API só aprova depois de QUEM APROVA abrir cada documento vigente; a tela espera o mesmo (cada abertura é gravada no servidor)
+    const thumbs = page.locator('[data-testid^="admin.caso.doc-thumb-"]');
+    for (let i = 0; i < (await thumbs.count()); i += 1) {
+      await thumbs.nth(i).click();
+      await expect(page.getByTestId('admin.caso.doc-image')).toBeVisible({ timeout: 20_000 });
+    }
+    await expect(page.getByTestId('admin.caso.approve')).toBeEnabled({ timeout: 20_000 });
     await page.getByTestId('admin.caso.approve').click();
     await expect(page.getByText(`Aprovar ${state.storeName}?`)).toBeVisible();
     await page.getByTestId('admin.caso.confirm-approve').click();

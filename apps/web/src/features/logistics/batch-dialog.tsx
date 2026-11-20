@@ -49,7 +49,7 @@ export function BatchAssignDialog({ batch, onClose }: { batch: AreaBatch; onClos
   const client = useQueryClient();
   const toast = useToast();
   const online = useOnline();
-  const couriers = useQuery({ queryKey: [...logisticsKeys.couriers, 'active'], queryFn: () => logisticsApi.couriers({ active: true, limit: 100 }) });
+  const couriers = useQuery({ queryKey: [...logisticsKeys.couriers, 'active'], queryFn: () => logisticsApi.couriers({ active: true, limit: 50 }) });
   const [courierId, setCourierId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

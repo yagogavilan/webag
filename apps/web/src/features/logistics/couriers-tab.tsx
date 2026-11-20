@@ -35,7 +35,7 @@ export function CouriersTab({ canWrite }: { canWrite: boolean }) {
   const online = useOnline();
   const toast = useToast();
   const client = useQueryClient();
-  const query = useQuery({ queryKey: logisticsKeys.couriers, queryFn: () => logisticsApi.couriers({ limit: 100 }) });
+  const query = useQuery({ queryKey: logisticsKeys.couriers, queryFn: () => logisticsApi.couriers({ limit: 50 }) });
   const [editing, setEditing] = useState<Courier | 'new' | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
 

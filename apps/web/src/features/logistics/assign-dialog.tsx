@@ -33,7 +33,7 @@ export function AssignDialog({ delivery, onClose }: { delivery: Pick<Delivery, '
   const client = useQueryClient();
   const toast = useToast();
   const online = useOnline();
-  const couriers = useQuery({ queryKey: [...logisticsKeys.couriers, 'active'], queryFn: () => logisticsApi.couriers({ active: true, limit: 100 }) });
+  const couriers = useQuery({ queryKey: [...logisticsKeys.couriers, 'active'], queryFn: () => logisticsApi.couriers({ active: true, limit: 50 }) });
   const [courierId, setCourierId] = useState<string | null>(null);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [needsAddress, setNeedsAddress] = useState(false);
