@@ -1,9 +1,11 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import ExchangeDetail from '../app/(customer)/exchange/[id]';
 import NewExchangeScreen from '../app/(customer)/exchange/new';
 import ConfirmedScreen from '../app/(customer)/confirmed/[orderId]';
 import ReviewScreen from '../app/(customer)/review/[orderId]';
 import { sessionStore } from '../src/api/session';
+import { WEB_PUBLIC_URL } from '../src/features/checkout/config';
 import { exchangeFixture, orderFixture } from '../src/test/orders-fixtures';
 import { renderScreen } from '../src/test/render';
 
@@ -103,6 +105,19 @@ describe('X1b. Pedir troca', () => {
     await fireEvent.press(screen.getByTestId('exchange.submit'));
     await waitFor(() => expect(mockPlace).toHaveBeenCalledTimes(1));
     expect(mockPlace.mock.calls[0]?.[1]).toMatchObject({ orderItemId: 'oi2', newVariantId: 'v44' });
+  });
+
+  it('DEC-081: "Ver a política de trocas e reembolsos" abre a página pública pelo navegador do sistema; se não abrir, mostra o endereço', async () => {
+    mockOptions.mockResolvedValue(options());
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    await renderScreen(<NewExchangeScreen />);
+    await fireEvent.press(await screen.findByTestId('exchange.policy-link'));
+    expect(openURL).toHaveBeenCalledWith(`${WEB_PUBLIC_URL}/termos/trocas`);
+    expect(screen.queryByTestId('legal.link-error')).toBeNull();
+    openURL.mockRejectedValueOnce(new Error('sem navegador'));
+    await fireEvent.press(screen.getByTestId('exchange.policy-link'));
+    expect(await screen.findByTestId('legal.link-error')).toBeOnTheScreen();
+    openURL.mockRestore();
   });
 
   it('U8.4: item sem opção de troca aparece cinza com o motivo e não é escolhido', async () => {

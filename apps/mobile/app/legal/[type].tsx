@@ -7,6 +7,8 @@ import { Header } from '../../src/components/Header';
 import { Screen } from '../../src/components/Screen';
 import { Skeleton } from '../../src/components/Skeleton';
 import { Text } from '../../src/components/Text';
+import { WEB_PUBLIC_URL } from '../../src/features/checkout/config';
+import { LegalBody } from '../../src/features/legal/LegalBody';
 import { t } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
@@ -37,8 +39,8 @@ export default function LegalScreen() {
           <View style={styles.doc} testID="legal.content">
             <Text variant="title2">{query.data.title}</Text>
             <Text color="secondary" variant="caption">{t('legal.version', { n: query.data.version })}</Text>
-            {/* Texto puro: o conteúdo é do admin e nunca é interpretado como HTML (contrato: "exibir como texto puro"). */}
-            <Text>{query.data.content}</Text>
+            {/* Texto puro: o conteúdo é do admin e nunca é interpretado como HTML (contrato: "exibir como texto puro"); só títulos, listas e negrito simples. */}
+            <LegalBody content={query.data.content} siteUrl={WEB_PUBLIC_URL} version={query.data.version} />
           </View>
         ) : null}
       </AsyncBoundary>

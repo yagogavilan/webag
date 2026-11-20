@@ -3,11 +3,11 @@ import { API_URL } from '../../api/config';
 import { APP_ENV, isSecureCardUrl, WEB_PUBLIC_URL } from '../checkout/config';
 
 /** Páginas públicas do Webag (apps/web, DEC-057). A origem vem de `EXPO_PUBLIC_WEB_URL` por ambiente; nunca fixa no código. */
-export const webPageUrl = (path: '/termos' | '/privacidade' | '/licencas', base: string = WEB_PUBLIC_URL): string => `${base}${path}`;
+export const webPageUrl = (path: '/termos' | '/privacidade' | '/licencas' | '/termos/trocas', base: string = WEB_PUBLIC_URL): string => `${base}${path}`;
 
 /**
  * Tipos de link que o app abre fora dele (SEC-172, M.3). Cada tipo tem seu domínio permitido; qualquer outra coisa nunca abre.
- * - `web`: páginas públicas do Webag (Termos, Política, Licenças), origem de `EXPO_PUBLIC_WEB_URL`.
+ * - `web`: páginas públicas do Webag (Termos, Política, Trocas e reembolsos, Licenças), origem de `EXPO_PUBLIC_WEB_URL`.
  * - `api`: download do pacote de dados (link de uso único que a API devolve), origem de `EXPO_PUBLIC_API_URL`.
  * - `card`: página segura do cartão (rota e token fixos, SEC-126).
  * - `whatsapp`: `https://wa.me/<dígitos>` (suporte e loja).

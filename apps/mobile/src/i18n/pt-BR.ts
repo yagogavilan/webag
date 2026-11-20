@@ -1153,6 +1153,8 @@ export const ptBR = {
     note: 'Resposta: {text}',
   },
   exchange: {
+    policyLink: 'Ver a política de trocas e reembolsos',
+    policyHint: 'Abre a página do Webag no navegador',
     dropAtStore: 'Levar à loja em vez da coleta',
     dropTitle: 'Levar o item à loja?',
     dropText: 'Cancelamos a coleta em casa e a taxa de coleta zera. Você recebe um código para mostrar no balcão.',

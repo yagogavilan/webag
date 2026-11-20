@@ -1,5 +1,5 @@
 import { Linking } from 'react-native';
-import { isAllowedExternalUrl, isSafeMailAddress, LICENSE_HOSTS, openExternal, openMailto, type LinkContext } from '../src/features/legal/open-link';
+import { isAllowedExternalUrl, isSafeMailAddress, LICENSE_HOSTS, openExternal, openMailto, webPageUrl, type LinkContext } from '../src/features/legal/open-link';
 import { CREDITS } from '../src/legal/credits';
 
 const prod: LinkContext = { web: 'https://webag.com.br', api: 'https://api.webag.com.br', allowHttp: false };
@@ -67,5 +67,14 @@ describe('Abertura de links externos (SEC-172, M.3)', () => {
     expect(await openMailto('dpo@webag.com.br', 'olá & tchau')).toBe(true);
     expect(open).toHaveBeenCalledWith('mailto:dpo@webag.com.br?body=ol%C3%A1%20%26%20tchau');
     open.mockRestore();
+  });
+});
+
+describe('Política de trocas e reembolsos (DEC-081)', () => {
+  it('é página pública do Webag: abre só pela origem configurada', () => {
+    const url = webPageUrl('/termos/trocas', 'https://webag.com.br');
+    expect(url).toBe('https://webag.com.br/termos/trocas');
+    expect(isAllowedExternalUrl(url, 'web', prod)).toBe(true);
+    expect(isAllowedExternalUrl('https://evil.example/termos/trocas', 'web', prod)).toBe(false);
   });
 });

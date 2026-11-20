@@ -26,6 +26,8 @@ import {
   type ReasonId,
 } from '../../../src/features/exchanges/model';
 import { PhotoPicker, type Photo } from '../../../src/features/exchanges/PhotoPicker';
+import { LinkErrorDialog } from '../../../src/features/legal/LinkErrorDialog';
+import { openExternal, webPageUrl } from '../../../src/features/legal/open-link';
 import { openWhatsapp } from '../../../src/features/orders/links';
 import { t, type MessageKey } from '../../../src/i18n';
 import { formatMoney } from '../../../src/lib/format';
@@ -63,6 +65,7 @@ export default function NewExchangeScreen() {
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [done, setDone] = useState<{ id: string; number: string; when: string; regret: boolean } | null>(null);
   const key = useRef<{ fingerprint: string; key: string } | null>(null);
 
@@ -198,6 +201,12 @@ export default function NewExchangeScreen() {
     }
   };
 
+  /** Política pública de trocas e reembolsos no navegador do sistema, só pela origem do Webag (`open-link`); sem app de navegador, mostra o endereço. */
+  const openPolicy = async () => {
+    const url = webPageUrl('/termos/trocas');
+    if (!(await openExternal(url, 'web'))) setFailedUrl(url);
+  };
+
   const footer = (
     <View accessibilityLiveRegion="polite" style={styles.footer} testID="exchange.summary">
       {reason ? <Text variant="bodyStrong">{summary}</Text> : null}
@@ -211,6 +220,7 @@ export default function NewExchangeScreen() {
   return (
     <Screen footer={footer} header={header} testID="exchange.screen">
       <Text color="secondary" variant="caption">{t('exchange.context', { number: order.data?.number ?? '', store: order.data?.store.name ?? '' })}</Text>
+      <Button accessibilityHint={t('exchange.policyHint')} label={t('exchange.policyLink')} onPress={() => void openPolicy()} testID="exchange.policy-link" variant="text" />
       {states.size.deadline ? <Banner testID="exchange.deadline-banner" text={t('exchange.deadlineBanner', { date: formatDay(states.size.deadline) })} tone="info" /> : null}
 
       <Text accessibilityRole="header" variant="title2">{items.length > 1 ? t('exchange.itemPick') : t('exchange.item')}</Text>
@@ -322,6 +332,7 @@ export default function NewExchangeScreen() {
         </View>
       ) : null}
       {reason && reason !== 'defect' ? <NoteField onChange={setNote} value={note} /> : null}
+      <LinkErrorDialog onClose={() => setFailedUrl(null)} url={failedUrl} />
     </Screen>
   );
 }
