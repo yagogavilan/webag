@@ -279,3 +279,13 @@ Parecer técnico para o G4: **COM RESSALVAS**. Os dois primeiros itens entram an
 Z3.1 a Z3.10 entregues (A-01 a A-10, A-13). Validação no commit abaixo: e2e completo 3 vezes seguidas, 106 arquivos e 827 testes verdes em cada; unitários da API 329 verdes; lint e typecheck da api, shared, web e mobile limpos; `pnpm generate:check` sem diferença. Candidato a release do QA e do Security (DEC-075). O commit seguinte só acrescenta esta linha (documento).
 
 RC commit: f622bc91ba4562a4e98a87e6c879a973f8db02fb
+
+## Z4. Do Security em 2026-11-20 (parecer final do RC `f622bc9`: `docs/seguranca/revisoes/parecer-final-rc.md`)
+
+G4 **APROVADO**; G5 (Play e App Store) **APROVADO COM CONDIÇÕES** (C1 a C9 no documento, nenhuma de código do backend além do C3). Z2.1 a Z2.5 (SEC-181 a 185) verificados por ataque e fechados.
+
+| Item | O que fazer |
+|---|---|
+| Z4.1 [ ] SEC-186 (Baixa; antes do piloto com lojistas reais, recomendado) | Conta ativa com exclusão `pending` não pode ser bloqueada (409 `USER_NOT_ACTIVE`) e a desistência a devolve `active`: o fraudador pede exclusão, espera a investigação e desiste. Aceitar o bloqueio de conta `deleted` com exclusão pendente gravando `previousUserStatus = 'blocked'` na exclusão e a linha em `user_status_history`; e2e: bloquear com a exclusão pendente dá 200, e a desistência deixa a conta `blocked` com login 403 |
+| Z4.2 [ ] C3 do G5 (com o qa-engineer; credenciais de sandbox do fundador) | Fumaça em staging com o sandbox do Mercado Pago: PIX e cartão, recusa, webhook com assinatura válida e inválida, reconsulta, estorno e OAuth de 1 lojista |
+| Sugestão sem ID | E-mail ao super admin que convidou quando o convite de admin for aceito (`admin-users.service.ts` `accept`) |
