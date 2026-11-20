@@ -78,7 +78,7 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
   }
 
   return (
-    <tr data-testid={T(`row-${product.id}`)}>
+    <tr className={s.productRow} data-testid={T(`row-${product.id}`)}>
       <td className={s.checkCell} data-primary>
         <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Selecionar ${product.name}`} data-testid={T(`select-${product.id}`)} />
       </td>
@@ -98,8 +98,8 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
           </div>
         </div>
       </td>
-      <td data-label="Preço" className="wb-text-body">{priceText(product)}</td>
-      <td data-label="Estoque">
+      <td data-label="Preço" className={cx('wb-text-body', s.priceCell)}>{priceText(product)}</td>
+      <td data-label="Estoque" className={s.stockCell}>
         {isDraft && product.availableTotal === 0 ? (
           <span className={ui.muted}>Sem estoque definido</span>
         ) : product.variantCount > 1 ? (
@@ -110,7 +110,7 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
           <StockStepper storeId={storeId} product={product} onError={setError} />
         )}
       </td>
-      <td data-label="Status">
+      <td data-label="Status" className={s.statusCell}>
         {isDraft ? (
           <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={s.productName}>Continuar cadastro</Link>
         ) : (
@@ -122,8 +122,8 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
           </p>
         ) : null}
       </td>
-      <td>
-        <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={s.productName} aria-label={`Editar ${product.name}`}>Editar</Link>
+      <td className={s.actionsCell}>
+        <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={cx(s.productName, s.editLink)} aria-label={`Editar ${product.name}`}>Editar</Link>
         {sheet ? <StockSheet storeId={storeId} product={product} onClose={() => setSheet(false)} /> : null}
       </td>
     </tr>

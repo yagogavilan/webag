@@ -43,6 +43,8 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
   const [limit, setLimit] = useState<(typeof PAGE_SIZES)[number]>(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [updated, setUpdated] = useState<Set<string>>(new Set());
+  // No celular a caixa de seleção só aparece no modo "Selecionar"; no computador ela é sempre visível.
+  const [selecting, setSelecting] = useState(false);
   const query: ProductQuery = { filter, q };
 
   // Busca com atraso: uma chamada por pausa na digitação, não por tecla (rede móvel).
@@ -119,6 +121,21 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
             </button>
           ))}
         </div>
+        {products.length > 0 ? (
+          <Button
+            variant="text"
+            size="sm"
+            className={s.selectToggle}
+            aria-pressed={selecting}
+            onClick={() => {
+              if (selecting) setSelected(new Set());
+              setSelecting(!selecting);
+            }}
+            data-testid={T('select-mode')}
+          >
+            {selecting ? 'Cancelar seleção' : 'Selecionar'}
+          </Button>
+        ) : null}
       </div>
 
       {list.isPending ? <SkeletonRows rows={6} height={72} label="Carregando os produtos" /> : null}
@@ -159,7 +176,7 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
             </>
           ) : null}
           <div className={ui.tableWrap}>
-            <table className={ui.table}>
+            <table className={cx(ui.table, s.productsTable, selecting && s.selecting)}>
               <caption className="wb-text-caption">Produtos da loja</caption>
               <thead>
                 <tr>
