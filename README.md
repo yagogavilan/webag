@@ -41,6 +41,8 @@ Pronto: http://localhost:3001/admin/entrar (admin), http://localhost:3001/lojist
 
 Todas criadas pelo seed. **Nunca existem em produção** (o seed de produção só cria o primeiro admin, categorias, regiões, parâmetros e textos legais).
 
+**Horário das lojas de demonstração (`SEED_HOURS`, no `.env`):** por padrão (`always_open`) as lojas do seed e a logística ficam **abertas 24 h, todos os dias**, para a demonstração e o `pnpm smoke` funcionarem a qualquer hora, inclusive de noite e no fim de semana. Para ver o horário real de cada loja (por exemplo, o Mercadinho Boa Compra das 7 h às 20 h, domingo das 8 h às 13 h, e a entrega das 9 h às 20 h de segunda a sábado), use `SEED_HOURS=realistic` e rode `pnpm db:seed`; para voltar, `always_open` e `pnpm db:seed` de novo. A troca só atinge lojas que ainda estão no horário padrão do outro modo (o que você editou no painel não é tocado). Detalhe de fim de dia: o horário de loja aceita no máximo 23:59, então há um minuto por dia (23:59) em que o servidor considera a loja fechada; o `pnpm smoke` espera esse minuto passar.
+
 | Perfil | E-mail | Senha | Observação |
 |---|---|---|---|
 | Admin (super admin) | `admin@webag.local` | `Webag-Admin-Dev-2026` | No 1º login o painel exige o 2º fator (ver abaixo) |
@@ -124,9 +126,12 @@ Passo a passo: https://www.mercadopago.com.br/developers > **Suas integrações*
 | `pnpm web` | Só o app no navegador (Metro com `--web`, http://localhost:8081; precisa da API no ar) |
 | `pnpm smoke` | Teste de fumaça ponta a ponta contra a API rodando (login de todos os perfis, pedido de retirada e de entrega com PIX simulado) |
 | `pnpm pagar [recusar\|expirar]` | Aprova (ou recusa, ou expira) o PIX simulado do pedido mais recente |
+| `pnpm web:compra [entrega-pix\|retirada-pix\|cartao]` | Compra de ponta a ponta no app web (Playwright do próprio workspace, sem instalar nada global; precisa de API, `pnpm web` e site no ar). Na primeira vez: `pnpm --filter @webag/web exec playwright install chromium` (o comando avisa se faltar) |
+| `pnpm web:smoke` | Fumaça do app no navegador (mesmo Playwright do workspace) |
+| `pnpm web:e2e [fake\|real\|all]` | Playwright do site e dos painéis (`apps/web`): `fake` (API falsa, sem infraestrutura), `real` (API real do `setup`) ou `all` (padrão, um depois do outro; espera a porta do site ficar livre entre as suítes). Portas: `E2E_WEB_PORT` e `REAL_WEB_PORT` (padrão 3101), `E2E_API_PORT` (3999); uma porta nova precisa entrar em `CORS_ORIGINS`. `PW_CHANNEL=chrome` usa o Chrome instalado |
 | `pnpm telas` | Gera os screenshots de todas as telas em `docs/telas/` (app 390x844; lojista, admin e site em 1440x900 e 390x844) com a API real e o seed; ver `docs/telas/README.md` |
 | `pnpm totp <segredo>` | Código TOTP do admin sem celular (só desenvolvimento) |
-| `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` | Qualidade, como no CI |
+| `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` | Qualidade, como no CI. Os testes de integração da API (`pnpm --filter @webag/api test:e2e`) leem `DATABASE_URL` e `REDIS_URL` do `.env` da raiz (a variável do ambiente tem prioridade; sem nenhuma das duas, 5432 e 6379), criam o banco `<nome>_<pid>_test` e imprimem no início contra qual PostgreSQL e Redis estão rodando. Nunca tocam no banco de desenvolvimento |
 | `pnpm generate` / `pnpm generate:check` | Regera `packages/shared` a partir do `openapi.yaml` / falha se estiver desatualizado |
 | `pnpm db:migrate`, `pnpm db:seed` | Migrações e seed (idempotentes) |
 | `pnpm licencas` | Regera `docs/legal/dependencias-npm.md` (licenças das dependências) |

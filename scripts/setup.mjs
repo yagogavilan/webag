@@ -139,5 +139,6 @@ Pronto. Próximos passos:
   http://localhost:8025          Mailpit (e-mails de código e convite)
 Admin inicial (DEV): ${env.SEED_ADMIN_EMAIL ?? '(não definido)'} / ${env.SEED_ADMIN_PASSWORD ?? '(não definido)'}
   -> no primeiro login o painel exige configurar o app autenticador (TOTP).
+Horário das lojas de demonstração: SEED_HOURS=${env.SEED_HOURS ?? 'always_open'} (always_open = abertas 24 h, a qualquer hora; realistic = horário real; veja o README).
 Pagamentos: PAYMENT_PROVIDER=${env.PAYMENT_PROVIDER ?? 'fake'} (simulado; sem chaves do Mercado Pago).
 `);

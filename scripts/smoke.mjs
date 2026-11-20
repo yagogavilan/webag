@@ -98,6 +98,17 @@ async function login(email, password = SEED_PASSWORD) {
 
 console.log(`[smoke] API: ${API}`);
 
+// Minuto 23:59 de Brasília: o horário de loja aceita no máximo 23:59 e o fim é exclusivo, então a loja de 24 h do seed (SEED_HOURS=always_open)
+// fica fechada só nesse minuto (BUG-026). Espera ele passar em vez de reprovar a verificação por isso.
+const brtMinuteOfDay = () => {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+  return Number(parts.find((p) => p.type === 'hour').value) * 60 + Number(parts.find((p) => p.type === 'minute').value);
+};
+if (brtMinuteOfDay() === 23 * 60 + 59) {
+  console.log('[smoke] 23:59 em Brasília: aguardando a virada do minuto (a loja de demonstração de 24 h fecha por 1 minuto aqui)');
+  await new Promise((done) => setTimeout(done, 61_000 - (Date.now() % 60_000)));
+}
+
 step('1. Saúde e contrato');
 const health = await call('GET', '/health');
 check(health.status === 200 && health.data?.status === 'ok', 'GET /health');
@@ -211,6 +222,9 @@ async function buyAndPay(mode) {
     headers: { 'Idempotency-Key': randomUUID() },
     body: { mode, ...(mode === 'delivery' ? { addressId } : {}), cartRevision: cart.data?.revision, expectedTotalCents: total, paymentMethod: 'pix' },
   });
+  if ((created.status === 409 && created.data?.code === 'STORE_CLOSED') || (created.status === 422 && created.data?.code === 'LOGISTICS_CLOSED')) {
+    console.log('  dica: a loja ou a logística de demonstração está fechada agora. Use SEED_HOURS=always_open no .env e rode `pnpm db:seed` (abre as lojas 24 h), ou rode entre 7 h e 20 h (horário de Brasília).');
+  }
   check(created.status === 201 && created.data?.status === 'awaiting_payment', `[${mode}] pedido criado aguardando o PIX`, `(HTTP ${created.status} ${JSON.stringify(created.data).slice(0, 300)})`);
   const order = created.data;
   if (!order?.id) stop('pedido não foi criado');
