@@ -159,7 +159,7 @@ async function bug015() {
   await api('POST', `/v1/orders/${d.id}/cancel-request`, { token: c.token, body: {} });
   sql(`update order_cancel_requests set requested_at = ${minutesAgo(11)} where order_id = '${d.id}'`);
   const alerted = await waitFor(() => sql(`select count(*) from order_cancel_requests where order_id = '${d.id}' and alerted_at is not null`) === '1');
-  const alerts = await adminCall('GET', '/v1/admin/payments/alerts?openOnly=true&limit=100');
+  const alerts = await adminCall('GET', '/v1/admin/payments/alerts?openOnly=true&limit=50');
   const hasAlert = JSON.stringify(alerts.data).includes('cancel_request_unanswered') && JSON.stringify(alerts.data).includes(d.id);
   record('BUG-015g', 'sem resposta da loja em 10 min o admin é alertado (alerta cancel_request_unanswered, uma vez)', alerted && hasAlert, `alerted_at=${alerted}; alerta visível=${hasAlert}`);
   const adminCancel = await adminCall('POST', `/v1/admin/orders/${d.id}/cancel`, { reason: 'Reteste QA BUG-015: admin decide', refund: true });

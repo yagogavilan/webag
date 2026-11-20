@@ -1,0 +1,82 @@
+
+> webag@ web:e2e /dev/shm/qa/webag
+> node scripts/web-playwright.mjs e2e fake
+
+[web-playwright] suíte API falsa (site na porta 3202)
+[WebServer] ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+
+Running 68 tests using 1 worker
+
+[WebServer] [web] WEB_TRUSTED_PROXY_HOPS/WEB_CLIENT_IP_HEADER não definidos: o IP do cliente não será enviado à API (limites por IP ficam no IP do BFF).
+  ✓   1 e2e/admin-aprovacao.e2e.ts:6:3 › Aprovar loja (admin) › abre a mais antiga, confere os documentos, confere os 6 itens e aprova (3.3s)
+  ✓   2 e2e/admin-aprovacao.e2e.ts:45:3 › Aprovar loja (admin) › SEC-188: o servidor não tem a abertura dos documentos (409 DOCUMENTS_NOT_REVIEWED): mostra qual falta, foca o documento e aprova depois de abrir (2.9s)
+  ✓   3 e2e/admin-aprovacao.e2e.ts:83:3 › Aprovar loja (admin) › pedir correção exige o texto e leva o motivo por item; recusar exige motivo (3.7s)
+  -   4 e2e/capturas-v3.e2e.ts:38:3 › capturas v3 › lojista
+  -   5 e2e/capturas-v3.e2e.ts:78:3 › capturas v3 › admin
+  -   6 e2e/capturas-v3.e2e.ts:101:3 › capturas v3 › dec-073
+  ✓   7 e2e/login.e2e.ts:5:3 › Login do admin (AC1) › senha errada mostra a mensagem única e não revela o que errou (1.2s)
+  ✓   8 e2e/login.e2e.ts:14:3 › Login do admin (AC1) › campos vazios mostram o erro ao tocar no botão (botão sempre ativo) (328ms)
+  ✓   9 e2e/login.e2e.ts:21:3 › Login do admin (AC1) › senha certa pede o código do autenticador e entra no painel (1.5s)
+  ✓  10 e2e/login.e2e.ts:28:3 › Login do admin (AC1) › operação entra e o menu só mostra o que o perfil acessa (1.8s)
+  ✓  11 e2e/login.e2e.ts:37:3 › Login do admin (AC1) › sem sessão, uma tela do painel manda para o login (299ms)
+  ✓  12 e2e/login.e2e.ts:42:3 › Login do admin (AC1) › sair encerra a sessão (1.7s)
+  ✓  13 e2e/login.e2e.ts:51:3 › Login do admin (AC1) › senha do e-mail certo sem o código segue pedindo o segundo fator (1.2s)
+  ✓  14 e2e/lojista-cadastro.e2e.ts:6:3 › Cadastrar loja (lojista) › cria a conta, preenche as 4 etapas, envia para análise e acompanha (5.2s)
+  ✓  15 e2e/lojista-cadastro.e2e.ts:66:3 › Cadastrar loja (lojista) › conta existente sem a loja concluída retoma de onde parou (1.6s)
+  ✓  16 e2e/lojista-catalogo.e2e.ts:8:3 › Catálogo (lojista) › cadastra um produto com foto recortada, variações e estoque por variação e publica (3.2s)
+  ✓  17 e2e/lojista-catalogo.e2e.ts:65:3 › Catálogo (lojista) › importa uma planilha: confere os erros por linha, importa como rascunho e abre os rascunhos (1.9s)
+  ✓  18 e2e/lojista-produtos-mobile.e2e.ts:7:1 › Produtos no celular: 3 produtos na 1ª tela, interruptor de pausa e estoque −/+ com alvo de 44 px (2.5s)
+  ✓  19 e2e/navegacao.e2e.ts:19:3 › Navegação no celular › lojista: 4 destinos na barra, Avaliações alcançável pelo Mais e o Mais marcado na página (2.0s)
+  ✓  20 e2e/navegacao.e2e.ts:40:3 › Navegação no celular › admin: barra por perfil, folha Mais com busca e sem menu hambúrguer (2.0s)
+  ✓  21 e2e/navegacao.e2e.ts:56:3 › Navegação no celular › admin suporte: Início, Lojas, Logística e Moderação na barra, sem Mais de áreas (só a conta) (1.5s)
+  ✓  22 e2e/onda6.e2e.ts:12:3 › Onda 6: admin › Logística mostra a faixa de entrega e avisa o atraso pelo fim da faixa (2.0s)
+  ✓  23 e2e/onda6.e2e.ts:26:3 › Onda 6: admin › lote por área: duas corridas da mesma área saem com o mesmo motoboy (2.2s)
+  ✓  24 e2e/onda6.e2e.ts:41:3 › Onda 6: admin › suporte vê o telefone mascarado e só revela o contato com motivo (auditado) (2.2s)
+  ✓  25 e2e/onda6.e2e.ts:56:3 › Onda 6: admin › parâmetros: o simulador do prazo mostra a faixa e o fora da área (1.7s)
+  ✓  26 e2e/onda6.e2e.ts:65:3 › Onda 6: admin › disputas: decide a mediação a favor do cliente com justificativa e a fila esvazia (2.3s)
+  ✓  27 e2e/onda6.e2e.ts:79:3 › Onda 6: lojista › responde uma avaliação e depois abre a ajuda editada pelo admin (2.8s)
+  ✓  28 e2e/onda6.e2e.ts:95:3 › Onda 6: lojista › conta: pede a exportação com a senha e exclui a conta com arrependimento de 72 h (2.0s)
+  ✓  29 e2e/ops-dec073.e2e.ts:26:3 › Alertas (B3) › super admin: contagem no Início e no menu, filtros por estado e tipo, detalhe e "marcar como resolvido" com nota (2.8s)
+  ✓  30 e2e/ops-dec073.e2e.ts:59:3 › Alertas (B3) › suporte vê só os tipos do público dele e não encerra; financeiro vê dinheiro e encerra (5.3s)
+  ✓  31 e2e/ops-dec073.e2e.ts:83:3 › Usuários (B4) › operação busca, vê o detalhe mascarado e bloqueia com motivo; a loja do dono é suspensa; desbloquear não reativa a loja (2.4s)
+  ✓  32 e2e/ops-dec073.e2e.ts:111:3 › Usuários (B4) › suporte consulta sem bloquear; financeiro não tem a área (3.4s)
+  ✓  33 e2e/ops-dec073.e2e.ts:126:3 › Pedidos (B5) › lista com filtros e detalhe mascarado; operação e suporte não cancelam nem estornam e não veem a comissão (2.2s)
+  ✓  34 e2e/ops-dec073.e2e.ts:146:3 › Pedidos (B5) › financeiro cancela com estorno (confirmação diz os efeitos) e estorna parcialmente com valor validado (2.9s)
+  ✓  35 e2e/ops-dec073.e2e.ts:171:3 › Pedidos (B5) › financeiro acima de R$ 500: cancelar com estorno pede super admin; sem estorno passa (2.2s)
+  ✓  36 e2e/ops-dec073.e2e.ts:195:3 › Modo manutenção (WB-121) › super admin liga com mensagem e previsão e desliga; todo perfil vê o aviso no painel; operação não tem a tela (4.8s)
+  ✓  37 e2e/ops-dec073.e2e.ts:231:3 › Modo manutenção (WB-121) › site e painel do lojista mostram o aviso amigável enquanto durar; ao desligar, some (17.6s)
+  ✓  38 e2e/ops-dec073.e2e.ts:251:3 › Lojista: e-mail de pedido novo (B2) › o dono desliga só o e-mail; o texto diz que o alerta e o som do painel não desligam; vale depois de recarregar (2.2s)
+  ✓  39 e2e/ops-dec073.e2e.ts:272:3 › Celular 390 › Alertas, Usuários e Pedidos cabem na tela sem rolagem lateral e a folha Mais leva às três áreas (2.5s)
+[WebServer] [web] WEB_TRUSTED_PROXY_HOPS/WEB_CLIENT_IP_HEADER não definidos: o IP do cliente não será enviado à API (limites por IP ficam no IP do BFF).
+  ✓  40 e2e/pagar-cartao.e2e.ts:7:3 › Página pública de cartão (B.2, SEC-106) › sem login do painel: mostra o total, paga com cartão de teste e volta ao app sem confirmar pagamento (400ms)
+  ✓  41 e2e/pagar-cartao.e2e.ts:18:3 › Página pública de cartão (B.2, SEC-106) › cartão recusado e link já usado mostram o caminho de volta (630ms)
+  ✓  42 e2e/pagar-cartao.e2e.ts:29:3 › Página pública de cartão (B.2, SEC-106) › token ausente ou malformado cai no estado de link inválido, sem tela de painel (261ms)
+  ✓  43 e2e/pagar-cartao.e2e.ts:35:3 › Página pública de cartão (B.2, SEC-106) › a CSP da página admite o Mercado Pago e a dos painéis não (351ms)
+  ✓  44 e2e/pedidos.e2e.ts:12:3 › Pedidos, logística e trocas › receber e aceitar pedido: o alerta abre, o aceite leva a "Em separação" e a loja termina em "Pronto para coleta" (1.9s)
+  ✓  45 e2e/pedidos.e2e.ts:39:3 › Pedidos, logística e trocas › celular 390x844 com 1 pedido novo: "Aceitar pedido" e "Recusar" aparecem sem rolar e sem a barra inferior por cima; o banner de som só vale em Início e Pedidos (U8.7) (2.2s)
+  ✓  46 e2e/pedidos.e2e.ts:86:3 › Pedidos, logística e trocas › despachar motoboy: atribui, abre o link do WhatsApp e o segundo operador recebe conflito (2.6s)
+  ✓  47 e2e/pedidos.e2e.ts:115:3 › Pedidos, logística e trocas › aprovar troca: 1 toque, sem diálogo de confirmação (1.7s)
+  ✓  48 e2e/publico.e2e.ts:6:3 › Site público (sem login) › a página inicial renderiza sem login, com logo, aviso das lojas e links das páginas exigidas pelas lojas (385ms)
+  ✓  49 e2e/publico.e2e.ts:23:3 › Site público (sem login) › cabeçalhos de segurança: CSP sem terceiros, sem enquadramento e sem referrer (259ms)
+  ✓  50 e2e/publico.e2e.ts:35:3 › Site público (sem login) › política e termos mostram o texto completo em revisão: sem minuta, sem data vencida, sem variável solta, HTML nunca interpretado (1.2s)
+  ✓  51 e2e/publico.e2e.ts:54:3 › Site público (sem login) › SEC-187: foro e encarregado vêm escritos no texto da versão publicada; sem valor, aparece "a definir" (nada inventado) (434ms)
+  ✓  52 e2e/publico.e2e.ts:64:3 › Site público (sem login) › política de trocas pública em /termos/trocas, com link no rodapé e na ajuda (557ms)
+  ✓  53 e2e/publico.e2e.ts:77:3 › Site público (sem login) › índice leva à seção pela âncora e "veja também" liga os outros documentos (374ms)
+  ✓  54 e2e/publico.e2e.ts:88:5 › Site público (sem login) › textos legais legíveis em 390 px: sem rolagem horizontal, alvos de toque de 44 px no índice, capturas (1.6s)
+  ✓  55 e2e/publico.e2e.ts:88:5 › Site público (sem login) › textos legais legíveis em 1440 px: sem rolagem horizontal, alvos de toque de 44 px no índice, capturas (2.0s)
+  ✓  56 e2e/publico.e2e.ts:106:3 › Site público (sem login) › a ajuda lista as perguntas publicadas, esconde grupo vazio e mostra HTML como texto (427ms)
+  ✓  57 e2e/publico.e2e.ts:118:3 › Site público (sem login) › suporte e licenças (Solar CC BY 4.0 e fontes OFL) (486ms)
+  ✓  58 e2e/publico.e2e.ts:128:3 › Site público (sem login) › robots e sitemap listam só o site público (26ms)
+  ✓  59 e2e/publico.e2e.ts:139:3 › Excluir conta (WB-214, SEC-166) › explica o processo e o pedido ao encarregado responde igual para conta que existe e que não existe (682ms)
+  ✓  60 e2e/publico.e2e.ts:161:3 › Excluir conta (WB-214, SEC-166) › limite de tentativas aparece como mensagem e o formulário rejeita POST de outro site (383ms)
+  ✓  61 e2e/publico.e2e.ts:174:3 › Excluir conta sem o app (SEC-166, SEC-176) › via A: código do e-mail, revisão, confirmação e desistência, sem sessão nem cookie (756ms)
+  ✓  62 e2e/publico.e2e.ts:194:3 › Excluir conta sem o app (SEC-166, SEC-176) › a resposta do primeiro passo é igual para e-mail que existe e que não existe (779ms)
+  ✓  63 e2e/publico.e2e.ts:209:3 › Excluir conta sem o app (SEC-166, SEC-176) › via B com a conta sob ataque pede o código do e-mail; senha errada tem mensagem única (602ms)
+  ✓  64 e2e/publico.e2e.ts:223:3 › Excluir conta sem o app (SEC-166, SEC-176) › desistir com a conta sob ataque abre o campo do código (SEC-176) e a exclusão com pedido em andamento é bloqueada (1.2s)
+  ✓  65 e2e/publico.e2e.ts:247:3 › Excluir conta sem o app (SEC-166, SEC-176) › limite de tentativas, POST de outro site e host de painel são recusados (384ms)
+  ✓  66 e2e/regions.e2e.ts:5:3 › Regiões (AD1) › criar uma cidade: valida o nome, cria e ela aparece na lista (2.1s)
+  ✓  67 e2e/regions.e2e.ts:22:3 › Regiões (AD1) › a criação fica registrada na auditoria (2.3s)
+  ✓  68 e2e/regions.e2e.ts:34:3 › Regiões (AD1) › operação cria cidade mas não vê parâmetros (1.5s)
+
+  3 skipped
+  65 passed (2.3m)

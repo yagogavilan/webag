@@ -1,0 +1,14 @@
+
+=== coleta ===
+PASS  COLETA-0 | parâmetro coleta_atrasada_dias_uteis existe com valor 1 (faixa 1 a 5)  [{"key":"coleta_atrasada_dias_uteis","value":1,"default":1,"type":"int","min":1,"max":5,"values":null,"description":"Novo prazo da coleta atrasada, a contar do aviso ao cliente (dias úteis)","ref":"DEC]
+PASS  COLETA-1 | troca com coleta em casa cria a corrida exchange_pickup na fila da Logística  [troca HTTP 201; corrida=68e5d9ef-cba3-4989-9666-98b1a5aee7b0]
+PASS  COLETA-2 | a corrida aparece como Atrasada (overdue) na fila  [overdue=true]
+PASS  COLETA-3 | a varredura avisa o cliente UMA vez, com novo prazo de 1 dia útil (entre ~1 h e 4 dias corridos conforme fim de semana) a contar do aviso  [evento={"newDeadlineAt": "2026-11-23T05:20:47.386Z"}; prazo novo daqui a 72.0 h; hoje=Fri]
+FALHA COLETA-3b | 1 dia útil (não 3): o novo prazo cai no próximo dia útil (não domingo) e nunca a mais de 4 dias corridos  [dia da semana (BRT) do prazo=1; daqui a 72.0 h]
+PASS  COLETA-4 | depois de mais uma varredura continua UM aviso ao cliente e UM alerta à operação (sem repetir)  [avisos=1; alertas=1]
+PASS  COLETA-5 | prazo do item vencido com a coleta atrasada SEM motoboy: a troca NÃO expira (relógio pausado por culpa da Webag)  [status da troca=approved]
+PASS  COLETA-6 | ao atribuir o motoboy, o prazo do cliente ganha o tempo do atraso (evento item_clock_paused)  [assign HTTP 200; prazo antes 2026-11-20T07:23:09.000Z depois 2026-11-23T07:26:06.000Z; item_clock_paused=1]
+PASS  COLETA-7 | controle: coleta que NÃO atrasou não mexe no prazo do item  [antes=2026-11-27 05:23:10.74+00; depois=2026-11-27 05:23:10.74+00]
+
+RESUMO: 8 passaram, 1 falharam, 0 não testadas
+  FALHA COLETA-3b | 1 dia útil (não 3): o novo prazo cai no próximo dia útil (não domingo) e nunca a mais de 4 dias corridos [dia da semana (BRT) do prazo=1; daqui a 72.0 h]

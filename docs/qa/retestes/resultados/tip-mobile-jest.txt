@@ -1,0 +1,11 @@
+
+> @webag/mobile@0.1.0 test /dev/shm/qa/webag/apps/mobile
+> jest --ci
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Test Suites: 46 passed, 46 total
+Tests:       439 passed, 439 total
+Snapshots:   0 total
+Time:        37.956 s
+Ran all test suites.

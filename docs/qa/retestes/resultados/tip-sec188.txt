@@ -1,0 +1,15 @@
+PASS  S188-0 | preparo: loja nova em análise com 3 documentos  [submit 200]
+PASS  S188-1 | operação aprova sem abrir nada: 409 DOCUMENTS_NOT_REVIEWED, 3 faltando  [HTTP 409 DOCUMENTS_NOT_REVIEWED faltam=3]
+PASS  S188-2 | super admin abriu 2 de 3: recusa e lista só o que falta (1 item)  [HTTP 409 faltam=1 [{"field":"documents.address_proof","message":"Documento ainda não aberto por você (ou reenviado dep]
+PASS  S188-3 | o super admin abriu tudo, mas a abertura é DE QUEM abriu: a operação segue recusada (409, 3 faltando)  [HTTP 409 faltam=3]
+PASS  S188-4 | suporte não abre documento de loja (403)  [HTTP 403]
+PASS  S188-4b | suporte não aprova loja (403)  [HTTP 403]
+PASS  S188-5 | operação abre os 3 e aprova (200 approved)  [HTTP 200 approved]
+PASS  S188-5b | abrir documento que não é da loja: 404 (não conta como abertura)  [HTTP 404]
+PASS  S188-6 | pedir correção (1 item) leva a loja para correction_requested  [HTTP 200 correction_requested]
+PASS  S188-7 | lojista reenvia a frente do documento e envia de novo: loja volta a in_review com documento NOVO (outro id)  [upload 204 submit 200 in_review]
+PASS  S188-8 | depois do reenvio, aprovar só com a abertura antiga = 409 e lista SÓ o documento novo (1 item)  [HTTP 409 [{"field":"documents.id_front","message":"Documento ainda não aberto por você (ou reenviado depois da última abertura)."]
+PASS  S188-9 | abrir o documento novo e aprovar: 200 approved  [HTTP 200 approved]
+PASS  S188-10 | tentativas bloqueadas e aprovações ficam na auditoria (approve_blocked = 4 nas duas lojas: 3 + 1; approve = 2; o 403 do suporte não chega a auditar a decisão)  [store.approve:2 store.approve_blocked:4]
+
+RESUMO: 13 passaram, 0 falharam, 0 não testadas

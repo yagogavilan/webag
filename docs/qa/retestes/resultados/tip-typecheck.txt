@@ -1,0 +1,54 @@
+
+> webag@ typecheck /dev/shm/qa/webag
+> turbo run typecheck
+
+
+   • turbo 2.11.12
+   • Packages in scope: @webag/api, @webag/mobile, @webag/shared, @webag/tokens, @webag/web
+   • Running typecheck in 5 packages
+   • Remote caching disabled
+
+@webag/shared:typecheck: cache miss, executing 4933e804394cbabd
+@webag/tokens:typecheck: cache miss, executing a27069034136da94
+@webag/shared:build: cache hit, replaying logs 2ca2986535968c32
+@webag/shared:build: 
+@webag/shared:build: > @webag/shared@0.1.0 build /dev/shm/qa/webag/packages/shared
+@webag/shared:build: > tsc -p tsconfig.build.json
+@webag/shared:build: 
+@webag/tokens:build: cache hit, replaying logs 63f12e615bd154e2
+@webag/tokens:build: 
+@webag/tokens:build: > @webag/tokens@0.1.0 build /dev/shm/qa/webag/packages/tokens
+@webag/tokens:build: > node scripts/build.mjs
+@webag/tokens:build: 
+@webag/tokens:build: gerado src/tokens.ts
+@webag/tokens:build: gerado css/tokens.css
+@webag/api:typecheck: cache miss, executing 9e8b9b9db181c930
+@webag/mobile:typecheck: cache miss, executing 04ddde04cb3b9e1c
+@webag/web:typecheck: cache miss, executing 18a58575be3052b4
+@webag/mobile:typecheck: 
+@webag/mobile:typecheck: > @webag/mobile@0.1.0 typecheck /dev/shm/qa/webag/apps/mobile
+@webag/mobile:typecheck: > tsc --noEmit
+@webag/mobile:typecheck: 
+@webag/shared:typecheck: 
+@webag/shared:typecheck: > @webag/shared@0.1.0 typecheck /dev/shm/qa/webag/packages/shared
+@webag/shared:typecheck: > tsc --noEmit
+@webag/shared:typecheck: 
+@webag/api:typecheck: 
+@webag/api:typecheck: > @webag/api@0.1.0 typecheck /dev/shm/qa/webag/apps/api
+@webag/api:typecheck: > tsc --noEmit
+@webag/api:typecheck: 
+@webag/web:typecheck: 
+@webag/web:typecheck: > @webag/web@0.1.0 typecheck /dev/shm/qa/webag/apps/web
+@webag/web:typecheck: > next typegen && tsc --noEmit
+@webag/web:typecheck: 
+@webag/tokens:typecheck: 
+@webag/tokens:typecheck: > @webag/tokens@0.1.0 typecheck /dev/shm/qa/webag/packages/tokens
+@webag/tokens:typecheck: > tsc --noEmit -p tsconfig.json
+@webag/tokens:typecheck: 
+@webag/web:typecheck: Generating route types...
+@webag/web:typecheck: ✓ Types generated successfully
+
+ Tasks:    7 successful, 7 total
+Cached:    2 cached, 7 total
+  Time:    22.931s 
+

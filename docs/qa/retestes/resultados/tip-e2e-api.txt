@@ -1,0 +1,74 @@
+
+> @webag/api@0.1.0 test:e2e /dev/shm/qa/webag/apps/api
+> vitest run --config ./vitest.config.e2e.ts
+
+
+ RUN  v4.1.12 /dev/shm/qa/webag/apps/api
+
+[e2e] PostgreSQL localhost:15432/webag_23988_test; Redis localhost:16379/1
+(node:24876) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:27270) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:29501) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:30641) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:30865) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:31266) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:581) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:2553) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯ test/discovery.e2e-spec.ts (11 tests | 1 failed) 3966ms
+     × categorias disponíveis só com loja visível no ponto (WB-011 C4) 7ms
+(node:3978) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:4710) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:4925) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:5046) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:5261) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:6040) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/discovery.e2e-spec.ts > Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012) > categorias disponíveis só com loja visível no ponto (WB-011 C4)
+Error: Failed query: insert into "categories" ("id", "parent_id", "name", "icon", "position", "active", "created_at", "updated_at") values (default, default, $1, $2, default, default, default, default) returning "id", "parent_id", "name", "icon", "position", "active", "created_at", "updated_at"
+params: Cat 57276-2,storefront
+ ❯ NodePgPreparedQuery.queryWithCache ../../node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.10.0_@types+pg@8.23.1_pg@8.23.1/node_modules/src/pg-core/session.ts:73:10
+ ❯ ../../node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.10.0_@types+pg@8.23.1_pg@8.23.1/node_modules/src/node-postgres/session.ts:154:18
+ ❯ ensureCategory test/helpers/fixtures.ts:294:17
+    292|   const { categories } = await import('../../src/platform/database/sch…
+    293|   categorySeq += 1;
+    294|   const [row] = await ctx.db
+       |                 ^
+    295|     .insert(categories)
+    296|     .values({ name: name ?? `Cat ${Date.now() % 100000}-${categorySeq}…
+ ❯ test/discovery.e2e-spec.ts:150:26
+
+Caused by: error: duplicate key value violates unique constraint "categories_level_name_uq"
+ ❯ ../../node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.1/node_modules/pg-pool/index.js:45:11
+ ❯ ../../node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.10.0_@types+pg@8.23.1_pg@8.23.1/node_modules/drizzle-orm/node-postgres/session.js:124:18
+ ❯ NodePgPreparedQuery.queryWithCache ../../node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.10.0_@types+pg@8.23.1_pg@8.23.1/node_modules/drizzle-orm/pg-core/session.js:39:16
+ ❯ ../../node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.10.0_@types+pg@8.23.1_pg@8.23.1/node_modules/drizzle-orm/node-postgres/session.js:117:22
+ ❯ ensureCategory test/helpers/fixtures.ts:294:17
+ ❯ test/discovery.e2e-spec.ts:150:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { length: 343, severity: 'ERROR', code: '23505', detail: 'Key (COALESCE(parent_id, \'00000000-0000-0000-0000-000000000000\'::uuid), lower(name::text))=(00000000-0000-0000-0000-000000000000, cat 57276-2) already exists.', hint: undefined, position: undefined, internalPosition: undefined, internalQuery: undefined, where: undefined, schema: 'public', table: 'categories', dataType: undefined, constraint: 'categories_level_name_uq', file: 'nbtinsert.c', routine: '_bt_check_unique' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 107 passed (108)
+      Tests  1 failed | 873 passed (874)
+   Start at  05:16:08
+   Duration  634.03s (transform 5.02s, setup 0ms, import 160.67s, tests 459.20s, environment 9ms)
+
+ ELIFECYCLE  Command failed with exit code 1.

@@ -1,0 +1,12 @@
+PASS  TROCA-UI-0 | preparo: pedido de entrega entregue com o código  [HTTP 200]
+PASS  TROCA-UI-0b | o servidor oferece "Pedir troca" (exchange.canRequest = true)  [status=delivered canRequest=true]
+PASS  TROCA-UI-1 | na tela do pedido entregue o botão "Pedir troca" aparece
+PASS  TROCA-UI-2 | a tela de troca abre com o item e os motivos (arrependimento, defeito, tamanho e cor conforme o produto)
+PASS  TROCA-UI-3 | o link da política de trocas abre /termos/trocas  [http://localhost:3201/termos/trocas]
+PASS  TROCA-UI-4 | enviar o arrependimento mostra a tela de sucesso
+PASS  TROCA-UI-5 | no servidor: troca de arrependimento nasce aprovada e a resolução é reembolso  [approved|refund|withdrawal]
+PASS  TROCA-UI-6 | o servidor recusa um 2º arrependimento do mesmo item (4xx, nunca 201 nem 5xx)  [HTTP 422 EXCHANGE_ALREADY_OPEN]
+PASS  TROCA-UI-6b | só 1 pedido de troca existe para o pedido depois da tentativa repetida  [exchange_requests=1; canRequest no pedido=true (informativo)]
+PASS  TROCA-UI-7 | nenhum erro de página e nenhum 5xx durante o fluxo
+
+RESUMO: 10 passaram, 0 falharam, 0 não testadas

@@ -1,0 +1,14 @@
+
+> @webag/web@0.1.0 test /dev/shm/qa/webag/apps/web
+> vitest run
+
+
+ RUN  v4.1.12 /dev/shm/qa/webag/apps/web
+
+Not implemented: navigation to another Document
+
+ Test Files  83 passed (83)
+      Tests  684 passed (684)
+   Start at  05:27:05
+   Duration  59.07s (transform 4.61s, setup 12.02s, import 71.12s, tests 48.19s, environment 34.20s)
+

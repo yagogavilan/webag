@@ -405,7 +405,7 @@ async function coleta() {
   // 8 dias corridos sem motoboy = atrasada; o prazo do item vence em 2 h
   sql(`update deliveries set ready_at = now() - interval '8 days' where id = '${run}'`);
   sql(`update exchange_requests set item_due_at = now() + interval '2 hours' where id = '${ex.data.id}'`);
-  const listed = await adminCall('GET', '/v1/admin/logistics/deliveries?kind=exchange_pickup&limit=100');
+  const listed = await adminCall('GET', '/v1/admin/logistics/deliveries?kind=exchange_pickup&limit=50');
   record('COLETA-2', 'a corrida aparece como Atrasada (overdue) na fila', (listed.data?.data ?? []).find((d) => d.id === run)?.overdue === true, `overdue=${(listed.data?.data ?? []).find((d) => d.id === run)?.overdue}`);
   const noticed = await waitFor(() => sql(`select count(*) from delivery_events where delivery_id = '${run}' and action = 'collection_late_notice'`) !== '0', { timeoutMs: 120_000 });
   const meta = sql(`select meta::text from delivery_events where delivery_id = '${run}' and action = 'collection_late_notice' order by created_at desc limit 1`);
@@ -414,7 +414,7 @@ async function coleta() {
   record('COLETA-3', 'a varredura avisa o cliente UMA vez, com novo prazo de 1 dia útil (entre ~1 h e 4 dias corridos conforme fim de semana) a contar do aviso', noticed && hoursAhead > 0.5 && hoursAhead <= 96, `evento=${meta}; prazo novo daqui a ${hoursAhead.toFixed(1)} h; hoje=${new Date().toUTCString().slice(0, 3)}`);
   // 1 dia útil: se hoje é qui/sex/sáb... conferir o dia da semana do novo prazo
   const dow = new Date(newDeadline - 3 * 3600_000).getUTCDay();
-  record('COLETA-3b', '1 dia útil (não 3): o novo prazo cai no próximo dia útil (não domingo) e nunca a mais de 4 dias corridos', dow !== 0 && hoursAhead <= 96 && hoursAhead < 70, `dia da semana (BRT) do prazo=${dow}; daqui a ${hoursAhead.toFixed(1)} h`);
+  record('COLETA-3b', '1 dia útil (não 3): o novo prazo cai no próximo dia útil (nem sábado nem domingo; da sexta são 72 h até a segunda) e nunca a mais de 4 dias corridos', dow !== 0 && dow !== 6 && hoursAhead <= 96 && hoursAhead < 80, `dia da semana (BRT) do prazo=${dow}; daqui a ${hoursAhead.toFixed(1)} h`);
   await sleep(65_000);
   const notices = sql(`select count(*) from delivery_events where delivery_id = '${run}' and action = 'collection_late_notice'`);
   const alerts = sql(`select count(*) from payment_alerts where kind = 'collection_late' and details->>'deliveryId' = '${run}'`);

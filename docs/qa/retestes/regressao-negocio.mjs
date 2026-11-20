@@ -74,6 +74,18 @@ async function main() {
   const productEarly = await api('POST', `/v1/stores/${storeId}/products`, { token, body: { name: 'Produto cedo demais', basePriceCents: 1000 } });
   record('REG-7b', 'catálogo só com a loja aprovada (409 STORE_NOT_APPROVED)', productEarly.status === 409, `HTTP ${productEarly.status} ${productEarly.data?.code ?? ''}`);
   // ------------------------------------------------------------------ 2. aprovação
+  // SEC-188: sem abrir os documentos o servidor recusa (409 DOCUMENTS_NOT_REVIEWED, com a lista do que falta); depois de abrir cada um, aprova.
+  const blocked = await adminCall('POST', `/v1/admin/stores/${storeId}/approve`, {});
+  record('REG-8-sec188a', 'SEC-188: aprovar sem abrir os documentos = 409 DOCUMENTS_NOT_REVIEWED com a lista do que falta', blocked.status === 409 && blocked.data?.code === 'DOCUMENTS_NOT_REVIEWED' && (blocked.data?.errors?.length ?? 0) >= 1, `HTTP ${blocked.status} ${blocked.data?.code ?? ''} faltam=${blocked.data?.errors?.length ?? 0}`);
+  const stillInReview = sql(`select status from stores where id = '${storeId}'`);
+  record('REG-8-sec188b', 'SEC-188: a loja segue em análise depois da tentativa bloqueada', stillInReview === 'in_review', stillInReview);
+  const detail = await adminCall('GET', `/v1/admin/stores/${storeId}`);
+  const currentDocs = (detail.data?.documents ?? []).filter((d) => d.current);
+  const opened = [];
+  for (const d of currentDocs) opened.push((await adminCall('POST', `/v1/admin/stores/${storeId}/documents/${d.id}/access`, { reason: 'initial_review' })).status);
+  record('REG-8-sec188c', 'SEC-188: abrir cada documento vigente devolve a URL assinada (200)', currentDocs.length >= 1 && opened.every((st) => st === 200), `documentos=${currentDocs.length} aberturas=${opened.join(',')}`);
+  const viewAudit = sql(`select count(*) from audit_log where action = 'store.document_view' and target_id in (${currentDocs.map((d) => `'${d.id}'`).join(',') || "''"})`);
+  record('REG-8-sec188d', 'SEC-188: cada abertura ficou auditada (store.document_view) e a tentativa bloqueada também (store.approve_blocked)', Number(viewAudit) >= currentDocs.length && Number(sql(`select count(*) from audit_log where action = 'store.approve_blocked' and target_id = '${storeId}'`)) >= 1, `document_view=${viewAudit}`);
   const approve = await adminCall('POST', `/v1/admin/stores/${storeId}/approve`, {});
   record('REG-8', 'admin aprova a loja (status approved)', approve.status === 200 && approve.data?.status === 'approved', `HTTP ${approve.status} ${approve.data?.status ?? JSON.stringify(approve.data).slice(0, 160)}`);
   const second = await adminCall('POST', `/v1/admin/stores/${storeId}/approve`, {});

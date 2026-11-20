@@ -240,7 +240,9 @@ async function alertas() {
   const lim0 = await adminCall('GET', '/v1/admin/alerts?limit=0');
   const lim999 = await adminCall('GET', '/v1/admin/alerts?limit=999');
   const limabc = await adminCall('GET', '/v1/admin/alerts?limit=abc');
-  record('B3-f-limit', 'INFORMATIVO: limit=0 e limit=999 não dão 400 (o contrato diz mínimo 1, máximo 50; a API aceita e ajusta)', lim0.status === 200 && lim999.status === 200 && lim999.data.data.length <= 50, `limit=0 -> ${lim0.status} (${lim0.data?.data?.length} itens); limit=999 -> ${lim999.status} (${lim999.data?.data?.length} itens); limit=abc -> ${limabc.status}`);
+  const lim50 = await adminCall('GET', '/v1/admin/alerts?limit=50');
+  const lim51 = await adminCall('GET', '/v1/admin/alerts?limit=51');
+  record('B3-f-limit', 'BUG-027: limit fora de 1 a 50 ou não numérico = 400; limit=50 = 200 (contrato)', lim0.status === 400 && lim999.status === 400 && limabc.status === 400 && lim51.status === 400 && lim50.status === 200, `limit=0 -> ${lim0.status}; 999 -> ${lim999.status}; abc -> ${limabc.status}; 51 -> ${lim51.status}; 50 -> ${lim50.status}`);
   const kindNotMine = await call('support', '/v1/admin/alerts?status=open&kind=refund_failed');
   record('B3-f-kind-rbac', 'kind de outro público pelo suporte: lista vazia (não vaza nem dá 403)', kindNotMine.status === 200 && kindNotMine.data.data.length === 0, `${kindNotMine.status} ${kindNotMine.data?.data?.length}`);
   // ordem e paginação sem duplicar
@@ -420,7 +422,8 @@ async function pedidos() {
   const l51 = await list('limit=51');
   const l0 = await list('limit=0');
   const labc = await list('limit=abc');
-  record('B5-f-limit', 'INFORMATIVO: limit=51 e limit=0 não dão 400 (contrato: 1 a 50); a API ajusta e nunca devolve mais de 50', l51.status === 200 && rows(l51).length <= 50 && l0.status === 200, `limit=51 -> ${l51.status} (${rows(l51).length} linhas); limit=0 -> ${l0.status} (${rows(l0).length} linhas); limit=abc -> ${labc.status}`);
+  const l50 = await list('limit=50');
+  record('B5-f-limit', 'BUG-027: limit=51, 0 e abc = 400; limit=50 = 200 (contrato: 1 a 50)', l51.status === 400 && l0.status === 400 && labc.status === 400 && l50.status === 200, `limit=51 -> ${l51.status}; 0 -> ${l0.status}; abc -> ${labc.status}; 50 -> ${l50.status}`);
   const p1 = await list(`userId=${c.userId}&limit=2`);
   const p2 = await list(`userId=${c.userId}&limit=2&cursor=${encodeURIComponent(p1.data.nextCursor)}`);
   const idsP = [...rows(p1), ...rows(p2)].map((o) => o.id);

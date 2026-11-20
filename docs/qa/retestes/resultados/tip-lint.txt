@@ -1,0 +1,48 @@
+
+> webag@ lint /dev/shm/qa/webag
+> turbo run lint
+
+
+   • turbo 2.11.12
+   • Packages in scope: @webag/api, @webag/mobile, @webag/shared, @webag/tokens, @webag/web
+   • Running lint in 5 packages
+   • Remote caching disabled
+
+@webag/shared:build: cache miss, executing 2ca2986535968c32
+@webag/tokens:build: cache miss, executing 63f12e615bd154e2
+@webag/shared:lint: cache miss, executing a48b294c95702a6f
+@webag/shared:lint: 
+@webag/shared:lint: > @webag/shared@0.1.0 lint /dev/shm/qa/webag/packages/shared
+@webag/shared:lint: > eslint .
+@webag/shared:lint: 
+@webag/tokens:build: 
+@webag/tokens:build: > @webag/tokens@0.1.0 build /dev/shm/qa/webag/packages/tokens
+@webag/tokens:build: > node scripts/build.mjs
+@webag/tokens:build: 
+@webag/shared:build: 
+@webag/shared:build: > @webag/shared@0.1.0 build /dev/shm/qa/webag/packages/shared
+@webag/shared:build: > tsc -p tsconfig.build.json
+@webag/shared:build: 
+@webag/tokens:build: gerado src/tokens.ts
+@webag/tokens:build: gerado css/tokens.css
+@webag/mobile:lint: cache miss, executing d074c98803ed5c4b
+@webag/web:lint: cache miss, executing f62003bd0d91885b
+@webag/api:lint: cache miss, executing 893d12ab2a864104
+@webag/web:lint: 
+@webag/web:lint: > @webag/web@0.1.0 lint /dev/shm/qa/webag/apps/web
+@webag/web:lint: > eslint .
+@webag/web:lint: 
+@webag/api:lint: 
+@webag/api:lint: > @webag/api@0.1.0 lint /dev/shm/qa/webag/apps/api
+@webag/api:lint: > eslint .
+@webag/api:lint: 
+@webag/mobile:lint: 
+@webag/mobile:lint: > @webag/mobile@0.1.0 lint /dev/shm/qa/webag/apps/mobile
+@webag/mobile:lint: > eslint .
+@webag/mobile:lint: 
+
+ Tasks:    6 successful, 6 total
+Cached:    0 cached, 6 total
+  Time:    50.73s 
+
+ WARNING  no output files found for task @webag/tokens#build. Please check your `outputs` key in `turbo.json`
