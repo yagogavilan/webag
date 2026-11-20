@@ -85,7 +85,7 @@ Sev 2 que cabem junto se a sprint tiver folga (detalhe e dono na tabela do relat
 
 | Item | O que fazer |
 |---|---|
-| Z5.m1 [ ] SEC-187 (Média; C10 do G5), parte do app | Depois que o backend publicar a versão com os valores escritos no texto, conferir que `legal/[type]` mostra o encarregado, o CNPJ e o foro sem "a definir". Trocar o "Vigência a definir" fixo de `fillLegal` (`src/features/legal/legal-text.ts:18`) pela vigência da versão (`effectiveAt`) quando o texto estiver aprovado, igual ao site. Teste em `legal-screen.test.tsx` |
+| Z5.m1 [x 2026-11-20] SEC-187 (Média; C10 do G5), parte do app | Depois que o backend publicar a versão com os valores escritos no texto, conferir que `legal/[type]` mostra o encarregado, o CNPJ e o foro sem "a definir". Trocar o "Vigência a definir" fixo de `fillLegal` (`src/features/legal/legal-text.ts:18`) pela vigência da versão (`effectiveAt`) quando o texto estiver aprovado, igual ao site. Teste em `legal-screen.test.tsx` **Feito (mobile-dev, 2026-11-20):** `fillLegal` resolve só `SITE_URL`, `VERSAO` e `VIGENCIA` (de `effectiveAt`, horário de Brasília, só com `EXPO_PUBLIC_LEGAL_REVIEWED=true`, igual ao `LEGAL_REVIEWED` do site; sem a chave, "Vigência a definir"); outro `{{...}}` (versão antiga) segue "a definir". A chave entra no build (nova build ao aprovar o jurídico), ver `infra/env.example`. |
 | Sugestão sem ID (web) | `EMAIL` em `apps/web/src/lib/legal-text.ts`: não aceitar `*` nem `_`, para que um e-mail não abra negrito no texto. É cosmético |
 
 ## Z3. Do tech-lead em 2026-11-19 (revisão final: `docs/arquitetura/reviews/onda-8.md`)
