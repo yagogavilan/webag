@@ -46,6 +46,9 @@ export const PIX_ALERT_SECONDS = 120;
  * Site público do Webag (página segura do cartão). `EXPO_PUBLIC_WEB_URL` por ambiente; tudo aqui é público.
  * O app só abre `WEB_PUBLIC_URL/pagar/cartao?i=<token>`: a URL que vem da API é conferida contra este endereço antes de abrir.
  */
+/** Jurídico aprovou os textos (mesma chave `LEGAL_REVIEWED` do site, DEC-078). Falso (padrão): "Vigência a definir" no texto legal; só `true` mostra `effectiveAt`. */
+export const LEGAL_REVIEWED: boolean = process.env.EXPO_PUBLIC_LEGAL_REVIEWED?.trim().toLowerCase() === 'true';
+
 export const WEB_PUBLIC_URL: string = (process.env.EXPO_PUBLIC_WEB_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
 
 /** A URL da intenção é da página segura do Webag (mesma origem, rota fixa, token `i`)? Qualquer outra coisa nunca é aberta (SEC-126). */

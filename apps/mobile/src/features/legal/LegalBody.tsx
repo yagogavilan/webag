@@ -5,8 +5,8 @@ import { theme } from '../../theme';
 import { fillLegal, parseLegal, type LegalContext } from './legal-text';
 
 /** Corpo do texto legal: títulos como cabeçalhos (leitor de tela navega por seção), parágrafos e lista com marcador. Texto puro. */
-export function LegalBody({ content, version, siteUrl }: { content: string } & LegalContext) {
-  const blocks = useMemo(() => parseLegal(fillLegal(content, { version, siteUrl })), [content, version, siteUrl]);
+export function LegalBody({ content, version, siteUrl, effectiveAt, reviewed }: { content: string } & LegalContext) {
+  const blocks = useMemo(() => parseLegal(fillLegal(content, { version, siteUrl, effectiveAt, reviewed })), [content, version, siteUrl, effectiveAt, reviewed]);
   return (
     <View style={styles.body}>
       {blocks.map((block, i) =>

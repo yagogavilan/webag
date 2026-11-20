@@ -187,6 +187,62 @@ describe('Caso de aprovação (A2)', () => {
     expect(screen.queryByTestId('admin.caso.check-all-help')).not.toBeInTheDocument();
   });
 
+  const threeDocs = ['d1', 'd2', 'd3'].map((id, i) => ({ id, kind: (['id_front', 'id_back', 'address_proof'] as const)[i]!, uploadedAt: '2026-11-16T11:00:00Z', current: true }));
+  const accessOk = (url: string) => (/^admin\/stores\/s1\/documents\/d\d\/access$/.test(path(url)) ? json({ url: `https://files.test/${path(url).split('/')[4]}.jpg?sig=1`, expiresInSeconds: 300, contentType: 'image/jpeg' }) : undefined);
+
+  it('"Aprovar" também espera a abertura de todos os documentos, mesmo com os 6 itens marcados à mão (SEC-188)', async () => {
+    vi.stubGlobal('fetch', mockFetch((url) => (path(url) === 'admin/stores/s1' ? json(detail({}, { documents: threeDocs })) : undefined), accessOk).impl);
+    renderPanel(<StoreCasePage storeId="s1" />, 'operations');
+    await screen.findByTestId('admin.caso.doc-image');
+    for (const id of ['legible', 'document', 'address', 'category', 'contact', 'duplicate']) await userEvent.click(screen.getByTestId(`admin.caso.check-${id}-ok`));
+    expect(screen.getByTestId('admin.caso.approve')).toBeDisabled();
+    expect(screen.getByTestId('admin.caso.approve-help')).toHaveTextContent('Abra os 2 documentos que faltam para aprovar.');
+    for (const id of ['d2', 'd3']) {
+      await userEvent.click(screen.getByTestId(`admin.caso.doc-thumb-${id}`));
+      await waitFor(() => expect(screen.getByTestId('admin.caso.doc-image')).toHaveAttribute('src', expect.stringContaining(`${id}.jpg`)));
+    }
+    await waitFor(() => expect(screen.getByTestId('admin.caso.approve')).toBeEnabled(), { timeout: 3000 });
+  });
+
+  it('409 DOCUMENTS_NOT_REVIEWED: diz qual documento falta, reabre e foca o documento, e trava "Aprovar" até abrir', async () => {
+    let blocked = true;
+    const { impl, calls } = mockFetch(
+      (url) => (path(url) === 'admin/stores/s1' ? json(detail({}, { documents: threeDocs })) : undefined),
+      accessOk,
+      (url) => (path(url) === 'admin/stores/s1/approve' && blocked ? json({ code: 'DOCUMENTS_NOT_REVIEWED', title: 'Documentos não conferidos', status: 409, detail: 'Abra cada documento antes de aprovar.', errors: [{ field: 'documents.address_proof', message: 'Documento não aberto por você.' }] }, 409) : undefined),
+      (url) => (path(url) === 'admin/stores/s1/approve' ? json({ id: 's1', status: 'approved' }) : undefined),
+      (url) => (path(url) === 'admin/stores' ? json({ data: [], nextCursor: null }) : undefined),
+    );
+    vi.stubGlobal('fetch', impl);
+    renderPanel(<StoreCasePage storeId="s1" />, 'operations');
+    await screen.findByTestId('admin.caso.doc-image');
+    for (const id of ['d2', 'd3']) {
+      await userEvent.click(screen.getByTestId(`admin.caso.doc-thumb-${id}`));
+      await waitFor(() => expect(screen.getByTestId('admin.caso.doc-image')).toHaveAttribute('src', expect.stringContaining(`${id}.jpg`)));
+    }
+    for (const id of ['legible', 'document', 'address', 'category', 'contact', 'duplicate']) await userEvent.click(screen.getByTestId(`admin.caso.check-${id}-ok`));
+    await waitFor(() => expect(screen.getByTestId('admin.caso.approve')).toBeEnabled(), { timeout: 3000 });
+    const opensOfD3 = () => calls.filter((c) => path(c.url) === 'admin/stores/s1/documents/d3/access').length;
+    const before = opensOfD3();
+    await userEvent.click(screen.getByTestId('admin.caso.approve'));
+    await userEvent.click(screen.getByTestId('admin.caso.confirm-approve'));
+    const banner = await screen.findByTestId('admin.caso.not-reviewed');
+    expect(banner).toHaveTextContent('Comprovante de endereço');
+    expect(banner).toHaveTextContent('A loja não foi aprovada');
+    expect(screen.queryByTestId('admin.caso.approve-dialog')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('admin.caso.doc-viewer')).toHaveFocus());
+    // a abertura é gravada de novo no servidor
+    await waitFor(() => expect(opensOfD3()).toBe(before + 1));
+    // com o registro refeito, aprovar volta a funcionar
+    blocked = false;
+    await waitFor(() => expect(screen.getByTestId('admin.caso.approve')).toBeEnabled());
+    await userEvent.click(screen.getByTestId('admin.caso.approve'));
+    expect(screen.queryByTestId('admin.caso.not-reviewed')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('admin.caso.confirm-approve'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/admin/lojas'));
+  });
+
   it('documento que não abre mostra a frase de leitura com "Tentar de novo" e mantém a conferência em bloco travada', async () => {
     vi.stubGlobal(
       'fetch',

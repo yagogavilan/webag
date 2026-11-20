@@ -22,6 +22,10 @@ interface Props {
   onSelect: (id: string) => void;
   /** Chamado quando o documento abriu de verdade (a URL assinada veio); a conferência em bloco só libera depois de abrir todos. */
   onOpened?: (id: string) => void;
+  /** Muda quando o servidor pediu nova abertura (SEC-188): a consulta do documento selecionado refaz e a abertura é gravada de novo. */
+  refreshKey?: number;
+  /** Muda quando o foco deve ir para o documento (409 `DOCUMENTS_NOT_REVIEWED`). */
+  focusToken?: number;
 }
 
 /**
@@ -29,11 +33,11 @@ interface Props {
  * por isso as miniaturas são botões com o nome do documento (uma imagem por miniatura geraria N acessos) e a consulta
  * não refaz sozinha ao voltar o foco da janela.
  */
-export function DocumentViewer({ storeId, documents, reason, selectedId, onSelect, onOpened }: Props) {
+export function DocumentViewer({ storeId, documents, reason, selectedId, onSelect, onOpened, refreshKey = 0, focusToken = 0 }: Props) {
   const selected = documents.find((doc) => doc.id === selectedId) ?? documents[0];
 
   const access = useQuery({
-    queryKey: ['admin', 'stores', 'document-access', storeId, selected?.id, reason],
+    queryKey: ['admin', 'stores', 'document-access', storeId, selected?.id, reason, refreshKey],
     queryFn: () => adminStoresApi.documentAccess(storeId, selected!.id, reason),
     enabled: Boolean(selected),
     retry: false,
@@ -42,6 +46,11 @@ export function DocumentViewer({ storeId, documents, reason, selectedId, onSelec
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusToken > 0) root.current?.focus();
+  }, [focusToken]);
 
   const openedId = selected && access.data ? selected.id : null;
   useEffect(() => {
@@ -59,7 +68,7 @@ export function DocumentViewer({ storeId, documents, reason, selectedId, onSelec
 
   const forbidden = access.error instanceof ApiError && access.error.status === 403;
   return (
-    <div className={s.viewer} data-testid={T('doc-viewer')}>
+    <div ref={root} className={s.viewer} tabIndex={-1} aria-label="Documentos da loja" role="region" data-testid={T('doc-viewer')}>
       <div className={s.thumbs} role="group" aria-label="Documentos enviados">
         {documents.map((doc) => (
           <button key={doc.id} type="button" className={cx(s.thumb, 'wb-text-body-strong')} aria-pressed={doc.id === selected.id} onClick={() => onSelect(doc.id)} data-testid={T(`doc-thumb-${doc.id}`)}>

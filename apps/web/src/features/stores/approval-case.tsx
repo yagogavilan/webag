@@ -155,6 +155,11 @@ function Checklist({ checks, onChange, documents, pendingDocs }: { checks: Check
   );
 }
 
+/** `errors[].field` do 409 `DOCUMENTS_NOT_REVIEWED` vem como `documents.<kind>` (openapi, `approveStore`). */
+function missingKinds(error: ApiError): string[] {
+  return error.fields.map((f) => /^documents\.(\w+)$/.exec(f.field)?.[1]).filter((kind): kind is string => Boolean(kind));
+}
+
 type Dialogs = null | 'approve' | 'correction' | 'reject' | 'shortcuts';
 
 /** A2: documento ao lado dos dados e da checklist; a decisão é registrada na auditoria pela API. */
@@ -175,11 +180,16 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
   const [mobileTab, setMobileTab] = useState<'documents' | 'data' | 'decision'>(canDocuments ? 'documents' : 'data');
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [openedDocs, setOpenedDocs] = useState<ReadonlySet<string>>(new Set());
+  // SEC-188: o servidor recusou a aprovação porque estes documentos não constam como abertos por quem aprova.
+  const [notReviewed, setNotReviewed] = useState<{ names: string[] } | null>(null);
+  const [viewerNonce, setViewerNonce] = useState(0);
+  const [focusToken, setFocusToken] = useState(0);
   const markOpened = useCallback((id: string) => setOpenedDocs((prev) => (prev.has(id) ? prev : new Set(prev).add(id))), []);
   const current = useMemo(() => detail.documents.filter((doc) => doc.current), [detail.documents]);
   // Só segura a conferência em bloco quem pode abrir documentos; sem a permissão, o revisor marca item a item como antes.
   const pendingDocs = canDocuments ? current.filter((doc) => !openedDocs.has(doc.id)).length : 0;
   const complete = allOk(checks);
+  const canApprove = complete && pendingDocs === 0;
   const conferred = CHECKLIST.filter((item) => checks[item.id].value === 'ok').length;
 
   // Atalhos (a, j, k, ?): cada um tem botão equivalente. Ignorados enquanto se digita.
@@ -188,7 +198,10 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
       const target = event.target as HTMLElement | null;
       if (dialog || event.metaKey || event.ctrlKey || event.altKey || (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       if (event.key === '?') setDialog('shortcuts');
-      else if (event.key === 'a' && decide && complete) setDialog('approve');
+      else if (event.key === 'a' && decide && canApprove) {
+        setNotReviewed(null);
+        setDialog('approve');
+      }
       else if (event.key === 'j' || event.key === 'k') {
         const index = current.findIndex((doc) => doc.id === (selectedDoc ?? current[0]?.id));
         const next = current[index + (event.key === 'j' ? 1 : -1)];
@@ -197,7 +210,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, decide, complete, current, selectedDoc]);
+  }, [dialog, decide, canApprove, current, selectedDoc]);
 
   async function afterDecision(message: string) {
     await client.invalidateQueries({ queryKey: storeKeys.all });
@@ -220,6 +233,20 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'STORE_ALREADY_DECIDED') {
         setConflict(caught.detail ?? 'Esta loja já foi decidida.');
+        setDialog(null);
+        return;
+      }
+      if (caught instanceof ApiError && caught.code === 'DOCUMENTS_NOT_REVIEWED') {
+        // O servidor manda: tira da lista local o que ele diz não ter registrado, leva o revisor ao primeiro documento que falta e reabre (grava a abertura).
+        const kinds = missingKinds(caught);
+        const missing = current.filter((doc) => kinds.includes(doc.kind));
+        const targets = missing.length > 0 ? missing : current;
+        setOpenedDocs((prev) => new Set([...prev].filter((id) => !targets.some((doc) => doc.id === id))));
+        setNotReviewed({ names: targets.map((doc) => DOCUMENT_NAME[doc.kind]) });
+        setSelectedDoc(targets[0]?.id ?? null);
+        setViewerNonce((n) => n + 1);
+        setFocusToken((n) => n + 1);
+        if (canDocuments) setMobileTab('documents');
         setDialog(null);
         return;
       }
@@ -247,10 +274,14 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
             Conferido {conferred} de {CHECKLIST.length}
           </p>
           {!online ? <Banner tone="warning" offline>Conecte-se para decidir. Suas marcações estão salvas.</Banner> : null}
-          <Button size="lg" onClick={() => setDialog('approve')} disabled={!complete || !online} aria-describedby="approve-help" data-testid={T('approve')}>
+          <Button size="lg" onClick={() => { setNotReviewed(null); setDialog('approve'); }} disabled={!canApprove || !online} aria-describedby="approve-help" data-testid={T('approve')}>
             Aprovar loja
           </Button>
-          {!complete ? <p id="approve-help" className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>Confira os 6 itens para aprovar.</p> : null}
+          {!canApprove ? (
+            <p id="approve-help" className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }} data-testid={T('approve-help')}>
+              {!complete ? 'Confira os 6 itens para aprovar.' : pendingDocs === 1 ? 'Abra o documento que falta para aprovar.' : `Abra os ${pendingDocs} documentos que faltam para aprovar.`}
+            </p>
+          ) : null}
           <Button variant="secondary" onClick={() => setDialog('correction')} disabled={!hasProblems || !online} data-testid={T('request-correction')}>
             Pedir correção
           </Button>
@@ -266,11 +297,17 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
       )}
     </div>
   );
-  const viewer = canDocuments ? <DocumentViewer storeId={storeId} documents={current} reason={ACCESS_REASON_FOR.in_review} selectedId={selectedDoc} onSelect={setSelectedDoc} onOpened={markOpened} /> : null;
+  const viewer = canDocuments ? <DocumentViewer storeId={storeId} documents={current} reason={ACCESS_REASON_FOR.in_review} selectedId={selectedDoc} onSelect={setSelectedDoc} onOpened={markOpened} refreshKey={viewerNonce} focusToken={focusToken} /> : null;
 
   return (
     <div className={ui.stack}>
       <PageHeader title={detail.store.name ?? 'Loja'} description={`${detail.store.address?.city ?? ''} · enviada para análise`} action={<Badge tone="info" testId={T('status-badge')}>Em análise</Badge>} />
+      {notReviewed ? (
+        <Banner tone="danger" testId={T('not-reviewed')}>
+          A loja não foi aprovada: o servidor não registrou a abertura {notReviewed.names.length === 1 ? 'do documento' : 'dos documentos'} <strong>{notReviewed.names.join(', ')}</strong>.{' '}
+          {notReviewed.names.length === 1 ? 'Confira o documento na área ao lado e aprove de novo.' : 'Abra cada um na área ao lado e aprove de novo.'}
+        </Banner>
+      ) : null}
       <div className={s.mobileTabs}>
         <Tabs
           label="Partes do caso"
@@ -359,7 +396,7 @@ export function ApprovalCase({ detail }: { detail: AdminStoreDetail }) {
       {dialog === 'shortcuts' ? (
         <Dialog title="Atalhos do teclado" onClose={() => setDialog(null)} testId={T('shortcuts-dialog')} actions={<Button onClick={() => setDialog(null)}>Fechar</Button>}>
           <dl className={s.dataList}>
-            <dt><kbd>a</kbd></dt><dd>Aprovar (só com os 6 itens conferidos)</dd>
+            <dt><kbd>a</kbd></dt><dd>Aprovar (só com os 6 itens conferidos e os documentos abertos)</dd>
             <dt><kbd>j</kbd> e <kbd>k</kbd></dt><dd>Próximo e documento anterior</dd>
             <dt><kbd>+</kbd> e <kbd>-</kbd></dt><dd>Zoom no documento</dd>
             <dt><kbd>r</kbd></dt><dd>Girar o documento</dd>
