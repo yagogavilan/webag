@@ -2,9 +2,9 @@
 
 > Mantido pelo `project-manager`. Fonte única do status. Plano: `plano-execucao.md`. Visão para o fundador: `../status.md`. Escopo: `docs/produto/backlog.md`. Fila técnica detalhada: `fila-backend-dev.md`. Retomada após reinício/limite de uso: primeira tarefa não `Aceito` da onda atual.
 
-**Onda atual:** Onda 8 (fechamento): RC `f622bc9` congelado (DEC-077); pós-RC só correções (DEC-078)   **Meta:** G4 definitivo (falta o QA no RC) e decisão do G5   **Atualizado:** 2026-11-20 (HEAD `f2f7e2d`)
+**Onda atual:** Onda 8 (fechamento): código final congelado em `036e791` (DEC-083); só correção de bug achado por QA/Security entra depois   **Meta:** G4 aprovado com ressalvas por QA e Security (sem veto); falta o CEO registrar; G5 depende do fundador   **Atualizado:** 2026-11-20 (tip `3d40959`, só documentos)
 
-**Bugs/SEC abertos (2026-11-20):** BUG-019 (Média, teste; corrigido em `f2f7e2d`, falta o QA rodar a frio); SEC-187 (Média; corrigido `f576ec5`, falta Security e a parte do app Z5.m1, em andamento); SEC-188 (Baixa; corrigido `7ea3613`, falta Security); Baixas 186, 146, 149, 150, 161, 162, 163 (c/d), 174; SEC-169 aceito (DEC-067); BUG-010 fechado indicativo (capacidade só em staging). BUG-020 a 025 fechados pelo QA em `0d902ab`. Nenhum Crítico/Alto aberto (Security e QA). Checklist do brief §8: `checklist-dod.md`.
+**Bugs/SEC abertos (2026-11-20):** nenhum Crítico, Alto ou Médio aberto (QA e Security). Baixas: BUG-029 (flake de fixture), BUG-030 (e2e-real depende do pedido do seed), BUG-031 (app sem aviso "versão para revisão"), BUG-028b (Chromium); SEC-189, 186, 146, 149, 150, 161, 162, 163 (c/d), 174; SEC-169 aceito (DEC-067); BUG-010 fechado indicativo (capacidade só em staging). Fechados no tip: BUG-019, 026, 027, SEC-187, SEC-188. Checklist do brief §8: `checklist-dod.md`.
 
 Status: `A fazer` · `Em andamento` · `Em revisão` · `Em QA` · `Aceito` · `Bloqueado`.
 
@@ -18,9 +18,9 @@ Status: `A fazer` · `Em andamento` · `Em revisão` · `Em QA` · `Aceito` · `
 | 3 | Descoberta do cliente | Concluída com ressalvas | `qa/relatorios/onda-3-5.md` |
 | 4 | Pagamento, ledger, checkout, pedido, tempo real | Concluída com ressalvas | DEC-043 (Security), DEC-047 (TL), DEC-048 (QA) |
 | 5 | Logística da Webag, trocas, financeiro, painéis | Concluída com ressalvas | DEC-036/037/045; QA reprova G4 até BUG-016 |
-| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Entregue; Security reverificou (SEC-166 fechado); falta reteste QA | `seguranca/revisoes/onda-7-pos-dec-059.md` |
+| 6 | LGPD, marketing, relatórios, ajuda, denúncia, cartão seguro | Concluída; Security reverificou e o QA retestou (`0d902ab`, RC, `036e791`) | `seguranca/revisoes/onda-7-pos-dec-059.md` |
 | 7 | Seed, carga, docs técnicas | Quase concluída: seed ok, k6 escrito, execução local indicativa; staging é do fundador | `qa/carga/README.md`, `qa/relatorios/setup-do-zero.md` |
-| 8 | Fechamento: retestes, revisões, capturas, G4/G5, tag | Em andamento (cerca de 76% do peso da onda, estimativa) | G4 Security: APROVADO; TL: com ressalvas (A-01/A-02 corrigidos); QA: aprovado com ressalvas só em `0d902ab`, **RC `f622bc9` PENDENTE**; G5 com condições C1 a C10 |
+| 8 | Fechamento: retestes, revisões, capturas, G4/G5, tag | Time: concluído salvo relatório final e SEC-186 (cerca de 16 de 18 do peso, estimativa); G5 e tag: fundador | G4 Security: APROVADO (adendo final, `036e791`); TL: com ressalvas (A-01/A-02 corrigidos); QA: APROVADO COM RESSALVAS em `036e791` (`g4-final-tip.md`); G5 com condições C1 a C9 e C10 reescrita |
 
 Direção visual v3 (DEC-051/052) e entrega em até 2 h (DEC-053) cruzam as ondas 6 a 8.
 
@@ -69,21 +69,21 @@ Direção visual v3 (DEC-051/052) e entrega em até 2 h (DEC-053) cruzam as onda
 | ID | Tarefa | Dono | Status | Depende de |
 |---|---|---|---|---|
 | T8-00 | Integrar contrato W/Y em app e web (F3, F4, F6, W.1 no `/excluir-conta`, M.6) e congelar o HEAD de teste | mobile-dev | Aceito | `0d902ab` (DEC-069); RC `f622bc9` (DEC-077) |
-| T8-01 | Reteste completo do QA no HEAD congelado: suítes (3 e2e seguidos), BUG-010 e 019 a 025, SEC-166/176/180 no app; atualizar `qa/bugs/` | qa-engineer | Em andamento | `g4-final.md` cobre `0d902ab` (BUG-019 aberto, resto fechado). **Reteste do RC `f622bc9` e pós-RC: PENDENTE (`g4-rc.md` não existe)**; `qa/bugs/` por atualizar (I-04) |
+| T8-01 | Reteste completo do QA no HEAD congelado: suítes, BUG-010 e 019 a 025, SEC-166/176/180 no app; atualizar `qa/bugs/` | qa-engineer | Aceito | `g4-final.md` (`0d902ab`), `g4-rc.md` (RC), `g4-final-tip.md` (`036e791`: unit 335/335, e2e 873/874 com 1 flake BUG-029, web 684, app 439, Playwright 65+9). `qa/bugs/` atualizado até BUG-031 |
 | T8-02 | Revisão funcional final | qa-engineer | Aceito | `qa/relatorios/revisao-funcional.md` (PO, 104/178 aceitas antes de B1 a B5, DEC-070); não refeita depois dos bloqueadores |
 | T8-03 | Heurísticas de Nielsen (10, todas as telas v3) | product-designer | Aceito | `qa/relatorios/heuristica-nielsen.md` (6,5/10; H-01 corrigido); não repetido após correções |
 | T8-04 | Usabilidade simulada, 4 tarefas (comprar, cadastrar loja, aprovar loja, pedir troca): toques, telas e palavras | qa-engineer + designer | Aceito | `qa/relatorios/usabilidade-4-tarefas.md` (`[HIPÓTESE]`, sem usuários reais) |
 | T8-05 | Acessibilidade (rótulos, contraste, leitor de tela, fonte grande) e 3G simulado | qa-engineer | Em andamento | Só por código e heurística; aparelho real é do fundador |
 | T8-06 | Capturas em `docs/telas/` (índice, uma por tela e estado: carregando, vazio, erro) | qa-engineer | Aceito | `docs/telas/README.md` (70 telas) e `qa/relatorios/revisao-visual-final.md`; V8.1 a V8.7 corrigidos (DEC-078) |
 | T8-07 | Teste de carga k6: script pronto, execução em staging | fundador (execução), qa (análise) | Bloqueado | Staging, servidor; local indicativo em `g4-final.md` §8 |
-| T8-08 | Correção de achados Crítico/Alto/Média viável e reteste | backend-dev + mobile-dev + QA | Em andamento | Feitos: B1 a B5, A-01 a A-13, SEC-181 a 185, SEC-187 e 188 (Z5.1, Z5.2), V8.x; faltam Z5.m1 (app), Z4.1 (SEC-186) e o reteste do QA |
-| T8-09 | Parecer final do Security (SEC-180, 176, 178, 179, 129, dependências, segredos) | security-engineer | Aceito | `seguranca/revisoes/parecer-final-rc.md`: G4 APROVADO, G5 com condições C1 a C10. Reverificar SEC-187/188 e pós-RC |
-| T8-10 | **G4 final**: parecer do QA | qa-engineer | Em andamento | `g4-final.md` (só `0d902ab`); falta o RC |
-| T8-11 | README e docs finais; guia de deploy e checklist das lojas com a v3 e a Onda 6; relatório final curto | tech-lead + PM | Em andamento | README, `deploy/guia-deploy.md` e `deploy/checklist-publicacao-lojas.md` existem; **relatório final curto não feito** |
-| T8-12 | Decisão do G5 (checklist, pareceres, itens do fundador) | CEO | Bloqueado | T8-10; itens 5 a 13 do `status.md` |
+| T8-08 | Correção de achados Crítico/Alto/Média viável e reteste | backend-dev + mobile-dev + QA | Aceito (salvo SEC-186) | Feitos e retestados: B1 a B5, A-01 a A-13, SEC-181 a 185, SEC-187, SEC-188, BUG-019, 026, 027, V8.x, Z5.m1. Aberto Baixa: SEC-186 (Z4.1, antes do piloto), SEC-189, BUG-029 a 031 |
+| T8-09 | Parecer final do Security (SEC-180, 176, 178, 179, 129, dependências, segredos) | security-engineer | Aceito | `seguranca/revisoes/parecer-final-rc.md` com adendo final em `036e791`: G4 APROVADO; G5 com C1 a C9 e C10 reescrita; SEC-187/188 corrigidos; SEC-189 Baixa aberto |
+| T8-10 | **G4 final**: parecer do QA | qa-engineer | Aceito | `qa/relatorios/g4-final-tip.md`: APROVADO COM RESSALVAS em `036e791`, sem veto; não é aprovação de G5. Fechamento formal: CEO |
+| T8-11 | README e docs finais; guia de deploy e checklist das lojas com a v3 e a Onda 6; relatório final curto | tech-lead + PM | Em andamento | README, `deploy/guia-deploy.md` e `deploy/checklist-publicacao-lojas.md` existem; **relatório final curto não feito** (ação do time) |
+| T8-12 | Decisão do G5 (checklist, pareceres, itens do fundador) | CEO | Bloqueado | G4 pronto; faltam itens 5 a 13 do `status.md`, jurídico e C7 no deploy real |
 | T8-13 | Merge para `main` e tag `v1.0.0` | CEO | Bloqueado | Autorização do fundador (D-08); G4 |
 
-Estado 2026-11-20: T8-00, 02, 03, 04, 06, 09 aceitos; T8-01, 05, 08, 10, 11 em andamento; T8-07, 12, 13 dependem do fundador. Ordem: T8-00 → T8-01 → (T8-02 a T8-06; máx. 3 agentes) → T8-08 → T8-09 → T8-10 → T8-11 → T8-12/T8-13. Congelar o HEAD antes do T8-01: o QA não pode testar alvo que muda (causa do preliminar reprovado).
+Estado 2026-11-20: T8-00, 01, 02, 03, 04, 06, 08, 09, 10 aceitos; T8-05 e T8-11 em andamento (relatório final); T8-07, 12, 13 dependem do fundador. Ordem: T8-00 → T8-01 → (T8-02 a T8-06; máx. 3 agentes) → T8-08 → T8-09 → T8-10 → T8-11 → T8-12/T8-13. Congelar o HEAD antes do T8-01: o QA não pode testar alvo que muda (causa do preliminar reprovado).
 
 Critério de saída: ver `plano-execucao.md` §3.
 
@@ -95,10 +95,12 @@ Critério de saída: ver `plano-execucao.md` §3.
 | DT-021 (retenção), DT-031 (rotação BFF), DT-023 (vetor oficial do MP) | Dívida | Antes do G4/G5 | Aberta |
 | BUG-010 (teto do sharp) | Média | T8-01 / T8-07 (precisa de carga) | Aberta |
 | SEC-180 a 185, 176, 178, 179 | Média/Baixa | T8-09 | Fechados pelo Security no RC (`parecer-final-rc.md`) |
-| SEC-187 (Média), SEC-188, SEC-186 | Média/Baixa | C10 do G5; Z5.1/Z5.2 feitos, Z5.m1 e Z4.1 abertos | Reverificar |
-| BUG-019 | Média (teste) | T8-01 | Corrigido (`f2f7e2d`), falta reteste a frio do QA |
+| SEC-187 (Média), SEC-188 | Média/Baixa | Corrigidos, provados pelo QA e confirmados pelo Security em `036e791` | Fechados |
+| SEC-189, SEC-186 | Baixa | SEC-189: antes de `LEGAL_REVIEWED=true` (C10); SEC-186 (Z4.1): antes do piloto | Abertos |
+| BUG-019, 026, 027 | Média/Baixa | T8-01 | Fechados pelo QA (`g4-final-tip.md`) |
+| BUG-029, 030, 031, 028b | Baixa | Backlog | Abertos (teste/UX); BUG-031 antes de publicar os textos |
 | BUG-020 a 025 | Baixa/Média | T8-01 | Fechados pelo QA em `0d902ab` |
-| Playwright do login em 2 passos contra API real (SEC-115) | Teste | T8-01 | Aberta |
+| Playwright do login em 2 passos contra API real (SEC-115) | Teste | T8-01 | Coberto: 9 passam contra API real no tip (BUG-030 na 2ª execução) |
 | O-1 (`correctEmail` grava e depois 429), O-2 (`resetTicket` no corpo) | Baixa | T6-09 | Aberta |
 | Adendo do TL (A-08) | Média | T7-04 | Aberta |
 
@@ -130,14 +132,14 @@ Escala: Probabilidade/Impacto = Alta, Média, Baixa. Datas no formato AAAA-MM-DD
 | R-16 | Risco | Mercado Pago sandbox sem credencial: PIX, cartão, split e webhook nunca rodaram contra o MP real; só provedor simulado e testes de contrato (DT-023) | Alta | Alta | Fundador / backend-dev | Fundador entrega credenciais de sandbox; teste real antes do G4; split e KYC (R-01) só no piloto | Aberto (2026-11-19) |
 | R-17 | Risco | Merge para `main` e tag `v1.0.0` exigem autorização do fundador; todo o trabalho está só no branch `claude/admiring-lamport-62tq1a` | Média | Alta | CEO / Fundador | Pedir autorização com o parecer G4; se houver perda do branch, perde-se a entrega | Aberto (2026-11-19) |
 | R-18 | Risco | Entrega em até 2 h (DEC-053) obriga a operação manual de despacho: sem alguém na fila de Logística no horário, o alerta de atraso dispara em todos os pedidos e a promessa quebra | Alta | Alta | Fundador / PM | Definir quem despacha e o horário (`logistica_horario`); começar com poucas lojas e raio pequeno; teto 120 min é parâmetro | Aberto (2026-11-19) |
-| R-19 | Risco (reduzido) | Verificação atrasada: correções da Onda 6 e do QA entram sem reteste; QA e Security precisam de nova rodada antes do G4, no mesmo limite de uso dos devs | Média | Média | PM / QA / Security | Security reverificou o RC; QA aprovou `0d902ab`; falta o QA no RC e Security em SEC-187/188 | Aberto, reduzido (2026-11-20) |
+| R-19 | Risco (encerrado) | Verificação atrasada: correções entram sem reteste | Baixa | Baixa | PM / QA / Security | QA retestou `0d902ab`, RC e `036e791`; Security confirmou `036e791`. Código congelado (DEC-083) | Fechado (2026-11-20) |
 | R-20 | Risco | Motoboys sem parecer jurídico (vínculo, Lei 12.009, seguro): operar a entrega da Webag antes é risco legal | Média | Alta | Fundador | Parecer (J8) antes de contratar ou pagar qualquer motoboy | Aberto (2026-11-19) |
 | R-21 | Risco | Direção v3 só cobre Home, Loja, Produto e Sacola; checkout, pedidos e conta ficam em v2: app inconsistente se o G4 chegar antes | Média | Média | mobile-dev / PM | V3-03 antes de T8-02 e T8-06; se faltar tempo, cortar painéis v3 (V3-05) primeiro | Aberto (2026-11-19) |
-| R-22 | Risco | G4 do QA depende de CI estável: e2e foi instável (BUG-019/024); o backend mostrou 763/763 em 3 execuções, o QA não repetiu | Média | Alta | QA / backend-dev | T8-01: 3 e2e completos seguidos no HEAD congelado; falha intermitente vira BUG Média | Aberto (2026-11-19) |
-| R-23 | Risco | Alvo móvel: app e web seguem integrando contrato enquanto QA e Security testam | Alta | Média | PM / mobile-dev | T8-00 termina e congela o HEAD; mudança posterior só com bug Crítico/Alto | Aberto (2026-11-19) |
+| R-22 | Risco (reduzido) | CI estável: e2e foi instável (BUG-019/024); no tip o QA mediu 873/874 em 1 execução (1 flake de fixture, BUG-029); 3 execuções seguidas só no RC, auto-relato do backend; GitHub Actions nunca rodou de verdade | Baixa | Média | QA / backend-dev | Corrigir BUG-029; rodar o CI real quando o repositório tiver o Actions ligado | Aberto, reduzido (2026-11-20) |
+| R-23 | Risco (encerrado) | Alvo móvel | Baixa | Baixa | PM | Congelado em `036e791` (DEC-083); só correção de bug achado por QA/Security | Fechado (2026-11-20) |
 | R-24 | Risco | Login e envio de código sem WAF/CAPTCHA: SEC-180 mitigado no código, abuso distribuído segue possível | Média | Média | Fundador / Security | Decisão do fundador (status item 12); `privacy:cancel-deletion` e alerta já existem | Aberto (2026-11-19) |
 | R-25 | Risco | Aparelho real, MP sandbox e carga em staging só o fundador faz; sem eles G4 fica "com ressalvas" e o G5 não é recomendável | Alta | Alta | Fundador | Pedir no parecer G4; agrupar os 3 numa única sessão do fundador | Aberto (2026-11-19) |
-| I-04 | Problema | Arquivos `qa/bugs/BUG-0xx.md` podem mostrar ABERTO para itens já fechados (BUG-019 a 025) | — | Baixa | qa-engineer | Atualizar no reteste | Aberto (2026-11-19) |
+| I-04 | Problema | Arquivos `qa/bugs/BUG-0xx.md` podem mostrar ABERTO para itens fechados | — | Baixa | qa-engineer | QA atualizou BUG-026 a 031 no tip; conferir BUG-019 a 025 | A verificar (2026-11-20) |
 | I-02 | Problema | O-1: `correctEmail` responde 429 após gravar o e-mail novo | — | Baixa | backend-dev | Checar o limite antes de gravar (Onda 3A) | Aberto (2026-11-18) |
 | I-03 | Problema | Parecer escrito do tech-lead que reverifica B1 e I1-I8 não está no repositório | — | Média | tech-lead | A-08: adendo em `review-onda1-api.md` | Aberto (2026-11-18) |
 | I-01 | Problema | CLAUDE.md §1/§2 desatualizado: cita Cajamar (brief e DEC-009 trazem Campo Limpo Paulista) e app para lojista (é painel web, DEC-005) | — | Baixa | CEO | Atualizar CLAUDE.md; até lá vale o brief | Aberto (2026-11-18) |
@@ -159,8 +161,8 @@ Escala: Probabilidade/Impacto = Alta, Média, Baixa. Datas no formato AAAA-MM-DD
 | D-08 | Dependência | Autorização do merge para `main` e da tag v1.0.0 | — | Alta | Fundador | Ver R-17 | Aberto |
 | D-09 | Dependência | Razão social, CNPJ, endereço, encarregado, WhatsApp de suporte, horário real da logística (HIP-E08), WAF/CAPTCHA, Sentry, geocodificador (opcional) | — | Média | Fundador | `status.md` itens 8, 9, 13 a 17 | Aberto (2026-11-19) |
 | D-10 | Dependência | Execução do k6 em staging e do roteiro em aparelho real | — | Alta | Fundador | T8-07, R-25 | Aberto (2026-11-19) |
-| R-26 | Risco | G4 do QA vale só para `0d902ab`; RC `f622bc9` e 14+ commits pós-RC (V8.x, DEC-052, textos legais, SEC-187/188) sem reteste do QA (`g4-rc.md` não existe); o e2e 827/827 do RC é auto-relato do backend | Alta | Alta | QA / CEO | Reteste do RC no tip aceito; G4 definitivo só depois (DEC-075); marcar PENDENTE até o relatório | Aberto (2026-11-20) |
+| R-26 | Risco (encerrado) | G4 do QA valia só para `0d902ab` | Baixa | Baixa | QA / CEO | `g4-rc.md` e `g4-final-tip.md` existem; G4 APROVADO COM RESSALVAS em `036e791`; falta o CEO registrar o fechamento | Fechado (2026-11-20) |
 | R-27 | Risco | Textos legais são proposta (DEC-080/082): sem aprovação do jurídico (J1 a J21, ECA Digital J17) o G5 e o piloto com lojistas não têm base contratual; J17 pode exigir mudança de produto; SEC-187 (C10) exige texto com fatos escritos antes de `LEGAL_REVIEWED=true` | Média | Alta | Fundador / PO | Levar J1 a J21 ao advogado já; nenhuma mudança no app antes do parecer (DEC-081) | Aberto (2026-11-20) |
-| R-28 | Risco | Relatório final curto (brief §8 item 7) e reconferência de README/docs após commits pós-RC não feitos: DoD do brief incompleto na entrega | Média | Média | tech-lead / PM | T8-11; ver `checklist-dod.md` | Aberto (2026-11-20) |
-| A-09 | Ação | Reverificar SEC-187, SEC-188 e commits pós-RC; QA: reteste do RC, 1 execução a frio (BUG-019), atualizar `qa/bugs/` | — | Alta | security-engineer / qa-engineer | Antes do G4 definitivo | A fazer (2026-11-20) |
-| A-10 | Ação | Fechar Z5.m1 (app, SEC-187), Z4.1 (SEC-186) e o relatório final | — | Média | mobile-dev / backend-dev / tech-lead | Antes do G4 definitivo (Z4.1: antes do piloto) | A fazer (2026-11-20) |
+| R-28 | Risco | Relatório final curto (brief §8 item 7) não feito: DoD do brief incompleto na entrega | Média | Média | tech-lead / PM | T8-11; ver `checklist-dod.md` | Aberto (2026-11-20) |
+| A-09 | Ação | Reverificar SEC-187, SEC-188 e commits pós-RC; QA: reteste do RC e do tip | — | Alta | security-engineer / qa-engineer | Feito: `parecer-final-rc.md` (adendo em `036e791`) e `g4-final-tip.md` | Fechada (2026-11-20) |
+| A-10 | Ação | Fechar SEC-186 (Z4.1), SEC-189, BUG-031 e o relatório final | — | Média | backend-dev / mobile-dev / tech-lead | Z5.m1 feito. Relatório final antes da entrega; SEC-186 antes do piloto; SEC-189 antes de `LEGAL_REVIEWED=true` | A fazer (2026-11-20) |

@@ -1,61 +1,86 @@
 # Status da missão v1.0 — Webag
 
-> Mantido pelo PM a partir dos documentos e do `git log` (533 commits). Atualizado em 2026-11-20 (HEAD `f2f7e2d`). Detalhe: `gestao/board.md`. Plano: `gestao/plano-execucao.md` §3. Checklist do brief §8: `gestao/checklist-dod.md`.
+> Mantido pelo PM a partir dos documentos e do `git log` (552 commits). Atualizado em 2026-11-20. **Código congelado em `036e791` (DEC-083); tip `3d40959` só tem documentos.** Detalhe: `gestao/board.md`. Plano: `gestao/plano-execucao.md` §3. Checklist do brief §8: `gestao/checklist-dod.md`.
+
+## Estado final do v1.0
+
+| Item | Estado |
+|---|---|
+| Gate atual | **G4 aprovado com ressalvas** (QA em `qa/relatorios/g4-final-tip.md`, sem veto; Security em `seguranca/revisoes/parecer-final-rc.md`, adendo final, sem veto; tech-lead com ressalvas, A-01/A-02 corrigidos). **G5 não decidido**: Security APROVADO COM CONDIÇÕES C1 a C9 (inalteradas) e C10 reescrita (passo operacional, inclui SEC-189). O fechamento formal do G4 é do CEO |
+| DoD feita pelo time | **cerca de 97% (ESTIMATIVA do PM, não medição)**; em itens do checklist: §8 8 de 18 FEITO + 2 FEITO só como artefato; §7 6 de 9 FEITO. Ver `gestao/checklist-dod.md` |
+| Dependências do fundador | 19 itens, **0 feitos** (lista abaixo) |
+| Merge em `main` e tag `v1.0.0` | Não feitos: dependem de autorização do fundador (R-17, D-08). Tudo está só no branch `claude/admiring-lamport-62tq1a` |
+| Mercado Pago real, aparelho real, k6 em staging | Nunca rodaram; só provedor `fake`, navegador e k6 local indicativo |
+| Críticos / Altos / Médios abertos | 0 / 0 / 0 (QA e Security, 2026-11-20) |
+
+### Backlog aberto (nenhum bloqueia G4)
+
+| ID | Sev. | Situação | Prazo |
+|---|---|---|---|
+| BUG-029 | Baixa | Flake de teste: nome de categoria colide entre arquivos paralelos | Backlog |
+| BUG-030 | Baixa | `e2e-real/04` consome o pedido `WB-DM002`; 2ª execução no mesmo banco falha | Backlog |
+| BUG-031 | Baixa | App não mostra "Versão para revisão" nos termos/privacidade (o site mostra; DEC-082) | Antes de publicar os textos |
+| BUG-028 (b) | Baixa | Falta Chromium na versão do workspace (`pnpm web:compra`); a, c, d fechados | Backlog |
+| SEC-189 | Baixa | Seed com razão social "(exemplo)" e CNPJ zerado pode virar versão imutável | Antes de `LEGAL_REVIEWED=true` (C10) |
+| SEC-186 | Baixa | Conta com exclusão pendente não pode ser bloqueada | Antes do piloto (recomendado) |
+| SEC-146, 149, 150, 161, 162, 163 (c/d), 174 | Baixa | Abertos; prazos em `seguranca/revisoes/parecer-final-rc.md` "Abertos" | Conforme parecer |
+| SEC-169 | Baixa | Aceito (DEC-067) | n/a |
+| DT-063, DT-021, DT-031 | Dívida | Expurgo de 5 anos (só depois do jurídico, DEC-081); retenção; rotação do BFF. SEC-129: boot de produção exige proxy/BFF (confirmado) | Pós-jurídico / antes do deploy |
+| BUG-010 | Média | Fechado de forma indicativa; capacidade real só em staging | Staging |
+| Observações do QA | UX/PO | "Pedir troca" ainda aparece após arrependimento aprovado (servidor recusa 422); abertura de documento (SEC-188) conta ao emitir a URL | PO / Security avaliam |
+
+### O que NÃO foi feito e por quê
+
+| Item | Por quê |
+|---|---|
+| Relatório final curto (brief §8 item 7, T8-11) | Não entregue; é ação do time (tech-lead + PM), sem dependência do fundador |
+| Aparelho real, 3G, Expo Go, push FCM/APNs | Só o fundador tem aparelho e contas (R-06) |
+| Mercado Pago real, split e KYC | Falta credencial sandbox (R-16); split só no piloto (R-01) |
+| k6 em staging; contêiner com 1 GB ou mais | Não há servidor (fundador) |
+| Deploy, nginx/TLS, restore de backup em ambiente real | Sem servidor; artefatos existem e nunca foram executados (C7) |
+| Windows e macOS no setup; `pnpm run setup` com Docker nas portas padrão | Não testados (QA usou outro projeto Docker por portas ocupadas) |
+| CI no GitHub Actions rodando de verdade | Só verificado localmente (item 16) |
+| Textos legais aprovados; ECA Digital (J17) | São proposta do PO; falta advogado (DEC-080/081/082) |
+| Revisão funcional, Nielsen e usabilidade refeitos após as correções | Não repetidos; usabilidade é simulada, sem usuários reais |
+| `SEED_HOURS=realistic`, domingo/feriado, build de produção completo, `/legal/*` do app com `LEGAL_REVIEWED=true` | Declarados NÃO TESTADO pelo QA |
+| Fase 2 (WB-300 a 334) e WB-161 | Fora da 1.0 por decisão (DEC-071) |
+| Merge em `main` e tag | Autorização do fundador |
 
 ## Resumo
 - Back-end, painéis web e app cliente rodam de ponta a ponta no provedor simulado (pedido, PIX/cartão, logística, trocas, financeiro, LGPD). **Mercado Pago real nunca foi testado.**
-- **G0 a G3 aprovados. G4: Security APROVADO** (`seguranca/revisoes/parecer-final-rc.md`); **tech-lead COM RESSALVAS** (bloqueantes A-01 e A-02 corrigidos no RC, `arquitetura/reviews/onda-8.md`); **QA aprovou com ressalvas só o commit `0d902ab`** (`qa/relatorios/g4-final.md`). **Reteste do QA no RC `f622bc9` e nos commits pós-RC: PENDENTE** (`g4-rc.md` ainda não existe). Sem ele o CEO não fecha o G4 definitivo (DEC-075).
-- **G5 (lojas):** Security APROVADO COM CONDIÇÕES C1 a C10; todas dependem do fundador ou de reverificação.
-- Nada foi mesclado em `main`; tudo está em `claude/admiring-lamport-62tq1a`.
+- G0 a G3 aprovados. G4 aprovado com ressalvas sobre o commit final `036e791` pelo QA e pelo Security; nenhum veto.
+- G5 depende do fundador (itens 5 a 13 e jurídico) e da reverificação C7 em deploy real.
 
 ## Feito
 
 | Item | Evidência |
 |---|---|
 | Ondas 0 a 7 (fundação até seed, k6 local e docs técnicas) | `gestao/board.md` |
-| Onda 8: contrato integrado, congelamento (DEC-069, DEC-077), reteste do QA em `0d902ab`, revisão funcional, Nielsen, usabilidade das 4 tarefas, 70 capturas, revisão visual | `qa/relatorios/` |
-| Bloqueadores B1 a B5, modo manutenção, regras DEC-072 em código, A-01 a A-13 do tech-lead | DEC-073 a DEC-077 |
-| Correções visuais V8.1 a V8.7 e textos legais integrados como proposta | DEC-078, DEC-082 |
-| SEC-180 a 185 corrigidos e provados por ataque; SEC-187 (`f576ec5`) e SEC-188 (`7ea3613`) corrigidos, falta reverificar | `parecer-final-rc.md` |
+| Onda 8: contrato integrado, congelamento (DEC-069, 077, 083), retestes do QA em `0d902ab`, RC `f622bc9` e tip `036e791`, revisão funcional, Nielsen, usabilidade das 4 tarefas, 70 capturas | `qa/relatorios/` |
+| Bloqueadores B1 a B5, modo manutenção, regras DEC-072, A-01 a A-13 do tech-lead | DEC-073 a DEC-077 |
+| V8.1 a V8.7 e textos legais integrados como proposta | DEC-078, DEC-082 |
+| SEC-180 a 185, SEC-187 e SEC-188 corrigidos e provados; BUG-026 e 027 fechados | `parecer-final-rc.md`, `g4-final-tip.md` |
 | README, guia de deploy, checklist das lojas, inventário de dados das lojas | `deploy/`, `seguranca/inventario-lojas.md` |
 
-## Rodando agora
-- mobile-dev: Z5.m1 (vigência e encarregado na tela legal do app, SEC-187 parte do app), ainda sem commit.
-- QA: reteste do RC `f622bc9` (marcado PENDENTE até o relatório existir).
-
 ## Falta (trabalho do time, sem depender de você)
-1. QA: reteste do RC e dos commits pós-RC (V8.x, DEC-052, textos legais, SEC-187/188) e 1 execução a frio do e2e (BUG-019); atualizar `qa/bugs/` (I-04).
-2. Security: reverificar SEC-187 e SEC-188 e os commits pós-RC (C10).
-3. backend-dev: SEC-186 (Z4.1, recomendado antes do piloto), expurgo de 5 anos (DT-063) depois do jurídico (DEC-081).
-4. tech-lead + PM: relatório final curto (brief §8 item 7, T8-11).
-5. CEO: G4 definitivo depois de 1 e 2.
-
-## Bugs e SEC em aberto (2026-11-20)
-
-| ID | Sev. | Situação |
-|---|---|---|
-| BUG-019 | Média (teste) | Corrigido (`f2f7e2d`); falta o QA rodar a frio |
-| SEC-187 | Média | Corrigido no backend e web; app em andamento; C10 do G5 |
-| SEC-188 | Baixa | Corrigido; falta reverificar |
-| SEC-186, 146, 149, 150, 161, 162, 163 (c/d), 174 | Baixa | Abertos; não bloqueiam; prazos no parecer do Security |
-| SEC-169 | Baixa | Aceito (DEC-067) |
-| BUG-010 | Média | Fechado de forma indicativa; capacidade real só em staging |
-| SEC-129, DT-021, DT-031 | Média/Dívida | Boot de produção exige proxy/BFF; Security confirmou |
-
-Nenhum Crítico ou Alto aberto (Security e QA, 2026-11-20).
+1. tech-lead + PM: relatório final curto (T8-11).
+2. backend-dev: SEC-186 (antes do piloto), SEC-189 (antes de `LEGAL_REVIEWED=true`), expurgo de 5 anos (DT-063) depois do jurídico.
+3. mobile-dev: BUG-031. QA: atualizar `qa/bugs/` se restar divergência (I-04).
+4. CEO: registrar o fechamento do G4 e a decisão de G5 quando houver itens do fundador.
 
 ## Números (fonte e data)
 
 | Item | Valor | Fonte |
 |---|---|---|
-| API e2e | QA: 763/763 em `0d902ab` (1ª execução a frio falhou 1: BUG-019). Backend: 827/827 em 3 execuções no RC `f622bc9` (auto-relato; QA não repetiu) | `qa/relatorios/g4-final.md`, `gestao/fila-backend-dev.md` |
-| API unitários | QA 308 em `0d902ab`; backend 329 no RC | idem |
-| Web Vitest / app Jest | 601 / 398 (QA, `0d902ab`) | `g4-final.md` §3 |
-| Playwright | 46 com API falsa; 8 contra API real (QA, `0d902ab`) | idem |
-| Subida do zero | `pnpm run setup` 28,8 s; `pnpm smoke` 36/36 | `g4-final.md` §2 |
-| Carga | k6 local, indicativo: sem 5xx; memória da API ~950 a 975 MB com imagens | `g4-final.md` §8 |
+| API unitários | 335/335 | `qa/relatorios/g4-final-tip.md` §3 (`036e791`) |
+| API e2e | 873/874 em 1 execução (1 flake de fixture, BUG-029; o arquivo sozinho passa 11/11) | idem |
+| Web Vitest / app Jest / shared | 684 / 439 / 3, todos passam | idem |
+| Playwright | 65 com API falsa (3 ignorados); 9 contra API real (3 ignorados) | idem |
+| Smoke / regressão de negócio | 35 ok, 0 falha / 55 PASS, 1 NÃO TESTADO (FIN-5, split real) | idem |
+| Subida do zero | `SKIP_DOCKER=1 pnpm run setup` 15,5 s, 57 migrações (setup completo com Docker nas portas padrão não exercitado) | idem §2 |
+| Carga | k6 local do RC, indicativo: sem 5xx; memória da API ~950 MB; não repetido no tip | `qa/relatorios/g4-rc.md`, `g4-final-tip.md` R3 |
 
-## Depende do fundador (lista única, por urgência; nenhum item está feito)
+## Depende do fundador (lista única, por urgência; 0 de 19 feitos)
 
 Para o G4 definitivo e a tag
 1. **Autorização do merge em `main` e da tag `v1.0.0`** (e se o histórico entra em squash).
@@ -82,10 +107,9 @@ Decisões e conteúdo
 18. Revisar as hipóteses (HIP-C01 comissão 15%, HIP-L01 frete, HIP-T05 troca, HIP-E08) e se a Webag absorve a tarifa do provedor em cancelamento (G4 §9.1).
 19. Ilustrador/fotos reais e cotação de 3 a 5 motoboys (não bloqueiam o código). Pentest externo antes de escalar (recomendação do Security).
 
-## Caminho até a v1.0 (ESTIMATIVA do PM, não é medição)
+## Como chegamos aos ~97% (ESTIMATIVA do PM, não é medição)
 
-Premissas: pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 12, O4 15, O5 15, O6 12, O7 5, O8 18; soma 100). O0 a O5 100% (65 pontos, concluídas com ressalvas). O6 95% (11,4; Security reverificou, QA reteste do RC pendente). O7 90% (4,5; carga em staging é do fundador). O8 76% (13,7 de 18): dentro dos 18, o trabalho do time vale 17 e a decisão do G5 e da tag vale 1 (do fundador); feitas 8.0, 8.2, 8.3, 8.4, 8.6 e 8.9; 8.1 (a 0d902ab) e 8.8 parciais; 8.5 meio; 8.10 e 8.11 parciais (falta QA no RC e relatório final).
+Pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 12, O4 15, O5 15, O6 12, O7 5, O8 18; soma 100). O0 a O5 100% (65). O6 100% (12: Security reverificou e o QA retestou em `0d902ab`, RC e tip). O7 90% (4,5; carga em staging é do fundador). O8 cerca de 16 de 18: feitos 8.0, 8.1, 8.2, 8.3, 8.4, 8.6, 8.9, 8.10; 8.8 feito salvo SEC-186; 8.5 meio; 8.11 sem o relatório final; 1 ponto da onda é decisão do G5 e da tag (fundador). Soma: 65 + 12 + 4,5 + 16 = 97,5.
 
-- **Trabalho do time: cerca de 95%** (65 + 11,4 + 4,5 + 13,7 = 94,6). Faltam: reteste do QA no RC, reverificação do Security (SEC-187/188), relatório final, SEC-186 e o fechamento do G4 pelo CEO.
-- **Dependências do fundador: 0 de 19 itens feitos** (não dá para converter em % honesto: itens têm pesos e prazos de terceiros diferentes). Para a **tag**, trava o item 1 e, para o G4 sem ressalva, os itens 2 a 4. Para **publicar nas lojas**, travam os itens 5 a 13 e a aprovação do jurídico.
+- **Dependências do fundador: 0 de 19 itens feitos** (sem % honesto: pesos e prazos de terceiros diferentes). Para a **tag** trava o item 1; para o G4 sem ressalva, os itens 2 a 4; para **publicar nas lojas**, os itens 5 a 13 e o jurídico.
 - Sem prazos em calendário: o gargalo é o seu tempo e terceiros (revisão das lojas pode levar dias e recusar [HIPÓTESE, sem fonte verificada]).

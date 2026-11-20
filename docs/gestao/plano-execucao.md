@@ -99,7 +99,7 @@ Sub-onda 5C (financeiro e admin): WB-076, 077, 078, 108, 109, 110, 176, 112, 113
 | Critério de saída | Prazos automáticos testados com relógio simulado; regra CDC arrependimento (WB-178) verificada pelo QA; repasse e conciliação sem inconsistência; SEC aprova 5B e 5C |
 | Revisão | TL, SEC, QA por sub-onda |
 
-### Onda 6 — Conformidade e acabamento (backlog onda 5) (CONCLUÍDA: Security reverificou; QA retestou em `0d902ab`)
+### Onda 6 — Conformidade e acabamento (backlog onda 5) (CONCLUÍDA: Security reverificou; QA retestou em `0d902ab`, no RC e em `036e791`)
 
 **Mudou:** (a) Security reprovou o G5 em DEC-049/050 (SEC-152 a 167); correções commitadas, sem reverificação; (b) direção visual v3 aprovada (DEC-051/052) e levada ao app (Home, Loja, Produto, Sacola feitos); (c) promessa de entrega em até 2 h por distância (DEC-053: ETA em faixa, teto 120 min, alerta de atraso, lotes); (d) cartão pela página segura `/pagar/cartao`; (e) tempo real por ticket de uso único (DEC-045).
 Sub-onda 6A (LGPD e lojas de apps, bloqueiam G5): WB-212, 213, 214, 215, 217, 196, 038, 124. BE + MB + SEC.
@@ -114,7 +114,7 @@ Paralelo: BE (seed completo, scripts) + QA (carga) + TL (docs de arquitetura).
 | Critério de saída | `docker compose up` com seed abre todos os fluxos (incluindo trocas, corridas e pedidos em atraso para o alerta de ETA); relatório de carga em `docs/qa/`; docs (ADR-011/012, modelo de dados, DS v3) sem divergência do código |
 
 ### Onda 8 — Fechamento (EM ANDAMENTO; tarefas e donos em `board.md` T8-00 a T8-13)
-Estado em 2026-11-20 (HEAD `f2f7e2d`): RC congelado em `f622bc9` (DEC-077). Security: G4 APROVADO, G5 com condições C1 a C10. Tech-lead: com ressalvas, A-01/A-02 corrigidos. QA: aprovado com ressalvas só em `0d902ab` (`g4-final.md`); **reteste do RC pendente**. Feitos: 8.0, 8.2, 8.3, 8.4, 8.6, 8.9; parciais: 8.1, 8.5, 8.8, 8.10, 8.11 (falta o relatório final); do fundador: 8.7, 8.12, 8.13. Checklist do brief §8: `checklist-dod.md`. Próximas ações: QA no RC e a frio (BUG-019); Security em SEC-187/188; Z5.m1, Z4.1; relatório final; CEO fecha o G4.
+Estado em 2026-11-20: código final congelado em `036e791` (DEC-083). Security: G4 APROVADO (adendo final), G5 com condições C1 a C9 e C10 reescrita. Tech-lead: com ressalvas, A-01/A-02 corrigidos. QA: G4 APROVADO COM RESSALVAS em `036e791` (`g4-final-tip.md`). Feitos: 8.0, 8.1, 8.2, 8.3, 8.4, 8.6, 8.8 (salvo SEC-186), 8.9, 8.10; parciais: 8.5, 8.11 (falta o relatório final curto); do fundador: 8.7, 8.12, 8.13. Checklist do brief §8: `checklist-dod.md`; visão final: `../status.md`. Próximas ações: relatório final; SEC-186 e SEC-189; BUG-031; CEO registra o G4; fundador decide merge, tag e itens do G5.
 | # | Etapa | Agentes | Dependência | Saída |
 |---|---|---|---|---|
 | 8.0 | Integrar contrato e **congelar o HEAD** de teste | MB | contrato do BE pronto | commit de congelamento no board |
@@ -127,9 +127,9 @@ Estado em 2026-11-20 (HEAD `f2f7e2d`): RC congelado em `f622bc9` (DEC-077). Secu
 | 8.7 | Teste de carga k6 (script em `qa/carga/`): **execução em staging é do fundador**; QA analisa | Fundador, QA | staging | relatório de carga; sem ele, carga fica ressalva |
 | 8.8 | Correção de Crítico/Alto/Média viável e reteste | BE + MB + QA | 8.1 a 8.6 | bugs fechados ou aceitos pelo CEO |
 | 8.9 | Parecer final do Security (SEC-180, 176, 178, 179, 129; dependências; segredos; LGPD) | SEC | 8.8 | `docs/seguranca/` |
-| 8.10 | **G4 final**: pareceres de QA e Security | QA, SEC | 8.8, 8.9 | pareceres escritos |
+| 8.10 | **G4 final**: pareceres de QA e Security | QA, SEC | 8.8, 8.9 | `qa/relatorios/g4-final-tip.md` e `seguranca/revisoes/parecer-final-rc.md` (adendo): aprovado com ressalvas, sem veto |
 | 8.11 | README, guia de deploy, checklist das lojas, relatório final curto | TL + PM | 8.10 | `README.md`, `docs/deploy/` |
-| 8.12 | **Decisão do G5** (checklist, textos jurídicos, contas, pareceres) | CEO | 8.10 + itens 4 a 10 do `status.md` | registro em `decisoes.md`; sem autorização escrita não publica |
+| 8.12 | **Decisão do G5** (checklist, textos jurídicos, contas, pareceres) | CEO | 8.10 + itens 5 a 13 do `status.md` | registro em `decisoes.md`; sem autorização escrita não publica |
 | 8.13 | Merge para `main` e tag `v1.0.0` | CEO | **autorização do fundador (R-17)** | tag |
 
 Regra: 8.1 não começa com o HEAD móvel. Máximo 3 agentes em paralelo. Itens do fundador (aparelho real, MP sandbox, k6 em staging) agrupados numa sessão única (R-25); sem eles o G4 sai "com ressalvas" explícitas.
