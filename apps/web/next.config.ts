@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // `NEXT_DIST_DIR`: build separado quando outro `next start` usa o `.next` padrão (ex.: E2E ao lado do QA).
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: true,
   poweredByHeader: false,
   // Pacotes do workspace publicados como TypeScript (sem build próprio).

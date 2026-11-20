@@ -4,10 +4,10 @@ import pg from 'pg';
 import * as schema from '../src/platform/database/schema.js';
 import { S3ObjectStorage } from '../src/platform/storage/s3.storage.js';
 import { seedOnda1 } from './onda1.js';
-import { seedOnda2 } from './onda2.js';
+import { applySeedHours, parseSeedHours, seedOnda2, SEED_STORES } from './onda2.js';
 import { seedLogistics } from './logistics.js';
 import { seedDemoOrders } from './orders-demo.js';
-import { seedOnda3 } from './onda3.js';
+import { seedOnda3, SEED_STORES_ONDA3 } from './onda3.js';
 
 /**
  * Seed de desenvolvimento: `pnpm --filter @webag/api db:seed`. Idempotente. Cada onda soma um arquivo aqui.
@@ -42,13 +42,20 @@ async function main(): Promise<void> {
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       });
       await seedLogistics(db, (message) => console.log(`[seed] ${message}`)); // hipótese de tabela de frete: só dev/staging (DEC-036)
-      // Demo fora do horário (fila do backend, CEO): quem clona e roda à noite via "entrega indisponível" (logística 09:00-20:00, BUG-016). SÓ no seed de
-      // dev/staging a logística nasce contínua (00:00-23:59, todos os dias); parâmetro já editado no admin não é tocado e a produção mantém o horário real.
-      await db.update(schema.parameters).set({ value: '00:00-23:59' }).where(and(eq(schema.parameters.key, 'logistica_horario'), eq(schema.parameters.value, '09:00-20:00'), isNull(schema.parameters.updatedBy)));
-      await db.update(schema.parameters).set({ value: 'seg_dom' }).where(and(eq(schema.parameters.key, 'logistica_dias'), eq(schema.parameters.value, 'seg_sab'), isNull(schema.parameters.updatedBy)));
-      await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
+      // Horário da demonstração (BUG-026, DEC-069): `always_open` (padrão) deixa lojas E logística abertas 24 h todos os dias, para quem clona e
+      // roda à noite ou no fim de semana poder comprar; `realistic` mantém o horário real (lojas e logística 09:00-20:00, seg a sáb). SÓ aqui, no
+      // seed de dev/staging: a produção nunca chega neste ramo. Parâmetro já editado no admin (updated_by preenchido) não é tocado.
+      const hours = parseSeedHours(process.env.SEED_HOURS, 'always_open');
+      const [logisticsHours, logisticsDays] = hours === 'always_open' ? (['00:00-23:59', 'seg_dom'] as const) : (['09:00-20:00', 'seg_sab'] as const);
+      const [fromHours, fromDays] = hours === 'always_open' ? (['09:00-20:00', 'seg_sab'] as const) : (['00:00-23:59', 'seg_dom'] as const);
+      await db.update(schema.parameters).set({ value: logisticsHours }).where(and(eq(schema.parameters.key, 'logistica_horario'), eq(schema.parameters.value, fromHours), isNull(schema.parameters.updatedBy)));
+      await db.update(schema.parameters).set({ value: logisticsDays }).where(and(eq(schema.parameters.key, 'logistica_dias'), eq(schema.parameters.value, fromDays), isNull(schema.parameters.updatedBy)));
+      console.log(`[seed] SEED_HOURS=${hours} (${hours === 'always_open' ? 'lojas e logística abertas 24 h todos os dias' : 'horário realista das lojas e da logística'})`);
+      await seedOnda2(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, hours, log: (message) => console.log(`[seed] ${message}`) });
       // Onda 3: mais lojas, clientes, avaliações, cupons, favoritos e banners.
-      await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, log: (message) => console.log(`[seed] ${message}`) });
+      await seedOnda3(db, { merchantPassword: process.env.SEED_MERCHANT_PASSWORD, storage, production, hours, log: (message) => console.log(`[seed] ${message}`) });
+      // Lojas que já existiam (seed rodado antes ou com o outro modo): troca o horário só das que ainda estão no horário padrão do outro modo.
+      await applySeedHours(db, [...SEED_STORES, ...SEED_STORES_ONDA3], hours, (message) => console.log(`[seed] ${message}`));
       // Pedidos de demonstração em vários estados (painel da loja, financeiro, logística e trocas). Só dev/staging.
       await seedDemoOrders(db, (message) => console.log(`[seed] ${message}`));
     }

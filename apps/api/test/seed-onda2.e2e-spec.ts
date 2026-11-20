@@ -2,9 +2,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { isStoreVisible } from '../src/modules/stores/index.js';
 import { OBJECT_STORAGE } from '../src/platform/storage/object-storage.js';
 import { MemoryObjectStorage } from '../src/platform/storage/memory.storage.js';
-import { mediaAssets, productImages, products, productVariants, stores, users, paymentAccounts, storeSettings } from '../src/platform/database/schema.js';
+import { storeHours, mediaAssets, productImages, products, productVariants, stores, users, paymentAccounts, storeSettings } from '../src/platform/database/schema.js';
 import { seedOnda1 } from '../seed/onda1.js';
-import { fakeCpf, SEED_STORES, seedOnda2 } from '../seed/onda2.js';
+import { applySeedHours, fakeCpf, parseSeedHours, SEED_STORES, seedOnda2 } from '../seed/onda2.js';
 import { isValidCpf } from '../src/modules/stores/domain/document.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 
@@ -72,6 +72,35 @@ describe('Seed da Onda 2: lojas fictícias em Francisco Morato e Franco da Rocha
     expect(new Set(cpfs).size).toBe(cpfs.length);
     expect(fakeCpf('x')).toBe(fakeCpf('x'));
     for (const cpf of cpfs) expect(isValidCpf(cpf)).toBe(true);
+  });
+
+  it('SEED_HOURS (BUG-026): realistic é o padrão do seed; always_open abre 24 h todos os dias; trocar de modo não toca horário editado', async () => {
+    expect(parseSeedHours(undefined, 'always_open')).toBe('always_open');
+    expect(parseSeedHours('', 'always_open')).toBe('always_open');
+    expect(parseSeedHours('realistic', 'always_open')).toBe('realistic');
+    expect(() => parseSeedHours('sempre', 'always_open')).toThrow(/SEED_HOURS inválido/);
+
+    const [boaCompra] = await ctx.db.select().from(stores).where(eq(stores.name, 'Mercadinho Boa Compra'));
+    const hoursOf = async (storeId: string): Promise<string[]> =>
+      (await ctx.db.select().from(storeHours).where(eq(storeHours.storeId, storeId))).map((r) => `${r.weekday}:${r.startMin}-${r.endMin}`).sort();
+    // O seed dos testes não passa `hours`: horário realista (7 h às 20 h; domingo 8 h às 13 h).
+    expect(await hoursOf(boaCompra!.id)).toContain('1:420-1200');
+    expect(await hoursOf(boaCompra!.id)).toContain('0:480-780');
+
+    await applySeedHours(ctx.db, SEED_STORES, 'always_open');
+    const everyday = [0, 1, 2, 3, 4, 5, 6].map((d) => `${d}:0-1439`).sort();
+    for (const seed of SEED_STORES) {
+      const [store] = await ctx.db.select().from(stores).where(eq(stores.name, seed.name));
+      expect(await hoursOf(store!.id)).toEqual(everyday);
+    }
+    // Horário editado pelo lojista não é sobrescrito ao voltar para o realista.
+    const [edited] = await ctx.db.select().from(stores).where(eq(stores.name, SEED_STORES[1]!.name));
+    await ctx.db.delete(storeHours).where(eq(storeHours.storeId, edited!.id));
+    await ctx.db.insert(storeHours).values({ storeId: edited!.id, weekday: 3, startMin: 600, endMin: 660 });
+    await applySeedHours(ctx.db, SEED_STORES, 'realistic');
+    expect(await hoursOf(edited!.id)).toEqual(['3:600-660']);
+    expect(await hoursOf(boaCompra!.id)).toContain('1:420-1200');
+    expect(await hoursOf(boaCompra!.id)).toHaveLength(7);
   });
 
   it('em produção o seed de demonstração se recusa a rodar (DEC-030d)', async () => {

@@ -50,8 +50,27 @@ export interface SeedOnda2Options {
   /** Armazenamento das fotos. Sem ele (ou se estiver fora do ar), as lojas nascem sem foto e o seed avisa. */
   storage?: ObjectStorage | null;
   production?: boolean;
+  /**
+   * Horário das lojas (BUG-026). `realistic` (padrão, e o que os testes usam): o horário de cada loja em `SEED_STORES`.
+   * `always_open`: demonstração, aberta 24 h todos os dias (CLI com `SEED_HOURS`, padrão do `pnpm run setup`).
+   */
+  hours?: SeedHours;
   log?: (message: string) => void;
 }
+
+export type SeedHours = 'realistic' | 'always_open';
+
+/** Dia inteiro: 00:00 até 23:59 (o máximo que o horário de loja aceita, `MAX_END_MIN`). */
+const ALWAYS_OPEN_BLOCKS: SeedStore['hours'] = [{ weekdays: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59' }];
+
+export function parseSeedHours(value: string | undefined, fallback: SeedHours): SeedHours {
+  if (value === undefined || value.trim() === '') return fallback;
+  if (value === 'realistic' || value === 'always_open') return value;
+  throw new Error(`SEED_HOURS inválido: "${value}" (use realistic ou always_open)`);
+}
+
+const blocksToRows = (blocks: SeedStore['hours']): string[] =>
+  blocks.flatMap((b) => b.weekdays.map((weekday) => `${weekday}:${toMin(b.start)}-${toMin(b.end)}`)).sort();
 
 export const DEV_SEED_MERCHANT_PASSWORD = 'webag-seed-lojista-2026';
 
@@ -238,6 +257,28 @@ export async function seedOnda2(db: Db, options: SeedOnda2Options = {}): Promise
   log(`seed da Onda 2 concluído. Login dos lojistas de teste: lojista.<loja>@seed.webag.local e funcionario.<loja>@seed.webag.local (senha ${options.production ? 'de SEED_MERCHANT_PASSWORD' : DEV_SEED_MERCHANT_PASSWORD})`);
 }
 
+/**
+ * Troca o horário das lojas de seed JÁ criadas entre `realistic` e `always_open` (rodar o seed de novo com outro `SEED_HOURS`).
+ * Só mexe na loja cujo horário ainda é exatamente o do outro modo: horário editado no painel da loja não é tocado.
+ */
+export async function applySeedHours(db: Db, seeds: SeedStore[], mode: SeedHours, log: (message: string) => void = () => undefined): Promise<void> {
+  let changed = 0;
+  for (const seed of seeds) {
+    const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.email, `lojista.${seed.slug}@seed.webag.local`));
+    if (!owner) continue;
+    const [store] = await db.select({ id: stores.id }).from(stores).where(eq(stores.ownerUserId, owner.id));
+    if (!store) continue;
+    const from = mode === 'always_open' ? seed.hours : ALWAYS_OPEN_BLOCKS;
+    const to = mode === 'always_open' ? ALWAYS_OPEN_BLOCKS : seed.hours;
+    const current = (await db.select().from(storeHours).where(eq(storeHours.storeId, store.id))).map((r) => `${r.weekday}:${r.startMin}-${r.endMin}`).sort();
+    if (current.join('|') !== blocksToRows(from).join('|')) continue;
+    await db.delete(storeHours).where(eq(storeHours.storeId, store.id));
+    for (const block of to) await db.insert(storeHours).values(block.weekdays.map((weekday) => ({ storeId: store.id, weekday, startMin: toMin(block.start), endMin: toMin(block.end) })));
+    changed++;
+  }
+  if (changed > 0) log(`horário das lojas de demonstração: ${changed} loja(s) agora em ${mode === 'always_open' ? '24 h todos os dias' : 'horário realista'}`);
+}
+
 /** Cria as lojas da lista que ainda não existem (idempotente pelo e-mail do dono). Usado pelas Ondas 2 e 3. */
 export async function seedStores(db: Db, seeds: SeedStore[], options: SeedOnda2Options = {}): Promise<void> {
   const log = options.log ?? (() => undefined);
@@ -315,7 +356,7 @@ export async function seedStores(db: Db, seeds: SeedStore[], options: SeedOnda2O
       .insert(storeSettings)
       .values({ storeId: store.id, acceptsDelivery: true, radiusM: seed.radiusM, feeMode: 'by_distance', minOrderCents: seed.minOrderCents, freeAboveCents: seed.freeAboveCents, pickupEnabled: seed.pickup, voluntaryExchangeDays: seed.voluntaryExchangeDays ?? 0, pausedIndefinitely: seed.paused ?? false, etaMinMinutes: 30, etaMaxMinutes: 50 });
     await db.insert(storeDeliveryTiers).values(seed.tiers.map((t, position) => ({ storeId: store.id, position, ...t })));
-    for (const block of seed.hours) {
+    for (const block of options.hours === 'always_open' ? ALWAYS_OPEN_BLOCKS : seed.hours) {
       await db.insert(storeHours).values(block.weekdays.map((weekday) => ({ storeId: store.id, weekday, startMin: toMin(block.start), endMin: toMin(block.end) })));
     }
     await db.insert(paymentAccounts).values({ storeId: store.id, provider: 'fake', providerAccountId: `seed-${seed.slug}`, status: 'active', holderDocumentMasked: '***.***.***-**', holderMatchesStore: true, tokensEnc: 'seed-sem-token', connectedBy: owner.id });

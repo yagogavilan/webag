@@ -105,7 +105,7 @@ test.describe('Pedidos, logística e trocas', () => {
     await page.getByTestId('admin.logistica.assigned-close').click();
 
     // Segundo operador (outra aba) tentando atribuir a mesma corrida: o primeiro venceu.
-    const response = await page.request.post(`/api/proxy/admin/admin/logistics/deliveries/${delivery.id}/assign`, { data: { courierId: '00000000-0000-4000-8000-000000000000' }, headers: { 'x-webag-client': 'web', origin: 'http://localhost:3101' } });
+    const response = await page.request.post(`/api/proxy/admin/admin/logistics/deliveries/${delivery.id}/assign`, { data: { courierId: '00000000-0000-4000-8000-000000000000' }, headers: { 'x-webag-client': 'web', origin: `http://localhost:${process.env.E2E_WEB_PORT ?? 3101}` } });
     expect([404, 409, 403]).toContain(response.status());
 
     await page.getByTestId('admin.logistica.tab-andamento').click();

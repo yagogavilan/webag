@@ -29,7 +29,7 @@ export async function login(page: Page, email: string, password: string = PASSWO
 }
 
 /** Base da API falsa (para semear lojas em análise sem depender de outro teste). */
-export const FAKE_API = `http://localhost:${process.env.PORT ?? 3999}`;
+export const FAKE_API = `http://localhost:${process.env.E2E_API_PORT ?? process.env.PORT ?? 3999}`;
 
 export async function seedStoreInReview(name: string): Promise<{ id: string; name: string; documents: string[] }> {
   const response = await fetch(`${FAKE_API}/__test/seed-store`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });

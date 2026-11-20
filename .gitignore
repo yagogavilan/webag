@@ -48,3 +48,4 @@ docs/qa/carga/imagens-s9/
 
 # relatórios de teste (Playwright)
 playwright-report/
+.next-*/

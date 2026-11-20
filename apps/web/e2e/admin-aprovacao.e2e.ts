@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, seedStoreInReview } from './helpers';
+import { FAKE_API, login, seedStoreInReview } from './helpers';
 
 /** R3 do roteiro de usabilidade: aprovar loja (WB-103, 104, 218). */
 test.describe('Aprovar loja (admin)', () => {
@@ -33,6 +33,44 @@ test.describe('Aprovar loja (admin)', () => {
     // A decisão e o acesso ao documento ficam na auditoria
     await page.getByTestId('nav-auditoria').click();
     await expect(page.getByRole('cell', { name: /Loja aprovada|store\.approved/ }).first()).toBeVisible();
+  });
+
+  test('SEC-188: o servidor não tem a abertura dos documentos (409 DOCUMENTS_NOT_REVIEWED): mostra qual falta, foca o documento e aprova depois de abrir', async ({ page }) => {
+    const store = await seedStoreInReview(`Loja Conferida ${Date.now() % 10_000}`);
+    await login(page, 'operacao@webag.local');
+    await page.goto(`/admin/lojas/${store.id}`);
+    await expect(page.getByTestId('admin.caso.doc-image')).toBeVisible();
+    // Abre todos os documentos (cada abertura é gravada no servidor) e confere os 6 itens
+    for (const id of store.documents) {
+      await page.getByTestId(`admin.caso.doc-thumb-${id}`).click();
+      await expect(page.getByTestId('admin.caso.doc-image')).toBeVisible();
+    }
+    await expect(page.getByTestId('admin.caso.check-all')).toBeEnabled();
+    await page.getByTestId('admin.caso.check-all').click();
+    await expect(page.getByTestId('admin.caso.approve')).toBeEnabled();
+
+    // O servidor perde o registro das aberturas: a aprovação volta 409 e a tela explica sem aprovar
+    await fetch(`${FAKE_API}/__test/forget-document-views`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storeId: store.id }) });
+    await page.getByTestId('admin.caso.approve').click();
+    await page.getByTestId('admin.caso.confirm-approve').click();
+    const banner = page.getByTestId('admin.caso.not-reviewed');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('A loja não foi aprovada');
+    await expect(banner).toContainText('Documento');
+    await expect(page.getByTestId('admin.caso.approve-dialog')).toHaveCount(0);
+    await expect(page.getByTestId('admin.caso.doc-viewer')).toBeFocused();
+    await page.screenshot({ path: 'test-results/sec188-documentos-nao-abertos.png', fullPage: false });
+
+    // Reabrir o documento selecionado regrava a abertura; os outros precisam ser abertos de novo (o servidor esqueceu todos)
+    for (const id of store.documents) {
+      await page.getByTestId(`admin.caso.doc-thumb-${id}`).click();
+      await expect(page.getByTestId('admin.caso.doc-image')).toBeVisible();
+    }
+    await expect(page.getByTestId('admin.caso.approve')).toBeEnabled();
+    await page.getByTestId('admin.caso.approve').click();
+    await expect(page.getByTestId('admin.caso.not-reviewed')).toHaveCount(0);
+    await page.getByTestId('admin.caso.confirm-approve').click();
+    await expect(page.getByText(`${store.name} aprovada.`)).toBeVisible();
   });
 
   test('pedir correção exige o texto e leva o motivo por item; recusar exige motivo', async ({ page }) => {

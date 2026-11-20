@@ -5,8 +5,9 @@ import { defineConfig, devices } from '@playwright/test';
  * Local sem browsers do Playwright: `PW_CHANNEL=chrome pnpm test:e2e` usa o Chrome instalado.
  * O app roda em produção (`next build` + `next start`) para exercitar a CSP com nonce de verdade.
  */
-const WEB_PORT = 3101;
-const API_PORT = 3999;
+/** Portas configuráveis (`E2E_WEB_PORT`, `E2E_API_PORT`) para rodar ao lado de outro servidor local; `NEXT_DIST_DIR` separa o build. */
+const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 3101);
+const API_PORT = Number(process.env.E2E_API_PORT ?? 3999);
 
 export default defineConfig({
   testDir: './e2e',

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const API = 'http://localhost:3999';
+const API = `http://localhost:${process.env.E2E_API_PORT ?? 3999}`;
 
 test.describe('Site público (sem login)', () => {
   test('a página inicial renderiza sem login, com logo, aviso das lojas e links das páginas exigidas pelas lojas', async ({ page }) => {
@@ -58,7 +58,7 @@ test.describe('Site público (sem login)', () => {
     const doc = page.getByTestId('public.privacidade.document');
     await expect(doc).toContainText('dados@webag.local'); // escrito no texto da versão (não vem do ambiente nem do /v1/help)
     await expect(doc).toContainText('a definir'); // endereço da sede, prestadores etc. sem valor
-    await expect(doc.getByRole('link', { name: 'a página de exclusão de conta' })).toHaveAttribute('href', /^https?:\/\/localhost:3101\/excluir-conta$/);
+    await expect(doc.getByRole('link', { name: 'a página de exclusão de conta' })).toHaveAttribute('href', new RegExp(`^https?://localhost:${process.env.E2E_WEB_PORT ?? 3101}/excluir-conta$`));
   });
 
   test('política de trocas pública em /termos/trocas, com link no rodapé e na ajuda', async ({ page }) => {

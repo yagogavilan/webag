@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const API = 'http://localhost:3999';
+const API = `http://localhost:${process.env.E2E_API_PORT ?? 3999}`;
 const intent = async (request: import('@playwright/test').APIRequestContext, name: string) => (await (await request.get(`${API}/__test/card-intent/${name}`)).json()).token as string;
 
 test.describe('Página pública de cartão (B.2, SEC-106)', () => {

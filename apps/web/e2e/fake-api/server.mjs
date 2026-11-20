@@ -768,6 +768,8 @@ route('POST', '/v1/admin/stores/:id/documents/:doc/access', { perm: 'stores:docu
   const doc = s?.documents.find((d) => d.id === ctx.params[1]);
   if (!doc) return problem(res, 404, 'NOT_FOUND', 'Documento não encontrado.');
   record(req, ctx, { action: 'store.document_view', targetType: 'store_document', targetId: doc.id, reason: ctx.body.reason });
+  // SEC-188: como a API real, a abertura fica registrada por admin e por documento (aprovar exige a de cada documento vigente).
+  (s.viewedBy ??= new Set()).add(`${ctx.user.id}:${doc.id}`);
   json(res, 200, { url: `http://localhost:${PORT}/__storage/doc-${doc.id}.png?sig=1`, expiresInSeconds: 300, contentType: 'image/png' });
 });
 function decide(req, res, ctx, from, to, apply) {
@@ -785,7 +787,25 @@ function decide(req, res, ctx, from, to, apply) {
   record(req, ctx, { action: `store.${to}`, targetType: 'store', targetId: s.id, reason: s.decisionReason });
   json(res, 200, apiStore(s, 'admin'));
 }
-route('POST', '/v1/admin/stores/:id/approve', { perm: 'stores:decide' }, (req, res, ctx) => decide(req, res, ctx, 'in_review', 'approved', () => {}));
+route('POST', '/v1/admin/stores/:id/approve', { perm: 'stores:decide' }, (req, res, ctx) => {
+  const s = stores.get(ctx.params[0]);
+  if (s?.status === 'in_review') {
+    // SEC-188: 409 DOCUMENTS_NOT_REVIEWED com `errors[].field = documents.<kind>` do que quem aprova ainda não abriu.
+    const missing = s.documents.filter((d) => !d.superseded && !s.viewedBy?.has(`${ctx.user.id}:${d.id}`));
+    if (missing.length > 0) {
+      record(req, ctx, { action: 'store.approve_blocked', targetType: 'store', targetId: s.id, reason: null });
+      return void problem(res, 409, 'DOCUMENTS_NOT_REVIEWED', 'Documentos não conferidos', 'Abra cada documento antes de aprovar a loja.', { errors: missing.map((d) => ({ field: `documents.${d.kind}`, message: 'Documento não aberto por você.' })) });
+    }
+  }
+  decide(req, res, ctx, 'in_review', 'approved', () => {});
+});
+// teste: faz o servidor "esquecer" as aberturas da loja (simula a sessão que o servidor não tem) para exercitar o 409 acima
+route('POST', '/__test/forget-document-views', { public: true }, (req, res, ctx) => {
+  const s = stores.get(ctx.body.storeId);
+  if (!s) return void problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  s.viewedBy = new Set();
+  json(res, 200, { ok: true });
+});
 route('POST', '/v1/admin/stores/:id/request-correction', { perm: 'stores:decide' }, (req, res, ctx) =>
   decide(req, res, ctx, 'in_review', 'correction_requested', (s) => {
     for (const item of ctx.body.items ?? []) s.reviewItems.push({ item: item.item, reason: item.reason, resolved: false });
