@@ -51,9 +51,10 @@ export class AdminOrdersController {
 
   /** B5 / WB-108 C1: todos os pedidos, com filtros (busca por número, e-mail do cliente ou ID; estado, tipo, pagamento, loja, cidade, período). Páginas de 50. */
   @AdminOnly('orders:read')
+  @RateLimit({ name: 'admin-order-search', limit: 120, windowSeconds: 60 })
   @Get()
-  list(@Query(new ZodPipe(listQuerySchema)) query: z.infer<typeof listQuerySchema>) {
-    return this.read.list(query);
+  list(@CurrentPrincipal() principal: Principal, @Query(new ZodPipe(listQuerySchema)) query: z.infer<typeof listQuerySchema>, @Ctx() ctx: RequestContext) {
+    return this.read.list(principal, query, ctx);
   }
 
   /** B5 / WB-108 C2: itens, valores (RN-10), pagamento, estornos, linha do tempo, corrida, trocas e avaliação; dado pessoal mascarado. */

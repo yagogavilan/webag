@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { eq } from 'drizzle-orm';
+import { auditLog } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, ensureCity, ensureLegalDocs, registerUser } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, cartView, customerAt, placeOrder, shopWith } from './helpers/orders.js';
@@ -73,6 +75,29 @@ describe('B5: pedidos no admin', () => {
     await list(admins.support, 'storeId=nao-uuid').expect(400);
     await list(admins.support, 'cursor=lixo').expect(400);
     await ctx.http.get('/v1/admin/orders').expect(401);
+  });
+
+  it('A-07: busca por e-mail, ID ou número é auditada (tipo, HMAC, resultados; nunca o termo) e limitada a 60/min por admin; filtro sem termo não audita', async () => {
+    const s = await scenario();
+    const spy = await createAdmin(ctx, 'support');
+    const other = await createAdmin(ctx, 'support');
+    const rows = async () => (await ctx.db.select().from(auditLog).where(eq(auditLog.action, 'order.search'))).filter((r) => r.actorId === spy.userId);
+    await list(spy, `q=${encodeURIComponent(s.buyer.user.email)}`).expect(200);
+    await list(spy, `q=${encodeURIComponent(s.delivery.number)}`).expect(200);
+    await list(spy, `q=${s.delivery.id}`).expect(200);
+    await list(spy, `q=${encodeURIComponent('naoexiste@exemplo.com')}`).expect(200);
+    const logged = await rows();
+    expect(logged).toHaveLength(4);
+    expect(logged.map((r) => (r.after as { termType: string }).termType).sort()).toEqual(['email', 'email', 'id', 'number']);
+    expect((logged.find((r) => (r.after as { results: number }).results === 3)!.after as { termType: string }).termType).toBe('email');
+    expect(logged.every((r) => r.targetType === 'order_search' && /^[0-9a-f]{64}$/.test((r.after as { termDigest: string }).termDigest))).toBe(true);
+    const blob = JSON.stringify(logged);
+    for (const raw of [s.buyer.user.email, s.delivery.number, 'naoexiste@exemplo.com']) expect(blob).not.toContain(raw);
+    await list(spy, `storeId=${s.shop.store.id}`).expect(200); // sem termo: não audita
+    expect(await rows()).toHaveLength(4);
+    for (let i = 0; i < 56; i += 1) await list(spy, `q=${encodeURIComponent(s.delivery.number)}`).expect(200);
+    expect((await list(spy, `q=${encodeURIComponent(s.delivery.number)}`)).status).toBe(429); // 61ª, de outro IP (o cliente de teste sorteia o IP)
+    await list(other, `q=${encodeURIComponent(s.delivery.number)}`).expect(200);
   });
 
   it('paginação por cursor: páginas de 1 percorrem os pedidos da loja, mais novos primeiro, sem repetir', async () => {

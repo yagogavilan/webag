@@ -1,11 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
+import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import type { Env } from '../../platform/config/env.js';
+import { hmacHex } from '../../platform/crypto/crypto.js';
 import { adminHasPermission } from '../../platform/auth/permissions.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { escapeLike, maskEmail, maskName, maskPhone } from '../../platform/http/pii-mask.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
-import { ParametersService } from '../admin/index.js';
+import { RateLimitService } from '../../platform/ratelimit/rate-limit.service.js';
+import { AuditService, ParametersService } from '../admin/index.js';
 import { reviews } from '../discovery/db/schema.js';
 import { exchangeRequests } from '../exchanges/db/schema.js';
 import { users, type AdminProfile } from '../identity/db/schema.js';
@@ -16,6 +21,8 @@ import { canTransition, type OrderStatus } from './domain/state.js';
 import { orderEvents, orderItems, orders } from './db/schema.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** A-07 / SEC-181: buscas por minuto de cada admin na lista de pedidos (além do limite por IP do controller). */
+export const ORDER_SEARCH_PER_ADMIN_PER_MIN = 60;
 const money = (amount: number) => ({ amount, currency: 'BRL' as const });
 
 export interface AdminOrderQuery {
@@ -43,12 +50,17 @@ export class AdminOrdersReadService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly params: ParametersService,
+    private readonly audit: AuditService,
+    private readonly limiter: RateLimitService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
-  async list(query: AdminOrderQuery): Promise<Page<ReturnType<typeof presentRow>>> {
+  async list(admin: Principal, query: AdminOrderQuery, ctx: RequestContext): Promise<Page<ReturnType<typeof presentRow>>> {
     const limit = parseLimit(query.limit ?? 50); // WB-108 C1: páginas de 50
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const q = query.q?.trim() ?? '';
+    // A-07: a busca por e-mail exato (confirma que o e-mail tem pedido), por ID e por trecho do número é limitada por admin e auditada (tipo, HMAC do termo, resultados; nunca o termo).
+    if (q !== '') await this.limiter.enforce(`rl:admin-order-search:admin:${admin.userId}`, ORDER_SEARCH_PER_ADMIN_PER_MIN, 60);
     const search: SQL | undefined =
       q === ''
         ? undefined
@@ -81,6 +93,15 @@ export class AdminOrdersReadService {
       .orderBy(...timestampOrderDesc(orders.createdAt, orders.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
+    if (q !== '') {
+      // Falha fechada: sem auditoria, sem resposta. O termo vai só como HMAC (o e-mail e o celular se reverteriam por força bruta num sha256 puro).
+      const kind = UUID_RE.test(q) ? 'id' : q.includes('@') ? 'email' : 'number';
+      await this.audit.recordStandalone(ctx, {
+        action: 'order.search',
+        targetType: 'order_search',
+        after: { termType: kind, termDigest: hmacHex(this.config.get('AUTH_HMAC_KEY', { infer: true }), `order-search:${kind}:${q.toLowerCase()}`), results: page.length },
+      });
+    }
     const last = rows.length > limit ? page.at(-1)?.order : undefined;
     return { data: page.map(presentRow), nextCursor: last ? encodeCursor({ at: last.createdAt.toISOString(), id: last.id }) : null };
   }

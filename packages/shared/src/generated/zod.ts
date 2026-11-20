@@ -3249,7 +3249,7 @@ export const UnblockAdminUserResponse = zod.object({
 
 
 /**
- * Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil).
+ * Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil). Cada busca com `q` é auditada (`order.search`: tipo, HMAC do termo e número de resultados; nunca o termo) e limitada a 60 por minuto por admin, além do limite por IP (429; A-07).
  * @summary Pedidos: visão geral e filtros (B5, WB-108 C1)
  */
 export const listAdminOrdersQueryQMin = 2;
