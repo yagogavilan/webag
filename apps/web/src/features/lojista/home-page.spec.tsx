@@ -12,6 +12,14 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }), usePat
 
 const T = (id: string) => screen.getByTestId(`lojista.inicio.${id}`);
 
+const settingsOf = (over: object = {}) => ({
+  isOpenNow: true,
+  hours: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, intervals: [{ start: '00:00', end: '23:59' }] })),
+  holidays: [],
+  pause: { active: false, until: null, indefinitely: false },
+  ...over,
+});
+
 function setup(store: MerchantStore | null, extra: Parameters<typeof mockFetch> = []) {
   const { impl, calls } = mockFetch(...extra, ...storeHandlers(store));
   vi.stubGlobal('fetch', impl);
@@ -98,11 +106,21 @@ describe('L8: acompanhar a aprovação', () => {
   });
 
   it('no ar: faixa de destaque com "Para fazer agora" e as vendas só para quem vê valores', async () => {
-    setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }));
-    expect(await screen.findByTestId('lojista.inicio.hero')).toHaveTextContent('Loja aberta');
+    setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }), [(url) => (url.pathname.endsWith('/stores/s1/settings') ? json(settingsOf()) : undefined)]);
+    await waitFor(() => expect(screen.getByTestId('lojista.inicio.store-status')).toHaveTextContent(/^Aberta/));
     expect(await screen.findByRole('heading', { level: 1, name: /^(Bom dia|Boa tarde|Boa noite), Marcos$/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Para fazer agora' })).toBeInTheDocument();
     expect(await screen.findByTestId('lojista.inicio.all-clear')).toHaveTextContent('Tudo em dia.');
+  });
+
+  it.each([
+    ['aberta', {}, /^Aberta/, 'Pausar ou ajustar'],
+    ['fechada pelo horário', { isOpenNow: false }, /^Fechada pelo horário/, 'Ajustar horários'],
+    ['pausada', { pause: { active: true, until: '2026-11-18T18:30:00Z', indefinitely: false } }, /^Pausada até/, 'Voltar a vender'],
+  ])('o Início diz o mesmo estado que Minha loja: %s (V8.5)', async (_name, over, text, action) => {
+    setup(fakeStore({ status: 'live', step: 4, name: 'Casa Bela', hasHours: true, payout: { status: 'connected', maskedAccount: 'x', simulated: true } }), [(url) => (url.pathname.endsWith('/stores/s1/settings') ? json(settingsOf(over)) : undefined)]);
+    await waitFor(() => expect(screen.getByTestId('lojista.inicio.store-status')).toHaveTextContent(text));
+    expect(screen.getByTestId('lojista.home.open')).toHaveTextContent(action);
   });
 
   it('no ar: cartão de avaliação e ranking "Mais vendidos" com "Você recebe" vêm da API (W.6)', async () => {

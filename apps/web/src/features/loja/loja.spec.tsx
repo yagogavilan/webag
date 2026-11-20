@@ -64,14 +64,14 @@ describe('Minha loja (C1)', () => {
   it('mostra o estado, os resumos e a pendência do horário', async () => {
     vi.stubGlobal('fetch', server(settings({ hours: [] })).impl);
     renderLojista(<StoreMenu />);
-    expect(await screen.findByText('Loja aberta')).toBeInTheDocument();
+    expect(await screen.findByTestId('lojista.minha-loja.status-text')).toHaveTextContent('Aberta');
     expect(screen.getByTestId('lojista.minha-loja.item-delivery')).toHaveTextContent('Entrega pela Webag · preparo 25 min');
     expect(screen.getByTestId('lojista.minha-loja.item-hours')).toHaveTextContent('Falta o horário');
     expect(screen.getByTestId('lojista.minha-loja.item-exchange')).toHaveTextContent('Troca em até 7 dias');
     expect(screen.getByTestId('lojista.minha-loja.item-payout')).toHaveTextContent('Titular');
   });
 
-  it('pausar: pede confirmação e manda o tempo escolhido; pausada mostra "Reabrir agora"', async () => {
+  it('pausar: pede confirmação e manda o tempo escolhido; pausada mostra "Voltar a vender"', async () => {
     const { impl, calls } = server(settings(), (url, init) => (url.pathname.endsWith('/stores/s1/pause') && init.method === 'POST' ? json(null, 204) : undefined));
     vi.stubGlobal('fetch', impl);
     renderLojista(<StoreMenu />);
@@ -82,10 +82,22 @@ describe('Minha loja (C1)', () => {
     await waitFor(() => expect(JSON.parse(String(calls.find((c) => c.init.method === 'POST' && c.url.pathname.endsWith('/pause'))!.init.body))).toEqual({ kind: '2h' }));
   });
 
-  it('loja pausada oferece reabrir', async () => {
+  it('loja pausada mostra "Pausada até" e oferece "Voltar a vender"', async () => {
     vi.stubGlobal('fetch', server(settings({ pause: { active: true, until: '2026-11-18T18:30:00Z', indefinitely: false } })).impl);
     renderLojista(<StoreMenu />);
-    expect(await screen.findByTestId('lojista.minha-loja.reopen')).toBeInTheDocument();
+    expect(await screen.findByTestId('lojista.minha-loja.reopen')).toHaveTextContent('Voltar a vender');
+    expect(screen.getByTestId('lojista.minha-loja.status-text')).toHaveTextContent('Pausada até 15:30');
+    expect(screen.queryByTestId('lojista.minha-loja.pause-open')).not.toBeInTheDocument();
+  });
+
+  it('fechada pelo horário: não existe "Pausar loja" nem durações de pausa; oferece ajustar os horários', async () => {
+    vi.stubGlobal('fetch', server(settings({ isOpenNow: false })).impl);
+    renderLojista(<StoreMenu />);
+    expect(await screen.findByTestId('lojista.minha-loja.status-text')).toHaveTextContent(/^Fechada pelo horário/);
+    expect(screen.queryByText('Pausar loja')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lojista.minha-loja.pause-open')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lojista.minha-loja.pause-chip-1h')).not.toBeInTheDocument();
+    expect(screen.getByTestId('lojista.minha-loja.hours-link')).toHaveAttribute('href', '/lojista/loja/horarios');
   });
 
   it('funcionário não tem acesso', async () => {

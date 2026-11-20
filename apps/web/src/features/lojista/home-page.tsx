@@ -17,6 +17,8 @@ import { ReviewsSummaryCard } from '@/features/reviews/reviews-summary';
 import { pickImage } from '@/lib/catalog/helpers';
 import f from '@/features/finance/finance.module.css';
 import { merchantApi, type MerchantStore } from '@/lib/api/lojista';
+import { settingsApi, settingsKeys } from '@/lib/api/store-settings';
+import { storeStatus } from '@/features/loja/store-status';
 import { formatClock, formatDateTime } from '@/lib/format';
 import { NEW_PRODUCT_PATH, canReplyReviews, canSeeSalesValues, isOnboarding, isOwner, isStoreLive, maskedDocument, onboardingPath, resumeStep, supportHref } from '@/lib/lojista-access';
 import { ltid } from '@/lib/testid';
@@ -289,6 +291,9 @@ function Live({ store }: { store: MerchantStore }) {
   if (store.payout.status !== 'connected' && isOwner(store)) todos.push({ id: 'payout', icon: <SolarIcon name="wallet" size={24} />, label: 'Falta conectar o Mercado Pago', href: '/lojista/onboarding/4' });
   const exchanges = useExchangeTodo(store.id);
   if (exchanges) todos.push(exchanges);
+  // Mesma fonte e mesmo texto de Minha loja (V8.5). Só o dono lê a configuração; sem ela o painel não afirma "aberta".
+  const settings = useQuery({ queryKey: settingsKeys.settings(store.id), queryFn: () => settingsApi.get(store.id), enabled: isOwner(store), refetchInterval: 60_000 });
+  const status = settings.data ? storeStatus(settings.data, new Date(now)) : null;
 
   const deadlines = pending.map((order) => (order.acceptDeadlineAt ? Date.parse(order.acceptDeadlineAt) : null)).filter((value): value is number => value !== null);
   const urgent = deadlines.length > 0 ? Math.min(...deadlines) - now : null;
@@ -299,10 +304,12 @@ function Live({ store }: { store: MerchantStore }) {
       <div className={f.openRow} data-testid={T('hero')}>
         <span className={f.openIcon}><SolarIcon name="store" size={26} /></span>
         <span className={f.openText}>
-          <span className="wb-text-body-strong">{store.status === 'live' ? 'Loja aberta' : 'Loja no ar'}</span>
-          <span className={cx('wb-text-caption', f.openHint)}>{pending.length > 0 ? 'Tem pedido esperando você.' : 'Mantenha o painel aberto para ouvir os pedidos.'}</span>
+          <span className="wb-text-body-strong" data-testid={T('store-status')}>{status ? status.text : 'Loja no ar'}</span>
+          <span className={cx('wb-text-caption', f.openHint)}>{pending.length > 0 ? 'Tem pedido esperando você.' : status && status.state !== 'open' ? 'Novos pedidos não entram agora.' : 'Mantenha o painel aberto para ouvir os pedidos.'}</span>
         </span>
-        <Link href={'/lojista/loja' as never} className={f.openLink} data-testid="lojista.home.open">Pausar ou ajustar</Link>
+        <Link href={(status?.state === 'closed_by_hours' ? '/lojista/loja/horarios' : '/lojista/loja') as never} className={f.openLink} data-testid="lojista.home.open">
+          {status?.state === 'paused' ? 'Voltar a vender' : status?.state === 'closed_by_hours' ? 'Ajustar horários' : 'Pausar ou ajustar'}
+        </Link>
       </div>
       {pending.length > 0 ? (
         <NightBlock icon="bell" title={`${pending.length} ${pending.length === 1 ? 'pedido novo' : 'pedidos novos'}`} testId="lojista.home.new-orders" role="status" action={<LimaAction href="/lojista/pedidos" testId={T('todo-orders')}>Ver pedidos</LimaAction>}>

@@ -2,7 +2,7 @@
 
 import { CaretRight, Warning } from '@phosphor-icons/react';
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { PageHeader } from '@/components/panel/page-header';
 import { Badge, cx, ui } from '@/components/ui';
 import { formatCents } from '@/lib/format';
 import { asRoute } from '@/lib/routes';
@@ -37,8 +37,6 @@ export function StoreMenu() {
 
 /** C1: estado da loja (pausar e reabrir) e a lista de seções com o resumo de cada uma. */
 function Menu({ store, settings, refresh }: { store: MerchantStore; settings: StoreSettings; refresh: () => Promise<unknown> }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => heading.current?.focus({ preventScroll: true }), []);
   const hours = hoursSummary(settings.hours);
   const d = settings.delivery;
   const p = settings.pickup;
@@ -56,7 +54,7 @@ function Menu({ store, settings, refresh }: { store: MerchantStore; settings: St
   ];
   return (
     <div className={ui.stack}>
-      <h1 ref={heading} className="wb-text-title1" tabIndex={-1} style={{ margin: 0, outline: 'none' }}>Minha loja</h1>
+      <PageHeader title="Minha loja" />
       <PauseCard storeId={store.id} settings={settings} refresh={refresh} screen="minha-loja" />
       <ul className={s.menuList}>
         {items.map((item) => (
