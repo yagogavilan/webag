@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { API, adminLogin, lojistaLogin } from './helpers';
+import { API, REAL_DB_URL, adminLogin, lojistaLogin } from './helpers';
 
 /**
  * Capturas do redesign v3 com a API REAL (Postgres, Redis e pedidos de demonstração do seed), desktop 1440 e celular 390, para
@@ -12,7 +12,7 @@ import { API, adminLogin, lojistaLogin } from './helpers';
  *
  * `CAPTURE_V3=1 REAL_DB_URL=postgresql://webag:webag_dev_only@localhost:5433/webag PW_CHANNEL=chrome pnpm exec playwright test -c playwright.real.config.ts e2e-real/05-capturas-v3.e2e.ts`
  */
-const DB = process.env.REAL_DB_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag';
+const DB = REAL_DB_URL;
 const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'webag-seed-lojista-2026';
 const OUT = resolve(process.cwd(), '../../docs/qa/relatorios/capturas-v3');
 const DESKTOP = { width: 1440, height: 900 };

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Fumaça do app no navegador (DEC-058): cidade > login > loja > produto > sacola, com o Chromium do Playwright.
-// Uso (Metro web e API no ar; `pnpm dev` na raiz): node apps/mobile/scripts/web-smoke.cjs [captura.png]
+// Uso (Metro web e API no ar; `pnpm dev` na raiz): `pnpm web:smoke [captura.png]` na raiz
 // Variáveis: APP_URL (padrão http://localhost:8081), SMOKE_EMAIL, SMOKE_PASSWORD (cliente de demonstração do seed).
-// O Playwright não é dependência do repositório: use o global (`NODE_PATH=$(npm root -g)`) ou `npm i -g playwright`.
+// O Playwright vem do workspace (apps/web); `pnpm web:smoke` o resolve (scripts/web-playwright.mjs), sem instalação global.
 const { chromium } = require('playwright');
 
 const APP = (process.env.APP_URL || 'http://localhost:8081').replace(/\/+$/, '');

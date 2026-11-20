@@ -12,6 +12,25 @@ export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@webag.local';
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'Webag-Admin-Dev-2026';
 export const MERCHANT_PASSWORD = 'Webag-Lojista-2026!';
 
+/**
+ * Banco lido pelo psql nos testes 04 e 05. Ordem: `REAL_DB_URL`, `DATABASE_URL` do ambiente, `DATABASE_URL` do `.env` da raiz
+ * (o banco do `pnpm run setup`; os testes rodam de `apps/web`) e, por fim, o banco padrão do setup em localhost:5432.
+ */
+function resolveDbUrl(): string {
+  if (process.env.REAL_DB_URL) return process.env.REAL_DB_URL;
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  try {
+    const raw = readFileSync(resolve(process.cwd(), '../../.env'), 'utf8');
+    const line = raw.split(/\r?\n/).find((l) => /^\s*DATABASE_URL\s*=/.test(l));
+    const value = line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (value) return value;
+  } catch {
+    // sem .env: cai no padrão
+  }
+  return 'postgresql://webag:webag_dev_only@localhost:5432/webag';
+}
+export const REAL_DB_URL = resolveDbUrl();
+
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 /** TOTP RFC 6238 (SHA-1, 30 s, 6 dígitos). */
 export function totpAt(secret: string, at: number = Date.now()): string {

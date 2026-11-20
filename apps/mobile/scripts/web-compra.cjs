@@ -5,7 +5,7 @@
 //   retirada-pix  cadastro de conta nova a partir da Sacola (volta direto ao checkout, U8.2) > Retirar na loja > PIX > confirmado > código de retirada
 //   cartao        login > checkout > cartão (página segura do site, cartão de teste aprovado) > espera > acompanhar
 // Uso (API :3000, Metro web :8081 e site :3001 no ar; ver docs/qa/relatorios/setup-do-zero.md):
-//   NODE_PATH=$(npm root -g) node apps/mobile/scripts/web-compra.cjs [entrega-pix|retirada-pix|cartao ...]
+//   pnpm web:compra [entrega-pix|retirada-pix|cartao ...]   (na raiz; scripts/web-playwright.mjs resolve o Playwright de apps/web)
 // Variáveis: APP_URL, SMOKE_EMAIL, SMOKE_PASSWORD, SHOTS_DIR (padrão docs/qa/relatorios/compra-e2e, relativo à raiz do repositório), VIEWPORT (390x844 padrão).
 // A confirmação do pagamento vem do servidor (rota de simulação da API, só dev); o app nunca marca como pago.
 const path = require('node:path');

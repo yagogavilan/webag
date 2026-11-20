@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
-import { API, adminLogin, lojistaLogin } from './helpers';
+import { API, REAL_DB_URL, adminLogin, lojistaLogin } from './helpers';
 
 /**
  * QA ondas 4 e 5 (O5-JOR-02): a jornada do pedido pelas TELAS contra a API REAL (Postgres e Redis reais, sem API falsa).
@@ -10,7 +10,7 @@ import { API, adminLogin, lojistaLogin } from './helpers';
  * `REAL_API_URL=... REAL_DB_URL=... PW_CHANNEL=chrome pnpm exec playwright test -c playwright.real.config.ts e2e-real/04-pedido-entrega-troca.e2e.ts`; use um TMPDIR novo se recriar o banco (o segredo do TOTP do admin fica nele).
  * Variáveis: REAL_DB_URL (psql, só leitura do que o seed criou), senha do seed em SEED_PASSWORD.
  */
-const DB = process.env.REAL_DB_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag_qa35e';
+const DB = REAL_DB_URL;
 const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'webag-seed-lojista-2026';
 const sql = (query: string): string => execFileSync('psql', [DB, '-At', '-F', '|', '-c', query], { encoding: 'utf8' }).trim();
 
