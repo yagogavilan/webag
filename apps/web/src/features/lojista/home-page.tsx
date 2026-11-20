@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
 import { Lima, LimaAction, NightBlock } from '@/components/panel/blocks';
-import { Banner, Button, ButtonLink, QueryBoundary, SkeletonRows, SolarIcon, cx, ui, useToast } from '@/components/ui';
+import { Banner, Button, ButtonLink, QueryBoundary, SafeImage, SkeletonRows, SolarIcon, cx, ui, useToast } from '@/components/ui';
 import { useNow } from '@/lib/use-now';
 import { useOptionalOrdersRuntime } from '@/features/orders/orders-runtime';
 import { exchangesApi, exchangesKeys } from '@/lib/api/exchanges';
@@ -409,10 +409,7 @@ function TopProducts({ storeId }: { storeId: string }) {
             <li key={row.productId} className={s.rankRow} data-testid={T(`top-${row.productId}`)}>
               <span className={s.rankNumber} aria-hidden="true">{index + 1}</span>
               <span className={s.rankThumb}>
-                {url ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- imagem pública já redimensionada pelo servidor
-                  <img src={url} alt="" width={48} height={48} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : null}
+                <SafeImage src={url} alt="" width={48} height={48} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </span>
               <span className={s.rankText}>
                 <span className="wb-text-body-strong">{row.name}</span>

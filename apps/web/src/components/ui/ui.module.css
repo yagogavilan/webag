@@ -415,3 +415,8 @@ fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; 
 .solar { flex: none; display: block; }
 .solar g[stroke-width] { stroke-width: 1.8; }
 .noOutline { margin: 0; outline: none; }
+
+/* Fallback de imagem (SafeImage): objeto da marca centrado no contêiner, sem texto alternativo visível. */
+.noPhoto { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--wb-space-1); width: 100%; height: 100%; background: var(--wb-color-surface-sunken); color: var(--wb-color-text-secondary); text-align: center; }
+.noPhotoObject { display: block; width: 50%; max-width: 40px; height: auto; opacity: 0.55; }
+.noPhotoLabel { margin: 0; }

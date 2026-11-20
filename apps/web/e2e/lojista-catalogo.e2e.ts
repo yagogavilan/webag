@@ -51,6 +51,9 @@ test.describe('Catálogo (lojista)', () => {
     await expect(row).toContainText('33 em 4 opções');
     await expect(row.getByRole('switch')).toBeChecked();
 
+    // V8.3: foto que não carrega nunca vira ícone quebrado do navegador nem texto alternativo na tela
+    await expect(page.locator('main img:visible').evaluateAll((imgs) => imgs.filter((img) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth === 0).length)).resolves.toBe(0);
+
     // Pausar com 1 toque e desfazer
     await row.getByRole('switch').click();
     await expect(page.getByText('Camiseta Básica pausada.')).toBeVisible();

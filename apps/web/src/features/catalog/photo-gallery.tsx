@@ -2,7 +2,7 @@
 
 import { ArrowLineLeft, Camera, Image as ImageIcon, Trash, WarningCircle } from '@phosphor-icons/react';
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Banner, Button, ui, cx } from '@/components/ui';
+import { Banner, Button, SafeImage, ui, cx } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { MAX_PHOTOS } from '@/lib/catalog/helpers';
 import { PRODUCT_PHOTO_MAX_BYTES, PRODUCT_PHOTO_MAX_SIDE, validateStoreImage, type Prepared } from '@/lib/image/prepare';
@@ -31,6 +31,8 @@ interface Props {
   photos: Photo[];
   onChange: (update: (current: Photo[]) => Photo[]) => void;
   error?: string | undefined;
+  /** Nome do produto, para o texto alternativo descritivo da foto. */
+  productName?: string;
 }
 
 let counter = 0;
@@ -47,7 +49,7 @@ function uploadMessage(caught: unknown): string {
  * enviada direto ao armazenamento com barra de progresso. Falha em uma não derruba as outras. Reordenar por arrastar
  * ou pelos botões.
  */
-export function PhotoGallery({ storeId, photos, onChange, error }: Props) {
+export function PhotoGallery({ storeId, photos, onChange, error, productName }: Props) {
   const online = useOnline();
   const gallery = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
@@ -120,8 +122,15 @@ export function PhotoGallery({ storeId, photos, onChange, error }: Props) {
             data-testid={T(`photo-${index}`)}
           >
             <div className={s.photoFrame}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- prévia local (blob:) ou imagem pública já redimensionada */}
-              <img src={photo.previewUrl} alt={`Foto ${index + 1}${index === 0 ? ' (capa)' : ''}`} className={s.photoImg} width={96} height={96} />
+              <SafeImage
+                src={photo.previewUrl}
+                alt={`${productName?.trim() ? `${productName.trim()}: foto` : 'Foto do produto'} ${index + 1}${index === 0 ? ', capa' : ''}`}
+                className={s.photoImg}
+                width={96}
+                height={96}
+                showLabel
+                testId={T(`photo-${index}-img`)}
+              />
               {index === 0 ? <span className={s.cover}><span className={ui.badge}>Capa</span></span> : null}
               {photo.status === 'uploading' ? (
                 <span className={s.photoProgress} role="progressbar" aria-label={`Enviando a foto ${index + 1}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={photo.progress}>

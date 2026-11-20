@@ -1,10 +1,10 @@
 'use client';
 
-import { Check, Image as ImageIcon, Minus, Plus, Warning } from '@phosphor-icons/react';
+import { Check, Minus, Plus, Warning } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Button, Dialog, Switch, ui, cx, useToast, SkeletonRows } from '@/components/ui';
+import { Badge, Button, Dialog, SafeImage, Switch, ui, cx, useToast, SkeletonRows } from '@/components/ui';
 import { catalogApi, catalogErrorMessage, catalogKeys, type ProductSummary } from '@/lib/api/catalog';
 import { ApiError } from '@/lib/api/errors';
 import { formatCents } from '@/lib/format';
@@ -27,17 +27,12 @@ interface RowProps {
   updated: boolean;
 }
 
-/** Foto de 56 px (miniatura leve) ou o ícone quando o produto ainda não tem foto. */
+/** Foto de 48 px (miniatura leve) ou o objeto da marca quando o produto não tem foto ou a foto não carrega. */
 export function Thumb({ cover }: { cover: Record<string, string> | null }) {
   const url = pickImage(cover, 160);
   return (
     <span className={s.thumb}>
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- imagem pública já redimensionada pelo servidor (WebP 160/400/800/1600)
-        <img src={url} alt="" width={48} height={48} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      ) : (
-        <ImageIcon size={24} aria-hidden="true" />
-      )}
+      <SafeImage src={url} alt="" width={48} height={48} style={{ width: '100%', height: '100%', objectFit: 'cover' }} testId={T('thumb')} />
     </span>
   );
 }

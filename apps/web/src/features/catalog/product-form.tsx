@@ -357,7 +357,7 @@ function ProductEditor({ storeId, product }: { storeId: string; product: Product
 
       <div className={s.formGrid}>
         <div className={s.col}>
-          <PhotoGallery storeId={storeId} photos={photos} onChange={(update) => { setPhotos(update); setErrors((current) => ({ ...current, photos: undefined })); }} error={errors.photos} />
+          <PhotoGallery storeId={storeId} photos={photos} onChange={(update) => { setPhotos(update); setErrors((current) => ({ ...current, photos: undefined })); }} error={errors.photos} productName={values.name} />
           <TextField label="Nome" maxLength={NAME_MAX} value={values.name} onChange={(event) => set('name', event.target.value)} counter={{ value: values.name.length, max: NAME_MAX }} error={errors.name} autoComplete="off" data-testid={T('name-input')} />
           <TextArea label="Descrição (opcional)" rows={5} maxLength={DESCRIPTION_MAX} value={values.description} onChange={(event) => set('description', event.target.value)} counter={{ value: values.description.length, max: DESCRIPTION_MAX }} error={errors.description} data-testid={T('description-input')} />
         </div>

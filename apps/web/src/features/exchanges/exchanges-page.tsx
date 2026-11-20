@@ -1,12 +1,12 @@
 'use client';
 
-import { ArrowsClockwise, Image as ImageIcon, Warning, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, Warning, WarningCircle } from '@phosphor-icons/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useRef, useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, Dialog, EmptyState, ErrorState, RadioCards, SkeletonRows, Tabs, TextArea, cx, useToast } from '@/components/ui';
+import { Banner, Button, Dialog, EmptyState, ErrorState, RadioCards, SafeImage, SkeletonRows, Tabs, TextArea, cx, useToast } from '@/components/ui';
 import { useMerchant } from '@/features/lojista/store-context';
 import { LojistaNoAccess } from '@/features/loja/settings-screen';
 import { ApiError } from '@/lib/api/errors';
@@ -183,7 +183,7 @@ function ExchangeCard({ exchange, now, online, actions }: { exchange: Exchange; 
         </div>
         <Link href={asRoute(`/lojista/trocas/${exchange.id}`)} style={{ color: 'inherit', textDecoration: 'none' }} className={s.itemRow}>
           <span className={s.thumb} aria-hidden="true">
-            <ImageIcon size={24} />
+            <SafeImage src={null} alt="" />
           </span>
           <span className={s.itemText}>
             <span className="wb-text-body-strong">{item?.name ?? 'Item do pedido'}{change ? ` · ${change}` : ''}</span>

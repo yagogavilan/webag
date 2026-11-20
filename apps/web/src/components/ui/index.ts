@@ -14,3 +14,4 @@ export { default as ui } from './ui.module.css';
 export * from './logo';
 export * from './solar-icon';
 export type { SolarName } from './solar-data';
+export * from './safe-image';
