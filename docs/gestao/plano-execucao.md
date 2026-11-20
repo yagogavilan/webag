@@ -99,7 +99,7 @@ Sub-onda 5C (financeiro e admin): WB-076, 077, 078, 108, 109, 110, 176, 112, 113
 | Critério de saída | Prazos automáticos testados com relógio simulado; regra CDC arrependimento (WB-178) verificada pelo QA; repasse e conciliação sem inconsistência; SEC aprova 5B e 5C |
 | Revisão | TL, SEC, QA por sub-onda |
 
-### Onda 6 — Conformidade e acabamento (backlog onda 5) (EM ANDAMENTO: entregue, falta verificação do Security e do QA)
+### Onda 6 — Conformidade e acabamento (backlog onda 5) (CONCLUÍDA: Security reverificou; QA retestou em `0d902ab`)
 
 **Mudou:** (a) Security reprovou o G5 em DEC-049/050 (SEC-152 a 167); correções commitadas, sem reverificação; (b) direção visual v3 aprovada (DEC-051/052) e levada ao app (Home, Loja, Produto, Sacola feitos); (c) promessa de entrega em até 2 h por distância (DEC-053: ETA em faixa, teto 120 min, alerta de atraso, lotes); (d) cartão pela página segura `/pagar/cartao`; (e) tempo real por ticket de uso único (DEC-045).
 Sub-onda 6A (LGPD e lojas de apps, bloqueiam G5): WB-212, 213, 214, 215, 217, 196, 038, 124. BE + MB + SEC.
@@ -108,13 +108,13 @@ Sub-onda 6B (gestão e Should/Could): WB-122, 114, 125, 065, 066, 121, 195, 197,
 | Critério de saída | 6A completa (não negociável): Security reverifica sem Crítico/Alto, SEC-166 validado no app e na web pelo QA, SEC-155 verificado; BUG-011, 012, 014 a 017 reteste do QA; ETA e alerta de atraso testados; 6B: o que não couber vai para `docs/gestao/pendencias-v1.md` com motivo (decisão do CEO) |
 | Revisão | SEC (veto) em 6A; TL; QA |
 
-### Onda 7 — Seed completo, carga e documentação técnica (EM ANDAMENTO: seeds por onda e de pedidos prontos; carga não executada)
+### Onda 7 — Seed completo, carga e documentação técnica (CONCLUÍDA salvo carga em staging, que é do fundador; k6 local indicativo)
 Paralelo: BE (seed completo, scripts) + QA (carga) + TL (docs de arquitetura).
 | Entregável | Seed conforme `backlog.md` §4 (4 cidades, 12+ lojas de 6+ categorias, pedidos em todos os estados RN-07, trocas RN-11, 1 divergência de conciliação, credenciais demo por perfil); teste de carga da API (k6 ou similar) com relatório e gargalos corrigidos; ADRs, modelo de dados, OpenAPI e design system atualizados |
 | Critério de saída | `docker compose up` com seed abre todos os fluxos (incluindo trocas, corridas e pedidos em atraso para o alerta de ETA); relatório de carga em `docs/qa/`; docs (ADR-011/012, modelo de dados, DS v3) sem divergência do código |
 
-### Onda 8 — Fechamento (A FAZER; tarefas e donos em `board.md` T8-00 a T8-13)
-Estado de entrada (2026-11-19): Security G4 aprovado com ressalvas; QA preliminar reprovado por evidência; backend entregou BUG-019 a 025 e SEC-180 com e2e 763/763 em 3 execuções; mobile-dev integra o contrato W/Y.
+### Onda 8 — Fechamento (EM ANDAMENTO; tarefas e donos em `board.md` T8-00 a T8-13)
+Estado em 2026-11-20 (HEAD `f2f7e2d`): RC congelado em `f622bc9` (DEC-077). Security: G4 APROVADO, G5 com condições C1 a C10. Tech-lead: com ressalvas, A-01/A-02 corrigidos. QA: aprovado com ressalvas só em `0d902ab` (`g4-final.md`); **reteste do RC pendente**. Feitos: 8.0, 8.2, 8.3, 8.4, 8.6, 8.9; parciais: 8.1, 8.5, 8.8, 8.10, 8.11 (falta o relatório final); do fundador: 8.7, 8.12, 8.13. Checklist do brief §8: `checklist-dod.md`. Próximas ações: QA no RC e a frio (BUG-019); Security em SEC-187/188; Z5.m1, Z4.1; relatório final; CEO fecha o G4.
 | # | Etapa | Agentes | Dependência | Saída |
 |---|---|---|---|---|
 | 8.0 | Integrar contrato e **congelar o HEAD** de teste | MB | contrato do BE pronto | commit de congelamento no board |
