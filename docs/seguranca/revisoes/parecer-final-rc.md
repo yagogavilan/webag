@@ -214,3 +214,46 @@ Como verificar a correção: no E2E, aprovar sem abrir os documentos dá 409. De
 | SEC-188 | Aprovação de loja sem exigir a abertura dos documentos no servidor | backend-dev | Antes do piloto com lojistas reais (recomendado) |
 
 **Limites do adendo:** sem Playwright (as portas são do QA), sem build de produção do web e sem aparelho. Os ataques e a spec ficaram fora do repositório. O que foi dito em "Limites" acima continua valendo.
+
+## Confirmação no commit congelado 036e791 (2026-11-20)
+
+- **Escopo:** código entre `06d52bb` e `036e791` (DEC-083): SEC-187 (`f576ec5`, `8d578a3`), SEC-188 (`7ea3613`, `718f19c`, `9cc1677`), BUG-027 (`c3e5260`, `b4773a2`), BUG-026 (`112cca4`, `d89aa6f`), BUG-028 (`ddf6924`, `036e791`), checkpoints `4f64cce` e `5159838` e docs de deploy (`364a975`). `a05536f` só tem documentos.
+- **Método:** leitura do diff (82 arquivos). E2E da API `legal-texts`, `stores-onboarding`, `bug027-limit` e `seed-onda2` em banco próprio (`webag_<pid>_test`): **4 arquivos, 79 testes passam**. Unitários: `legal-variables` (6), web `legal-text` e `stores` (33), app `legal-screen` (6), todos passam. Prova própria em `tsx` fora do repositório (SEC-189). `pnpm audit`, busca de segredos no diff e nos commits recentes. Sem Playwright, sem build de produção do web, sem aparelho.
+
+### Veredito
+
+| Gate | Parecer |
+|---|---|
+| **G4** | **APROVADO, sem veto.** Não há Crítico, Alto nem Médio aberto. SEC-187 e SEC-188 estão corrigidos e cobertos por E2E |
+| **G5** | **Mantido com condições.** C1 a C9 **inalteradas**. A **C10 muda de redação**: deixa de ser correção de código (feita) e vira passo operacional, que inclui o SEC-189 (abaixo) |
+
+**C10 (nova redação):** antes de pôr `LEGAL_REVIEWED=true` no web e `EXPO_PUBLIC_LEGAL_REVIEWED=true` no build do app (os dois juntos), o admin publica pelo painel a versão aprovada pelo jurídico, com os dados **reais** escritos no texto. Depois, alguém confere no `GET /v1/legal/<tipo>` dos 4 tipos que o texto não contém "a definir", "exemplo", "00.000.000" nem `{{` fora de `SITE_URL`/`VERSAO`/`VIGENCIA`. Donos: fundador (dados), PO (publicação), mobile-dev (build). Motivo: a versão gravada pelo seed é imutável e pode ter valores de exemplo (SEC-189).
+
+### Conferência por item
+
+| # | Item | Resultado |
+|---|---|---|
+| 1 | SEC-187 | **Corrigido.** `publish` recusa (422 `LEGAL_VARIABLE_NOT_ALLOWED`) qualquer `{{...}}` fora de `SITE_URL`/`VERSAO`/`VIGENCIA`, inclusive minúsculas e chaves sem par (`legal-variables.ts`, `legal.service.ts:37`). A auditoria grava o `contentSha256` da versão. O seed escreve os valores de empresa no texto com higienização (`plain()`, e-mail sem `*`/`_`, que era a sugestão do adendo), sem recursão, e registra `companyValues`/`pending` no `audit_log`. O web não lê mais nenhum valor contratual do ambiente nem do `/v1/help`. O compose de produção tirou essas variáveis do `web` e as passou ao `seed`. O app resolve só as 3 variáveis, e `VIGENCIA` só com `EXPO_PUBLIC_LEGAL_REVIEWED=true` (booleano público, não é segredo). As páginas públicas não mudaram de rota, middleware, CSP nem cache (nenhum arquivo de `app/` ou do middleware está no diff). O markdown segue pela allowlist do `markdown-lite`, e nenhum módulo `'use client'` importa `legal-text` |
+| 2 | SEC-188 | **Corrigido, e mais forte que o pedido.** `approve` exige, dentro da transação com `FOR UPDATE`, um `store.document_view` **do próprio admin que aprova** para cada documento obrigatório vigente (`supersededAt` nulo). O reenvio cria outro id e exige nova abertura. O 409 `DOCUMENTS_NOT_REVIEWED` é auditado (`store.approve_blocked`). Não há outro caminho para `approved` a partir de `in_review`: `decide` é o único `update(stores).set({status})` de admin. `suspended → approved` (reativação) não exige abertura, o que está correto porque a loja já foi conferida. `decideDataReview` só mexe em `pendingChanges`. O `documentAccessUrl` só audita documento da própria loja (`storeId` no `where`). Perfis: `stores:decide` e `stores:documents` = SUPER e OPS. E2E cobre outro admin, documento reenviado, financeiro/suporte/lojista com 403 e sem token com 401 |
+| 3 | BUG-027 | **Sem regressão.** `limitQuery` (`^\d{1,3}$`, 1 a 50) substitui `z.string().max(4)` em todas as listas com schema. `parseLimit` continua limitando a 50 nos caminhos sem schema. Cursor, `max(200)` e `strictObject` estão intactos |
+| 4 | Seed e smoke | **OK.** `SEED_HOURS` só é lido no ramo não produtivo de `seed/index.ts`. O serviço `seed` de produção força `NODE_ENV: production`, e `onda3`/`orders-demo` também recusam produção. Nenhuma credencial nova: as senhas de demo (`webag-seed-lojista-2026`, `Webag-Admin-Dev-2026`) já eram públicas e de dev. O smoke só passou a respeitar `POSTGRES_USER`/`POSTGRES_DB` do ambiente, como array de argumentos e sem shell no Linux |
+| 5 | Segredos e dependências | Nenhum `.env` versionado. `.env`/`.env.*` estão no `.gitignore`. Nada de `APP_USR-`, `-----BEGIN`, `AKIA`, `ghp_`, `sk_live`, `AIza` ou URL de banco com senha real no diff nem nos commits recentes. O `apps/api/.tmp-dist-mem` (compilado, desde `11081aa`) já estava no histórico revisado e sem segredo. Lockfile sem diff. `pnpm audit --prod` dá as mesmas 4 moderadas de ferramentas de build (`glob`, `minimatch`). Com dev são 5 (mais o `esbuild` do `drizzle-kit`). Nenhuma Alta ou Crítica |
+| 6 | Infra e2e | `test-env.ts` e `e2e-real/helpers.ts` leem **só** `DATABASE_URL`/`REDIS_URL` do `.env`. O ambiente do processo tem prioridade. O log mostra host, porta e banco, **sem senha**. O banco usado continua obrigatoriamente `*_test`. `NEXT_DIST_DIR` e as portas por variável são só de teste. Observação sem ID: se o `.env` de alguém apontar para um servidor remoto, o E2E cria e apaga bancos `_test` lá com essas credenciais. Basta não usar `.env` de staging/produção numa máquina de dev, o que já é regra |
+
+### SEC-189 | Severidade: Baixa | Status: Aberto
+Onde: `infra/env.prod.example:158-159` (`COMPANY_LEGAL_NAME=Webag Tecnologia Ltda (exemplo)`, `COMPANY_CNPJ=00.000.000/0001-00`) e `apps/api/src/modules/admin/legal-variables.ts` (`resolveCompanyValues`: `COMPANY_NAME` vazio cai em `COMPANY_LEGAL_NAME`; o regex de `CNPJ` não confere os dígitos verificadores).
+Problema: quem copiar o `env.prod.example` sem trocar esses dois valores e rodar o serviço `seed` grava, **numa versão imutável**, a razão social "(exemplo)" e o CNPJ zerado, cujo DV é inválido (o correto para essa base seria `-91`). Provado: `resolveCompanyValues` devolve os dois valores como válidos, e não como "a definir". Antes do SEC-187 isso se corrigia trocando o `.env`. Agora só se corrige com uma versão nova.
+Cenário de ataque: não é ataque, é erro operacional. Se o `LEGAL_REVIEWED=true` for ligado sem publicar a versão aprovada, os termos aceitos mostram um controlador falso e um CNPJ inexistente. O efeito é o mesmo do SEC-187 (identificação do controlador, LGPD art. 9º, II). O impacto hoje é nulo, porque o texto está "em revisão" e não há usuário real.
+Correção recomendada (backend-dev): (1) em `resolveCompanyValues`, tratar como inválido ("a definir") um CNPJ com DV errado e qualquer valor que contenha "exemplo" ou o domínio `.exemplo`. (2) Deixar `COMPANY_LEGAL_NAME` e `COMPANY_CNPJ` vazios no `env.prod.example`, como já estão os outros campos legais. Até lá, a C10 cobre.
+Como verificar a correção: no unitário de `legal-variables`, `COMPANY_CNPJ=00.000.000/0001-00` e `COMPANY_LEGAL_NAME=... (exemplo)` resultam em `pending` com os dois. O `env.prod.example` vem sem valor nesses campos.
+
+### Abertos após a confirmação
+
+| ID | Status | Prazo |
+|---|---|---|
+| SEC-187 | **Corrigido** (`f576ec5`, `8d578a3`) | — |
+| SEC-188 | **Corrigido** (`7ea3613`, `718f19c`) | — |
+| SEC-189 | Aberto, Baixa | Antes de `LEGAL_REVIEWED=true` (C10); a correção de código pode entrar depois do v1.0 |
+| SEC-186, 146, 149, 150, 161, 162, 163 c/d, 174 | Abertos, Baixa (sem mudança) | Conforme a tabela "Abertos" acima |
+
+**Limites:** os mesmos do parecer e do adendo. Não houve Playwright, `next build` de produção, nginx, aparelho, Mercado Pago real nem pentest.
