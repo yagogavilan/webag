@@ -45,7 +45,7 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
     expect(assets).toHaveLength(3);
     for (const asset of assets) expect(asset.width! / asset.height!).toBe(2);
     const res = await ctx.http.get('/v1/banners').expect(200);
-    expect(res.body.data.map((b: { destination: { type: string } }) => b.destination.type)).toEqual(expect.arrayContaining(['coupon', 'category', 'store']));
+    expect(res.body.data.map((b: { destination: { type: string } }) => b.destination.type)).toEqual(expect.arrayContaining(['category', 'store'])); // sem destino de cupom desde 3a81ef1 (HIP-L12, DEC-078)
     expect(Object.keys(res.body.data[0].image.urls)).toEqual(expect.arrayContaining(['400', '800', '1200']));
   });
 
