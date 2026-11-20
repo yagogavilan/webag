@@ -95,6 +95,7 @@ export const LegalDocumentType = {
   customer_terms: 'customer_terms',
   merchant_terms: 'merchant_terms',
   privacy: 'privacy',
+  exchange_policy: 'exchange_policy',
 } as const;
 
 export interface DocumentRef {
@@ -12146,7 +12147,7 @@ export type getCurrentLegalDocumentResponseError = (getCurrentLegalDocumentRespo
 
 export type getCurrentLegalDocumentResponse = (getCurrentLegalDocumentResponseSuccess | getCurrentLegalDocumentResponseError)
 
-export const getGetCurrentLegalDocumentUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy',) => {
+export const getGetCurrentLegalDocumentUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy',) => {
 
 
 
@@ -12155,10 +12156,10 @@ export const getGetCurrentLegalDocumentUrl = (type: 'customer_terms' | 'merchant
 }
 
 /**
- * Alimenta as páginas /termos e /privacidade e os links do app.
+ * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app.
  * @summary Versão vigente do documento (público)
  */
-export const getCurrentLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy', options?: Parameters<typeof apiFetch>[1]): Promise<getCurrentLegalDocumentResponse> => {
+export const getCurrentLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy', options?: Parameters<typeof apiFetch>[1]): Promise<getCurrentLegalDocumentResponse> => {
 
   return apiFetch<getCurrentLegalDocumentResponse>(getGetCurrentLegalDocumentUrl(type),
   {
@@ -12200,7 +12201,7 @@ export type listLegalVersionsResponseError = (listLegalVersionsResponse401 | lis
 
 export type listLegalVersionsResponse = (listLegalVersionsResponseSuccess | listLegalVersionsResponseError)
 
-export const getListLegalVersionsUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy',) => {
+export const getListLegalVersionsUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy',) => {
 
 
 
@@ -12212,7 +12213,7 @@ export const getListLegalVersionsUrl = (type: 'customer_terms' | 'merchant_terms
  * Permissão de admin: `legal:read` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Versões publicadas do documento
  */
-export const listLegalVersions = async (type: 'customer_terms' | 'merchant_terms' | 'privacy', options?: Parameters<typeof apiFetch>[1]): Promise<listLegalVersionsResponse> => {
+export const listLegalVersions = async (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy', options?: Parameters<typeof apiFetch>[1]): Promise<listLegalVersionsResponse> => {
 
   return apiFetch<listLegalVersionsResponse>(getListLegalVersionsUrl(type),
   {
@@ -12259,7 +12260,7 @@ export type publishLegalDocumentResponseError = (publishLegalDocumentResponse400
 
 export type publishLegalDocumentResponse = (publishLegalDocumentResponseSuccess | publishLegalDocumentResponseError)
 
-export const getPublishLegalDocumentUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy',) => {
+export const getPublishLegalDocumentUrl = (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy',) => {
 
 
 
@@ -12271,7 +12272,7 @@ export const getPublishLegalDocumentUrl = (type: 'customer_terms' | 'merchant_te
  * Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Publicar nova versão
  */
-export const publishLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy',
+export const publishLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy',
     publishLegalRequest: PublishLegalRequest, options?: Parameters<typeof apiFetch>[1]): Promise<publishLegalDocumentResponse> => {
 
   return apiFetch<publishLegalDocumentResponse>(getPublishLegalDocumentUrl(type),

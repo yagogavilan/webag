@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { desc, eq } from 'drizzle-orm';
 import { PasswordService } from '../src/modules/identity/password.service.js';
 import { FEATURE_FLAG_DEFINITIONS } from '../src/modules/admin/feature-flags.definitions.js';
 import { PARAMETER_DEFINITIONS } from '../src/modules/admin/parameters.definitions.js';
@@ -35,24 +36,21 @@ const CATEGORIES: { name: string; icon: string; children: string[] }[] = [
   { name: 'Brinquedos', icon: 'teddy-bear', children: [] },
 ];
 
-/** Minutas técnicas de partida. A revisão jurídica é pendência para o G5 (plano de execução §6). */
-const DRAFT_NOTICE = 'Minuta técnica de partida, sujeita a revisão jurídica antes da publicação nas lojas.';
-const LEGAL_DRAFTS = [
-  {
-    type: 'customer_terms' as const,
-    title: 'Termos de Uso',
-    content: `${DRAFT_NOTICE}\n\n1. O Webag conecta você a lojas da sua região. A compra é feita com a loja; o Webag intermedia o pedido e o pagamento.\n2. Você precisa ter 18 anos ou mais e informar dados verdadeiros.\n3. Pagamento por PIX ou cartão, processado pelo Mercado Pago; o Webag não guarda dados de cartão.\n4. Trocas e arrependimento seguem o Código de Defesa do Consumidor: 7 dias de arrependimento nas compras à distância e a garantia legal por defeito.\n5. Você pode excluir sua conta a qualquer momento pelo app.`,
-  },
-  {
-    type: 'merchant_terms' as const,
-    title: 'Termos do Lojista',
-    content: `${DRAFT_NOTICE}\n\n1. O lojista é responsável pelos produtos, preços, estoque, emissão de documento fiscal e pela entrega dos pedidos.\n2. A comissão da plataforma e as taxas do provedor de pagamento são exibidas antes da ativação da loja.\n3. O lojista é controlador dos dados do cliente que recebe para entregar o pedido, e deve usá-los só para essa finalidade.\n4. Estornos pagos ao cliente por falha do lojista podem ser cobrados do lojista conforme este contrato.\n5. O Webag pode suspender lojas por descumprimento destes termos.`,
-  },
-  {
-    type: 'privacy' as const,
-    title: 'Política de Privacidade',
-    content: `${DRAFT_NOTICE}\n\nUsamos seus dados para criar sua conta, processar pedidos e pagamentos, cumprir obrigações legais e proteger a plataforma contra fraude.\nColetamos só o necessário: nome, e-mail, celular e endereço de entrega quando você faz um pedido. Não coletamos CPF nem data de nascimento no cadastro.\nMarketing, localização precisa e lista de espera dependem do seu consentimento, que você pode retirar a qualquer momento em Conta.\nVocê pode pedir acesso, correção, exportação e exclusão dos seus dados pelo app.`,
-  },
+/**
+ * Textos legais do v1.0 (DEC-080/081): PROPOSTA do PO para o advogado do fundador, não texto aprovado. O trecho público de cada arquivo de
+ * `docs/produto/legal/` foi copiado para `seed/legal/<tipo>.md` SEM os marcadores `[REVISAR JURÍDICO ...]` (procedimento do LEIA-ME §2) e
+ * COM as variáveis `{{...}}`, que o site preenche na exibição a partir do ambiente (`apps/web/src/lib/legal-text.ts`). Enquanto o jurídico
+ * não aprovar (J1 a J16), o site e o admin mostram "Versão para revisão". Mudou o texto jurídico: mude em `docs/produto/legal/` e regenere.
+ */
+export const legalText = (type: string): string => readFileSync(new URL(`./legal/${type}.md`, import.meta.url), 'utf8').trim();
+
+/** Primeira linha das minutas técnicas antigas (v1 do seed): só elas são substituídas pelo texto completo. */
+const OLD_DRAFT_PREFIX = 'Minuta técnica de partida';
+export const LEGAL_DOCS = [
+  { type: 'customer_terms' as const, title: 'Termos de Uso' },
+  { type: 'merchant_terms' as const, title: 'Termos do Lojista' },
+  { type: 'privacy' as const, title: 'Política de Privacidade' },
+  { type: 'exchange_policy' as const, title: 'Política de Trocas e Reembolsos' },
 ];
 
 export interface SeedOptions {
@@ -103,13 +101,24 @@ export async function seedOnda1(db: Db, options: SeedOptions = {}): Promise<void
   }
   log(`${CATEGORIES.length} categorias`);
 
-  // Termos e privacidade v1 (só se o tipo ainda não tem versão).
-  for (const draft of LEGAL_DRAFTS) {
-    const [existing] = await db.select().from(legalDocuments).where(eq(legalDocuments.type, draft.type)).limit(1);
-    if (existing) continue;
-    await db.insert(legalDocuments).values({ ...draft, version: 1, effectiveAt: new Date('2026-01-01T00:00:00Z'), relevantChange: false });
+  // Textos legais: tipo sem versão ganha a v1 com o texto completo; tipo cuja última versão ainda é a minuta técnica antiga ganha a
+  // versão seguinte (a anterior continua no histórico, imutável). Mudança comum, não "relevante": ainda não há usuário real (pré-G5),
+  // e a minuta antiga nunca foi aprovada pelo jurídico. Rodar de novo não duplica.
+  for (const doc of LEGAL_DOCS) {
+    const [latest] = await db.select().from(legalDocuments).where(eq(legalDocuments.type, doc.type)).orderBy(desc(legalDocuments.version)).limit(1);
+    if (latest && !latest.content.startsWith(OLD_DRAFT_PREFIX)) continue;
+    await db.insert(legalDocuments).values({
+      type: doc.type,
+      title: doc.title,
+      content: legalText(doc.type),
+      version: (latest?.version ?? 0) + 1,
+      // Vigência = data do seed (não uma data fixa já vencida). A data de vigência real é definida pelo admin ao publicar a versão aprovada.
+      effectiveAt: new Date(),
+      relevantChange: false,
+      changeSummary: latest ? 'Texto completo proposto (versão para revisão jurídica), no lugar da minuta técnica.' : null,
+    });
   }
-  log('termos e privacidade (minuta v1)');
+  log('termos, privacidade e política de trocas (texto proposto, versão para revisão)');
 
   // Primeiro super admin: só se ainda não existir nenhum admin e houver senha explícita.
   const existingAdmins = await db.select({ id: adminProfiles.userId }).from(adminProfiles).limit(1);

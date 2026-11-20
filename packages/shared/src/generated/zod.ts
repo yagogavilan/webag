@@ -78,7 +78,7 @@ export const RegisterBody = zod.object({
   "password": zod.string().describe('8 a 128 caracteres, fora da lista de senhas comuns (422 WEAK_PASSWORD)'),
   "adultDeclaration": zod.literal(true).describe('Declaração de ter 18 anos ou mais'),
   "acceptedDocuments": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int().min(1)
 })).min(1).max(registerBodyAcceptedDocumentsMax).describe('Versões exibidas ao usuário. Devem ser as vigentes de customer_terms e privacy (409 TERMS_OUTDATED).')
 })
@@ -307,7 +307,7 @@ export const GetMeResponse = zod.object({
   "roles": zod.array(zod.enum(['customer', 'merchant'])),
   "adminProfile": zod.union([zod.literal('super_admin'),zod.literal('operations'),zod.literal('finance'),zod.literal('support'),zod.literal(null)]).nullable(),
   "pendingTerms": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "documentId": zod.uuid(),
   "version": zod.int(),
   "title": zod.string(),
@@ -339,7 +339,7 @@ export const UpdateMeResponse = zod.object({
   "roles": zod.array(zod.enum(['customer', 'merchant'])),
   "adminProfile": zod.union([zod.literal('super_admin'),zod.literal('operations'),zod.literal('finance'),zod.literal('support'),zod.literal(null)]).nullable(),
   "pendingTerms": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "documentId": zod.uuid(),
   "version": zod.int(),
   "title": zod.string(),
@@ -378,7 +378,7 @@ export const becomeMerchantBodyAcceptedDocumentsMax = 5;
 
 export const BecomeMerchantBody = zod.object({
   "acceptedDocuments": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int().min(1)
 })).min(1).max(becomeMerchantBodyAcceptedDocumentsMax)
 })
@@ -418,7 +418,7 @@ export const RevokeMySessionResponse = zod.void()
  */
 export const GetMyPendingTermsResponse = zod.object({
   "pending": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "documentId": zod.uuid(),
   "version": zod.int(),
   "title": zod.string(),
@@ -438,14 +438,14 @@ export const acceptTermsBodyAcceptedDocumentsMax = 5;
 
 export const AcceptTermsBody = zod.object({
   "acceptedDocuments": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int().min(1)
 })).min(1).max(acceptTermsBodyAcceptedDocumentsMax)
 })
 
 export const AcceptTermsResponse = zod.object({
   "pending": zod.array(zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "documentId": zod.uuid(),
   "version": zod.int(),
   "title": zod.string(),
@@ -1183,11 +1183,11 @@ export const SetMaintenanceResponse = zod.object({
 
 
 /**
- * Alimenta as páginas /termos e /privacidade e os links do app.
+ * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app.
  * @summary Versão vigente do documento (público)
  */
 export const GetCurrentLegalDocumentParams = zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']).describe('Tipo do documento')
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']).describe('Tipo do documento')
 })
 
 export const GetCurrentLegalDocumentResponse = zod.object({
@@ -1195,7 +1195,7 @@ export const GetCurrentLegalDocumentResponse = zod.object({
   "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
   "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int(),
   "title": zod.string(),
   "content": zod.string().describe('Texto simples; clientes devem exibir como texto puro'),
@@ -1210,7 +1210,7 @@ export const GetCurrentLegalDocumentResponse = zod.object({
  * @summary Versões publicadas do documento
  */
 export const ListLegalVersionsParams = zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']).describe('Tipo do documento')
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']).describe('Tipo do documento')
 })
 
 export const ListLegalVersionsResponse = zod.object({
@@ -1219,7 +1219,7 @@ export const ListLegalVersionsResponse = zod.object({
   "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
   "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int(),
   "title": zod.string(),
   "content": zod.string().describe('Texto simples; clientes devem exibir como texto puro'),
@@ -1236,7 +1236,7 @@ export const ListLegalVersionsResponse = zod.object({
  * @summary Publicar nova versão
  */
 export const PublishLegalDocumentParams = zod.object({
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']).describe('Tipo do documento')
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']).describe('Tipo do documento')
 })
 
 export const publishLegalDocumentBodyTitleMin = 3;
@@ -1264,7 +1264,7 @@ export const PublishLegalDocumentResponse = zod.object({
   "publishedByName": zod.string().nullish().describe('Nome de quem publicou (só nas rotas de admin)'),
   "acceptances": zod.int().nullish().describe('Quantos usuários aceitaram esta versão (só nas rotas de admin)'),
   "id": zod.uuid(),
-  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy']),
+  "type": zod.enum(['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy']),
   "version": zod.int(),
   "title": zod.string(),
   "content": zod.string().describe('Texto simples; clientes devem exibir como texto puro'),

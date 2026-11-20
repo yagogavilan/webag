@@ -119,7 +119,8 @@ export const maintenanceState = pgTable(
   (t) => [check('maintenance_state_singleton_chk', sql`${t.id} = 1`)],
 );
 
-export const LEGAL_DOCUMENT_TYPES = ['customer_terms', 'merchant_terms', 'privacy'] as const;
+/** `exchange_policy` (DEC-081): política pública de trocas e reembolsos. Informativa: não entra no aceite do cadastro (`requiredDocumentTypes`). */
+export const LEGAL_DOCUMENT_TYPES = ['customer_terms', 'merchant_terms', 'privacy', 'exchange_policy'] as const;
 export type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 
 /** WB-117: versões imutáveis. A vigente é a de maior versão com `effective_at <= now()`. */

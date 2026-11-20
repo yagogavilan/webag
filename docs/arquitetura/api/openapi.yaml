@@ -1306,10 +1306,10 @@ paths:
       tags: [legal]
       operationId: getCurrentLegalDocument
       summary: Versão vigente do documento (público)
-      description: "Alimenta as páginas /termos e /privacidade e os links do app."
+      description: "Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app."
       security: []
       parameters:
-        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy, exchange_policy] } }
       responses:
         '200':
           description: Documento vigente
@@ -1328,7 +1328,7 @@ paths:
       summary: Versões publicadas do documento
       description: "Permissão de admin: `legal:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
-        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy, exchange_policy] } }
       responses:
         '200':
           description: Versões (a mais nova primeiro)
@@ -1348,7 +1348,7 @@ paths:
       summary: Publicar nova versão
       description: "Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
-        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy] } }
+        - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy, exchange_policy] } }
       requestBody:
         required: true
         content:
@@ -9063,7 +9063,7 @@ components:
         message: { type: string }
     LegalDocumentType:
       type: string
-      enum: [customer_terms, merchant_terms, privacy]
+      enum: [customer_terms, merchant_terms, privacy, exchange_policy]
     DocumentRef:
       type: object
       required: [type, version]
