@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const marketing = join(root, 'docs/marketing');
 const srcRoot = join(marketing, 'src');
+const docsRoot = join(root, 'docs'); // raiz do servidor: as pecas referenciam ../../telas e ../../design (fora de marketing/src)
 
 const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'tudo'];
 const DECKS = { lojista: 'apresentacao-lojista', cliente: 'apresentacao-cliente' };
@@ -147,14 +148,14 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-/** Serve docs/marketing/src em 127.0.0.1 numa porta livre (porta 0 = o SO escolhe), para o fetch de config.json funcionar (file:// bloqueia). */
+/** Serve a pasta docs/ inteira em 127.0.0.1 numa porta livre (porta 0 = o SO escolhe), para o fetch de config.json funcionar (file:// bloqueia) e para ../../telas e ../../design resolverem. Nada fora de docs/ e servido. */
 function startServer() {
   const server = createServer((req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
-      let file = resolve(srcRoot, '.' + decodeURIComponent(url.pathname));
-      if (file !== srcRoot && !file.startsWith(srcRoot + sep)) {
-        res.writeHead(403).end('fora da pasta src');
+      let file = resolve(docsRoot, '.' + decodeURIComponent(url.pathname));
+      if (file !== docsRoot && !file.startsWith(docsRoot + sep)) {
+        res.writeHead(403).end('fora da pasta docs');
         return;
       }
       if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
@@ -237,9 +238,19 @@ async function openPage(browser, origin, file, viewport, deviceScaleFactor = 1) 
         `${label}: recurso externo (depende de internet; prefira local em src/assets): ${u.slice(0, 120)}`,
       );
   });
-  await page.goto(`${origin}/${relative(srcRoot, file).split(sep).join('/')}`, {
+  await page.goto(`${origin}/${relative(docsRoot, file).split(sep).join('/')}`, {
     waitUntil: 'networkidle',
   });
+  // pecas que sinalizam prontidao com <html data-ready="1"> (o script do HTML a define apos carregar o config): espera; sem sinal, segue
+  const usesReady = await page.evaluate(
+    () =>
+      document.documentElement.hasAttribute('data-ready') ||
+      [...document.scripts].some((s) => s.textContent.includes('data-ready')),
+  );
+  if (usesReady)
+    await page
+      .waitForSelector('html[data-ready="1"]', { timeout: 15000, state: 'attached' })
+      .catch(() => problems.push(`${label}: html[data-ready="1"] nao apareceu em 15 s`));
   const readiness = await page.evaluate(async () => {
     await document.fonts.ready;
     const imgs = [...document.images];
@@ -672,7 +683,7 @@ try {
   ({ server } = await startServer());
   const origin = `http://127.0.0.1:${server.address().port}`;
   log(
-    `servindo ${relative(root, srcRoot)} em ${origin}; saida em ${relative(root, outDir) || '.'}`,
+    `servindo ${relative(root, docsRoot)} em ${origin}; saida em ${relative(root, outDir) || '.'}`,
   );
   browser = await chromium.launch({ args: CHROME_ARGS, executablePath });
   for (const [name, job] of jobs) {

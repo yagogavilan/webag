@@ -31,7 +31,7 @@ docs/marketing/
 ```
 
 Trocar o contato: edite só `src/config.json` e rode `pnpm marketing`.
-O pipeline serve `src/` por um servidor HTTP local em porta livre (127.0.0.1, porta escolhida pelo SO), porque `fetch` de JSON não funciona em `file://`. Para ver no navegador sem o pipeline: `npx serve docs/marketing/src` (ou qualquer servidor estático) e abrir a URL.
+O pipeline serve a pasta `docs/` inteira (raiz do servidor; nada fora dela, com proteção contra path traversal) por um servidor HTTP local em porta livre (127.0.0.1, porta escolhida pelo SO), porque `fetch` de JSON não funciona em `file://` e as peças referenciam `../../telas/*.png` e `../../design/fonts`. As peças abrem em `/marketing/src/<arquivo>.html`. Se o HTML define `data-ready` (`<html data-ready="1">`), o pipeline espera o atributo antes de medir e imprimir. Para ver no navegador sem o pipeline: `npx serve docs` e abrir `/marketing/src/apresentacao-lojista.html`.
 
 ## O que o pipeline verifica (e falha com mensagem clara)
 
