@@ -81,6 +81,13 @@ V8.7 [ ] **(sev 3, web; polimento)** Produtos do lojista no celular: 1 produto p
 
 Sev 2 que cabem junto se a sprint tiver folga (detalhe e dono na tabela do relatório): G1 fallback de produto por categoria (kit §7); G3 cabeçalho compacto de 96 px nas telas de trabalho; copy do Pedido confirmado em retirada ("quando estiver pronto", imagem 10); endereço da loja na Retirada do checkout (07); faixa de chegada em 1 linha (11); "Ajuda" só no detalhe do pedido (13); ícones lilás com contraste (18); bloco de marca no cadastro do lojista (27); variável interna na copy de Comissões (37); filtros recolhidos em admin (31, 32).
 
+## Z5. Do Security em 2026-11-20 (adendo pós-RC: `docs/seguranca/revisoes/parecer-final-rc.md`, seção "Adendo pós-RC")
+
+| Item | O que fazer |
+|---|---|
+| Z5.m1 [ ] SEC-187 (Média; C10 do G5), parte do app | Depois que o backend publicar a versão com os valores escritos no texto, conferir que `legal/[type]` mostra o encarregado, o CNPJ e o foro sem "a definir". Trocar o "Vigência a definir" fixo de `fillLegal` (`src/features/legal/legal-text.ts:18`) pela vigência da versão (`effectiveAt`) quando o texto estiver aprovado, igual ao site. Teste em `legal-screen.test.tsx` |
+| Sugestão sem ID (web) | `EMAIL` em `apps/web/src/lib/legal-text.ts`: não aceitar `*` nem `_`, para que um e-mail não abra negrito no texto. É cosmético |
+
 ## Z3. Do tech-lead em 2026-11-19 (revisão final: `docs/arquitetura/reviews/onda-8.md`)
 
 | Item | Onde | O que fazer |

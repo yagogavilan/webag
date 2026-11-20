@@ -30,6 +30,7 @@
 | C7 | Reexecutar contra o **deploy real** (nginx e TLS) a minha bateria curta de hosts, CSRF, cabeçalhos e D2. Leva cerca de 30 min | security-engineer | Aqui o nginx não rodou: o `X-Real-IP` e o `default_server` só foram lidos |
 | C8 | Conta demo para o revisor da loja em **staging**, sem dado real, e as notas ao revisor com o caminho de exclusão de conta | PO / mobile-dev | Diretrizes 5.1.1(v) (Apple) e política de exclusão do Play |
 | C9 (Apple) | Num build iOS, conferir em Ajustes > Webag que a "Localização precisa" está **desligada**. Se estiver ligada, declarar Precise Location | mobile-dev / QA | Garante que o rótulo Coarse é verdadeiro (SEC-179) |
+| C10 (adendo pós-RC) | SEC-187 corrigido: fatos contratuais escritos na versão publicada, sem vir do ambiente. Vale antes de `LEGAL_REVIEWED=true` e antes do envio | backend-dev, PO, mobile-dev | Prova do aceite e encarregado visível no app (LGPD art. 9º e 41) |
 
 **Recomendado, sem bloquear o piloto:** um pentest externo antes de escalar para fora da região do piloto (mais de cerca de 30 lojas), ou antes de ligar o Mercado Pago em produção para o público em geral, o que vier primeiro. O custo é decisão do fundador.
 
@@ -160,3 +161,56 @@ Como verificar a correção: no E2E, bloquear com a exclusão pendente dá 200, 
 - **Não houve pentest** nem teste de carga do Security (o QA tem os k6).
 - A spec de ataque (`rc-attacks`, 9 cenários) e o script do D2 ficaram fora do repositório. O SEC-186 deve virar E2E junto com a correção.
 - Bases legais, prazos e textos são recomendação técnica `[validar com o jurídico]` (C4).
+
+## Adendo pós-RC (2026-11-20)
+
+- **Escopo:** commits de código entre `f622bc9` e `06d52bb`: V8.6 `f217b7b`, V8.7 `11313d4` e `696d27b`, DEC-052 `9afdd56` e `3a81ef1`, textos legais `c746778`, `deab780` e `41a3db7`. Os V8.2 a V8.5 já estavam cobertos acima e foram relidos. Não houve mudança de dependências (`package.json` e lockfile sem diff).
+- **Método:** leitura do diff. E2E da API `legal-texts` (5 passam). Vitest do web nos módulos tocados (9 arquivos, 94 passam). Jest do app (`legal-screen`, `open-link`, `exchange`, `store`, `checkout`: 61 passam). Busca de segredos no diff: nada. Três ataques próprios fora do repositório (banco `_<pid>_test` próprio). **Não rodei o Playwright** (`publico.e2e`): ele usa portas fixas (3101/3999) e `next build` no mesmo `.next` do QA. A CSP de `/termos/trocas` foi conferida no código (o `matcher` `/termos/:path*` e `isPublicSitePath`) e no `publico.e2e.ts:26-45`.
+
+### Parecer do adendo
+
+| Gate | Parecer |
+|---|---|
+| **G4** | **MANTIDO APROVADO.** Não há achado Crítico nem Alto. O SEC-187 (Média) não bloqueia o RC: o texto continua "versão para revisão" (`LEGAL_REVIEWED=false`) e ainda não há usuário real |
+| **G5** | **MANTIDO COM CONDIÇÕES**, com a condição nova **C10:** o SEC-187 deve estar corrigido antes de `LEGAL_REVIEWED=true` e antes do envio às lojas |
+
+### Ataques próprios
+
+| # | Ataque | Resultado |
+|---|---|---|
+| X1 | Operação e suporte publicam `exchange_policy` | **403** nos dois. Só `super_admin` publica (`legal:write`). O histórico sem token dá 401. O suporte lê o histórico (`legal:read`, 200), como já era para os outros tipos |
+| X2 | Vazamento de versão não vigente. Publiquei `exchange_policy` com vigência amanhã e um marcador secreto, e `customer_terms` futura | O endpoint público continua na versão vigente, **sem o marcador**. O cadastro com a versão futura dos termos dá **409 `TERMS_OUTDATED`**. Os tipos `refund_policy`, `EXCHANGE_POLICY`, `%00` e `..%2F` dão 404. Uma referência inventada a `exchange_policy` v999 no cadastro é **ignorada**: não grava aceite e não é exigida |
+| X3 | Troca de versão **sem** `relevantChange` (o caso da minuta trocada pelo seed) | O cadastro com a versão anterior dá **409 `TERMS_OUTDATED`**. Quem aceitou a versão anterior **não** ganha pendência, como esperado para mudança não relevante |
+| A3 | Injeção nas variáveis `{{...}}`. Pus payloads no ambiente e no fallback de `/v1/help` (editável pelo admin): link `javascript:`, `<script>`, `<img onerror>`, título `##` com quebra de linha, `{{SITE_URL}}` e `{{ VIGENCIA }}` dentro do valor, `)[x](https://evil)` no e-mail, `LEGAL_VIGENCIA` e `AVISO_MUDANCA_DIAS` com lixo. Rendi a `LegalPage` inteira com os 4 textos do seed | **Nenhum** `href` fora de `#secao-*` e de `https://<SITE_URL>/`. Não sai tag, título injetado nem `{{`. A substituição é de uma passada só, sem recursão: `plain()` tira `[]<>{}*` e as quebras de linha, o e-mail inválido vira "a definir", a data inválida cai na vigência publicada e o número sai só com os dígitos. `SITE_URL` vem de `publicOrigin()`, que só aceita https em produção, e o compose exige `PUBLIC_HOST` |
+
+### Respostas às perguntas do CEO
+
+1. **Variáveis nas páginas legais:** não há XSS, injeção de link ou de Markdown, recursão nem open redirect (A3). Os links do texto passam pela allowlist `https:`/`mailto:` do `markdown-lite`, que já era assim. Detalhe sem ID: o e-mail aceita `*`, e um `x**y@...` pode abrir um negrito. É só cosmético, e o valor vem do ambiente ou do admin. Sugestão ao mobile-dev: tirar `*` e `_` do `EMAIL` em `lib/legal-text.ts`. A CSP e os cabeçalhos de `/termos/trocas` são os mesmos de `/termos`: `publicSiteCsp`, sem terceiros, com `frame-ancestors 'none'` e `no-store`.
+2. **`exchange_policy`:** publicação, vigência e aceite estão corretos (X1 a X3). É um tipo só informativo, fora de `requiredDocumentTypes` e fora das pendências. O seed só substitui a minuta antiga e não duplica o texto ao rodar de novo. O problema de versionamento está nas **variáveis**, e não no tipo: ver SEC-187.
+3. **`open-link`:** `/termos/trocas` passa por `openExternal(url, 'web')`, com a mesma origem de `EXPO_PUBLIC_WEB_URL`, https e sem `user@`. O texto legal no app não abre links: ele escreve o endereço.
+4. **`SafeImage`, `storeStatus()`, 48 px, V8.6 e V8.7:** são só tela. "Conferir tudo" é **controle de interface**. No servidor, `approve()` (`admin-stores.service.ts:143`) só confere o status `in_review` e **não** confere se os documentos foram abertos, embora cada abertura seja auditada (`store.document_view`). Registro como SEC-188 (Baixa).
+5. **Ambiente de produção:** as variáveis novas são de **servidor** (sem `NEXT_PUBLIC_`), não entram no bundle e não precisam de mudança no `check-build-env`. Nenhum módulo `'use client'` importa `legal-text`. O `env.prod.example` vem vazio e não traz segredo. `LEGAL_REVIEWED` é `false` por padrão.
+6. **Inventário e Data Safety:** **nenhum dado novo** coletado. O que mudou: um link externo, textos, o banner do seed e o subtítulo do PIX. O `inventario-lojas.md` não muda. A §3 da política proposta bate com o inventário na minha leitura, mas a validação é do jurídico (C4).
+
+### SEC-187 | Severidade: Média | Status: Aberto
+Onde: `apps/web/src/lib/legal-text.ts` (`legalVariables` lê `process.env` a cada exibição), `apps/mobile/src/features/legal/legal-text.ts:18` (`fillLegal` só conhece `SITE_URL` e `VERSAO`), `terms_acceptances` (guarda só o `documentId`).
+Problema: os fatos contratuais (razão social, CNPJ, sede, encarregado, foro, prestadores, prazo de aviso) entram no texto na hora de exibir, a partir do ambiente. Isso causa dois problemas. (a) A versão "imutável" muda sem versão nova e sem registro: basta trocar `FORO_COMARCA` ou `DPO_EMAIL` no `.env`. (b) No app, quem aceita no cadastro lê "a definir" no encarregado, no CNPJ e no foro, e "Vigência a definir" mesmo depois da aprovação, enquanto o site mostra os valores.
+Cenário de ataque: numa disputa, ou num pedido da ANPD, o Webag não consegue provar qual foro e qual encarregado constavam no texto que o titular aceitou. O registro aponta para um conteúdo com `{{FORO_COMARCA}}`, e o valor dependia de um `.env` que mudou. Um insider com acesso ao `.env` altera cláusulas sem deixar trilha no `legal_documents`. No app, faltam a identidade e o contato do controlador e do encarregado (LGPD art. 9º, II e III, e art. 41, §1º). Hoje o impacto é nulo: não há usuário real e o texto está "em revisão". Ele aparece no G5.
+Correção recomendada: nenhum fato contratual pode vir do ambiente na exibição. (1) A versão aprovada pelo jurídico é publicada **com os valores escritos no texto**, e trocar um valor vira uma versão nova. Só `SITE_URL`, `VERSAO` e `VIGENCIA` continuam como variáveis de exibição. (2) O backend recusa na publicação (400) qualquer `{{...}}` fora dessa lista, ou só aceita a lista enquanto o texto estiver em revisão. (3) O PO acrescenta o passo no `docs/produto/legal/LEIA-ME.md` §2. Com isso, o app passa a mostrar os mesmos valores do site sem mudança de código. Ainda falta tratar a "Vigência" no app (mobile-dev).
+Como verificar a correção: no E2E, publicar com `{{FORO_COMARCA}}` dá 400 e com `{{SITE_URL}}` dá 201. Trocar `FORO_COMARCA` no ambiente do web não muda o HTML de `/termos/lojista`. O texto do `GET /v1/legal/privacy` contém o e-mail do encarregado. A tela legal do app mostra o encarregado sem "a definir".
+
+### SEC-188 | Severidade: Baixa | Status: Aberto
+Onde: `apps/api/src/modules/stores/admin-stores.service.ts:143` (`approve`) e `:100` (`decide`).
+Problema: o servidor aprova uma loja `in_review` sem exigir que alguém tenha aberto os documentos. O "Conferir tudo só depois de abrir" (V8.4) é só da tela.
+Cenário de ataque: um admin apressado ou mal-intencionado aprova direto pela API, ou pela tela marcando item a item, uma loja falsa sem ver o documento com foto nem o comprovante. A loja passa a receber PIX de clientes e não entrega. A auditoria permite descobrir depois, mas não impede.
+Correção recomendada: no `approve`, exigir uma linha `store.document_view` (de qualquer admin) para cada documento **atual** da loja depois do último envio. Sem ela, responder 409 `DOCUMENTS_NOT_REVIEWED`. É uma consulta ao `audit_log` dentro da transação.
+Como verificar a correção: no E2E, aprovar sem abrir os documentos dá 409. Depois de `GET` no acesso de cada documento, dá 200. Um documento reenviado depois da abertura volta a exigir uma nova abertura.
+
+### Abertos acrescentados
+
+| ID | Resumo | Dono | Prazo |
+|---|---|---|---|
+| SEC-187 | Texto legal versionado depende do ambiente; o app mostra "a definir" | backend-dev (validação na publicação), product-owner (LEIA-ME), mobile-dev (vigência no app) | **C10:** antes de `LEGAL_REVIEWED=true` e do envio às lojas |
+| SEC-188 | Aprovação de loja sem exigir a abertura dos documentos no servidor | backend-dev | Antes do piloto com lojistas reais (recomendado) |
+
+**Limites do adendo:** sem Playwright (as portas são do QA), sem build de produção do web e sem aparelho. Os ataques e a spec ficaram fora do repositório. O que foi dito em "Limites" acima continua valendo.

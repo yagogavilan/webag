@@ -289,3 +289,12 @@ G4 **APROVADO**; G5 (Play e App Store) **APROVADO COM CONDIÇÕES** (C1 a C9 no 
 | Z4.1 [ ] SEC-186 (Baixa; antes do piloto com lojistas reais, recomendado) | Conta ativa com exclusão `pending` não pode ser bloqueada (409 `USER_NOT_ACTIVE`) e a desistência a devolve `active`: o fraudador pede exclusão, espera a investigação e desiste. Aceitar o bloqueio de conta `deleted` com exclusão pendente gravando `previousUserStatus = 'blocked'` na exclusão e a linha em `user_status_history`; e2e: bloquear com a exclusão pendente dá 200, e a desistência deixa a conta `blocked` com login 403 |
 | Z4.2 [ ] C3 do G5 (com o qa-engineer; credenciais de sandbox do fundador) | Fumaça em staging com o sandbox do Mercado Pago: PIX e cartão, recusa, webhook com assinatura válida e inválida, reconsulta, estorno e OAuth de 1 lojista |
 | Sugestão sem ID | E-mail ao super admin que convidou quando o convite de admin for aceito (`admin-users.service.ts` `accept`) |
+
+## Z5. Do Security em 2026-11-20 (adendo pós-RC: `docs/seguranca/revisoes/parecer-final-rc.md`, seção "Adendo pós-RC")
+
+G4 mantido APROVADO. G5 mantido com condições, com a C10 nova (SEC-187).
+
+| Item | O que fazer |
+|---|---|
+| Z5.1 [ ] SEC-187 (Média; C10 do G5, antes de `LEGAL_REVIEWED=true`) | Os fatos contratuais não podem vir do ambiente na exibição. Em `POST /v1/admin/legal/:type`, recusar com 400 qualquer `{{...}}` fora de `SITE_URL`, `VERSAO` e `VIGENCIA`; a versão aprovada é publicada com os valores escritos no texto, e trocar um valor vira versão nova. E2E: `{{FORO_COMARCA}}` dá 400 e `{{SITE_URL}}` dá 201. O seed atual (texto em revisão com variáveis) precisa de saída: um modo "em revisão" que aceite a lista, ou o seed inserir direto no banco sem passar pela validação |
+| Z5.2 [ ] SEC-188 (Baixa; antes do piloto com lojistas reais, recomendado) | `approve` da loja (`admin-stores.service.ts:143`) exige uma linha `store.document_view` para cada documento atual enviado depois do último reenvio; sem ela, 409 `DOCUMENTS_NOT_REVIEWED`. E2E: aprovar sem abrir dá 409, abrir todos e aprovar dá 200, e um documento reenviado exige nova abertura |
