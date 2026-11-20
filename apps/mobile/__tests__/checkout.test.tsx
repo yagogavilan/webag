@@ -41,6 +41,17 @@ describe('S3. Checkout', () => {
     expect(router.replace).toHaveBeenCalledWith({ pathname: '/signup', params: { returnTo: '/checkout', context: 'checkout' } });
   });
 
+  it('DEC-052: PIX e cartão chegam sem nenhum selecionado e sem subtítulo que favoreça o PIX', async () => {
+    await login();
+    await renderScreen(<CheckoutScreen />);
+    const pix = await screen.findByTestId('checkout.pay-pix');
+    expect(pix).not.toBeSelected();
+    expect(screen.getByTestId('checkout.pay-card')).not.toBeSelected();
+    expect(screen.queryByText('Aprovação na hora')).toBeNull();
+    expect(screen.getByText('Pague pelo app do seu banco')).toBeOnTheScreen();
+    expect(screen.getByText('Em até 3x')).toBeOnTheScreen();
+  });
+
   it('PIX: manda a revisão, o total esperado e a chave de idempotência, e abre a tela do PIX', async () => {
     await login();
     mockPlace.mockResolvedValue(orderFixture({ status: 'awaiting_payment' }));

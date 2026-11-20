@@ -771,7 +771,7 @@ export const ptBR = {
     noAddress: 'Escolha onde receber',
     pay: 'Como você quer pagar?',
     pix: 'PIX',
-    pixHint: 'Aprovação na hora',
+    pixHint: 'Pague pelo app do seu banco',
     card: 'Cartão de crédito',
     cardHint: 'Em até 3x',
     cpfLabel: 'CPF',
