@@ -47,6 +47,10 @@ export default async function Page() {
           ))}
         </section>
       ))}
+      <section className={s.card} aria-labelledby="politica-trocas" data-testid="public.ajuda.trocas">
+        <h2 id="politica-trocas" className="wb-text-title2">Regras de troca e reembolso</h2>
+        <p className="wb-text-body">Quer ver as regras completas de arrependimento, defeito, troca por tamanho ou cor e reembolso? Leia a <Link href="/termos/trocas">Política de trocas e reembolsos</Link>.</p>
+      </section>
       <section className={s.card} aria-labelledby="falar">
         <h2 id="falar" className="wb-text-title2">Não achou o que procurava?</h2>
         {loaded.status === 'ok' ? <Contacts contacts={loaded.data.contacts} /> : null}

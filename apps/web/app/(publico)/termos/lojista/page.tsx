@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import { LegalLinks } from '@/components/public/legal-links';
 import { LegalPage } from '@/components/public/legal-page';
-import { loadLegal } from '@/server/public-content';
+import { loadLegalView } from '@/server/public-content';
 
 export const metadata: Metadata = {
   title: 'Termos do lojista',
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  return <LegalPage loaded={await loadLegal('merchant_terms')} fallbackTitle="Termos do lojista" testId="public.termos-lojista" />;
+  return <LegalPage {...await loadLegalView('merchant_terms')} fallbackTitle="Termos do lojista" testId="public.termos-lojista" footer={<LegalLinks current="merchant" />} />;
 }

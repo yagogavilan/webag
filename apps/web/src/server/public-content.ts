@@ -1,8 +1,10 @@
 import 'server-only';
 import type { MaintenanceStatus } from '@/lib/maintenance';
+import { legalReviewed, legalVariables, type HelpFallback } from '@/lib/legal-text';
+import { publicOrigin } from './config';
 import { callApi, parseJson } from './upstream';
 
-export type LegalType = 'customer_terms' | 'merchant_terms' | 'privacy';
+export type LegalType = 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy';
 
 export interface LegalDoc {
   id: string;
@@ -55,6 +57,20 @@ function isHelp(body: unknown): body is HelpData {
 
 export function loadLegal(type: LegalType): Promise<Loaded<LegalDoc>> {
   return cached(`legal:${type}`, `/v1/legal/${type}`, undefined, isLegal);
+}
+
+/** Texto legal pronto para a página: o documento da API, as variáveis preenchidas pelo ambiente e se o jurídico já aprovou (`LEGAL_REVIEWED`). */
+export interface LegalView {
+  loaded: Loaded<LegalDoc>;
+  variables: Record<string, string>;
+  reviewed: boolean;
+}
+
+export async function loadLegalView(type: LegalType): Promise<LegalView> {
+  const [loaded, help] = await Promise.all([loadLegal(type), loadHelp('customer')]);
+  const fallback: HelpFallback | null = help.status === 'ok' ? { officerName: help.data.privacy.officerName, officerEmail: help.data.privacy.officerEmail, supportEmail: help.data.contacts.email, supportWhatsapp: help.data.contacts.whatsapp } : null;
+  const variables = loaded.status === 'ok' ? legalVariables({ doc: loaded.data, siteUrl: publicOrigin(), help: fallback }) : {};
+  return { loaded, variables, reviewed: legalReviewed() };
 }
 
 export function loadHelp(audience: 'customer' | 'merchant' = 'customer'): Promise<Loaded<HelpData>> {

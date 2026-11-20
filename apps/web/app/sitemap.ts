@@ -9,6 +9,7 @@ const PAGES: { path: string; priority: number }[] = [
   { path: '/', priority: 1 },
   { path: '/privacidade', priority: 0.8 },
   { path: '/termos', priority: 0.8 },
+  { path: '/termos/trocas', priority: 0.7 },
   { path: '/termos/lojista', priority: 0.5 },
   { path: '/ajuda', priority: 0.7 },
   { path: '/suporte', priority: 0.7 },

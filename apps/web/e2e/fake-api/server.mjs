@@ -2,6 +2,7 @@
 // sem Postgres/Redis. Contrato = o dos controllers reais (ver docs/arquitetura/divida-tecnica.md, DT-014).
 // Uso: node e2e/fake-api/server.mjs  (PORT, FAKE_ACCESS_TTL_S)
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { deflateSync } from 'node:zlib';
 
@@ -96,10 +97,15 @@ const flags = [
   ['taxa_servico', false, 'Taxa de serviço ao cliente'],
   ['cadastro_lojista', true, 'Cadastro aberto de lojistas'],
 ].map(([key, enabled, description]) => ({ key, enabled, description, updatedAt: null }));
-const legal = { customer_terms: [], merchant_terms: [], privacy: [] };
-legal.customer_terms.push({ id: randomUUID(), type: 'customer_terms', version: 1, title: 'Termos de uso', content: '## Termos\nTexto inicial dos termos de uso do cliente, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
-legal.merchant_terms.push({ id: randomUUID(), type: 'merchant_terms', version: 1, title: 'Termos do lojista', content: '## Termos do lojista\nTexto inicial, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
-legal.privacy.push({ id: randomUUID(), type: 'privacy', version: 1, title: 'Política de privacidade', content: '## Privacidade\nTexto inicial da política de privacidade, versão um.', effectiveAt: '2026-01-01T03:00:00.000Z', relevantChange: false, createdAt: now() });
+// Textos legais: os REAIS do seed da API (apps/api/seed/legal, DEC-080), com as variáveis {{...}} que o site preenche.
+const SEED_LEGAL = new URL('../../../api/seed/legal/', import.meta.url);
+const legalDoc = (type, title) => ({ id: randomUUID(), type, version: 1, title, content: readFileSync(new URL(`${type}.md`, SEED_LEGAL), 'utf8').trim(), effectiveAt: new Date(Date.now() - 86_400_000).toISOString(), relevantChange: false, createdAt: now() });
+const legal = {
+  customer_terms: [legalDoc('customer_terms', 'Termos de Uso')],
+  merchant_terms: [legalDoc('merchant_terms', 'Termos do Lojista')],
+  privacy: [legalDoc('privacy', 'Política de Privacidade')],
+  exchange_policy: [legalDoc('exchange_policy', 'Política de Trocas e Reembolsos')],
+};
 
 // ---------------------------------------------------------------- utilitários
 const problem = (res, status, code, title, detail, extra = {}) => {

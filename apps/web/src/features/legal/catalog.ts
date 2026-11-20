@@ -4,6 +4,7 @@ export const LEGAL_TYPES: { type: LegalType; slug: string; label: string }[] = [
   { type: 'customer_terms', slug: 'cliente', label: 'Termos de uso (cliente)' },
   { type: 'merchant_terms', slug: 'lojista', label: 'Termos do lojista' },
   { type: 'privacy', slug: 'privacidade', label: 'Política de privacidade' },
+  { type: 'exchange_policy', slug: 'trocas', label: 'Política de trocas e reembolsos' },
 ];
 
 export function typeFromSlug(slug: string) {

@@ -239,6 +239,20 @@ services:
       # Identificação da empresa no rodapé do site (razão social e CNPJ; vazios = o rodapé mostra só "Webag").
       COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
       COMPANY_CNPJ: ${COMPANY_CNPJ:-}
+      # Textos legais (variáveis {{...}} de /privacidade, /termos e /termos/trocas). Vazio = "a definir". LEGAL_REVIEWED só vira true com o parecer do jurídico.
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-}
+      DPO_NAME: ${DPO_NAME:-}
+      DPO_EMAIL: ${DPO_EMAIL:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP:-}
+      FORO_COMARCA: ${FORO_COMARCA:-}
+      HOSTING_PROVIDER: ${HOSTING_PROVIDER:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      MP_LEGAL_NAME: ${MP_LEGAL_NAME:-}
+      AVISO_MUDANCA_DIAS: ${AVISO_MUDANCA_DIAS:-}
+      LEGAL_REVIEWED: ${LEGAL_REVIEWED:-false}
+      LEGAL_VIGENCIA: ${LEGAL_VIGENCIA:-}
       # SEC-178: prazos citados em /excluir-conta. Ajuste junto com os parâmetros do admin (vazio = padrão 72 h, 5 anos, 6 meses, 15 dias).
       PUBLIC_DELETION_REGRET_HOURS: ${PUBLIC_DELETION_REGRET_HOURS:-}
       PUBLIC_DELETION_FISCAL_YEARS: ${PUBLIC_DELETION_FISCAL_YEARS:-}

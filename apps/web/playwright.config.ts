@@ -35,7 +35,7 @@ export default defineConfig({
       command: `pnpm build && pnpm exec next start --port ${WEB_PORT}`,
       port: WEB_PORT,
       timeout: 300_000,
-      env: { API_URL: `http://localhost:${API_PORT}`, COOKIE_SECURE: 'false', WEBAG_ALLOW_LOCAL_ORIGINS: 'true', ADMIN_HOST: `localhost:${WEB_PORT}`, LOJISTA_HOST: `localhost:${WEB_PORT}`, PUBLIC_HOST: `localhost:${WEB_PORT}`, STORAGE_ORIGIN: `http://localhost:${API_PORT}` },
+      env: { API_URL: `http://localhost:${API_PORT}`, COOKIE_SECURE: 'false', WEBAG_ALLOW_LOCAL_ORIGINS: 'true', ADMIN_HOST: `localhost:${WEB_PORT}`, LOJISTA_HOST: `localhost:${WEB_PORT}`, PUBLIC_HOST: `localhost:${WEB_PORT}`, STORAGE_ORIGIN: `http://localhost:${API_PORT}`, FORO_COMARCA: 'Comarca de Teste' },
       reuseExistingServer: !process.env.CI,
     },
   ],

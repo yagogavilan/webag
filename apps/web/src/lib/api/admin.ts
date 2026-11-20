@@ -61,7 +61,7 @@ export interface FeatureFlag {
   updatedAt: string | null;
 }
 
-export type LegalType = 'customer_terms' | 'merchant_terms' | 'privacy';
+export type LegalType = 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy';
 export interface LegalDocument {
   id: string;
   type: LegalType;

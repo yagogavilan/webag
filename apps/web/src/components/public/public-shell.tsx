@@ -9,6 +9,7 @@ import s from './public.module.css';
 export const FOOTER_LINKS = [
   { href: '/privacidade', label: 'Política de privacidade' },
   { href: '/termos', label: 'Termos de uso' },
+  { href: '/termos/trocas', label: 'Trocas e reembolsos' },
   { href: '/ajuda', label: 'Ajuda' },
   { href: '/suporte', label: 'Suporte' },
   { href: '/excluir-conta', label: 'Excluir conta' },

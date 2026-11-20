@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import { LegalLinks } from '@/components/public/legal-links';
 import { LegalPage } from '@/components/public/legal-page';
-import { loadLegal } from '@/server/public-content';
+import { loadLegalView } from '@/server/public-content';
 
 export const metadata: Metadata = {
   title: 'Política de privacidade',
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  return <LegalPage loaded={await loadLegal('privacy')} fallbackTitle="Política de privacidade" testId="public.privacidade" />;
+  return <LegalPage {...await loadLegalView('privacy')} fallbackTitle="Política de privacidade" testId="public.privacidade" footer={<LegalLinks current="privacy" />} />;
 }

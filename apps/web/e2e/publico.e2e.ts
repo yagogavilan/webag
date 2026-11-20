@@ -32,16 +32,76 @@ test.describe('Site público (sem login)', () => {
     expect(headers['x-content-type-options']).toBe('nosniff');
   });
 
-  test('política e termos mostram a versão publicada e a data; HTML do texto não é interpretado', async ({ page }) => {
+  test('política e termos mostram o texto completo em revisão: sem minuta, sem data vencida, sem variável solta, HTML nunca interpretado', async ({ page }) => {
     await page.goto('/privacidade');
-    await expect(page.getByRole('heading', { level: 1, name: 'Política de privacidade' })).toBeVisible();
-    await expect(page.getByTestId('public.privacidade.version')).toContainText('Versão 1. Em vigor desde 1 de janeiro de 2026.');
+    await expect(page.getByRole('heading', { level: 1, name: 'Política de Privacidade' })).toBeVisible();
+    await expect(page.getByTestId('public.privacidade.version')).toHaveText('Versão para revisão. Vigência a definir.');
+    await expect(page.getByRole('heading', { level: 2, name: '1. Resumo em linguagem simples' })).toBeVisible();
     await page.goto('/termos');
-    await expect(page.getByTestId('public.termos.version')).toContainText('Versão 1');
-    await expect(page.getByText('Texto inicial dos termos de uso do cliente')).toBeVisible();
+    await expect(page.getByTestId('public.termos.version')).toHaveText('Versão para revisão. Vigência a definir.');
+    await expect(page.getByRole('heading', { level: 2, name: '10. Direito de arrependimento (7 dias)' })).toBeVisible();
     await page.goto('/termos/lojista');
-    await expect(page.getByRole('heading', { level: 1, name: 'Termos do lojista' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Termos do Lojista' })).toBeVisible();
+    for (const path of ['/privacidade', '/termos', '/termos/lojista', '/termos/trocas']) {
+      await page.goto(path);
+      const text = await page.locator('main').innerText();
+      expect(text, path).not.toMatch(/\{\{|REVISAR|[Mm]inuta|31 de dezembro de 2025|Em vigor desde/);
+      expect(text, path).not.toMatch(/\b2 ?h\b/);
+      await expect(page.locator('main img, main script')).toHaveCount(0);
+    }
   });
+
+  test('variáveis vêm do ambiente e, sem valor, aparecem como "a definir" (nada inventado); contato do encarregado cai no publicado no admin', async ({ page }) => {
+    await page.goto('/termos/lojista');
+    await expect(page.getByTestId('public.termos-lojista.document')).toContainText('Comarca de Teste');
+    await page.goto('/privacidade');
+    const doc = page.getByTestId('public.privacidade.document');
+    await expect(doc).toContainText('dados@webag.local'); // sem DPO_EMAIL no ambiente: o contato do /v1/help
+    await expect(doc).toContainText('a definir'); // endereço da sede, prestadores etc. sem valor
+    await expect(doc.getByRole('link', { name: 'a página de exclusão de conta' })).toHaveAttribute('href', /^https?:\/\/localhost:3101\/excluir-conta$/);
+  });
+
+  test('política de trocas pública em /termos/trocas, com link no rodapé e na ajuda', async ({ page }) => {
+    const response = await page.goto('/termos/trocas');
+    expect(response!.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'Política de Trocas e Reembolsos' })).toBeVisible();
+    await expect(page.getByTestId('public.trocas.version')).toHaveText('Versão para revisão. Vigência a definir.');
+    await expect(page.getByRole('heading', { level: 2, name: '3. Arrependimento (7 dias)' })).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/termos\/trocas$/);
+    await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Trocas e reembolsos' })).toHaveAttribute('href', '/termos/trocas');
+    await page.goto('/ajuda');
+    await page.getByTestId('public.ajuda.trocas').getByRole('link', { name: 'Política de trocas e reembolsos' }).click();
+    await expect(page).toHaveURL(/\/termos\/trocas$/);
+  });
+
+  test('índice leva à seção pela âncora e "veja também" liga os outros documentos', async ({ page }) => {
+    await page.goto('/termos');
+    const toc = page.getByTestId('public.termos.toc');
+    await toc.getByText(/^Índice/).click();
+    await toc.getByRole('link', { name: '8. Se a entrega atrasar' }).click();
+    await expect(page).toHaveURL(/#secao-8$/);
+    await expect(page.locator('#secao-8')).toBeInViewport();
+    await expect(page.getByTestId('public.legal-links').getByRole('link', { name: 'Política de trocas e reembolsos' })).toHaveAttribute('href', '/termos/trocas');
+  });
+
+  for (const [name, viewport] of [['390', { width: 390, height: 844 }], ['1440', { width: 1440, height: 900 }]] as const) {
+    test(`textos legais legíveis em ${name} px: sem rolagem horizontal, alvos de toque de 44 px no índice, capturas`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      for (const [path, slug] of [['/privacidade', 'privacidade'], ['/termos', 'termos'], ['/termos/lojista', 'lojista'], ['/termos/trocas', 'trocas']] as const) {
+        await page.goto(path);
+        await page.screenshot({ path: `test-results/legal-${slug}-${name}-topo.png`, fullPage: false });
+        await page.getByText(/^Índice/).click();
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, path).toBeLessThanOrEqual(0);
+        const small = await page.locator('[data-testid$=".toc"] a').evaluateAll((links) => links.filter((a) => a.getBoundingClientRect().height < 44).length);
+        expect(small, path).toBe(0);
+        await page.screenshot({ path: `test-results/legal-${slug}-${name}.png`, fullPage: false });
+        await page.goto(`${path}#secao-3`);
+        await expect(page.locator('#secao-3')).toBeInViewport();
+        await page.screenshot({ path: `test-results/legal-${slug}-${name}-secao.png`, fullPage: false });
+      }
+    });
+  }
 
   test('a ajuda lista as perguntas publicadas, esconde grupo vazio e mostra HTML como texto', async ({ page }) => {
     await page.goto('/ajuda');
@@ -70,7 +130,7 @@ test.describe('Site público (sem login)', () => {
     expect(robots).toContain('Disallow: /admin');
     expect(robots).toContain('Sitemap:');
     const sitemap = await (await request.get('/sitemap.xml')).text();
-    for (const path of ['/privacidade', '/termos', '/ajuda', '/suporte', '/excluir-conta', '/licencas']) expect(sitemap).toContain(path);
+    for (const path of ['/privacidade', '/termos', '/termos/trocas', '/termos/lojista', '/ajuda', '/suporte', '/excluir-conta', '/licencas']) expect(sitemap).toContain(path);
     expect(sitemap).not.toContain('/admin');
   });
 });
