@@ -97,9 +97,12 @@ const flags = [
   ['taxa_servico', false, 'Taxa de serviço ao cliente'],
   ['cadastro_lojista', true, 'Cadastro aberto de lojistas'],
 ].map(([key, enabled, description]) => ({ key, enabled, description, updatedAt: null }));
-// Textos legais: os REAIS do seed da API (apps/api/seed/legal, DEC-080), com as variáveis {{...}} que o site preenche.
+// Textos legais: os REAIS do seed da API (apps/api/seed/legal, DEC-080). SEC-187: como o seed real, escreve os valores de empresa no texto ao gravar
+// a versão (aqui só foro e e-mail do encarregado têm valor; o resto vira "a definir"); só SITE_URL, VERSAO e VIGENCIA ficam como variável.
+const COMPANY_VALUES = { FORO_COMARCA: 'Comarca de Teste', DPO_EMAIL: 'dados@webag.local' };
+const fillCompany = (text) => text.replace(/\{\{\s*([A-Z_]+)\s*\}\}/g, (token, key) => (['SITE_URL', 'VERSAO', 'VIGENCIA'].includes(key) ? token : (COMPANY_VALUES[key] ?? 'a definir')));
 const SEED_LEGAL = new URL('../../../api/seed/legal/', import.meta.url);
-const legalDoc = (type, title) => ({ id: randomUUID(), type, version: 1, title, content: readFileSync(new URL(`${type}.md`, SEED_LEGAL), 'utf8').trim(), effectiveAt: new Date(Date.now() - 86_400_000).toISOString(), relevantChange: false, createdAt: now() });
+const legalDoc = (type, title) => ({ id: randomUUID(), type, version: 1, title, content: fillCompany(readFileSync(new URL(`${type}.md`, SEED_LEGAL), 'utf8').trim()), effectiveAt: new Date(Date.now() - 86_400_000).toISOString(), relevantChange: false, createdAt: now() });
 const legal = {
   customer_terms: [legalDoc('customer_terms', 'Termos de Uso')],
   merchant_terms: [legalDoc('merchant_terms', 'Termos do Lojista')],

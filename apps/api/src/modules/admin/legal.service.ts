@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, desc, eq, gt, inArray, lte, max, sql } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
@@ -7,6 +8,7 @@ import { AuditService } from './audit.service.js';
 import { users } from '../identity/db/schema.js';
 import { termsAcceptances } from '../users/db/schema.js';
 import { legalDocuments, type LegalDocumentType } from './db/schema.js';
+import { DISPLAY_VARIABLES, forbiddenLegalVariables } from './legal-variables.js';
 
 export type LegalDocument = typeof legalDocuments.$inferSelect;
 
@@ -27,7 +29,18 @@ export class LegalService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * SEC-187: a versão publicada é imutável, inclusive nos fatos contratuais. Só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` podem ficar no
+   * texto; qualquer outra variável (foro, encarregado, CNPJ...) deve vir já escrita, e trocar um valor é uma versão nova (422).
+   */
   async publish(input: PublishInput, ctx: RequestContext): Promise<LegalDocument> {
+    const forbidden = forbiddenLegalVariables(input.content);
+    if (forbidden.length > 0) {
+      throw errors.unprocessable('LEGAL_VARIABLE_NOT_ALLOWED', 'Variável não permitida no texto publicado', {
+        detail: `Escreva o valor no texto antes de publicar. Só ${DISPLAY_VARIABLES.map((name) => `{{${name}}}`).join(', ')} podem ficar como variável.`,
+        errors: forbidden.map((token) => ({ field: 'content', message: `Variável não permitida: ${token}` })),
+      });
+    }
     return this.db.transaction(async (tx) => {
       // Serializa publicações do mesmo tipo para a numeração de versão não colidir.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'legal:' + input.type}))`);
@@ -53,7 +66,7 @@ export class LegalService {
         action: 'legal.publish',
         targetType: 'legal_document',
         targetId: created.id,
-        after: { type: created.type, version: created.version, relevantChange: created.relevantChange, effectiveAt: created.effectiveAt, changeSummary: created.changeSummary },
+        after: { type: created.type, version: created.version, relevantChange: created.relevantChange, effectiveAt: created.effectiveAt, changeSummary: created.changeSummary, contentSha256: createHash('sha256').update(created.content).digest('hex') },
       });
       return created;
     });

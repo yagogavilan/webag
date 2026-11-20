@@ -18,7 +18,7 @@ Dono: product-owner | Data: 2026-11-20 | Decisões: DEC-078 (rótulo "versão pa
 - Cada arquivo tem um bloco de metadados no topo (NÃO publicar), o texto público entre `<!-- TEXTO-PUBLICO-INICIO -->` e `<!-- TEXTO-PUBLICO-FIM -->` e uma lista consolidada de revisão no fim (NÃO publicar). Só o trecho entre os marcadores vira conteúdo.
 - O texto público usa só o que o `markdown-lite` renderiza (`apps/web/src/lib/markdown-lite.tsx`): títulos `##` e `###`, parágrafos separados por linha em branco, listas com "- ", `**negrito**` e links `[texto](https://...)`. Sem tabela, sem lista numerada, sem HTML. Links só `https://` ou `mailto:`: por isso os links usam `{{SITE_URL}}`.
 - Os marcadores `[REVISAR JURÍDICO ...]` são inline e sem colchete dentro: remover com a expressão `\s?\[REVISAR JURÍDICO[^\]]*\]` **antes de publicar uma versão aprovada**. Se algum sobrar, a publicação deve falhar (sugestão ao tech-lead: teste no seed ou no admin que recuse o texto com a palavra "REVISAR").
-- Variáveis (`{{...}}`) são trocadas na publicação. Nenhum valor foi inventado. Quem responde cada uma está no §7.
+- Variáveis (`{{...}}`) de empresa são trocadas NA PUBLICAÇÃO e ficam escritas no texto da versão (SEC-187); só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` permanecem, resolvidas na exibição. Nenhum valor foi inventado. Quem responde cada uma está no §7.
 - **Não integrar ainda ao `apps/web` nem ao seed (`apps/api/seed/onda1.ts`).** O mobile-dev integra depois da aprovação (DEC-080). Até lá, vale a DEC-078: rótulo honesto "versão para revisão".
 
 ## 3. Vigência, versionamento e aceite registrado (J15)
@@ -36,6 +36,7 @@ Procedimento recomendado de aprovação (cada passo é de quem está na coluna):
 1. Advogado devolve os textos com ajustes (fundador encaminha). PO consolida.
 2. PO entrega uma versão **sem marcadores** e com a lista de decisões resolvidas.
 3. Admin (super admin) publica como nova versão marcada "mudança relevante", com `change_summary`.
+   - **SEC-187:** escreva os valores de empresa NO TEXTO antes de publicar (foro, encarregado, CNPJ, sede, prestadores, aviso em dias). O painel recusa com 422 qualquer `{{...}}` que não seja `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}`; a versão publicada não muda com o `.env`, e trocar um valor é uma versão nova. No seed (dev e staging), os valores vêm do ambiente na gravação e, se faltar, grava "a definir".
 4. QA confere os números do §8 contra os parâmetros e as páginas públicas.
 5. CEO remove o rótulo "versão para revisão" (DEC-078, DEC-080) e registra em `docs/decisoes.md`.
 

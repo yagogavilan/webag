@@ -12156,7 +12156,7 @@ export const getGetCurrentLegalDocumentUrl = (type: 'customer_terms' | 'merchant
 }
 
 /**
- * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app.
+ * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app. SEC-187: o `content` já traz os fatos contratuais (empresa, CNPJ, encarregado, foro...) ESCRITOS; só `{{SITE_URL}}` (domínio de quem exibe), `{{VERSAO}}` (= `version`) e `{{VIGENCIA}}` (= `effectiveAt`, formatado por quem exibe) ficam como variável. O app mostra a vigência a partir de `effectiveAt`.
  * @summary Versão vigente do documento (público)
  */
 export const getCurrentLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy', options?: Parameters<typeof apiFetch>[1]): Promise<getCurrentLegalDocumentResponse> => {
@@ -12251,10 +12251,15 @@ export type publishLegalDocumentResponse404 = {
   status: 404
 }
 
+export type publishLegalDocumentResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
 export type publishLegalDocumentResponseSuccess = (publishLegalDocumentResponse201) & {
   headers: Headers;
 };
-export type publishLegalDocumentResponseError = (publishLegalDocumentResponse400 | publishLegalDocumentResponse401 | publishLegalDocumentResponse403 | publishLegalDocumentResponse404) & {
+export type publishLegalDocumentResponseError = (publishLegalDocumentResponse400 | publishLegalDocumentResponse401 | publishLegalDocumentResponse403 | publishLegalDocumentResponse404 | publishLegalDocumentResponse422) & {
   headers: Headers;
 };
 
@@ -12269,7 +12274,7 @@ export const getPublishLegalDocumentUrl = (type: 'customer_terms' | 'merchant_te
 }
 
 /**
- * Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. SEC-187: o texto deve vir com os valores contratuais já escritos; só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` podem ficar como variável. Qualquer outro `{{...}}` (ou chave sem par) é recusado com 422 `LEGAL_VARIABLE_NOT_ALLOWED` e nada é gravado; trocar um valor é publicar uma versão nova. A auditoria guarda o SHA-256 do texto. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Publicar nova versão
  */
 export const publishLegalDocument = async (type: 'customer_terms' | 'merchant_terms' | 'privacy' | 'exchange_policy',

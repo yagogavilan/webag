@@ -1183,7 +1183,7 @@ export const SetMaintenanceResponse = zod.object({
 
 
 /**
- * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app.
+ * Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app. SEC-187: o `content` já traz os fatos contratuais (empresa, CNPJ, encarregado, foro...) ESCRITOS; só `{{SITE_URL}}` (domínio de quem exibe), `{{VERSAO}}` (= `version`) e `{{VIGENCIA}}` (= `effectiveAt`, formatado por quem exibe) ficam como variável. O app mostra a vigência a partir de `effectiveAt`.
  * @summary Versão vigente do documento (público)
  */
 export const GetCurrentLegalDocumentParams = zod.object({
@@ -1232,7 +1232,7 @@ export const ListLegalVersionsResponse = zod.object({
 
 
 /**
- * Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts).
+ * Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. SEC-187: o texto deve vir com os valores contratuais já escritos; só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` podem ficar como variável. Qualquer outro `{{...}}` (ou chave sem par) é recusado com 422 `LEGAL_VARIABLE_NOT_ALLOWED` e nada é gravado; trocar um valor é publicar uma versão nova. A auditoria guarda o SHA-256 do texto. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts).
  * @summary Publicar nova versão
  */
 export const PublishLegalDocumentParams = zod.object({

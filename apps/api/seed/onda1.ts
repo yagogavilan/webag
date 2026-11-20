@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { desc, eq } from 'drizzle-orm';
 import { PasswordService } from '../src/modules/identity/password.service.js';
 import { FEATURE_FLAG_DEFINITIONS } from '../src/modules/admin/feature-flags.definitions.js';
+import { fillCompanyVariables, forbiddenLegalVariables, resolveCompanyValues } from '../src/modules/admin/legal-variables.js';
 import { PARAMETER_DEFINITIONS } from '../src/modules/admin/parameters.definitions.js';
 import type { Db } from '../src/platform/database/database.module.js';
 import {
   adminProfiles,
+  auditLog,
   categories,
   cities,
   featureFlags,
@@ -38,9 +41,11 @@ const CATEGORIES: { name: string; icon: string; children: string[] }[] = [
 
 /**
  * Textos legais do v1.0 (DEC-080/081): PROPOSTA do PO para o advogado do fundador, não texto aprovado. O trecho público de cada arquivo de
- * `docs/produto/legal/` foi copiado para `seed/legal/<tipo>.md` SEM os marcadores `[REVISAR JURÍDICO ...]` (procedimento do LEIA-ME §2) e
- * COM as variáveis `{{...}}`, que o site preenche na exibição a partir do ambiente (`apps/web/src/lib/legal-text.ts`). Enquanto o jurídico
- * não aprovar (J1 a J16), o site e o admin mostram "Versão para revisão". Mudou o texto jurídico: mude em `docs/produto/legal/` e regenere.
+ * `docs/produto/legal/` foi copiado para `seed/legal/<tipo>.md` SEM os marcadores `[REVISAR JURÍDICO ...]` (procedimento do LEIA-ME §2).
+ * SEC-187: ao GRAVAR a versão, o seed escreve no texto os valores de empresa (foro, encarregado, CNPJ...) lidos do ambiente; falta de valor
+ * vira "a definir" (visível). Só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` ficam como variável. Depois de gravada, a versão não muda
+ * com o ambiente: trocar um valor é uma versão nova, publicada pelo admin. Enquanto o jurídico não aprovar (J1 a J16), o site e o admin
+ * mostram "Versão para revisão". Mudou o texto jurídico: mude em `docs/produto/legal/` e regenere.
  */
 export const legalText = (type: string): string => readFileSync(new URL(`./legal/${type}.md`, import.meta.url), 'utf8').trim();
 
@@ -57,6 +62,8 @@ export interface SeedOptions {
   adminEmail?: string;
   adminPassword?: string;
   log?: (message: string) => void;
+  /** Ambiente de onde vêm os valores de empresa dos textos legais (padrão `process.env`). */
+  env?: Record<string, string | undefined>;
 }
 
 export async function seedOnda1(db: Db, options: SeedOptions = {}): Promise<void> {
@@ -101,22 +108,49 @@ export async function seedOnda1(db: Db, options: SeedOptions = {}): Promise<void
   }
   log(`${CATEGORIES.length} categorias`);
 
-  // Textos legais: tipo sem versão ganha a v1 com o texto completo; tipo cuja última versão ainda é a minuta técnica antiga ganha a
-  // versão seguinte (a anterior continua no histórico, imutável). Mudança comum, não "relevante": ainda não há usuário real (pré-G5),
-  // e a minuta antiga nunca foi aprovada pelo jurídico. Rodar de novo não duplica.
+  // Textos legais: tipo sem versão ganha a v1 com o texto completo; tipo cuja última versão ainda é a minuta técnica antiga, ou que ainda traz
+  // variável de empresa sem valor escrito (seed anterior ao SEC-187), ganha a versão seguinte (a anterior continua no histórico, imutável).
+  // Mudança comum, não "relevante": ainda não há usuário real (pré-G5) e esses textos nunca foram aprovados pelo jurídico. Rodar de novo não
+  // duplica nem reescreve: a versão gravada não acompanha mudança do ambiente.
+  const company = resolveCompanyValues(options.env ?? process.env);
   for (const doc of LEGAL_DOCS) {
     const [latest] = await db.select().from(legalDocuments).where(eq(legalDocuments.type, doc.type)).orderBy(desc(legalDocuments.version)).limit(1);
-    if (latest && !latest.content.startsWith(OLD_DRAFT_PREFIX)) continue;
-    await db.insert(legalDocuments).values({
-      type: doc.type,
-      title: doc.title,
-      content: legalText(doc.type),
-      version: (latest?.version ?? 0) + 1,
-      // Vigência = data do seed (não uma data fixa já vencida). A data de vigência real é definida pelo admin ao publicar a versão aprovada.
-      effectiveAt: new Date(),
-      relevantChange: false,
-      changeSummary: latest ? 'Texto completo proposto (versão para revisão jurídica), no lugar da minuta técnica.' : null,
+    if (latest && !latest.content.startsWith(OLD_DRAFT_PREFIX) && forbiddenLegalVariables(latest.content).length === 0) continue;
+    const content = fillCompanyVariables(legalText(doc.type), company.values);
+    const forbidden = forbiddenLegalVariables(content);
+    if (forbidden.length > 0) throw new Error(`Texto legal ${doc.type} com variável não permitida: ${forbidden.join(', ')}`);
+    const [created] = await db
+      .insert(legalDocuments)
+      .values({
+        type: doc.type,
+        title: doc.title,
+        content,
+        version: (latest?.version ?? 0) + 1,
+        // Vigência = data do seed (não uma data fixa já vencida). A data de vigência real é definida pelo admin ao publicar a versão aprovada.
+        effectiveAt: new Date(),
+        relevantChange: false,
+        changeSummary: latest ? 'Texto completo proposto (versão para revisão jurídica), com os valores de empresa escritos no texto.' : null,
+      })
+      .returning();
+    if (!created) continue;
+    // Trilha: quais valores foram gravados nesta versão e quais ficaram "a definir" (os valores são os mesmos que o texto público mostra).
+    await db.insert(auditLog).values({
+      actorRole: 'system',
+      action: 'legal.publish',
+      targetType: 'legal_document',
+      targetId: created.id,
+      after: {
+        type: created.type,
+        version: created.version,
+        relevantChange: false,
+        effectiveAt: created.effectiveAt.toISOString(),
+        source: 'seed',
+        companyValues: company.values,
+        pending: company.pending,
+        contentSha256: createHash('sha256').update(created.content).digest('hex'),
+      },
     });
+    if (company.pending.length > 0) log(`${doc.type} v${created.version}: sem valor no ambiente, gravado "a definir": ${company.pending.join(', ')}`);
   }
   log('termos, privacidade e política de trocas (texto proposto, versão para revisão)');
 

@@ -51,12 +51,12 @@ test.describe('Site público (sem login)', () => {
     }
   });
 
-  test('variáveis vêm do ambiente e, sem valor, aparecem como "a definir" (nada inventado); contato do encarregado cai no publicado no admin', async ({ page }) => {
+  test('SEC-187: foro e encarregado vêm escritos no texto da versão publicada; sem valor, aparece "a definir" (nada inventado)', async ({ page }) => {
     await page.goto('/termos/lojista');
     await expect(page.getByTestId('public.termos-lojista.document')).toContainText('Comarca de Teste');
     await page.goto('/privacidade');
     const doc = page.getByTestId('public.privacidade.document');
-    await expect(doc).toContainText('dados@webag.local'); // sem DPO_EMAIL no ambiente: o contato do /v1/help
+    await expect(doc).toContainText('dados@webag.local'); // escrito no texto da versão (não vem do ambiente nem do /v1/help)
     await expect(doc).toContainText('a definir'); // endereço da sede, prestadores etc. sem valor
     await expect(doc.getByRole('link', { name: 'a página de exclusão de conta' })).toHaveAttribute('href', /^https?:\/\/localhost:3101\/excluir-conta$/);
   });

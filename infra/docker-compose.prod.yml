@@ -239,20 +239,10 @@ services:
       # Identificação da empresa no rodapé do site (razão social e CNPJ; vazios = o rodapé mostra só "Webag").
       COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
       COMPANY_CNPJ: ${COMPANY_CNPJ:-}
-      # Textos legais (variáveis {{...}} de /privacidade, /termos e /termos/trocas). Vazio = "a definir". LEGAL_REVIEWED só vira true com o parecer do jurídico.
+      # Textos legais (/privacidade, /termos, /termos/trocas). SEC-187: os valores de empresa (foro, encarregado, CNPJ...) NÃO vêm mais do
+      # ambiente do web: ficam escritos no texto da versão publicada (ver o serviço `seed`). O web só usa COMPANY_NAME (rodapé) e LEGAL_REVIEWED.
       COMPANY_NAME: ${COMPANY_NAME:-}
-      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-}
-      DPO_NAME: ${DPO_NAME:-}
-      DPO_EMAIL: ${DPO_EMAIL:-}
-      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
-      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP:-}
-      FORO_COMARCA: ${FORO_COMARCA:-}
-      HOSTING_PROVIDER: ${HOSTING_PROVIDER:-}
-      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
-      MP_LEGAL_NAME: ${MP_LEGAL_NAME:-}
-      AVISO_MUDANCA_DIAS: ${AVISO_MUDANCA_DIAS:-}
       LEGAL_REVIEWED: ${LEGAL_REVIEWED:-false}
-      LEGAL_VIGENCIA: ${LEGAL_VIGENCIA:-}
       # SEC-178: prazos citados em /excluir-conta. Ajuste junto com os parâmetros do admin (vazio = padrão 72 h, 5 anos, 6 meses, 15 dias).
       PUBLIC_DELETION_REGRET_HOURS: ${PUBLIC_DELETION_REGRET_HOURS:-}
       PUBLIC_DELETION_FISCAL_YEARS: ${PUBLIC_DELETION_FISCAL_YEARS:-}
@@ -382,6 +372,22 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webag}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      # SEC-187: valores de empresa escritos NO TEXTO ao gravar a versão dos termos e da privacidade (vazio = "a definir"). Versão publicada não
+      # muda ao trocar estes valores: publique uma versão nova pelo painel.
+      COMPANY_LEGAL_NAME: ${COMPANY_LEGAL_NAME:-}
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      COMPANY_CNPJ: ${COMPANY_CNPJ:-}
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-}
+      DPO_NAME: ${DPO_NAME:-}
+      DPO_EMAIL: ${DPO_EMAIL:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP:-}
+      NEXT_PUBLIC_SUPPORT_WHATSAPP: ${NEXT_PUBLIC_SUPPORT_WHATSAPP:-}
+      FORO_COMARCA: ${FORO_COMARCA:-}
+      HOSTING_PROVIDER: ${HOSTING_PROVIDER:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      MP_LEGAL_NAME: ${MP_LEGAL_NAME:-}
+      AVISO_MUDANCA_DIAS: ${AVISO_MUDANCA_DIAS:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

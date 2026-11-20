@@ -1306,7 +1306,7 @@ paths:
       tags: [legal]
       operationId: getCurrentLegalDocument
       summary: Versão vigente do documento (público)
-      description: "Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app."
+      description: "Alimenta as páginas /termos, /privacidade e /termos/trocas (`exchange_policy`, política de trocas e reembolsos, só informativa: não entra no aceite) e os links do app. SEC-187: o `content` já traz os fatos contratuais (empresa, CNPJ, encarregado, foro...) ESCRITOS; só `{{SITE_URL}}` (domínio de quem exibe), `{{VERSAO}}` (= `version`) e `{{VIGENCIA}}` (= `effectiveAt`, formatado por quem exibe) ficam como variável. O app mostra a vigência a partir de `effectiveAt`."
       security: []
       parameters:
         - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy, exchange_policy] } }
@@ -1346,7 +1346,7 @@ paths:
       tags: [legal]
       operationId: publishLegalDocument
       summary: Publicar nova versão
-      description: "Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
+      description: "Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. SEC-187: o texto deve vir com os valores contratuais já escritos; só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` podem ficar como variável. Qualquer outro `{{...}}` (ou chave sem par) é recusado com 422 `LEGAL_VARIABLE_NOT_ALLOWED` e nada é gravado; trocar um valor é publicar uma versão nova. A auditoria guarda o SHA-256 do texto. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
         - { name: type, in: path, required: true, description: Tipo do documento, schema: { type: string, enum: [customer_terms, merchant_terms, privacy, exchange_policy] } }
       requestBody:
@@ -1370,6 +1370,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /v1/admin/audit-log:
     get:
       tags: [audit]
