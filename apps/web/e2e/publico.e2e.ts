@@ -3,14 +3,17 @@ import { expect, test } from '@playwright/test';
 const API = 'http://localhost:3999';
 
 test.describe('Site público (sem login)', () => {
-  test('a página inicial renderiza sem login, com logo, lojas reservadas e links das páginas exigidas pelas lojas', async ({ page }) => {
+  test('a página inicial renderiza sem login, com logo, aviso das lojas e links das páginas exigidas pelas lojas', async ({ page }) => {
     const response = await page.goto('/');
     expect(response!.status()).toBe(200);
     await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByTestId('logo').first()).toBeVisible();
-    await expect(page.getByTestId('public.home.play')).toHaveText('[link da Google Play]');
-    await expect(page.getByTestId('public.home.apple')).toHaveText('[link da App Store]');
+    // Sem URL configurada: aviso sóbrio, sem placeholder entre colchetes e sem botões de loja.
+    await expect(page.getByTestId('public.home.soon')).toHaveText('Em breve nas lojas');
+    await expect(page.getByTestId('public.home.play')).toHaveCount(0);
+    await expect(page.getByTestId('public.home.apple')).toHaveCount(0);
+    await expect(page.getByRole('main')).not.toContainText(/\[link da/);
     for (const [name, href] of [['Política de privacidade', '/privacidade'], ['Termos de uso', '/termos'], ['Ajuda e perguntas frequentes', '/ajuda'], ['Excluir conta', '/excluir-conta']] as const) {
       await expect(page.getByRole('main').getByRole('link', { name })).toHaveAttribute('href', href);
     }

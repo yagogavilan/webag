@@ -12,19 +12,11 @@ export const metadata: Metadata = {
   openGraph: { title: 'Webag', description: DESCRIPTION, url: '/' },
 };
 
-function StoreButton({ href, label, placeholder, testId }: { href: string | null; label: string; placeholder: string; testId: string }) {
-  if (href) {
-    return (
-      <a href={href} className={s.store} rel="noopener noreferrer" data-testid={testId}>
-        {label}
-      </a>
-    );
-  }
-  // Antes da publicação não há link: o texto reservado marca o lugar e não é clicável.
+function StoreButton({ href, label, testId }: { href: string; label: string; testId: string }) {
   return (
-    <span className={s.storePending} data-testid={testId}>
-      {placeholder}
-    </span>
+    <a href={href} className={s.store} rel="noopener noreferrer" data-testid={testId}>
+      {label}
+    </a>
   );
 }
 
@@ -36,10 +28,15 @@ export default function Home() {
         <div className={s.heroInner}>
           <h1 id="titulo" className={`wb-text-hero ${s.heroTitle}`}>Compre de lojas parceiras e receba em casa ou retire na loja.</h1>
           <p className={`wb-text-body ${s.heroText}`}>{DESCRIPTION}</p>
-          <div className={s.stores} aria-label="Baixar o aplicativo">
-            <StoreButton href={play} label="Baixar na Google Play" placeholder="[link da Google Play]" testId="public.home.play" />
-            <StoreButton href={apple} label="Baixar na App Store" placeholder="[link da App Store]" testId="public.home.apple" />
-          </div>
+          {play || apple ? (
+            <div className={s.stores} aria-label="Baixar o aplicativo">
+              {play ? <StoreButton href={play} label="Baixar na Google Play" testId="public.home.play" /> : null}
+              {apple ? <StoreButton href={apple} label="Baixar na App Store" testId="public.home.apple" /> : null}
+            </div>
+          ) : (
+            // Antes da publicação não há link: aviso sóbrio, sem botão e sem texto reservado.
+            <p className={s.soon} data-testid="public.home.soon">Em breve nas lojas</p>
+          )}
         </div>
       </section>
 
