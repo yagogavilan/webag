@@ -57,7 +57,8 @@ describe('B2: e-mail de pedido novo e de lembrete de aceite à loja', () => {
     expect(mail.text).toContain('- 2x Produto 1');
     expect(mail.text).toContain('- 2x Produto 2');
     expect(mail.text).toMatch(/Aceite até \d{2}:\d{2} \(horário de Brasília\), em \d+ min/);
-    expect(mail.text).toContain(`/lojista/pedidos/${r.id}`);
+    expect(mail.text).toContain(`http://lojista.webag.test/lojista/pedidos/${r.id}`); // A-01: host do lojista, nunca o do admin
+    expect(mail.text).not.toContain('admin.webag.test');
     expect(mail.text).toMatch(/cancelado e o cliente é estornado/);
   });
 
@@ -104,7 +105,7 @@ describe('B2: e-mail de pedido novo e de lembrete de aceite à loja', () => {
     expect(mails).toHaveLength(2);
     const reminder = mails.find((m) => m.subject.startsWith('Aceite agora'))!;
     expect(reminder.subject).toMatch(/^Aceite agora: o pedido .+ vence em [34] min$/);
-    expect(reminder.text).toContain(`/lojista/pedidos/${r.id}`);
+    expect(reminder.text).toContain(`http://lojista.webag.test/lojista/pedidos/${r.id}`);
     expect(mailsOf(r.staffOrders.email, r.number)).toHaveLength(2);
     expect(mailsOf(r.staffCatalog.email, r.number)).toHaveLength(0);
 

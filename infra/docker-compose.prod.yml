@@ -148,6 +148,8 @@ services:
       BFF_SHARED_SECRET: ${BFF_SHARED_SECRET:?defina BFF_SHARED_SECRET no .env}
       API_PUBLIC_URL: https://${API_HOST:?defina API_HOST no .env}
       ADMIN_WEB_URL: https://${ADMIN_HOST:?defina ADMIN_HOST no .env}
+      # A-01: links do lojista em e-mail (convite de funcionário, pedido novo) vão para o host do lojista; no host do admin /lojista responde 404 (SEC-116).
+      LOJISTA_WEB_URL: https://${LOJISTA_HOST:?defina LOJISTA_HOST no .env}
       # B.2: base da página segura de cartão (/pagar/cartao). Base da página segura do cartão (/pagar/cartao): é o SITE PÚBLICO (PUBLIC_HOST), não um painel. O app confere esta URL (EXPO_PUBLIC_WEB_URL).
       WEB_PUBLIC_URL: https://${PUBLIC_HOST:?defina PUBLIC_HOST no .env}
       MP_PUBLIC_KEY: ${MP_PUBLIC_KEY:-}

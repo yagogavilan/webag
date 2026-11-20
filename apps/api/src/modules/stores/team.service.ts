@@ -69,7 +69,7 @@ export class TeamService {
       await tx.insert(storeActivity).values({ storeId: store.id, actorId: principal.userId, action: 'team.invite', details: { permissions } });
       return row;
     });
-    const link = `${this.config.get('ADMIN_WEB_URL', { infer: true })}/lojista/convite?token=${token}`;
+    const link = `${this.config.get('LOJISTA_WEB_URL', { infer: true }).replace(/\/$/, '')}/lojista/convite?token=${token}`;
     this.mail.enqueue({ to: input.email, ...staffInviteEmail(link, store.name ?? 'Webag', STAFF_INVITE_DAYS) });
     return { invitationId: created.id, expiresAt };
   }

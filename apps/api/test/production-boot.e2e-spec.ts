@@ -24,6 +24,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     API_PUBLIC_URL: 'https://api.webag.com.br',
     WEB_PUBLIC_URL: 'https://webag.com.br',
     ADMIN_WEB_URL: 'https://admin.webag.com.br',
+    LOJISTA_WEB_URL: 'https://lojista.webag.com.br',
     BFF_SHARED_SECRET: 'bff-shared-very-long-random-production-secret-5555555',
     STORAGE_DRIVER: 's3',
     S3_ACCESS_KEY: 'prod-access',

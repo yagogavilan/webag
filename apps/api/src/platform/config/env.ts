@@ -92,6 +92,8 @@ export const envSchema = z
     API_PUBLIC_URL: z.url().default('http://localhost:3000'),
     /** Prefixo de links enviados por e-mail (convite de admin, etc.). */
     ADMIN_WEB_URL: z.url().default('http://localhost:3001'),
+    /** Prefixo dos links do LOJISTA em e-mail (convite de funcionário, aviso de pedido novo B2). Host próprio do painel do lojista (A-01, ADR-016): `/lojista` responde 404 no host do admin. */
+    LOJISTA_WEB_URL: z.url().default('http://localhost:3001'),
     /** Base das páginas públicas da web (ex.: `/pagar/cartao`, B.2). */
     WEB_PUBLIC_URL: z.url().default('http://localhost:3001'),
     /** Chave PÚBLICA do Mercado Pago (MP.js/Bricks na página segura de cartão); não é segredo. Sem ela o provedor `fake` não precisa. */
@@ -189,7 +191,7 @@ export const envSchema = z
     if (env.API_DOCS_ENABLED === true) fail('API_DOCS_ENABLED', '/docs não pode ficar ligado em produção');
     // SEC-172: link de exportação, página de cartão e e-mails levam token na URL; em produção, só https e nunca localhost (a variável
     // esquecida derruba o boot em vez de gerar link sem TLS).
-    for (const [name, value] of [['API_PUBLIC_URL', env.API_PUBLIC_URL], ['WEB_PUBLIC_URL', env.WEB_PUBLIC_URL], ['ADMIN_WEB_URL', env.ADMIN_WEB_URL]] as const) {
+    for (const [name, value] of [['API_PUBLIC_URL', env.API_PUBLIC_URL], ['WEB_PUBLIC_URL', env.WEB_PUBLIC_URL], ['ADMIN_WEB_URL', env.ADMIN_WEB_URL], ['LOJISTA_WEB_URL', env.LOJISTA_WEB_URL]] as const) {
       const url = new URL(value);
       if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) fail(name, 'em produção precisa ser uma URL https pública (não localhost)');
     }

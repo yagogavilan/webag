@@ -66,7 +66,7 @@ export class NotificationsService implements OnModuleInit {
     const items = await this.db.select({ quantity: orderItems.quantity, name: orderItems.name, attributes: orderItems.attributes }).from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(orderItems.createdAt, orderItems.id);
     const userIds = await this.storeUserIds(e.storeId);
     if (userIds.length === 0) return;
-    const panelUrl = `${this.config.get('ADMIN_WEB_URL', { infer: true }).replace(/\/$/, '')}/lojista/pedidos/${order.id}`;
+    const panelUrl = `${this.config.get('LOJISTA_WEB_URL', { infer: true }).replace(/\/$/, '')}/lojista/pedidos/${order.id}`;
     const email = storeOrderEmail({ kind, number: order.number, mode: order.mode, storeName, items, acceptBy: order.acceptDeadlineAt, now: new Date(), panelUrl });
     await this.deliver(userIds, { email });
   }

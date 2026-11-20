@@ -189,6 +189,10 @@ describe('Onda 2A: conta de recebimento e equipe', () => {
       const [row] = await ctx.db.select().from(invitations).where(eq(invitations.id, ok.body.invitationId));
       expect(((row?.expiresAt.getTime() ?? 0) - Date.now()) / 86_400_000).toBeGreaterThan(6.99);
       const token = tokenFromMail(email);
+      // A-01: o convite de funcionário abre no host do LOJISTA (no do admin, /lojista responde 404)
+      const inviteMail = ctx.mail.to(email).findLast((m) => /token=/.test(m.text))!;
+      expect(inviteMail.text).toContain('http://lojista.webag.test/lojista/convite?token=');
+      expect(inviteMail.text).not.toContain('admin.webag.test');
       expect(row?.tokenHash).not.toBe(token);
       expect(row?.tokenHash).toHaveLength(64);
 

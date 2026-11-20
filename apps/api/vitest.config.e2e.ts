@@ -21,6 +21,10 @@ export default defineConfig({
       DATABASE_URL: TEST_ENV.databaseUrl,
       REDIS_URL: TEST_ENV.redisUrl,
       TRUST_PROXY: '1',
+      // A-01: hosts de cada painel DIFERENTES nos e-mails (admin x lojista x site público); os testes fixam qual link usa qual host.
+      ADMIN_WEB_URL: 'http://admin.webag.test',
+      LOJISTA_WEB_URL: 'http://lojista.webag.test',
+      WEB_PUBLIC_URL: 'http://www.webag.test',
       BFF_SHARED_SECRET: 'test-bff-shared-secret-0123456789abcdef',
       STORAGE_DRIVER: 'memory',
       // Mais rápido nos testes que exercitam o fluxo de retry de rede; o comportamento é o mesmo.
