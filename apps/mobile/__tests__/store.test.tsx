@@ -90,6 +90,19 @@ describe('Loja (D8)', () => {
     expect(screen.queryByText('Não entrega no seu endereço.')).toBeNull();
   });
 
+  it('entrega fechada (V8.6): o aviso aparece 1 vez, estatística sem valor não é desenhada e nenhum "—" vira valor', async () => {
+    mockStore.mockResolvedValue(browseStore({ delivery: { ...browseStore().delivery, available: false, feeCents: null, unavailableReason: 'LOGISTICS_CLOSED', logisticsOpensAt: new Date(Date.now() + 86_400_000).toISOString() } }));
+    await renderScreen(<StoreScreen />);
+    expect(await screen.findByTestId('store.ops-banner')).toBeOnTheScreen();
+    expect(screen.queryByTestId('store.eta')).toBeNull();
+    expect(screen.queryByText('—')).toBeNull();
+    expect(screen.getAllByText(/Entregas? volt/)).toHaveLength(1);
+    expect(screen.getByTestId('store.rating')).toBeOnTheScreen();
+    expect(screen.getByTestId('store.exchange-policy')).toBeOnTheScreen();
+    expect(screen.getByTestId('store.about')).toBeOnTheScreen();
+    expect(screen.getByTestId('store.report')).toBeOnTheScreen();
+  });
+
   it('barra "Ver sacola" só aparece com itens desta loja', async () => {
     await cartActions.add('s1', 'Casa Bela', { productId: 'a', variantId: 'v-local', name: 'A', variantLabel: null, urls: {}, unitPriceCents: 4500, originalPriceCents: null, quantity: 2, maxQuantity: 9 });
     await renderScreen(<StoreScreen />);

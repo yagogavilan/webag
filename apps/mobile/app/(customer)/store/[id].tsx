@@ -349,7 +349,7 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
       </View>
 
       <View style={styles.info}>
-        <Text accessibilityRole="header" variant="hero">
+        <Text accessibilityRole="header" variant="display">
           {store.name}
         </Text>
         <Text color={store.open ? 'success' : 'secondary'} variant="captionStrong">
@@ -399,18 +399,22 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
               {store.rating.isNew || store.rating.average === null ? t('store.reviews') : t('store.reviewsCount', { count: store.rating.count })}
             </Text>
           </Pressy>
-          <View style={[styles.stat, styles.statMid]} testID="store.eta">
-            <Text variant="title1">{range ? `${range.start} – ${range.end}` : '—'}</Text>
-            <Text color="secondary" variant="caption">
-              {range ? t('store.etaCaption') : (unavailable?.chip ?? t('catalog.outOfArea'))}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text variant="title1">{fee ?? '—'}</Text>
-            <Text color="secondary" variant="caption">
-              {t('store.feeCaption')}
-            </Text>
-          </View>
+          {range ? (
+            <View style={[styles.stat, styles.statMid]} testID="store.eta">
+              <Text variant="title1">{`${range.start} – ${range.end}`}</Text>
+              <Text color="secondary" variant="caption">
+                {t('store.etaCaption')}
+              </Text>
+            </View>
+          ) : null}
+          {fee !== null ? (
+            <View style={[styles.stat, range ? null : styles.statDivider]}>
+              <Text variant="title1">{fee}</Text>
+              <Text color="secondary" variant="caption">
+                {t('store.feeCaption')}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <ScrollView contentContainerStyle={styles.tickets} horizontal showsHorizontalScrollIndicator={false} style={styles.ticketsScroll}>
@@ -420,9 +424,9 @@ function StoreHeader({ store, favorite, onAbout, onExchange, onReviews, onShare,
           {d.minOrderCents > 0 ? <Ticket label={t('store.minOrder', { value: formatMoney(d.minOrderCents) })} icon="box" /> : null}
         </ScrollView>
         <View style={styles.links}>
-          <Button label={t('store.exchangePolicy')} onPress={onExchange} testID="store.exchange-policy" variant="text" />
-          <Button label={t('store.about')} onPress={onAbout} testID="store.about" variant="text" />
-          <ReportButton target="store" targetId={store.id} label={t('report.titleStore')} testID="store.report" />
+          <Button label={t('store.exchangePolicy')} onPress={onExchange} style={styles.linkButton} testID="store.exchange-policy" variant="text" />
+          <Button label={t('store.about')} onPress={onAbout} style={styles.linkButton} testID="store.about" variant="text" />
+          <ReportButton target="store" targetId={store.id} testID="store.report" />
         </View>
       </View>
     </View>
@@ -454,12 +458,15 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', borderTopWidth: theme.borderWidth.strong, borderTopColor: theme.color.neutral[900], marginTop: theme.space[3] },
   stat: { flex: 1, paddingVertical: theme.space[3], gap: 2, justifyContent: 'center', minHeight: theme.size.touchMin },
   statMid: { paddingHorizontal: theme.space[3], borderLeftWidth: theme.borderWidth.hairline, borderRightWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default },
+  statDivider: { paddingLeft: theme.space[3], borderLeftWidth: theme.borderWidth.hairline, borderColor: theme.color.border.default },
   statTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ticketsScroll: { marginHorizontal: -theme.layout.screenPaddingX },
   tickets: { paddingHorizontal: theme.layout.screenPaddingX, gap: theme.space[3], paddingVertical: theme.space[2] },
   ticket: { width: 200, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: theme.space[3], backgroundColor: theme.color.surface.sunken, borderRadius: theme.radius.lg, paddingHorizontal: theme.space[3], paddingVertical: theme.space[2] },
   ticketText: { flex: 1 },
-  links: { flexDirection: 'row', gap: theme.space[2], marginLeft: -theme.space[4] },
+  // Os 3 links numa linha só (V8.6): botões de texto com folga curta; quebra só com fonte muito grande.
+  links: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: theme.space[1], marginLeft: -theme.space[2] },
+  linkButton: { minWidth: 0, paddingHorizontal: theme.space[2] },
   highlights: { paddingTop: theme.space[4], gap: theme.space[3] },
   highlightsTitle: { paddingHorizontal: theme.layout.screenPaddingX },
   highlightsRow: { paddingHorizontal: theme.layout.screenPaddingX, gap: theme.space[3] },
