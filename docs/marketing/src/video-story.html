@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Webag: vídeo Stories 15 s (1080 x 1920, 30 fps)</title>
+<meta name="viewport" content="width=1080">
+<link rel="stylesheet" href="social.css">
+<style>
+/* Contrato com o render: palco 1080x1920, window.__duration = 15, window.setTime(t) posiciona TUDO no instante t (qualquer ordem).
+   Nenhuma CSS animation/transition, nenhum requestAnimationFrame, Date.now ou Math.random. Um único timeline em JS puro (abaixo).
+   Margens seguras do Stories: topo 250 px e base 340 px livres; laterais 84 px. Todo texto fica entre y=270 e y=1575 (o aviso "Telas do app em teste." termina em y=1516, alinhado à base do aparelho).
+   O aparelho atravessa a faixa inferior por ~4 quadros ao entrar (movimento transitório) e repousa em y 590 a 1516. */
+@font-face { font-family: "Bricolage Grotesque"; font-weight: 800; font-display: block; src: url("../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+#stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: var(--noite); transform-origin: 0 0; }
+.sc { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden; visibility: hidden; }
+.bgn { background: var(--noite); color: var(--branco); }
+.bgr { background: var(--roxo);  color: var(--branco); }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* cena A: gancho */
+#sA .hook { position: absolute; left: 84px; top: 300px; font-size: 224px; }
+#sA .hook .l { color: var(--lima); }
+
+/* cena B: marca */
+#logoB { position: absolute; left: 140px; top: 640px; width: 800px; height: 220px; color: var(--branco); fill: currentColor; overflow: visible; }
+#bB1 { transform-origin: 24px 41px; }
+#bB2 { transform-origin: 0px 69px; }
+#bB3 { transform-origin: 18px 97px; }
+#bBag { transform-origin: 106px 69px; }
+#sB .tag { position: absolute; left: 84px; top: 960px; font-size: 104px; }
+
+/* cenas C, D, E: passo a passo com a tela real */
+.num { position: absolute; left: 56px; top: 585px; font-family: var(--display); font-weight: 800; font-size: 640px; line-height: 0.74; letter-spacing: -0.06em; color: var(--lima); white-space: nowrap; }
+.ttl { position: absolute; left: 84px; top: 270px; font-size: 128px; }
+.vph { left: 552px; top: 590px; width: 444px; height: 926px; --rf: 56px; --b: 12px; }
+.stk { position: absolute; left: 84px; top: 1160px; transform-origin: 0 50%; }
+.stk .sticker { font-size: 42px; }
+#sNota .nota { position: absolute; left: 84px; top: 1462px; background: var(--noite); color: var(--branco); font: 600 32px/1 var(--texto); padding: 10px 18px 12px; border-radius: 10px; }
+
+/* cena G: fecho */
+#logoG { position: absolute; left: 84px; top: 300px; width: 420px; height: 116px; color: var(--branco); fill: currentColor; }
+#sG .big { position: absolute; left: 84px; top: 470px; font-size: 300px; }
+#gT2 { transform-origin: 0 50%; }
+#sG .cta { position: absolute; left: 84px; top: 1140px; width: 912px; background: var(--noite); border-radius: 28px; padding: 52px 56px 64px; }
+#sG .cta p { font-family: var(--display); font-weight: 800; font-size: 84px; line-height: 1; letter-spacing: -0.04em; white-space: nowrap; }
+#sG .cta p span { display: block; }
+#sG .cta .l { color: var(--lima); }
+#sG .ul { position: absolute; left: 56px; bottom: 40px; width: 548px; height: 12px; border-radius: 6px; background: var(--lima); transform-origin: 0 50%; }
+
+/* pré-visualização manual (só com ?preview): régua para arrastar o tempo. Não usada pelo render. */
+#prev { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px; background: #111; color: #fff; font: 14px/1 var(--texto); z-index: 9; display: flex; gap: 12px; align-items: center; }
+#prev input { flex: 1; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+        <rect width="160" height="104" fill="#FFFFFF"/>
+        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+      </mask>
+      <rect id="r-b1" x="24" y="34" width="23" height="14" rx="7"/>
+      <rect id="r-b2" x="0" y="62" width="49" height="14" rx="7"/>
+      <rect id="r-b3" x="18" y="90" width="34" height="14" rx="7"/>
+      <g id="g-bag" mask="url(#wb-ol)">
+        <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
+        <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
+      </g>
+      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
+        <use href="#r-b1"/><use href="#r-b2"/><use href="#r-b3"/><use href="#g-bag"/>
+      </symbol>
+      <!-- palavra "webag" em curvas (docs/design/logo/v4/webag-logo-branca-v4.svg) -->
+      <g id="g-word"><path d="M186.608 104.0 170.48 57.344H184.88L194.864 91.232L190.64 91.328L201.68 57.344H213.584L224.72 91.328L220.4 91.232L230.48000000000002 57.344H244.88L228.752 104.0H216.752L205.904 71.744H209.552L198.512 104.0Z"/><path d="M271.584 105.056Q264.0 105.056 258.096 101.936Q252.192 98.816 248.832 93.248Q245.472 87.68 245.472 80.672Q245.472 73.664 248.784 68.144Q252.096 62.624 257.76 59.456Q263.42400000000004 56.288 270.528 56.288Q277.44 56.288 282.72 59.263999999999996Q288.0 62.24 291.024 67.52Q294.048 72.8 294.048 79.616Q294.048 80.864 293.904 82.256Q293.76 83.648 293.37600000000003 85.47200000000001L253.15200000000002 85.568V75.488L287.136 75.392L280.8 79.616Q280.704 75.584 279.552 72.944Q278.40000000000003 70.304 276.144 68.912Q273.88800000000003 67.52 270.624 67.52Q267.168 67.52 264.624 69.104Q262.08000000000004 70.688 260.688 73.56800000000001Q259.296 76.44800000000001 259.296 80.576Q259.296 84.70400000000001 260.784 87.632Q262.272 90.56 265.00800000000004 92.144Q267.744 93.728 271.488 93.728Q274.944 93.728 277.728 92.52799999999999Q280.512 91.328 282.624 88.928L290.688 96.992Q287.232 101.024 282.336 103.03999999999999Q277.44 105.056 271.584 105.056Z"/><path d="M326.03200000000004 104.96Q321.32800000000003 104.96 317.39200000000005 102.99199999999999Q313.456 101.024 310.96000000000004 97.712Q308.464 94.4 308.08000000000004 90.272V70.592Q308.464 66.464 310.96000000000004 63.248Q313.456 60.032 317.39200000000005 58.208Q321.32800000000003 56.384 326.03200000000004 56.384Q332.656 56.384 337.79200000000003 59.552Q342.928 62.72 345.856 68.19200000000001Q348.784 73.664 348.784 80.672Q348.784 87.68 345.856 93.152Q342.928 98.624 337.79200000000003 101.792Q332.656 104.96 326.03200000000004 104.96ZM299.15200000000004 104.0V34.304H313.84000000000003V68.768L311.44 80.096L313.648 91.424V104.0ZM323.44 91.712Q326.512 91.712 328.86400000000003 90.27199999999999Q331.216 88.832 332.56 86.336Q333.904 83.84 333.904 80.672Q333.904 77.408 332.56 74.912Q331.216 72.416 328.86400000000003 71.024Q326.512 69.632 323.44 69.632Q320.368 69.632 317.968 71.024Q315.56800000000004 72.416 314.27200000000005 74.912Q312.976 77.408 312.976 80.672Q312.976 83.936 314.32000000000005 86.432Q315.66400000000004 88.928 318.016 90.32Q320.368 91.712 323.44 91.712Z"/><path d="M373.76000000000005 104.96Q367.32800000000003 104.96 362.288 101.792Q357.24800000000005 98.624 354.32000000000005 93.152Q351.392 87.68 351.392 80.672Q351.392 73.664 354.32000000000005 68.19200000000001Q357.24800000000005 62.72 362.288 59.552Q367.32800000000003 56.384 373.76000000000005 56.384Q378.464 56.384 382.256 58.208Q386.048 60.032 388.448 63.248Q390.848 66.464 391.136 70.592V90.752Q390.848 94.88 388.496 98.096Q386.144 101.312 382.304 103.136Q378.464 104.96 373.76000000000005 104.96ZM376.73600000000005 91.712Q381.44000000000005 91.712 384.32000000000005 88.59200000000001Q387.20000000000005 85.47200000000001 387.20000000000005 80.672Q387.20000000000005 77.408 385.904 74.912Q384.608 72.416 382.256 71.024Q379.904 69.632 376.832 69.632Q373.76000000000005 69.632 371.408 71.024Q369.05600000000004 72.416 367.66400000000004 74.912Q366.27200000000005 77.408 366.27200000000005 80.672Q366.27200000000005 83.84 367.61600000000004 86.336Q368.96000000000004 88.832 371.36 90.27199999999999Q373.76000000000005 91.712 376.73600000000005 91.712ZM386.624 104.0V91.424L388.832 80.096L386.624 68.768V57.344H401.024V104.0Z"/><path d="M429.168 124.928Q421.48800000000006 124.928 415.68000000000006 122.288Q409.872 119.648 406.512 114.848L415.536 105.824Q418.03200000000004 108.8 421.15200000000004 110.336Q424.27200000000005 111.872 428.68800000000005 111.872Q434.16 111.872 437.28000000000003 109.184Q440.40000000000003 106.496 440.40000000000003 101.6V89.696L442.896 79.52L440.68800000000005 69.344V57.344H455.088V101.216Q455.088 108.416 451.72800000000007 113.696Q448.36800000000005 118.976 442.51200000000006 121.952Q436.656 124.928 429.168 124.928ZM428.49600000000004 102.56Q422.064 102.56 417.072 99.488Q412.08000000000004 96.416 409.20000000000005 91.136Q406.32000000000005 85.856 406.32000000000005 79.424Q406.32000000000005 72.896 409.20000000000005 67.664Q412.08000000000004 62.432 417.072 59.408Q422.064 56.384 428.49600000000004 56.384Q433.29600000000005 56.384 437.0880000000001 58.16Q440.88000000000005 59.936 443.232 63.152Q445.584 66.368 445.872 70.592V88.352Q445.584 92.48 443.232 95.696Q440.88000000000005 98.912 437.0400000000001 100.736Q433.20000000000005 102.56 428.49600000000004 102.56ZM431.28000000000003 89.504Q434.35200000000003 89.504 436.60800000000006 88.16Q438.86400000000003 86.816 440.064 84.56Q441.264 82.304 441.264 79.424Q441.264 76.544 440.064 74.24000000000001Q438.86400000000003 71.936 436.60800000000006 70.592Q434.35200000000003 69.24799999999999 431.28000000000003 69.24799999999999Q428.30400000000003 69.24799999999999 426.0 70.592Q423.696 71.936 422.44800000000004 74.24000000000001Q421.20000000000005 76.544 421.20000000000005 79.424Q421.20000000000005 82.112 422.44800000000004 84.464Q423.696 86.816 425.952 88.16Q428.208 89.504 431.28000000000003 89.504Z"/></g>
+    </defs>
+  </svg>
+
+  <!-- A  0,0 a 2,0 s  GANCHO. As duas primeiras linhas já estão em cena no quadro 0 (miniatura e autoplay mudo). -->
+  <section class="sc bgn" id="sA">
+    <h1 class="hook d">
+      <span class="ln" id="aL1">A loja</span>
+      <span class="ln" id="aL2"><span class="mk"><span>fechou</span></span></span>
+      <span class="ln" id="aL3">antes de</span>
+      <span class="ln" id="aL4">você</span>
+      <span class="ln" id="aL5">chegar.</span>
+    </h1>
+  </section>
+
+  <!-- B  2,0 a 4,0 s  MARCA -->
+  <section class="sc bgr" id="sB">
+    <svg id="logoB" viewBox="0 0 458 126" aria-label="Webag">
+      <use id="bB1" href="#r-b1"/>
+      <use id="bB2" href="#r-b2"/>
+      <use id="bB3" href="#r-b3"/>
+      <g id="bBag"><use href="#g-bag"/></g>
+      <g id="bWord"><use href="#g-word"/></g>
+    </svg>
+    <p class="tag d">
+      <span class="ln" id="bT1">Escolha no app.</span>
+      <span class="ln" id="bT2">Receba <span class="mk"><span>em casa.</span></span></span>
+    </p>
+  </section>
+
+  <!-- C  4,0 a 6,0 s  PASSO 1 -->
+  <section class="sc bgn" id="sC">
+    <div class="num" id="cNum">1</div>
+    <h2 class="ttl d"><span class="ln" id="cT1">Escolha</span><span class="ln" id="cT2">a loja.</span></h2>
+    <div class="phone vph" id="cPh" aria-hidden="true"><div class="tela"><img src="assets-social/04-app-loja.png" alt=""></div></div>
+    <div class="stk" id="cSt"><span class="sticker s-roxo">Tempo e taxa<br>antes de pedir</span></div>
+  </section>
+
+  <!-- D  6,0 a 8,0 s  PASSO 2 -->
+  <section class="sc bgr" id="sD">
+    <div class="num" id="dNum">2</div>
+    <h2 class="ttl d"><span class="ln" id="dT1">Pague</span><span class="ln" id="dT2">com PIX.</span></h2>
+    <div class="phone vph" id="dPh" aria-hidden="true"><div class="tela"><img src="assets-social/09-app-pix.png" alt=""><div class="cobre">Código copia e cola</div></div></div>
+    <div class="stk" id="dSt"><span class="sticker">Confirma<br>sozinho</span></div>
+  </section>
+
+  <!-- E  8,0 a 10,0 s  PASSO 3 -->
+  <section class="sc bgn" id="sE">
+    <div class="num" id="eNum">3</div>
+    <h2 class="ttl d"><span class="ln" id="eT1">Acompanhe</span><span class="ln" id="eT2">até a porta.</span></h2>
+    <div class="phone vph" id="ePh" aria-hidden="true"><div class="tela"><img src="assets-social/11-app-acompanhamento.png" alt=""></div></div>
+    <div class="stk" id="eSt"><span class="sticker s-roxo">Fale com a loja<br>pelo WhatsApp</span></div>
+  </section>
+
+  <!-- G  10,0 a 15,0 s  EM BREVE + CTA único -->
+  <section class="sc bgr" id="sG">
+    <svg id="logoG" viewBox="0 0 458 126" aria-label="Webag"><use href="#s-sym" x="0" y="0" width="160" height="104"/><use href="#g-word"/></svg>
+    <h2 class="big d"><span class="ln" id="gT1">Em</span><span class="ln" id="gT2"><span class="mk"><span>breve.</span></span></span></h2>
+    <div class="cta" id="gCta">
+      <p><span>Siga para saber</span><span class="l">quando abrir.</span></p>
+      <div class="ul" id="gUl"></div>
+    </div>
+  </section>
+
+  <!-- aviso de demonstração, de 4 s a 10 s, dentro da margem segura inferior -->
+  <section class="sc" id="sNota"><p class="nota">Telas do app em teste.</p></section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DURATION = 15;          // s
+  var FPS = 30;
+
+  // Tempos de corte (s). Compasso de 2,0 s = 4/4 a 120 BPM. Para casar com outra trilha, mude só estes valores.
+  var T = { A: 0, B: 2, C: 4, D: 6, E: 8, G: 10, FIM: DURATION };
+
+  // Curvas curtas e intencionais. Nada de flutuar: toda animação termina em <= 0,30 s.
+  var EASE = {
+    lin:  function (x) { return x; },
+    out3: function (x) { var u = 1 - x; return 1 - u * u * u; },
+    out5: function (x) { var u = 1 - x; return 1 - u * u * u * u * u; },
+    back: function (x) { var c = 1.2, u = x - 1; return 1 + (c + 1) * u * u * u + c * u * u; }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var n = function (v) { return Math.round(v * 1000) / 1000; };
+
+  // ---------- cenas: visíveis só em [t0, t1) ----------
+  var SCENES = [
+    { id: 'sA', t0: T.A, t1: T.B },
+    { id: 'sB', t0: T.B, t1: T.C },
+    { id: 'sC', t0: T.C, t1: T.D },
+    { id: 'sD', t0: T.D, t1: T.E },
+    { id: 'sE', t0: T.E, t1: T.G },
+    { id: 'sG', t0: T.G, t1: T.FIM + 1 },
+    { id: 'sNota', t0: T.C, t1: T.G }
+  ];
+
+  // ---------- trilhas: elemento, propriedade, início, duração, de, para, curva ----------
+  var TR = {};
+  function tr(id, prop, t, d, from, to, ease) {
+    if (!TR[id]) TR[id] = {};
+    if (!TR[id][prop]) TR[id][prop] = [];
+    TR[id][prop].push({ t: t, d: d, from: from, to: to, e: EASE[ease || 'out3'] });
+  }
+  // Regras de corte (ritmo de Stories): no quadro do corte NADA começa invisível. Quem é protagonista da cena
+  // (numeral, título, logo, "Em breve.") já está opaco e legível no 1º quadro; só se desloca 8 px em 3 quadros.
+  // Todo o conteúdo da cena fica opaco até 0,40 s depois do corte, ou seja, >= 1,6 s legível antes do próximo corte (cenas de 2,0 s).
+  // Fade só existe em elementos que entram DEPOIS do corte (linhas de apoio, adesivo, cartão do CTA).
+
+  // entrada que aparece (fade curto) e sobe dy px: só para elementos que NÃO estão no quadro do corte
+  function rise(id, t, dy, d, ease) {
+    tr(id, 'o', t, d * 0.6, 0, 1, 'lin');
+    tr(id, 'y', t, d, dy, 0, ease || 'out3');
+  }
+  // entrada de corte: já opaco no 1º quadro, só desloca dy px (6 a 8) em d (2 a 3 quadros). Sem trilha de opacidade.
+  function snap(id, t, dy, d) {
+    tr(id, 'y', t, d, dy, 0, 'out3');
+  }
+  // sobressalto curto (adesivo, selo)
+  function pop(id, t, d, s0) {
+    tr(id, 'o', t, d * 0.4, 0, 1, 'lin');
+    tr(id, 'sx', t, d, s0, 1, 'back');
+    tr(id, 'sy', t, d, s0, 1, 'back');
+  }
+  // sobressalto de corte: já opaco, só escala de s0 a 1
+  function bump(id, t, d, s0) {
+    tr(id, 'sx', t, d, s0, 1, 'back');
+    tr(id, 'sy', t, d, s0, 1, 'back');
+  }
+
+  // A  gancho: linhas 1 e 2 no quadro 0; as outras em 3, 6 e 9 quadros (0,10 / 0,20 / 0,30 s); frase completa e opaca em 0,36 s
+  rise('aL3', 0.10, 24, 0.10);
+  rise('aL4', 0.20, 24, 0.10);
+  rise('aL5', 0.30, 24, 0.10);
+
+  // B  corte seco: logo inteiro e 1ª frase já em cena no quadro do corte; barras partem de 40%, sacola de 80%, palavra desliza 36 px
+  tr('bB1', 'sx', T.B + 0.00, 0.15, 0.4, 1, 'out3');
+  tr('bB2', 'sx', T.B + 0.03, 0.15, 0.4, 1, 'out3');
+  tr('bB3', 'sx', T.B + 0.07, 0.15, 0.4, 1, 'out3');
+  bump('bBag', T.B + 0.00, 0.20, 0.8);
+  tr('bWord', 'x', T.B + 0.00, 0.13, 36, 0, 'out5');
+  snap('bT1', T.B + 0.00, 8, 0.10);
+  rise('bT2', T.B + 0.25, 24, 0.12);
+
+  // C, D, E  numeral e título no quadro do corte (desloca 8 px em 3 quadros); aparelho entra de baixo em 6 quadros
+  // (0,20 s), opaco desde o 1º quadro, easing de saída forte (out5); adesivo em 0,25 s (opaco em 0,33 s)
+  function passo(s, p) {
+    snap(p + 'Num', s, 8, 0.10);
+    snap(p + 'T1',  s, 8, 0.10);
+    snap(p + 'T2',  s, 8, 0.10);
+    tr(p + 'Ph', 'y', s, 0.20, 260, 0, 'out5');
+    pop(p + 'St', s + 0.25, 0.20, 0.6);
+  }
+  passo(T.C, 'c');
+  passo(T.D, 'd');
+  passo(T.E, 'e');
+
+  // G  "Em breve." no corte (já opaco); chamada única em 12,0 s; sublinhado desenha em 12,45 s; hold de 12,75 a 15,0 s
+  snap('gT1', T.G + 0.00, 8, 0.10);
+  bump('gT2', T.G + 0.00, 0.18, 0.9);
+  rise('gCta', T.G + 2.00, 60, 0.22, 'out5');
+  tr('gUl', 'sx', T.G + 2.45, 0.30, 0, 1, 'out3');
+
+  // ---------- motor: valor de cada propriedade em t (puro, sem estado, sem ordem) ----------
+  var SC = [], ANIM = [], i, id, prop;
+  for (i = 0; i < SCENES.length; i++) SC.push({ el: $(SCENES[i].id), t0: SCENES[i].t0, t1: SCENES[i].t1 });
+  for (id in TR) {
+    for (prop in TR[id]) TR[id][prop].sort(function (a, b) { return a.t - b.t; });
+    ANIM.push({ el: $(id), p: TR[id] });
+  }
+
+  function val(segs, t, def) {
+    if (!segs) return def;
+    var v = segs[0].from, k, s;
+    for (k = 0; k < segs.length; k++) {
+      s = segs[k];
+      if (t < s.t) break;
+      if (t >= s.t + s.d) { v = s.to; continue; }
+      v = s.from + (s.to - s.from) * s.e((t - s.t) / s.d);
+      break;
+    }
+    return v;
+  }
+
+  function setTime(t) {
+    t = Number(t);
+    if (!isFinite(t)) t = 0;
+    if (t < 0) t = 0;
+    if (t > DURATION) t = DURATION;
+    var k, a, p, o, ts = t + 1e-6; // tolerância: t=3,9999999 não pode cair num quadro sem cena
+    for (k = 0; k < SC.length; k++) {
+      SC[k].el.style.visibility = (ts >= SC[k].t0 && ts < SC[k].t1) ? 'visible' : 'hidden';
+    }
+    for (k = 0; k < ANIM.length; k++) {
+      a = ANIM[k]; p = a.p;
+      a.el.style.transform =
+        'translate(' + n(val(p.x, t, 0)) + 'px,' + n(val(p.y, t, 0)) + 'px) ' +
+        'scale(' + n(val(p.sx, t, 1)) + ',' + n(val(p.sy, t, 1)) + ')';
+      o = val(p.o, t, 1);
+      a.el.style.opacity = n(o);
+    }
+  }
+
+  window.__duration = DURATION;
+  window.__fps = FPS;
+  window.setTime = setTime;
+  setTime(0);
+
+  // fontes carregadas antes do primeiro quadro (o render pode aguardar window.__ready)
+  if (document.fonts && document.fonts.load) {
+    var imgs = Array.prototype.slice.call(document.images).map(function (im) {
+      return im.decode ? im.decode().catch(function () { return null; }) : Promise.resolve(null);
+    });
+    window.__ready = Promise.all([
+      document.fonts.load('800 100px "Bricolage Grotesque"'),
+      document.fonts.load('600 32px "Figtree"'),
+      document.fonts.load('700 32px "Figtree"'),
+      document.fonts.load('800 32px "Figtree"')
+    ].concat(imgs)).then(function () { setTime(0); return true; });
+  } else {
+    window.__ready = Promise.resolve(true);
+  }
+
+  // régua de pré-visualização manual (?preview): arrasta o tempo; setas = 1 quadro. Sem timers.
+  if (/[?&]preview/.test(location.search)) {
+    var stage = $('stage'), bar = document.createElement('div'), r = document.createElement('input'), lab = document.createElement('span');
+    var fit = function () { stage.style.transform = 'scale(' + n((window.innerHeight - 48) / 1920) + ')'; };
+    bar.id = 'prev'; r.type = 'range'; r.min = 0; r.max = DURATION; r.step = 1 / FPS; r.value = 0;
+    r.addEventListener('input', function () { setTime(r.value); lab.textContent = Number(r.value).toFixed(2) + ' s'; });
+    document.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      r.value = Math.min(DURATION, Math.max(0, Number(r.value) + d / FPS));
+      r.dispatchEvent(new Event('input'));
+    });
+    lab.textContent = '0.00 s'; bar.appendChild(r); bar.appendChild(lab); document.body.appendChild(bar);
+    window.addEventListener('resize', fit); fit();
+  }
+})();
+</script>
+</body>
+</html>

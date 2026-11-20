@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Moto do Webag com a sacola no bagageiro">
+  <rect width="200" height="200" fill="#1C1721"/>
+  <g fill="#D6FF4A"><rect x="8" y="92" width="36" height="11" rx="5.5"/><rect x="0" y="114" width="60" height="11" rx="5.5"/><rect x="14" y="136" width="44" height="11" rx="5.5"/></g>
+  <circle cx="86" cy="160" r="20" fill="#FFFFFF"/><circle cx="86" cy="160" r="8" fill="#1C1721"/>
+  <circle cx="168" cy="160" r="20" fill="#FFFFFF"/><circle cx="168" cy="160" r="8" fill="#1C1721"/>
+  <path d="M68 138H134L150 102H168L182 140Q188 152 180 156H70Q62 150 68 138Z" fill="#C02EF0"/>
+  <path d="M152 104 160 70H178" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <g transform="translate(16 46) scale(.78)">
+    <polygon points="67,43 145,43 133,95 72,95" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    <circle cx="80" cy="52" r="4.5" fill="#1C1721"/><circle cx="132" cy="52" r="4.5" fill="#1C1721"/>
+  </g>
+</svg>

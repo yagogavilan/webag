@@ -1,0 +1,153 @@
+/* Webag: kit social (perfil, 4 posts, vídeo Stories). Autor: product-designer. 2026-11-20.
+   Uma folha para os 6 HTML. Tokens de docs/design/direcao-v3.md §4.3 e kit-marca-v3.md.
+   Regras: cor sólida, sem gradiente, sem sombra com desfoque (só sombra dura), sem emoji,
+   texto nunca inclinado (inclinação só em bloco de cor), Bricolage só >= 40 px.
+   Contraste: branco sobre roxo #C02EF0 = 4,29:1, só em texto grande/negrito (>= 24 px); lima sobre noite 15,3:1;
+   noite sobre lima 15,3:1; branco sobre noite 17,6:1; roxo-ação #A21FBE sobre papel 6,0:1.
+   As @font-face ficam em cada HTML (o caminho relativo muda por pasta). */
+
+:root {
+  --roxo: #C02EF0;
+  --acao: #A21FBE;
+  --noite: #1C1721;
+  --lima: #D6FF4A;
+  --papel: #FAF8FB;
+  --fio: #3A3342;
+  --moldura: #2C2632;
+  --moldura-borda: #4A4252;
+  --branco: #FFFFFF;
+  --display: "Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+  --texto: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { margin: 0; background: #0E0B11; }
+body {
+  font-family: var(--texto);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  font-kerning: normal;
+}
+svg { display: block; }
+
+/* ---------- base dos posts ---------- */
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.post { position: relative; display: block; width: 1080px; height: 1350px; overflow: hidden; }
+.roxo  { background: var(--roxo);  color: var(--branco); }
+.noite { background: var(--noite); color: var(--branco); }
+.papel { background: var(--papel); color: var(--noite); }
+
+.d { font-family: var(--display); font-weight: 800; letter-spacing: -0.045em; line-height: 0.92; white-space: nowrap; }
+.d > span { display: block; }
+.abs { position: absolute; }
+
+/* barra de topo: símbolo à esquerda, série "N de 3" à direita */
+.rail { position: absolute; left: 72px; right: 72px; top: 64px; height: 80px; display: flex; align-items: center; justify-content: space-between; }
+.rail .sym { width: 116px; height: 75px; }
+
+/* série: 3 segmentos inclinados (a inclinação Webag, -8 graus), sempre com texto */
+.serie { display: flex; align-items: center; gap: 22px; font: 700 36px/1 var(--texto); }
+.serie .segs { display: flex; gap: 10px; transform: skewX(-8deg); }
+.serie .seg { width: 56px; height: 16px; border-radius: 8px; background: rgba(255, 255, 255, 0.3); }
+.serie .seg.on { background: var(--lima); }
+.papel .serie .seg { background: #D9D2DE; }
+.papel .serie .seg.on { background: var(--acao); }
+
+/* adesivo: lima, texto noite, sombra dura (sem desfoque), rotação -6 graus */
+.sticker {
+  display: inline-block;
+  background: var(--lima);
+  color: var(--noite);
+  border-radius: 10px;
+  padding: 14px 26px 16px;
+  font: 800 44px/1.05 var(--texto);
+  letter-spacing: -0.01em;
+  transform: rotate(-6deg);
+  box-shadow: 8px 8px 0 var(--noite);
+}
+.sticker.s-roxo { box-shadow: 8px 8px 0 var(--roxo); }
+
+/* marca-texto: bloco lima inclinado atrás da palavra; o texto fica reto */
+.mk {
+  display: inline-block;
+  background: var(--lima);
+  color: var(--noite);
+  padding: 0 0.14em 0.08em;
+  margin: 0 -0.04em;
+  transform: skewX(-8deg);
+  border-radius: 0.07em;
+}
+.mk > span { display: inline-block; transform: skewX(8deg); }
+
+/* moldura de aparelho: simples, sem notch, sem botões. A tela é a captura real (390x844). */
+.phone {
+  position: absolute;
+  background: var(--moldura);
+  border: 3px solid var(--moldura-borda);
+  border-radius: var(--rf, 54px);
+}
+.phone .tela {
+  position: absolute;
+  inset: var(--b, 12px);
+  border-radius: calc(var(--rf, 54px) - var(--b, 12px) - 3px);
+  overflow: hidden;
+  background: #FFFFFF;
+}
+.phone .tela img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; }
+.phone .tela { container-type: inline-size; }
+/* cobre o código copia e cola de teste da captura 09 (linhas em y 340 a 378 de 844), como nas apresentações */
+.cobre { position: absolute; left: 0; right: 0; top: 40.2%; height: 4.6%; background: #FAF8FB; display: flex; align-items: center; justify-content: center; font: 600 3.7cqw/1 var(--texto); color: #5B5262; }
+
+/* painel noite com corte diagonal a -8 graus (subindo para a direita): 152 px de queda em 1080 */
+.painel { position: absolute; left: 0; width: 1080px; background: var(--noite); clip-path: polygon(0 152px, 100% 0, 100% 100%, 0 100%); }
+
+/* ---------- perfil (1080 x 1080, círculo seguro de 80% = 864 px) ---------- */
+.avatar { position: relative; display: block; width: 1080px; height: 1080px; overflow: hidden; background: var(--roxo); color: var(--branco); }
+.avatar svg { position: absolute; left: 0; top: 0; width: 1080px; height: 1080px; }
+
+/* ---------- post 0: apresentação ---------- */
+.p0 .logo { position: absolute; left: 72px; top: 60px; width: 300px; height: 82px; }
+.p0 .em-breve { position: absolute; right: 80px; top: 58px; }
+.p0 h1 { position: absolute; left: 72px; top: 176px; font-size: 156px; }
+.p0 .painel { top: 738px; height: 612px; }                 /* borda diagonal: y=738 na direita, y=890 na esquerda */
+/* o aparelho sai pela base do post: a caixa .vp recorta (overflow hidden) para o scrollHeight da raiz continuar 1350 */
+.p0 .vp { position: absolute; left: 568px; top: 772px; width: 440px; height: 578px; overflow: hidden; }
+.p0 .phone { left: 0; top: 0; width: 440px; height: 917px; --rf: 52px; --b: 12px; }
+.p0 .lista { position: absolute; left: 72px; top: 928px; width: 440px; list-style: none; }
+.p0 .lista li { display: grid; grid-template-columns: 64px 1fr; column-gap: 16px; align-items: start; margin-bottom: 34px; font: 700 38px/1.16 var(--texto); }
+.p0 .lista b { font: 800 44px/1 var(--display); letter-spacing: -0.03em; color: var(--lima); }
+
+/* ---------- post 1: o problema ---------- */
+.p1 .rows { position: absolute; left: 72px; right: 72px; top: 176px; }
+.p1 .row { display: flex; align-items: center; height: 204px; border-top: 2px solid var(--fio); }
+.p1 .row:last-child { border-bottom: 2px solid var(--fio); }
+.p1 .hora { width: 340px; font-size: 176px; line-height: 1; color: var(--lima); }
+.p1 .fato { width: 524px; font: 700 46px/1.15 var(--texto); }
+.p1 .virada { position: absolute; left: 72px; top: 856px; font-size: 132px; }
+.p1 .virada .l { color: var(--lima); }
+.p1 .rodape { position: absolute; left: 72px; right: 72px; bottom: 72px; }
+.p1 .rodape p { font: 600 38px/1.2 var(--texto); margin-bottom: 14px; }
+.p1 .rodape strong { display: block; font: 800 64px/0.92 var(--display); letter-spacing: -0.04em; }
+
+/* ---------- post 2: o que vem no app ---------- */
+.p2 .rail .sym { color: var(--acao); }
+.p2 h1 { position: absolute; left: 72px; top: 176px; font-size: 124px; }
+.p2 .painel { top: 488px; height: 862px; }
+.p2 .item { position: absolute; width: 270px; }
+.p2 .item .phone { position: relative; left: auto; top: auto; width: 270px; height: 559px; --rf: 38px; --b: 8px; }
+.p2 .rot { display: grid; grid-template-columns: 44px 1fr; column-gap: 10px; margin-top: 26px; align-items: start; }
+.p2 .rot b { font: 800 64px/0.9 var(--display); letter-spacing: -0.04em; color: var(--lima); }
+.p2 .rot span { font: 800 38px/1.14 var(--texto); color: var(--branco); }
+.p2 .nota { position: absolute; left: 72px; bottom: 56px; font: 600 32px/1 var(--texto); color: rgba(255, 255, 255, 0.82); }
+
+/* ---------- post 3: convite ---------- */
+.p3 h1 { position: absolute; left: 72px; top: 170px; font-size: 196px; }
+.p3 .sub { position: absolute; left: 72px; top: 372px; font-size: 104px; }
+.p3 .painel { top: 688px; height: 662px; }
+.p3 .simbolo { position: absolute; left: 590px; top: 470px; width: 480px; height: 312px; color: var(--branco); }
+.p3 .sticker-pos { position: absolute; left: 760px; top: 404px; }
+.p3 .passos { position: absolute; left: 72px; right: 72px; top: 896px; list-style: none; }
+.p3 .passo { display: flex; align-items: center; gap: 28px; height: 120px; border-top: 2px solid var(--fio); }
+.p3 .passo b { width: 56px; font: 800 84px/1 var(--display); letter-spacing: -0.04em; color: var(--lima); }
+.p3 .passo span { font: 800 54px/1.1 var(--texto); }

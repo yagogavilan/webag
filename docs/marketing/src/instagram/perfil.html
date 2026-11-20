@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Webag: foto de perfil (1080 x 1080)</title>
+<meta name="viewport" content="width=1080">
+<link rel="stylesheet" href="../social.css">
+<style>
+/* O Instagram corta em círculo: símbolo dentro do círculo seguro de 80% (raio 432 px).
+   Ponto mais distante do centro: ~360 px. Fundo = roxo da marca, sólido. Mesmo desenho do ícone do app. */
+html, body { width: 1080px; height: 1080px; overflow: hidden; }
+@font-face { font-family: "Bricolage Grotesque"; font-weight: 800; font-display: block; src: url("../../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
+</style>
+</head>
+<body>
+<main class="avatar perfil" role="img" aria-label="Webag: símbolo da sacola branco sobre fundo roxo">
+  <svg viewBox="0 0 1080 1080" aria-hidden="true">
+    <defs>
+      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+        <rect width="160" height="104" fill="#FFFFFF"/>
+        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+      </mask>
+      <symbol id="s-sym" viewBox="0 0 160 104" fill="#FFFFFF">
+        <rect x="24" y="34" width="23" height="14" rx="7"/>
+        <rect x="0" y="62" width="49" height="14" rx="7"/>
+        <rect x="18" y="90" width="34" height="14" rx="7"/>
+        <g mask="url(#wb-ol)">
+          <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+        </g>
+      </symbol>
+    </defs>
+    <!-- escala 4,4: 704 x 458 px. Centro do conteúdo (x 77, y 69) em (540, 540) com leve deslocamento ótico para a esquerda
+         porque o peso visual está na sacola (direita): ponto (80, 69) no centro. -->
+    <use href="#s-sym" x="188" y="236.4" width="704" height="457.6"/>
+  </svg>
+</main>
+</body>
+</html>
