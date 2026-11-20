@@ -84,8 +84,9 @@ function totp(secretBase32, offsetSteps = 0) {
 
 // O id da tentativa de pagamento não aparece na API (só o servidor sabe); lemos do banco pelo container do compose.
 function attemptIdOfOrder(orderId) {
-  const user = env.POSTGRES_USER ?? 'webag';
-  const db = env.POSTGRES_DB ?? 'webag';
+  // Variável do ambiente tem prioridade sobre o arquivo (como no resto do repositório): permite apontar o smoke para outro banco do mesmo container.
+  const user = process.env.POSTGRES_USER ?? env.POSTGRES_USER ?? 'webag';
+  const db = process.env.POSTGRES_DB ?? env.POSTGRES_DB ?? 'webag';
   const sql = `select id from payment_attempts where external_reference = '${orderId}' order by created_at limit 1`;
   const result = spawnSync('docker', ['compose', 'exec', '-T', 'postgres', 'psql', '-U', user, '-d', db, '-tA', '-c', sql], { cwd: root, encoding: 'utf8', shell: process.platform === 'win32' });
   return result.status === 0 ? result.stdout.trim() : '';
