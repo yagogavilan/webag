@@ -273,3 +273,9 @@ Parecer técnico para o G4: **COM RESSALVAS**. Os dois primeiros itens entram an
 | A-02 (Média) | Migração 0055: índice `order_cancel_requests_open_uq` por `kind`; encerrar o pedido de cancelamento de preparo pendente quando o pedido sai de `in_preparation`; teste do 500. |
 | A-13 (Média, CI) | `dt060-finance-csv.e2e-spec.ts:84-86`: `.at(-1)` sem ORDER BY: corrigir. |
 | A-03, A-04, A-05, A-07, A-08, A-10 | Itens Z3.x da fila, se couberem sem risco (A-03: incluir `acceptedEtaToAt` na impressão digital da idempotência no app e no servidor de forma consistente). |
+
+## RC (2026-11-20)
+
+Z3.1 a Z3.10 entregues (A-01 a A-10, A-13). Validação no commit abaixo: e2e completo 3 vezes seguidas, 106 arquivos e 827 testes verdes em cada; unitários da API 329 verdes; lint e typecheck da api, shared, web e mobile limpos; `pnpm generate:check` sem diferença. Candidato a release do QA e do Security (DEC-075). O commit seguinte só acrescenta esta linha (documento).
+
+RC commit: f622bc91ba4562a4e98a87e6c879a973f8db02fb
