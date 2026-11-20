@@ -165,7 +165,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     let created = false;
     // A-03: `acceptedEtaToAt` anda com o relógio a cada refetch da sacola no app (a faixa é recalculada); fora da impressão digital da chave, a repetição do
     // MESMO pedido (3G, toque duplo) devolve o pedido já criado em vez de 409 IDEMPOTENCY_KEY_REUSED. A conferência ETA_CHANGED roda só na criação.
-    const { acceptedEtaToAt: _etaHint, ...fingerprint } = input;
+    const fingerprint: Partial<CreateOrderInput> = { ...input };
+    delete fingerprint.acceptedEtaToAt;
     const result = await this.idempotency.run(
       `order:${principal.userId}`,
       idempotencyKey,
