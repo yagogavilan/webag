@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { paymentRefundIntents } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
-import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith } from './helpers/orders.js';
+import { addToCart, approve, attemptOf, cartView, customerAt, orderRow, placeOrder, shopWith } from './helpers/orders.js';
 
 /** WB-259 (F3) `Order.refund` e WB-261 (F6a) `409 ETA_CHANGED` com `acceptedEtaToAt` (DEC-065, decisão do CEO). */
 describe('Contrato do pedido: estorno (WB-259) e horário mudou (WB-261)', () => {
@@ -114,6 +115,20 @@ describe('Contrato do pedido: estorno (WB-259) e horário mudou (WB-261)', () =>
       expect(accepted.status, JSON.stringify(accepted.body)).toBe(201);
       const row = await orderRow(ctx, accepted.body.id);
       expect(row.etaToAt).not.toBeNull();
+    });
+
+    it('A-03: repetição com a MESMA chave e outro acceptedEtaToAt (a faixa andou com o relógio) devolve o mesmo pedido (200), não 409 IDEMPOTENCY_KEY_REUSED; outro campo do corpo continua 409', async () => {
+      const { buyer, eta } = await cartReady();
+      const key = randomUUID();
+      const { revision, totalCents } = await cartView(ctx, buyer.user, buyer.addressId);
+      const send = (over: Record<string, unknown>) => ctx.http.post('/v1/orders').set(bearer(buyer.user.accessToken)).set('Idempotency-Key', key).send({ mode: 'delivery', addressId: buyer.addressId, cartRevision: revision, expectedTotalCents: totalCents, paymentMethod: 'pix', ...over });
+      const first = await send({ acceptedEtaToAt: eta.toAt });
+      expect(first.status, JSON.stringify(first.body)).toBe(201);
+      const again = await send({ acceptedEtaToAt: new Date(Date.parse(eta.toAt) + 3 * 60_000).toISOString() });
+      expect(again.status, JSON.stringify(again.body)).toBe(200);
+      expect(again.body.id).toBe(first.body.id);
+      expect((await send({})).status).toBe(200); // sem o campo (app antigo) também
+      expect((await send({ mode: 'pickup', addressId: undefined })).body.code).toBe('IDEMPOTENCY_KEY_REUSED'); // o resto do corpo segue na impressão digital
     });
 
     it('o limite é só de piora: dentro de 5 min a mais não avisa (o horário anda com o relógio)', async () => {
