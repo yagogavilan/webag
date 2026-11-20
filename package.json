@@ -27,7 +27,10 @@
     "licencas": "node scripts/gerar-licencas.mjs",
     "totp": "node scripts/totp.mjs",
     "pagar": "node scripts/simular-pagamento.mjs",
-    "telas": "node scripts/capture-screens.mjs"
+    "telas": "node scripts/capture-screens.mjs",
+    "web:compra": "node scripts/web-playwright.mjs compra",
+    "web:smoke": "node scripts/web-playwright.mjs smoke",
+    "web:e2e": "node scripts/web-playwright.mjs e2e"
   },
   "devDependencies": {
     "prettier": "3.10.1",

@@ -8,6 +8,10 @@ export default async function setup(): Promise<() => Promise<void>> {
   const { adminDatabaseUrl: adminUrl, databaseUrl: testUrl, redisUrl } = TEST_ENV;
 
   const dbName = new URL(testUrl).pathname.slice(1);
+  // BUG-028a: diz contra qual PostgreSQL e Redis o "verde" foi obtido (sem senha).
+  const target = new URL(testUrl);
+  const redisTarget = new URL(redisUrl);
+  console.log(`[e2e] PostgreSQL ${target.hostname}:${target.port || '5432'}/${dbName}; Redis ${redisTarget.hostname}:${redisTarget.port || '6379'}${redisTarget.pathname}`);
   if (!dbName.endsWith('_test')) throw new Error(`Banco de teste inesperado: ${dbName}`);
 
   const admin = new pg.Client({ connectionString: adminUrl });

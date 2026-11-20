@@ -7,7 +7,26 @@
 // intermitentes "database does not exist"). Para isolar, defina TEST_DB_NAME (termina em `_test`) e TEST_REDIS_DB (0 a 15).
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * BUG-028a: o `.env` da raiz vale para os testes como já vale para `pnpm dev` e `db:migrate`. Só DATABASE_URL e REDIS_URL são lidos
+ * (o resto do `.env`, como PAYMENT_PROVIDER e NODE_ENV=development, mudaria o comportamento da API sob teste). A variável do ambiente
+ * do processo (CI) tem prioridade; sem nenhuma das duas, vale o padrão do docker compose. O banco usado é sempre `<db>_<pid>_test`.
+ */
+function fromDotEnv(key: 'DATABASE_URL' | 'REDIS_URL'): string | undefined {
+  try {
+    const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env');
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const match = /^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/.exec(line);
+      if (match?.[1] === key) return match[2]!.replace(/^(['"])(.*)\1$/, '$2') || undefined;
+    }
+  } catch {
+    /* sem .env (CI): vale o ambiente do processo ou o padrão */
+  }
+  return undefined;
+}
 
 /**
  * BUG-019: `pid % 14` deixava duas execuções simultâneas (dev, QA, CI local) caírem no MESMO banco lógico do Redis em ~1 de 14 vezes, e o
@@ -49,7 +68,7 @@ function claimRedisDb(): string {
 }
 
 const adminDatabaseUrl =
-  process.env.DATABASE_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag';
+  process.env.DATABASE_URL ?? fromDotEnv('DATABASE_URL') ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag';
 
 const testDb = new URL(adminDatabaseUrl);
 // S9: sem TEST_DB_NAME/TEST_REDIS_DB cada execução ganha banco e Redis próprios (pid) e os publica em `process.env`, que os
@@ -60,7 +79,7 @@ const testDbName = process.env.TEST_DB_NAME;
 if (!/^[a-z0-9_]+_test$/.test(testDbName)) throw new Error(`TEST_DB_NAME inválido: ${testDbName} (use letras minúsculas, números e _, terminando em _test)`);
 testDb.pathname = `/${testDbName}`;
 
-const redis = new URL(process.env.REDIS_URL ?? 'redis://localhost:6379');
+const redis = new URL(process.env.REDIS_URL ?? fromDotEnv('REDIS_URL') ?? 'redis://localhost:6379');
 redis.pathname = `/${process.env.TEST_REDIS_DB ?? '15'}`;
 
 export const TEST_ENV = {
