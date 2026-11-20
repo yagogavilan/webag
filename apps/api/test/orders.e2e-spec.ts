@@ -509,6 +509,28 @@ describe('Pedido: criação, reserva de estoque, pagamento, cancelamento e timeo
       await ctx.http.post(`/v1/orders/${created.id}/cancel`).set(bearer(user.accessToken)).send({}).expect(200);
       expect(await port.hasOpenOrders(shop.store.productIds[0]!)).toBe(false);
     });
+
+    it('A-10: todo estado em andamento conta, inclusive `ready_for_collection`; arquivar o produto devolve 409 OPEN_ORDERS; encerrado libera', async () => {
+      const { ProductOrdersPort } = await import('../src/modules/catalog/index.js');
+      const { ACTIVE_STATUSES, ORDER_STATUSES } = await import('../src/modules/orders/domain/state.js');
+      const port = ctx.app.get(ProductOrdersPort);
+      const shop = await shopWith(ctx, [{ name: 'Item', priceCents: 1_000, stock: 5 }]);
+      const { user, addressId } = await customerAt(ctx, shop.origin);
+      await addToCart(ctx, user, shop.variants[0]!, 1).expect(200);
+      const created = (await placeOrder(ctx, user, addressId)).body;
+      const productId = shop.store.productIds[0]!;
+      const archive = () => ctx.http.delete(`/v1/stores/${shop.store.id}/products/${productId}`).set(bearer(shop.store.owner.accessToken));
+      for (const status of ORDER_STATUSES) {
+        await ctx.db.update(orders).set({ status }).where(eq(orders.id, created.id));
+        expect(await port.hasOpenOrders(productId), status).toBe((ACTIVE_STATUSES as readonly string[]).includes(status));
+      }
+      await ctx.db.update(orders).set({ status: 'ready_for_collection' }).where(eq(orders.id, created.id));
+      const blocked = await archive();
+      expect(blocked.status, JSON.stringify(blocked.body)).toBe(409);
+      expect(blocked.body.code).toBe('OPEN_ORDERS');
+      await ctx.db.update(orders).set({ status: 'delivered' }).where(eq(orders.id, created.id));
+      await archive().expect(204);
+    });
   });
 
   describe('e-mail não confirmado (DEC-014)', () => {
