@@ -7,6 +7,8 @@ Capturas das telas principais do Webag, feitas em viewport (não fullPage) com a
   que só existe no aparelho (barra do sistema, teclado, permissões do sistema).
 - **Painel do lojista, painel admin e site**: 1440x900 (`-desktop`) e 390x844 (`-mobile`).
 - Numeração = ordem do catálogo no script; o número é estável quando só algumas áreas são regeradas.
+- **Gerado em 2026-11-20 a partir do commit congelado `036e791`** (código idêntico ao da ponta do branch; só há documentos depois dele). Banco próprio com
+  o seed padrão (lojas abertas 24 h), API, site e app exportado para web, tudo do zero. Os horários que aparecem (ex.: "Chega entre 03:31") seguem a hora da captura.
 
 ## Como gerar
 
@@ -34,6 +36,8 @@ por execução. Só roda contra banco local (`REAL_DB_URL` em localhost).
 | Logística da entrega fora do horário | Quando a entrega está fechada, sacola e checkout seguem por **Retirada** (o app avisa e oferece retirar) |
 | Horário comercial das lojas | Textos como "Loja fechada agora" e "Entrega volta amanhã" dependem da hora da captura |
 | Sem Mailpit (e-mail) | O e-mail dos clientes de demonstração é marcado como confirmado direto no banco |
+| Tempo real dos painéis | O site roda em `next start` (produção) e o Socket.IO exige HTTPS fora do dev: o BFF responde 503 em `realtime/tickets` e os painéis ficam só com polling (aparece "Som desligado" no lojista). Não é defeito do produto |
+| Documentos da loja em análise (admin) | Os 3 documentos são imagens fictícias ("DOCUMENTO FICTÍCIO PARA DEMONSTRAÇÃO") enviadas ao bucket privado do ambiente local antes da captura |
 | Cartão | O cartão é digitado na página segura do Mercado Pago; o app só mostra o checkout com cartão escolhido |
 
 ## Índice
@@ -110,10 +114,3 @@ por execução. Só roda contra banco local (`REAL_DB_URL` em localhost).
 | [43-site-exclusao-de-conta-mobile.png](43-site-exclusao-de-conta-mobile.png) | Exclusão de conta (site) | Público | 390x844 | Como pedir a exclusão da conta e dos dados. |
 | [44-site-licencas-desktop.png](44-site-licencas-desktop.png) | Licenças | Público | 1440x900 | Licenças de código aberto usadas pelo Webag. |
 | [44-site-licencas-mobile.png](44-site-licencas-mobile.png) | Licenças | Público | 390x844 | Licenças de código aberto usadas pelo Webag. |
-
-## Telas que mostraram erro nesta execução
-
-A captura registra o estado real: nestas telas apareceu uma mensagem de erro (normalmente a API devolveu falha ou faltou o arquivo no armazenamento de objetos). Corrija a causa e capture de novo.
-
-- `admin/alertas`: "Não conseguimos carregar"
-- `admin/loja-aprovacao`: "Não conseguimos carregar"
