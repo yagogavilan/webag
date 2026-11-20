@@ -1,6 +1,6 @@
 # Arquitetura do Webag: índice
 
-Fonte para quem vai manter, auditar ou estender o sistema. Dono: `tech-lead`. Atualizado em 2026-11-19 (Onda 7).
+Fonte para quem vai manter, auditar ou estender o sistema. Dono: `tech-lead`. Atualizado em 2026-11-20 (v1.0 congelado em `036e791`). Índice geral da documentação: [`../README.md`](../README.md); relatório final: [`../relatorio-final.md`](../relatorio-final.md).
 
 ## Visão em 10 linhas
 
@@ -29,6 +29,10 @@ Monólito modular NestJS (`apps/api`) com PostgreSQL + PostGIS, Redis e armazena
 | [010](adr/ADR-010-descoberta-sacola-checkout-onda3.md) | Descoberta, sacola no servidor, contrato do checkout | Carrinho e checkout |
 | [011](adr/ADR-011-trocas-tempo-real-notificacoes.md) | Trocas, tempo real e notificações (push e e-mail) | Trocas, push |
 | [012](adr/ADR-012-privacidade-lgpd-onda6.md) | Exclusão de conta, exportação, pedidos de titular, retenção | LGPD |
+| [013](adr/ADR-013-promessa-de-entrega.md) | Promessa de entrega em faixa (ETA), teto no fim da faixa, atraso, compensação e `deliveredAt` | Prazo e atraso de entrega |
+| [014](adr/ADR-014-operacao-do-admin.md) | Operação do admin: modo manutenção, caixa de alertas, usuários e pedidos | Painel admin |
+| [015](adr/ADR-015-geocodificador-opcional-e-pino-do-endereco.md) | Geocodificador opcional e confiança no pino do endereço | CEP, endereço |
+| [016](adr/ADR-016-email-ao-lojista-e-links-entre-hosts.md) | E-mail de pedido ao lojista e URLs por host | Links em e-mail, hosts |
 
 Modelo: [`adr/ADR-000-template.md`](adr/ADR-000-template.md). Toda decisão de arquitetura relevante vira ADR (CLAUDE.md, regra 4). Decisões de produto e de processo ficam em [`../decisoes.md`](../decisoes.md) (DEC-###).
 
@@ -36,7 +40,7 @@ Modelo: [`adr/ADR-000-template.md`](adr/ADR-000-template.md). Toda decisão de a
 
 | Documento | O que é |
 |---|---|
-| [`modelo-dados.md`](modelo-dados.md) | Tabelas por módulo, regras que o banco garante e **mapa das migrações 0000 a 0042**. A verdade é `apps/api/src/modules/*/db/schema.ts` e `apps/api/drizzle/*.sql` |
+| [`modelo-dados.md`](modelo-dados.md) | Tabelas por módulo, regras que o banco garante e **mapa das migrações 0000 a 0056**. A verdade é `apps/api/src/modules/*/db/schema.ts` e `apps/api/drizzle/*.sql` |
 | [`runbook-break-glass.md`](runbook-break-glass.md) | Recuperar o acesso de admin quando todos perderam o segundo fator |
 
 ## Revisões de código (Tech Lead)
@@ -47,6 +51,7 @@ Modelo: [`adr/ADR-000-template.md`](adr/ADR-000-template.md). Toda decisão de a
 | [`reviews/review-onda1-api.md`](reviews/review-onda1-api.md) | Identidade, configuração, pagamento base | Ver o arquivo |
 | [`reviews/review-onda2-api.md`](reviews/review-onda2-api.md) | Lojas e catálogo | Ver o arquivo |
 | [`reviews/review-ondas-3-5.md`](reviews/review-ondas-3-5.md) | Descoberta, pedido, pagamento, ledger, logística, trocas, tempo real | Com ressalvas (achados tratados nas ondas seguintes) |
+| [`reviews/onda-8.md`](reviews/onda-8.md) | Ondas 6 a 8 (DEC-053 a DEC-075) e parecer técnico para o G4 (A-01 a A-13) | Com ressalvas; bloqueantes A-01 e A-02 corrigidos (DEC-076, DEC-077) |
 
 Revisões de segurança ficam em [`../seguranca/`](../seguranca/) e de QA em [`../qa/`](../qa/).
 

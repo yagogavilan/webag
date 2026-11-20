@@ -2,7 +2,7 @@
 
 Marketplace regional de bens de consumo para Francisco Morato e região (Grande SP): o cliente compra de lojas locais pelo app, o lojista cuida de pedidos e catálogo pelo painel web, a Webag administra tudo pelo painel admin. Monorepo com API, painéis web, site público e app.
 
-> Visão e escopo: `docs/00-visao/brief.md`. Decisões: `docs/decisoes.md` e `docs/arquitetura/adr/`. Andamento: `docs/status.md`. Validação de que sobe do zero: `docs/qa/relatorios/setup-do-zero.md`.
+> Visão e escopo: `docs/00-visao/brief.md`. Decisões: `docs/decisoes.md` e `docs/arquitetura/adr/`. Andamento: `docs/status.md`. **Relatório final do v1.0 (o que depende do fundador, hipóteses, fase 2): `docs/relatorio-final.md`.** Índice da documentação: `docs/README.md`. Capturas de todas as telas: `docs/telas/`. Validação de que sobe do zero: `docs/qa/relatorios/setup-do-zero.md`.
 
 ## Subir tudo (3 comandos)
 
@@ -16,7 +16,7 @@ pnpm run setup      # cria o .env, sobe banco, Redis, armazenamento e e-mail de 
 pnpm dev            # API (3000), painéis e site (3001) e app (Metro, 8081)
 ```
 
-Pronto: http://localhost:3001/admin/entrar (admin), http://localhost:3001/lojista/entrar (lojista), http://localhost:3000/docs (contrato da API), http://localhost:8025 (caixa de e-mail de teste). Credenciais abaixo. Para conferir que tudo funciona, com a API rodando: `pnpm smoke` (cadastra um cliente, faz um pedido de retirada e outro de entrega com PIX simulado, em ~10 s).
+Pronto: http://localhost:3001/admin/entrar (admin), http://localhost:3001/lojista/entrar (lojista), http://localhost:3000/docs (contrato da API), http://localhost:8025 (caixa de e-mail de teste). Credenciais abaixo. Para conferir que tudo funciona, com a API rodando: `pnpm smoke` (cadastra um cliente, faz um pedido de retirada e outro de entrega com PIX simulado, em ~10 s; se o Mailpit não estiver na porta 8025, defina `MAILPIT_URL` no ambiente).
 
 `pnpm run setup` é seguro de repetir: nunca sobrescreve um `.env` existente, espera os serviços ficarem prontos, cria os buckets de fotos antes do seed e, se a porta do Postgres (5432) ou do Redis (6379) já estiver ocupada na sua máquina, escolhe outra sozinho e grava no `.env`. Atenção: `pnpm setup` **sem** `run` é um comando embutido do pnpm e não faz isto.
 
@@ -35,7 +35,7 @@ Pronto: http://localhost:3001/admin/entrar (admin), http://localhost:3001/lojist
 - Confirme: `git --version`, `node --version` (v24...), `pnpm --version` (10.28...), `docker compose version`.
 - Sem Docker: `SKIP_DOCKER=1 pnpm run setup` (PowerShell: `$env:SKIP_DOCKER=1; pnpm run setup`), com Postgres 16+ com PostGIS e Redis seus, e o armazenamento S3 e o e-mail de teste por sua conta.
 
-> Testado em Linux (Ubuntu, Node 22 e Docker 29). **Windows e macOS não foram testados** neste repositório; os passos acima seguem a documentação oficial das ferramentas. Se falhar, o erro mais provável é Docker fechado ou porta ocupada, e o `setup` diz qual.
+> Testado em Linux (Ubuntu, Node 22 e Docker 29); no commit final o QA exercitou `SKIP_DOCKER=1 pnpm run setup`, e o `setup` completo com Docker nas portas padrão não foi repetido (`docs/qa/relatorios/g4-final-tip.md` §2). **Windows e macOS não foram testados** neste repositório; os passos acima seguem a documentação oficial das ferramentas. Se falhar, o erro mais provável é Docker fechado ou porta ocupada, e o `setup` diz qual.
 
 ## Credenciais de demonstração (só desenvolvimento)
 
@@ -78,7 +78,7 @@ Com `PAYMENT_PROVIDER=fake` (padrão em desenvolvimento) nada é cobrado. O flux
 
 - **Celular (Expo Go)**: instale o Expo Go, escaneie o QR (celular e computador na **mesma rede Wi-Fi**). O celular não enxerga o `localhost` do computador: no `.env` defina `EXPO_PUBLIC_API_URL=http://<IP-do-computador>:3000` e `EXPO_PUBLIC_WEB_URL=http://<IP-do-computador>:3001` (IP: `ipconfig` no Windows, `ipconfig getifaddr en0` no macOS, `hostname -I` no Linux) e reinicie o `pnpm dev`. Se o firewall bloquear, libere as portas 3000, 3001 e 8081 para a rede privada.
 - **Emulador Android / simulador iOS**: com o emulador aberto, `pnpm --filter @webag/mobile android` (ou `ios`, só macOS). O emulador Android alcança o computador em `10.0.2.2` (`EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`).
-- **Navegador** (DEC-058): com a API no ar (`pnpm dev` ou só a API), rode `pnpm web` e abra http://localhost:8081 (ou aperte `w` no terminal do Metro). É o mesmo app, via `react-native-web`; serve para ver e testar as telas sem celular. Limites: a sessão fica só na memória da aba (recarregar a página sai da conta; sem `expo-secure-store` na web), sem push e sem localização do aparelho (escolha a cidade ou digite o CEP). O app de verdade é o nativo. Roteiro automatizado: `node apps/mobile/scripts/web-smoke.cjs` (Playwright; cidade, login, loja, produto e sacola).
+- **Navegador** (DEC-058): com a API no ar (`pnpm dev` ou só a API), rode `pnpm web` e abra http://localhost:8081 (ou aperte `w` no terminal do Metro). É o mesmo app, via `react-native-web`; serve para ver e testar as telas sem celular. Limites: a sessão fica só na memória da aba (recarregar a página sai da conta; sem `expo-secure-store` na web), sem push e sem localização do aparelho (escolha a cidade ou digite o CEP). O app de verdade é o nativo. Roteiro automatizado: `pnpm web:smoke` (Playwright do workspace; cidade, login, loja, produto e sacola).
 
 ## Trocar do simulado para o Mercado Pago real
 
@@ -113,6 +113,8 @@ Passo a passo: https://www.mercadopago.com.br/developers > **Suas integrações*
 | `packages/tokens` | Design tokens (CSS para a web, TS para o app) | |
 | `docs/arquitetura/` | Índice, ADRs, contrato (`api/openapi.yaml`), modelo de dados, revisões, dívida técnica | |
 | `docs/deploy/` | Guia de deploy e checklist das lojas | |
+| `docs/telas/` | Capturas de todas as telas (`pnpm telas`; índice em `docs/telas/README.md`) | |
+| `docs/relatorio-final.md` | Relatório final do v1.0 para o fundador | |
 | `infra/` | Compose e nginx de produção, backup, scripts, modelos de `.env` | |
 | `scripts/` | Utilitários da raiz (tabela abaixo) | |
 | `docker-compose.yml` | Dev: PostgreSQL+PostGIS (5432), Redis (6379), RustFS/S3 (9000, 9001), Mailpit (1025, 8025) | |
@@ -147,7 +149,8 @@ Os testes E2E da API usam banco real: `E2E_DEPS=1` com Postgres e Redis no ar (o
 
 - **Mercado Pago real, push real e Sentry do app/painel não foram exercitados** (dependem de contas do fundador). Estão prontos para ligar só com chaves.
 - **App no navegador**: abre com `pnpm web` (DEC-058), com os limites descritos em "Abrir o app". Captura do roteiro: `docs/qa/relatorios/app-web-sacola.png`.
-- O botão "Simular pagamento" do app depende de uma rota de dev por pedido que a API ainda não expõe (`docs/gestao/fila-mobile.md`): enquanto isso, use `pnpm pagar`.
+- O botão "Simular pagamento" do app usa a rota de dev por pedido (`/v1/dev/orders/{orderId}/payment/...`), que só existe em desenvolvimento e teste com o provedor `fake` (commit `e985bf5`; não verificado pelo QA pela tela do app). `pnpm pagar` continua valendo.
+- Pontos de `docs/relatorio-final.md` (g): merge em `main` e tag `v1.0.0` dependem de autorização do fundador; tudo está no branch `claude/admiring-lamport-62tq1a`.
 
 ## Como o time trabalha
 
@@ -169,6 +172,9 @@ sh infra/scripts/prod.sh run --rm seed   # primeiro administrador e dados base
 |---|---|
 | `docs/deploy/guia-deploy.md` | Passo a passo, variáveis de todos os serviços, webhook do Mercado Pago, backup e restauração, rotação de segredos, monitoramento |
 | `docs/deploy/checklist-publicacao-lojas.md` | EAS Build/Submit, ícones, textos, privacidade, regras da Apple e do Google, o que depende do fundador |
+| `docs/README.md` | Índice de toda a documentação (visão, produto, design, arquitetura, QA, segurança, deploy, decisões) |
+| `docs/relatorio-final.md` | Relatório final do v1.0: o que foi feito, como rodar, o que depende do fundador, hipóteses, fase 2 |
+| `docs/telas/README.md` | Capturas de todas as telas, com o que cada uma mostra |
 | `docs/arquitetura/README.md` | Índice de ADRs, contrato, modelo de dados, revisões e dívida técnica |
 | `docs/qa/plano-carga.md` | Plano de teste de carga |
 | `THIRD_PARTY_NOTICES.md` | Licenças de terceiros (fontes, ícones, dependências) |
