@@ -69,7 +69,7 @@
 
 ## Commits pós-RC (DEC-078), conferidos por leitura
 
-`a313b18` (V8.2), `4d0818e` (V8.3) e `21671cb` (V8.4) mexem só no web, em 21 arquivos de tela, CSS, textos e testes. **Sem impacto de segurança:**
+`a313b18` (V8.2), `4d0818e` (V8.3), `21671cb` (V8.4) e `3a7e496` (V8.5, status da loja calculado só na tela) mexem só no web, em telas, CSS, textos e testes. Nenhum deles toca no BFF. **Sem impacto de segurança:**
 - o `SafeImage` só usa o `src` que o painel já usava e troca a imagem pelo símbolo estático da marca; não usa `dangerouslySetInnerHTML`;
 - os links das lojas vêm de `PLAY_STORE_URL`/`APP_STORE_URL`, que o boot de produção exige em https (`prod-config.ts`), e agora somem quando a variável está vazia;
 - "conferir tudo só depois de abrir todos os documentos" é ajuda de **interface**, não controle de segurança. A aprovação da loja continua decidida e auditada no servidor.
