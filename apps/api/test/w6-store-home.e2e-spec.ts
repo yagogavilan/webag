@@ -33,7 +33,7 @@ describe('Lojista: resumo de avaliações e mais vendidos (W.6)', () => {
       const summary = (await ctx.http.get(`/v1/stores/${shop.store.id}/reviews/summary`).set(bearer(shop.store.owner.accessToken)).expect(200)).body;
       expect(summary).toEqual({ average: 3.6, total: 5, distribution: { '1': 1, '2': 0, '3': 1, '4': 1, '5': 2 }, withoutReply: 3 });
       // o mesmo universo da lista do painel
-      expect((await ctx.http.get(`/v1/stores/${shop.store.id}/reviews?limit=100`).set(bearer(shop.store.owner.accessToken)).expect(200)).body.data).toHaveLength(summary.total);
+      expect((await ctx.http.get(`/v1/stores/${shop.store.id}/reviews?limit=50`).set(bearer(shop.store.owner.accessToken)).expect(200)).body.data).toHaveLength(summary.total);
       // outra loja e visitante
       const other = await shopWith(ctx, [{ name: 'Outro', priceCents: 1_000, stock: 1 }]);
       expect([403, 404]).toContain((await ctx.http.get(`/v1/stores/${shop.store.id}/reviews/summary`).set(bearer(other.store.owner.accessToken))).status);
