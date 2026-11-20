@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<meta name="marketing-slides" content="10">
+<title>Webag para clientes</title>
+<link rel="stylesheet" href="base.css">
+<style>
+  /* Só desta peça */
+  .word{display:flex;align-items:center;gap:32px;height:230px;border-bottom:4px solid var(--n200)}
+  .word b{flex:none;width:96px;height:96px;border-radius:24px;background:var(--lima);color:var(--noite);font:800 56px/96px var(--disp);text-align:center}
+  .word span{font:800 96px/1 var(--disp);letter-spacing:-.035em}
+  .store{position:absolute;width:520px;height:132px;border:3px solid var(--n600);background:var(--n800);border-radius:24px;padding:22px 32px;color:#fff}
+  .store small{display:block;font:800 28px/1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--lima);margin-bottom:10px}
+  .store b{display:block;font:800 48px/1 var(--disp);letter-spacing:-.03em}
+</style>
+</head>
+<body>
+
+<!-- Sprite: símbolo da marca (cores por variável: --barras e --sac). Olhais são recortes reais. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <mask id="wb-oh" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+      <rect x="0" y="0" width="160" height="104" fill="#fff"/>
+      <circle cx="80" cy="52" r="4.5" fill="#000"/>
+      <circle cx="132" cy="52" r="4.5" fill="#000"/>
+    </mask>
+    <g id="wb-simbolo">
+      <g style="fill:var(--barras,#C02EF0)">
+        <rect x="24" y="34" width="23" height="14" rx="7"/>
+        <rect x="0" y="62" width="49" height="14" rx="7"/>
+        <rect x="18" y="90" width="34" height="14" rx="7"/>
+      </g>
+      <g mask="url(#wb-oh)" style="fill:var(--sac,#C02EF0);stroke:var(--sac,#C02EF0)">
+        <polygon points="67,43 145,43 133,95 72,95" stroke-width="18" stroke-linejoin="round"/>
+        <path d="M80 42A26 30 0 0 1 132 42" fill="none" stroke-width="14"/>
+      </g>
+    </g>
+  </defs>
+</svg>
+
+<!-- 1. CAPA -->
+<section class="slide roxo" id="s01" aria-label="Capa">
+  <img src="assets/webag-logo-branca.svg" alt="Webag" style="position:absolute;left:120px;top:96px;height:76px;width:auto">
+  <span class="tag" style="position:absolute;left:120px;top:236px">Em breve</span>
+  <h1 class="h1" style="left:120px;top:340px;width:960px;font-size:108px">Moda, casa<br>e mais.<br>Entregue<br>pelo <span class="mark">Webag.</span></h1>
+  <p class="l" style="left:120px;top:850px;font-weight:700">O app de compras do Webag</p>
+  <svg class="sim" viewBox="0 0 160 104" style="left:1000px;top:300px;width:800px;height:520px;transform:rotate(-7deg);--barras:#D6FF4A;--sac:#1C1721" aria-hidden="true"><use href="#wb-simbolo"/></svg>
+</section>
+
+<!-- 2. O QUE É O WEBAG -->
+<section class="slide" id="s02" aria-label="O que é o Webag">
+  <p class="kick" style="left:120px;top:100px">O que é o Webag</p>
+  <h1 class="h1" style="left:120px;top:164px;width:960px">Escolha no app.<br>Receba em casa.</h1>
+  <p class="l" style="left:120px;top:440px;width:880px">O Webag reúne lojas em um só app. Você escolhe, paga e acompanha o pedido.</p>
+  <span class="chip" style="left:120px;top:640px">Começando em Francisco Morato e região</span>
+  <div style="position:absolute;left:1100px;top:250px;width:700px">
+    <div class="word"><b>1</b><span>Escolha</span></div>
+    <div class="word"><b>2</b><span>Pague</span></div>
+    <div class="word"><b>3</b><span>Acompanhe</span></div>
+  </div>
+  <div class="foot"><img src="assets/webag-logo.svg" alt="Webag"><span class="num">02 / 10</span></div>
+</section>
+
+<!-- 3. O QUE VOCÊ ENCONTRA (as 4 promessas) -->
+<section class="slide roxo" id="s03" aria-label="O que você encontra no Webag">
+  <p class="kick" style="left:120px;top:100px">Webag para clientes</p>
+  <h1 class="h1" style="left:120px;top:164px;width:1500px">O que você encontra.</h1>
+  <div class="cards">
+    <div class="card"><div class="n">1</div><h3>Variedade em um só app</h3><p>Moda, casa e mais.</p></div>
+    <div class="card"><div class="n">2</div><h3>Entrega pelo Webag</h3><p>Ou retire na loja. Taxa e tempo estimado antes de pagar.</p></div>
+    <div class="card"><div class="n">3</div><h3>PIX ou cartão</h3><p>Pague pelo app, com o Mercado Pago.</p></div>
+    <div class="card"><div class="n">4</div><h3>Acompanhe o pedido</h3><p>Veja cada etapa e receba avisos no celular.</p></div>
+  </div>
+  <div class="foot"><img src="assets/webag-logo-branca.svg" alt="Webag"><span class="num">03 / 10</span></div>
+</section>
+
+<!-- 4. PASSO 1: ESCOLHA -->
+<section class="slide" id="s04" aria-label="Passo 1: escolha a loja e o produto">
+  <p class="kick" style="left:120px;top:100px">Passo 1 de 4 · Escolha</p>
+  <div class="prog w92" style="left:120px;top:152px"><i class="on"></i><i></i><i></i><i></i></div>
+  <h1 class="h1" style="left:120px;top:206px;width:1100px">Escolha a loja<br>e o produto.</h1>
+  <ul class="pts" style="left:120px;top:470px;width:1100px">
+    <li>Busque pelo nome do produto ou da loja.</li>
+    <li>Ou navegue pelas categorias.</li>
+    <li>Veja o preço de cada item antes de adicionar à sacola.</li>
+  </ul>
+  <div class="phone" style="--w:400px;left:1366px;top:90px"><div class="scr"><img src="../../telas/02-app-busca.png" alt="Tela de busca do app Webag, com as categorias"></div></div>
+  <div class="foot"><img src="assets/webag-logo.svg" alt="Webag"><span class="num">04 / 10</span></div>
+</section>
+
+<!-- 5. PASSO 2: CONFIRA -->
+<section class="slide noite" id="s05" aria-label="Passo 2: veja a taxa e o tempo antes de pagar">
+  <div class="phone" style="--w:400px;left:120px;top:90px"><div class="scr"><img src="../../telas/07-app-checkout-pix.png" alt="Tela de finalizar pedido: entrega ou retirada, endereço, taxa, tempo estimado e total"></div></div>
+  <p class="kick" style="left:700px;top:100px">Passo 2 de 4 · Confira</p>
+  <div class="prog w92" style="left:700px;top:152px"><i></i><i class="on"></i><i></i><i></i></div>
+  <h1 class="h1" style="left:700px;top:206px;width:1100px;font-size:96px">Veja a taxa e<br>o tempo antes<br>de pagar.</h1>
+  <ul class="pts" style="left:700px;top:560px;width:1000px">
+    <li>Escolha entrega ou retirada na loja.</li>
+    <li>Veja o endereço, a taxa de entrega e o tempo estimado.</li>
+    <li>O total já inclui a entrega.</li>
+  </ul>
+  <div class="foot r"><img src="assets/webag-logo-branca.svg" alt="Webag"><span class="num">05 / 10</span></div>
+</section>
+
+<!-- 6. PASSO 3: PAGUE -->
+<section class="slide" id="s06" aria-label="Passo 3: pague com PIX ou cartão">
+  <p class="kick" style="left:120px;top:100px">Passo 3 de 4 · Pague</p>
+  <div class="prog w92" style="left:120px;top:152px"><i></i><i></i><i class="on"></i><i></i></div>
+  <h1 class="h1" style="left:120px;top:206px;width:1100px">Pague com<br>PIX ou cartão.</h1>
+  <ul class="pts" style="left:120px;top:470px;width:1100px">
+    <li>PIX: copie o código e cole no app do seu banco.</li>
+    <li>A tela muda sozinha quando o pagamento é confirmado.</li>
+    <li>Cartão: você digita na página segura do Mercado Pago, nunca no app.</li>
+  </ul>
+  <div class="phone" style="--w:400px;left:1366px;top:90px"><div class="scr"><img src="../../telas/09-app-pix.png" alt="Tela de pagamento com PIX: valor, contagem regressiva e botão copiar código"><div class="patch" style="left:0;top:39.8%;width:100%;height:5.9%">Código copia e cola</div></div></div>
+  <div class="foot"><img src="assets/webag-logo.svg" alt="Webag"><span class="num">06 / 10</span></div>
+</section>
+
+<!-- 7. PASSO 4: ACOMPANHE -->
+<section class="slide noite" id="s07" aria-label="Passo 4: acompanhe o pedido">
+  <div class="phone" style="--w:400px;left:120px;top:90px"><div class="scr"><img src="../../telas/11-app-acompanhamento.png" alt="Acompanhamento do pedido: etapa atual, faixa de chegada e linha do tempo"></div></div>
+  <p class="kick" style="left:700px;top:100px">Passo 4 de 4 · Acompanhe</p>
+  <div class="prog w92" style="left:700px;top:152px"><i></i><i></i><i></i><i class="on"></i></div>
+  <h1 class="h1" style="left:700px;top:206px;width:1100px">Acompanhe<br>seu pedido.</h1>
+  <ul class="pts" style="left:700px;top:470px;width:1000px">
+    <li>Veja cada etapa, do pedido recebido até a entrega.</li>
+    <li>Receba avisos no celular.</li>
+    <li>Fale com a loja pelo WhatsApp.</li>
+  </ul>
+  <div class="foot r"><img src="assets/webag-logo-branca.svg" alt="Webag"><span class="num">07 / 10</span></div>
+</section>
+
+<!-- 8. COMPRE COM TRANQUILIDADE -->
+<section class="slide" id="s08" aria-label="Compre com tranquilidade">
+  <h1 class="h1" style="left:120px;top:164px;width:1100px">Compre com<br>tranquilidade.</h1>
+  <ul class="pts" style="left:120px;top:460px;width:1100px">
+    <li>Peça a <span class="mark">troca</span> pelo app.</li>
+    <li>O pagamento é feito pelo Mercado Pago.</li>
+    <li>O Webag não guarda os dados do seu cartão.</li>
+  </ul>
+  <div class="phone" style="--w:400px;left:1366px;top:90px"><div class="scr"><img src="../../telas/14-app-troca.png" alt="Tela de pedir troca no app Webag"></div></div>
+  <div class="foot"><img src="assets/webag-logo.svg" alt="Webag"><span class="num">08 / 10</span></div>
+</section>
+
+<!-- 9. COMO BAIXAR -->
+<section class="slide noite" id="s09" aria-label="Como baixar">
+  <p class="kick" style="left:120px;top:100px">Como baixar</p>
+  <h1 class="h1" style="left:120px;top:164px;width:1100px;font-size:100px">Em breve na<br>Google Play e na<br>App Store.</h1>
+  <div class="store" style="left:120px;top:560px"><small>Em breve</small><b>Google Play</b></div>
+  <div class="store" style="left:680px;top:560px"><small>Em breve</small><b>App Store</b></div>
+  <p class="l" style="left:120px;top:740px;width:1000px">Sem data definida. Acompanhe o Webag para saber quando abrir.</p>
+  <svg class="sim" viewBox="0 0 160 104" style="left:1260px;top:160px;width:540px;height:351px;transform:rotate(-7deg);--barras:#D6FF4A;--sac:#C02EF0" aria-hidden="true"><use href="#wb-simbolo"/></svg>
+  <div class="foot"><img src="assets/webag-logo-branca.svg" alt="Webag"><span class="num">09 / 10</span></div>
+</section>
+
+<!-- 10. CONTATO -->
+<section class="slide roxo" id="s10" aria-label="Contato">
+  <p class="kick" style="left:120px;top:100px">Contato</p>
+  <h1 class="h1" style="left:120px;top:164px;width:900px">Fale com<br>o Webag.</h1>
+  <p class="l" style="left:120px;top:440px;width:800px">Tire dúvidas e acompanhe a abertura do app.</p>
+  <div class="contact" style="left:1100px;top:150px;width:700px">
+    <h3>Onde nos achar</h3>
+    <div class="crow" data-cfg="instagram"><span class="lbl">Instagram</span><span class="val"></span></div>
+    <div class="crow" data-cfg="whatsapp"><span class="lbl">WhatsApp</span><span class="val"></span></div>
+    <div class="crow" data-cfg="site"><span class="lbl">Site</span><span class="val"></span></div>
+    <div class="crow" data-cfg="email"><span class="lbl">E-mail</span><span class="val"></span></div>
+  </div>
+  <div class="foot"><img src="assets/webag-logo-branca.svg" alt="Webag"><span class="num">10 / 10</span></div>
+</section>
+
+<script>
+/* Contato: lê config.json (ou window.__CONFIG injetado pelo render). Campo vazio = linha para escrever à mão. */
+(function () {
+  var DEFAULTS = { nome: "Yago", whatsapp: "", instagram: "@webag", site: "", email: "" };
+  var injected = !!window.__CONFIG;
+  var cfg = {};
+  Object.keys(DEFAULTS).forEach(function (k) { cfg[k] = DEFAULTS[k]; });
+  if (injected) Object.keys(window.__CONFIG).forEach(function (k) { cfg[k] = window.__CONFIG[k]; });
+
+  function apply(c) {
+    var rows = document.querySelectorAll("[data-cfg]");
+    for (var i = 0; i < rows.length; i++) {
+      var v = String(c[rows[i].getAttribute("data-cfg")] || "").trim();
+      var el = rows[i].querySelector(".val");
+      if (!el) continue;
+      el.textContent = v;
+      if (v) el.classList.remove("blank"); else el.classList.add("blank");
+    }
+    var txt = document.querySelectorAll("[data-cfg-text]");
+    for (var j = 0; j < txt.length; j++) {
+      var t = String(c[txt[j].getAttribute("data-cfg-text")] || "").trim();
+      txt[j].textContent = t || txt[j].getAttribute("data-fallback") || "";
+    }
+    window.__CONFIG = c;
+  }
+  apply(cfg);
+
+  var cfgDone = Promise.resolve();
+  if (!injected && window.fetch) {
+    cfgDone = fetch("config.json").then(function (r) { return r.json(); }).then(function (j) {
+      var m = {};
+      Object.keys(cfg).forEach(function (k) { m[k] = cfg[k]; });
+      Object.keys(j).forEach(function (k) { m[k] = j[k]; });
+      apply(m);
+    }).catch(function () { /* file:// bloqueia fetch: vale o fallback acima */ });
+  }
+
+  /* Só na tela: reduz o slide para caber na janela. Nunca no PDF/render (?render ou janela >= 1920). */
+  if (!/[?&]render\b/.test(location.search) && window.innerWidth < 1920) {
+    document.documentElement.style.setProperty("--fit", String((window.innerWidth - 24) / 1920));
+  }
+
+  var fontsDone = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+  Promise.all([cfgDone, fontsDone]).then(function () {
+    document.documentElement.setAttribute("data-ready", "1");
+  });
+})();
+</script>
+</body>
+</html>
