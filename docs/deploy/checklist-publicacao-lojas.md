@@ -224,3 +224,5 @@ Conferido em: ____/____/______ (Google Play Console Help)
 | Push real (`PUSH_PROVIDER=expo`, FCM/APNs no EAS) | Depende das contas do fundador | Fundador, mobile-dev |
 | Sentry no app e no painel web, se for declarado no formulário | Só a API tem (DT-039) | mobile-dev |
 | `expo-updates` (OTA), se quiser correção rápida de JavaScript | A criar | mobile-dev |
+
+- **Textos legais (DEC-082, SEC-187/C10):** antes do envio às lojas, o jurídico aprova os textos de `docs/produto/legal/`; só então publicar as versões aprovadas no admin com os valores de empresa preenchidos no seed e ligar `LEGAL_REVIEWED=true` (site) e `EXPO_PUBLIC_LEGAL_REVIEWED=true` (build do app). Até lá as páginas mostram "Versão para revisão. Vigência a definir.".
