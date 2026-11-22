@@ -116,25 +116,25 @@ Pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 1
 
 ---
 
-## v1.1 (R1 a R5): estado em 2026-11-22 (após o merge do desempenho no `main`)
+## v1.1 (R1 a R5): estado em 2026-11-22 (contrato R1 aprovado, R1 reestimada)
 
-Cor: **AMARELO** (era AMARELO). Motivo: base limpa e sem veto, mas disco a 99% (719 MB) bloqueia a R1, o contrato da R1 ainda não saiu e SEC-200 bloqueia deploy. Vira VERDE quando: disco liberado, contrato revisado. Vira VERMELHO se: o disco não for liberado até 2026-11-23 (I-05).
+Cor: **AMARELO** (era AMARELO). Motivo: G2 da R1 aprovado e R1.1 liberada (DEC-123), sem veto; mas a R1 custa ~40 a 44 UT contra 31,7 do plano, disco a 99% (683 MB) e sem Docker travam a R1.0, e SEC-206 a 209 estão abertos como gates. Vira VERMELHO se não houver máquina com Docker e disco para a R1.0 na próxima sessão. Vira VERDE quando a base e2e estiver verde 3x e a R1.1 dentro de 7,5 UT.
 
-**Delta:** W0 concluída (V0-02 a V0-04, V0-09): desempenho da API no `main` (PR 1, `d0a25b1`, DEC-117); veto da DEC-105 levantado (DEC-115); R-29 fechado. Cache do cliente 30 s -> 5 s (DEC-116). Novos: R-38 a R-40, I-06, D-15.
+**Delta:** contrato OpenAPI da R1 e estimativas aceitos (V0-11); DEC-118 a 123; plano e board reestimados. Novos: R-41 a R-46, D-16.
 
-| Meta | Evidência |
-|---|---|
-| W0: 4 de 5 tarefas aceitas (V0-02, 03, 04, 09 com ressalvas); V0-05 em revisão; V0-01 bloqueada | `gestao/board.md`; pareceres TL, Security e QA de 2026-11-22; e2e 3x verde, 912 testes |
+- **A conta (fonte: `gestao/plano-v1-1.md` §10):** backend 16,5 a 19 UT (piso 15,85) contra 9 a 10 do plano; R1 total ~40 a 44 UT (`[HIPÓTESE]`; o mobile-dev ainda não estimou). Rodadas de agentes: ~40 a 44 na R1; ~17 a 19 janelas de backend em série (caminho crítico).
+- **Piso que não corta:** WB-352, WB-355, D-06, R1.2. **Ordem de corte (DEC-123):** CSV/restaurar do WB-354, PUT de modelo, xlsx no servidor, massa do admin, R1.4 inteira (~4,1 UT juntos: fecha só metade da lacuna).
+- **Precisa de sessão com Docker:** R1.0 (e2e 3x, `db-roles`, restauração), toda migração 0058 a 0065, VA/AO/BK/DB no CI, D-06. Sem Docker já anda: remoção das 2 rotas legadas e WB-355, partes puras da WB-352, escrita das migrações.
+- **Bloqueado:** R1.0 | falta Docker e disco | CEO/fundador | próxima sessão | atrasa toda a R1.1 (sem folga).
+- **Caminho crítico:** R1.0 -> R1.1 (WB-352 e D-06) -> R1.2 -> teste de 60 s -> R1.3 -> G4 local; folga zero, sem datas (UT).
+- **Top riscos:** R-41 (sem Docker), R-45 (estouro da R1), R-42 a R-44 (SEC-206 a 209 bloqueiam G4/merge); também R-38 (SEC-200), R-32 (jurídico), R-46 (sem estimativa do mobile-dev).
 
-- **Em andamento:** backend-dev: contrato OpenAPI da R1 e estimativas (`gestao/estimativas-v1-1-r1.md`); mobile-dev: BUG-033.
-- **Bloqueado:** disco (I-05) | CEO/fundador | até 2026-11-23 | impede commit e `pnpm` na R1.
-- **Caminho crítico:** disco + contrato R1 -> revisão do TL -> R1.1. Folga: sem datas (UT, 168 com faixa 122 a 234 `[HIPÓTESE]`); o contrato é o próximo marco.
-- **Top riscos:** R-38 SEC-200 (bloqueia deploy até G4 ou aceite do fundador); R-32 jurídico (J8, J22 a J27); R-30 limite de uso. Também: R-39 staging (PostgreSQL 18, `compose config`, 2 réplicas `[HIPÓTESE]`); SEC-205 antes da 2ª réplica; DT-085/086; BUG-033 (Média), 034 e 035 (Baixas).
+Decisões do CEO (em lote): (1) aprovar nova linha de base da R1 (~40 a 44 UT, total ~177 a 181) sem gastar o buffer de 25 UT (recomendado); (2) aprovar os gatilhos de corte: R1.1 acima de 7,5 UT corta 1 a 3, acima de 9 corta também 4 e 5; (3) mandar o mobile-dev estimar a R1 antes da R1.2; (4) escolher onde roda a R1.0 (máquina do fundador com Docker Desktop ou liberar disco aqui); (5) manter R1.4 por último (recomendado) ou trocá-la com a R1.3.
 
 Depende do fundador (por urgência):
-1. **Liberar disco** (I-05).
+1. **Liberar disco** (I-05) e **uma máquina com Docker** para a R1.0 (D-16).
 2. **Aceitar ou mandar corrigir SEC-200** antes de qualquer deploy (DEC-115).
-3. **Tornar o repositório privado** e decidir a **tag `v1.0.0`** (D-15, D-08).
-4. **Levar J8 e J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
-5. Decisões F2 (cupom), F5 (preço do módulo), F8, F10/F16 e cotação de motoboys (D-13).
-6. **Aparelho Android** e forma de gerar o APK (R4, D-11); 1 sessão do fundador por release (D-14).
+3. **5 pessoas do perfil** para o teste de 60 s da R1.2 (D-14).
+4. **Tornar o repositório privado** e decidir a **tag `v1.0.0`** (D-15, D-08).
+5. **Levar J8 e J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
+6. Decisões F2, F5, F8, F10/F16 e cotação de motoboys (D-13); aparelho Android e APK (R4, D-11).
