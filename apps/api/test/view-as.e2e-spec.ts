@@ -495,9 +495,10 @@ describe('Ver como o lojista (WB-352)', () => {
       // Só as chaves da visão "caem": o resto do Redis (sessão, rate limit por IP) segue, para o teste isolar o comportamento da visão.
       const down = (error = new Error('ECONNREFUSED simulado')) => error;
       const realMulti = redis.multi.bind(redis);
-      const realSet = redis.set.bind(redis) as (...a: unknown[]) => Promise<unknown>;
+      const realSet = redis.set.bind(redis) as unknown as (...a: unknown[]) => Promise<unknown>;
       const realIncr = redis.incr.bind(redis);
-      vi.spyOn(redis, 'multi').mockImplementation(((...args: unknown[]) => {
+      const spies: { mockRestore: () => void }[] = [];
+      spies.push(vi.spyOn(redis, 'multi').mockImplementation(((...args: unknown[]) => {
         const pipeline = (realMulti as (...a: unknown[]) => ReturnType<typeof realMulti>)(...args);
         const realPipelineSet = pipeline.set.bind(pipeline) as (...a: unknown[]) => typeof pipeline;
         (pipeline as { set: unknown }).set = (...a: unknown[]) => {
@@ -505,9 +506,9 @@ describe('Ver como o lojista (WB-352)', () => {
           return realPipelineSet(...a);
         };
         return pipeline;
-      }) as never);
-      vi.spyOn(redis, 'set').mockImplementation(((...a: unknown[]) => (String(a[0]).startsWith('view-as:denied-audit:') ? Promise.reject(down()) : realSet(...a))) as never);
-      vi.spyOn(redis, 'incr').mockImplementation(((key: string) => (key.startsWith('view-as:denies:') ? Promise.reject(down()) : realIncr(key))) as never);
+      })));
+      spies.push(vi.spyOn(redis, 'set').mockImplementation(((...a: unknown[]) => (String(a[0]).startsWith('view-as:denied-audit:') ? Promise.reject(down()) : realSet(...a))) as never));
+      spies.push(vi.spyOn(redis, 'incr').mockImplementation(((key: string) => (key.startsWith('view-as:denies:') ? Promise.reject(down()) : realIncr(key))) as never));
       try {
         const read = await viewGet(admin, `/v1/stores/${shop.store.id}`, view.token);
         expect([read.status, read.body.code]).toEqual([503, 'RATE_LIMIT_UNAVAILABLE']);
@@ -518,9 +519,7 @@ describe('Ver como o lojista (WB-352)', () => {
         await ctx.http.delete(`/v1/stores/${shop.store.id}/products/${randomUUID()}`).set(bearer(admin.accessToken)).set('X-View-As', view.token).expect(403);
         expect((await auditOf('view_as.denied', admin.userId)).length).toBe(deniedBefore + 1);
       } finally {
-        vi.mocked(redis.multi).mockRestore();
-        vi.mocked(redis.set).mockRestore();
-        vi.mocked(redis.incr).mockRestore();
+        for (const spy of spies) spy.mockRestore();
       }
       await viewGet(admin, `/v1/stores/${shop.store.id}`, view.token).expect(200); // Redis de volta: volta a ler, a visão não foi encerrada
       expect((await rows(admin.userId))[0]).toMatchObject({ closedAt: null });
