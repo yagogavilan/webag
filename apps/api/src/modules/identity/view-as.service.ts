@@ -160,7 +160,12 @@ export class ViewAsService implements OnApplicationBootstrap, OnApplicationShutd
     if (!row) return this.deny(req, principal, 'VIEW_AS_EXPIRED');
     const routeStore = (req.params as Record<string, string | undefined>).storeId;
     if (!routeStore || routeStore.toLowerCase() !== row.storeId) return this.deny(req, principal, 'VIEW_AS_EXPIRED');
-    await this.limiter.enforce(`rl:view-as:${row.id}`, VIEW_AS_LIMITS.readsPerMinute, 60, false);
+    // SEC-210 (ADR-018 D8): FALHA FECHADA. Sem Redis não há como contar as 120 leituras/min nem encerrar por abuso, então a leitura da visão responde 503 (ferramenta
+    // interna: o admin tenta de novo; o lojista e o cliente não passam por aqui). Sem reserva em memória: com N instâncias o teto vira N x 120 e o contador some no reinício.
+    await this.limiter.enforce(`rl:view-as:${row.id}`, VIEW_AS_LIMITS.readsPerMinute, 60).catch((error: unknown) => {
+      if (error instanceof AppError && error.code === 'RATE_LIMIT_UNAVAILABLE') this.logger.error({ event: 'view_as.limiter_unavailable', viewAsId: row.id, adminId: principal.userId, storeId: row.storeId });
+      throw error;
+    });
     req.viewAs = { id: row.id, storeId: row.storeId, adminUserId: row.adminUserId, adminSessionId: row.adminSessionId, reasonCode: row.reasonCode, expiresAt: row.expiresAt, level: 'viewer' };
     req.storeAccess = 'viewer';
     await this.countRead(row.id, operationId as string);
@@ -176,7 +181,11 @@ export class ViewAsService implements OnApplicationBootstrap, OnApplicationShutd
 
   private async recordDenied(req: AuthedRequest, principal: Principal, code: ViewAsDenial): Promise<void> {
     const open = await this.openOf(principal.userId);
-    const gate = await this.redis.set(`view-as:denied-audit:${principal.sessionId}:${code}`, '1', 'EX', VIEW_AS_LIMITS.deniedAuditWindowSeconds, 'NX');
+    // SEC-210: o portão de 1 linha por minuto é só anti-inundação. Redis fora = GRAVA (melhor linha repetida que tentativa sem rastro).
+    const gate = await this.redis.set(`view-as:denied-audit:${principal.sessionId}:${code}`, '1', 'EX', VIEW_AS_LIMITS.deniedAuditWindowSeconds, 'NX').catch((error: Error) => {
+      this.logger.warn({ event: 'view_as.denied_gate_unavailable', adminId: principal.userId, error: error.message });
+      return 'OK';
+    });
     if (gate === 'OK') {
       await this.audit.recordStandalone(this.ctxOf(req, principal), {
         action: 'view_as.denied',

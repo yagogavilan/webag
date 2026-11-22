@@ -57,6 +57,8 @@ export default async function setup(): Promise<() => Promise<void>> {
   let rolesReady: boolean;
   try {
     rolesReady = await ensureRoles(admin);
+    // SEC-212: no CI (REQUIRE_DB_ROLES=1) sem os papéis a execução inteira falha já aqui, antes de qualquer teste de papel ser "verde" por estar pulado.
+    if (!rolesReady && process.env.REQUIRE_DB_ROLES === '1') throw new Error('REQUIRE_DB_ROLES=1, mas os papéis webag_migrator e webag_app não puderam ser criados (o usuário do teste precisa ser superusuário)');
     await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
     await admin.query(`CREATE DATABASE "${dbName}"`);
   } finally {

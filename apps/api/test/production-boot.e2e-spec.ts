@@ -21,6 +21,8 @@ async function productionDatabaseUrl(): Promise<string> {
   }
 }
 const PROD_DATABASE_URL = await productionDatabaseUrl();
+// SEC-212: com REQUIRE_DB_ROLES=1 (CI) o caso D-06 abaixo não pode ser pulado em silêncio: sem o papel `webag_app` o arquivo inteiro falha.
+if (PROD_DATABASE_URL === TEST_ENV.databaseUrl && process.env.REQUIRE_DB_ROLES === '1') throw new Error('REQUIRE_DB_ROLES=1, mas o papel webag_app não conecta ao banco de teste: o caso D-06 do production-boot seria pulado');
 
 /**
  * SEC-036 / SEC-080: em produção o módulo /v1/dev/* nem é registrado (404, não 403), o provedor fake não sobe e

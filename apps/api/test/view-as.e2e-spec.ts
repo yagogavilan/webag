@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { Controller, Get, Logger, Param } from '@nestjs/common';
 import { ModulesContainer } from '@nestjs/core';
 import { and, count, desc, eq } from 'drizzle-orm';
+import type { Redis } from 'ioredis';
 import { io, type Socket } from 'socket.io-client';
 import { vi } from 'vitest';
 import { StorePermission, ViewAs } from '../src/platform/auth/decorators.js';
+import { REDIS } from '../src/platform/redis/redis.module.js';
 import { AuditService } from '../src/modules/admin/index.js';
 import { listViewAsHandlers, ViewAsService } from '../src/modules/identity/index.js';
 import { adminProfiles, adminViewSessions, auditLog, exchangeRequests, orderItems, orders, productVariants, products, sessions, storeHours, stores, users } from '../src/platform/database/schema.js';
@@ -481,6 +483,47 @@ describe('Ver como o lojista (WB-352)', () => {
       expect(denied.filter((d) => (d.after as { denial: string }).denial === 'VIEW_AS_READ_ONLY')).toHaveLength(1); // no máximo 1 linha por minuto por sessão e código; o resto só conta
       const close = (await auditOf('view_as.close', abuser.userId))[0];
       expect(close?.after).toMatchObject({ cause: 'abuse' });
+    });
+
+    it('VA-27 (SEC-210): com o Redis fora a leitura da visão falha FECHADA (503) e a negação continua deixando linha view_as.denied', async () => {
+      const redis = ctx.app.get<Redis>(REDIS);
+      const admin = await createAdmin(ctx, 'super_admin');
+      const view = await openOk(admin, shop.store.id);
+      await viewGet(admin, `/v1/stores/${shop.store.id}`, view.token).expect(200);
+      const deniedBefore = (await auditOf('view_as.denied', admin.userId)).length;
+
+      // Só as chaves da visão "caem": o resto do Redis (sessão, rate limit por IP) segue, para o teste isolar o comportamento da visão.
+      const down = (error = new Error('ECONNREFUSED simulado')) => error;
+      const realMulti = redis.multi.bind(redis);
+      const realSet = redis.set.bind(redis) as (...a: unknown[]) => Promise<unknown>;
+      const realIncr = redis.incr.bind(redis);
+      vi.spyOn(redis, 'multi').mockImplementation(((...args: unknown[]) => {
+        const pipeline = (realMulti as (...a: unknown[]) => ReturnType<typeof realMulti>)(...args);
+        const realPipelineSet = pipeline.set.bind(pipeline) as (...a: unknown[]) => typeof pipeline;
+        (pipeline as { set: unknown }).set = (...a: unknown[]) => {
+          if (String(a[0]).startsWith('rl:view-as:')) (pipeline as { exec: unknown }).exec = () => Promise.reject(down());
+          return realPipelineSet(...a);
+        };
+        return pipeline;
+      }) as never);
+      vi.spyOn(redis, 'set').mockImplementation(((...a: unknown[]) => (String(a[0]).startsWith('view-as:denied-audit:') ? Promise.reject(down()) : realSet(...a))) as never);
+      vi.spyOn(redis, 'incr').mockImplementation(((key: string) => (key.startsWith('view-as:denies:') ? Promise.reject(down()) : realIncr(key))) as never);
+      try {
+        const read = await viewGet(admin, `/v1/stores/${shop.store.id}`, view.token);
+        expect([read.status, read.body.code]).toEqual([503, 'RATE_LIMIT_UNAVAILABLE']);
+        expect(JSON.stringify(read.body)).not.toContain('"name"'); // nenhum dado da loja saiu
+        expect(logged.some((l) => l.includes('view_as.limiter_unavailable'))).toBe(true); // alerta (log de nível error com evento estável)
+
+        // Tentativa de escrita com a visão: 403 e a linha de negação existe mesmo sem o portão do Redis.
+        await ctx.http.delete(`/v1/stores/${shop.store.id}/products/${randomUUID()}`).set(bearer(admin.accessToken)).set('X-View-As', view.token).expect(403);
+        expect((await auditOf('view_as.denied', admin.userId)).length).toBe(deniedBefore + 1);
+      } finally {
+        vi.mocked(redis.multi).mockRestore();
+        vi.mocked(redis.set).mockRestore();
+        vi.mocked(redis.incr).mockRestore();
+      }
+      await viewGet(admin, `/v1/stores/${shop.store.id}`, view.token).expect(200); // Redis de volta: volta a ler, a visão não foi encerrada
+      expect((await rows(admin.userId))[0]).toMatchObject({ closedAt: null });
     });
 
     it('VA-22: o Socket.IO ignora X-View-As: o admin com a visão não entra na sala do pedido da loja', async () => {
