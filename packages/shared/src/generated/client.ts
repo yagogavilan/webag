@@ -13,7 +13,7 @@
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
  * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
- * "Ver como o lojista" (v1.1 R1): as rotas de LEITURA da loja marcadas `x-view-as: true` (dados da loja, produtos, pedidos, trocas, avaliações) aceitam também a credencial `viewAsAuth`; nenhuma rota de escrita, financeira, de documento, de equipe ou de exportação a aceita (403 `VIEW_AS_READ_ONLY`).
+ * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
  *
  * OpenAPI spec version: 0.4.0
@@ -7487,7 +7487,7 @@ export interface ProductTableRow {
   /** @nullable */
   basePriceCents: number | null;
   /**
-     * "Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo)
+     * "Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo). Sempre nulo com `X-View-As` (VA-14)
      * @nullable
      */
   youReceiveCents: number | null;
@@ -8026,7 +8026,10 @@ export type ViewAsSessionReason = {
 
 export interface ViewAsSession {
   id: string;
-  /** Credencial opaca de visualização, mostrada UMA vez; vai em `Authorization: Bearer` nas rotas `x-view-as` */
+  /**
+     * Credencial `vas_` mostrada UMA vez; vai no cabeçalho `X-View-As`, somada ao Bearer do admin, nas rotas `x-view-as`. Não vai em `Authorization`, URL nem corpo, e não é logada
+     * @pattern ^vas_[A-Za-z0-9_-]{43}$
+     */
   token: string;
   storeId: string;
   /** @nullable */
@@ -8034,6 +8037,427 @@ export interface ViewAsSession {
   /** No máximo 30 min, ou o fim da sessão do admin, o que vier antes */
   expiresAt: string;
   reason: ViewAsSessionReason;
+}
+
+export type StoreViewAsStatus = typeof StoreViewAsStatus[keyof typeof StoreViewAsStatus];
+
+
+export const StoreViewAsStatus = {
+  draft: 'draft',
+  in_review: 'in_review',
+  correction_requested: 'correction_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  suspended: 'suspended',
+  closed: 'closed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type StoreViewAsLogo = {[key: string]: string} | null;
+
+/**
+ * @nullable
+ */
+export type StoreViewAsCover = {[key: string]: string} | null;
+
+export type StoreViewAsReviewItemsItem = {
+  item: string;
+  reason: string;
+};
+
+export type StoreViewAsAddress = {
+  /** @nullable */
+  neighborhood: string | null;
+  /** @nullable */
+  city: string | null;
+  /** @nullable */
+  state: string | null;
+} | null;
+
+/**
+ * Resposta de `getStore` com `X-View-As` (apresentador `view_as`, threat model §14.3): sem CPF/CNPJ, razão social, comissão, tarifa, conta de recebimento, `settings` embutido nem papel. Lista fechada: campo novo só entra com parecer do Security. A rota devolve este corpo, e não `Store`, quando o cabeçalho está presente
+ */
+export interface StoreViewAs {
+  id: string;
+  /**
+     * v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo
+     * @minimum 1
+     */
+  version?: number;
+  /** Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo */
+  live?: boolean;
+  status: StoreViewAsStatus;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
+  mainCategoryId?: string | null;
+  extraCategoryIds: string[];
+  /** @nullable */
+  logo?: StoreViewAsLogo;
+  /** @nullable */
+  cover?: StoreViewAsCover;
+  pendingReview: boolean;
+  reviewItems: StoreViewAsReviewItemsItem[];
+  /** @nullable */
+  submittedAt?: string | null;
+  /** @nullable */
+  decisionReason?: string | null;
+  createdAt: string;
+  address?: StoreViewAsAddress;
+}
+
+export type StoreSettingsViewAsHoursItem = {
+  weekday: number;
+  intervals: Interval[];
+};
+
+export type StoreSettingsViewAsHolidaysItem = {
+  date: string;
+  /** @nullable */
+  label?: string | null;
+};
+
+export type StoreSettingsViewAsPause = {
+  active: boolean;
+  /** @nullable */
+  until: string | null;
+  indefinitely: boolean;
+};
+
+export type StoreSettingsViewAsDeliveryFeeManagedBy = typeof StoreSettingsViewAsDeliveryFeeManagedBy[keyof typeof StoreSettingsViewAsDeliveryFeeManagedBy];
+
+
+export const StoreSettingsViewAsDeliveryFeeManagedBy = {
+  webag: 'webag',
+} as const;
+
+export type StoreSettingsViewAsDeliveryTiersItem = {
+  fromKm: number;
+  toKm: number;
+  feeCents: number;
+};
+
+/**
+ * Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.
+ */
+export type StoreSettingsViewAsDelivery = {
+  /** DEC-053: preparo em uso (o da loja ou o padrão do admin) */
+  prepMinutes?: number;
+  prepMinutesIsDefault?: boolean;
+  acceptsDelivery: boolean;
+  feeManagedBy?: StoreSettingsViewAsDeliveryFeeManagedBy;
+  radiusKm: number;
+  feeMode: string;
+  feeFixedCents: number;
+  tiers: StoreSettingsViewAsDeliveryTiersItem[];
+  minOrderCents: number;
+  freeAboveCents: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+};
+
+export type StoreSettingsViewAsPickup = {
+  enabled: boolean;
+  useStoreAddress: boolean;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  instructions?: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+};
+
+export type StoreSettingsViewAsExchangePolicyLegalFloor = {
+  withdrawalDays: number;
+  defectDays: number;
+  /** BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável). */
+  defectDurableDays?: number;
+};
+
+export type StoreSettingsViewAsExchangePolicy = {
+  voluntaryDays: number;
+  collectionFeeCents: number;
+  version: number;
+  /** BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2). */
+  defaultVoluntaryDays?: number;
+  legalFloor: StoreSettingsViewAsExchangePolicyLegalFloor;
+};
+
+/**
+ * Resposta de `getStoreSettings` com `X-View-As`: horários, pausa, entrega, retirada, política de troca e limiar de estoque; sem `notifications` nem qualquer destino de contato (e-mail ou telefone)
+ */
+export interface StoreSettingsViewAs {
+  isOpenNow: boolean;
+  hours: StoreSettingsViewAsHoursItem[];
+  holidays: StoreSettingsViewAsHolidaysItem[];
+  pause: StoreSettingsViewAsPause;
+  /** Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag. */
+  delivery: StoreSettingsViewAsDelivery;
+  pickup: StoreSettingsViewAsPickup;
+  exchangePolicy: StoreSettingsViewAsExchangePolicy;
+  lowStockThreshold: number;
+}
+
+export type StoreOrderViewAsMode = typeof StoreOrderViewAsMode[keyof typeof StoreOrderViewAsMode];
+
+
+export const StoreOrderViewAsMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+/**
+ * Só o primeiro nome, mesmo em pedido ativo (SEC-207)
+ */
+export type StoreOrderViewAsCustomer = {
+  firstName: string;
+};
+
+export type StoreOrderViewAsItemsItemAttributes = {[key: string]: string};
+
+export type StoreOrderViewAsItemsItem = {
+  name: string;
+  attributes: StoreOrderViewAsItemsItemAttributes;
+  image: ImageUrls;
+  quantity: number;
+  unitPrice: Money | null;
+  lineTotal: Money | null;
+};
+
+/**
+ * Só o bairro; sem rua, número, complemento, CEP, coordenadas nem observação
+ */
+export type StoreOrderViewAsDelivery = {
+  /** @nullable */
+  neighborhood: string | null;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  /** DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra. */
+  eta?: EtaRange | null;
+} | null;
+
+export type StoreOrderViewAsPickup = {
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+} | null;
+
+export type StoreOrderViewAsValues = {
+  subtotal: Money;
+  delivery: Money;
+  storeDiscount: Money;
+  total: Money;
+} | null;
+
+export type StoreOrderViewAsCancellationBy = typeof StoreOrderViewAsCancellationBy[keyof typeof StoreOrderViewAsCancellationBy];
+
+
+export const StoreOrderViewAsCancellationBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type StoreOrderViewAsCancellation = {
+  by: StoreOrderViewAsCancellationBy;
+  at: string;
+} | null;
+
+/**
+ * Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.
+ */
+export type StoreOrderViewAsLogistics = {
+  status?: DeliveryStatus;
+  /** @nullable */
+  courierFirstName?: string | null;
+  volumes?: number;
+} | null;
+
+/**
+ * Resposta de `getStoreOrder` com `X-View-As` (SEC-207): só primeiro nome e bairro, também em pedido ativo; sem sobrenome, telefone, e-mail, CPF, rua, número, complemento, CEP, coordenadas, observação do cliente, código de entrega, `cancelRequest`, comissão nem líquido. Em `listStoreOrders` a única diferença é `allowedActions` vazio (o resumo já só traz o primeiro nome)
+ */
+export interface StoreOrderViewAs {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: StoreOrderViewAsMode;
+  createdAt: string;
+  /** @nullable */
+  paidAt: string | null;
+  /** @nullable */
+  acceptedAt: string | null;
+  /** @nullable */
+  acceptDeadlineAt: string | null;
+  /**
+     * W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.
+     * @nullable
+     */
+  readyByAt?: string | null;
+  /** Só o primeiro nome, mesmo em pedido ativo (SEC-207) */
+  customer: StoreOrderViewAsCustomer;
+  items: StoreOrderViewAsItemsItem[];
+  /** Só o bairro; sem rua, número, complemento, CEP, coordenadas nem observação */
+  delivery: StoreOrderViewAsDelivery;
+  pickup: StoreOrderViewAsPickup;
+  values: StoreOrderViewAsValues;
+  /** @nullable */
+  couponCode: string | null;
+  timeline: OrderTimelineEntry[];
+  cancellation: StoreOrderViewAsCancellation;
+  /** Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto. */
+  logistics?: StoreOrderViewAsLogistics;
+  /**
+     * Sempre vazio: o visualizador não age
+     * @maxItems 0
+     */
+  allowedActions: StoreOrderAction[];
+}
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsReasonCode = typeof ExchangeViewAsReasonCode[keyof typeof ExchangeViewAsReasonCode] | null;
+
+
+export const ExchangeViewAsReasonCode = {
+  size: 'size',
+  color: 'color',
+} as const;
+
+export type ExchangeViewAsMethod = typeof ExchangeViewAsMethod[keyof typeof ExchangeViewAsMethod];
+
+
+export const ExchangeViewAsMethod = {
+  pickup_at_home: 'pickup_at_home',
+  drop_at_store: 'drop_at_store',
+} as const;
+
+export type ExchangeViewAsResolution = typeof ExchangeViewAsResolution[keyof typeof ExchangeViewAsResolution];
+
+
+export const ExchangeViewAsResolution = {
+  replace: 'replace',
+  refund: 'refund',
+} as const;
+
+export type ExchangeViewAsItemAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsItem = {
+  orderItemId?: string;
+  name?: string;
+  attributes?: ExchangeViewAsItemAttributes;
+  image?: ImageUrls;
+  unitPrice?: Money;
+} | null;
+
+export type ExchangeViewAsNewVariantAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsNewVariant = {
+  variantId?: string;
+  attributes?: ExchangeViewAsNewVariantAttributes;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsDecidedBy = typeof ExchangeViewAsDecidedBy[keyof typeof ExchangeViewAsDecidedBy] | null;
+
+
+export const ExchangeViewAsDecidedBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type ExchangeViewAsTimelineItem = {
+  /** @nullable */
+  from?: string | null;
+  to?: string;
+  actor?: string;
+  /** @nullable */
+  reason?: string | null;
+  at?: string;
+};
+
+export type ExchangeViewAsRunsItemKind = typeof ExchangeViewAsRunsItemKind[keyof typeof ExchangeViewAsRunsItemKind];
+
+
+export const ExchangeViewAsRunsItemKind = {
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type ExchangeViewAsRunsItem = {
+  id?: string;
+  kind?: ExchangeViewAsRunsItemKind;
+  status?: string;
+};
+
+/**
+ * Resposta de `getStoreExchange` com `X-View-As`: motivo (código), status, prazos e itens; sem texto livre nem fotos do cliente, sem dados de reembolso, sem a justificativa digitada
+ */
+export interface ExchangeViewAs {
+  id: string;
+  /** Protocolo (TR-XXXXX). */
+  number: string;
+  orderId: string;
+  storeId?: string;
+  orderNumber: string;
+  status: ExchangeStatus;
+  type: ExchangeType;
+  /** @nullable */
+  reasonCode?: ExchangeViewAsReasonCode;
+  method: ExchangeViewAsMethod;
+  resolution: ExchangeViewAsResolution;
+  quantity: number;
+  /** @nullable */
+  item?: ExchangeViewAsItem;
+  /** @nullable */
+  newVariant?: ExchangeViewAsNewVariant;
+  fee: Money;
+  difference: Money;
+  totalDue: Money;
+  /** @nullable */
+  feeDueAt?: string | null;
+  feePaid?: boolean;
+  answerDeadlineAt: string;
+  windowEndsAt: string;
+  /** @nullable */
+  itemDueAt?: string | null;
+  autoApproved?: boolean;
+  /** @nullable */
+  decidedBy?: ExchangeViewAsDecidedBy;
+  /**
+     * Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.
+     * @nullable
+     */
+  contestableUntil?: string | null;
+  contested?: boolean;
+  timeline?: ExchangeViewAsTimelineItem[];
+  runs?: ExchangeViewAsRunsItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExchangePageViewAs {
+  data: ExchangeViewAs[];
+  /** @nullable */
+  nextCursor: string | null;
 }
 
 export interface AdminCreateProductDraftRequest {
@@ -8400,7 +8824,7 @@ export type ValidationErrorResponse = Problem;
 export type UnauthorizedResponse = Problem;
 
 /**
- * Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`)
+ * Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`; com `X-View-As`: `VIEW_AS_READ_ONLY` para método, rota ou cabeçalho fora da regra e `VIEW_AS_EXPIRED` para credencial vencida, encerrada ou de outra loja, admin ou sessão)
  */
 export type ForbiddenResponse = Problem;
 
@@ -16838,7 +17262,7 @@ export const getGetAdminOrderUrl = (orderId: string,) => {
 }
 
 /**
- * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+ * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`. **Auditoria (WB-352 C14, DEC-121):** cada abertura da ficha grava `audit_log` (`admin.order.view`: admin, pedido, loja, hora; sem o conteúdo exibido), no máximo 1 linha por (admin, pedido) a cada 10 min para a recarga da tela não inflar a trilha [HIPÓTESE]; a linha é gravada antes de o dado ser devolvido, e a falha de gravação derruba a resposta (500, sem dado). É o único caminho de dado de cliente para o suporte; não há "Revelar" dado completo na v1.1. Esta rota não aceita `X-View-As` (403 `VIEW_AS_READ_ONLY`). Resposta `Cache-Control: private, no-store`.
  * @summary Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)
  */
 export const getAdminOrder = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminOrderResponse> => {
@@ -17577,15 +18001,25 @@ export type getStoreResponse401 = {
   status: 401
 }
 
+export type getStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
 export type getStoreResponse404 = {
   data: NotFoundResponse
   status: 404
 }
 
+export type getStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreResponseSuccess = (getStoreResponse200) & {
   headers: Headers;
 };
-export type getStoreResponseError = (getStoreResponse401 | getStoreResponse404) & {
+export type getStoreResponseError = (getStoreResponse401 | getStoreResponse403 | getStoreResponse404 | getStoreResponse429) & {
   headers: Headers;
 };
 
@@ -17948,10 +18382,15 @@ export type getStoreSettingsResponse404 = {
   status: 404
 }
 
+export type getStoreSettingsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreSettingsResponseSuccess = (getStoreSettingsResponse200) & {
   headers: Headers;
 };
-export type getStoreSettingsResponseError = (getStoreSettingsResponse401 | getStoreSettingsResponse403 | getStoreSettingsResponse404) & {
+export type getStoreSettingsResponseError = (getStoreSettingsResponse401 | getStoreSettingsResponse403 | getStoreSettingsResponse404 | getStoreSettingsResponse429) & {
   headers: Headers;
 };
 
@@ -20135,10 +20574,15 @@ export type listProductsResponse404 = {
   status: 404
 }
 
+export type listProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listProductsResponseSuccess = (listProductsResponse200) & {
   headers: Headers;
 };
-export type listProductsResponseError = (listProductsResponse400 | listProductsResponse401 | listProductsResponse403 | listProductsResponse404) & {
+export type listProductsResponseError = (listProductsResponse400 | listProductsResponse401 | listProductsResponse403 | listProductsResponse404 | listProductsResponse429) & {
   headers: Headers;
 };
 
@@ -20444,7 +20888,7 @@ export const getBulkProductsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`).
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`).
  * @summary Ação em massa
  */
 export const bulkProducts = async (storeId: string,
@@ -20481,10 +20925,15 @@ export type getProductResponse404 = {
   status: 404
 }
 
+export type getProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getProductResponseSuccess = (getProductResponse200) & {
   headers: Headers;
 };
-export type getProductResponseError = (getProductResponse401 | getProductResponse403 | getProductResponse404) & {
+export type getProductResponseError = (getProductResponse401 | getProductResponse403 | getProductResponse404 | getProductResponse429) & {
   headers: Headers;
 };
 
@@ -21163,10 +21612,15 @@ export type listSectionsResponse404 = {
   status: 404
 }
 
+export type listSectionsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listSectionsResponseSuccess = (listSectionsResponse200) & {
   headers: Headers;
 };
-export type listSectionsResponseError = (listSectionsResponse401 | listSectionsResponse403 | listSectionsResponse404) & {
+export type listSectionsResponseError = (listSectionsResponse401 | listSectionsResponse403 | listSectionsResponse404 | listSectionsResponse429) & {
   headers: Headers;
 };
 
@@ -23879,10 +24333,15 @@ export type listStoreOrdersResponse404 = {
   status: 404
 }
 
+export type listStoreOrdersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreOrdersResponseSuccess = (listStoreOrdersResponse200) & {
   headers: Headers;
 };
-export type listStoreOrdersResponseError = (listStoreOrdersResponse400 | listStoreOrdersResponse401 | listStoreOrdersResponse403 | listStoreOrdersResponse404) & {
+export type listStoreOrdersResponseError = (listStoreOrdersResponse400 | listStoreOrdersResponse401 | listStoreOrdersResponse403 | listStoreOrdersResponse404 | listStoreOrdersResponse429) & {
   headers: Headers;
 };
 
@@ -23942,10 +24401,15 @@ export type countStoreOrdersResponse404 = {
   status: 404
 }
 
+export type countStoreOrdersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type countStoreOrdersResponseSuccess = (countStoreOrdersResponse200) & {
   headers: Headers;
 };
-export type countStoreOrdersResponseError = (countStoreOrdersResponse401 | countStoreOrdersResponse403 | countStoreOrdersResponse404) & {
+export type countStoreOrdersResponseError = (countStoreOrdersResponse401 | countStoreOrdersResponse403 | countStoreOrdersResponse404 | countStoreOrdersResponse429) & {
   headers: Headers;
 };
 
@@ -23996,10 +24460,15 @@ export type getStoreOrderResponse404 = {
   status: 404
 }
 
+export type getStoreOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreOrderResponseSuccess = (getStoreOrderResponse200) & {
   headers: Headers;
 };
-export type getStoreOrderResponseError = (getStoreOrderResponse401 | getStoreOrderResponse403 | getStoreOrderResponse404) & {
+export type getStoreOrderResponseError = (getStoreOrderResponse401 | getStoreOrderResponse403 | getStoreOrderResponse404 | getStoreOrderResponse429) & {
   headers: Headers;
 };
 
@@ -25480,10 +25949,15 @@ export type listStoreExchangesResponse404 = {
   status: 404
 }
 
+export type listStoreExchangesResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreExchangesResponseSuccess = (listStoreExchangesResponse200) & {
   headers: Headers;
 };
-export type listStoreExchangesResponseError = (listStoreExchangesResponse401 | listStoreExchangesResponse403 | listStoreExchangesResponse404) & {
+export type listStoreExchangesResponseError = (listStoreExchangesResponse401 | listStoreExchangesResponse403 | listStoreExchangesResponse404 | listStoreExchangesResponse429) & {
   headers: Headers;
 };
 
@@ -25543,10 +26017,15 @@ export type getStoreExchangeResponse404 = {
   status: 404
 }
 
+export type getStoreExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreExchangeResponseSuccess = (getStoreExchangeResponse200) & {
   headers: Headers;
 };
-export type getStoreExchangeResponseError = (getStoreExchangeResponse401 | getStoreExchangeResponse403 | getStoreExchangeResponse404) & {
+export type getStoreExchangeResponseError = (getStoreExchangeResponse401 | getStoreExchangeResponse403 | getStoreExchangeResponse404 | getStoreExchangeResponse429) & {
   headers: Headers;
 };
 
@@ -27755,10 +28234,15 @@ export type getStoreReviewsSummaryResponse404 = {
   status: 404
 }
 
+export type getStoreReviewsSummaryResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreReviewsSummaryResponseSuccess = (getStoreReviewsSummaryResponse200) & {
   headers: Headers;
 };
-export type getStoreReviewsSummaryResponseError = (getStoreReviewsSummaryResponse401 | getStoreReviewsSummaryResponse403 | getStoreReviewsSummaryResponse404) & {
+export type getStoreReviewsSummaryResponseError = (getStoreReviewsSummaryResponse401 | getStoreReviewsSummaryResponse403 | getStoreReviewsSummaryResponse404 | getStoreReviewsSummaryResponse429) & {
   headers: Headers;
 };
 
@@ -30469,10 +30953,15 @@ export type listStoreReviewsResponse404 = {
   status: 404
 }
 
+export type listStoreReviewsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreReviewsResponseSuccess = (listStoreReviewsResponse200) & {
   headers: Headers;
 };
-export type listStoreReviewsResponseError = (listStoreReviewsResponse400 | listStoreReviewsResponse401 | listStoreReviewsResponse403 | listStoreReviewsResponse404) & {
+export type listStoreReviewsResponseError = (listStoreReviewsResponse400 | listStoreReviewsResponse401 | listStoreReviewsResponse403 | listStoreReviewsResponse404 | listStoreReviewsResponse429) & {
   headers: Headers;
 };
 
@@ -31131,10 +31620,15 @@ export type listProductTableResponse409 = {
   status: 409
 }
 
+export type listProductTableResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listProductTableResponseSuccess = (listProductTableResponse200) & {
   headers: Headers;
 };
-export type listProductTableResponseError = (listProductTableResponse400 | listProductTableResponse401 | listProductTableResponse403 | listProductTableResponse404 | listProductTableResponse409) & {
+export type listProductTableResponseError = (listProductTableResponse400 | listProductTableResponse401 | listProductTableResponse403 | listProductTableResponse404 | listProductTableResponse409 | listProductTableResponse429) & {
   headers: Headers;
 };
 
@@ -32049,7 +32543,7 @@ export const getOpenViewAsUrl = (storeId: string,) => {
 }
 
 /**
- * **[PENDENTE, tech-lead B3: a forma da credencial (cabeçalho `X-View-As` somado ao Bearer do admin, ou Bearer com prefixo `vas_`) e o nível de acesso "visualizador" estão em definição pelo Security em ADR-018 D8 e no threat model; o contrato de `openViewAs`, `viewAsAuth` e das rotas `x-view-as` NÃO deve ser implementado até lá.]** Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE].
+ * Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve a CREDENCIAL `vas_...`, mostrada uma só vez e guardada só como SHA-256, que o cliente envia no cabeçalho `X-View-As` JUNTO com o Bearer do admin (esquema `viewAsAuth`) nas 13 rotas de leitura `x-view-as: true`. Nível fixo "visualizador" (threat model §14), mesmo que o admin seja membro ou dono da loja. Validade `expiresAt` = o menor entre 30 min e o fim da sessão do admin, **sem renovação** (para continuar, abre outra, com novo motivo). **Uma visão ativa por admin:** abrir outra encerra a anterior (`replaced`). **Auditoria:** `view_as.open` (admin, sessão, loja, motivo, `expiresAt`) é gravada NA MESMA TRANSAÇÃO da credencial e antes de ela ser devolvida; se a gravação falhar, 500 sem credencial e sem linha órfã. Sem motivo: 422 `REASON_REQUIRED`. Limite de 10 aberturas por hora por admin (429) e alerta à operação acima de 20 lojas distintas por dia [HIPÓTESE]. 409 `VIEW_AS_OPEN_CONFLICT`: duas aberturas simultâneas do mesmo admin (a restrição de uma visão ativa por admin decide a corrida); repetir. Rota de admin: não aceita `X-View-As`. Resposta `Cache-Control: private, no-store`.
  * @summary Abrir "Ver como o lojista" (somente leitura) (WB-352)
  */
 export const openViewAs = async (storeId: string,
@@ -32104,7 +32598,7 @@ export const getEndViewAsUrl = (viewAsId: string,) => {
 }
 
 /**
- * Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close`. Idempotente: encerrar de novo devolve 204.
+ * Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close` com a causa (`ended`) e o total de leituras por operação. Idempotente: encerrar de novo devolve 204 sem gravar de novo. Outras causas de encerramento, gravadas pelo servidor: `expired` (sweep de 10 min, com `at` = `expiresAt`), `replaced`, `session_ended` (logout, revogação, inatividade, MFA pendente), `permission_lost` e `abuse` (20 negações na mesma visão).
  * @summary Encerrar "Ver como o lojista" ("Sair da visualização")
  */
 export const endViewAs = async (viewAsId: string, options?: Parameters<typeof apiFetch>[1]): Promise<endViewAsResponse> => {
@@ -32739,7 +33233,7 @@ export const getBulkAdminStoreProductsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
+ * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
  * @summary Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
  */
 export const bulkAdminStoreProducts = async (storeId: string,

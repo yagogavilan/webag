@@ -137,14 +137,20 @@ describe('contrato OpenAPI da v1.1 R1', () => {
     });
   });
 
-  describe('"Ver como o lojista" é somente leitura (C-ADM-02)', () => {
+  describe('"Ver como o lojista" é somente leitura (C-ADM-02, ADR-018 D8, threat model §14)', () => {
     const viewAs = all.filter((o) => o.op['x-view-as'] === true);
+    const LISTA_FECHADA = [
+      'countStoreOrders', 'getProduct', 'getStore', 'getStoreExchange', 'getStoreOrder', 'getStoreReviewsSummary', 'getStoreSettings',
+      'listProductTable', 'listProducts', 'listSections', 'listStoreExchanges', 'listStoreOrders', 'listStoreReviews',
+    ];
+    const PROIBIDOS = /^(commissionPct|commissionSource|commissionCategories|providerFeePct|legalName|document|documentType|youReceiveCents|netBeforeProviderFee|commission|phone|email|cpf|cep|lat|lng|street|complement|note|description|photos|photoCount|refund|storeCode|deliveryCode|cancelRequest|settings|role)$/;
 
-    it('só rotas GET aceitam a credencial, e todas declaram o esquema de segurança', () => {
-      expect(viewAs.length).toBeGreaterThanOrEqual(10);
+    it('são exatamente as 13 rotas GET da lista fechada, com Bearer do admin MAIS o cabeçalho (nunca um sem o outro)', () => {
+      expect(viewAs.map((o) => o.op.operationId).sort()).toEqual(LISTA_FECHADA);
       for (const { key, method, op } of viewAs) {
         expect(method, key).toBe('get');
-        expect(op.security, key).toEqual([{ bearerAuth: [] }, { viewAsAuth: [] }]);
+        expect(op.security, key).toEqual([{ bearerAuth: [] }, { bearerAuth: [], viewAsAuth: [] }]);
+        for (const code of ['401', '403', '404', '429']) expect(op.responses[code], `${key} ${code}`).toBeDefined();
       }
       const usingScheme = all.filter((o) => JSON.stringify(o.op.security ?? '').includes('viewAsAuth')).map((o) => o.key);
       expect(usingScheme.sort()).toEqual(viewAs.map((o) => o.key).sort());
@@ -154,10 +160,38 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       for (const { key, path } of viewAs) expect(path, key).not.toMatch(/finance|documents|members|payment-account|ticket|\.csv|export/);
     });
 
-    it('a credencial é opaca e a abertura devolve expiração de até 30 min', () => {
-      expect(contract.components.securitySchemes.viewAsAuth.bearerFormat).toBe('opaque');
+    it('a credencial é um cabeçalho `X-View-As` (apiKey), não um Bearer, e a abertura devolve `vas_` com expiração', () => {
+      expect(contract.components.securitySchemes.viewAsAuth).toMatchObject({ type: 'apiKey', in: 'header', name: 'X-View-As' });
       expect(schemas.ViewAsSession.required).toEqual(expect.arrayContaining(['token', 'expiresAt']));
-      expect(String(all.find((o) => o.op.operationId === 'openViewAs')!.op.description)).toContain('ANTES de qualquer dado');
+      expect(schemas.ViewAsSession.properties.token.pattern).toBe('^vas_[A-Za-z0-9_-]{43}$');
+      const open = all.find((o) => o.op.operationId === 'openViewAs')!.op;
+      const text = String(open.description);
+      for (const part of ['MESMA TRANSAÇÃO', 'sem renovação', 'Uma visão ativa por admin', '10 aberturas por hora', 'Nível fixo']) expect(text, part).toContain(part);
+      for (const code of ['201', '401', '403', '404', '409', '422', '429']) expect(open.responses[code], code).toBeDefined();
+      expect(contract.components.responses.Forbidden.description).toMatch(/VIEW_AS_READ_ONLY.*VIEW_AS_EXPIRED/);
+    });
+
+    it('os corpos mascarados são estritos, sem os campos proibidos, e estão ligados às rotas por `x-view-as-schema`', () => {
+      const ligados = Object.fromEntries(viewAs.filter((o) => o.op['x-view-as-schema']).map((o) => [o.op.operationId, o.op['x-view-as-schema']]));
+      expect(ligados).toEqual({
+        getStore: 'StoreViewAs', getStoreSettings: 'StoreSettingsViewAs', getStoreOrder: 'StoreOrderViewAs',
+        getStoreExchange: 'ExchangeViewAs', listStoreExchanges: 'ExchangePageViewAs',
+      });
+      for (const name of ['StoreViewAs', 'StoreSettingsViewAs', 'StoreOrderViewAs', 'ExchangeViewAs']) {
+        const s = schemas[name];
+        expect(s.additionalProperties, name).toBe(false);
+        // `phone`, `whatsapp` e `description` da LOJA são públicos na vitrine; o telefone de CLIENTE é o que não pode aparecer.
+        expect(Object.keys(s.properties).filter((k) => PROIBIDOS.test(k) && !(name === 'StoreViewAs' && /^(phone|whatsapp|description)$/.test(k))), name).toEqual([]);
+      }
+      expect(JSON.stringify(schemas.StoreOrderViewAs)).not.toMatch(/"(lastName|phone|email|cpf|observation|notes|deliveryCode|street|cep|complement|commission|netBeforeProviderFee)"/);
+      expect(Object.keys(schemas.StoreOrderViewAs.properties.customer.properties)).toEqual(['firstName']);
+      expect(Object.keys(schemas.StoreViewAs.properties.address.oneOf[0].properties).sort()).toEqual(['city', 'neighborhood', 'state']);
+    });
+
+    it('a ficha do pedido no admin grava auditoria e não aceita a visão (WB-352 C14)', () => {
+      const text = String(all.find((o) => o.op.operationId === 'getAdminOrder')!.op.description);
+      expect(text).toContain('admin.order.view');
+      expect(text).toContain('X-View-As');
     });
   });
 

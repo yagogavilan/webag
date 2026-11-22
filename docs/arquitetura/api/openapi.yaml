@@ -14,7 +14,7 @@ info:
     Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
     Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
     Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
-    "Ver como o lojista" (v1.1 R1): as rotas de LEITURA da loja marcadas `x-view-as: true` (dados da loja, produtos, pedidos, trocas, avaliações) aceitam também a credencial `viewAsAuth`; nenhuma rota de escrita, financeira, de documento, de equipe ou de exportação a aceita (403 `VIEW_AS_READ_ONLY`).
+    "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
     Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
 servers:
   - url: http://localhost:3000
@@ -2825,7 +2825,7 @@ paths:
       operationId: getAdminOrder
       summary: "Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)"
       description: |
-        Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+        Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`. **Auditoria (WB-352 C14, DEC-121):** cada abertura da ficha grava `audit_log` (`admin.order.view`: admin, pedido, loja, hora; sem o conteúdo exibido), no máximo 1 linha por (admin, pedido) a cada 10 min para a recarga da tela não inflar a trilha [HIPÓTESE]; a linha é gravada antes de o dado ser devolvido, e a falha de gravação derruba a resposta (500, sem dado). É o único caminho de dado de cliente para o suporte; não há "Revelar" dado completo na v1.1. Esta rota não aceita `X-View-As` (403 `VIEW_AS_READ_ONLY`). Resposta `Cache-Control: private, no-store`.
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -3170,9 +3170,11 @@ paths:
       - stores
       operationId: getStore
       x-view-as: true
+      x-view-as-schema: StoreViewAs
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Ver a loja
       description: Qualquer membro. O CPF/CNPJ vem inteiro só para o dono; funcionário vê mascarado. `settings` só para o dono.
       parameters:
@@ -3193,6 +3195,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         '404':
           $ref: "#/components/responses/NotFound"
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/profile:
     patch:
       tags:
@@ -3369,9 +3373,11 @@ paths:
       - stores
       operationId: getStoreSettings
       x-view-as: true
+      x-view-as-schema: StoreSettingsViewAs
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Configuração da loja (dono)
       description: Permissão `settings`.
       parameters:
@@ -3394,6 +3400,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
         '404':
           $ref: "#/components/responses/NotFound"
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/hours:
     put:
       tags:
@@ -4574,7 +4581,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Listar produtos da loja
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Filtros por status, busca, seção e estoque baixo; paginação por cursor."
       parameters:
@@ -4600,6 +4608,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
     post:
       tags: [catalog]
       operationId: createProduct
@@ -4706,7 +4715,7 @@ paths:
       tags: [catalog]
       operationId: bulkProducts
       summary: Ação em massa
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`)."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`)."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { $ref: '#/components/parameters/IdempotencyKey' }
@@ -4742,7 +4751,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Detalhe do produto
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
       parameters:
@@ -4765,6 +4775,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
     patch:
       tags: [catalog]
       operationId: updateProduct
@@ -5045,7 +5056,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Seções da vitrine
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
       parameters:
@@ -5063,6 +5075,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
     post:
       tags: [catalog]
       operationId: createSection
@@ -6069,7 +6082,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Pedidos da loja (painel, WB-067)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `scope`: `new` (recebidos), `in_progress` (aceito a pronto) e `history` (entregue, cancelado, recusado). Mais recentes primeiro, por cursor. Preços só com a permissão `sales_values`."
       parameters:
@@ -6092,6 +6106,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/orders/counts:
     get:
       tags: [orders]
@@ -6099,7 +6114,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Contagem por grupo (badge de novos)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS."
       parameters:
@@ -6116,14 +6132,17 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/orders/{orderId}:
     get:
       tags: [orders]
       operationId: getStoreOrder
       x-view-as: true
+      x-view-as-schema: StoreOrderViewAs
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Detalhe do pedido na loja (WB-068)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Cliente só com o primeiro nome; telefone só enquanto o pedido está em andamento e é de entrega. O código de retirada NUNCA aparece aqui. `values` e preços unitários só com `sales_values` (senão `null`)."
       parameters:
@@ -6141,6 +6160,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/orders/{orderId}/ticket:
     get:
       tags: [orders]
@@ -6771,9 +6791,11 @@ paths:
       tags: [exchanges]
       operationId: listStoreExchanges
       x-view-as: true
+      x-view-as-schema: ExchangePageViewAs
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Fila de trocas da loja (WB-172)
       description: "Permissão da loja `exchanges`. `scope`: pending (aguardando resposta), in_progress, history."
       parameters:
@@ -6793,14 +6815,17 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/exchanges/{id}:
     get:
       tags: [exchanges]
       operationId: getStoreExchange
       x-view-as: true
+      x-view-as-schema: ExchangeViewAs
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Detalhe da troca para a loja
       description: "Troca de outra loja: 404."
       parameters:
@@ -6818,6 +6843,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/exchanges/{id}/accept:
     post:
       tags: [exchanges]
@@ -7829,7 +7855,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
       description: "Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja."
       parameters:
@@ -7853,6 +7880,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/admin/overview/pending:
     get:
       tags: [reports]
@@ -8960,7 +8988,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Avaliações da loja no painel (com a resposta)
       description: "Permissão da loja `reviews`. Só publicadas; autor abreviado ('Joana L.'). Funcionário sem a permissão: 403; outra loja: 404."
       parameters:
@@ -8983,6 +9012,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/reviews/{reviewId}/reply:
     put:
       tags: [stores]
@@ -9221,7 +9251,8 @@ paths:
       x-view-as: true
       security:
         - bearerAuth: []
-        - viewAsAuth: []
+        - bearerAuth: []
+          viewAsAuth: []
       summary: Tabela de preço e estoque (WB-377, edição em massa)
       description: "Lista enxuta para a tela \"Preços e estoque\": por produto, preço, \"Você recebe\" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: \"Selecionar os 12 da busca\"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito \"Este produto foi alterado agora\". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table`, `/products/bulk`, `/products/bulk-batches` e `/products/bulk/{batchId}/undo` antes de `/products/{productId}`; teste e2e chama cada segmento estático e prova que não cai em `{productId}` (A2)."
       parameters:
@@ -9242,6 +9273,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /v1/stores/{storeId}/products/bulk/{batchId}/undo:
     post:
       tags: [catalog]
@@ -9555,7 +9587,7 @@ paths:
       x-admin-permission: 'view-as:open'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Abrir "Ver como o lojista" (somente leitura) (WB-352)
-      description: "**[PENDENTE, tech-lead B3: a forma da credencial (cabeçalho `X-View-As` somado ao Bearer do admin, ou Bearer com prefixo `vas_`) e o nível de acesso \"visualizador\" estão em definição pelo Security em ADR-018 D8 e no threat model; o contrato de `openViewAs`, `viewAsAuth` e das rotas `x-view-as` NÃO deve ser implementado até lá.]** Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE]."
+      description: "Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve a CREDENCIAL `vas_...`, mostrada uma só vez e guardada só como SHA-256, que o cliente envia no cabeçalho `X-View-As` JUNTO com o Bearer do admin (esquema `viewAsAuth`) nas 13 rotas de leitura `x-view-as: true`. Nível fixo \"visualizador\" (threat model §14), mesmo que o admin seja membro ou dono da loja. Validade `expiresAt` = o menor entre 30 min e o fim da sessão do admin, **sem renovação** (para continuar, abre outra, com novo motivo). **Uma visão ativa por admin:** abrir outra encerra a anterior (`replaced`). **Auditoria:** `view_as.open` (admin, sessão, loja, motivo, `expiresAt`) é gravada NA MESMA TRANSAÇÃO da credencial e antes de ela ser devolvida; se a gravação falhar, 500 sem credencial e sem linha órfã. Sem motivo: 422 `REASON_REQUIRED`. Limite de 10 aberturas por hora por admin (429) e alerta à operação acima de 20 lojas distintas por dia [HIPÓTESE]. 409 `VIEW_AS_OPEN_CONFLICT`: duas aberturas simultâneas do mesmo admin (a restrição de uma visão ativa por admin decide a corrida); repetir. Rota de admin: não aceita `X-View-As`. Resposta `Cache-Control: private, no-store`."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
       requestBody:
@@ -9584,7 +9616,7 @@ paths:
       x-admin-permission: 'view-as:open'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Encerrar "Ver como o lojista" ("Sair da visualização")
-      description: "Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close`. Idempotente: encerrar de novo devolve 204."
+      description: "Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close` com a causa (`ended`) e o total de leituras por operação. Idempotente: encerrar de novo devolve 204 sem gravar de novo. Outras causas de encerramento, gravadas pelo servidor: `expired` (sweep de 10 min, com `at` = `expiresAt`), `replaced`, `session_ended` (logout, revogação, inatividade, MFA pendente), `permission_lost` e `abuse` (20 negações na mesma visão)."
       parameters:
         - { name: viewAsId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -9828,7 +9860,7 @@ paths:
       x-admin-permission: 'store-catalog:write'
       x-admin-profiles: [super_admin, operations]
       summary: Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
-      description: "Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora."
+      description: "Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { $ref: '#/components/parameters/IdempotencyKey' }
@@ -9915,10 +9947,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
     viewAsAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: opaque
-      description: "Credencial de visualização de `openViewAs` (v1.1 R1, WB-352): só vale nas rotas GET marcadas `x-view-as: true`, para a loja e o motivo da abertura, por até 30 min. Qualquer outra rota ou método com ela: 403 `VIEW_AS_READ_ONLY`."
+      type: apiKey
+      in: header
+      name: X-View-As
+      description: "Credencial `vas_` (43 caracteres base64url) de `openViewAs` (v1.1 R1, WB-352). NÃO autentica: só qualifica uma requisição já autenticada com o Bearer do admin que abriu a visão (por isso o `security` das rotas é `bearerAuth` E `viewAsAuth` juntos). Vale só nas rotas GET marcadas `x-view-as: true`, para a loja da abertura e na mesma sessão do admin, por até 30 min sem renovação. Cabeçalho vazio, repetido ou malformado, ou em qualquer outra rota ou método: 403 `VIEW_AS_READ_ONLY`; sem Bearer: 401."
   parameters:
     Cursor:
       name: cursor
@@ -9990,7 +10022,7 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     Forbidden:
-      description: Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`)
+      description: 'Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`; com `X-View-As`: `VIEW_AS_READ_ONLY` para método, rota ou cabeçalho fora da regra e `VIEW_AS_EXPIRED` para credencial vencida, encerrada ou de outra loja, admin ou sessão)'
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -15325,7 +15357,7 @@ components:
         moderationStatus: { type: string, enum: [ok, review, paused, removed] }
         cover: { type: [object, 'null'], additionalProperties: { type: string } }
         basePriceCents: { type: [integer, 'null'] }
-        youReceiveCents: { type: [integer, 'null'], description: '"Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo)' }
+        youReceiveCents: { type: [integer, 'null'], description: '"Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo). Sempre nulo com `X-View-As` (VA-14)' }
         available: { type: integer, description: 'Soma de (estoque - reservado) das variações ativas' }
         reserved: { type: integer, description: 'Soma reservada em pedidos ("2 reservadas em pedidos")' }
         variantCount: { type: integer }
@@ -15630,11 +15662,116 @@ components:
       required: [id, token, storeId, storeName, expiresAt, reason]
       properties:
         id: { type: string, format: uuid }
-        token: { type: string, description: 'Credencial opaca de visualização, mostrada UMA vez; vai em `Authorization: Bearer` nas rotas `x-view-as`' }
+        token: { type: string, pattern: '^vas_[A-Za-z0-9_-]{43}$', description: 'Credencial `vas_` mostrada UMA vez; vai no cabeçalho `X-View-As`, somada ao Bearer do admin, nas rotas `x-view-as`. Não vai em `Authorization`, URL nem corpo, e não é logada' }
         storeId: { type: string, format: uuid }
         storeName: { type: [string, 'null'] }
         expiresAt: { type: string, format: date-time, description: 'No máximo 30 min, ou o fim da sessão do admin, o que vier antes' }
         reason: { type: object, required: [code], properties: { code: { $ref: '#/components/schemas/ViewAsReasonCode' }, note: { type: string } } }
+    StoreViewAs:
+      type: object
+      description: "Resposta de `getStore` com `X-View-As` (apresentador `view_as`, threat model §14.3): sem CPF/CNPJ, razão social, comissão, tarifa, conta de recebimento, `settings` embutido nem papel. Lista fechada: campo novo só entra com parecer do Security. A rota devolve este corpo, e não `Store`, quando o cabeçalho está presente"
+      additionalProperties: false
+      required: ["id", "status", "pendingReview", "reviewItems", "extraCategoryIds", "createdAt"]
+      properties:
+        id: {"type": "string", "format": "uuid"}
+        version: {"type": "integer", "minimum": 1, "description": "v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo"}
+        live: {"type": "boolean", "description": "Z.1 / DEC-072f: loja \"no ar\" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo"}
+        status: {"type": "string", "enum": ["draft", "in_review", "correction_requested", "approved", "rejected", "suspended", "closed"]}
+        name: {"type": ["string", "null"]}
+        description: {"type": ["string", "null"]}
+        phone: {"type": ["string", "null"]}
+        whatsapp: {"type": ["string", "null"]}
+        mainCategoryId: {"type": ["string", "null"], "format": "uuid"}
+        extraCategoryIds: {"type": "array", "items": {"type": "string", "format": "uuid"}}
+        logo: {"type": ["object", "null"], "additionalProperties": {"type": "string"}}
+        cover: {"type": ["object", "null"], "additionalProperties": {"type": "string"}}
+        pendingReview: {"type": "boolean"}
+        reviewItems: {"type": "array", "items": {"type": "object", "required": ["item", "reason"], "properties": {"item": {"type": "string"}, "reason": {"type": "string"}}}}
+        submittedAt: {"type": ["string", "null"], "format": "date-time"}
+        decisionReason: {"type": ["string", "null"]}
+        createdAt: {"type": "string", "format": "date-time"}
+        address: {"oneOf": [{"type": "object", "additionalProperties": false, "description": "Só o que a vitrine pública mostra: bairro, cidade e UF; sem rua, número, CEP nem coordenadas", "required": ["neighborhood", "city", "state"], "properties": {"neighborhood": {"type": ["string", "null"]}, "city": {"type": ["string", "null"]}, "state": {"type": ["string", "null"]}}}, {"type": "null"}]}
+    StoreSettingsViewAs:
+      type: object
+      description: "Resposta de `getStoreSettings` com `X-View-As`: horários, pausa, entrega, retirada, política de troca e limiar de estoque; sem `notifications` nem qualquer destino de contato (e-mail ou telefone)"
+      additionalProperties: false
+      required: ["isOpenNow", "hours", "holidays", "pause", "delivery", "pickup", "exchangePolicy", "lowStockThreshold"]
+      properties:
+        isOpenNow: {"type": "boolean"}
+        hours: {"type": "array", "items": {"type": "object", "required": ["weekday", "intervals"], "properties": {"weekday": {"type": "integer"}, "intervals": {"type": "array", "items": {"$ref": "#/components/schemas/Interval"}}}}}
+        holidays: {"type": "array", "items": {"type": "object", "required": ["date"], "properties": {"date": {"type": "string"}, "label": {"type": ["string", "null"]}}}}
+        pause: {"type": "object", "required": ["active", "until", "indefinitely"], "properties": {"active": {"type": "boolean"}, "until": {"type": ["string", "null"], "format": "date-time"}, "indefinitely": {"type": "boolean"}}}
+        delivery: {"type": "object", "required": ["acceptsDelivery", "radiusKm", "feeMode", "feeFixedCents", "tiers", "minOrderCents", "freeAboveCents", "etaMinMinutes", "etaMaxMinutes"], "description": "Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.", "properties": {"prepMinutes": {"type": "integer", "description": "DEC-053: preparo em uso (o da loja ou o padrão do admin)"}, "prepMinutesIsDefault": {"type": "boolean"}, "acceptsDelivery": {"type": "boolean"}, "feeManagedBy": {"type": "string", "enum": ["webag"]}, "radiusKm": {"type": "number"}, "feeMode": {"type": "string"}, "feeFixedCents": {"type": "integer"}, "tiers": {"type": "array", "items": {"type": "object", "required": ["fromKm", "toKm", "feeCents"], "properties": {"fromKm": {"type": "number"}, "toKm": {"type": "number"}, "feeCents": {"type": "integer"}}}}, "minOrderCents": {"type": "integer"}, "freeAboveCents": {"type": "integer"}, "etaMinMinutes": {"type": "integer"}, "etaMaxMinutes": {"type": "integer"}}}
+        pickup: {"type": "object", "required": ["enabled", "useStoreAddress", "prepMinMinutes", "prepMaxMinutes"], "properties": {"enabled": {"type": "boolean"}, "useStoreAddress": {"type": "boolean"}, "address": {"type": ["string", "null"]}, "instructions": {"type": ["string", "null"]}, "prepMinMinutes": {"type": "integer"}, "prepMaxMinutes": {"type": "integer"}}}
+        exchangePolicy: {"type": "object", "required": ["voluntaryDays", "collectionFeeCents", "version", "legalFloor"], "properties": {"voluntaryDays": {"type": "integer"}, "collectionFeeCents": {"type": "integer"}, "version": {"type": "integer"}, "defaultVoluntaryDays": {"type": "integer", "description": "BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2)."}, "legalFloor": {"type": "object", "required": ["withdrawalDays", "defectDays"], "properties": {"withdrawalDays": {"type": "integer"}, "defectDays": {"type": "integer"}, "defectDurableDays": {"type": "integer", "description": "BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável)."}}}}}
+        lowStockThreshold: {"type": "integer"}
+    StoreOrderViewAs:
+      type: object
+      description: "Resposta de `getStoreOrder` com `X-View-As` (SEC-207): só primeiro nome e bairro, também em pedido ativo; sem sobrenome, telefone, e-mail, CPF, rua, número, complemento, CEP, coordenadas, observação do cliente, código de entrega, `cancelRequest`, comissão nem líquido. Em `listStoreOrders` a única diferença é `allowedActions` vazio (o resumo já só traz o primeiro nome)"
+      additionalProperties: false
+      required: ["id", "number", "status", "mode", "createdAt", "paidAt", "acceptedAt", "acceptDeadlineAt", "customer", "items", "delivery", "pickup", "values", "couponCode", "timeline", "cancellation", "allowedActions"]
+      properties:
+        id: {"type": "string", "format": "uuid"}
+        number: {"type": "string"}
+        status: {"$ref": "#/components/schemas/OrderStatus"}
+        mode: {"type": "string", "enum": ["delivery", "pickup"]}
+        createdAt: {"type": "string", "format": "date-time"}
+        paidAt: {"type": ["string", "null"], "format": "date-time"}
+        acceptedAt: {"type": ["string", "null"], "format": "date-time"}
+        acceptDeadlineAt: {"type": ["string", "null"], "format": "date-time"}
+        readyByAt: {"type": ["string", "null"], "format": "date-time", "description": "W.8 / DEC-064 (c): \"Marque pronto até HH:MM\" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do \"pronto\", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional."}
+        customer: {"type": "object", "additionalProperties": false, "required": ["firstName"], "description": "Só o primeiro nome, mesmo em pedido ativo (SEC-207)", "properties": {"firstName": {"type": "string"}}}
+        items: {"type": "array", "items": {"type": "object", "required": ["name", "attributes", "image", "quantity", "unitPrice", "lineTotal"], "properties": {"name": {"type": "string"}, "attributes": {"type": "object", "additionalProperties": {"type": "string"}}, "image": {"$ref": "#/components/schemas/ImageUrls"}, "quantity": {"type": "integer"}, "unitPrice": {"oneOf": [{"$ref": "#/components/schemas/Money"}, {"type": "null"}]}, "lineTotal": {"oneOf": [{"$ref": "#/components/schemas/Money"}, {"type": "null"}]}}}}
+        delivery: {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["neighborhood", "etaMinMinutes", "etaMaxMinutes"], "properties": {"neighborhood": {"type": ["string", "null"]}, "etaMinMinutes": {"type": "integer"}, "etaMaxMinutes": {"type": "integer"}, "eta": {"oneOf": [{"$ref": "#/components/schemas/EtaRange"}, {"type": "null"}], "description": "DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra."}}}], "description": "Só o bairro; sem rua, número, complemento, CEP, coordenadas nem observação"}
+        pickup: {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["prepMinMinutes", "prepMaxMinutes"], "properties": {"prepMinMinutes": {"type": "integer"}, "prepMaxMinutes": {"type": "integer"}}}]}
+        values: {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "description": "Sem comissão nem líquido (\"você recebe\")", "required": ["subtotal", "delivery", "storeDiscount", "total"], "properties": {"subtotal": {"$ref": "#/components/schemas/Money"}, "delivery": {"$ref": "#/components/schemas/Money"}, "storeDiscount": {"$ref": "#/components/schemas/Money"}, "total": {"$ref": "#/components/schemas/Money"}}}]}
+        couponCode: {"type": ["string", "null"]}
+        timeline: {"type": "array", "items": {"$ref": "#/components/schemas/OrderTimelineEntry"}}
+        cancellation: {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["by", "at"], "description": "Sem o texto do motivo (pode ser digitado pelo cliente)", "properties": {"by": {"type": "string", "enum": ["customer", "store", "system", "admin"]}, "at": {"type": "string", "format": "date-time"}}}]}
+        logistics: {"description": "Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.", "oneOf": [{"type": "null"}, {"type": "object", "properties": {"status": {"$ref": "#/components/schemas/DeliveryStatus"}, "courierFirstName": {"type": ["string", "null"]}, "volumes": {"type": "integer"}}}]}
+        allowedActions: {"type": "array", "maxItems": 0, "items": {"$ref": "#/components/schemas/StoreOrderAction"}, "description": "Sempre vazio: o visualizador não age"}
+    ExchangeViewAs:
+      type: object
+      description: "Resposta de `getStoreExchange` com `X-View-As`: motivo (código), status, prazos e itens; sem texto livre nem fotos do cliente, sem dados de reembolso, sem a justificativa digitada"
+      additionalProperties: false
+      required: ["id", "number", "orderId", "orderNumber", "status", "type", "method", "resolution", "quantity", "fee", "difference", "totalDue", "answerDeadlineAt", "windowEndsAt", "createdAt", "updatedAt"]
+      properties:
+        id: {"type": "string", "format": "uuid"}
+        number: {"type": "string", "description": "Protocolo (TR-XXXXX)."}
+        orderId: {"type": "string", "format": "uuid"}
+        storeId: {"type": "string", "format": "uuid"}
+        orderNumber: {"type": "string"}
+        status: {"$ref": "#/components/schemas/ExchangeStatus"}
+        type: {"$ref": "#/components/schemas/ExchangeType"}
+        reasonCode: {"type": ["string", "null"], "enum": ["size", "color", null]}
+        method: {"type": "string", "enum": ["pickup_at_home", "drop_at_store"]}
+        resolution: {"type": "string", "enum": ["replace", "refund"]}
+        quantity: {"type": "integer"}
+        item: {"type": ["object", "null"], "properties": {"orderItemId": {"type": "string", "format": "uuid"}, "name": {"type": "string"}, "attributes": {"type": "object", "additionalProperties": {"type": "string"}}, "image": {"$ref": "#/components/schemas/ImageUrls"}, "unitPrice": {"$ref": "#/components/schemas/Money"}}}
+        newVariant: {"type": ["object", "null"], "properties": {"variantId": {"type": "string", "format": "uuid"}, "attributes": {"type": "object", "additionalProperties": {"type": "string"}}}}
+        fee: {"$ref": "#/components/schemas/Money"}
+        difference: {"$ref": "#/components/schemas/Money"}
+        totalDue: {"$ref": "#/components/schemas/Money"}
+        feeDueAt: {"type": ["string", "null"], "format": "date-time"}
+        feePaid: {"type": "boolean"}
+        answerDeadlineAt: {"type": "string", "format": "date-time"}
+        windowEndsAt: {"type": "string", "format": "date-time"}
+        itemDueAt: {"type": ["string", "null"], "format": "date-time"}
+        autoApproved: {"type": "boolean"}
+        decidedBy: {"type": ["string", "null"], "enum": ["customer", "store", "system", "admin", null]}
+        contestableUntil: {"type": ["string", "null"], "format": "date-time", "description": "Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe."}
+        contested: {"type": "boolean"}
+        timeline: {"type": "array", "items": {"type": "object", "properties": {"from": {"type": ["string", "null"]}, "to": {"type": "string"}, "actor": {"type": "string"}, "reason": {"type": ["string", "null"]}, "at": {"type": "string", "format": "date-time"}}}}
+        runs: {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string", "format": "uuid"}, "kind": {"type": "string", "enum": ["exchange_pickup", "exchange_return"]}, "status": {"type": "string"}}}}
+        createdAt: {"type": "string", "format": "date-time"}
+        updatedAt: {"type": "string", "format": "date-time"}
+    ExchangePageViewAs:
+      type: object
+      additionalProperties: false
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ExchangeViewAs' } }
+        nextCursor: { type: [string, 'null'] }
     AdminCreateProductDraftRequest:
       type: object
       additionalProperties: false
