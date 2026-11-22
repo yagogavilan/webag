@@ -422,26 +422,33 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 - **Correção recomendada:** C-RT-01 a C-RT-03 (sala `track:{orderId}` só do dono, emissão filtrada pela próxima parada, saída da sala no fim).
 - **Como verificar:** teste de gateway: membro da loja inscrito em `order:{id}` não recebe nenhum evento de posição; inscrição em `track:{id}` recusada.
 
-### SEC-206 | Severidade: Alta (desenho, antes da implementação) | Status: Aberto (fecha quando ADR-018 D8, o contrato e o código seguirem a §14 e VA-01 a VA-24 passarem)
+### SEC-206 | Severidade: Alta (desenho, antes da implementação) | Status: Desenho fechado, código pendente (2026-11-22, §15: ADR-018 D8 e contrato conferidos sobre `395f34c`; fecha quando o código da WB-352 seguir a §14 e VA-01 a VA-26 passarem)
 - **Onde:** ADR-018 D8; `openapi.yaml` `securitySchemes.viewAsAuth` e `openViewAs` (credencial em `Authorization: Bearer`); `apps/api/src/modules/identity/auth.guard.ts:54-60` (só JWT) e `:99-100`, `:112-118` (`checkStore` por `principal.userId`); `apps/api/src/modules/stores/stores.controllers.ts:130-134` (não dono recebe `presentStore` `staff`, com `legalName`, telefone e endereço completo, `:44-80`); `apps/api/src/modules/orders/store-orders.controller.ts:48-51` (handler refaz a autorização por `storeMembership(p.userId)`).
 - **Problema:** o "Ver como" não tem nível de acesso próprio. Para passar pelo `checkStore` seria preciso um "membro virtual" ou trocar o `userId` pelo do dono; nos dois casos a visão herda o que o dono vê (CNPJ/CPF, razão social, configurações, financeiro) e os handlers que decidem por `principal.userId` passam a decidir errado.
 - **Cenário de ataque:** perfil suporte (os 4 perfis têm `view-as:open`) ou um admin com Bearer roubado abre a visão de qualquer loja e lê CPF e razão social do MEI e o endereço completo dos clientes de pedidos ativos, sem trilha por pedido; um handler sem opt-in explícito aceita POST com a credencial e grava em nome da loja.
 - **Correção recomendada:** §14 (cabeçalho `X-View-As` somado ao Bearer do admin, nível "visualizador" fixo, opt-in por rota, apresentador `view_as`).
 - **Como verificar:** VA-01 a VA-24 (§14.9) no e2e.
 
-### SEC-207 | Severidade: Média | Status: Aberto (PRD)
+### SEC-207 | Severidade: Média | Status: Desenho fechado (PRD WB-352 C2/C8 por DEC-120 e `StoreOrderViewAs`), com a lacuna da linha do tempo na SEC-209; código pendente (VA-12, VA-25)
 - **Onde:** `docs/produto/prd/v1-1-admin-e-paineis.md` WB-352 C2 e C8 (dado do cliente na visão "segue a RN-14": sem máscara em pedido ativo).
 - **Problema:** a visão do admin entrega nome completo, telefone e endereço dos clientes de todos os pedidos ativos da loja a qualquer perfil, sem registro por pedido. O admin já tem rotas próprias de pedido, com permissão e auditoria, para o caso real.
 - **Cenário:** um funcionário de suporte usa o "Ver como" de lojas diferentes para colher endereço e telefone de clientes (golpe do falso entregador, perseguição), com motivo genérico.
 - **Correção recomendada:** máscara estrita no apresentador `view_as` (§14.3): só primeiro nome e bairro, mesmo em pedido ativo. PO reescreve C2 e C8 (D-09).
 - **Como verificar:** VA-12 e VA-13.
 
-### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Aberto (código existente)
+### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Desenho fechado (ADR-018 D17 e D18, §15.3), código pendente (BK-01 a BK-08)
 - **Onde:** `apps/api/src/modules/idempotency/idempotency.service.ts:85-86` (a resposta é gravada em comando separado, depois do efeito de `fn`) e `:74-77` (reivindicação sem resposta há mais de 120 s é apagada e a repetição executa de novo).
 - **Problema:** se o processo cai entre o commit de `fn` e a gravação da resposta, a repetição depois de 120 s reaplica o efeito. Para escrita com chave natural (pedido) há proteção própria; para reajuste relativo em massa (B2 do tech-lead) não há.
 - **Cenário:** deploy ou queda no meio de "+10% em 80 produtos"; o painel repete com a mesma chave após o timeout e o preço sobe 21%. Dinheiro do cliente e reputação da loja.
 - **Correção recomendada:** ver §14.11 (idempotência em massa). O contrato em revisão (backend-dev, B2) já acrescenta `expectedVersions` por item: se a conferência e o incremento de `version` ficarem na transação do lote, a repetição vira 409 e o lote deixa de depender do serviço (fica Baixa para ele); a fragilidade continua para qualquer escrita relativa futura sem versão.
 - **Como verificar:** e2e que faz a gravação da resposta falhar depois do commit do lote, avança o relógio 121 s e repete: nenhum preço muda de novo.
+
+### SEC-209 | Severidade: Média (desenho, antes da implementação) | Status: Aberto (contrato; devolvido ao backend-dev)
+- **Onde:** `openapi.yaml` `StoreOrderViewAs.timeline` (usa `OrderTimelineEntry`, com `reason` texto livre) e `ExchangeViewAs.timeline[].reason`. Origem do texto: `apps/api/src/modules/orders/orders.service.ts:512` e `:596` (motivo de cancelamento do cliente, `CancelOrderRequest.reason`, até 200 caracteres, vai para `order_events.reason`); `apps/api/src/modules/exchanges/exchanges.service.ts:275` (a **descrição livre da troca digitada pelo cliente** vira o `reason` do evento `requested`) e `:807`.
+- **Problema:** os schemas da visão tiram o texto do cliente do topo (`cancellation` sem motivo, troca "sem texto livre") mas o devolvem pela linha do tempo. Contradiz a §14.3, a WB-352 C8 e a própria descrição dos dois schemas. Também: objetos aninhados (`items`, `logistics`, `item`, `newVariant`, `timeline`, `runs`) sem `additionalProperties: false`; "estrito" vale só no primeiro nível e o `contract-r1.spec.ts:180-188` confere só chaves do topo.
+- **Cenário:** suporte abre a visão de lojas com troca e lê "a calça não serviu, estou grávida, me liga no 11 9xxxx" sem trilha por pedido. Apresentador escrito pelo schema copia o `reason` e passa no teste.
+- **Correção recomendada:** na visão, `timeline` com item próprio `{status, at, actor}` (sem `reason`) nos dois schemas, ou `reason` sempre `null` quando `actor = customer` e só códigos fixos do sistema nos demais; `additionalProperties: false` em todos os níveis dos 5 schemas `...ViewAs`; o teste de contrato percorre o schema recursivamente.
+- **Como verificar:** VA-25 e VA-26 (§15.6).
 
 ## 12. Decisões e encaminhamentos
 
@@ -579,3 +586,70 @@ Exploratório do QA: navegar a visão no web com DevTools e reenviar formulário
 1. **SEC-208:** a resposta é gravada fora da transação do efeito (`idempotency.service.ts:85-86`) e a reivindicação vence em 120 s; para `price_adjust` grave a chave e o lote **na mesma transação** (ou tabela `bulk_operations` com chave única dentro da transação do lote).
 2. O `expectedVersions` por item que o backend-dev já pôs no contrato fecha a reaplicação **só se** a conferência e o `version = version + 1` estiverem na mesma transação do lote e o `price_adjust` subir a `version` (I2); teste: repetir o mesmo corpo depois de aplicado dá o mesmo `batchId` ou 409, nunca +21%.
 3. Escopo da chave = (rota, loja, ator), nunca só a rota; o web gera a chave **uma vez por clique em "Aplicar"** e a reutiliza na repetição; o `undo` também é idempotente (um desfazer por lote).
+
+## 15. Conferência do contrato R1 (2026-11-22, sobre `395f34c`)
+
+Escopo: `openapi.yaml` (13 rotas `x-view-as`, `viewAsAuth`, `openViewAs`, `endViewAs`, 5 schemas `...ViewAs`, `getAdminOrder`, `ingestAnalyticsEvents`), ADR-018 D8 e D15 a D20, `contract-r1.spec.ts:141-195`, DEC-119 a DEC-122; fonte dos campos de texto conferida no código (`orders.service.ts`, `exchanges.service.ts`, `idempotency.service.ts`). Não li `app-grants.ts`, `40-roles-grants.sql` nem `db-roles.e2e-spec.ts` linha a linha (D19 avaliada pelo texto do ADR). Nada disto prova o código: tudo abaixo é desenho.
+
+### 15.1 Status
+| Achado | Status | O que falta |
+|---|---|---|
+| SEC-206 | **Desenho fechado, código pendente** | WB-352 implementada pela §14; VA-01 a VA-26 verdes |
+| SEC-207 | Desenho fechado (DEC-120, `StoreOrderViewAs`), código pendente | VA-12 e a correção da SEC-209 |
+| SEC-208 | **Desenho fechado (D17 + D18), código pendente** | `runInTransaction` e BK-01 a BK-08 |
+| SEC-209 (novo, Média) | Aberto no contrato | Backend-dev corrige os 2 `timeline` e o "estrito" aninhado antes do PR da WB-352 |
+| D-06 (D19) | Desenho suficiente, código pendente | DB-01 a DB-04 no CI com Docker |
+
+### 15.2 Campos proibidos e regras da visão (itens 1 e 2 do pedido)
+| Verificação | Resultado |
+|---|---|
+| CPF/CNPJ, razão social, comissão, tarifa, conta de recebimento, `settings` | Ausentes de `StoreViewAs`; teste `PROIBIDOS` cobre o topo. OK |
+| "Você recebe" | `Product`/`ProductSummary` não têm o campo; `ProductTableRow.youReceiveCents` "sempre nulo com `X-View-As`" (VA-14). OK. Observação: `listAdminStoreProducts` já mostra o valor aos 4 perfis, então o ganho é de coerência, não de sigilo |
+| Dado pessoal de cliente em pedido | `StoreOrderViewAs.customer` só `firstName`; `delivery` só bairro; `StoreOrderSummary` só `customerFirstName`. OK, **exceto** `timeline[].reason` (SEC-209) |
+| Texto e fotos de troca | Sem `description`/`photos` no topo de `ExchangeViewAs`; **mas** `timeline[].reason` carrega a descrição do cliente (`exchanges.service.ts:275`): SEC-209 |
+| Avaliações | `StoreReview`: `comment` e `reviewer` abreviado, iguais à vitrine pública. OK |
+| `phone`, `whatsapp` da loja em `StoreViewAs` | Aceito: contato da loja já entregue ao cliente (`Order.store.whatsapp`) e ao admin na ficha 360 (`stores:read`). Não é dado de cliente nem documento |
+| `listStoreOrders`, `listProducts`, `getProduct`, `listSections`, `countStoreOrders`, `listProductTable`, reviews sem `x-view-as-schema` | Aceito: o corpo normal já não tem campo proibido; `allowedActions` vazio na visão fica a cargo do apresentador (VA-01 garante que nenhuma ação funciona) |
+| 403 `VIEW_AS_READ_ONLY`/`VIEW_AS_EXPIRED`, 429 nas 13 rotas | Presentes (`Forbidden` documenta os dois códigos; `429` em todas). OK |
+| 409 `VIEW_AS_OPEN_CONFLICT`, 1 visão ativa, 30 min sem renovação, 10 aberturas/h, `Cache-Control: no-store` | Presentes em `openViewAs` e na D8. OK |
+| `security` das 13 rotas e esquema `apiKey` `X-View-As` | Conferidos e cobertos por teste nos dois sentidos (`contract-r1.spec.ts:149-156`). OK |
+| Divergência de código de erro (Baixa, alinhamento) | `viewAsAuth` diz "malformado = `VIEW_AS_READ_ONLY`"; a §14.4 diz que falha de formato em rota `x-view-as` = `VIEW_AS_EXPIRED`. Regra a adotar: cabeçalho vazio ou repetido = `READ_ONLY`; formato inválido, vencido, de outra loja, admin ou sessão = `EXPIRED`. Backend-dev ajusta o texto; VA-16 testa os dois |
+
+### 15.3 SEC-208 (D18) e D-06 (D19): suficientes, com 4 condições de implementação
+1. A variante transacional mantém a conferência do `requestHash` (`idempotency.service.ts:50`, `:66`): mesma chave com corpo diferente = 422 `IDEMPOTENCY_KEY_REUSED`, nunca a resposta guardada de outro corpo.
+2. Após `INSERT ... ON CONFLICT DO NOTHING` com 0 linhas, o código **lê a resposta guardada** (a concorrente espera o commit da primeira pelo índice único); nunca segue para o efeito sem checar `rowCount`.
+3. `UPDATE` dos itens em ordem de `id` e `statement_timeout` do lote (até 200 itens): evita deadlock com edição em linha virar 500 repetido. Robustez, não bloqueante.
+4. D19 item 1: a checagem do boot roda **antes** de a API aceitar tráfego (falha = processo sai), e `NODE_ENV` ausente conta como produção para essa checagem ou o boot exige `NODE_ENV` definido.
+Resíduo aceito: a variante antiga (`run`, com `STALE_CLAIM_MS`) continua para escritas absolutas; qualquer escrita **relativa** nova usa a transacional (regra para o checklist do tech-lead).
+
+### 15.4 Resposta à D20 (`getAdminOrder`, dedupe de 10 min): **aceito o dedupe**
+Por quê: o dedupe só funde reaberturas do MESMO pedido pelo MESMO admin; a coleta em massa (muitos pedidos distintos) continua com uma linha por pedido, que é o que a trilha precisa provar. A recarga não acrescenta dado novo, e a ficha já é mascarada (WB-108 C2). Uma linha por abertura só inflaria o `audit_log` (append-only, sem expurgo fácil). Condições:
+- Janela contada da **última linha gravada**, não da última leitura: leitura contínua gera ao menos 1 linha a cada 10 min.
+- Falha na consulta de dedupe ou na gravação = 500 sem corpo (falha fechada).
+- A linha leva `admin_session_id` e `requestId`, nunca conteúdo exibido; a corrida (duas aberturas simultâneas gravando 2 linhas) é aceitável: sem lock nem memória.
+- Should (R1.3, parâmetro `[HIPÓTESE]`): alerta à operação quando um admin abre mais de 30 pedidos distintos por hora.
+
+### 15.5 I5/I6 (coleta): suficiente para a R1 em staging; não suficiente para ligar em produção sem 3 itens
+| Aspecto | Parecer |
+|---|---|
+| Reidentificação (SEC-194) | Sem IP/UA/cabeçalho/`session_id` em log, sem `session_id` no `order_paid`, nenhuma ligação sessão-pedido (DEC-122), leitura do bruto só por `SECURITY DEFINER`, expurgo de 91 dias: **suficiente**. Aceito "expurgo em lote" no lugar de "por partição" (C-ANA-04) e `occurredAt` truncado ao minuto. O bruto continua **pseudonimizado** (dado pessoal): a cruza por loja, produto e minuto com `orders` segue possível para quem tem acesso ao banco; SEC-194 fica aberta até a D-02 (texto do PO) e o J24 |
+| Condições | (a) a chave do limite por IP no Redis também é HMAC com TTL de até 120 s (a WB-361 já prevê; o ADR só cita o `sessionId`); (b) chave do HMAC em variável obrigatória no boot, fora do repositório; (c) **não encontrado no contrato:** regra de vida do `sessionId` no app. Exigir novo `sessionId` a cada abertura do app ou 30 min de inatividade, nunca igual a `device_id`/id de instalação e nunca persistido entre dias; senão vira identificador de aparelho (afeta o Data Safety). Dono: mobile-dev, com o PO no PRD |
+| Abuso (poluição de métrica) | O limite por sessão **não segura atacante** (o `sessionId` é escolhido pelo cliente); quem segura é a trava por IP (600/min, 300 sessões novas/h). Em staging com flag desligada: suficiente. **Antes de ligar em produção (WB-360) ou de qualquer número chegar a decisão do admin (R2) ou ao lojista (R5):** teto por (IP-HMAC, loja) por hora, alerta de anomalia por loja (visitas x pedidos) e marca no agregado do dia com descarte alto. Registrar como pré-requisito do G5 da coleta |
+
+### 15.6 Testes de abuso obrigatórios por história da R1.1 (e2e do backend-dev; QA confere no G4)
+| História | Testes |
+|---|---|
+| WB-352 (Ver como) | VA-01 a VA-24 (§14.9). **VA-25:** pedido cancelado pelo cliente com motivo e troca com descrição, lidos pela visão: nenhum texto do cliente em `timeline` (SEC-209). **VA-26:** resposta real das 13 rotas validada contra o schema `...ViewAs` (ou o normal) com `additionalProperties: false` em todos os níveis. VA-16 com os dois códigos da §15.2 |
+| WB-352 C14 (D20, `getAdminOrder`) | **AO-01** abrir 2 vezes em 1 min = 1 linha; após 10 min = 2; 3 pedidos = 3 linhas. **AO-02** falha injetada na gravação = 500 sem corpo. **AO-03** perfil sem `orders:read` = 403. **AO-04** com `X-View-As` = 403 `VIEW_AS_READ_ONLY`. **AO-05** linha sem conteúdo do pedido |
+| WB-355 (permissões) | Matriz 4 perfis + lojista + cliente x todas as rotas `/v1/admin/*` contra `x-admin-permission` (403 esperado); `X-View-As` em rota de admin = 403 |
+| WB-351 (edição da loja pelo admin) | `editAdminStore`/`editAdminStoreSettings` inexistentes no YAML e no Nest (404); `legalName`, `document` ou endereço no corpo = 400; sem motivo = 422; `expectedVersion` velho = 409; flag J27 desligada e motivo diferente de `requested_by_merchant` = recusado |
+| WB-353 e WB-377 (massa, D17/D18) | **BK-01** mesmo corpo repetido após aplicar = mesmo `batchId`, preço sobe uma vez. **BK-02** falha injetada entre efeito e resposta = rollback total, chave livre. **BK-03** 2 simultâneas com a mesma chave (`Promise.all`) = 1 aplicação. **BK-04** versão alterada no meio = 409, nada aplicado. **BK-05** mesma chave, corpo diferente = 422. **BK-06** mesma chave em outra loja ou outro ator não colide. **BK-07** sem chave ou sem `expectedVersions` = 400. **BK-08** `undo` repetido = `alreadyUndone`; `undo` de lote de outra loja = 404; redução acima de 50% por não super admin = 403 (D-04) |
+| WB-354 (histórico, D-06/D19, I4) | **DB-01** boot de produção com usuário superusuário, dono do `audit_log` ou membro de `webag_migrator` = processo sai. **DB-02** `has_table_privilege` sem UPDATE/DELETE/TRUNCATE nas 9 append-only e nas novas. **DB-03** sem `TRIGGER`, sem `SET session_replication_role`, sem posse de função `SECURITY DEFINER`. **DB-04** `UPDATE`/`DELETE` em `audit_log` como `webag_app` = permissão negada. **DB-05** falha injetada na linha de auditoria do I4 desfaz a edição do catálogo |
+Fora da R1.1, já fixados: WB-361/363 (coleta) com grep de log da API e do nginx depois de 413/422/429, 301 sessões novas do mesmo IP em 1 h = 429, `SELECT` no bruto como `webag_app` negado (C-ANA-04).
+
+### 15.7 Condições para o G4 da R1
+1. SEC-209 corrigida no contrato e no apresentador (não bloqueia o início da WB-352, bloqueia o merge dela).
+2. VA-01 a VA-26, AO-01 a AO-05, BK-01 a BK-08 e DB-01 a DB-05 verdes no CI com Docker (DEC-122), não só localmente.
+3. `x-view-as` no `redact` do pino e no `beforeSend` do Sentry (VA-24) e varredura de log sem `vas_`.
+4. Revisão diferencial de segurança do código da WB-352, da D18 e da D19 (`revisao-diferencial-de-mudancas`) antes do G4: o desenho não prova o código.
+5. SEC-206 e SEC-208 só passam a "Corrigido" com os itens 2 e 4; SEC-194 segue aberta até D-02/J24 e não bloqueia o G4 em staging.
