@@ -174,3 +174,20 @@ export const productMetricsQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
   limit: limitQuery,
 });
+
+/**
+ * `bulkAdminStoreProducts` (WB-353 C6, D7): sem reajuste de PREÇO (o admin não tem prévia por item de dinheiro de terceiros na R1). O corpo aceita mais itens que o teto
+ * (200) só para o servidor responder 422 `BULK_TOO_LARGE` (e não 400); o motivo é validado por `validateAdminReason` (422 `REASON_REQUIRED`/`REASON_NOT_ALLOWED`).
+ */
+export const adminBulkSchema = z.strictObject({
+  reason: z.strictObject({ code: z.string().max(40).optional(), note: z.string().max(400).optional() }).optional(),
+  productIds: z.array(z.uuid()).min(1).max(1000),
+  dryRun: z.boolean().default(false),
+  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(1000).optional(),
+  action: z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('pause') }),
+    z.strictObject({ type: z.literal('resume') }),
+    z.strictObject({ type: z.literal('stock_set'), value: z.number().int().min(0).max(99_999) }),
+    z.strictObject({ type: z.literal('stock_adjust'), value: z.number().int().min(-99_999).max(99_999) }),
+  ]),
+});

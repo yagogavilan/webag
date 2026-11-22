@@ -17494,7 +17494,7 @@ export const BulkAdminStoreProductsResponse = zod.object({
   "changed": zod.int(),
   "auditEntries": zod.int().describe('Uma por item alterado (C-ADM-07)'),
   "batchId": zod.uuid().nullable(),
-  "merchantNotified": zod.enum(['aggregate']).describe('Um único aviso agregado com o motivo'),
+  "merchantNotified": zod.enum(['aggregate', 'none']).describe('Um único aviso agregado com o motivo (`aggregate`: uma linha no painel do lojista e um e-mail); `none` quando nada mudou (prévia ou lote sem alteração): nenhum aviso'),
   "preview": zod.array(zod.object({
   "productId": zod.uuid(),
   "name": zod.string(),
@@ -17503,7 +17503,7 @@ export const BulkAdminStoreProductsResponse = zod.object({
   "blocked": zod.array(zod.object({
   "productId": zod.uuid(),
   "name": zod.string(),
-  "reason": zod.enum(['STOCK_BELOW_RESERVED', 'PRODUCT_MODERATED', 'NOT_ACTIVE', 'MULTIPLE_VARIANTS']).describe('`NOT_ACTIVE`: produto em rascunho ou arquivado (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999')
+  "reason": zod.enum(['STOCK_BELOW_RESERVED', 'PRODUCT_MODERATED', 'NOT_ACTIVE', 'MULTIPLE_VARIANTS']).describe('`NOT_ACTIVE`: produto em rascunho ou arquivado, ou sem variação ativa (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999')
 }))
 })
 

@@ -15919,7 +15919,7 @@ components:
         changed: { type: integer }
         auditEntries: { type: integer, description: 'Uma por item alterado (C-ADM-07)' }
         batchId: { type: [string, 'null'], format: uuid }
-        merchantNotified: { type: string, enum: [aggregate], description: 'Um único aviso agregado com o motivo' }
+        merchantNotified: { type: string, enum: [aggregate, none], description: 'Um único aviso agregado com o motivo (`aggregate`: uma linha no painel do lojista e um e-mail); `none` quando nada mudou (prévia ou lote sem alteração): nenhum aviso' }
         preview:
           type: array
           items: { $ref: '#/components/schemas/AdminBulkPreviewItem' }
@@ -15932,7 +15932,7 @@ components:
             properties:
               productId: { type: string, format: uuid }
               name: { type: string }
-              reason: { type: string, enum: [STOCK_BELOW_RESERVED, PRODUCT_MODERATED, NOT_ACTIVE, MULTIPLE_VARIANTS], description: '`NOT_ACTIVE`: produto em rascunho ou arquivado (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999' }
+              reason: { type: string, enum: [STOCK_BELOW_RESERVED, PRODUCT_MODERATED, NOT_ACTIVE, MULTIPLE_VARIANTS], description: '`NOT_ACTIVE`: produto em rascunho ou arquivado, ou sem variação ativa (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999' }
     ProductVersionConflictProblem:
       allOf:
         - { $ref: '#/components/schemas/Problem' }

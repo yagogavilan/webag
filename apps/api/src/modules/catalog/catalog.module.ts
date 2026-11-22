@@ -6,6 +6,8 @@ import { IdentityModule } from '../identity/index.js';
 import { MediaModule } from '../media/index.js';
 import { ACTIVE_STATUSES } from '../orders/domain/state.js'; // constante pura (sem serviço): não cria dependência de módulo nem ciclo
 import { StoresModule } from '../stores/index.js';
+import { AdminCatalogController } from './admin-catalog.controller.js';
+import { AdminCatalogService } from './admin-catalog.service.js';
 import { AdminModerationController, AdminProductMetricsController, CatalogController } from './catalog.controllers.js';
 import { BulkBatchesService } from './bulk-batches.service.js';
 import { CatalogService, ProductOrdersPort } from './catalog.service.js';
@@ -39,8 +41,8 @@ class SqlOpenOrders extends ProductOrdersPort {
 
 @Module({
   imports: [AdminModule, IdentityModule, MediaModule, StoresModule],
-  controllers: [CatalogController, AdminModerationController, AdminProductMetricsController],
-  providers: [CatalogService, BulkBatchesService, ProductDraftsService, ProductTableService, ProductMetricsService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: SqlOpenOrders },
+  controllers: [CatalogController, AdminCatalogController, AdminModerationController, AdminProductMetricsController],
+  providers: [CatalogService, BulkBatchesService, AdminCatalogService, ProductDraftsService, ProductTableService, ProductMetricsService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: SqlOpenOrders },
     // F8/F9 (flags `ia_visao_real` e `ean_base_externa` desligadas): só os adaptadores que não saem para a rede.
     { provide: ProductVisionProvider, useClass: FakeProductVisionProvider },
     { provide: ExternalEanLookup, useClass: DisabledExternalEanLookup },

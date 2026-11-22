@@ -8582,17 +8582,18 @@ export interface AdminBulkPreviewItem {
 }
 
 /**
- * Um único aviso agregado com o motivo
+ * Um único aviso agregado com o motivo (`aggregate`: uma linha no painel do lojista e um e-mail); `none` quando nada mudou (prévia ou lote sem alteração): nenhum aviso
  */
 export type AdminBulkResultMerchantNotified = typeof AdminBulkResultMerchantNotified[keyof typeof AdminBulkResultMerchantNotified];
 
 
 export const AdminBulkResultMerchantNotified = {
   aggregate: 'aggregate',
+  none: 'none',
 } as const;
 
 /**
- * `NOT_ACTIVE`: produto em rascunho ou arquivado (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999
+ * `NOT_ACTIVE`: produto em rascunho ou arquivado, ou sem variação ativa (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999
  */
 export type AdminBulkResultBlockedItemReason = typeof AdminBulkResultBlockedItemReason[keyof typeof AdminBulkResultBlockedItemReason];
 
@@ -8607,7 +8608,7 @@ export const AdminBulkResultBlockedItemReason = {
 export type AdminBulkResultBlockedItem = {
   productId: string;
   name: string;
-  /** `NOT_ACTIVE`: produto em rascunho ou arquivado (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999 */
+  /** `NOT_ACTIVE`: produto em rascunho ou arquivado, ou sem variação ativa (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o admin edita a variação pela rota própria. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999 */
   reason: AdminBulkResultBlockedItemReason;
 };
 
@@ -8619,7 +8620,7 @@ export interface AdminBulkResult {
   auditEntries: number;
   /** @nullable */
   batchId: string | null;
-  /** Um único aviso agregado com o motivo */
+  /** Um único aviso agregado com o motivo (`aggregate`: uma linha no painel do lojista e um e-mail); `none` quando nada mudou (prévia ou lote sem alteração): nenhum aviso */
   merchantNotified: AdminBulkResultMerchantNotified;
   /** B2: só em `dryRun`; traz a `version` de cada item para `expectedVersions` */
   preview?: AdminBulkPreviewItem[];
