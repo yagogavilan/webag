@@ -93,4 +93,15 @@ describe('Rascunhos (WB-371, WB-372)', () => {
     await userEvent.click(await screen.findByTestId('lojista.rascunhos.delete-confirm-d1'));
     await waitFor(() => expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true));
   });
+
+  it('BUG-045: apagar um rascunho que já foi apagado (404) conta como sucesso e atualiza a lista', async () => {
+    const { impl, calls } = mockFetch(listHandler([draft()]), (url, init) => (url.pathname === `${P}/products/d1` && init.method === 'DELETE' ? json({ code: 'NOT_FOUND', title: 'x', status: 404 }, 404) : undefined));
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<DraftsPanel storeId="s1" />);
+    await userEvent.click(await screen.findByTestId('lojista.rascunhos.delete-d1'));
+    await userEvent.click(await screen.findByTestId('lojista.rascunhos.delete-confirm-d1'));
+    expect(await screen.findByText('Rascunho apagado.')).toBeInTheDocument();
+    expect(screen.queryByText(/Não conseguimos apagar/)).not.toBeInTheDocument();
+    await waitFor(() => expect(calls.filter((c) => c.url.pathname === `${P}/product-drafts`).length).toBeGreaterThan(1));
+  });
 });

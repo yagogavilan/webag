@@ -2,9 +2,10 @@
 
 import { MagnifyingGlass, Package } from '@phosphor-icons/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, ButtonLink, ErrorState, MessageState, SelectField, SkeletonRows, TextField, cx, ui } from '@/components/ui';
+import { ActionMenu, Banner, Button, ButtonLink, ErrorState, MessageState, SelectField, SkeletonRows, TextField, cx, ui } from '@/components/ui';
 import { catalogApi, catalogKeys, type ProductFilter, type ProductQuery } from '@/lib/api/catalog';
 import { ApiError } from '@/lib/api/errors';
 import { asRoute } from '@/lib/routes';
@@ -39,6 +40,7 @@ export function ProductsPage({ initialFilter = 'all' }: { initialFilter?: Produc
 /** K1: lista de produtos com busca, filtros, ajuste rápido de estoque, pausa com 1 toque e ação em massa. */
 function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner: boolean; initialFilter: ProductFilter }) {
   const online = useOnline();
+  const router = useRouter();
   const [filter, setFilter] = useState<ProductFilter>(initialFilter);
   const [input, setInput] = useState('');
   const [q, setQ] = useState('');
@@ -99,12 +101,28 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
         title="Produtos"
         description={list.data ? `${products.length.toLocaleString('pt-BR')}${list.hasNextPage ? '+' : ''} ${products.length === 1 && !list.hasNextPage ? 'produto' : 'produtos'}` : undefined}
         action={
-          <div className={ui.row}>
-            <ButtonLink href={asRoute('/lojista/produtos/adicionar-varios')} variant="secondary" data-testid={T('paste-link')}>Adicionar vários</ButtonLink>
-            <ButtonLink href={asRoute('/lojista/produtos/precos')} variant="secondary" data-testid={T('prices-link')}>Preços e estoque</ButtonLink>
-            <ButtonLink href={asRoute('/lojista/produtos/importar')} variant="text" data-testid={T('import-link')}>Importar planilha</ButtonLink>
-            <ButtonLink href={asRoute('/lojista/produtos/secoes')} variant="text" data-testid={T('sections-link')}>Seções da vitrine</ButtonLink>
-          </div>
+          <>
+            {/* Computador: os 4 atalhos como botões. Celular: um só "Mais" na linha da contagem, para não empurrar a lista (V8.7). */}
+            <div className={cx(ui.row, s.headerLinks)}>
+              <ButtonLink href={asRoute('/lojista/produtos/adicionar-varios')} variant="secondary" data-testid={T('paste-link')}>Adicionar vários</ButtonLink>
+              <ButtonLink href={asRoute('/lojista/produtos/precos')} variant="secondary" data-testid={T('prices-link')}>Preços e estoque</ButtonLink>
+              <ButtonLink href={asRoute('/lojista/produtos/importar')} variant="text" data-testid={T('import-link')}>Importar planilha</ButtonLink>
+              <ButtonLink href={asRoute('/lojista/produtos/secoes')} variant="text" data-testid={T('sections-link')}>Seções da vitrine</ButtonLink>
+            </div>
+            <div className={s.headerMore}>
+              <ActionMenu
+                label="Mais opções de produtos"
+                text="Mais"
+                testId={T('more')}
+                actions={[
+                  { label: 'Adicionar vários produtos', onSelect: () => router.push(asRoute('/lojista/produtos/adicionar-varios')), testId: T('more-paste') },
+                  { label: 'Preços e estoque', onSelect: () => router.push(asRoute('/lojista/produtos/precos')), testId: T('more-prices') },
+                  { label: 'Importar planilha', onSelect: () => router.push(asRoute('/lojista/produtos/importar')), testId: T('more-import') },
+                  { label: 'Seções da vitrine', onSelect: () => router.push(asRoute('/lojista/produtos/secoes')), testId: T('more-sections') },
+                ]}
+              />
+            </div>
+          </>
         }
       />
       {!online ? <Banner tone="warning" offline>Sem conexão. Mostrando o que já carregou.</Banner> : null}
@@ -117,7 +135,7 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
       ) : null}
       {withoutDescription > 0 && !draftsView ? (
         <Banner tone="info" testId={T('without-description')}>
-          {withoutDescription} {withoutDescription === 1 ? 'produto sem descrição' : 'produtos sem descrição'}. Com descrição o cliente decide mais rápido.
+          {withoutDescription} {withoutDescription === 1 ? 'produto sem descrição' : 'produtos sem descrição'}.<span className={s.reminderWhy}> Com descrição o cliente decide mais rápido.</span>
         </Banner>
       ) : null}
       <div className={s.toolbar}>

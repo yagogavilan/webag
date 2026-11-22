@@ -329,6 +329,7 @@ fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; 
   border: var(--wb-border-width-hairline) solid var(--wb-color-border-subtle);
   box-shadow: var(--wb-shadow-md);
 }
+.menuStart { right: auto; left: 0; min-width: 140px; white-space: nowrap; }
 .menuItem {
   display: flex;
   align-items: center;

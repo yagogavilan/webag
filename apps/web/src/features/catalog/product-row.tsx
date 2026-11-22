@@ -4,7 +4,7 @@ import { Check, Minus, Plus, Warning } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Button, Dialog, SafeImage, Switch, ui, cx, useToast, SkeletonRows } from '@/components/ui';
+import { ActionMenu, Badge, Button, Dialog, SafeImage, Switch, ui, cx, useToast, SkeletonRows } from '@/components/ui';
 import { catalogApi, catalogErrorMessage, catalogKeys, type ProductSummary } from '@/lib/api/catalog';
 import { ApiError } from '@/lib/api/errors';
 import { formatCents } from '@/lib/format';
@@ -127,9 +127,21 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
       <td className={s.actionsCell}>
         <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={cx(s.productName, s.editLink)} aria-label={`Editar ${product.name}`}>Editar</Link>
         {!isDraft ? (
-          <button type="button" className={s.linkButton} onClick={() => void dup.duplicate(product.id)} aria-label={`Duplicar ${product.name}`} aria-busy={dup.busyId === product.id || undefined} data-testid={T(`row-${product.id}-duplicate`)}>
-            {dup.busyId === product.id ? 'Duplicando…' : 'Duplicar'}
-          </button>
+          <>
+            {/* Computador: "Duplicar" ao lado de "Editar". Celular: no menu da linha, para a linha não passar de ~100 px (V8.7). */}
+            <button type="button" className={cx(s.linkButton, s.dupInline)} onClick={() => void dup.duplicate(product.id)} aria-label={`Duplicar ${product.name}`} aria-busy={dup.busyId === product.id || undefined} data-testid={T(`row-${product.id}-duplicate`)}>
+              {dup.busyId === product.id ? 'Duplicando…' : 'Duplicar'}
+            </button>
+            <span className={s.rowMenu}>
+              <ActionMenu
+                label={`Mais ações de ${product.name}`}
+                align="start"
+                busy={dup.busyId === product.id}
+                actions={[{ label: 'Duplicar', onSelect: () => void dup.duplicate(product.id), testId: T(`row-${product.id}-duplicate-menu`) }]}
+                testId={T(`row-${product.id}-more`)}
+              />
+            </span>
+          </>
         ) : null}
         {dup.error ? <p className={cx('wb-text-caption', s.rowError)} role="alert" data-testid={T(`row-${product.id}-duplicate-error`)}>{dup.error}</p> : null}
         {sheet ? <StockSheet storeId={storeId} product={product} onClose={() => setSheet(false)} /> : null}

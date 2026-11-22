@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, mockFetch } from '../../../test/render';
@@ -13,8 +13,9 @@ const P = '/api/proxy/lojista/stores/s1';
 const latest = { id: 'd1', name: 'Camiseta básica preta', basePriceCents: null, cover: null, missing: ['price'], updatedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), expiresAt: '2026-12-22T00:00:00Z', expiresInDays: 30, version: 3, via: 'camera' };
 const start = (over = {}) => ({ suggestedCategoryId: null, draftCount: 1, draftLimit: 100, latestDraft: latest, withoutDescriptionCount: 12, limits: { variantsMax: 100, reajusteMaxPct: 30 }, ...over });
 
-function setup(products: unknown[], quick: unknown = start()) {
+function setup(products: unknown[], quick: unknown = start(), extra: Parameters<typeof mockFetch> = []) {
   return mockFetch(
+    ...extra,
     (url) => (url.pathname === `${P}/catalog/quick-start` ? json(quick) : undefined),
     (url) => (url.pathname === `${P}/product-drafts` ? json({ data: [latest], nextCursor: null, count: 1, limit: 100 }) : undefined),
     (url) => (url.pathname === `${P}/products` ? json({ data: products, nextCursor: null }) : undefined),
@@ -76,5 +77,26 @@ describe('Produtos: cadastro rápido na lista (WB-371, WB-377 atalhos, RN-Q1)', 
     expect(screen.getByTestId('lojista.produtos.prices-link')).toHaveAttribute('href', '/lojista/produtos/precos');
     await userEvent.click(screen.getByTestId('lojista.produtos.filter-draft'));
     expect(await screen.findByRole('heading', { name: 'Rascunhos (1)' })).toBeInTheDocument();
+  });
+
+  it('celular (V8.7): o menu "Mais" reúne os 4 atalhos do cabeçalho e navega', async () => {
+    vi.stubGlobal('fetch', setup([]).impl);
+    renderLojista(<ProductsPage />);
+    await userEvent.click(await screen.findByTestId('lojista.produtos.more'));
+    const menu = screen.getByRole('menu', { name: 'Mais opções de produtos' });
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Adicionar vários produtos', 'Preços e estoque', 'Importar planilha', 'Seções da vitrine']);
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Preços e estoque' }));
+    expect(push).toHaveBeenCalledWith('/lojista/produtos/precos');
+  });
+
+  it('celular (V8.7, WB-372): "Duplicar" também está no menu da linha e cria a cópia com chave de idempotência', async () => {
+    const row = { id: 'p1', name: 'Camiseta Básica', status: 'active', moderationStatus: 'ok', sectionId: null, basePriceCents: 5990, fromPriceCents: 5990, cover: null, availableTotal: 12, low: false, soldOut: false, variantCount: 1, updatedAt: '2026-11-18T12:00:00.000Z' };
+    const { impl, calls } = setup([row], start({ latestDraft: null }), [(url, init) => (url.pathname === `${P}/products/p1/duplicate` && init.method === 'POST' ? json({ id: 'c9', name: 'Camiseta Básica (cópia)' }, 201) : undefined)]);
+    vi.stubGlobal('fetch', impl);
+    renderLojista(<ProductsPage />);
+    await userEvent.click(await screen.findByTestId('lojista.produtos.row-p1-more'));
+    await userEvent.click(screen.getByTestId('lojista.produtos.row-p1-duplicate-menu'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/lojista/produtos/novo/c9?camera=1'));
+    expect((calls.find((c) => c.url.pathname.endsWith('/duplicate'))?.init.headers as Record<string, string>)['idempotency-key']).toMatch(/^dup-/);
   });
 });

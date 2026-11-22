@@ -91,7 +91,12 @@ function DraftItem({ storeId, draft, onDuplicate, duplicating }: { storeId: stri
     }
     setBusy('delete');
     try {
-      await catalogApi.archive(storeId, draft.id);
+      try {
+        await catalogApi.archive(storeId, draft.id);
+      } catch (caught) {
+        // Repetir o "Apagar" (resposta perdida, toque duplo) devolve 404: o rascunho já não existe, que era o objetivo (BUG-045).
+        if (!(caught instanceof ApiError && caught.status === 404)) throw caught;
+      }
       await client.invalidateQueries({ queryKey: catalogKeys.all });
       toast.show('Rascunho apagado.');
       setConfirming(false);
