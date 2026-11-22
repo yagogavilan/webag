@@ -877,3 +877,63 @@ Exigida pela DEC-126 item 5 antes do G4. Escopo: commits `713db8f` (WB-352), `7f
 - **Continua valendo para o G4:** as condições do §16.5 e §17.5 (CI verde com SEC-212).
 - **Condição antes do G5/produção:** SEC-219, SEC-220, SEC-221 (além das já listadas, incluindo SEC-211 na API) e obs. 2 e 4.
 - **Não validado:** comportamento real do navegador (ordem de cookies com mesmo nome, prefixos em HTTPS), Playwright da visão contra a API real, log do nginx/CDN (se registra `Cookie`), build de produção do Next. Não substitui pentest.
+
+## 19. Revisão do código R1.3 (2026-11-22, sobre `b1e8dd4`)
+
+Escopo: `git diff origin/main...b1e8dd4` (commits `779ee06`, `b0083a5`, `f27123f`, `1e2bc8e`, `b1e8dd4`; 51 arquivos). Lidos por inteiro: `admin-catalog.controller.ts`, `admin-catalog.service.ts`, `domain/admin-bulk.ts`, `bulk-batches.service.ts`, `store-indicators.service.ts`, migração 0063 e o `down`, `view-as.guard.ts`, `rate-limit.service.ts`, `idempotency.service.ts` (`runInTransaction`); diff completo de `catalog.service.ts`, `catalog.controllers.ts`, `catalog.schemas.ts`, `db/schema.ts`, `store-overview.service.ts`, `admin-store-edit.service.ts`, `stores.service.ts`, `privacy-map.ts`, `ci.yml`, `openapi.yaml`, `lib/api/catalog.ts`, `bulk-bar.tsx`; por variante, todas as escritas de `priceCents` de variação e `setVariants`. Não lidos linha a linha: `bulk-undo.tsx`, `price-table.tsx`, `fake-api/server.mjs`, os e2e `r13-*` (só os nomes dos casos), o snapshot do drizzle. Skills: `revisao-diferencial-de-mudancas`, `analise-de-variantes`, `defaults-inseguros-e-armadilhas-de-api`.
+
+### 19.1 Testes executados (PostgreSQL e Redis locais)
+| Suíte | Resultado |
+|---|---|
+| `r13-admin-bulk`, `r13-bulk-batches`, `sec167-privacy-map`, `db-roles`, `admin-permission-matrix` com `TEST_DB_AS_APP=1 REQUIRE_DB_ROLES=1` (papel `webag_app`) | 51/51 verdes: as 2 tabelas novas e todas as escritas da R1.3 funcionam sem privilégio extra |
+| `view-as` (VA-01 a VA-27, inclui as 2 rotas novas de loja pela varredura de `listRoutes`), `migrations-down` (0063 a 0058), `admin-store-360` com `REQUIRE_DB_ROLES=1` | 46/46 verdes |
+| Busca de segredo no diff (`APP_USR-`, chave privada, `AKIA`, senha/segredo literal) | Nada. Nenhuma dependência nova (sem `package.json`/lockfile no diff) |
+| CI do GitHub | Não conferido nesta revisão (condição do §15.7 item 2 continua) |
+
+### 19.2 Verificações pedidas
+| Item | Resultado | Evidência |
+|---|---|---|
+| (1) `bulkAdminStoreProducts`: permissão | OK. `@AdminOnly('store-catalog:write')` = super admin e operação; financeiro, suporte, lojista dono e cliente = 403; matriz `x-admin-permission` nos dois sentidos | `admin-catalog.controller.ts:19`; `permissions.ts:101`; e2e "acesso e motivo" |
+| (1) Visualizador do "Ver como" e funcionário | OK. Rota `/v1/admin/*` sem `@StorePermission`: o `ViewAsGuard` global nega qualquer requisição com `X-View-As` sem `req.viewAs` (falha fechada); funcionário/dono não tem perfil de admin (403). DEC-119 mantida | `view-as.guard.ts:14-19`; e2e "lojista dono = 403" |
+| (1) Motivo obrigatório | OK. Validado no servidor antes de tudo (inclusive na prévia); J27 desligada só aceita `requested_by_merchant`; corpo `strictObject`, sem preço | `admin-catalog.service.ts:76-80,85`; `catalog.schemas.ts:182-193` |
+| (1) Auditoria por item | OK. 1 linha por item com `store_id`, motivo, antes/depois e versão (status: `targetType product`; estoque: `targetType variant` com `productId`, `reserved`); + 1 linha `product.bulk` da loja; tudo na transação da chave (falha injetada desfaz tudo) | `admin-catalog.service.ts:186-199`; e2e "falha ao gravar a auditoria" |
+| (1) Limite 10/h por admin | OK. Conta só execução que altera, dentro da 1ª execução da chave, falha fechada sem Redis (`hit` padrão `failClosed`), devolve a contagem em erro; mais 120/h por IP na rota (variante da SEC-200, obs. 3) | `admin-catalog.service.ts:157-168`; `rate-limit.service.ts:28`; e2e "11ª = 429" |
+| (1) Aviso ao lojista | OK. 1 linha agregada no feed na transação e 1 e-mail depois do commit (falha de envio não desfaz; repetição da chave não reenvia). O lojista vê "Webag", nunca o nome do admin | `admin-catalog.service.ts:104-108,198-199`; `bulk-batches.service.ts:146` |
+| (1) IDOR entre lojas | OK. Itens lidos por (`id` IN, `store_id`) na prévia e sob `FOR UPDATE` na execução; algum id de outra loja = 404 para o pedido todo (SEC-020); variações só dos produtos já filtrados | `admin-catalog.service.ts:115-116,145-146` |
+| (1) Estoque abaixo do reservado | OK. Regra pura com a variação travada; grade bloqueada (`MULTIPLE_VARIANTS`, DEC-135) | `domain/admin-bulk.ts:31-37` |
+| (2) IDOR de `batchId` | OK. `lockForUndo` por (`id`, `store_id`) da rota; itens revertidos filtrados pela loja de novo; outra loja = 404 | `bulk-batches.service.ts:156-160`; `catalog.service.ts:1048,1053` |
+| (2) Janela e corrida do desfazer | OK. 10 min conferidos no servidor; lote travado `FOR UPDATE` (2 simultâneos revertem 1 vez); repetição = `alreadyUndone` com o mesmo corpo, mesmo vencida; item com `version` diferente da aplicada fica em `skipped` (nunca sobrescreve). Toda escrita de preço de variação sobe a `version` (`setVariants`, importação pós SEC-213), então o `CHANGED_AFTER` cobre também a variação | `catalog.service.ts:1045-1075`; e2e BK-08 |
+| (2) Replay com `Idempotency-Key` (D18) | OK. O lote nasce na transação do efeito e da resposta guardada (sem lote órfão nem efeito sem lote); mesma chave = mesmo `batchId`; escopo do admin `admin-bulk:{loja}:{admin}` | `catalog.service.ts:1000-1003`; `admin-catalog.service.ts:98`; e2e BK-01 e "falha ao gravar o lote" |
+| (2) Visualizador nas rotas novas da loja | OK. `undoBulk` (POST) e `bulkBatches` (GET sem `@ViewAs`) negam com a visão: VA-01/VA-02 percorrem todas as rotas reais | `view-as.e2e-spec.ts:312-358` |
+| (2) Privacidade da tabela nova | Aceito com ressalva. `product_bulk_batches` guarda só o id do autor, sem texto livre (`params` do admin leva só o `reasonCode`) e sem dado de cliente; está no mapa (`retain`), mas **sem prazo** (obs. 2). `product_bulk_batch_items` não tem dado pessoal. A lista mostra o nome do membro autor a quem tem `catalog` (C7 pede "quem"; obs. 4) | `privacy-map.ts:53`; `bulk-batches.service.ts:138-146` |
+| (2) D-06 | OK. Tabelas novas sem privilégio extra (testes como `webag_app`); não são append-only por desenho (o desfazer marca `undone_at`): a fonte da verdade é o `audit_log`. `down` documenta perda de dado e exige autorização fora do staging | `0063_r1_bulk_batches.sql`; `down/0063.sql:2-3` |
+| (3) `adjustVariantStock` com `productVersion`/`ETag` | OK. Versão não é dado sensível; rota de escrita fora da visão; vai na resposta guardada (repetição traz o mesmo ETag); caminho com chave continua o transacional (SEC-218 fechada) | `catalog.controllers.ts:281-306`; `catalog.service.ts:679-683` |
+| (4) DT-088 (ficha 360) | OK. Mesmos campos de antes (contagens, GMV, últimos pedidos com id/status/total/data), sem dado de cliente; consulta movida para `StoreIndicatorsService` (só leitura) e `countActive`; rota de admin, inalcançável pelo visualizador; teste de fronteira barra a volta do import direto | `store-indicators.service.ts:301-321`; `store-overview.service.ts:44-56`; e2e `admin-store-360` |
+| (5) Job `e2e-web` | OK. Gatilho `pull_request` (PR de fork sem segredo e token só leitura), `permissions: contents: read` herdado, nenhum segredo no job (só valores de teste no `playwright.config.ts`), cache do `.next` com escopo do GitHub (PR não grava no cache do `main`), relatório só em falha com retenção de 3 dias e sem trace. Ressalva: 2 actions novas por tag (`actions/cache@v4`, `actions/upload-artifact@v4`): DT-013 passa de 3 para 5 actions a fixar por SHA (já bloqueia o G5) | `ci.yml:116-165` |
+
+### 19.3 Achados novos
+
+#### SEC-223 | Severidade: Baixa | Status: Aberto (parte pré-existente da R1.2; o desfazer repete) | Dono: backend-dev
+- **Onde:** `apps/api/src/modules/catalog/catalog.service.ts:993` (reajuste em massa) e `:1066` (desfazer): `auditProduct(... CATALOG_AUDIT.price ...)` grava só `basePriceCents` e `version`; as variações com preço próprio mudam em `:991` e `:1065` sem antes/depois na trilha.
+- **Problema:** em produto com grade de preço por variação, o `audit_log` (append-only, fonte da verdade) não mostra o preço de cada variação antes e depois do reajuste nem do desfazer. Só `product_bulk_batch_items.variants` guarda isso, e essa tabela é mutável pelo `webag_app` e some no `down` da 0063. Contraria WB-377 C7 ("antes e depois de cada produto").
+- **Cenário:** funcionário com `catalog` aplica −40% e o lojista contesta o preço de uma variação vendida barato; a ficha 360 e o histórico mostram só o preço base, e a prova da variação depende de uma tabela que o próprio processo da API pode alterar. Repúdio e disputa sem trilha; sem ganho direto para terceiro.
+- **Correção recomendada:** no `before`/`after` das duas chamadas, incluir `variants: [{ id, priceCents }]` das variações com preço próprio (o mesmo formato de `variantsAudit` usado por `setVariants`).
+- **Como verificar:** e2e: reajuste e desfazer em produto com 2 variações de preço próprio = linha `product.price` com os preços das 2 variações antes e depois.
+
+### 19.4 Observações (sem SEC)
+1. **Testes a acrescentar:** (a) `X-View-As` com Bearer de admin em `POST /v1/admin/stores/{id}/products/bulk` = 403 `VIEW_AS_READ_ONLY` (o guard cobre; o VA-03 só lista outras rotas); (b) mesma `Idempotency-Key` por **outro admin** na mesma loja não colide (o escopo já inclui o admin; BK-06 não cobre o admin).
+2. **Retenção de `product_bulk_batches`:** `retain` sem prazo, como o `audit_log` (SEC-217) e `admin_view_sessions` (§16.4 item 4). Entra no mesmo prazo e expurgo da SEC-217; não piora a SEC-217 de forma relevante (só o id do autor).
+3. **Variante da SEC-200:** o teto de 120 por hora da rota do admin é por IP; admins atrás do mesmo IP do escritório dividem o teto. O limite que importa (10/h por admin) já é por usuário; não piora a SEC-200 do cliente.
+4. **Nome do autor no histórico:** quem tem `catalog` vê o nome dos colegas que agiram em massa (a lista da equipe exige `team`). É o que o C7 pede; o PO confirma se basta o primeiro nome.
+5. **Insider:** 10 ações x 200 itens por hora por admin, em qualquer loja, com trilha e aviso ao lojista. Antes do G5, alerta à operação quando um admin agir em mais de 3 lojas distintas por dia `[HIPÓTESE: parâmetro]` (mesmo padrão do alerta do "Ver como", §16.4 item 3).
+6. **Front x API (preço em massa):** o web só mostra "Mudar preço" ao dono (`canChangePrice={owner}`, hipótese do design `onda-2`), mas a API aceita `price_adjust` e o desfazer de qualquer membro com `catalog`, como o PRD WB-377 permite ("lojista ou funcionário"). Não é falha (a API segue o PRD); se o PO quiser "só o dono", a regra tem de ir para a API, inclusive no desfazer.
+
+### 19.5 Conformidade com o modelo e com SEC abertos
+- §14 (DEC-119): nenhuma rota nova com `@ViewAs`; lista fechada das 13 intacta (VA-23 verde). §14.11 itens 1 a 3 cumpridos (chave, efeito, lote e resposta no mesmo commit; escopo com loja e ator; desfazer idempotente). §15.6 **BK-08 verde** e `bulkAdminStoreProducts` revisado: as pendências da R1.3 do §17.5 fecham no código.
+- SEC-200, 205, 211, 216 e 217: **nenhum piora de severidade** com esta rodada (obs. 2 e 3 são variantes de baixo peso registradas acima).
+
+### 19.6 Parecer para o G4 da R1
+- **Nenhum achado Crítico ou Alto na R1.3: liberado para o QA.** SEC-223 (Baixa) pode ser corrigida antes do merge, junto com as obs. 1, sem bloquear o QA.
+- **Continua bloqueando o G4 da R1:** CI verde no PR final (§15.7 item 2), agora com o job `e2e-web` como status obrigatório no `main` (DEC-135 item 4, configuração do fundador).
+- **Antes do G5/produção:** obs. 2 (com SEC-217), obs. 5, DT-013 (agora 5 actions), além das condições já listadas no §16.5, §17.5 e §18.5.
+- **Não validado:** telas `bulk-undo.tsx` e `price-table.tsx` no navegador; Playwright no CI real; envio real do e-mail ao lojista; carga de 200 itens com `FOR UPDATE` sob concorrência real; relógio entre réplicas para a janela de 10 min (1 réplica hoje). Não substitui pentest.
