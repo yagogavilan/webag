@@ -5,5 +5,6 @@ export { LateDeliveryService } from './late-delivery.service.js';
 export { MIN_ORDERS_FOR_CANCEL_ALERT } from './orders.service.js';
 export { OrderEventBus, type OrderEvent } from './order-events.bus.js';
 export { canTransition, nextStatuses, ORDER_STATUSES, type OrderActor, type OrderStatus } from './domain/state.js';
+export { NON_GMV_STATUSES, CANCELLATION_STATUSES } from './domain/metrics.js';
 export { StoreOrdersService, storeActions, type StoreAction } from './store-orders.service.js';
 export { devOrderModulesFor } from './orders.dev.js';

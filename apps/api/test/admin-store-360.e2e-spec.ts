@@ -230,6 +230,43 @@ describe('Ficha 360 e edição da loja pelo admin (WB-350, WB-351)', () => {
       expect(JSON.stringify(res.body.recentOrders)).not.toMatch(/name|phone|email|address|customer/i);
     });
 
+    it('I1 (RN-15): GMV, cancelamento e janela da ficha batem com a definição do relatório, estado por estado e pela data do pagamento', async () => {
+      const day = 86_400_000;
+      const lot = await shopWith(ctx, [{ name: 'Produto RN-15', priceCents: 4_000, stock: 30 }]);
+      const buyer = await customerAt(ctx, lot.origin);
+      // Tabela: estado, total e deslocamentos de data. `inGmv` = conta no GMV; `cancel` = conta como cancelamento; `inWindow` = pago nos últimos 30 dias.
+      const table = [
+        { status: 'accepted', total: 1_000, paidDaysAgo: 1, createdDaysAgo: 1, inGmv: true, cancel: false, inWindow: true },
+        { status: 'delivered', total: 2_000, paidDaysAgo: 2, createdDaysAgo: 2, inGmv: true, cancel: false, inWindow: true },
+        { status: 'cancelled', total: 4_000, paidDaysAgo: 3, createdDaysAgo: 3, inGmv: false, cancel: true, inWindow: true },
+        { status: 'refused', total: 8_000, paidDaysAgo: 3, createdDaysAgo: 3, inGmv: false, cancel: true, inWindow: true },
+        { status: 'expired', total: 16_000, paidDaysAgo: 4, createdDaysAgo: 4, inGmv: false, cancel: false, inWindow: true },
+        { status: 'delivered', total: 32_000, paidDaysAgo: 40, createdDaysAgo: 0, inGmv: true, cancel: false, inWindow: false }, // criado agora, pago há 40 dias: fora (a janela é pelo pagamento)
+        { status: 'delivered', total: 64_000, paidDaysAgo: 0, createdDaysAgo: 40, inGmv: true, cancel: false, inWindow: true }, // criado há 40 dias, pago agora: dentro
+      ] as const;
+      const now = Date.now();
+      for (const row of table) {
+        await addToCart(ctx, buyer.user, lot.variants[0]!, 1).expect(200);
+        const created = (await placeOrder(ctx, buyer.user, buyer.addressId)).body as { id: string };
+        await approve(ctx, buyer.user, (await attemptOf(ctx, created.id)).id);
+        await ctx.db.update(orders).set({ status: row.status, totalCents: row.total, paidAt: new Date(now - row.paidDaysAgo * day), createdAt: new Date(now - row.createdDaysAgo * day) }).where(eq(orders.id, created.id));
+      }
+      const expectedGmv = table.filter((r) => r.inWindow && r.inGmv).reduce((n, r) => n + r.total, 0);
+      const inWindow = table.filter((r) => r.inWindow);
+      const expectedCancelled = inWindow.filter((r) => r.cancel).length;
+
+      const card = (await ctx.http.get(`/v1/admin/stores/${lot.store.id}/overview`).set(bearer(ops.accessToken)).expect(200)).body;
+      expect(card.indicators).toMatchObject({ orders: inWindow.length, gmv: { amount: expectedGmv }, cancellations: { count: expectedCancelled, pct: null } });
+      expect(expectedGmv).toBe(1_000 + 2_000 + 64_000); // contas à mão: sem cancelado, recusado, expirado nem o pago fora da janela
+
+      // Mesma loja e mesmo período no relatório de operação: os dois números têm que ser os mesmos.
+      const ymd = (ms: number) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const report = (await ctx.http.get(`/v1/admin/reports/operations?from=${ymd(now - 29 * day)}&to=${ymd(now)}&storeId=${lot.store.id}`).set(bearer(ops.accessToken)).expect(200)).body;
+      expect(report.kpis.gmv.amount).toBe(card.indicators.gmv.amount);
+      expect(report.kpis.orders).toBe(card.indicators.orders);
+      expect(report.kpis.cancelledOrders).toBe(card.indicators.cancellations.count);
+    });
+
     it('C4: o histórico traz antes, depois e motivo, filtra por tipo, autor e período, pagina por cursor e não traz dado de cliente', async () => {
       const all = await ctx.http.get(`/v1/admin/stores/${storeId}/history?limit=50`).set(bearer(support.accessToken)).expect(200);
       expect(validateAgainst('AdminStoreHistoryPage', all.body), JSON.stringify(all.body).slice(0, 600)).toEqual([]);

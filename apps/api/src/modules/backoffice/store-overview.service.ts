@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { actorKindOf, asHistoryObject, AuditService, decodeReason, historyTypeOf, summaryOf, targetTypeOf } from '../admin/index.js';
 import { ADMIN_REASON_CODES, AdminStoreEditService, StoreSettingsService, StoresService } from '../stores/index.js';
 import { orders } from '../orders/db/schema.js';
+import { CANCELLATION_STATUSES, NON_GMV_STATUSES } from '../orders/index.js';
 import { products } from '../catalog/db/schema.js';
 import { users } from '../identity/db/schema.js';
 
@@ -48,11 +49,11 @@ export class StoreOverviewService {
       this.db
         .select({
           orders: count(),
-          gmv: sql<number>`coalesce(sum(case when ${orders.status} <> 'cancelled' then ${orders.totalCents} else 0 end), 0)::bigint`,
-          cancelled: sql<number>`count(*) filter (where ${orders.status} = 'cancelled')::int`,
+          gmv: sql<number>`coalesce(sum(${orders.totalCents}) filter (where ${notInArray(orders.status, [...NON_GMV_STATUSES])}), 0)::bigint`,
+          cancelled: sql<number>`count(*) filter (where ${inArray(orders.status, [...CANCELLATION_STATUSES])})::int`,
         })
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), isNotNull(orders.paidAt), gte(orders.createdAt, since))),
+        .where(and(eq(orders.storeId, storeId), gte(orders.paidAt, since))),
       this.db
         .select({ id: orders.id, status: orders.status, total: orders.totalCents, createdAt: orders.createdAt })
         .from(orders)
