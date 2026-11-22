@@ -29,6 +29,7 @@ Cliente acompanha o pedido em tempo real (linha do tempo + push). Lojista recebe
 - Push (app em segundo plano): Expo Push Service via `expo-server-sdk` em job BullMQ, com leitura de recibos e remoção de token `DeviceNotRegistered`. Credenciais FCM v1 e APNs ficam no EAS (dependem do fundador; gratuito).
 - Painel do lojista: navegadores bloqueiam áudio sem gesto do usuário; o painel exige um clique em "Ativar alerta sonoro" por sessão e marca o título da aba com contador. Web Push fica para a fase 2.
 - Escala: uma instância na 1.0. Com mais de uma, ativar sticky session no balanceador (exigência do Socket.IO com polling) — o Redis adapter já fica configurado.
+  - Nota 2026-11-22 (tech-lead): correção factual. O Redis adapter NÃO está configurado no código (`@socket.io/redis-adapter` não é dependência da API). Com mais de uma réplica ele é pré-requisito; ver ADR-017 (proposta) e DT-083.
 
 ## Consequências
 - Positivas: experiência "ao vivo" sem custo extra; correção não depende do socket.
