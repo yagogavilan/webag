@@ -1,0 +1,576 @@
+{
+  "meta": {
+    "label": "depois-4g-rapido",
+    "date": "2026-11-22",
+    "net": "4G rápido (9 Mbps, RTT 60 ms)",
+    "cpu": 4,
+    "tapMs": 80,
+    "runs": 2,
+    "mode": "produção estática (brotli/gzip)",
+    "chromium": "153.0.8010.12",
+    "node": "v22.23.5",
+    "bundle": {
+      "js": {
+        "raw": 3590686,
+        "gzip": 908741,
+        "br": 805357,
+        "files": 47
+      },
+      "fonts": 434208,
+      "images": 35737,
+      "other": 3822,
+      "entry": {
+        "raw": 1127186,
+        "gzip": 296148,
+        "br": 254289
+      },
+      "total": 4064453
+    }
+  },
+  "steps": {
+    "cold": {
+      "label": "Abertura a frio (1ª visita) até a escolha da cidade",
+      "ms": 2220.649999999907,
+      "runsMs": [
+        2149,
+        2292
+      ],
+      "tbtMs": 361,
+      "inpMs": null,
+      "feedbackMs": null,
+      "fcpMs": 390,
+      "lcpMs": 390,
+      "req": {
+        "total": 18,
+        "api": 0
+      },
+      "bytes": {
+        "total": 931016,
+        "js": 698223,
+        "img": 4841,
+        "api": 0,
+        "font": 225962,
+        "other": 1990
+      },
+      "calls": []
+    },
+    "home": {
+      "label": "Escolher cidade > Início com lojas",
+      "ms": 719.3500000000931,
+      "runsMs": [
+        742,
+        696
+      ],
+      "tbtMs": 201,
+      "inpMs": 32,
+      "feedbackMs": 29.9000000001397,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 16,
+        "api": 6
+      },
+      "bytes": {
+        "total": 70365,
+        "js": 8464,
+        "img": 48915,
+        "api": 12986,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/home",
+          "startMs": 520,
+          "endMs": 520
+        },
+        {
+          "path": "/v1/categories",
+          "startMs": 520,
+          "endMs": 522
+        },
+        {
+          "path": "/v1/home",
+          "startMs": 520,
+          "endMs": 609
+        },
+        {
+          "path": "/v1/categories",
+          "startMs": 520,
+          "endMs": 591
+        },
+        {
+          "path": "/v1/banners",
+          "startMs": 520,
+          "endMs": 522
+        },
+        {
+          "path": "/v1/banners",
+          "startMs": 520,
+          "endMs": 593
+        }
+      ]
+    },
+    "scroll": {
+      "label": "Rolagem do início (14 passos)",
+      "frameP95": 25.09999999999991,
+      "frameMax": 75,
+      "slowFrames": 1.5,
+      "frames": 82
+    },
+    "reopen": {
+      "label": "Reabertura (endereço salvo, cache quente) até o início com lojas",
+      "ms": 961.7999999998137,
+      "runsMs": [
+        841,
+        1082
+      ],
+      "tbtMs": 325,
+      "inpMs": null,
+      "feedbackMs": null,
+      "fcpMs": 390,
+      "lcpMs": 390,
+      "req": {
+        "total": 30,
+        "api": 8
+      },
+      "bytes": {
+        "total": 14363,
+        "js": 0,
+        "img": 498,
+        "api": 13601,
+        "font": 0,
+        "other": 264
+      },
+      "calls": [
+        {
+          "path": "/v1/home",
+          "startMs": 490,
+          "endMs": 496
+        },
+        {
+          "path": "/v1/categories",
+          "startMs": 492,
+          "endMs": 495
+        },
+        {
+          "path": "/v1/home",
+          "startMs": 492,
+          "endMs": 717
+        },
+        {
+          "path": "/v1/categories",
+          "startMs": 492,
+          "endMs": 717
+        },
+        {
+          "path": "/v1/regions",
+          "startMs": 492,
+          "endMs": 500
+        },
+        {
+          "path": "/v1/regions",
+          "startMs": 494,
+          "endMs": 718
+        },
+        {
+          "path": "/v1/banners",
+          "startMs": 751,
+          "endMs": 755
+        },
+        {
+          "path": "/v1/banners",
+          "startMs": 751,
+          "endMs": 913
+        }
+      ]
+    },
+    "store": {
+      "label": "Início > Loja (produtos visíveis)",
+      "ms": 493.44999999995343,
+      "runsMs": [
+        471,
+        516
+      ],
+      "tbtMs": 109.5,
+      "inpMs": 28,
+      "feedbackMs": 16.5,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 15,
+        "api": 6
+      },
+      "bytes": {
+        "total": 26910,
+        "js": 5331,
+        "img": 14847,
+        "api": 6732,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/browse/stores/s1",
+          "startMs": 128,
+          "endMs": 130
+        },
+        {
+          "path": "/v1/browse/stores/s1",
+          "startMs": 130,
+          "endMs": 258
+        },
+        {
+          "path": "/v1/browse/stores/s1/products",
+          "startMs": 130,
+          "endMs": 130
+        },
+        {
+          "path": "/v1/browse/stores/s1/products",
+          "startMs": 130,
+          "endMs": 259
+        },
+        {
+          "path": "/v1/me/favorites",
+          "startMs": 597,
+          "endMs": 600
+        },
+        {
+          "path": "/v1/me/favorites",
+          "startMs": 599,
+          "endMs": 708
+        }
+      ]
+    },
+    "product": {
+      "label": "Loja > Produto (botão adicionar)",
+      "ms": 444.14999999990687,
+      "runsMs": [
+        439,
+        449
+      ],
+      "tbtMs": 95.5,
+      "inpMs": 28,
+      "feedbackMs": 23.049999999813735,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 6,
+        "api": 4
+      },
+      "bytes": {
+        "total": 9235,
+        "js": 6841,
+        "img": 249,
+        "api": 2145,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/browse/products/s1-p1",
+          "startMs": 127,
+          "endMs": 131
+        },
+        {
+          "path": "/v1/browse/products/s1-p1",
+          "startMs": 128,
+          "endMs": 361
+        },
+        {
+          "path": "/v1/browse/products/s1-p1/reviews",
+          "startMs": 589,
+          "endMs": 593
+        },
+        {
+          "path": "/v1/browse/products/s1-p1/reviews",
+          "startMs": 589,
+          "endMs": 674
+        }
+      ]
+    },
+    "add": {
+      "label": "Adicionar à sacola (selo \"Adicionado\")",
+      "ms": 308.19999999995343,
+      "runsMs": [
+        298,
+        318
+      ],
+      "tbtMs": 56,
+      "inpMs": 60,
+      "feedbackMs": 52.85000000009313,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 3,
+        "api": 3
+      },
+      "bytes": {
+        "total": 3339,
+        "js": 0,
+        "img": 0,
+        "api": 3339,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/browse/products/s1-p1",
+          "startMs": 201,
+          "endMs": 266
+        },
+        {
+          "path": "/v1/cart/items/s1-p1-v40",
+          "startMs": 274,
+          "endMs": 275
+        },
+        {
+          "path": "/v1/cart/items/s1-p1-v40",
+          "startMs": 274,
+          "endMs": 346
+        }
+      ]
+    },
+    "back-store": {
+      "label": "Produto > voltar à Loja (barra da sacola)",
+      "ms": 230.70000000018626,
+      "runsMs": [
+        159,
+        303
+      ],
+      "tbtMs": 121,
+      "inpMs": 72,
+      "feedbackMs": 42.50000000023283,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 1,
+        "api": 0
+      },
+      "bytes": {
+        "total": 249,
+        "js": 0,
+        "img": 249,
+        "api": 0,
+        "font": 0,
+        "other": 0
+      },
+      "calls": []
+    },
+    "cart": {
+      "label": "Loja > Sacola (total)",
+      "ms": 516.1999999999534,
+      "runsMs": [
+        497,
+        536
+      ],
+      "tbtMs": 84,
+      "inpMs": 160,
+      "feedbackMs": 16.449999999953434,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 4,
+        "api": 2
+      },
+      "bytes": {
+        "total": 5561,
+        "js": 4928,
+        "img": 249,
+        "api": 384,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/config/maintenance",
+          "startMs": 6943,
+          "endMs": 6946
+        },
+        {
+          "path": "/v1/config/maintenance",
+          "startMs": 6943,
+          "endMs": 7011
+        }
+      ]
+    },
+    "checkout": {
+      "label": "Sacola > Checkout",
+      "ms": 524.1500000003725,
+      "runsMs": [
+        604,
+        444
+      ],
+      "tbtMs": 111,
+      "inpMs": 32,
+      "feedbackMs": 21.450000000186265,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 4,
+        "api": 2
+      },
+      "bytes": {
+        "total": 7303,
+        "js": 5500,
+        "img": 249,
+        "api": 1554,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/cart",
+          "startMs": 626,
+          "endMs": 630
+        },
+        {
+          "path": "/v1/cart",
+          "startMs": 626,
+          "endMs": 782
+        }
+      ]
+    },
+    "pix": {
+      "label": "Checkout > Pagar com PIX (código)",
+      "ms": 678.1000000000931,
+      "runsMs": [
+        706,
+        650
+      ],
+      "tbtMs": 139,
+      "inpMs": 16,
+      "feedbackMs": 14.449999999953434,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 8,
+        "api": 6
+      },
+      "bytes": {
+        "total": 10548,
+        "js": 6155,
+        "img": 249,
+        "api": 4144,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/orders",
+          "startMs": 160,
+          "endMs": 164
+        },
+        {
+          "path": "/v1/orders",
+          "startMs": 169,
+          "endMs": 242
+        },
+        {
+          "path": "/v1/cart",
+          "startMs": 255,
+          "endMs": 263
+        },
+        {
+          "path": "/v1/cart",
+          "startMs": 261,
+          "endMs": 466
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
+          "startMs": 734,
+          "endMs": 736
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
+          "startMs": 736,
+          "endMs": 822
+        }
+      ]
+    },
+    "confirmed": {
+      "label": "Simular pagamento > Pedido confirmado",
+      "ms": 1849.0000000002328,
+      "runsMs": [
+        1861,
+        1837
+      ],
+      "tbtMs": 62.5,
+      "inpMs": 36,
+      "feedbackMs": 29.399999999906868,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 8,
+        "api": 6
+      },
+      "bytes": {
+        "total": 6627,
+        "js": 3467,
+        "img": 249,
+        "api": 2911,
+        "font": 0,
+        "other": 0
+      },
+      "calls": [
+        {
+          "path": "/v1/dev/orders/11111111-1111-4111-8111-111111111111/payment/approve",
+          "startMs": 184,
+          "endMs": 185
+        },
+        {
+          "path": "/v1/dev/orders/11111111-1111-4111-8111-111111111111/payment/approve",
+          "startMs": 193,
+          "endMs": 273
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111",
+          "startMs": 287,
+          "endMs": 300
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111",
+          "startMs": 300,
+          "endMs": 371
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
+          "startMs": 300,
+          "endMs": 309
+        },
+        {
+          "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
+          "startMs": 300,
+          "endMs": 371
+        }
+      ]
+    },
+    "track": {
+      "label": "Pedido confirmado > Acompanhamento",
+      "ms": 461.80000000004657,
+      "runsMs": [
+        448,
+        476
+      ],
+      "tbtMs": 70,
+      "inpMs": 28,
+      "feedbackMs": 17.300000000046566,
+      "fcpMs": null,
+      "lcpMs": null,
+      "req": {
+        "total": 2,
+        "api": 0
+      },
+      "bytes": {
+        "total": 8307,
+        "js": 8058,
+        "img": 249,
+        "api": 0,
+        "font": 0,
+        "other": 0
+      },
+      "calls": []
+    }
+  },
+  "problems": []
+}

@@ -6,6 +6,7 @@
 - **Escopo:** só o **app** (Expo, consumidor). O painel do lojista e o admin são web e não entram nos formulários das lojas. O registro de operações completo (art. 37) é o de `docs/produto/prd/lgpd.md` §Regras.
 - **Regra:** mudou o app ou a API (dado novo, SDK novo, Sentry no app, login social), atualize esta página **antes** do envio. Formulário divergente do app é motivo de remoção nas duas lojas.
 - Bases legais e prazos são recomendação técnica `[validar com o jurídico]`.
+- **v1.1 (2026-11-22):** os dados novos estão em `threat-model-v1-1.md` §8. Nada muda aqui enquanto as flags estiverem desligadas. Ao ligar `coleta_eventos`, acrescente "Interações com o app / Analytics, não vinculadas a você" (Data Safety) e "Dados de uso, não usados para rastreamento" (App Privacy). O app do motoboy é APK direto e não entra nos formulários das lojas. O app do cliente **não** ganha localização em segundo plano (WB-395 C8).
 
 ## 1. Dados que o app envia para fora do aparelho
 

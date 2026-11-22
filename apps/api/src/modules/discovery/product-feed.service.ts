@@ -23,7 +23,7 @@ export interface ProductQuery {
   limit: number;
 }
 
-interface ProductRow extends Record<string, unknown> {
+export interface ProductRow extends Record<string, unknown> {
   id: string;
   name: string;
   store_id: string;
@@ -32,6 +32,11 @@ interface ProductRow extends Record<string, unknown> {
   promo_price_cents: number | null;
   promo_starts_at: Date | null;
   promo_ends_at: Date | null;
+}
+
+/** Linha de oferta: a linha do produto + o desconto em % (para ordenar entre lojas). */
+export interface OfferRow extends ProductRow {
+  discount: number;
 }
 
 export interface ProductCard {
@@ -74,9 +79,12 @@ export class ProductFeedService {
     ];
     const text = query.q?.trim();
     const norm = text ? sql`f_norm(${text})` : null;
+    let textCondition: SQL | null = null;
     if (norm && text) {
-      const fuzzy = text.length >= 4 ? sql` or word_similarity(${norm}, f_norm(p.name)) >= 0.5` : sql``;
-      conditions.push(sql`(f_norm(p.name) like '%' || f_norm(${likeEscape(text)}) || '%'${fuzzy})`);
+      // `a <% b` == `word_similarity(a, b) >= pg_trgm.word_similarity_threshold` (0,5, fixado na conexão: platform/database) e, ao contrário de `word_similarity(...) >= 0.5`, usa o índice GIN de trigramas.
+      const fuzzy = text.length >= 4 ? sql` or ${norm} <% f_norm(p.name)` : sql``;
+      textCondition = sql`(f_norm(p.name) like '%' || f_norm(${likeEscape(text)}) || '%'${fuzzy})`;
+      conditions.push(textCondition);
     }
     if (query.categoryIds?.length) conditions.push(sql`p.category_id = any(${pgArray(query.categoryIds, 'uuid')})`);
     if (query.minPriceCents !== undefined) conditions.push(sql`${EFFECTIVE_PRICE} >= ${query.minPriceCents}`);
@@ -94,16 +102,25 @@ export class ProductFeedService {
       discount: sql`${discount} desc, d.distance_m asc, p.id asc`,
     }[query.sort];
 
+    const feed = sql`unnest(${pgArray(stores.map((s) => s.id), 'uuid')}, ${pgArray(stores.map((s) => s.distanceM), 'int')}, ${pgArray(stores.map((s) => s.ratingAverage ?? 0), 'float8')}, ${pgArray(stores.map((s) => s.open), 'boolean')})`;
+    // Busca por texto: o índice GIN de trigramas acha os produtos do termo UMA vez (CTE materializada) e só depois junta com as lojas do ponto. Sem isso o planejador
+    // repetia a busca no índice uma vez por loja (200 voltas) ou lia a tabela inteira: 79 ms -> 11 ms medidos (20 mil produtos). O resultado é o mesmo (mesmas condições).
+    const source = textCondition
+      ? sql`with hit as materialized (select p.* from products p where p.status = 'active' and p.moderation_status in ('ok', 'review') and p.base_price_cents is not null and ${textCondition})
+        select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from hit p`
+      : sql`select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p`;
     const result = await this.db.execute<ProductRow>(sql`
-      select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at
-        from products p
-        join unnest(${pgArray(stores.map((s) => s.id), 'uuid')}, ${pgArray(stores.map((s) => s.distanceM), 'int')}, ${pgArray(stores.map((s) => s.ratingAverage ?? 0), 'float8')}, ${pgArray(stores.map((s) => s.open), 'boolean')})
-          as d(store_id, distance_m, rating, is_open) on d.store_id = p.store_id
+      ${source}
+        join ${feed} as d(store_id, distance_m, rating, is_open) on d.store_id = p.store_id
        where ${sql.join(conditions, sql` and `)}
        order by ${orderBy}
        limit ${query.limit} offset ${query.offset}
     `);
-    const rows = result.rows;
+    return this.cards(result.rows, byId);
+  }
+
+  /** Linhas de produto + lojas visíveis -> cartões da vitrine (preço vigente, capa e loja). Usado pela busca, pelas ofertas e pelos mais vendidos. */
+  async cards(rows: ProductRow[], byId: ReadonlyMap<string, FeedStore>): Promise<ProductCard[]> {
     const images = await this.covers(rows.map((row) => row.id));
     const now = new Date();
     return rows.map((row) => {
@@ -120,6 +137,31 @@ export class ProductFeedService {
         store: { id: store.id, name: store.name, open: store.open, opensAt: store.opensAt, distanceM: store.distanceM, etaMinMinutes: store.etaMinMinutes, etaMaxMinutes: store.etaMaxMinutes },
       };
     });
+  }
+
+  /**
+   * Ofertas (promoção vigente, com estoque) de TODAS as lojas visíveis, no máximo `perStore` por loja, na ordem `desconto desc, id`. Não depende da posição
+   * do cliente: a home junta as listas das lojas do ponto e desempata por distância (o mesmo resultado de uma consulta única por posição, que lia
+   * 3 mil produtos e ordenava a cada home). Cacheada por poucos segundos em DiscoveryService.
+   */
+  async offersByStore(perStore: number): Promise<Map<string, OfferRow[]>> {
+    const result = await this.db.execute<OfferRow>(sql`
+      select * from (
+        select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at,
+               ((p.base_price_cents - p.promo_price_cents) * 100.0 / p.base_price_cents)::float8 as discount,
+               row_number() over (partition by p.store_id order by (p.base_price_cents - p.promo_price_cents) * 100.0 / p.base_price_cents desc, p.id asc) as rn
+          from products p
+         where p.status = 'active' and p.moderation_status in ('ok', 'review') and p.base_price_cents is not null
+           and ${PROMO_ACTIVE}
+           and exists (select 1 from product_variants v where v.product_id = p.id and v.active and v.stock - v.reserved > 0)
+      ) t where t.rn <= ${perStore}`);
+    const byStore = new Map<string, OfferRow[]>();
+    for (const row of result.rows) {
+      const list = byStore.get(row.store_id) ?? [];
+      list.push(row);
+      byStore.set(row.store_id, list);
+    }
+    return byStore;
   }
 
   private async covers(productIds: string[]): Promise<Map<string, Record<string, string> | null>> {

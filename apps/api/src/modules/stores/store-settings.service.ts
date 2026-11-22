@@ -2,6 +2,7 @@ import { DeliveryQuoteRegistry } from './delivery-quote.registry.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
@@ -32,6 +33,7 @@ export class StoreSettingsService {
     private readonly flags: FeatureFlagsService,
     private readonly audit: AuditService,
     private readonly quotes: DeliveryQuoteRegistry,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   /** Lojista edita configuração salvo se suspensa/recusada (não força visibilidade, O2-APR-16); o admin sempre pode. */
@@ -171,6 +173,7 @@ export class StoreSettingsService {
       await tx.update(storeSettings).set({ pausedUntil: next.pausedUntil, pausedIndefinitely: next.pausedIndefinitely, updatedAt: now }).where(eq(storeSettings.storeId, store.id));
       await this.record(tx, store, actor, ctx, 'pause', null, { kind, until: next.pausedUntil?.toISOString() ?? null });
     });
+    await this.storefront.storeChanged(store.id); // DEC-113: "Fechada" na vitrine em até 5 s
   }
 
   async resume(store: Store, actor: Actor, ctx: RequestContext): Promise<void> {
@@ -179,6 +182,7 @@ export class StoreSettingsService {
       await tx.update(storeSettings).set({ pausedUntil: null, pausedIndefinitely: false, updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
       await this.record(tx, store, actor, ctx, 'resume', null, null);
     });
+    await this.storefront.storeChanged(store.id);
   }
 
   // ------------------------------------------------------------------- entrega

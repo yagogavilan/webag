@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/index.native.d.ts",
+      "default": "./dist/index.native.js"
     }
   },
   "files": ["dist"],

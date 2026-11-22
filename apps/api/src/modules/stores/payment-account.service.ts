@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { and, desc, eq, isNull, ne, gt, sql } from 'drizzle-orm';
 import { MercadoPagoConfig, OAuth, User } from 'mercadopago';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import type { Env } from '../../platform/config/env.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { decryptSecret, encryptSecret, randomToken, sha256Hex } from '../../platform/crypto/crypto.js';
@@ -143,6 +144,7 @@ export class PaymentAccountService implements OnModuleInit {
     private readonly mail: MailService,
     private readonly payments: PaymentsService,
     private readonly sellers: SellerCredentialsRegistry,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   onModuleInit(): void {
@@ -265,6 +267,7 @@ export class PaymentAccountService implements OnModuleInit {
       if (isUniqueViolation(error)) throw errors.conflict('PAYMENT_ACCOUNT_IN_USE', 'Essa conta já está em uso por outra loja', 'Essa conta já está em uso por outra loja. Fale com o suporte.');
       throw error;
     }
+    await this.storefront.storeChanged(store.id); // DEC-113: a conta ativa decide se a loja é visível
     if (!matches) await this.alertTeam(store, 'payment_account_holder_mismatch');
     if (!matches) this.mail.enqueue({ to: principal.email, ...paymentAccountUnderReviewEmail() });
     return this.view(store.id);
@@ -297,6 +300,7 @@ export class PaymentAccountService implements OnModuleInit {
       return true;
     });
     if (!changed) throw errors.notFound('Nenhuma conta conectada.');
+    await this.storefront.storeChanged(store.id); // DEC-113: sem conta de recebimento a loja sai da vitrine em até 5 s
     this.mail.enqueue({ to: principal.email, ...paymentAccountChangedEmail() });
     await this.alertTeam(store, 'payment_account_changed');
   }
@@ -309,6 +313,7 @@ export class PaymentAccountService implements OnModuleInit {
       await tx.update(paymentAccounts).set({ status: 'active', releasedBy: adminUserId, releaseReason: reason }).where(eq(paymentAccounts.id, row.id));
       await this.audit.record(tx, ctx, { action: 'store.payment_account_release', targetType: 'store', targetId: storeId, reason, after: { holderDocumentMasked: row.holderDocumentMasked } });
     });
+    await this.storefront.storeChanged(storeId);
   }
 
   /** SEC-047/048: alerta para financeiro/super admin (painel de alertas) e e-mail aos super admins, em até 1 min. */

@@ -113,3 +113,26 @@ Pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 1
 
 - **Dependências do fundador: 0 de 19 itens feitos** (sem % honesto: pesos e prazos de terceiros diferentes). Para a **tag** trava o item 1; para o G4 sem ressalva, os itens 2 a 4; para **publicar nas lojas**, os itens 5 a 13 e o jurídico.
 - Sem prazos em calendário: o gargalo é o seu tempo e terceiros (revisão das lojas pode levar dias e recusar [HIPÓTESE, sem fonte verificada]).
+
+---
+
+## v1.1 (R1 a R5): estado em 2026-11-22
+
+Cor: **AMARELO**. Planejado, nada construído. Detalhe: `gestao/plano-v1-1.md`; tarefas: `gestao/board.md` (seção v1.1).
+
+| | Itens |
+|---|---|
+| Pronto | Pesquisa, 6 PRDs e backlog WB-340 a 399 (DEC-088 a 102); telas R1 e R2 com protótipo (`design/telas/v1-1-indice.md`, notas 3 a 4, sem teste com usuário); threat model e decisões D-01 a D-06 (DEC-103); revisão de segurança do desempenho do app; plano e board da v1.1 |
+| Em andamento | Telas R3 e R4 (designer); trabalho de desempenho da API na árvore **sem commit** (R-29) |
+| Bloqueado | **Disco a 99%** (I-05): sem espaço, commit e `pnpm` falham |
+| A fazer, em ordem | W0 (commit e revisão do desempenho, bugs BUG-029 a 032, SEC-186/189/195, DoR do PO) -> R1 -> R2 -> R3 -> R4 (após SEC-193 e SEC-198) -> R5 -> relatório visual |
+| Esforço | 168 UT, faixa 122 a 234 `[HIPÓTESE]`; sem datas |
+| Flags desligadas em produção até parecer | cupom (J22, J23, J27), coleta e Análises (J24), app do motoboy e rastreio (J8, J26), IA real (J25) |
+
+Depende do fundador (por urgência):
+1. **Liberar espaço em disco** do ambiente (I-05).
+2. Decidir as D-A a D-E do `plano-v1-1.md` §9 (via CEO): 2ª instância do mobile-dev em pasta separada, ordem R4/R5, cortes extras, revisão antes do merge.
+3. **Levar J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
+4. **Aparelho Android** e forma de gerar o APK (R4): sem ele o app do motoboy só passa em emulador.
+5. Em cada release: 1 sessão para rodar local (`pnpm iphone`, Docker Desktop) e testar; **5 pessoas do perfil** para a meta de cadastro em 60 s; 5 lojistas para a porta falsa.
+6. Orçamento de cupom (hoje R$ 0), cotação de motoboys (custo previsto) e preço do módulo Análises, quando chegar a hora.

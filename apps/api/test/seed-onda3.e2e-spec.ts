@@ -1,7 +1,7 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { OBJECT_STORAGE } from '../src/platform/storage/object-storage.js';
 import { MemoryObjectStorage } from '../src/platform/storage/memory.storage.js';
-import { banners, coupons, favorites, mediaAssets, reviews, stores, userAddresses, users } from '../src/platform/database/schema.js';
+import { banners, coupons, favorites, mediaAssets, orders, reviews, stores, userAddresses, users } from '../src/platform/database/schema.js';
 import { seedOnda1 } from '../seed/onda1.js';
 import { seedOnda2 } from '../seed/onda2.js';
 import { SEED_STORES_ONDA3, seedOnda3 } from '../seed/onda3.js';
@@ -76,21 +76,31 @@ describe('Seed da Onda 3: mais lojas, clientes, avaliações, cupons, favoritos 
   it('roteiro ponta a ponta: a cliente vê a home no endereço dela, abre uma loja, põe na sacola e aplica o cupom da plataforma', async () => {
     // SEC-155: o cupom de primeira compra confere o telefone contra outras contas com pedido pago; os cadastros dos outros testes dividem o mesmo telefone.
     await ctx.db.update(users).set({ phone: `5511${String(700000000 + Math.floor(Math.random() * 1e8))}` }).where(eq(users.email, 'cliente.ana@seed.webag.local'));
-    const login = await ctx.http.post('/v1/auth/login').send({ email: 'cliente.ana@seed.webag.local', password: PASSWORD }).expect(200);
-    const auth = bearer(login.body.tokens.accessToken as string);
-    const addresses = (await ctx.http.get('/v1/me/addresses').set(auth).expect(200)).body.data as { lat: number; lng: number }[];
-    const home = (await ctx.http.get(`/v1/home?lat=${addresses[0]!.lat}&lng=${addresses[0]!.lng}`).expect(200)).body;
-    expect(home.nearbyStores.length).toBeGreaterThanOrEqual(3);
-    expect(home.offers.length).toBeGreaterThanOrEqual(1);
-    expect(home.empty).toBe(false);
-    const open = home.nearbyStores.find((s: { open: boolean }) => s.open) ?? home.nearbyStores[0];
-    const products = (await ctx.http.get(`/v1/browse/stores/${open.id}/products`).expect(200)).body.data as { id: string; available: boolean; price: { amount: number } }[];
-    const item = products.find((p) => p.available)!;
-    const detail = (await ctx.http.get(`/v1/browse/products/${item.id}`).expect(200)).body;
-    const variant = detail.variants.find((v: { available: boolean }) => v.available);
-    await ctx.http.put(`/v1/cart/items/${variant.id}`).set(auth).send({ quantity: 6 }).expect(200);
-    const cart = (await ctx.http.put('/v1/cart/coupon').set(auth).send({ code: 'bemvindo10' }).expect(200)).body;
-    expect(cart.coupon).toMatchObject({ code: 'BEMVINDO10', applied: true });
-    expect(cart.summary.discount.amount).toBeGreaterThan(0);
+    // SEC-155 (de novo, a própria conta): `seed-orders` dá pedidos PAGOS de demonstração a esta mesma cliente. Se aquele arquivo rodou antes deste (a ordem dos
+    // arquivos varia com o cache de duração e de falhas do vitest), ela deixa de ser "primeira compra" e o cupom dá 422. Aqui ela precisa ser primeira compra:
+    // os pedidos pagos dela ficam "não pagos" só durante o teste e voltam ao que eram no final.
+    const [anaRow] = await ctx.db.select({ id: users.id }).from(users).where(eq(users.email, 'cliente.ana@seed.webag.local'));
+    const paid = await ctx.db.select({ id: orders.id, paidAt: orders.paidAt }).from(orders).where(and(eq(orders.userId, anaRow!.id), isNotNull(orders.paidAt)));
+    if (paid.length > 0) await ctx.db.update(orders).set({ paidAt: null }).where(inArray(orders.id, paid.map((o) => o.id)));
+    try {
+      const login = await ctx.http.post('/v1/auth/login').send({ email: 'cliente.ana@seed.webag.local', password: PASSWORD }).expect(200);
+      const auth = bearer(login.body.tokens.accessToken as string);
+      const addresses = (await ctx.http.get('/v1/me/addresses').set(auth).expect(200)).body.data as { lat: number; lng: number }[];
+      const home = (await ctx.http.get(`/v1/home?lat=${addresses[0]!.lat}&lng=${addresses[0]!.lng}`).expect(200)).body;
+      expect(home.nearbyStores.length).toBeGreaterThanOrEqual(3);
+      expect(home.offers.length).toBeGreaterThanOrEqual(1);
+      expect(home.empty).toBe(false);
+      const open = home.nearbyStores.find((s: { open: boolean }) => s.open) ?? home.nearbyStores[0];
+      const products = (await ctx.http.get(`/v1/browse/stores/${open.id}/products`).expect(200)).body.data as { id: string; available: boolean; price: { amount: number } }[];
+      const item = products.find((p) => p.available)!;
+      const detail = (await ctx.http.get(`/v1/browse/products/${item.id}`).expect(200)).body;
+      const variant = detail.variants.find((v: { available: boolean }) => v.available);
+      await ctx.http.put(`/v1/cart/items/${variant.id}`).set(auth).send({ quantity: 6 }).expect(200);
+      const cart = (await ctx.http.put('/v1/cart/coupon').set(auth).send({ code: 'bemvindo10' }).expect(200)).body;
+      expect(cart.coupon).toMatchObject({ code: 'BEMVINDO10', applied: true });
+      expect(cart.summary.discount.amount).toBeGreaterThan(0);
+    } finally {
+      for (const order of paid) await ctx.db.update(orders).set({ paidAt: order.paidAt }).where(eq(orders.id, order.id));
+    }
   });
 });

@@ -161,7 +161,7 @@ describe('Descoberta por raio de entrega (PostGIS, RN-03/RN-04, WB-012)', () => 
     await ctx.http.get('/v1/home?lat=-10&lng=-40&extra=1').expect(400);
     const empty = await ctx.http.get('/v1/home?lat=-1&lng=-1').expect(200);
     expect(empty.body).toMatchObject({ empty: true, nearbyStores: [], newStores: [], offers: [], bestSellers: [], availableCategoryIds: [] });
-    expect(empty.headers['cache-control']).toBe('private, max-age=30');
+    expect(empty.headers['cache-control']).toBe('private, max-age=5');
   });
 
   it('a mesma posição repetida usa o cache (resposta idêntica) e ele expira por TTL curto', async () => {

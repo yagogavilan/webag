@@ -67,6 +67,31 @@ export const envSchema = z
     /** SEC-114: segredo que o BFF do painel manda com `X-Webag-Client-IP`. Sem ele, o IP vindo do BFF é ignorado. */
     BFF_SHARED_SECRET: z.string().min(32).optional(),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    /** Desempenho (docs/qa/performance): conexões do pool por processo. (instâncias da API + worker) x DB_POOL_MAX precisa caber em `max_connections` do PostgreSQL com folga. */
+    DB_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
+    /** Teto de uma consulta (ms): protege o pool de uma consulta fora de controle. 0 = sem teto. Relatórios longos devem rodar em job, não na requisição. */
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(30_000),
+    /**
+     * Fecha a conexão de quem abriu transação e esqueceu (ms). 0 = desligado. O servidor MATA a conexão (SQLSTATE 25P03) e o pool só a descarta
+     * (`database.module.ts` trata o erro: nunca derruba o processo). Nenhum código deve esperar rede com transação aberta (trabalho longo usa
+     * `SessionLockService`, fora de transação). Padrão 60 s: o dobro do `statement_timeout` e acima da maior chamada ao Mercado Pago
+     * (8 s x 3 tentativas = 24 s), como margem de segurança; é rede de proteção, não parte do desenho. Em produção o boot RECUSA valor entre 1 e 14999 (SEC-204).
+     */
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(60_000),
+    /**
+     * Cache em memória (por processo) do catálogo de lojas visíveis da descoberta e das seções "ofertas"/"mais vendidos" da home.
+     * É o que impede cada posição diferente do cliente de refazer a consulta pesada. 0 = desligado (os testes e2e usam 0, pois criam dados e
+     * leem em seguida). A staleness máxima de uma loja nova/alterada na home é este TTL somado aos 30 s do cache da posição.
+     */
+    FEED_DIRECTORY_TTL_SECONDS: z.coerce.number().int().min(0).max(300).default(15),
+    /** Cache em memória (por processo) da vitrine da loja e das páginas de loja/produto (parte que não depende da posição). 0 = desligado (e2e). */
+    BROWSE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(120).default(10),
+    HOME_SECTIONS_TTL_SECONDS: z.coerce.number().int().min(0).max(600).default(60),
+    /** Log de acesso (pino-http): `slow` = só erro (4xx/5xx) e requisição lenta; `all` = toda requisição (comportamento anterior, ~10% da CPU da API em carga). */
+    HTTP_ACCESS_LOG: z.enum(['slow', 'all']).default('slow'),
+    HTTP_SLOW_MS: z.coerce.number().int().min(1).max(60_000).default(500),
+    /** Resumo de latência por rota no log (a cada N s, sem dado pessoal). 0 = desligado. */
+    LATENCY_LOG_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     /** Caminho do contrato OpenAPI servido em /docs. Padrão: procura docs/arquitetura/api/openapi.yaml subindo a partir do cwd. */
     OPENAPI_SPEC_PATH: z.string().optional(),
@@ -181,6 +206,10 @@ export const envSchema = z
       const other = keys.slice(0, i).find(([, v]) => v === value);
       if (other) fail(name, `precisa ser diferente de ${other[0]} (uma chave por finalidade)`);
     }
+    // SEC-204: abaixo de 15 s o servidor pode matar a conexão do refresh OAuth (transação aberta durante a chamada de 8 s ao Mercado Pago) DEPOIS de o MP girar o token e
+    // ANTES da gravação do par novo: a loja perde a conta de recebimento. 0 (desligado) segue aceito; o valor de dev/teste é livre (o e2e usa 1 s).
+    if (env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS > 0 && env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS < 15_000)
+      fail('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', 'em produção use 0 (desligado) ou, no mínimo, 15000 (o refresh OAuth mantém transação aberta durante a chamada ao Mercado Pago)');
     if (env.TRUST_PROXY === undefined)
       fail('TRUST_PROXY', 'obrigatório em produção (nginx na frente = 1; sem proxy = 0). Sem ele o IP do cliente é perdido');
     // SEC-129: sem o segredo do BFF, todos os usuários do painel web compartilham o IP do BFF (limites por IP viram globais).
@@ -195,6 +224,8 @@ export const envSchema = z
       const url = new URL(value);
       if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) fail(name, 'em produção precisa ser uma URL https pública (não localhost)');
     }
+    // SEC-203: 0 = "sem teto"; um valor copiado de outro ambiente por engano deixaria consulta sem limite e travaria o pool.
+    if (env.DB_STATEMENT_TIMEOUT_MS === 0) fail('DB_STATEMENT_TIMEOUT_MS', 'em produção precisa ser maior que 0 (consulta sem teto prende o pool)');
     const staging = env.APP_ENV === 'staging';
     if (env.PAYMENT_PROVIDER === 'fake' && !staging)
       fail('PAYMENT_PROVIDER', 'o provedor fake não sobe em produção (só com APP_ENV=staging)');

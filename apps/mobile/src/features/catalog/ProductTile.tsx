@@ -67,18 +67,20 @@ export interface ProductTileProps {
   /** Largura em dp (grade: a coluna; carrossel: fixa). */
   width: number;
   onPress: () => void;
+  /** Dedo encostou: a tela do produto já pode buscar os dados (prefetch por intenção). */
+  onPressIn?: () => void;
   /** `ink`: sobre a faixa noite (ofertas). */
   tone?: 'light' | 'ink';
   testID?: string;
 }
 
 /** Card de produto v3: foto 4:5 em estúdio (raio 22, sem sombra), selo lima sobre a foto, preço de cartaz colado ao nome, loja em `caption`. */
-export function ProductTile({ product, width, onPress, tone = 'light', testID }: ProductTileProps) {
+export function ProductTile({ product, width, onPress, onPressIn, tone = 'light', testID }: ProductTileProps) {
   const muted = product.state === 'soldOut' || product.state === 'unavailable';
   const ink = tone === 'ink';
   const hasPromo = product.originalCents != null && product.priceCents !== null && product.originalCents > product.priceCents;
   return (
-    <Pressy accessibilityLabel={a11yLabel(product)} accessibilityRole="button" onPress={onPress} style={[styles.tile, { width }]} testID={testID}>
+    <Pressy accessibilityLabel={a11yLabel(product)} accessibilityRole="button" onPress={onPress} onPressIn={onPressIn} style={[styles.tile, { width }]} testID={testID}>
       <View style={styles.photoBox}>
         <RemoteImage aspectRatio={4 / 5} fallback={productFallback(product.name, ink)} radius={theme.radius.card - 2} style={ink ? styles.photoInk : undefined} urls={product.urls} width={width} />
         {hasPromo && product.discountPercent ? <OfferSeal label={t('catalog.off', { pct: product.discountPercent })} style={styles.seal} /> : null}

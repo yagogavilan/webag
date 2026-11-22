@@ -1,0 +1,33 @@
+
+== qa-cacheoff-300: 300 VUs, 60 s medidos, 9176 req, 153 req/s, erros 0.00% | jornadas 1507, pedidos 75, falhas 0
+CPU% (100 = 1 vCPU): API 71.2 (pico 88.0), PG 115 (pico 164), Redis 1.4, gerador 7.9, máquina 65.5% | RAM máx: API 502 MB, PG 551 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/products/{id}                      1172    19.5     33.8      574      804    0.0     1717     706
+GET /v1/browse/stores/{id}                        1168    19.5     31.7      546      659    0.0     1143     654
+GET /v1/home                                      1168    19.5     13.3      976     1575    0.0    29410    4776
+PUT /v1/cart/items/{variantId}                    1166    19.4     77.1     1280     1689    0.0     1851     800
+GET /v1/browse/stores/{id}/products               1158    19.3     20.4      242      353    0.0    10146    1646
+GET /v1/cart                                      1158    19.3     63.2     1351     1654    0.0     1797     797
+GET /v1/search/products                            595     9.9     33.8      200      261    0.0    16414    2028
+GET /v1/search/suggestions                         594     9.9     43.7      429      596    0.0      802     419
+GET /v1/me/addresses                               340     5.7      9.8      141      196    0.0      423     307
+GET /v1/search/stores                              193     3.2     15.6     85.6      358    0.0     3512     756
+GET /v1/browse/stores/{id}/products (pág. 2)       181     3.0     14.0      205      355    0.0    10563    1785
+GET /v1/orders/{id}                                139     2.3     31.9      373      539    0.0     2359    1070
+GET /v1/orders/{id}/payment                         50     0.8     16.6      243      357    0.0      390     304
+POST /v1/orders                                     49     0.8      127     1607     2308    0.0     2369    1066
+GET /v1/orders                                      45     0.8     20.8      160      200    0.0      893     462
+
+Top consultas por tempo total (pg_stat_statements):
+   75652 ms      677x  média  111.75  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+   13436 ms      677x  média   19.85  select * from ( select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, ((p.base_price_cent
+   12201 ms      796x  média   15.33  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    9985 ms      722x  média   13.83  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    2581 ms      738x  média    3.50  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+     841 ms     1738x  média    0.48  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     409 ms      738x  média    0.55  select "id", "store_id", "weekday", "start_min", "end_min" from "store_hours" where "store_hours"."store_id" in ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $
+     352 ms     1674x  média    0.21  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     348 ms     3089x  média    0.11  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+     333 ms      738x  média    0.45  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     294 ms     4752x  média    0.06  select "stores"."id", "stores"."owner_user_id", "stores"."status", "stores"."document_type", "stores"."document_number", "stores"."legal_name", "stores"."fiscal
+     246 ms        8x  média   30.76  select "id", "number", "user_id", "store_id", "status", "mode", "cart_revision", "address", "eta_min_minutes", "eta_max_minutes", "eta_from_at", "eta_to_at", "e

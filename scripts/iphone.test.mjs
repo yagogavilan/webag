@@ -9,6 +9,7 @@ import {
   SAFETY_NOTICE,
   buildBanner,
   dockerUpPlan,
+  devArgs,
   envUpdates,
   findBundlePaths,
   firewallHelp,
@@ -203,4 +204,20 @@ test('SEC-192: recado mostra a senha aleatória do admin, o 2º fator no 1º log
   assert.ok(!banner.includes('Webag-Admin-Dev-2026'));
   const sem = buildBanner({ ip: '192.168.0.10', expoSdk: '58' });
   assert.ok(sem.includes('SEED_ADMIN_PASSWORD do seu .env'));
+});
+
+test('--producao: opção reconhecida e o turbo sobe só API e site (o app é servido estático)', () => {
+  assert.equal(parseArgs([]).producao, false);
+  assert.equal(parseArgs(['--producao']).producao, true);
+  assert.equal(parseArgs(['--producao', '--check']).errors.length, 0);
+  assert.deepEqual(devArgs(), ['dev', '--env-mode=loose']);
+  assert.deepEqual(devArgs({ producao: true }), ['dev', '--env-mode=loose', '--filter=@webag/api', '--filter=@webag/web']);
+});
+
+test('--producao: o aviso explica o modo e some o Expo Go; o modo normal indica como testar velocidade', () => {
+  const prod = buildBanner({ ip: '192.168.0.10', expoSdk: '58', production: true, withExpoGo: false });
+  assert.match(prod, /MODO PRODUÇÃO/);
+  assert.doesNotMatch(prod, /Expo Go/);
+  const dev = buildBanner({ ip: '192.168.0.10', expoSdk: '58' });
+  assert.match(dev, /pnpm iphone --producao/);
 });

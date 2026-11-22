@@ -12,7 +12,9 @@ const storeQuery = z.strictObject({ lat: geoQuery.lat.optional(), lng: geoQuery.
 const listQuery = z.strictObject({ sectionId: z.uuid().optional(), cursor: z.string().max(200).optional(), limit: limitQuery });
 const pageQuery = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 
-const SHORT = 'public, max-age=30';
+/** max-age de 5 s (DEC-116): a invalidação em até 5 s da DEC-113 tem de valer também no aparelho/proxy. O ganho de desempenho vem do cache do servidor e da ETag/304, não daqui. */
+const SHORT = 'public, max-age=5';
+const PRIVATE_PAGE = 'private, max-age=5';
 
 /** Loja e produto públicos (WB-016, WB-017, WB-018). Sem login; loja fechada é navegável (DEC-022). */
 @Controller('v1/browse')
@@ -23,7 +25,7 @@ export class BrowseController {
   @Public()
   @RateLimit({ name: 'browse', limit: 180, windowSeconds: 60 })
   @Get('stores/:storeId')
-  @Header('Cache-Control', 'private, max-age=30')
+  @Header('Cache-Control', PRIVATE_PAGE)
   store(@Param('storeId') storeId: string, @Query(new ZodPipe(storeQuery)) q: z.infer<typeof storeQuery>) {
     return this.browse.store(uuidParam(storeId), q.lat !== undefined && q.lng !== undefined ? { lat: q.lat, lng: q.lng } : null);
   }
@@ -47,7 +49,7 @@ export class BrowseController {
   @Public()
   @RateLimit({ name: 'browse', limit: 180, windowSeconds: 60 })
   @Get('products/:productId')
-  @Header('Cache-Control', 'private, max-age=30')
+  @Header('Cache-Control', PRIVATE_PAGE)
   product(@Param('productId') productId: string, @Query(new ZodPipe(storeQuery)) q: z.infer<typeof storeQuery>) {
     // Com `lat`/`lng` a página traz a entrega e o ETA (DEC-053) para aquela posição; sem elas, só o produto.
     return this.browse.product(uuidParam(productId), q.lat !== undefined && q.lng !== undefined ? { lat: q.lat, lng: q.lng } : null);

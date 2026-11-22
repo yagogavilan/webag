@@ -84,6 +84,11 @@ describe('validateEnv', () => {
       expect(() => validateEnv(prod)).not.toThrow();
     });
 
+    it('SEC-204: em produção o timeout de transação ociosa aceita o padrão, 15000 e 0 (desligado); em desenvolvimento e teste qualquer valor (o e2e usa 1000)', () => {
+      for (const value of [undefined, '15000', '60000', '0']) expect(() => validateEnv({ ...prod, ...(value === undefined ? {} : { DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: value }) })).not.toThrow();
+      for (const nodeEnv of ['development', 'test']) expect(validateEnv({ ...base, NODE_ENV: nodeEnv, DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: '1000' }).DB_IDLE_IN_TRANSACTION_TIMEOUT_MS).toBe(1000);
+    });
+
     it.each([
       ['JWT_ACCESS_SECRET igual ao de desenvolvimento', { JWT_ACCESS_SECRET: DEV_JWT_ACCESS_SECRET }, /JWT_ACCESS_SECRET/],
       ['JWT_ACCESS_SECRET curto', { JWT_ACCESS_SECRET: 'curto' }, /JWT_ACCESS_SECRET/],
@@ -105,6 +110,9 @@ describe('validateEnv', () => {
       ['CORS_ORIGINS vazio', { CORS_ORIGINS: '' }, /CORS_ORIGINS/],
       ['CORS_ORIGINS com *', { CORS_ORIGINS: '*' }, /CORS_ORIGINS/],
       ['/docs ligado', { API_DOCS_ENABLED: 'true' }, /API_DOCS_ENABLED/],
+      ['DB_STATEMENT_TIMEOUT_MS=0, consulta sem teto (SEC-203)', { DB_STATEMENT_TIMEOUT_MS: '0' }, /DB_STATEMENT_TIMEOUT_MS/],
+      ['DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=5000, abaixo do refresh OAuth (SEC-204)', { DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: '5000' }, /DB_IDLE_IN_TRANSACTION_TIMEOUT_MS/],
+      ['DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=14999 (SEC-204)', { DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: '14999' }, /DB_IDLE_IN_TRANSACTION_TIMEOUT_MS/],
       ['provedor fake', { PAYMENT_PROVIDER: 'fake' }, /PAYMENT_PROVIDER/],
       ['MP sem segredo de webhook', { MP_WEBHOOK_SECRET: undefined }, /MP_WEBHOOK_SECRET/],
       ['credencial de teste do MP', { MP_ACCESS_TOKEN: 'TEST-123' }, /MP_ACCESS_TOKEN/],

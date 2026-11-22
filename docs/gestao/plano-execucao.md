@@ -167,3 +167,15 @@ Folga: não calculável em datas (sem prazos). Medida em ondas: qualquer atraso 
 
 ## 7. Escopo e mudanças
 Escopo congelado em `backlog.md` (164 histórias após DEC-039). Qualquer história nova entra só com decisão do CEO e indicação do que sai. Corte, se necessário: `backlog.md` §5 (Could, depois Should), nunca LGPD, pagamentos, arrependimento, auditoria, denúncia.
+
+## 8. v1.1 (releases R1 a R5) — adicionado em 2026-11-22
+
+Plano completo em `plano-v1-1.md`; tarefas no `board.md` (seção v1.1). Resumo:
+
+| Item | Resumo |
+|---|---|
+| Ordem | W0 base limpa (bugs, revisão diferencial do desempenho, DoR) -> R1 cadastro rápido + admin de lojas + coleta em staging -> R2 cupons + painéis -> R3 rota, OK da loja, notificações -> R4 app do motoboy + rastreio (após SEC-193/198) -> R5 Análises e IA -> Onda Final (relatório visual) |
+| Estimativa | 168 UT (faixa 122 a 234) `[HIPÓTESE]`, buffer de 25 UT à parte; sem datas |
+| Caminho crítico | W0 -> contrato R1 -> cadastro rápido -> teste de 60 s -> R2 motor de cupom -> 391/390 (R3) -> SEC-193/198 -> app do motoboy -> Android real |
+| Regras mantidas | 3 agentes no máximo; fronteiras do §2; contrato antes do consumidor; protocolo anti-reinício; G4 local por release; flags desligadas até parecer (DEC-102) |
+| Gargalos | Disco (I-05), mobile-dev (R-31), fundador (1 sessão por RC), Android real (D-11), pareceres J8/J22 a J27 (D-12) |

@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import { LatencyRecorder } from './platform/observability/latency.js';
 import { RealtimeAdapter } from './modules/realtime/realtime.adapter.js';
 import { bffClientIp } from './platform/http/client-ip.js';
 import type { Env } from './platform/config/env.js';
@@ -17,7 +18,22 @@ export function configureApp(app: NestExpressApplication): void {
   app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }) ?? 0);
   // SEC-114: IP do navegador informado pelo BFF do painel, aceito só com o segredo compartilhado.
   app.use(bffClientIp(config.get('BFF_SHARED_SECRET', { infer: true })));
+  // Latência por rota (p50/p95/p99) num log por janela, sem dado pessoal (platform/observability/latency.ts).
+  // Só instala o middleware com o resumo ligado (> 0): desligado, não guarda amostra em memória que ninguém lê (A8).
+  const latencyEvery = config.get('LATENCY_LOG_INTERVAL_SECONDS', { infer: true }) * 1000;
+  if (latencyEvery > 0) {
+    const latency = new LatencyRecorder();
+    app.use(latency.middleware);
+    const logger = app.get(Logger);
+    setInterval(() => {
+      const routes = latency.snapshot().slice(0, 25);
+      if (routes.length > 0) logger.log({ event: 'http.latency', windowSeconds: latencyEvery / 1000, routes });
+    }, latencyEvery).unref();
+  }
   app.use((_req: Request, res: Response, next: NextFunction) => {
+    // LGPD: resposta autenticada/pessoal (pedido, perfil, endereço, sacola) NUNCA fica em cache compartilhado nem em disco. O padrão é `private, no-store`; só as
+    // rotas públicas que declaram o próprio `Cache-Control` (@Header: catálogo, loja, produto, banners, textos legais) o sobrescrevem.
+    res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');

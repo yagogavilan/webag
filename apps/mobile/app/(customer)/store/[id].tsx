@@ -27,7 +27,7 @@ import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { closedLabel, closesAtToday, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
 import { fromBrowseItem, ProductTile } from '../../../src/features/catalog/ProductTile';
-import { modeStore, useDeliveryPoint, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
+import { modeStore, useDeliveryPoint, usePrefetchCatalog, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
 import { AboutStoreSheet, ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
 import { useCartView } from '../../../src/features/cart/hooks';
 import { useApplyPendingFavorite, useFavorite } from '../../../src/features/favorites/hooks';
@@ -54,6 +54,7 @@ export default function StoreScreen() {
   const point = useDeliveryPoint();
   const { width } = useWindowDimensions();
   const store = useStoreQuery(id, point);
+  const prefetch = usePrefetchCatalog();
   const [sectionId, setSectionId] = useState<string | null>(null);
   const products = useStoreProductsQuery(id, sectionId);
   const { view: cart } = useCartView();
@@ -165,6 +166,7 @@ export default function StoreScreen() {
               <ProductTile
                 key={p.id}
                 onPress={() => router.push(`/product/${p.id}`)}
+                onPressIn={() => prefetch.product(p.id)}
                 product={fromBrowseItem(p)}
                 testID={`store.product-${p.id}`}
                 width={tile}

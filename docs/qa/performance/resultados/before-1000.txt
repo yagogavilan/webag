@@ -1,0 +1,30 @@
+
+== before-1000: 1000 VUs, 60 s medidos, 2955 req, 49 req/s, erros 52.08% | jornadas 426, pedidos 6, falhas 7
+CPU% (100 = 1 vCPU): API 99.1 (pico 142), PG 124 (pico 194), Redis 0.7, gerador 5.2, máquina 83.4% | RAM máx: API 1296 MB, PG 495 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/home                                      1829    30.5    30001    30014    30072   83.8     4734    4815
+GET /v1/me/addresses                               328     5.5     3240     5647     6216    0.0      424     308
+GET /v1/browse/stores/{id}/products                212     3.5     2765     5044     5118    0.0    10180    1737
+GET /v1/browse/products/{id}                       141     2.4     6003    10233    11357    0.0     1737     711
+GET /v1/browse/stores/{id}                         137     2.3     2881     8580     8874    0.0     1143     653
+PUT /v1/cart/items/{variantId}                     112     1.9    14486    20858    21119    0.0     1716     800
+GET /v1/cart                                        59     1.0    11446    20887    21839    0.0     1714     800
+GET /v1/search/suggestions                          55     0.9     1690    30001    30002    9.1      687     417
+GET /v1/search/products                             50     0.8     1658     2367     2449    0.0    16410    2031
+GET /v1/search/stores                               17     0.3      900     1178     1178    0.0     3549     752
+GET /v1/browse/stores/{id}/products (pág. 2)        14     0.2     1489     3589     3589    0.0    10591    1792
+POST /v1/orders                                      1     0.0    30000    30000    30000  100.0        0       -
+
+Top consultas por tempo total (pg_stat_statements):
+  301769 ms     1947x  média  154.99  select oi.product_id, sum(oi.quantity)::int as units from order_items oi join orders o on o.id = oi.order_id where o.store_id = any($1::uuid[]) and o.paid_at >=
+   87738 ms     2302x  média   38.11  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+   38908 ms     1959x  média   19.86  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+   21274 ms      205x  média  103.78  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    4627 ms  3398250x  média    0.00  SELECT lower(public.unaccent($2, $1))
+    2855 ms      228x  média   12.52  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    1251 ms   267335x  média    0.00  select "id", "city_id", "reason", "paused_by", "paused_at", "resumed_at", "resumed_by" from "logistics_pauses" where "logistics_pauses"."resumed_at" is null ord
+     817 ms    18042x  média    0.05  select "key", "value", "updated_at", "updated_by" from "parameters"
+     745 ms     1947x  média    0.38  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     657 ms     1943x  média    0.34  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     346 ms     1959x  média    0.18  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     295 ms      496x  média    0.60  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv

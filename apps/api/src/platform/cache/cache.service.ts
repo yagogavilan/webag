@@ -1,4 +1,4 @@
-import { Global, Inject, Injectable, Logger, Module } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { REDIS } from '../redis/redis.module.js';
 
@@ -11,6 +11,8 @@ const logger = new Logger('Cache');
  */
 @Injectable()
 export class CacheService {
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
   private async version(namespace: string): Promise<string> {
@@ -30,13 +32,24 @@ export class CacheService {
     } catch (error) {
       logger.warn(`Cache indisponível (leitura): ${(error as Error).message}`);
     }
-    const value = await compute();
+    // Single-flight: requisições simultâneas pela mesma chave vencida dividem UM cálculo (evita a debandada contra o banco na virada do TTL).
+    const running = this.inflight.get(full) as Promise<T> | undefined;
+    if (running) return running;
+    const pending = (async () => {
+      const value = await compute();
+      try {
+        await this.redis.set(full, JSON.stringify(value), 'EX', typeof ttlSeconds === 'function' ? ttlSeconds(value) : ttlSeconds);
+      } catch (error) {
+        logger.warn(`Cache indisponível (gravação): ${(error as Error).message}`);
+      }
+      return value;
+    })();
+    this.inflight.set(full, pending);
     try {
-      await this.redis.set(full, JSON.stringify(value), 'EX', typeof ttlSeconds === 'function' ? ttlSeconds(value) : ttlSeconds);
-    } catch (error) {
-      logger.warn(`Cache indisponível (gravação): ${(error as Error).message}`);
+      return await pending;
+    } finally {
+      this.inflight.delete(full);
     }
-    return value;
   }
 
   /** Invalida o namespace inteiro (as chaves antigas expiram sozinhas pelo TTL). */
@@ -48,7 +61,3 @@ export class CacheService {
     }
   }
 }
-
-@Global()
-@Module({ providers: [CacheService], exports: [CacheService] })
-export class CacheModule {}

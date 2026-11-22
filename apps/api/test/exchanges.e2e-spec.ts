@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { ParametersService } from '../src/modules/admin/index.js';
 import { ExchangeEventBus, ExchangesService, type ExchangeEvent } from '../src/modules/exchanges/index.js';
+import { FakePaymentProvider } from '../src/modules/payments/providers/fake.provider.js';
 import { deliveries, exchangeRequests, orderItems, orders, paymentAlerts, paymentAttempts, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, jpegBuffer, memoryStorage, type RegisteredUser } from './helpers/fixtures.js';
@@ -64,6 +65,36 @@ describe('Trocas e devoluções (WB-170 a WB-178, WB-243, WB-245)', () => {
     await ctx.http.post(`${base}/deliveries/${deliveryId}/assign`).set(bearer(ops.accessToken)).send({ courierId: courier.id }).expect(200);
     for (const action of ['confirm', 'picked_up', to]) await ctx.http.post(`${base}/deliveries/${deliveryId}/status`).set(bearer(ops.accessToken)).send({ action }).expect(200);
   }
+
+  it('I8/B1: dois toques simultâneos em "pagar a taxa" com o provedor LENTO: UMA cobrança, o outro recebe 409 EXCHANGE_PAYMENT_IN_PROGRESS, a trava de sessão é solta e o toque seguinte devolve o mesmo PIX', async () => {
+    const d = await delivered();
+    const id = (await request(d, sizeRequest(d))).body.id as string;
+    await store(d, id, 'accept').expect(200);
+    const fake = ctx.app.get(FakePaymentProvider);
+    const real = fake.createPayment.bind(fake);
+    const slow = vi.spyOn(fake, 'createPayment').mockImplementation(async (input) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_500)); // o provedor demora: a outra requisição chega com a cobrança em andamento
+      return real(input);
+    });
+    try {
+      const pay = () => ctx.http.post(`/v1/exchanges/${id}/payment`).set(bearer(d.buyer.user.accessToken)).set('Idempotency-Key', randomUUID()).send({ paymentMethod: 'pix' });
+      const [a, b] = await Promise.all([pay(), pay()]); // chaves diferentes: a idempotência de API não ajuda, quem decide é a trava por troca
+      expect([a.status, b.status].sort()).toEqual([200, 409]);
+      const refused = a.status === 409 ? a : b;
+      expect(refused.body.code).toBe('EXCHANGE_PAYMENT_IN_PROGRESS');
+      expect(slow).toHaveBeenCalledTimes(1);
+      expect(await exchangeAttempts(id)).toHaveLength(1);
+
+      const again = await pay().expect(200); // trava solta: o PIX pendente é reaproveitado, sem nova cobrança
+      expect(again.body).toMatchObject({ status: 'pending', amount: { amount: 900 } });
+      expect(slow).toHaveBeenCalledTimes(1);
+      expect(await exchangeAttempts(id)).toHaveLength(1);
+      const { rows } = await ctx.pool.query<{ held: number }>(`select count(*)::int as held from pg_locks where locktype = 'advisory' and granted and database = (select oid from pg_database where datname = current_database())`);
+      expect(rows[0]!.held).toBe(0); // nada preso na conexão devolvida ao pool
+    } finally {
+      slow.mockRestore();
+    }
+  });
 
   it('opções mostram prazo e bloqueios; pedido não entregue ou prazo vencido é recusado com código estável', async () => {
     const d = await delivered();

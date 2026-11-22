@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Principal } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
-import { adminProfiles, sessions, storeMembers, userRoles, users, type StoreRole } from './db/schema.js';
+import { storeMembers, type StoreRole, type UserRole } from './db/schema.js';
 
 export interface LoadedPrincipal {
   principal: Principal;
@@ -14,38 +14,57 @@ export interface LoadedPrincipal {
 export class PrincipalService {
   constructor(@Inject(DRIZZLE) private readonly db: Db) {}
 
-  /** Devolve null se a sessão estiver revogada/expirada ou o usuário não estiver ativo (SEC-010, WB-219 C4). */
+  /**
+   * Devolve null se a sessão estiver revogada/expirada ou o usuário não estiver ativo (SEC-010, WB-219 C4).
+   * UMA consulta (sessão + usuário + perfil de admin + papéis) só com as colunas usadas: antes eram duas, com `select *` de sessão e usuário
+   * (hash de senha) e do perfil de admin (segredo TOTP cifrado) em TODA requisição autenticada. Continua indo ao banco a cada requisição: revogar
+   * a sessão vale na hora (ADR-003).
+   */
   async load(userId: string, sessionId: string): Promise<LoadedPrincipal | null> {
-    const [row] = await this.db
-      .select({
-        session: sessions,
-        user: users,
-        admin: adminProfiles,
-      })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .leftJoin(adminProfiles, eq(adminProfiles.userId, users.id))
-      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)));
+    const result = await this.db.execute<{
+      last_used_at: Date | string;
+      revoked_at: Date | string | null;
+      absolute_expires_at: Date | string;
+      mfa_verified_at: Date | string | null;
+      mfa_factor: Principal['mfaFactor'];
+      reauth_at: Date | string | null;
+      email: string;
+      email_verified_at: Date | string | null;
+      status: string;
+      admin_profile: Principal['adminProfile'];
+      admin_active: boolean | null;
+      totp_confirmed_at: Date | string | null;
+      totp_reenroll_required_at: Date | string | null;
+      roles: UserRole[] | null;
+    }>(sql`
+      select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at,
+             u.email, u.email_verified_at, u.status,
+             a.profile as admin_profile, a.active as admin_active, a.totp_confirmed_at, a.totp_reenroll_required_at,
+             (select array_agg(r.role) from user_roles r where r.user_id = u.id) as roles
+        from sessions s
+        join users u on u.id = s.user_id
+        left join admin_profiles a on a.user_id = u.id
+       where s.id = ${sessionId} and s.user_id = ${userId}`);
+    const row = result.rows[0];
     if (!row) return null;
-    const { session, user, admin } = row;
-    if (session.revokedAt || session.absoluteExpiresAt <= new Date() || user.status !== 'active') return null;
+    const date = (value: Date | string | null): Date | null => (value === null ? null : new Date(value));
+    if (row.revoked_at || new Date(row.absolute_expires_at) <= new Date() || row.status !== 'active') return null;
 
-    const roles = await this.db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
-    const activeAdmin = admin?.active ? admin : null;
+    const admin = row.admin_active ? row : null;
     return {
-      sessionLastUsedAt: session.lastUsedAt,
+      sessionLastUsedAt: new Date(row.last_used_at),
       principal: {
         userId,
         sessionId,
-        email: user.email,
-        emailVerified: user.emailVerifiedAt !== null,
-        roles: roles.map((r) => r.role),
-        adminProfile: activeAdmin?.profile ?? null,
-        totpConfigured: activeAdmin?.totpConfirmedAt != null,
-        mfaVerified: session.mfaVerifiedAt !== null,
-        mfaFactor: session.mfaFactor,
-        totpReenrollRequired: activeAdmin?.totpReenrollRequiredAt != null,
-        reauthAt: session.reauthAt,
+        email: row.email,
+        emailVerified: row.email_verified_at !== null,
+        roles: row.roles ?? [],
+        adminProfile: admin?.admin_profile ?? null,
+        totpConfigured: admin?.totp_confirmed_at != null,
+        mfaVerified: row.mfa_verified_at !== null,
+        mfaFactor: row.mfa_factor,
+        totpReenrollRequired: admin?.totp_reenroll_required_at != null,
+        reauthAt: date(row.reauth_at),
       },
     };
   }

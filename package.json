@@ -32,7 +32,8 @@
     "marketing": "node scripts/marketing-render.mjs",
     "web:compra": "node scripts/web-playwright.mjs compra",
     "web:smoke": "node scripts/web-playwright.mjs smoke",
-    "web:e2e": "node scripts/web-playwright.mjs e2e"
+    "web:e2e": "node scripts/web-playwright.mjs e2e",
+    "perf:app": "node scripts/perf-app.mjs"
   },
   "devDependencies": {
     "prettier": "3.10.1",

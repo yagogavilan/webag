@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
@@ -27,6 +28,7 @@ export class AdminStoresService {
     private readonly storesService: StoresService,
     private readonly audit: AuditService,
     private readonly mail: MailService,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   async list(query: { status?: StoreStatus; cursor?: string; limit?: unknown; now?: Date }): Promise<Page<Record<string, unknown>>> {
@@ -132,6 +134,8 @@ export class AdminStoresService {
       }
       throw errors.conflict('INVALID_STORE_TRANSITION', 'Transição inválida', `Não é possível ir de ${current.status} para ${to}.`);
     }
+    // DEC-113: aprovar, suspender, reativar, reprovar ou pedir correção muda quem aparece na vitrine; some (ou volta) em até 5 s.
+    await this.storefront.storeChanged(storeId);
     return { store: result.store, before: result.before };
   }
 

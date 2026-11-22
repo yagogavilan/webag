@@ -32,6 +32,21 @@
         height: 100%;
         flex: 1;
       }
+      /* Abertura: enquanto o JS do app baixa (alguns segundos em 4G) aparece a marca na cor do tema, como a splash do app nativo. O app tira esta camada
+         quando a primeira tela está pronta (app/_layout.tsx). Sem isto a página ficava branca até o bundle rodar. */
+      #webag-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent; /* a cor do tema é aplicada pelo script abaixo */
+      }
+      #webag-splash img {
+        width: 120px;
+        height: 120px;
+      }
     </style>
   </head>
 
@@ -40,5 +55,11 @@
     <noscript> You need to enable JavaScript to run this app. </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
+    <div id="webag-splash" aria-hidden="true"><img src="/icon-192.png" alt="" width="120" height="120" /></div>
+    <script>
+      /* cor do tema vem do app.config (tokens): evita repetir a cor aqui */
+      var tc = document.querySelector('meta[name="theme-color"]');
+      if (tc) document.getElementById("webag-splash").style.background = tc.getAttribute("content");
+    </script>
   </body>
 </html>

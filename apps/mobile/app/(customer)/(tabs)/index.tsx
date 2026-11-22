@@ -21,7 +21,7 @@ import { BannerCarousel } from '../../../src/features/catalog/BannerCarousel';
 import { CategoryRow } from '../../../src/features/catalog/CategoryRow';
 import { HomeSkeleton } from '../../../src/features/catalog/HomeSkeleton';
 import { fromProductCard, ProductTile, type ProductTileData } from '../../../src/features/catalog/ProductTile';
-import { modeStore, useBannersQuery, useCategoriesQuery, useCategoryNames, useDeliveryPoint, useHomeQuery } from '../../../src/features/catalog/queries';
+import { modeStore, useBannersQuery, useCategoriesQuery, useCategoryNames, useDeliveryPoint, useHomeQuery, usePrefetchCatalog } from '../../../src/features/catalog/queries';
 import { StoreCoverCard } from '../../../src/features/catalog/StoreCoverCard';
 import { StoreRow } from '../../../src/features/catalog/StoreRow';
 import { HomeHero } from '../../../src/features/catalog/HomeHero';
@@ -64,6 +64,7 @@ export default function CustomerHome() {
   const mode = modeStore.useValue();
   const insets = useSafeAreaInsets();
   const home = useHomeQuery(point, mode);
+  const prefetch = usePrefetchCatalog();
   const categories = useCategoriesQuery();
   const banners = useBannersQuery();
   const { names } = useCategoryNames();
@@ -216,6 +217,7 @@ export default function CustomerHome() {
               approximate={approximate}
               categoryName={item.store.mainCategoryId ? names.get(item.store.mainCategoryId) : undefined}
               onPress={() => openStore(item.store.id)}
+              onPressIn={() => prefetch.store(item.store.id)}
               pickup={pickup}
               store={item.store}
               testID={`home.store-${item.store.id}`}
@@ -242,7 +244,7 @@ export default function CustomerHome() {
                   horizontal
                   ItemSeparatorComponent={Gap}
                   keyExtractor={(p) => p.id}
-                  renderItem={({ item: p }) => <ProductTile onPress={() => openProduct(p.id)} product={p} testID={`home.offer-${p.id}`} tone="ink" width={OFFER_TILE} />}
+                  renderItem={({ item: p }) => <ProductTile onPress={() => openProduct(p.id)} onPressIn={() => prefetch.product(p.id)} product={p} testID={`home.offer-${p.id}`} tone="ink" width={OFFER_TILE} />}
                   showsHorizontalScrollIndicator={false}
                 />
               </>

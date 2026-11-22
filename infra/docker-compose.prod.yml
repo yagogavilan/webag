@@ -39,8 +39,48 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
       POSTGRES_DB: ${POSTGRES_DB:-webag}
       TZ: UTC
-    # Registra consultas lentas (> 1 s) para diagnóstico.
-    command: ['postgres', '-c', 'log_min_duration_statement=1000']
+    # Registra consultas lentas (> 1 s) e ajusta o PostgreSQL ao tamanho do servidor (o padrão de fábrica usa shared_buffers=128MB e é pensado para um notebook).
+    # Valores padrão abaixo servem a um VPS de 4 GB de RAM; para 8 GB e 16 GB use os valores da tabela em docs/deploy/guia-deploy.md ("Desempenho do banco") no .env (PG_*).
+    # pg_stat_statements: depois do 1º boot rode `CREATE EXTENSION IF NOT EXISTS pg_stat_statements;` uma vez (guia, seção "Medir o banco"). jit=off: JIT só atrasa consultas curtas.
+    # Memória compartilhada do contêiner: o padrão do Docker é 64 MB e junções paralelas (work_mem maior) usam memória dinâmica compartilhada; abaixo do necessário falham com
+    # "could not resize shared memory segment" sob carga (I5 do review de desempenho). 256 MB cobre os valores de work_mem da tabela do guia.
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-768MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-128MB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - jit=off
+      - -c
+      - wal_compression=on
+      - -c
+      - checkpoint_timeout=15min
+      # Com checkpoint_timeout=15min o padrão de max_wal_size (1GB) dispara o checkpoint por tamanho antes do tempo; 2GB acompanha a carga de escrita do piloto.
+      - -c
+      - max_wal_size=${PG_MAX_WAL_SIZE:-2GB}
+      # SEC-202: consulta lenta vai para o log SEM os parâmetros (e-mail do login, termo de busca, lat/lng, telefone). Padrão do PostgreSQL 13+ é registrar tudo.
+      - -c
+      - log_parameter_max_length=0
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - track_io_timing=on
     volumes:
       # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
       - postgres-data:/var/lib/postgresql
@@ -198,6 +238,18 @@ services:
       GEOCODER_API_KEY: ${GEOCODER_API_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      # Desempenho e banco (guia, seções "Desempenho" e "Variáveis"): sem repassar aqui, definir no .env não teria efeito no contêiner.
+      # Teto do heap do Node: sem ele o V8 decide pela memória do servidor e divide com banco, Redis e web. 1024 MB serve ao VPS de 4 GB; 1536 para 8 GB ou mais.
+      NODE_OPTIONS: --max-old-space-size=${API_MAX_OLD_SPACE_MB:-1024}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-30000}
+      DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-60000}
+      FEED_DIRECTORY_TTL_SECONDS: ${FEED_DIRECTORY_TTL_SECONDS:-15}
+      HOME_SECTIONS_TTL_SECONDS: ${HOME_SECTIONS_TTL_SECONDS:-60}
+      BROWSE_CACHE_TTL_SECONDS: ${BROWSE_CACHE_TTL_SECONDS:-10}
+      HTTP_ACCESS_LOG: ${HTTP_ACCESS_LOG:-slow}
+      HTTP_SLOW_MS: ${HTTP_SLOW_MS:-500}
+      LATENCY_LOG_INTERVAL_SECONDS: ${LATENCY_LOG_INTERVAL_SECONDS:-60}
     # Sem ports: só o nginx (mesma rede) fala com a API.
     expose: ['3000']
     networks: [webag]

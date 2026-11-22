@@ -1,0 +1,33 @@
+
+== before-300: 300 VUs, 60 s medidos, 7299 req, 122 req/s, erros 0.00% | jornadas 1248, pedidos 57, falhas 0
+CPU% (100 = 1 vCPU): API 90.4 (pico 110), PG 146 (pico 192), Redis 1.3, gerador 6.8, máquina 78.9% | RAM máx: API 337 MB, PG 491 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/stores/{id}                         953    15.9      222      491      609    0.0     1138     647
+GET /v1/browse/stores/{id}/products                950    15.8      123      271      337    0.0    10314    1782
+GET /v1/home                                       929    15.5     27.1     9452    10017    0.0    29380    4912
+GET /v1/browse/products/{id}                       929    15.5      326      732      839    0.0     1736     719
+PUT /v1/cart/items/{variantId}                     912    15.2      802     1695     2003    0.0     1870     801
+GET /v1/cart                                       889    14.8      785     1759     1967    0.0     1814     797
+GET /v1/search/suggestions                         477     7.9      109     7233     9429    0.0      801     416
+GET /v1/search/products                            476     7.9      154      301      341    0.0    16419    2019
+GET /v1/me/addresses                               277     4.6      108      247      309    0.0      424     308
+GET /v1/search/stores                              154     2.6     61.8     2041     9104    0.0     3575     739
+GET /v1/browse/stores/{id}/products (pág. 2)       149     2.5      125      278      365    0.0    10556    1783
+GET /v1/orders/{id}                                100     1.7      363      665      770    0.0     2469    1080
+POST /v1/orders                                     36     0.6     1619     3097     3133    0.0     2474    1105
+GET /v1/orders/{id}/payment                         36     0.6      147      391      393    0.0      390     303
+GET /v1/orders                                      32     0.5      173      328      414    0.0      827     442
+
+Top consultas por tempo total (pg_stat_statements):
+   64853 ms      634x  média  102.29  select oi.product_id, sum(oi.quantity)::int as units from order_items oi join orders o on o.id = oi.order_id where o.store_id = any($1::uuid[]) and o.paid_at >=
+   41066 ms      601x  média   68.33  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+   22300 ms      663x  média   33.63  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+    9103 ms      634x  média   14.36  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    8743 ms  9305081x  média    0.00  SELECT lower(public.unaccent($2, $1))
+    5474 ms      665x  média    8.23  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     856 ms     1451x  média    0.59  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     363 ms    86184x  média    0.00  select "id", "city_id", "reason", "paused_by", "paused_at", "resumed_at", "resumed_by" from "logistics_pauses" where "logistics_pauses"."resumed_at" is null ord
+     352 ms     1416x  média    0.25  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     345 ms     1248x  média    0.28  select avg("rating")::float8, count(*)::int from "reviews" where (("reviews"."store_id" = $1 and "reviews"."product_id" is null) and "reviews"."status" = $2)
+     222 ms     2553x  média    0.09  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+     200 ms      634x  média    0.32  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
