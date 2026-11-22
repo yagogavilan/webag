@@ -435,8 +435,8 @@ export function QuickForm({ storeId, product, quickStart, templates, categories,
           {phase.message}
         </Banner>
       ) : null}
-      {publisher.offlineTap ? <p role="alert" className={cx('wb-text-body', ui.danger)} data-testid={T('offline-tap')}><WarningCircle size={20} weight="fill" aria-hidden="true" /> {QUICK_MESSAGES.offlineTap}</p> : null}
-      {saveNote ? <p role="alert" className={cx('wb-text-body', ui.danger)} data-testid={T('save-note')}>{saveNote}</p> : null}
+      {publisher.offlineTap ? <p role="alert" className={cx('wb-text-body', q.rowErr)} data-testid={T('offline-tap')}><WarningCircle size={20} weight="fill" aria-hidden="true" /> {QUICK_MESSAGES.offlineTap}</p> : null}
+      {saveNote ? <p role="alert" className={cx('wb-text-body', q.rowErr)} data-testid={T('save-note')}>{saveNote}</p> : null}
 
       <div className={q.footer}>
         <Button

@@ -112,7 +112,7 @@ function DraftItem({ storeId, draft, onDuplicate, duplicating }: { storeId: stri
           {missingText(draft.missing)} · {savedAgo(draft.updatedAt)}
         </p>
         {draft.expiresInDays <= 3 ? (
-          <p className={cx('wb-text-caption-strong', ui.danger)} style={{ margin: 0 }} data-testid={T(`expires-${draft.id}`)}>
+          <p className={cx('wb-text-caption-strong', q.rowErr)} style={{ margin: 0 }} data-testid={T(`expires-${draft.id}`)}>
             Será apagado em {draft.expiresInDays} {draft.expiresInDays === 1 ? 'dia' : 'dias'}
           </p>
         ) : null}

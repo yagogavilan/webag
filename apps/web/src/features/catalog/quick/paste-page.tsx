@@ -246,7 +246,7 @@ export function PasteFlow({ storeId, deps }: { storeId: string; deps: PasteDeps 
           {slotsLeft && slotsLeft > 0 ? `Você tem espaço para ${slotsLeft} ${slotsLeft === 1 ? 'rascunho' : 'rascunhos'}.` : MESSAGES.limit}
         </Banner>
       ) : null}
-      {note ? <p role="alert" className={cx('wb-text-body', ui.danger)} data-testid={T('note')}><WarningCircle size={20} weight="fill" aria-hidden="true" /> {note}</p> : null}
+      {note ? <p role="alert" className={cx('wb-text-body', q.rowErr)} data-testid={T('note')}><WarningCircle size={20} weight="fill" aria-hidden="true" /> {note}</p> : null}
       <div className={q.sticky}>
         <Button size="lg" aria-disabled={!online || undefined} loading={creating} loadingLabel="Criando…" onClick={() => (canCreate ? void create() : creating ? undefined : setNote(MESSAGES.offlineCreate))} data-testid={T('create')}>
           Criar {rows.length} {rows.length === 1 ? 'rascunho' : 'rascunhos'}
@@ -435,7 +435,7 @@ function PhotoStep({ storeId, deps, items, setItems, rejected }: { storeId: stri
         ))}
       </ul>
       <input ref={input} type="file" accept="image/*" capture="environment" className={q.hiddenInput} tabIndex={-1} aria-hidden="true" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; void onFile(file); }} data-testid={T('file')} />
-      {note ? <p role="alert" className={cx('wb-text-body', ui.danger)} data-testid={T('photos-note')}>{note}</p> : null}
+      {note ? <p role="alert" className={cx('wb-text-body', q.rowErr)} data-testid={T('photos-note')}>{note}</p> : null}
       <div className={q.sticky}>
         <Button size="lg" aria-disabled={!online || ready.length === 0 || undefined} loading={publishing} loadingLabel="Publicando…" onClick={() => void publishAll()} data-testid={T('publish-valid')}>
           Publicar os válidos ({ready.length})

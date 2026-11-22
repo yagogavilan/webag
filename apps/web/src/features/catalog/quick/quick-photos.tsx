@@ -178,7 +178,7 @@ export function QuickPhotos({ storeId, photos, onChange, online, productName, er
 
       {photos.map((photo, index) =>
         photo.status === 'error' ? (
-          <p key={`err-${photo.key}`} className={cx('wb-text-body', ui.danger)} role="alert" data-testid={T(`photo-${index}-error`)}>
+          <p key={`err-${photo.key}`} className={cx('wb-text-body', q.rowErr)} role="alert" data-testid={T(`photo-${index}-error`)}>
             <WarningCircle size={20} weight="fill" aria-hidden="true" /> {photo.error}{' '}
             {photo.blob ? (
               <Button variant="text" size="sm" onClick={() => (online ? void send(photo.key, photo.blob as Blob) : patch(photo.key, { error: OFFLINE_PHOTO }))} data-testid={T(`photo-${index}-retry`)}>
@@ -217,7 +217,7 @@ export function QuickPhotos({ storeId, photos, onChange, online, productName, er
         </div>
       ) : null}
       {error ? (
-        <span className={cx('wb-text-body', ui.danger)} role="alert" data-testid={T('photo-error')}>
+        <span className={cx('wb-text-body', q.rowErr)} role="alert" data-testid={T('photo-error')}>
           {error}
         </span>
       ) : null}

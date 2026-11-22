@@ -48,7 +48,8 @@ export const catalogApi = {
   update: (storeId: string, productId: string, body: UpdateProductRequest) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}`, { method: 'PATCH', body }),
   archive: (storeId: string, productId: string) => apiRequest<void>(L, `${base(storeId)}/products/${productId}`, { method: 'DELETE' }),
   setVariants: (storeId: string, productId: string, body: SetVariantsRequest) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/variants`, { method: 'PUT', body }),
-  adjustStock: (storeId: string, productId: string, variantId: string, body: StockAdjustBody) => apiRequest<ProductVariantView>(L, `${base(storeId)}/products/${productId}/variants/${variantId}/stock`, { method: 'POST', body }),
+  adjustStock: (storeId: string, productId: string, variantId: string, body: StockAdjustBody, ifMatch?: number) =>
+    apiRequest<ProductVariantView>(L, `${base(storeId)}/products/${productId}/variants/${variantId}/stock`, { method: 'POST', body, ...(ifMatch !== undefined ? { ifMatch } : {}) }),
   setImages: (storeId: string, productId: string, imageIds: string[]) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/images`, { method: 'PUT', body: { imageIds } }),
   publish: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/publish`, { method: 'POST' }),
   pause: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/pause`, { method: 'POST' }),
