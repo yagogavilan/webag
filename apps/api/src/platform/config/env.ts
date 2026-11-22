@@ -67,6 +67,26 @@ export const envSchema = z
     /** SEC-114: segredo que o BFF do painel manda com `X-Webag-Client-IP`. Sem ele, o IP vindo do BFF é ignorado. */
     BFF_SHARED_SECRET: z.string().min(32).optional(),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    /** Desempenho (docs/qa/performance): conexões do pool por processo. (instâncias da API + worker) x DB_POOL_MAX precisa caber em `max_connections` do PostgreSQL com folga. */
+    DB_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
+    /** Teto de uma consulta (ms): protege o pool de uma consulta fora de controle. 0 = sem teto. Relatórios longos devem rodar em job, não na requisição. */
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(30_000),
+    /** Fecha a conexão de quem abriu transação e esqueceu (ms). 0 = desligado. */
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(30_000),
+    /**
+     * Cache em memória (por processo) do catálogo de lojas visíveis da descoberta e das seções "ofertas"/"mais vendidos" da home.
+     * É o que impede cada posição diferente do cliente de refazer a consulta pesada. 0 = desligado (os testes e2e usam 0, pois criam dados e
+     * leem em seguida). A staleness máxima de uma loja nova/alterada na home é este TTL somado aos 30 s do cache da posição.
+     */
+    FEED_DIRECTORY_TTL_SECONDS: z.coerce.number().int().min(0).max(300).default(15),
+    /** Cache em memória (por processo) da vitrine da loja e das páginas de loja/produto (parte que não depende da posição). 0 = desligado (e2e). */
+    BROWSE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(120).default(10),
+    HOME_SECTIONS_TTL_SECONDS: z.coerce.number().int().min(0).max(600).default(60),
+    /** Log de acesso (pino-http): `slow` = só erro (4xx/5xx) e requisição lenta; `all` = toda requisição (comportamento anterior, ~10% da CPU da API em carga). */
+    HTTP_ACCESS_LOG: z.enum(['slow', 'all']).default('slow'),
+    HTTP_SLOW_MS: z.coerce.number().int().min(1).max(60_000).default(500),
+    /** Resumo de latência por rota no log (a cada N s, sem dado pessoal). 0 = desligado. */
+    LATENCY_LOG_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     /** Caminho do contrato OpenAPI servido em /docs. Padrão: procura docs/arquitetura/api/openapi.yaml subindo a partir do cwd. */
     OPENAPI_SPEC_PATH: z.string().optional(),

@@ -21,6 +21,11 @@ export default defineConfig({
       DATABASE_URL: TEST_ENV.databaseUrl,
       REDIS_URL: TEST_ENV.redisUrl,
       TRUST_PROXY: '1',
+      // Desempenho: os caches em memória da descoberta ficam DESLIGADOS no e2e (os testes criam lojas/produtos e leem em seguida) e o resumo de latência não agenda timer.
+      FEED_DIRECTORY_TTL_SECONDS: '0',
+      HOME_SECTIONS_TTL_SECONDS: '0',
+      BROWSE_CACHE_TTL_SECONDS: '0',
+      LATENCY_LOG_INTERVAL_SECONDS: '0',
       // A-01: hosts de cada painel DIFERENTES nos e-mails (admin x lojista x site público); os testes fixam qual link usa qual host.
       ADMIN_WEB_URL: 'http://admin.webag.test',
       LOJISTA_WEB_URL: 'http://lojista.webag.test',

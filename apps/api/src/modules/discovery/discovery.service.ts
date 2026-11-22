@@ -1,10 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { CacheService } from '../../platform/cache/cache.service.js';
+import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { categories } from '../admin/db/schema.js';
-import { likeEscape, ProductFeedService, type ProductCard, type ProductSort } from './product-feed.service.js';
+import { likeEscape, ProductFeedService, type OfferRow, type ProductCard, type ProductSort } from './product-feed.service.js';
 import { StoreFeedService, type DiscoveryMode, type FeedStore } from './store-feed.service.js';
 import { type GeoPoint, pointKey } from './geo.js';
 import { presentEta } from '../logistics/index.js';
@@ -77,7 +80,15 @@ export class DiscoveryService {
     private readonly cache: CacheService,
     private readonly stores: StoreFeedService,
     private readonly products: ProductFeedService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  /** Ofertas e mais vendidos POR LOJA (não dependem da posição), em memória do processo por `HOME_SECTIONS_TTL_SECONDS`. */
+  private readonly offerPool = new LocalTtlCache<Map<string, OfferRow[]>>(2);
+  private readonly bestSellerPool = new LocalTtlCache<Map<string, { product_id: string; units: number }[]>>(2);
+  private sectionsTtlMs(): number {
+    return this.config.get('HOME_SECTIONS_TTL_SECONDS', { infer: true }) * 1000;
+  }
 
   /** Seções da home. Seção sem item vem vazia e o app a oculta (WB-012 C4); `empty` = nenhuma loja visível. */
   async home(point: GeoPoint, mode: DiscoveryMode) {
@@ -89,7 +100,7 @@ export class DiscoveryService {
         .filter((store) => StoreFeedService.isRecent(store, now))
         .sort((a, b) => b.approvedAt.localeCompare(a.approvedAt))
         .slice(0, SECTION_SIZE);
-      const offers = mode === 'delivery' ? await this.products.query(feed, { promoOnly: true, sort: 'discount', offset: 0, limit: SECTION_SIZE }) : [];
+      const offers = mode === 'delivery' ? await this.offers(feed) : [];
       const highlights = await this.highlights(feed, mode, now);
       return {
         mode,
@@ -101,29 +112,58 @@ export class DiscoveryService {
         newStores: newest.map(presentStoreCard),
         offers: offers.map(presentProductCard),
         // Mais vendidos (RN-03, BUG-018): produtos com pelo menos 5 pedidos pagos nos últimos 30 dias nas lojas desta região, por unidades.
-        bestSellers: mode === 'delivery' ? (await this.bestSellers(feed, now)).map(presentProductCard) : [],
+        bestSellers: mode === 'delivery' ? (await this.bestSellers(feed)).map(presentProductCard) : [],
         availableCategoryIds: await this.availableCategories(feed),
       };
     });
   }
 
-  /** RN-03: unidades em pedidos pagos (não cancelados) dos últimos 30 dias, só de produtos com 5+ pedidos, nas lojas visíveis no ponto. */
-  private async bestSellers(feed: FeedStore[], now: Date): Promise<ProductCard[]> {
+  /**
+   * Ofertas da home: as `SECTION_SIZE` de maior desconto entre as lojas visíveis (desempate: mais perto, depois id). A lista por loja é a mesma para todo
+   * mundo e fica em memória; a posição só entra no desempate (mesmo resultado da consulta única por posição, que lia ~3 mil produtos a cada home).
+   */
+  private async offers(feed: FeedStore[]): Promise<ProductCard[]> {
     if (feed.length === 0) return [];
-    const since = new Date(now.getTime() - BEST_SELLER_DAYS * 86_400_000);
-    const rows = await this.db.execute<{ product_id: string; units: number }>(sql`
-      select oi.product_id, sum(oi.quantity)::int as units
-        from order_items oi
-        join orders o on o.id = oi.order_id
-       where o.store_id = any(${pgArray(feed.map((s) => s.id), 'uuid')})
-         and o.paid_at >= ${since.toISOString()}::timestamptz
-         and o.status not in ('cancelled', 'refused', 'expired', 'awaiting_payment')
-       group by oi.product_id
-      having count(distinct o.id) >= ${BEST_SELLER_MIN_ORDERS}
-       order by units desc, oi.product_id
-       limit ${SECTION_SIZE * 3}`);
-    if (rows.rows.length === 0) return [];
-    const rank = new Map(rows.rows.map((r, i) => [r.product_id, i]));
+    const byStore = await this.offerPool.get('offers', this.sectionsTtlMs(), () => this.products.offersByStore(SECTION_SIZE));
+    const distance = new Map(feed.map((store) => [store.id, store.distanceM]));
+    const rows = feed
+      .flatMap((store) => byStore.get(store.id) ?? [])
+      .sort((a, b) => b.discount - a.discount || (distance.get(a.store_id) ?? 0) - (distance.get(b.store_id) ?? 0) || (a.id < b.id ? -1 : 1))
+      .slice(0, SECTION_SIZE);
+    return this.products.cards(rows, new Map(feed.map((store) => [store.id, store])));
+  }
+
+  /** Mais vendidos de cada loja (RN-03): unidades pagas (não canceladas) dos últimos 30 dias, só de produto com 5+ pedidos; top `SECTION_SIZE * 3` por loja. */
+  private bestSellersByStore(): Promise<Map<string, { product_id: string; units: number }[]>> {
+    return this.bestSellerPool.get('best', this.sectionsTtlMs(), async () => {
+      const since = new Date(Date.now() - BEST_SELLER_DAYS * 86_400_000);
+      const rows = await this.db.execute<{ store_id: string; product_id: string; units: number }>(sql`
+        select store_id, product_id, units from (
+          select o.store_id, oi.product_id, sum(oi.quantity)::int as units,
+                 row_number() over (partition by o.store_id order by sum(oi.quantity) desc, oi.product_id) as rn
+            from order_items oi
+            join orders o on o.id = oi.order_id
+           where o.paid_at >= ${since.toISOString()}::timestamptz
+             and o.status not in ('cancelled', 'refused', 'expired', 'awaiting_payment')
+           group by o.store_id, oi.product_id
+          having count(distinct o.id) >= ${BEST_SELLER_MIN_ORDERS}
+        ) t where rn <= ${SECTION_SIZE * 3}`);
+      const byStore = new Map<string, { product_id: string; units: number }[]>();
+      for (const row of rows.rows) byStore.set(row.store_id, [...(byStore.get(row.store_id) ?? []), { product_id: row.product_id, units: row.units }]);
+      return byStore;
+    });
+  }
+
+  /** RN-03: ranking entre as lojas visíveis no ponto (unidades desc, id): a junção das listas por loja dá o mesmo top-30 da consulta única por posição. */
+  private async bestSellers(feed: FeedStore[]): Promise<ProductCard[]> {
+    if (feed.length === 0) return [];
+    const byStore = await this.bestSellersByStore();
+    const ranked = feed
+      .flatMap((store) => byStore.get(store.id) ?? [])
+      .sort((a, b) => b.units - a.units || (a.product_id < b.product_id ? -1 : 1))
+      .slice(0, SECTION_SIZE * 3);
+    if (ranked.length === 0) return [];
+    const rank = new Map(ranked.map((r, i) => [r.product_id, i]));
     const cards = await this.products.query(feed, { productIds: [...rank.keys()], sort: 'relevance', offset: 0, limit: rank.size });
     return cards.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)).slice(0, SECTION_SIZE);
   }
@@ -184,7 +224,7 @@ export class DiscoveryService {
         select s.id, (case when f_norm(s.name) like f_norm(${likeEscape(text)}) || '%' then 3 when f_norm(s.name) like '%' || f_norm(${likeEscape(text)}) || '%' then 2 else 0 end + word_similarity(f_norm(${text}), f_norm(s.name)))::float8 as score
           from stores s
          where s.id = any(${pgArray(feed.map((store) => store.id), 'uuid')})
-           and (f_norm(s.name) like '%' || f_norm(${likeEscape(text)}) || '%' ${text.length >= 4 ? sql`or word_similarity(f_norm(${text}), f_norm(s.name)) >= 0.5` : sql``})`);
+           and (f_norm(s.name) like '%' || f_norm(${likeEscape(text)}) || '%' ${text.length >= 4 ? sql`or f_norm(${text}) <% f_norm(s.name)` : sql``})`);
       for (const row of rows.rows) scores.set(row.id, Number(row.score));
       feed = feed.filter((store) => scores.has(store.id));
     }

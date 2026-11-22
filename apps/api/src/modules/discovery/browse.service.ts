@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, asc, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
+import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit } from '../../platform/http/pagination.js';
@@ -42,7 +45,20 @@ export class BrowseService {
     private readonly params: ParametersService,
     private readonly settings: StoreSettingsService,
     private readonly fees: DeliveryFeesService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  /**
+   * Leitura pública igual para todos (vitrine da loja, dados-base da loja e do produto): cache em memória por poucos segundos com single-flight. 1.000 pessoas abrindo a
+   * mesma loja viram 1 leitura ao banco por TTL, não 1.000. O que depende do cliente (frete/ETA pela posição) é calculado FORA do cache. TTL 0 = desligado (e2e).
+   * Defasagem máxima = TTL (10 s por padrão), menor que o `Cache-Control: max-age=30` que as respostas já mandam ao app.
+   */
+  private readonly storeBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadStoreBase']>>>(500);
+  private readonly productBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadProductBase']>>>(1000);
+  private readonly storeLists = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadStoreProducts']>>>(1000);
+  private cacheMs(): number {
+    return this.config.get('BROWSE_CACHE_TTL_SECONDS', { infer: true }) * 1000;
+  }
 
   /** Loja visível (RN-03: aprovada, conta de recebimento ativa, produto ativo); qualquer outra coisa é 404. */
   private async visibleStore(storeId: string) {
@@ -83,16 +99,27 @@ export class BrowseService {
     return { urls: (asset ? this.media.publicVariants(asset) : null) ?? {} };
   }
 
-  async store(storeId: string, point: GeoPoint | null) {
+  private storeBase(storeId: string) {
+    return this.storeBases.get(storeId, this.cacheMs(), () => this.loadStoreBase(storeId));
+  }
+
+  /** O que a página da loja mostra e NÃO depende de quem olha: loja, configurações, abertura agora, nota, seções e logo/capa. */
+  private async loadStoreBase(storeId: string) {
     const { store, settings } = await this.visibleStore(storeId);
     const now = new Date();
-    const [opening, rating, sections, assets, quote] = await Promise.all([
+    const [opening, rating, sections, assets] = await Promise.all([
       this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now),
       this.ratingOf(and(eq(reviews.storeId, store.id), sql`${reviews.productId} is null`)!),
       this.db.select().from(storeSections).where(eq(storeSections.storeId, store.id)).orderBy(asc(storeSections.position)),
       this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, [store.logoAssetId, store.coverAssetId].filter((id): id is string => id !== null))),
-      point ? this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null,
     ]);
+    return { store, settings, opening, rating, sections, assets };
+  }
+
+  async store(storeId: string, point: GeoPoint | null) {
+    const { store, settings, opening, rating, sections, assets } = await this.storeBase(storeId);
+    const now = new Date();
+    const quote = point ? await this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null;
     const byId = new Map(assets.map((a) => [a.id, a]));
     const [pickupMax, etaConfig] = await Promise.all([this.params.getNumber('retirada_distancia_max_km'), this.fees.etaConfig()]);
     const pickupNear = quote?.distanceM != null && quote.distanceM <= pickupMax * 1000;
@@ -146,8 +173,13 @@ export class BrowseService {
 
   /** Vitrine da loja: disponíveis primeiro, na ordem das seções e dos produtos; sem estoque ao final como "Indisponível". */
   async storeProducts(storeId: string, filters: { sectionId?: string | undefined; cursor?: string | undefined; limit?: unknown }) {
-    await this.visibleStore(storeId);
     const limit = parseLimit(filters.limit);
+    const key = `${storeId}|${filters.sectionId ?? ''}|${filters.cursor ?? ''}|${limit}`;
+    return this.storeLists.get(key, this.cacheMs(), () => this.loadStoreProducts(storeId, filters, limit));
+  }
+
+  private async loadStoreProducts(storeId: string, filters: { sectionId?: string | undefined; cursor?: string | undefined }, limit: number) {
+    await this.visibleStore(storeId);
     const offset = decodeCursor<{ o: number }>(filters.cursor)?.o ?? 0;
     const result = await this.db.execute<{ id: string; name: string; section_id: string | null; base_price_cents: number; promo_price_cents: number | null; promo_starts_at: Date | null; promo_ends_at: Date | null; free: number }>(sql`
       select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at,
@@ -196,28 +228,46 @@ export class BrowseService {
    * Página do produto. Pausado ou removido pela moderação responde 200 com `available: false` e o atalho da loja
    * (WB-017 C6); rascunho, arquivado ou de loja invisível é 404. Estoque exato não sai: só "últimas X unidades".
    */
-  async product(productId: string, point: GeoPoint | null = null) {
+  private productBase(productId: string) {
+    return this.productBases.get(productId, this.cacheMs(), () => this.loadProductBase(productId));
+  }
+
+  /** Produto + loja + abertura + (se à venda) variantes, imagens e nota: o que a página do produto mostra e não depende de quem olha. */
+  private async loadProductBase(productId: string) {
     const [product] = await this.db.select().from(products).where(eq(products.id, productId));
     if (!product || !['active', 'paused'].includes(product.status) || product.basePriceCents === null) throw errors.notFound('Produto não encontrado.');
     const { store, settings } = await this.visibleStore(product.storeId);
     const now = new Date();
     const unavailableReason = product.status === 'paused' ? 'PAUSED' : product.moderationStatus === 'paused' || product.moderationStatus === 'removed' ? 'MODERATED' : null;
-    const quote = point ? await this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null;
-    const storeSummary = {
-      id: store.id,
-      name: store.name,
-      ...(await this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now)),
-      // DEC-053: com posição, "chega entre X e Y" ou "fora da área" na página do produto.
-      delivery: quote ? { available: quote.available, eta: quote.available && quote.eta ? presentEta({ minMinutes: quote.eta.fromMin, maxMinutes: quote.eta.toMin }, now) : null } : null,
-    };
-    if (unavailableReason) return { id: product.id, name: product.name, available: false, unavailableReason, store: storeSummary };
-
+    const opening = await this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now);
+    if (unavailableReason) return { product, store, opening, unavailableReason, detail: null };
     const [variants, images, rating, maxQty] = await Promise.all([
       this.db.select().from(productVariants).where(and(eq(productVariants.productId, product.id), eq(productVariants.active, true))).orderBy(asc(productVariants.createdAt), asc(productVariants.attributesKey)),
       this.db.select({ id: productImages.assetId, position: productImages.position, asset: mediaAssets }).from(productImages).innerJoin(mediaAssets, eq(mediaAssets.id, productImages.assetId)).where(eq(productImages.productId, product.id)).orderBy(asc(productImages.position)),
       this.ratingOf(eq(reviews.productId, product.id)),
       this.params.getNumber('item_qtd_max'),
     ]);
+    return { product, store, opening, unavailableReason: null, detail: { variants, images, rating, maxQty } };
+  }
+
+  /**
+   * Página do produto. Pausado ou removido pela moderação responde 200 com `available: false` e o atalho da loja
+   * (WB-017 C6); rascunho, arquivado ou de loja invisível é 404. Estoque exato não sai: só "últimas X unidades".
+   */
+  async product(productId: string, point: GeoPoint | null = null) {
+    const { product, store, opening, unavailableReason, detail } = await this.productBase(productId);
+    const now = new Date();
+    const quote = point ? await this.fees.quote(store.id, { ...point, cityId: store.addressCityId ?? null }, 0) : null;
+    const storeSummary = {
+      id: store.id,
+      name: store.name,
+      ...opening,
+      // DEC-053: com posição, "chega entre X e Y" ou "fora da área" na página do produto.
+      delivery: quote ? { available: quote.available, eta: quote.available && quote.eta ? presentEta({ minMinutes: quote.eta.fromMin, maxMinutes: quote.eta.toMin }, now) : null } : null,
+    };
+    if (unavailableReason || !detail) return { id: product.id, name: product.name, available: false, unavailableReason, store: storeSummary };
+
+    const { variants, images, rating, maxQty } = detail;
     const promo = { promoPriceCents: product.promoPriceCents, promoStartsAt: product.promoStartsAt, promoEndsAt: product.promoEndsAt };
     const views = variants.map((variant) => {
       const free = Math.max(variant.stock - variant.reserved, 0);
@@ -233,7 +283,7 @@ export class BrowseService {
         lastUnits: free > 0 && free <= LAST_UNITS_MAX ? free : null,
       };
     });
-    const base = effectivePrice(product.basePriceCents, null, promo, now);
+    const base = effectivePrice(product.basePriceCents!, null, promo, now);
     return {
       id: product.id,
       name: product.name,

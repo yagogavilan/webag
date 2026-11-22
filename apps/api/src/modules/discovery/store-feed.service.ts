@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { inArray, sql } from 'drizzle-orm';
 import { CacheService } from '../../platform/cache/cache.service.js';
+import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
@@ -56,9 +59,17 @@ interface StoreRow extends Record<string, unknown> {
   voluntary_exchange_days: number;
   paused_until: Date | null;
   paused_indefinitely: boolean;
-  distance_m: number;
   avg_rating: number | null;
   rating_count: number;
+}
+
+/** Loja do catálogo da descoberta: tudo que NÃO depende da posição do cliente (a distância vem de uma consulta pequena por posição). */
+interface DirectoryStore {
+  row: StoreRow;
+  weekly: WeeklyHours;
+  holidays: string[];
+  extraCategoryIds: string[];
+  logo: Record<string, string> | null;
 }
 
 const FEED_TTL_SECONDS = 30;
@@ -78,22 +89,32 @@ export class StoreFeedService {
     private readonly media: MediaService,
     private readonly fees: DeliveryFeesService,
     private readonly availability: LogisticsAvailabilityService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  /** Catálogo de lojas visíveis (sem a posição do cliente), em memória do processo; ver `directory`. */
+  private readonly directories = new LocalTtlCache<Map<string, DirectoryStore>>(4);
 
   async at(point: GeoPoint, mode: DiscoveryMode): Promise<FeedStore[]> {
     return this.cache.wrap('feed', `${mode}:${pointKey(point)}`, FEED_TTL_SECONDS, () => this.compute(point, mode));
   }
 
-  private async compute(point: GeoPoint, mode: DiscoveryMode): Promise<FeedStore[]> {
-    const now = new Date();
-    const maxKm = await this.params.getNumber(mode === 'pickup' ? 'retirada_distancia_max_km' : 'raio_max_km');
-    const minRatings = await this.params.getNumber('avaliacao_min_exibicao');
+  /**
+   * Catálogo das lojas elegíveis para o modo (aprovada, conta de recebimento ativa, produto ativo, cidade ativa, aceita o modo), com avaliação,
+   * horários, feriados, categorias e logo. É a parte cara da descoberta e NÃO depende da posição: fica em memória por `FEED_DIRECTORY_TTL_SECONDS`
+   * (single-flight: uma única requisição recalcula na virada). Antes, cada posição diferente do cliente refazia tudo isto (a home de 1.000 usuários
+   * simultâneos nunca acertava o cache por posição).
+   */
+  private directory(mode: DiscoveryMode): Promise<Map<string, DirectoryStore>> {
+    return this.directories.get(mode, this.config.get('FEED_DIRECTORY_TTL_SECONDS', { infer: true }) * 1000, () => this.loadDirectory(mode));
+  }
+
+  private async loadDirectory(mode: DiscoveryMode): Promise<Map<string, DirectoryStore>> {
     const result = await this.db.execute<StoreRow>(sql`
       select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at,
              s.address_city_id, ss.accepts_delivery,
              ss.prep_minutes, ss.pickup_enabled, ss.voluntary_exchange_days,
              ss.paused_until, ss.paused_indefinitely,
-             round(ST_Distance(s.location, ${pointSql(point)}))::int as distance_m,
              r.avg_rating, coalesce(r.rating_count, 0)::int as rating_count
         from stores s
         join store_settings ss on ss.store_id = s.id
@@ -104,50 +125,81 @@ export class StoreFeedService {
         ) r on true
        where s.status = 'approved'
          and s.location is not null
-         and ST_DWithin(s.location, ${pointSql(point)}, ${maxKm * 1000})
          and exists (select 1 from payment_accounts pa where pa.store_id = s.id and pa.status = 'active')
          and exists (select 1 from products p where p.store_id = s.id and p.status = 'active' and p.moderation_status in ('ok', 'review'))
          and ${mode === 'pickup' ? sql`ss.pickup_enabled` : sql`ss.accepts_delivery`}
+       order by s.id
     `);
     const rows = result.rows;
-    if (rows.length === 0) return [];
+    const directory = new Map<string, DirectoryStore>();
+    if (rows.length === 0) return directory;
     const ids = rows.map((row) => row.id);
-
-    const today = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+    const logoIds = rows.map((row) => row.logo_asset_id).filter((id): id is string => id !== null);
     const [hourRows, holidayRows, extraRows, logoRows] = await Promise.all([
       this.db.select().from(storeHours).where(inArray(storeHours.storeId, ids)),
       this.db.select().from(storeHolidays).where(inArray(storeHolidays.storeId, ids)),
       this.db.select().from(storeExtraCategories).where(inArray(storeExtraCategories.storeId, ids)),
-      this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, rows.map((row) => row.logo_asset_id).filter((id): id is string => id !== null))),
+      logoIds.length > 0 ? this.db.select().from(mediaAssets).where(inArray(mediaAssets.id, logoIds)) : Promise.resolve([]),
     ]);
     const logos = new Map(logoRows.map((asset) => [asset.id, this.media.publicVariants(asset)]));
+    const weeklyOf = new Map<string, WeeklyHours>();
+    for (const h of hourRows) {
+      const weekly = weeklyOf.get(h.storeId) ?? {};
+      (weekly[h.weekday] ??= []).push({ startMin: h.startMin, endMin: h.endMin });
+      weeklyOf.set(h.storeId, weekly);
+    }
+    const holidaysOf = new Map<string, string[]>();
+    for (const h of holidayRows) holidaysOf.set(h.storeId, [...(holidaysOf.get(h.storeId) ?? []), h.day]);
+    const extrasOf = new Map<string, string[]>();
+    for (const e of extraRows) extrasOf.set(e.storeId, [...(extrasOf.get(e.storeId) ?? []), e.categoryId]);
+    for (const row of rows) {
+      directory.set(row.id, { row, weekly: weeklyOf.get(row.id) ?? {}, holidays: holidaysOf.get(row.id) ?? [], extraCategoryIds: extrasOf.get(row.id) ?? [], logo: row.logo_asset_id ? (logos.get(row.logo_asset_id) ?? null) : null });
+    }
+    return directory;
+  }
 
-    const [freeAbove, minOrder, radiusKm, etaConfig] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km'), this.fees.etaConfig()]);
+  private async compute(point: GeoPoint, mode: DiscoveryMode): Promise<FeedStore[]> {
+    const now = new Date();
+    const maxKm = await this.params.getNumber(mode === 'pickup' ? 'retirada_distancia_max_km' : 'raio_max_km');
+    const minRatings = await this.params.getNumber('avaliacao_min_exibicao');
+    // Por posição só a distância: ST_DWithin sobre o GiST de `stores.location` (ADR-008) devolve as lojas do raio; o resto vem do catálogo em memória.
+    const [directory, near] = await Promise.all([
+      this.directory(mode),
+      this.db.execute<{ id: string; distance_m: number }>(sql`
+        select s.id, round(ST_Distance(s.location, ${pointSql(point)}))::int as distance_m
+          from stores s
+         where s.status = 'approved' and s.location is not null and ST_DWithin(s.location, ${pointSql(point)}, ${maxKm * 1000})
+      `),
+    ]);
+    const candidates = near.rows.filter((row) => directory.has(row.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
+    if (candidates.length === 0) return [];
+
+    const today = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+    const [freeAbove, minOrder, radiusKm, etaConfig, pauses] = await Promise.all([this.params.getNumber('frete_gratis_acima_cents'), this.params.getNumber('pedido_minimo_cents'), this.params.getNumber('raio_max_km'), this.fees.etaConfig(), this.availability.listPauses()]);
     const tableCache = new Map<string | null, Promise<Awaited<ReturnType<DeliveryFeesService['resolve']>>>>();
     const feeTables = { get: (cityId: string | null) => tableCache.get(cityId) ?? tableCache.set(cityId, this.fees.resolve({ cityId, neighborhoodId: null })).get(cityId)! };
     const feed: FeedStore[] = [];
     const logisticsByCity = new Map<string, Awaited<ReturnType<LogisticsAvailabilityService['status']>>>();
-    for (const row of rows) {
-      const distanceM = Number(row.distance_m);
+    for (const hit of candidates) {
+      const { row, weekly, holidays, extraCategoryIds, logo } = directory.get(hit.id)!;
+      const distanceM = Number(hit.distance_m);
       // L.1 (DEC-036): taxa da tabela do admin (cidade da loja como estimativa; o carrinho usa o destino exato) e raio global.
       const table = row.address_city_id ? ((await feeTables.get(row.address_city_id)) ?? (await feeTables.get(null))) : await feeTables.get(null);
       // DEC-053: o ETA (preparo da loja + despacho + deslocamento) acima do teto tira a loja da descoberta ("fora da área").
       const eta = computeEta(etaConfig, { distanceM, prepMin: row.prep_minutes });
       // RN-19 item 2 (BUG-021): a mesma conta do checkout (o fim da faixa precisa cair antes do fechamento), em cache por cidade + fim da faixa.
       const logisticsKey = `${row.address_city_id ?? ''}:${eta.toMin}`;
-      if (!logisticsByCity.has(logisticsKey)) logisticsByCity.set(logisticsKey, await this.availability.status(row.address_city_id, now, eta.toMin));
+      if (!logisticsByCity.has(logisticsKey)) logisticsByCity.set(logisticsKey, await this.availability.statusWith(pauses, row.address_city_id, now, eta.toMin));
       const logistics = logisticsByCity.get(logisticsKey)!;
       const picked = row.accepts_delivery && distanceM <= radiusKm * 1000 && eta.withinCeiling && table ? pickTier(table.tiers, distanceM) : null;
       const fee = picked ? picked.tier.feeCents : null;
       const deliversHere = fee !== null;
       if (mode === 'delivery' && !deliversHere) continue; // fora do raio da loja: some da lista (RN-04)
 
-      const weekly: WeeklyHours = {};
-      for (const h of hourRows.filter((x) => x.storeId === row.id)) (weekly[h.weekday] ??= []).push({ startMin: h.startMin, endMin: h.endMin });
       const opening: OpeningInput = {
         hours: weekly,
-        holidays: new Set(holidayRows.filter((h) => h.storeId === row.id && h.day >= today).map((h) => h.day)),
-        pausedUntil: row.paused_until,
+        holidays: new Set(holidays.filter((day) => day >= today)),
+        pausedUntil: row.paused_until === null ? null : new Date(row.paused_until),
         pausedIndefinitely: row.paused_indefinitely,
       };
       const open = isOpen(opening, now);
@@ -157,8 +209,8 @@ export class StoreFeedService {
         name: row.name,
         description: row.description,
         mainCategoryId: row.main_category_id,
-        categoryIds: [...new Set([...(row.main_category_id ? [row.main_category_id] : []), ...extraRows.filter((e) => e.storeId === row.id).map((e) => e.categoryId)])],
-        logo: row.logo_asset_id ? (logos.get(row.logo_asset_id) ?? null) : null,
+        categoryIds: [...new Set([...(row.main_category_id ? [row.main_category_id] : []), ...extraCategoryIds])],
+        logo,
         approvedAt: new Date(row.approved_at).toISOString(),
         distanceM,
         deliversHere,
