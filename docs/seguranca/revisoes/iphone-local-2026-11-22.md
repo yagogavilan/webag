@@ -11,7 +11,7 @@ Não analisados: `apps/mobile/scripts/web-compra.cjs` (emulação no Playwright,
 ## Achados
 
 ```
-SEC-190 | Severidade: Média | Status: Aberto | Quem corrige: backend-dev
+SEC-190 | Severidade: Média | Status: Corrigido no código (2026-11-22), falta o `pnpm iphone` passar STORAGE_BIND e a verificação de rede | Quem corrige: backend-dev
 Onde: docker-compose.yml:18, 35, 53-54, 81-82 (anterior a este commit; o modo iPhone torna a exposição real)
 Problema: Postgres (5432), Redis (6379), RustFS (9000 API S3 e 9001 console) e Mailpit (1025 SMTP, 8025 UI) são publicados em
   0.0.0.0 com credenciais públicas no repositório (POSTGRES_PASSWORD=webag_dev_only; S3 webag-dev/webag-dev-secret-only;
@@ -29,6 +29,15 @@ Correção recomendada (ajuste mínimo):
     `pnpm iphone` passando STORAGE_BIND=0.0.0.0 ao `docker compose up` (ou um docker-compose.iphone.yml de override);
   - `pnpm run setup` (scripts/setup.mjs) gerar S3_SECRET_KEY e POSTGRES_PASSWORD aleatórios ao criar o .env, já que a 9000
     fica exposta com a chave que dá escrita e leitura no bucket privado. A API (3000) já precisa de 0.0.0.0 (main.ts:21).
+Correção aplicada (backend-dev): `docker-compose.yml` publica Postgres, Redis, console 9001 e Mailpit só em 127.0.0.1 e a 9000 em
+  `${STORAGE_BIND:-127.0.0.1}`; `scripts/setup.mjs` (com `scripts/setup-secrets.mjs`, testado) gera no `.env` NOVO senha do Postgres,
+  senha do Redis (`requirepass`, REDIS_URL com senha), chave S3 e senha do admin aleatórias. Ficam fixas com CI=true,
+  WEBAG_FIXED_DEV_SECRETS=1, SKIP_DOCKER=1 ou volume do Postgres já existente; `.env` existente nunca é alterado (o setup só avisa se
+  ele usa as senhas públicas). Pendências: (a) `scripts/iphone.mjs` (mobile-dev) precisa subir o compose com STORAGE_BIND=0.0.0.0
+  e recriar o `storage` mesmo já rodando (`docker compose up -d storage`; hoje só sobe serviços parados); (b) quem já tem containers
+  rodando precisa de `docker compose up -d` para recriá-los com as portas em 127.0.0.1; (c) `.env` antigo mantém as senhas
+  públicas: para trocar, `pnpm infra:down -v`, apagar o `.env` e rodar o setup (apaga os dados locais); (d) as contas de seed de
+  lojista e cliente seguem com senha pública (`webag-seed-lojista-2026`), fora do escopo deste achado.
 Como verificar a correção: com `pnpm iphone` no ar, de outro aparelho da rede, `nc -vz <IP> 5432`, 6379, 9001, 8025 e 1025
   falham; 3000, 3001, 8081 e 9000 respondem; fotos das lojas carregam no iPhone; `docker compose ps` mostra 127.0.0.1 nas
   portas internas. Sem a variável, 9000 também fica em 127.0.0.1.
@@ -51,7 +60,7 @@ Como verificar: ler o recado do `pnpm iphone --check` e as seções de firewall 
 ```
 
 ```
-SEC-192 | Severidade: Baixa | Status: Aberto | Quem corrige: backend-dev (opcional, só desenvolvimento)
+SEC-192 | Severidade: Baixa | Status: Corrigido para `.env` novo (2026-11-22) | Quem corrige: backend-dev (opcional, só desenvolvimento)
 Onde: README.md:48 e :57 (senha do admin de dev e cadastro do TOTP no 1º login); scripts/iphone.mjs:212-215 (painel no IP)
 Problema: a senha do admin de desenvolvimento é pública no repositório e o 2º fator é cadastrado no primeiro login. Com o painel
   em http://<IP>:3001/admin/entrar, quem está no mesmo Wi-Fi e conhece o repositório pode entrar antes do fundador e
@@ -60,6 +69,11 @@ Cenário de ataque: conta admin do ambiente local tomada; vê e altera os dados 
   NODE_ENV=production: apps/api/seed/onda2.ts:286, onda3.ts:112, orders-demo.ts:28; admin de produção vem do break-glass).
 Correção recomendada: `pnpm run setup` gerar a senha do admin de dev e imprimir uma vez (ou o fundador cadastra o TOTP antes do
   primeiro `pnpm iphone`). Com SEC-191, o aviso de "só em casa" já reduz o risco a quase nada.
+Correção aplicada: o `pnpm run setup` grava SEED_ADMIN_PASSWORD aleatória no `.env` novo e a mostra no fim; o README manda cadastrar o
+  TOTP logo no primeiro uso. Não implementei "2º fator só a partir de localhost": o painel passa pelo BFF do Next (o IP que a API vê
+  é o do próprio servidor web, SEC-114), então o teste de origem na API seria falso ou exigiria código novo no caminho de login de
+  produção, caro demais para um risco de desenvolvimento. Residual: banco/`.env` anteriores ao setup novo (ou CI/SKIP_DOCKER) mantêm a
+  senha pública do admin até o fundador trocá-la ou recomeçar o banco.
 Como verificar: em banco novo, o login com a senha do README falha; a senha impressa pelo setup funciona.
 ```
 
