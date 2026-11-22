@@ -659,3 +659,16 @@ E o que deve funcionar: `INSERT` e `SELECT` em `audit_log`; `SELECT count(*) FRO
 **Rotação das senhas.** Repetir o passo 2 (a primeira linha só troca as senhas) e `up -d`.
 
 **Índices em tabela grande.** O `migrate` do Drizzle aplica todas as migrações pendentes numa única transação: `CREATE INDEX CONCURRENTLY` não roda nele. Nas tabelas do piloto o `CREATE INDEX` simples dentro da migração basta. Se `audit_log` ou `products` passarem de ~1 milhão de linhas (conferir com `select count(*)`), o índice é criado à mão, FORA do Drizzle, como `webag_migrator`: `CREATE INDEX CONCURRENTLY IF NOT EXISTS ...` e a migração correspondente usa `CREATE INDEX IF NOT EXISTS` com o mesmo nome (vira no-op).
+
+## 16. Migrações da R1 (0058 a 0061): bloqueios, horário e reversão
+
+Registrado a pedido do tech-lead (review R1.1, I3). O `migrate()` do Drizzle roda as pendentes numa transação só, e cada `ALTER` segura o bloqueio até o fim dela: aplicar **fora do horário de pico** e com `lock_timeout` de 10 s do `webag_migrator` (se estourar, a transação inteira volta e nada fica pela metade).
+
+| Migração | O que bloqueia escrita, e por quê |
+|---|---|
+| 0058 `r1_store_version` | `stores`: coluna nova com default constante (metadado, instantâneo no PG 18) |
+| 0059 `r1_audit_store_id` | `audit_log`: coluna nula e `CREATE INDEX` simples (sem `CONCURRENTLY`, que não cabe na transação): bloqueia INSERT no `audit_log` enquanto o índice é construído. Antes, registrar `select count(*) from audit_log` no staging; acima de ~1 milhão de linhas criar o índice à mão (regra 2 do modelo de dados) |
+| 0060 `r1_admin_edit_support` | `ADD FOREIGN KEY` para `users`, `sessions` e `stores`: bloqueia escrita nessas três até o fim da transação das migrações (tabelas novas e vazias, então é rápido) |
+| 0061 `r1_catalog_version` | `products` e `categories`: colunas novas e `CHECK` com `NOT VALID` + `VALIDATE`; o `VALIDATE` varre `products` (sem bloquear escrita por muito tempo) |
+
+**Reversão (regra 5 do modelo de dados).** Scripts em `apps/api/drizzle/down/<NNNN>.sql` (o migrator não lê essa pasta). Executar como `webag_migrator`, uma migração por vez, da mais nova para a mais antiga, numa transação: `psql -1 -v ON_ERROR_STOP=1 -f apps/api/drizzle/down/0061.sql`. O próprio script apaga a linha da migração em `drizzle.__drizzle_migrations`, então o `migrate` a reaplica depois. **0060 e 0061 apagam dado** (tabelas e colunas novas): só com autorização do fundador fora do staging. `audit_log` não perde linha (só a coluna `store_id`). Provado por `apps/api/test/migrations-down.e2e-spec.ts` (aplica do zero, insere dados, reverte as quatro, confere as linhas, reaplica); o CI barra migração nova sem `down` (`src/platform/database/migrations-down.spec.ts`).
