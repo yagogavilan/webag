@@ -1,10 +1,13 @@
 import { LatencyRecorder, percentile, routeKey } from './latency.js';
 
 describe('latência por rota', () => {
-  it('percentil sobre lista ordenada', () => {
+  it('percentil por posição mais próxima (nearest-rank) sobre lista ordenada', () => {
     const list = Array.from({ length: 100 }, (_, i) => i + 1);
-    expect(percentile(list, 50)).toBe(51);
-    expect(percentile(list, 95)).toBe(96);
+    expect(percentile(list, 50)).toBe(50);
+    expect(percentile(list, 95)).toBe(95);
+    expect(percentile(list, 99)).toBe(99);
+    expect(percentile(list, 100)).toBe(100);
+    expect(percentile([7], 95)).toBe(7);
     expect(percentile([], 95)).toBe(0);
   });
 
@@ -19,7 +22,7 @@ describe('latência por rota', () => {
     for (let i = 1; i <= 100; i++) recorder.record('GET /lenta', i, i === 100 ? 500 : 200);
     for (let i = 1; i <= 10; i++) recorder.record('GET /rapida', 1, 200);
     const [first, second] = recorder.snapshot();
-    expect(first).toMatchObject({ route: 'GET /lenta', n: 100, p50: 51, p95: 96, max: 100, errors5xx: 1 });
+    expect(first).toMatchObject({ route: 'GET /lenta', n: 100, p50: 50, p95: 95, p99: 99, max: 100, errors5xx: 1 });
     expect(second).toMatchObject({ route: 'GET /rapida', n: 10, p95: 1 });
     expect(recorder.snapshot()).toEqual([]);
   });

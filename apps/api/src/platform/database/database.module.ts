@@ -1,4 +1,4 @@
-import { Global, Inject, Injectable, Logger, Module, type OnApplicationShutdown } from '@nestjs/common';
+import { Global, Inject, Injectable, Logger, Module, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
@@ -69,10 +69,29 @@ export class SessionLockService {
   }
 }
 
-/** Fecha o pool no shutdown gracioso. */
+/** Fecha o pool no shutdown gracioso e confere no boot os parâmetros de sessão que o pool pede. */
 @Injectable()
-class PgPoolLifecycle implements OnApplicationShutdown {
+class PgPoolLifecycle implements OnApplicationBootstrap, OnApplicationShutdown {
+  private readonly logger = new Logger('PgPool');
+
   constructor(@Inject(PG_POOL) private readonly pool: pg.Pool) {}
+
+  /**
+   * A busca por semelhança depende de `pg_trgm.word_similarity_threshold=0.5` (vai por `options` da conexão). Atrás de PgBouncer ou outro pool que
+   * descarte esse parâmetro o limite volta a 0,6 e a busca por erro de digitação muda SEM erro nenhum: confere e avisa no boot (A6).
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const { rows } = await this.pool.query<{ threshold: string; statement_timeout: string; idle: string }>(
+        `select current_setting('pg_trgm.word_similarity_threshold', true) as threshold, current_setting('statement_timeout') as statement_timeout, current_setting('idle_in_transaction_session_timeout') as idle`,
+      );
+      const row = rows[0];
+      if (row?.threshold !== '0.5') this.logger.warn(`pg_trgm.word_similarity_threshold = ${row?.threshold ?? 'indefinido'} (esperado 0.5): a busca por erro de digitação vai se comportar diferente. O pool de conexões descarta parâmetros de sessão?`);
+      this.logger.log({ event: 'db.session_settings', pgTrgmWordSimilarityThreshold: row?.threshold, statementTimeout: row?.statement_timeout, idleInTransactionTimeout: row?.idle });
+    } catch (error) {
+      this.logger.warn(`não foi possível conferir os parâmetros de sessão do banco: ${(error as Error).message}`);
+    }
+  }
 
   async onApplicationShutdown(): Promise<void> {
     await this.pool.end();

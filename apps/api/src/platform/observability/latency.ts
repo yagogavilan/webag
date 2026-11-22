@@ -26,7 +26,7 @@ const MAX_ROUTES = 300;
 const MAX_SAMPLES = 5_000;
 
 export const percentile = (sortedAscending: readonly number[], p: number): number =>
-  sortedAscending.length === 0 ? 0 : sortedAscending[Math.min(sortedAscending.length - 1, Math.floor((p / 100) * sortedAscending.length))]!;
+  sortedAscending.length === 0 ? 0 : sortedAscending[Math.min(sortedAscending.length - 1, Math.max(0, Math.ceil((p / 100) * sortedAscending.length) - 1))]!; // nearest-rank
 
 export function routeKey(req: Pick<Request, 'method' | 'baseUrl' | 'route' | 'path'>): string {
   const template = (req.route as { path?: unknown } | undefined)?.path;

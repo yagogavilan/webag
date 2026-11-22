@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { FakePaymentProvider } from '../src/modules/payments/providers/fake.provider.js';
@@ -271,6 +271,54 @@ describe('Pagamentos: PaymentProvider fake, webhook assinado e conciliação (WB
       expect((await row(pix.id)).status).toBe('approved');
       const logs = await ctx.db.select().from(auditLog).where(and(eq(auditLog.action, 'payment.webhook_reprocess'), eq(auditLog.targetId, String(failed!.id))));
       expect(logs).toHaveLength(1);
+    });
+  });
+
+  describe('regressão: evento gravado e processado no mesmo milissegundo (ed862ba)', () => {
+    const insertEvent = async (pid: string, nextAttemptAtSql: ReturnType<typeof sql>) => {
+      const eventKey = `regr-${randomUUID()}`;
+      await ctx.db.execute(sql`insert into webhook_events (provider, event_key, provider_payment_id, type, next_attempt_at) values ('fake', ${eventKey}, ${pid}, 'payment', ${nextAttemptAtSql})`);
+      return eventKey;
+    };
+    const statusOf = async (eventKey: string) => (await ctx.db.select().from(webhookEvents).where(eq(webhookEvents.eventKey, eventKey)))[0]!;
+
+    it('o vencimento usa o `now()` do BANCO: evento com `next_attempt_at` a 500 microssegundos depois do milissegundo do relógio da API é processado (com `new Date()` ficava para o próximo ciclo)', async () => {
+      const pix = await createPix();
+      const pid = (await row(pix.id)).providerPaymentId;
+      await fake.simulate(pid, { outcome: 'approved' });
+      // 1 s atrás + 500 µs: o JS, que só tem milissegundos, trunca para ANTES do valor gravado (a condição antiga `next_attempt_at <= new Date()` dava falso).
+      const { rows } = await ctx.pool.query<{ ms: string }>(`select (extract(epoch from (now() - interval '1 second' + interval '500 microseconds')) * 1000)::bigint as ms`);
+      const eventKey = await insertEvent(pid, sql`now() - interval '1 second' + interval '500 microseconds'`);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date(Number(rows[0]!.ms) - 1)); // relógio da API logo antes do valor gravado
+        expect(await payments.processDue()).toBeGreaterThanOrEqual(1);
+      } finally {
+        vi.useRealTimers();
+      }
+      await payments.drain();
+      expect((await statusOf(eventKey)).status).toBe('processed');
+      expect((await row(pix.id)).status).toBe('approved');
+    });
+
+    it('sem dupla execução nem perda: dois processadores simultâneos consultam o provedor UMA vez e o evento fica processado; repetir não reprocessa', async () => {
+      const pix = await createPix();
+      const pid = (await row(pix.id)).providerPaymentId;
+      await fake.simulate(pid, { outcome: 'approved' });
+      const eventKey = await insertEvent(pid, sql`now()`); // exatamente como o `default now()` de um webhook recém-recebido
+      const spy = vi.spyOn(fake, 'getPayment');
+      try {
+        await Promise.all([payments.processDue(), payments.processDue(), payments.processDue()]);
+        await payments.drain();
+        expect(spy.mock.calls.filter(([id]) => id === pid)).toHaveLength(1); // FOR UPDATE SKIP LOCKED + marcação de 60 s: só um pega
+        const done = await statusOf(eventKey);
+        expect(done.status).toBe('processed');
+        expect(done.attempts).toBe(1);
+        await payments.processDue();
+        expect(spy.mock.calls.filter(([id]) => id === pid)).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

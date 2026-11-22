@@ -391,6 +391,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         .from(webhookEvents)
         // `now()` do BANCO (a coluna nasce com `default now()` em microssegundos): comparar com `new Date()` (milissegundos) deixava o evento recém-gravado "ainda não vencido"
         // quando o processamento disparado logo após o INSERT rodava no mesmo milissegundo; ele só saía no próximo ciclo (e fazia o e2e de pagamento falhar de forma intermitente).
+        // Marcação e retentativas também em `now() + intervalo` do banco (A9): relógio de API e de banco em máquinas diferentes não mudam a janela.
         .where(and(eq(webhookEvents.status, 'pending'), lte(webhookEvents.nextAttemptAt, sql`now()`)))
         .orderBy(webhookEvents.id)
         .limit(limit)
@@ -398,7 +399,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       if (due.length > 0) {
         await tx
           .update(webhookEvents)
-          .set({ nextAttemptAt: new Date(Date.now() + 60_000) })
+          .set({ nextAttemptAt: sql`now() + interval '60 seconds'` })
           .where(inArray(webhookEvents.id, due.map((e) => e.id)));
       }
       return due;
@@ -411,7 +412,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     try {
       const outcome = await this.applyEvent(event);
       if (outcome === 'deferred') {
-        await this.db.update(webhookEvents).set({ nextAttemptAt: new Date(Date.now() + 60_000) }).where(eq(webhookEvents.id, event.id));
+        await this.db.update(webhookEvents).set({ nextAttemptAt: sql`now() + interval '60 seconds'` }).where(eq(webhookEvents.id, event.id));
         return;
       }
       await this.db
@@ -426,7 +427,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
         .set({
           attempts,
           status: dead ? 'failed' : 'pending',
-          nextAttemptAt: new Date(Date.now() + backoffSeconds(attempts) * 1000),
+          nextAttemptAt: sql`now() + make_interval(secs => ${backoffSeconds(attempts)})`,
           lastError: (error as Error).message.slice(0, 300),
         })
         .where(eq(webhookEvents.id, event.id));

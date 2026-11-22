@@ -19,10 +19,11 @@ export function configureApp(app: NestExpressApplication): void {
   // SEC-114: IP do navegador informado pelo BFF do painel, aceito só com o segredo compartilhado.
   app.use(bffClientIp(config.get('BFF_SHARED_SECRET', { infer: true })));
   // Latência por rota (p50/p95/p99) num log por janela, sem dado pessoal (platform/observability/latency.ts).
-  const latency = new LatencyRecorder();
-  app.use(latency.middleware);
+  // Só instala o middleware com o resumo ligado (> 0): desligado, não guarda amostra em memória que ninguém lê (A8).
   const latencyEvery = config.get('LATENCY_LOG_INTERVAL_SECONDS', { infer: true }) * 1000;
   if (latencyEvery > 0) {
+    const latency = new LatencyRecorder();
+    app.use(latency.middleware);
     const logger = app.get(Logger);
     setInterval(() => {
       const routes = latency.snapshot().slice(0, 25);

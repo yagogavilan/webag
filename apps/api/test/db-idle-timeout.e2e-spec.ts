@@ -54,6 +54,12 @@ describe('Timeout de transação ociosa: a API não cai e a conciliação segue 
     expect(rows[0]!.idle_in_transaction_session_timeout).toBe('1s');
   });
 
+  it('A6: os parâmetros de sessão do pool chegam à conexão (a busca por digitação errada depende do limite 0,5)', async () => {
+    const { rows } = await ctx.pool.query<{ t: string; s: string }>(`select current_setting('pg_trgm.word_similarity_threshold') as t, current_setting('statement_timeout') as s`);
+    expect(rows[0]!.t).toBe('0.5');
+    expect(rows[0]!.s).toBe('30s');
+  });
+
   it('transação esquecida aberta é encerrada pelo servidor e o processo continua vivo (o pool descarta a conexão e segue servindo)', async () => {
     const client = await ctx.pool.connect();
     await client.query('begin');
