@@ -209,6 +209,23 @@ describe('Preços e estoque (WB-377)', () => {
       expect(screen.getByLabelText('Selecionar Boné')).toBeChecked();
     });
 
+    it('A6: trocar a busca limpa a seleção (a barra some e o reajuste não alcança itens fora da tela)', async () => {
+      rows = [row(), row({ id: 'p2', name: 'Boné' })];
+      const { impl, calls } = setup();
+      vi.stubGlobal('fetch', impl);
+      renderLojista(<PriceTablePage />);
+      await userEvent.click(await screen.findByLabelText('Selecionar todos os 2 da lista'));
+      expect(screen.getByRole('region', { name: 'Ações em massa' })).toHaveTextContent('2 selecionados');
+      rows = [row({ id: 'p2', name: 'Boné' })];
+      fireEvent.change(screen.getByTestId('lojista.precos.search'), { target: { value: 'bon' } });
+      await screen.findByLabelText('Selecionar os 1 da busca', undefined, { timeout: 3000 });
+      expect(screen.queryByLabelText('Selecionar Camiseta básica')).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Ações em massa' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Selecionar Boné')).not.toBeChecked();
+      expect(screen.getByLabelText('Selecionar os 1 da busca')).not.toBeChecked();
+      expect(callsTo(calls, '/products/bulk', 'POST')).toHaveLength(0);
+    });
+
     it('funcionário sem preço em massa (não é o dono) só vê "Pausar"', async () => {
       vi.stubGlobal('fetch', mockFetch((url) => (url.pathname === `${P}/products/table` ? json({ data: rows, nextCursor: null, matchingCount: 1 }) : undefined), ...storeHandlers(fakeStore({ status: 'approved', step: 4, role: 'staff', permissions: ['catalog'] }))).impl);
       renderLojista(<PriceTablePage />);

@@ -46,6 +46,13 @@ function PriceTable({ storeId, owner }: { storeId: string; owner: boolean }) {
   const [generation, setGeneration] = useState(0);
   const [input, setInput] = useState('');
   const [q2, setQ] = useState('');
+  // A seleção só vale para o que está na tela: ao trocar a busca a lista muda e os ids marcados somem de vista (WB-377, review R1.3 A6).
+  // Limpar é mais seguro que preservar: reajuste em massa nunca atinge produto que o lojista não está vendo.
+  const [selectionQuery, setSelectionQuery] = useState(q2);
+  if (selectionQuery !== q2) {
+    setSelectionQuery(q2);
+    setSelected(new Set());
+  }
   useEffect(() => {
     const id = setTimeout(() => setQ(input.trim()), 300);
     return () => clearTimeout(id);
@@ -90,7 +97,7 @@ function PriceTable({ storeId, owner }: { storeId: string; owner: boolean }) {
           data-testid={T('select-all')}
         />
       ) : null}
-      {selected.size > 0 ? (
+      {selectedRows.length > 0 ? (
         <BulkBar
           storeId={storeId}
           selected={selectedRows}
@@ -104,7 +111,7 @@ function PriceTable({ storeId, owner }: { storeId: string; owner: boolean }) {
           }}
         />
       ) : null}
-      {selected.size > BULK_MAX ? <Banner tone="warning">O máximo é {BULK_MAX} produtos por vez. Desmarque alguns.</Banner> : null}
+      {selectedRows.length > BULK_MAX ? <Banner tone="warning">O máximo é {BULK_MAX} produtos por vez. Desmarque alguns.</Banner> : null}
       {rows.length > 0 ? (
         <div className={q.tableWrap}>
           <table className={ui.table}>
