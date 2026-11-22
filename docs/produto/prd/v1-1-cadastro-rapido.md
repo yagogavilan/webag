@@ -1,6 +1,6 @@
 # PRD v1.1: Cadastro e manutenção rápida de produtos
 
-Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-CAD-*, DEC-106, respostas em `v1-1-respostas-ao-time.md`; **DEC-128: teto de 100 rascunhos, sem fila offline, `quickPublish` de uma chamada, regras do leitor de texto colado em "Respostas ao parser"**) | Histórias: WB-370 a WB-379
+Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-CAD-*, DEC-106, respostas em `v1-1-respostas-ao-time.md`; **DEC-128: teto de 100 rascunhos, sem fila offline, `quickPublish` de uma chamada, regras do leitor de texto colado em "Respostas ao parser"**; **WB-372 C4 (DEC-131) e C8 (BUG-042) atualizados em 2026-11-22**) | Histórias: WB-370 a WB-379
 Base: `prd/lojista.md` WB-060 a WB-066 (aceitas; este PRD acelera o caminho, não o substitui), persona P2 e P2b (`personas.md`: "cadastro de 20 produtos em < 30 minutos"), `v1-1-pesquisa.md` §4 e §5; RN-05, RN-06; DEC-035 ("Você recebe").
 
 ## Problema
@@ -134,10 +134,10 @@ Como lojista, quero duplicar um produto parecido, para cadastrar a outra cor em 
 - **C1** Dado "Duplicar" num produto, então abre um rascunho com nome "<nome> (cópia)", mesma categoria, descrição, preço e variações, sem fotos, sem SKU e sem código de barras, e a câmera para a nova foto.
 - **C2** Dado a variação, quando duplico "M", então cria "M (cópia)" para eu trocar o valor do atributo e o estoque, sem duplicar SKU.
 - **C3** Dado produto em promoção, então a cópia nasce sem promoção.
-- **C4** Dado duplicar produto arquivado ou pausado por moderação, então a cópia é nova, passa pela moderação e **não fica visível na vitrine enquanto a moderação não a liberar** (SEC-215).
-- **C5** Dado uma duplicação, então o histórico da loja registra "duplicado de <id>" com autor, data e hora (DEC-122, I4).
+- **C4** (DEC-131, SEC-215; **exceção à regra de "cópia sem herdar estado"**) A cópia nasce sem herdar o estado do original, **exceto** o da moderação do Webag: (a) original **removido** ou **pausado pela moderação** -> a cópia nasce pausada pela moderação e publicar responde 403 `PRODUCT_MODERATED` até o admin liberar; (b) original **em revisão** -> a cópia nasce em revisão; (c) original **pausado pelo próprio lojista** ou **arquivado por ele** -> duplica normalmente, ativo se tem foto, nome e preço; (d) em (a) e (b) o lojista vê "Este produto está em revisão pela Webag. A cópia só fica visível depois da liberação", sem o motivo nem o texto interno da moderação (SEC-209); (e) a cópia nunca aparece na vitrine antes da liberação.- **C5** Dado uma duplicação, então o histórico da loja registra "duplicado de <id>" com autor, data e hora (DEC-122, I4).
 - **C6** (C-CAD-10) Dado duplicar o produto de outra loja pelo id, então 404; a posse do produto de origem é conferida.
 - **C7** Dado produto de moda com cores diferentes, então "Duplicar" é o caminho para a outra cor (foto por cor dentro de um produto com grade fica fora da v1.1).
+- **C8** (BUG-042) Dado rascunho-cópia com evento de moderação herdado, quando o lojista toca em "Apagar" ou o rascunho vence em 30 dias, então apaga sem erro e a rotina de vencimento das demais lojas não é afetada (o apagar não pode falhar por causa do evento).
 
 ### WB-373 Código de barras com a câmera — Should — dep: WB-370
 Como lojista, quero ler o código do produto, para não digitar e não cadastrar duas vezes.

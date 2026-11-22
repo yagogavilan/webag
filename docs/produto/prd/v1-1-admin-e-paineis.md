@@ -1,6 +1,6 @@
 # PRD v1.1: Admin com mais autonomia e painel de gráficos
 
-Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7). **WB-359 cortada na DEC-104 (só o export); a proteção das consultas passou para a WB-356** | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-ADM-* e C-DSH-*, DEC-108, matriz métrica x dimensão) | Histórias: WB-350 a WB-358
+Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7). **WB-359 cortada na DEC-104 (só o export); a proteção das consultas passou para a WB-356** | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-ADM-* e C-DSH-*, DEC-108, matriz métrica x dimensão; fechamento da R2: sensibilidade por métrica, conteúdo dos 5 painéis, WB-357 C7 a C9) | Histórias: WB-350 a WB-358
 Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), RN-15 (métricas), RN-16 (estados da loja); DEC-073 e DEC-074 (menor privilégio, sem "revelar dado" na 1.0); ADR-014 (operação do admin); `docs/arquitetura/modelo-dados.md` (`audit_log`, `reports`).
 
 ## Problema
@@ -117,6 +117,22 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 | Sessões, visitas à loja, visitas ao produto, adicionados à sacola, conversão (acessos; `analises` RN-A5) | T, CI, LO, OR (CA só em visitas ao produto); célula < 5 suprimida |
 | Tempo do OK da loja (mediana e p90), % de saídas por fonte (loja, sistema, admin) | T, CI, LO |
 | % de entregas com mapa, % de tempo sem sinal, erro mediano do ETA | T, CI (nunca motoboy individual) |
+**Sensibilidade por métrica (fecha a permissão da matriz de perfis; `[HIPÓTESE]`, o fundador ajusta depois de usar):**
+| Classe | Métricas | Quem vê |
+|---|---|---|
+| Geral | pedidos pagos, pedidos entregues, cancelamentos, lojas ativas, tempo de aceite, entregues na faixa, tempo do pagamento à entrega, tempo do OK da loja | Todos os perfis (suporte já lê pedidos, lojas e fila de logística, RN-13) |
+| Operacional | GMV, GMV concluído, ticket médio, novos clientes, clientes ativos, recompra, usos de cupom, desconto total, acessos (sessões, visitas, conversão) | Super admin, operação, financeiro (suporte não: dado de negócio, WB-362 C6) |
+| Financeira | receita Webag, take rate, custo de logística por entrega, desconto Webag, custo por cliente novo | Super admin e financeiro |
+
+**Conteúdo dos 5 painéis prontos (WB-357; só métricas e dimensões da matriz; o designer ajusta a ordem, não o conteúdo):**
+| Painel | Widgets (métrica por dimensão) |
+|---|---|
+| Visão geral | GMV, pedidos pagos, ticket médio, novos clientes, cancelamentos (taxa) e entregues na faixa, cada um com variação sobre o período anterior; GMV por dia |
+| Vendas | GMV por semana; GMV por categoria; GMV por modo (entrega e retirada); GMV por meio de pagamento; ticket médio por semana; receita Webag e take rate por semana (financeiras) |
+| Lojas | tabela por loja: GMV, pedidos entregues, cancelamentos (taxa), tempo de aceite (mediana e p90), novos clientes; lojas ativas por cidade |
+| Entrega | entregues na faixa por semana e por faixa de distância; tempo do pagamento à entrega (mediana e p90) por faixa; cancelamentos por faixa de distância; custo de logística por entrega por faixa (financeira) |
+| Cupons | usos de cupom e desconto total por campanha; novos clientes por campanha; desconto Webag e custo por cliente novo por campanha (financeiras) |
+
 - **Tipos de gráfico:** número (KPI), linha, barra, barra empilhada, rosca (até 6 fatias), tabela ordenável. Rosca e pizza só para parte do todo.
 - **Limites:** período máximo 400 dias; 1 métrica por widget (até 3 sem dimensão, como linhas); no máximo 2 dimensões e 10 categorias exibidas mais "Outros"; 12 widgets por painel; 20 painéis por usuário; 5 filtros por widget; resposta até 5.000 pontos.
 - **Painéis são privados** do usuário; duplicar cria cópia dele. Painéis prontos pertencem ao sistema (não editáveis; duplicáveis).
@@ -198,7 +214,7 @@ Como fundador, quero que cada perfil faça só o que lhe cabe, para limitar o da
 Como fundador, quero que cada número tenha uma definição única, para não discutir "qual GMV".
 - **C1** Dado a métrica GMV, então usa a definição RN-15 e a tela mostra a definição em uma frase.
 - **C2** Dado combinação métrica x dimensão incompatível, então a API devolve 422 com o motivo e a tela só oferece as compatíveis.
-- **C3** Dado métrica financeira e usuário sem permissão, então não aparece no construtor e a API devolve 403.
+- **C3** Dado métrica financeira e usuário sem permissão (ou operacional para o perfil suporte; classes na seção Regras), então não aparece no construtor e a API devolve 403.
 - **C4** Dado conjunto de pedidos conhecido (seed), então cada métrica bate com um cálculo independente (teste contra oráculo).
 - **C5** Dado consulta com parâmetro fora da lista (métrica, dimensão ou filtro desconhecido), então 422, sem executar nada.
 - **C6** (C-DSH-01) Dado a requisição `{metricId, dimensionIds[], filters[{dimensionId, op: eq ou in, values}], period}`, então ids são validados contra o registro do servidor e o SQL vem **só** do registro, com valores como parâmetro (`sql.raw` com entrada é proibido por regra de lint no módulo); fuzz com `'; drop`, nome de coluna, `__proto__` e id desconhecido retorna 422 e executa **zero** consultas.
@@ -216,6 +232,9 @@ Como fundador, quero abrir painéis prontos, para ter resposta no primeiro dia.
 - **C4** Dado o painel pronto, quando duplico, então ganho uma cópia editável.
 - **C5** Dado o rótulo "Atualizado às HH:MM", então reflete a última atualização dos agregados.
 - **C6** Dado a lista de painéis prontos, então traz Visão geral, Vendas, Lojas, Entrega e Cupons (Acessos só com a WB-362), todos duplicáveis e nenhum editável.
+- **C7** Dado cada painel pronto, então contém exatamente os widgets da tabela "Conteúdo dos 5 painéis prontos" (teste de snapshot da definição) e cada widget usa só combinação métrica x dimensão aceita pela matriz (o teste da lista fechada da WB-356 C7 cobre os 5).
+- **C8** Dado o perfil operação abrindo "Vendas" ou "Cupons", então os widgets de métrica financeira aparecem como "Sem permissão" (bloqueado, sem valor) e **não são consultados** (zero chamadas ao banco para eles); dado o perfil suporte abrindo "Visão geral", então só os widgets de classe Geral trazem valor e os demais aparecem bloqueados.
+- **C9** Dado menos de 20 pedidos no período, então a variação sobre o período anterior e as taxas somem e a tarja diz "Poucos dados" (limiares da seção Regras); a tabela por loja do painel "Lojas" mostra o `n` da linha.
 
 ### WB-358 Construtor de widgets, salvar e duplicar painéis — Should — dep: WB-356
 Como fundador, quero montar meus gráficos, para responder minhas perguntas sem pedir ao dev.

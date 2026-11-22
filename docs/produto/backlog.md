@@ -532,7 +532,7 @@ Ordem se o prazo apertar: B1, B2, B3, B4, B5 (o último a entrar). Correções p
 
 ## 10. v1.1 (proposta do PO, 2026-11-22; pedido do fundador)
 
-Fontes: PRDs `docs/produto/prd/v1-1-cupons.md`, `v1-1-admin-e-paineis.md`, `v1-1-analises-lojista.md`, `v1-1-cadastro-rapido.md`, `v1-1-despacho-e-app-motoboy.md`, `v1-1-rastreio-e-notificacoes.md`. Pesquisa e decisões do fundador: `docs/produto/v1-1-pesquisa.md` (§11). Propostas de decisão: `decisoes.md` DEC-088 a DEC-101. **Os critérios de aceite em Gherkin estão em cada PRD, na história de mesmo ID** (o backlog indexa; não duplica). **Status vigente: ver §10.7 (atualizado em 2026-11-22, W0.1).** A coluna "Status" das tabelas da §10.4 guarda o valor de origem ("Proposta") e **não** é mais atualizada; a §10.7 é a fonte. Em 2026-11-22 as specs de tela e o threat model existem (`design/telas/v1-1-*.md`, `seguranca/threat-model-v1-1.md`); faltam a estimativa dos devs e o contrato OpenAPI (a definir pelo backend-dev na onda x.1).
+Fontes: PRDs `docs/produto/prd/v1-1-cupons.md`, `v1-1-admin-e-paineis.md`, `v1-1-analises-lojista.md`, `v1-1-cadastro-rapido.md`, `v1-1-despacho-e-app-motoboy.md`, `v1-1-rastreio-e-notificacoes.md`. Pesquisa e decisões do fundador: `docs/produto/v1-1-pesquisa.md` (§11). Propostas de decisão: `decisoes.md` DEC-088 a DEC-101. **Os critérios de aceite em Gherkin estão em cada PRD, na história de mesmo ID** (o backlog indexa; não duplica). **Status vigente: ver §10.7 (W0.1) e §10.8 (DoR da R2, 2026-11-22).** A coluna "Status" das tabelas da §10.4 guarda o valor de origem ("Proposta") e **não** é mais atualizada; a §10.7 é a fonte. Em 2026-11-22 as specs de tela e o threat model existem (`design/telas/v1-1-*.md`, `seguranca/threat-model-v1-1.md`); faltam a estimativa dos devs e o contrato OpenAPI (a definir pelo backend-dev na onda x.1).
 
 ### 10.1 IDs e o que muda no que já existia
 - **Faixa usada: WB-340 a WB-399.** WB-300 a WB-334 seguem **reservados à fase 2** (§6.1 a §6.4); o pedido citava "WB-3xx" e esses números já estavam ocupados. Faixas: cupons 340-349; admin e painéis 350-359; análises 360-369; cadastro 370-379; despacho e app do motoboy 380-389; rastreio e notificações 390-399.
@@ -687,7 +687,7 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | **Front do cadastro rápido: PRONTO (DoR fechada pelo PO, 2026-11-22, DEC-128)** | R1.2: WB-370, 371, 372, 374, 375, 379. R1.3: WB-376 (parser 376a já existe) e 377. Fora da R1: WB-373 (R2), WB-378 (R5) | Estimado (16,0 UT front, DEC-126); contrato no OpenAPI (a rota só é usada depois que o backend tira o `x-planned`, e `quickPublish` só depois dos SEC-213/214/215/218). **Não bloqueiam o início:** o designer corrige teto 100 e estado sem rede (lista em `prd/v1-1-cadastro-rapido.md`, "Respostas ao parser") antes da revisão da tela; os critérios novos já valem. Aceite da meta de 60 s depende do teste em aparelho real (fundador, T1) |
 | **Pronta, R1, produção só com condição** | WB-353 (produção só com motivo "solicitado pelo lojista" até o **J27**) | J27 (jurídico) |
 | **Pronta, R1 em staging; liga em produção só com o J24** | WB-360, 361, 363, 369 | **J24** (jurídico e Security); política de privacidade, Data Safety e App Privacy antes de ligar (C-GEN-03) |
-| **Pronta para sprint (PO), R2** | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362, 367, 373 | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
+| **Pronta para sprint (PO), R2** (**fechamento em §10.8, 2026-11-22**) | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362, 367, 373 | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
 | **Pronta, R2, liga só com parecer** | WB-343 (**J27**: cláusula de adesão); WB-347 (frete grátis só com o **J22**); WB-348 (**J23**: "de/por" de 30 dias) | Jurídico |
 | **Pronta para sprint (PO), R3** | WB-358, 381, 382, 390, 391, 396, 397 | **SEC-196** corrigido antes do G4 da R3 (Security e backend); teste de Web Push em aparelho real (WB-397) |
 | **Pronta (PO), falta ADR** | WB-380 (mapa) | ADR do mapa e spike L5 (tech-lead) |
@@ -704,3 +704,27 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 **Critérios transversais (DoD de toda história da v1.1; vêm do Security, sem história própria):** C-GEN-01 flags novas nascem **desligadas** (`campanhas_cupom`, `painel_construtor`, `coleta_eventos`, `modulo_analises`, `app_motoboy`, `rastreio_ao_vivo`, `saida_automatica`, `web_push_lojista`, `ia_visao_real`, `ean_base_externa`; banco novo de produção: todas desligadas; ligar exige super admin com 2º fator e motivo citando a DEC ou o parecer); C-GEN-02 `openapi.yaml` com todas as rotas novas e teste de contrato de papel errado cobrindo motoboy, "ver como" e módulo pago; C-GEN-03 inventário LGPD e Data Safety atualizados **antes** de ligar cada flag que muda o app.
 
 **Mudanças de escopo e de regra desta rodada:** WB-344 C4 reescrito sem celular (DEC-103 D-01); WB-060 C1 com descrição opcional e `descricao_obrigatoria` (DEC-106); WB-359 cortada só no export, com a proteção movida para a WB-356 (**atenção: o corte literal da DEC-104 removeria o controle do risco nº 3 do threat model, pontuação 9**); WB-361 C4 e WB-369 C1 conforme SEC-194 (bruto pseudonimizado, "até 90 dias"); WB-346 com teto de 30% (D-03); WB-353 com D-04; WB-383 com D-05; WB-354 com D-06 e C6 (filtro "Acesso"); **WB-352 C2 e C8 reescritos (SEC-207, DEC-120) e C10 a C15 acrescentados: sem dado de cliente na visão, caminho de suporte pela ficha do pedido (WB-108 C2) com abertura auditada; C15 (aviso ao lojista) é Should e pode ser cortado sem tocar o piso**; novos RN-A9 (períodos) e RN-A10 (cobertura), RN-C10, RN-C11, RN-D6a, RN-D11, RN-D12, RN-R10. Decisões em `decisoes.md` DEC-106 a DEC-113 (propostas).
+
+### 10.8 DoR da R2: fechamento (PO, 2026-11-22, após R1.1 a R1.3 na main)
+
+**Pendências do `plano-v1-1.md` §4 que eram do PO: todas fechadas.** WB-344 C4 sem celular (C4 e C14 novo); WB-060 C1 (`prd/lojista.md`, `descricao_obrigatoria`); frase SEC-194 em WB-360 C1 e C3, WB-361, WB-363, WB-369 C1 e RN-A3; WB-372 C4 com a exceção da moderação (DEC-131) e C8 (BUG-042); perguntas do designer (`v1-1-respostas-ao-time.md` seções D e G). **Falta para toda história R2** (DoR do `definicao-de-pronto`): (a) estimativa dos devs (poker; o PM coleta), (b) contrato OpenAPI da R2 (backend-dev, em curso; "a definir nesta história" é aceito), (c) 4 correções de spec do designer (`respostas` §G; o PRD prevalece até lá). Nenhuma pendência é do PO.
+
+| WB | Status DoR (PO) | Liga em produção só com | Observação |
+|---|---|---|---|
+| 340 | **Pronta** (C12 novo: pior caso) | F2 > R$ 0 para custo Webag | Piso do motor; 12 critérios |
+| 341 | **Pronta** (C2 e C3 com parâmetros) | F4 (seed provisório até lá) | 11 critérios; alerta de tamanho: dividir só se o poker estourar |
+| 342 | **Pronta** | F2 | Teste de concorrência é o aceite (C2, C7) |
+| 343 | **Pronta**; produção **J27** | J27 | Sem adesão tácita |
+| 344 | **Pronta** (C4 e C14: tetos no lugar do OTP) | Nada | 14 critérios: candidata a dividir (identificadores x painel "Suspeitos") |
+| 345 | **Pronta** | F2 | Relatório confere com o ledger |
+| 346 | **Pronta** (Should; corte nº 4 da DEC-100) | J27 se parte da loja | Teto de 30% (D-03) |
+| 347 | **Pronta** (C6 e C10 novos); frete grátis só com **J22** | J22 | Piso; tabela "Mensagens ao cliente" no PRD |
+| 348 | **Pronta** (Should; corte nº 4); produção **J23** | J23 | Selo desligado sem parecer |
+| 349 | **Pronta** | Nada | Pausa com reconferência sob trava |
+| 356 | **Pronta** (C3 com 3 classes de sensibilidade) | Nada | Inclui a proteção de consulta que era da WB-359 |
+| 357 | **Pronta** (C7 a C9 novos: conteúdo dos 5 painéis) | Nada | Should; depende da 356 |
+| 362 | **Pronta** (C4 alinhado à RN-A2) | `coleta_eventos` (J24) | Depende de WB-361/363 (R1.4); estado vazio coberto (C7) |
+| 367 | **Pronta** (C5 a C7: texto, dono, critério de matar HIP-A1) | Nada (não coleta dado pessoal) | 5 entrevistas do fundador alimentam a mesma hipótese |
+| 373 | **Pronta**; leitor no Safari é spike do mobile-dev | `ean_base_externa` só com F9 | Should; base própria nasce vazia (L4); primeiro da fila de corte da R2 (plano §8) |
+
+**Para o fundador (resumo):** F2 e F4 (recomendação em `respostas` §F), e J22, J23 e J27 só para ligar. **Para o CEO:** (1) aceitar a divisão da flag `campanhas_cupom` em 3 parâmetros (`campanha_frete_gratis`, `campanha_parte_da_loja`, `selo_de_por`); (2) validar a classificação de sensibilidade das métricas (PRD admin); (3) aceitar a tabela "Mensagens ao cliente" como fonte única; (4) pedir ao designer as 4 correções de spec.

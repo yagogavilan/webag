@@ -1,6 +1,6 @@
 # PRD v1.1: Coleta de acessos, análises do admin e módulo pago "Análises" do lojista
 
-Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7); coleta só em staging até o J24. **WB-368 cortada na DEC-104** | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: SEC-194, controles C-ANA-*, DEC-109, DEC-103 D-02 e D-08) | Histórias: WB-360 a WB-369
+Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7); coleta só em staging até o J24. **WB-368 cortada na DEC-104** | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: SEC-194, controles C-ANA-*, DEC-109, DEC-103 D-02 e D-08; fechamento da R2: frase SEC-194 em WB-360 C1 e C3, WB-361, WB-363, WB-362 C4, WB-367 C5 a C7) | Histórias: WB-360 a WB-369
 Base: `v1-1-pesquisa.md` §3; `prd/lgpd.md` (WB-210, WB-211, WB-216); RN-14 (lojista só vê dado de cliente em pedido ativo); DEC-016 (sem retenção no split); DEC-073 (piloto sem analytics; `relatorio-final.md` (e)1: analytics antes de campanha paga); SEC-156, SEC-159; `docs/seguranca/inventario-lojas.md` (Data Safety e App Privacy).
 
 ## Problema
@@ -83,7 +83,7 @@ Base: `v1-1-pesquisa.md` §3; `prd/lgpd.md` (WB-210, WB-211, WB-216); RN-14 (loj
 
 **RN-A2 Agregação mínima e supressão complementar (C-ANA-05, DEC-109).** Célula (loja x período x origem, ou produto x período) com **menos de 5 sessões** é suprimida **no servidor** (o número nunca vai na resposta). Para impedir a descoberta por subtração: (1) todas as células < 5 de uma quebra são **agrupadas** numa linha "Outras"; (2) se "Outras" nascer de **uma só** célula, absorve também a menor célula visível; (3) se "Outras" ainda ficar < 5, a tela mostra "menos de 5" e **nenhum total da mesma resposta é exato**: vem arredondado ao múltiplo de 5 e rotulado "cerca de". Vendas e pedidos do banco (RN-14) seguem exatos e separados. Loja com menos de 30 visitas no período mostra só os totais, com "Poucos dados ainda" e o contador "Faltam N visitas para mostrar o funil" (a partir de 5 visitas; abaixo de 5: "Ainda poucas visitas"). O mesmo vale no admin para quebras por loja. Os 5 e os 30 são parâmetros `[HIPÓTESE]`.
 
-**RN-A3 Base legal e transparência `[HIPÓTESE; encarregado e advogado, J24]`.** Medição agregada do próprio Webag, sem identificar a conta, apoiada em **legítimo interesse** (LGPD art. 7º IX; guia ANPD de cookies trata analítica como candidata, fonte secundária), com aviso claro e **opt-out em um toque** (Conta > Privacidade > "Ajudar o Webag a melhorar"). **O bruto não é anônimo; é pseudonimizado (SEC-194, DEC-103 D-02):** `order_paid` com `session_id`, loja e hora permite ligar a sessão ao pedido e, por ele, à pessoa. Por isso: nenhuma API nem tela lê o bruto (só o job de agregação), o `order_paid` grava a hora truncada à hora cheia e sem valor, o `session_id` não vai a log, pedido nem usuário (teste de varredura de log no QA) e o bruto some por partição em até 90 dias. **Só o agregado (mínimo de 5, RN-A2) é tratado como anônimo.** Ao J24 vão duas perguntas separadas: bruto (pseudônimo) e agregado (anônimo). Texto ao cliente: "dados de uso não ligados à sua conta, guardados por até 90 dias". O padrão ligado ou desligado é o parâmetro `medicao_padrao_ligada` (opt-out hoje; vira opt-in sem refazer tela se o J24 pedir). Qualquer vinculação à conta (ex.: recomendar produto) é outra finalidade e exige consentimento específico (`consents`, WB-211). A alternativa mais prudente é **opt-in**, ao custo de cobertura menor e viés no funil (F7).
+**RN-A3 Base legal e transparência `[HIPÓTESE; encarregado e advogado, J24]`.** Medição agregada do próprio Webag, sem identificar a conta, apoiada em **legítimo interesse** (LGPD art. 7º IX; guia ANPD de cookies trata analítica como candidata, fonte secundária), com aviso claro e **opt-out em um toque** (Conta > Privacidade > "Ajudar o Webag a melhorar"). **O bruto não é anônimo; é pseudonimizado (SEC-194, DEC-103 D-02):** `order_paid` com `session_id`, loja e hora permite ligar a sessão ao pedido e, por ele, à pessoa. Por isso: nenhuma API nem tela lê o bruto (só o job de agregação), o `order_paid` grava a hora truncada à hora cheia e sem valor, o `session_id` não vai a log, pedido nem usuário (teste de varredura de log no QA) e o bruto some por partição em até 90 dias. **Só o agregado (mínimo de 5, RN-A2) é tratado como anônimo.** Ao J24 vão duas perguntas separadas: bruto (pseudônimo) e agregado (anônimo). Texto ao cliente (**frase oficial**, a mesma no aviso do 1º uso, na tela de Privacidade, na tela pós-opt-out, na exportação e na política): "dados de uso não ligados à sua conta, guardados por até 90 dias"; a palavra "anônimo" fica restrita ao agregado com mínimo de 5 e **não** aparece em texto ao cliente até o J24; o lojista vê a tag "Medição agregada" (não "anônima") em Análises `[HIPÓTESE]`; o designer ajusta as telas de `v1-1-transparencia-medicao.md` e `v1-1-analises-lojista.md` (hoje dizem "anônimo"). O padrão ligado ou desligado é o parâmetro `medicao_padrao_ligada` (opt-out hoje; vira opt-in sem refazer tela se o J24 pedir). Qualquer vinculação à conta (ex.: recomendar produto) é outra finalidade e exige consentimento específico (`consents`, WB-211). A alternativa mais prudente é **opt-in**, ao custo de cobertura menor e viés no funil (F7).
 
 **RN-A4 Opt-out.** Ao desligar, o app deixa de enviar na hora (inclusive a fila offline); o que já foi enviado não está ligado à conta, não dá para localizá-lo por ela e é apagado sozinho em até 90 dias (a tela diz isso; não diz "anônimo"). Na exclusão de conta nada de analytics precisa ser apagado (não há ligação); o teste de classificação de colunas ligadas a `users` (SEC-158) cobre.
 
@@ -111,16 +111,16 @@ Base: `v1-1-pesquisa.md` §3; `prd/lgpd.md` (WB-210, WB-211, WB-216); RN-14 (loj
 
 ### WB-360 Aviso, controle e opt-out de medição no app — Must — dep: WB-211
 Como cliente, quero saber da medição e poder desligá-la, para controlar meus dados.
-- **C1** Dado o primeiro uso após a atualização, então aparece um aviso curto (o que se mede, para quê, que não identifica a conta) com "Entendi" e link para Privacidade; não bloqueia a navegação.
+- **C1** (SEC-194) Dado o primeiro uso após a atualização, então aparece um aviso curto (o que se mede, para quê, e a frase oficial "dados de uso não ligados à sua conta, guardados por até 90 dias"; nunca "anônimo") com "Entendi" e link para Privacidade; não bloqueia a navegação.
 - **C2** (C-ANA-08) Dado Conta > Privacidade, quando desligo "Ajudar o Webag a melhorar", então nenhum evento novo é enviado a partir daquele toque e a fila local é esvaziada: com 50 eventos na fila (inclusive os gravados offline), 0 são enviados.
-- **C3** Dado o interruptor desligado, então a escolha persiste após fechar o app e a tela explica o que já foi enviado.
+- **C3** (SEC-194) Dado o interruptor desligado, então a escolha persiste após fechar o app e a tela diz "Não enviamos mais nada a partir de agora. O que já foi enviado não está ligado à sua conta e é apagado sozinho em até 90 dias" (não diz "anônimo" nem "não dá para apagar").
 - **C4** Dado o app sem internet, então o interruptor funciona do mesmo jeito.
 - **C5** Dado a política de privacidade, então cita a medição, a finalidade, a retenção de **até** 90 dias e o canal do titular (WB-217).
 - **C6** (C-ANA-08) Dado conta de membro de loja ou de admin logada, então o app não envia eventos.
 - **C7** Dado o aviso do 1º uso, então reaparece só em mudança material (finalidade, retenção ou destinatário), versionado; correção de texto não o reabre.
 
 ### WB-361 Coleta de eventos de navegação — Must — dep: WB-360
-Como Webag, quero registrar a jornada da sessão sem identificar o cliente, para medir o funil.
+Como Webag, quero registrar a jornada da sessão sem ligá-la à conta do cliente, para medir o funil (o bruto é pseudonimizado, não anônimo: SEC-194, RN-A3).
 - **C1** Dado a abertura do app, então `app_session_started` é enviado com `platform`, `app_version`, `city_id` e `session_id` novo.
 - **C2** Dado abrir o perfil de uma loja, então um `store_viewed` com `store_id` e `origin`; reabrir a mesma loja na mesma sessão dentro de 30 s não duplica.
 - **C3** Dado tocar em adicionar com sucesso, então um `item_added`; falha de estoque não gera evento.
@@ -137,13 +137,13 @@ Como fundador, quero ver o que o cliente abre, para decidir destaque, banner e a
 - **C1** Dado o período de 7 dias, então vejo as 10 lojas com mais visitas e os 10 produtos com mais aberturas, com variação sobre o período anterior.
 - **C2** Dado a loja, então mostra "só perfil" (visita sem abrir produto) versus "abriu produto".
 - **C3** Dado o funil geral e por cidade: visita, produto, sacola, checkout, pedido pago, com a conversão de cada etapa separada (não só a final).
-- **C4** Dado a quebra por origem, então célula com menos de 5 sessões aparece "menos de 5".
+- **C4** Dado a quebra por origem, então célula com menos de 5 sessões segue a RN-A2 (agrupada em "Outras", "menos de 5" e totais "cerca de" quando houver supressão; WB-363 C6 e C7); a regra vale também para o admin nas quebras por loja.
 - **C5** Dado o filtro de cidade, então todos os números respeitam.
 - **C6** Dado o perfil suporte, então não acessa (dado de negócio, RN-13).
 - **C7** Dado a falta de dados, então estado vazio "Ainda sem dados: o app precisa ser atualizado".
 
 ### WB-363 Agregação, mínimo de 5 e retenção — Must — dep: WB-361
-Como Webag, quero agregar e apagar o bruto, para entregar só dado anônimo e curto.
+Como Webag, quero agregar e apagar o bruto, para entregar só dado agregado (anônimo a partir do mínimo de 5, RN-A2) e guardar o bruto por até 90 dias (SEC-194).
 - **C1** Dado o fim do dia, então o job gera contagens por loja, produto, origem, cidade e dia sem `session_id`; reexecutar não duplica.
 - **C2** (C-ANA-04) Dado o bruto com mais de 90 dias (partição de 91 dias), então a partição é removida e o agregado permanece; nenhuma API nem tela lê o bruto (só o job de agregação) e o papel do admin não tem leitura na tabela bruta (teste de permissão).
 - **C3** (C-ANA-05 a) Dado a regra RN-A2, então nenhuma API devolve célula com menos de 5 (teste com 4: ausente; com 5: presente).
@@ -189,6 +189,9 @@ Como fundador, quero medir interesse antes de construir, para não gastar com m�
 - **C2** Dado o toque, então registra `analytics_interest_clicked` e mostra "Avisamos você quando abrir. Quanto você pagaria por mês?" com 4 faixas **de exemplo** ("Até R$ 19", "R$ 20 a R$ 39", "R$ 40 a R$ 79", "R$ 80 ou mais"), a opção "Não pagaria por isso" e um campo opcional curto ("Não escreva dados de clientes."); a tela não diz que será cobrado o valor escolhido; guarda-se o id da faixa (HIP-A1).
 - **C3** Dado o fundador, então vê no admin quantas lojas clicaram e as faixas escolhidas.
 - **C4** Dado que o módulo ainda não existe, então a tela não promete data nem recurso (sem "em breve" com data).
+- **C5** Dado o campo opcional, então aceita até 200 caracteres, é guardado e exibido ao admin como texto (sem HTML, escapado no CSV) e **não** vai a nenhum evento de analytics; o texto livre é associado à loja, não a pessoa.
+- **C6** Dado o cartão, então só o dono da loja (ou funcionário com permissão `analises`) o vê e responde; cada loja tem **uma** resposta, que pode ser alterada (a última vale; o histórico guarda as anteriores para o admin); funcionário sem permissão não vê o cartão.
+- **C7** (matar a hipótese) Dado o resultado, então o admin lê "lojas que clicaram, escolheram faixa e escolheram 'Não pagaria por isso'" com os números absolutos; a hipótese HIP-A1 é **refutada** se menos de 3 lojas escolherem uma faixa paga entre as primeiras 10 que clicarem `[HIPÓTESE; limite definido antes do teste]` e o módulo não é lançado (R5 fecha "pronta, desligada").
 
 ### WB-368 Origem por canal do link da loja — Could — dep: WB-361 — CORTADA na DEC-104 (gatilho de volta: 3 lojistas pedirem; sem ela, `?o=` cai em "Link externo" genérico)
 Como lojista, quero saber qual rede traz visitas, para divulgar onde funciona.

@@ -104,3 +104,51 @@ Padrão adotado: custo zero e privacidade. Tudo que não tem dado é `[HIPÓTESE
 | análises lojista | Períodos | 7 e 30 dias terminando ontem; 90 dias só no admin | D-08 |
 | análises admin | Preço, teste, quem registra | Preço: fundador (F5). Teste: 30 dias (parâmetro). Registra pagamento: financeiro ou super admin | WB-366 |
 | transparência | Aviso 1 vez ou a cada versão | Só em mudança material (ver B) | |
+
+---
+
+# Fechamento da DoR da R2 (PO, 2026-11-22, após R1.1 a R1.3)
+
+Escopo: WB-340 a 349, 356, 357, 362, 367, 373. Status por história: `backlog.md` §10.8. Tudo abaixo é **proposta do PO; o CEO valida e o fundador decide o que é dele** (preço, comissão e dinheiro nunca são do PO).
+
+## F. Para o fundador (lista curta; tempo estimado ~1 h, mais ~1 h do advogado)
+
+| # | Decisão | Recomendação do PO | Se não decidir |
+|---|---|---|---|
+| **F2** | Orçamento mensal de cupons pagos pela Webag (hoje R$ 0) | **Manter R$ 0 no sistema até 3 condições:** (1) F4 cotado; (2) 5 lojas com pedidos reais (cupom acelera pedido, não cria loja; DEC-100); (3) J22 resolvido, se for frete grátis. Depois, **R$ 300 no 1º mês e teto de R$ 50 por dia** (`[HIPÓTESE]`: é um limite de perda que o fundador aceita, não um número de mercado; sem fonte externa), só na campanha "Primeira compra R$ 8" **Autofinanciada** (R$ 300 / R$ 8 = ~37 clientes novos). Revisão semanal pelo relatório WB-345; sobe só se o custo por cliente novo ficar abaixo do que o cliente deixa de margem nos 2 primeiros pedidos `[HIPÓTESE]`. Teto do autofinanciado: **50% da margem**, só global | Segue R$ 0: só "Loja paga" ativa (já dá para testar o motor inteiro) |
+| **F4** | Custo previsto do motoboy por faixa | **Cotar 3 a 5 motoboys ou serviços locais** (valor por corrida nas 4 faixas 0-2, 2-5, 5-10 e 10-15 km, e se há desconto por lote de 3; ~1 h, o fundador). Hoje: taxa cobrada R$ 8, 10, 14 e 18 x custo do seed R$ 8, 11, 15 e 19 (`regras-de-negocio.md` RN-02; `relatorio-final.md` (d)4), ou seja **R$ 0, -1, -1 e -1 por entrega**, `[HIPÓTESE]` sem cotação. Regra: se o custo real passar da taxa, **subir a taxa da faixa** até cobrir (preferido) ou aceitar o déficit; **sem frete grátis enquanto a margem da faixa for negativa** (pesquisa F4). Cadastrar o custo mais alto cotado (conservador) | Tabela provisória do seed; o autofinanciado destrava só cesta grande, o que é seguro |
+| **J22** | Portaria Senacon 61/2026: a Webag é destinatária? Como mostrar taxa de entrega e de serviço? Vale também para o v1.0 (G5) | Só para **ligar**: campanha de **frete grátis** e o selo de composição. A tela do cliente (WB-347 C8) é construída igual | Frete grátis desligado; desconto em valor e percentual segue |
+| **J23** | Regulamento mínimo, encerramento antecipado, pedido mínimo global (R$ 20), "de/por" de 30 dias | Só para **ligar**: selo "de/por" (WB-348) e frete grátis. O "pedido a partir de R$ X" como condição de cupom já é prática comum (`pesquisa` §2.2); o advogado confirma | "de/por" desligado: a loja mostra só o preço atual |
+| **J27** | Termos do Lojista: adesão e saída de campanha, teto da loja, edição de catálogo e preço pelo admin, módulo pago | Só para **ligar**: campanha com parte da loja (Loja paga e Dividido) e edição pelo admin sem pedido do lojista | Só "Webag paga" e "Autofinanciado"; admin edita só com motivo "solicitado pelo lojista" (já é regra) |
+
+Perguntas exatas ao advogado: `decisoes.md` J22, J23 e J27 (não reescrevo). **Risco que o PO não resolve:** liberar desconto Webag/Autofinanciado em valor ou percentual **sem** J23 depende de o fundador aceitar o risco de regulamento (CDC arts. 30 e 31); mitigação já no PRD: pausa vale para pedidos novos e pedido criado mantém o desconto (WB-349 C1), texto de condição na vitrine (RN-C7). **Recomendação ao CEO e ao backend-dev:** em vez de uma flag só (`campanhas_cupom`), três **parâmetros do admin, padrão desligados**: `campanha_frete_gratis`, `campanha_parte_da_loja`, `selo_de_por`. Assim cada parecer liga a sua parte e o resto não espera o advogado.
+
+## G. Perguntas do designer e do Security ainda abertas (R2)
+
+| Spec | Pergunta | Resposta |
+|---|---|---|
+| admin cupons CU-2 | Custo variável do percentual | **Pior caso por pedido** na simulação (teto em R$ do desconto) e "até N pedidos no pior caso" contra o orçamento do dia: WB-340 C12 |
+| admin cupons CU-4, P1 | Custo acumulado x orçamento global | Barra "gasto do mês x orçamento" no topo (seção D) e recusa de ativação se a soma passar (WB-340 C11) |
+| admin cupons P6 | Barra do dia atualiza a cada quanto tempo? | Basta **atualizar a cada 60 s com a tela aberta** `[HIPÓTESE]`; a trava de orçamento é do servidor (reserva atômica), a barra é só leitura. Backend confirma o custo |
+| admin cupons P7, P8 | Revelar dado em "Suspeitos"; validade do 2º fator; retenção | Pedido a pedido com motivo e auditoria (WB-344 C12); 2º fator vale **5 min** (`reauth_min`, WB-340 C6); sinais de fraude **12 meses** `[HIPÓTESE; Security e encarregado]` (WB-344 C11) |
+| cupom cliente P1, P2, P3, P4 | Vitrine, produto sugerido, frete, "Válido até" | Já respondidas (seção D); a **tabela "Mensagens ao cliente"** do PRD de cupons é a fonte única e prevalece sobre a spec |
+| cupom cliente CC-1 | O "Faltam" empurra o cliente? | Medir: eventos `coupon_shortfall_*` (PRD cupons); gatilho para trocar o texto: abandono com "Faltam" > 10 pontos acima do abandono sem cupom `[HIPÓTESE]` |
+| painéis P2 | Limiares 20 e 5 | Mantidos. Base: com 20 pedidos uma taxa de ~50% tem margem de erro de ~22 pontos (IC 95%, aproximação normal) e com 5, ~44; **20 é o mínimo para não exibir percentual enganoso**, não uma garantia; reavaliar para 30 quando houver mais de 100 pedidos por semana `[HIPÓTESE]` |
+| painéis P3, P4, P5 | Vendas, definições, matriz | Vendas entra (seção D); definições em uma frase e matriz no PRD admin; **novos:** sensibilidade por métrica e conteúdo dos 5 painéis (PRD admin, WB-357 C7 a C9) |
+| painéis P9 (Security) | "Enviar cópia" leva dados? | **Só a definição** (WB-358 C10); Security confirma |
+| acessos (analytics) | Textos de "anônimo" | Frase oficial SEC-194 em todos os textos ao cliente; tag do lojista "Medição agregada" (RN-A3) |
+
+**Correções que o designer precisa fazer nas specs (divergem do PRD; não toquei em `docs/design`):**
+1. `v1-1-cupom-cliente.md` §4: remover "Sem celular confirmado / Confirmar celular" (D-01; vira "Confirme seu e-mail"); remover a sugestão de produto no "Faltam" ("Adicionar Bermuda jeans"; fica "Ver mais da loja"); trocar o texto de fraude por "Não foi possível aplicar este cupom a este pedido" + "Falar com o suporte"; "Não encontramos esse cupom" vira "Cupom inválido"; "vale só na loja X" só para campanha pública; "11 tentativas" vira 10 por hora.
+2. `v1-1-admin-cupons.md`: incluir o "pior caso" (WB-340 C12).
+3. `v1-1-admin-paineis.md`: incluir o painel "Vendas" e usar "Entrega" no lugar de "Logística"; estado "Sem permissão" no widget bloqueado (WB-357 C8).
+4. `v1-1-transparencia-medicao.md` e `v1-1-analises-lojista.md`: trocar "anônimo" pela frase oficial e "Medição agregada".
+
+## H. Checagem final da R2 (critério de aceite testável e DEC-088)
+
+| Verificação | Resultado |
+|---|---|
+| Cada história R2 (WB-340 a 349, 356, 357, 362, 367, 373) tem Gherkin com caminho feliz, limite, erro e vazio, e valores concretos | Sim, após os acréscimos: WB-340 C12; WB-341 C2 e C3 (parâmetros e limite de R$ 0,01); WB-344 C4 e C14; WB-347 C10; WB-357 C7 a C9; WB-362 C4; WB-367 C5 a C7. WB-373 e WB-345/346/348/349 sem mudança |
+| Nenhum campo, regra ou rotina majora preço, entrega ou taxa por cupom | Conferido em RN-C1 a RN-C11 e nas 10 histórias de cupom: **nenhum**. Guardas: RN-C1 (taxa de serviço só global), WB-341 C9 (o corpo aceita só `code`) e **WB-347 C10** (propriedade de 10 mil carrinhos, no CI). Risco residual: lojista subir o preço de lista antes de criar cupom próprio (WB-346); WB-348 impede o selo de "de/por" sem 30 dias e a trilha de preço (WB-348 C4) permite fiscalizar |
+| Divergência entre PRD e spec de tela | 4 correções do designer (acima); o PRD prevalece |
+| Dependência que pode travar | WB-362 depende de WB-361/363 (R1.4, primeira da fila de corte): se a R1.4 sair da R1, entra no início da R2 e a WB-362 vai por último |
