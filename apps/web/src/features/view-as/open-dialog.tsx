@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Banner, Button, Dialog, SelectField, TextArea } from '@/components/ui';
 import { ApiError } from '@/lib/api/errors';
 import { VIEW_AS_REASON_LABEL, viewAsApi, type ViewAsOpened, type ViewAsReasonCode } from '@/lib/api/view-as';
+import { REASON_NOTE_WARNING } from '@/lib/stored-reasons';
 import { T } from './banner';
 import { readLastReason, saveLastReason } from './use-view-as';
 
@@ -114,7 +115,7 @@ export function OpenViewAsDialog({ storeId, storeName, hasOpen, reopen, onOpened
         ))}
       </SelectField>
       {code === 'other' ? (
-        <TextArea label="Descreva o motivo (até 200 caracteres)" value={note} onChange={(event) => setNote(event.target.value.slice(0, NOTE_MAX))} counter={{ value: note.length, max: NOTE_MAX }} error={fieldError ?? undefined} rows={3} data-testid={T('reason-note')} />
+        <TextArea label="Descreva o motivo (até 200 caracteres)" value={note} onChange={(event) => setNote(event.target.value.slice(0, NOTE_MAX))} counter={{ value: note.length, max: NOTE_MAX }} hint={REASON_NOTE_WARNING} error={fieldError ?? undefined} rows={3} data-testid={T('reason-note')} />
       ) : null}
       {error ? (
         <Banner tone="danger" testId={T('open-error')}>

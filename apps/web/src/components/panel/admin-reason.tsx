@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { SelectField, TextArea } from '@/components/ui';
+import { ADMIN_SESSION_REASON_KEY, REASON_NOTE_WARNING } from '@/lib/stored-reasons';
 import type { AdminReasonCode } from '@webag/shared';
 
 /**
@@ -30,7 +31,7 @@ export interface ReasonValue {
 }
 export const EMPTY_REASON: ReasonValue = { code: '', note: '' };
 
-const SESSION_KEY = 'wb:admin:session-reason';
+const SESSION_KEY = ADMIN_SESSION_REASON_KEY;
 
 /** Motivo desta sessão do navegador (só código e nota do próprio admin; nada de dado de cliente). */
 export function readSessionReason(): ReasonValue {
@@ -98,6 +99,7 @@ export function AdminReasonFields({ value, onChange, options = GENERAL_REASONS, 
           onChange={(event) => onChange({ ...value, note: event.target.value.slice(0, NOTE_MAX) })}
           counter={{ value: value.note.length, max: NOTE_MAX }}
           error={errors?.note}
+          hint={REASON_NOTE_WARNING}
           rows={2}
           data-testid={`${testId}.note`}
         />

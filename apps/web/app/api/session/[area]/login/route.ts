@@ -6,6 +6,7 @@ import { csrfProblem } from '@/server/csrf';
 import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { callApi, clientHints, parseJson } from '@/server/upstream';
+import { clearedViewAsCookie } from '@/server/view-as';
 
 const bodySchema = z.strictObject({
   email: z.string().trim().min(3).max(254),
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
 
   const response = NextResponse.json({ mfaSetupRequired }, { headers: { 'cache-control': 'no-store' } });
   writeCookies(response.cookies, sessionCookies(area, tokens));
-  if (area === 'admin') writeCookies(response.cookies, [clearedPendingCookie('mfa')]);
+  // SEC-219: login novo não herda uma visão "Ver como" de sessão anterior (nem a de outro admin no mesmo navegador).
+  if (area === 'admin') writeCookies(response.cookies, [clearedPendingCookie('mfa'), clearedViewAsCookie()]);
   return response;
 }

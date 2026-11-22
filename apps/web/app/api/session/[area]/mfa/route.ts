@@ -6,6 +6,7 @@ import { csrfProblem } from '@/server/csrf';
 import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { callApi, clientHints, parseJson } from '@/server/upstream';
+import { clearedViewAsCookie } from '@/server/view-as';
 
 const bodySchema = z.strictObject({
   /** TOTP de 6 dígitos ou código de recuperação. */
@@ -59,6 +60,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   }
 
   const response = NextResponse.json({ mfaSetupRequired }, { headers: { 'cache-control': 'no-store' } });
-  writeCookies(response.cookies, [...sessionCookies('admin', body.tokens), clearedPendingCookie('mfa')]);
+  writeCookies(response.cookies, [...sessionCookies('admin', body.tokens), clearedPendingCookie('mfa'), clearedViewAsCookie()]);
   return response;
 }

@@ -2,8 +2,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as proxyPost, GET as proxyGet } from '../../app/api/proxy/[area]/[...path]/route';
+import { POST as login } from '../../app/api/session/[area]/login/route';
 import { POST as logout } from '../../app/api/session/[area]/logout/route';
 import * as endRoute from '../../app/api/view-as/end/route';
+import { POST as mfa } from '../../app/api/session/[area]/mfa/route';
 import { POST as openView } from '../../app/api/view-as/open/route';
 import * as readRoute from '../../app/api/view-as/read/[...path]/route';
 import { GET as sessionState } from '../../app/api/view-as/session/route';
@@ -46,7 +48,7 @@ async function openAndGetCookie(storeId = STORE) {
 const readCtx = (path: string) => ({ params: Promise.resolve({ path: path.split('/') }) });
 
 describe('abrir a visão (BFF)', () => {
-  it('guarda a credencial só em cookie httpOnly/Strict com Path restrito; o corpo da resposta não a leva', async () => {
+  it('guarda a credencial só em cookie httpOnly/Strict, sem Domain e com Path=/ (SEC-219); o corpo da resposta não a leva', async () => {
     const { res, raw } = await openAndGetCookie();
     expect(res.status).toBe(201);
     const body = await res.text();
@@ -55,7 +57,8 @@ describe('abrir a visão (BFF)', () => {
     expect(JSON.parse(body)).toMatchObject({ id: VIEW, storeId: STORE, storeName: 'Moda | Morato' });
     expect(raw).toMatch(/HttpOnly/i);
     expect(raw).toMatch(/SameSite=strict/i);
-    expect(raw).toMatch(/Path=\/api\/view-as(;|$)/);
+    expect(raw).toMatch(/Path=\/(;|$)/);
+    expect(raw).not.toMatch(/Domain=/i);
     const maxAge = Number(/Max-Age=(\d+)/i.exec(raw)![1]);
     expect(maxAge).toBeGreaterThan(1700);
     expect(maxAge).toBeLessThanOrEqual(1800);
@@ -218,6 +221,80 @@ describe('o proxy comum nunca vira caminho da visão', () => {
     const res = await proxyPost(req('POST', `/api/proxy/admin/stores/${STORE}/products`, { cookie: `wb_admin_at=${ADMIN_AT}`, headers: { 'x-view-as': TOKEN }, body: {} }), { params: Promise.resolve({ area: 'admin', path: ['stores', STORE, 'products'] }) });
     expect(res.status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('SEC-219: sem sessão do admin a visão não existe', () => {
+  const forged = `wb_admin_vas=${TOKEN}|${VIEW}|${STORE}|${Date.now() + 20 * 60_000}|Loja%20do%20atacante`;
+
+  it('cookie da visão plantado, sem cookie de sessão do admin: estado inativo, sem nome da loja', async () => {
+    const res = await sessionState(req('GET', '/api/view-as/session', { cookie: forged }));
+    expect(await res.json()).toEqual({ active: false });
+  });
+
+  it('sessão só do lojista (outro par de cookies) não habilita a visão', async () => {
+    const res = await sessionState(req('GET', '/api/view-as/session', { cookie: `${forged}; wb_lojista_at=at-do-lojista; wb_lojista_rt=rt-do-lojista` }));
+    expect(await res.json()).toEqual({ active: false });
+    const read = await readRoute.GET(req('GET', '/api/view-as/read/x', { cookie: `${forged}; wb_lojista_at=at-do-lojista` }), readCtx(`stores/${STORE}/orders`));
+    expect(read.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('leitura sem sessão do admin: VIEW_AS_EXPIRED sem chamar a API e o cookie é apagado', async () => {
+    const res = await readRoute.GET(req('GET', '/api/view-as/read/x', { cookie: forged }), readCtx(`stores/${STORE}/orders`));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('VIEW_AS_EXPIRED');
+    expect(setCookies(res).find((c) => c.startsWith('wb_admin_vas='))).toMatch(/Max-Age=0/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('só o refresh (access vencido) ainda conta como sessão: a renovação segue o fluxo normal', async () => {
+    const res = await sessionState(req('GET', '/api/view-as/session', { cookie: `${forged}; wb_admin_rt=refresh` }));
+    expect(await res.json()).toMatchObject({ active: true, id: VIEW });
+  });
+
+  it('"Sair da visualização" sem sessão não chama a API e apaga o cookie', async () => {
+    const res = await endRoute.POST(req('POST', '/api/view-as/end', { cookie: forged }));
+    expect(res.status).toBe(204);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(setCookies(res).find((c) => c.startsWith('wb_admin_vas='))).toMatch(/Max-Age=0/i);
+  });
+});
+
+describe('SEC-219: o cookie com Path=/ não vai a nenhuma rota fora do view-as', () => {
+  it('o proxy comum (GET e POST, admin e lojista) não repassa o cookie da visão nem a credencial', async () => {
+    const { cookie } = await openAndGetCookie();
+    fetchMock.mockReset().mockResolvedValue(json(200, {}));
+    await proxyGet(req('GET', '/api/proxy/admin/admin/stores', { cookie }), { params: Promise.resolve({ area: 'admin', path: ['admin', 'stores'] }) });
+    await proxyPost(req('POST', '/api/proxy/admin/admin/stores/x/notes', { cookie, body: {} }), { params: Promise.resolve({ area: 'admin', path: ['admin', 'stores', 'x', 'notes'] }) });
+    await proxyGet(req('GET', '/api/proxy/lojista/stores/mine', { cookie }), { params: Promise.resolve({ area: 'lojista', path: ['stores', 'mine'] }) });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
+    for (let n = 0; n < fetchMock.mock.calls.length; n++) {
+      const headers = apiHeaders(n);
+      expect(headers.get('x-view-as')).toBeNull();
+      expect(headers.get('cookie')).toBeNull();
+      expect(JSON.stringify([...headers.entries()])).not.toContain(TOKEN);
+    }
+  });
+});
+
+describe('SEC-219: login e MFA do admin apagam uma visão antiga', () => {
+  const ctx = { params: Promise.resolve({ area: 'admin' }) };
+  const tokens = { accessToken: 'novo-at', refreshToken: 'novo-rt', expiresIn: 900 };
+  const adminMe = { id: 'u1', email: 'a@webag.local', roles: ['customer'], adminProfile: 'super_admin' };
+
+  it('login com sucesso devolve o cookie da visão com Max-Age=0', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { tokens, mfaSetupRequired: false })).mockResolvedValueOnce(json(200, adminMe));
+    const res = await login(req('POST', '/api/session/admin/login', { cookie: `wb_admin_vas=${TOKEN}|${VIEW}|${STORE}|${Date.now() + 60_000}|x`, body: { email: 'a@webag.local', password: 'senha' } }), ctx);
+    expect(res.status).toBe(200);
+    expect(setCookies(res).find((c) => c.startsWith('wb_admin_vas='))).toMatch(/Max-Age=0/i);
+  });
+
+  it('MFA com sucesso devolve o cookie da visão com Max-Age=0', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { tokens, mfaSetupRequired: false })).mockResolvedValueOnce(json(200, adminMe));
+    const res = await mfa(req('POST', '/api/session/admin/mfa', { cookie: 'wb_admin_mfa=tok-abc', body: { code: '123456' } }), ctx);
+    expect(res.status).toBe(200);
+    expect(setCookies(res).find((c) => c.startsWith('wb_admin_vas='))).toMatch(/Max-Age=0/i);
   });
 });
 

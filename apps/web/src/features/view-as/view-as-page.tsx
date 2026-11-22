@@ -10,6 +10,7 @@ import { useSession } from '@/components/panel/session-context';
 import { Banner, Button, MessageState, NoAccessState, SkeletonRows, cx, useToast } from '@/components/ui';
 import { viewAsApi, viewAsKeys } from '@/lib/api/view-as';
 import { asRoute } from '@/lib/routes';
+import { clearStoredReasons } from '@/lib/stored-reasons';
 import { useOnline } from '@/lib/use-online';
 import { ViewAsBanner, T } from './banner';
 import { KEEPS_RUNNING, OnlyMerchantTag } from './boundary';
@@ -103,6 +104,7 @@ export function ViewAsPage({ storeId, tab }: { storeId: string; tab: ViewAsTab }
 
   async function exit() {
     setExiting(true);
+    clearStoredReasons();
     try {
       await viewAsApi.end();
     } catch {

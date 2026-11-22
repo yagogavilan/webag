@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { viewAsApi, viewAsKeys, type ViewAsState } from '@/lib/api/view-as';
+import { VIEW_AS_REASON_KEY } from '@/lib/stored-reasons';
 import { useNow } from '@/lib/use-now';
 import { FIVE_MIN_MS, ONE_MIN_MS, WARNING_TEXT } from './clock';
 
@@ -37,7 +38,7 @@ export function useWarnings(remainingMs: number, active: boolean): string {
   return message;
 }
 
-const LAST_REASON_KEY = 'wb:view-as:last-reason';
+const LAST_REASON_KEY = VIEW_AS_REASON_KEY;
 export interface LastReason {
   code: string;
   note?: string;

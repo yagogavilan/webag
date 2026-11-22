@@ -153,6 +153,13 @@ describe('diálogo de abertura', () => {
     expect(screen.getByText('Mesmo motivo da visualização anterior. Troque se mudou.')).toBeInTheDocument();
   });
 
+  it('SEC-220: o campo de texto livre avisa para não escrever dados do cliente', async () => {
+    vi.stubGlobal('fetch', mockFetch().impl);
+    open();
+    await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'other');
+    expect(screen.getByText('Não escreva dados do cliente (nome, telefone, endereço).')).toBeInTheDocument();
+  });
+
   it('Esc fecha o diálogo', async () => {
     const { onClose } = open();
     await userEvent.keyboard('{Escape}');
@@ -318,6 +325,22 @@ describe('telas da visão', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/admin/lojas/${STORE}`));
     expect(mock.calls.some((c) => route(c.url) === 'end')).toBe(true);
     expect(await screen.findByText('Visualização encerrada.')).toBeInTheDocument();
+  });
+
+  it('SEC-220: "Sair da visualização" apaga os motivos guardados na aba', async () => {
+    window.sessionStorage.setItem('wb:view-as:last-reason', JSON.stringify({ code: 'other', note: 'texto livre' }));
+    window.sessionStorage.setItem('wb:admin:session-reason', JSON.stringify({ code: 'other', note: 'texto livre' }));
+    const mock = mockFetch(
+      (url) => (route(url) === 'session' ? json(session()) : undefined),
+      (url, init) => (route(url) === 'end' && init.method === 'POST' ? json(null, 204) : undefined),
+      (url) => (route(url).startsWith('read/') ? json({ data: [], nextCursor: null }) : undefined),
+    );
+    vi.stubGlobal('fetch', mock.impl);
+    renderPanel(<ViewAsPage storeId={STORE} tab="prod" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Sair da visualização' }));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(window.sessionStorage.getItem('wb:view-as:last-reason')).toBeNull();
+    expect(window.sessionStorage.getItem('wb:admin:session-reason')).toBeNull();
   });
 });
 

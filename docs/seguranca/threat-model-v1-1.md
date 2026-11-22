@@ -844,14 +844,14 @@ Exigida pela DEC-126 item 5 antes do G4. Escopo: commits `713db8f` (WB-352), `7f
 
 ### 18.3 Achados novos
 
-#### SEC-219 | Severidade: Baixa | Status: Aberto | Dono: mobile-dev (web)
+#### SEC-219 | Severidade: Baixa | Status: Corrigido no código (mobile-dev, aguarda re-teste do security) | Dono: mobile-dev (web)
 - **Onde:** `apps/web/src/server/view-as.ts:15` (prefixo `__Secure-`, `Path=/api/view-as`); `app/api/view-as/session/route.ts:10-11` (estado "ativo", loja, nome e fim lidos só do cookie, sem conferir sessão de admin); rotas `app/api/session/[area]/{login,mfa}` não apagam o cookie da visão.
 - **Problema:** `__Secure-` aceita `Domain=`; um host irmão (lojista ou site público, que o SEC-116 isolou justamente com `__Host-`) consegue plantar `__Secure-wb_admin_vas` para o domínio pai. O BFF confia nos metadados do cookie para a tela e não consegue apagar o cookie com `Domain` (o `clearedViewAsCookie` é sem `Domain`).
 - **Cenário de ataque:** XSS no painel do lojista grava um cookie com `Max-Age` longo, credencial do próprio atacante e nome de loja à escolha. No navegador do admin, o cookie plantado (mais antigo) vem primeiro: o banner mostra "Visualizando como <texto do atacante>" e toda leitura dá `VIEW_AS_EXPIRED`; a visão fica inutilizável até o cookie vencer. Sem vazamento de dado nem ação em nome do admin (a API exige a mesma sessão). Variante sem ataque: admin B entra no mesmo navegador depois de A fechar a aba sem sair e vê "visão aberta" de A até a primeira leitura falhar.
 - **Correção recomendada:** usar `__Host-wb_admin_vas` com `Path=/` (o `Path` restrito não é fronteira de segurança: o cookie já é `httpOnly` e o proxy não o lê); apagar o cookie da visão no sucesso do login/MFA do admin; na rota `session`, responder `active:false` se não houver cookie de sessão do admin.
 - **Como verificar:** teste do BFF: `Set-Cookie` do `open` começa com `__Host-` e tem `Path=/`; sucesso do MFA devolve o cookie da visão com `Max-Age=0`; `session` sem cookie de sessão = `active:false`.
 
-#### SEC-220 | Severidade: Baixa | Status: Aberto | Dono: mobile-dev (web); PO confirma o texto
+#### SEC-220 | Severidade: Baixa | Status: Corrigido no código (limpa no logout, perda de sessão e "Sair da visualização"; o fim por vencimento mantém o pré-preenchimento do "Abrir de novo"; PO confirma o texto) | Dono: mobile-dev (web); PO confirma o texto
 - **Onde:** `apps/web/src/features/view-as/use-view-as.ts:40-61` (`wb:view-as:last-reason` com a nota livre); variante em `src/components/panel/admin-reason.tsx:32-52` (`wb:admin:session-reason`); `admin-shell.tsx:74-87` (logout não limpa); `open-dialog.tsx:117` (campo sem orientação).
 - **Problema:** a nota livre do motivo (até 200 caracteres, vai também ao `audit_log` append-only) não tem orientação para não incluir dado de cliente (pedido do §16.4 item 4) e fica no `sessionStorage` depois do logout, na mesma aba.
 - **Cenário:** suporte escreve "cliente Maria 11 9xxxx reclamou" na nota; o texto fica para sempre na auditoria e, na aba, é pré-preenchido para o próximo admin que usar o mesmo navegador e reabrir uma visão.

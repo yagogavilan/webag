@@ -1,3 +1,4 @@
+import { clearStoredReasons } from '../stored-reasons';
 import { ApiError, networkError, toApiError } from './errors';
 
 export type Area = 'admin' | 'lojista';
@@ -9,6 +10,12 @@ const listeners = new Set<Listener>();
 export function onSessionLost(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** SEC-220: sessão perdida = motivos digitados na aba saem junto; depois avisa as telas inscritas. */
+function notifySessionLost(reason: Parameters<Listener>[0]): void {
+  clearStoredReasons();
+  listeners.forEach((listener) => listener(reason));
 }
 
 export interface RequestOptions {
@@ -72,7 +79,7 @@ async function request<T>(url: string, options: RequestOptions): Promise<T> {
     const error = await toApiError(response);
     if (response.status === 401) {
       const reason = error.code === 'SESSION_IDLE' ? 'idle' : 'expired';
-      listeners.forEach((listener) => listener(reason));
+      notifySessionLost(reason);
     }
     throw error;
   }
@@ -90,7 +97,7 @@ export async function apiDownload(area: Area, path: string, query?: RequestOptio
   }
   if (!response.ok) {
     const error = await toApiError(response);
-    if (response.status === 401) listeners.forEach((listener) => listener(error.code === 'SESSION_IDLE' ? 'idle' : 'expired'));
+    if (response.status === 401) notifySessionLost(error.code === 'SESSION_IDLE' ? 'idle' : 'expired');
     throw error;
   }
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -112,6 +119,8 @@ export function saveBlob(blob: Blob, fileName: string): void {
 
 /** Chamada às rotas de sessão do BFF (login, logout, convite, cadastro do lojista). Não dispara "sessão perdida". */
 export async function sessionRequest<T>(area: Area, action: 'login' | 'mfa' | 'logout' | 'accept-invite' | 'register', body?: unknown): Promise<T> {
+  // SEC-220: o motivo digitado nunca sobrevive ao logout, mesmo se a chamada falhar.
+  if (action === 'logout') clearStoredReasons();
   let response: Response;
   try {
     response = await fetch(`/api/session/${area}/${action}`, {

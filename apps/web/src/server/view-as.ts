@@ -7,12 +7,12 @@ import { callApi, clientHints, type UpstreamInit, type UpstreamResult } from './
 
 /**
  * "Ver como o lojista" no BFF (ADR-018 D8, threat model §14.5). A credencial `vas_` vive só num cookie `httpOnly`, `SameSite=Strict`,
- * com `Path` restrito às rotas `/api/view-as` e validade até `expiresAt`; o JavaScript da página nunca a lê, e ela não vai para URL,
+ * `__Host-` (sem `Domain`, `Path=/`, `Secure`) e validade até `expiresAt`; o JavaScript da página nunca a lê, e ela não vai para URL,
  * `localStorage`, corpo nem log. A API ainda exige o Bearer do MESMO admin e da MESMA sessão: roubar só o cookie não serve.
- * `__Host-` não cabe aqui (exige `Path=/`); em produção usa `__Secure-`.
+ * SEC-219: `__Host-` impede um host irmão de plantar o cookie. Como o `Path=/` faz o navegador mandá-lo a todas as rotas, só as 4
+ * rotas de `app/api/view-as` o leem (e só com a sessão do admin presente); o proxy comum e o resto do BFF nunca o repassam.
  */
-export const VIEW_AS_PATH = '/api/view-as';
-export const VIEW_AS_COOKIE = `${COOKIE_SECURE ? '__Secure-' : ''}wb_admin_vas`;
+export const VIEW_AS_COOKIE = `${COOKIE_SECURE ? '__Host-' : ''}wb_admin_vas`;
 
 const TOKEN = /^vas_[A-Za-z0-9_-]{43}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,7 +32,14 @@ export function encodeViewAsCookie(value: ViewAsCookie): string {
   return `${value.token}|${value.id}|${value.storeId}|${value.expiresAt}|${encodeURIComponent((value.storeName ?? '').slice(0, 120))}`;
 }
 
+/** Há cookie de sessão do admin (access ou refresh)? Sem ele a visão não existe: o cookie sozinho (de outra sessão ou plantado) não vale. */
+export function hasAdminSession(request: NextRequest): boolean {
+  const names = cookieNames('admin');
+  return Boolean(request.cookies.get(names.access)?.value || request.cookies.get(names.refresh)?.value);
+}
+
 export function readViewAsCookie(request: NextRequest, now = Date.now()): ViewAsCookie | null {
+  if (!hasAdminSession(request)) return null;
   const raw = request.cookies.get(VIEW_AS_COOKIE)?.value;
   if (!raw) return null;
   const [token, id, storeId, expires, name] = raw.split('|');
@@ -48,11 +55,11 @@ export function readViewAsCookie(request: NextRequest, now = Date.now()): ViewAs
 }
 
 export function viewAsCookie(value: ViewAsCookie, now = Date.now()): CookieSpec {
-  return { name: VIEW_AS_COOKIE, value: encodeViewAsCookie(value), httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: VIEW_AS_PATH, maxAge: Math.max(Math.floor((value.expiresAt - now) / 1000), 1) };
+  return { name: VIEW_AS_COOKIE, value: encodeViewAsCookie(value), httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: '/', maxAge: Math.max(Math.floor((value.expiresAt - now) / 1000), 1) };
 }
 
 export function clearedViewAsCookie(): CookieSpec {
-  return { name: VIEW_AS_COOKIE, value: '', httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: VIEW_AS_PATH, maxAge: 0 };
+  return { name: VIEW_AS_COOKIE, value: '', httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: '/', maxAge: 0 };
 }
 
 /** Rotas de LEITURA que aceitam a credencial (as 13 `x-view-as: true` do contrato, mais a lista fechada do BFF). Qualquer outra: 404 aqui. */
