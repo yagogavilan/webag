@@ -48,6 +48,9 @@ type Row =
 
 const OFFER_TILE = 140;
 
+/** Chave estável por linha (não por posição): seções que chegam depois não remontam as que já estão na tela. */
+const rowKey = (row: Row): string => (row.type === 'title' || row.type === 'error' ? `${row.type}-${row.id}` : row.type === 'store' ? `store-${row.store.id}` : row.type);
+
 /** Abertas primeiro, fechadas depois (onda-3 D5 bloco 6); a ordem por distância da API se mantém dentro de cada grupo. */
 const openFirst = (stores: readonly StoreCard[]): StoreCard[] => [...stores.filter((s) => s.open), ...stores.filter((s) => !s.open)];
 
@@ -383,7 +386,7 @@ export default function CustomerHome() {
         ListHeaderComponent={listHeader}
         data={rows}
         getItemType={(row) => row.type}
-        keyExtractor={(row, i) => (row.type === 'title' ? `title-${row.id}` : row.type === 'store' ? `store-${row.store.id}` : `${row.type}-${i}`)}
+        keyExtractor={rowKey}
         onRefresh={() => void refresh()}
         onScroll={(e) => setCollapsed(e.nativeEvent.contentOffset.y > COLLAPSE_AT)}
         ref={list}
