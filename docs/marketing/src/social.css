@@ -1,4 +1,6 @@
-/* Webag: kit social v2.1 (perfil, 4 posts, 2 vídeos). Autor: product-designer. 2026-11-22.
+/* Webag: kit social v2.3 (perfil, 4 posts, 2 vídeos). Autor: product-designer. 2026-11-22.
+   v2.3: telas sem código, horário, contagem nem dado de seed; UI >= 44 px na peça final; selo "Tela de exemplo" (.selo); réplica do cartão de
+   acompanhamento (.stat) e chip desenhado (.chipx). Os cartões .ui da v2.1 não são mais usados (ficam só como referência).
    Substitui a v2 (nota < 4,0 no parecer da estrategista). Uma folha para os HTML de instagram/ e dos vídeos.
    Marca: docs/design/kit-marca-v3.md; regras: docs/marketing/direcao-criativa.md §2.
    Regras: cor sólida, sem gradiente, sem sombra com desfoque (só sombra dura), sem emoji, sem PIX/cartão como argumento.
@@ -149,6 +151,29 @@ svg, img { display: block; }
 .track li i u.ud { background: var(--noite); }
 .track li i u.ud::after { content: ""; position: absolute; left: 0.39em; top: 0.17em; width: 0.26em; height: 0.46em; border: solid var(--lima); border-width: 0 0.1em 0.1em 0; transform: rotate(40deg); }
 .track li i u.un { background: var(--lima); border: 0.14em solid var(--noite); }
+
+/* ---------- v2.3: selo, chip e réplica do cartão de acompanhamento (tudo em px; texto de UI >= 44 px) ---------- */
+/* selo "Tela de exemplo": 32 px (é rótulo, não UI), pílula noite com texto lima (15,3:1) */
+.selo { position: absolute; font: 800 32px/1 var(--texto); padding: 12px 24px 14px; border-radius: 999px; background: var(--noite); color: var(--lima); white-space: nowrap; }
+/* chip desenhado (ex.: "Outro bairro") no estilo do chip do painel: cinza claro, texto noite */
+.chipx { position: absolute; font: 700 44px/1 var(--texto); padding: 14px 28px 17px; border-radius: 999px; background: #EFEAF2; color: var(--noite); white-space: nowrap; }
+
+/* .stat: réplica do cartão "Acompanhe seu pedido" do app (bloco escuro com etapa, título, ilustração e barra; linha do tempo embaixo), SEM horário e SEM código.
+   Dimensões fixas: largura vem do uso; .top mede 360 px; a linha do tempo usa .track a 44 px (linha = 2,3 em = 101,2 px). */
+.stat { position: absolute; overflow: hidden; border-radius: 28px; background: var(--papel); color: var(--noite); font-variant-numeric: tabular-nums; }
+.stat .top { position: relative; height: 360px; background: var(--noite); color: var(--branco); }
+.stat .lyr { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.stat .lb { position: absolute; left: 44px; top: 30px; font: 800 44px/1.2 var(--texto); color: var(--lima); white-space: nowrap; }
+.stat .tt { position: absolute; left: 44px; top: 96px; font: 800 88px/1 var(--texto); letter-spacing: -0.02em; white-space: nowrap; }
+.stat .tt span { display: block; }
+.stat .art { position: absolute; right: 16px; top: 74px; width: 250px; height: 220px; }
+.stat .art img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.stat .bar { position: absolute; left: 44px; right: 44px; bottom: 34px; display: flex; gap: 14px; }
+.stat .bar i { flex: 1; height: 22px; border-radius: 11px; background: #443C4C; }
+.stat .bar i.on { background: var(--roxo); }
+.stat .bar i.cur { background: var(--lima); }
+.stat .tl { padding: 20px 44px 24px; font-size: 44px; }
+.stat .tl .track .rows { margin-top: 0; }
 
 /* ---------- perfil (1080 x 1080) ---------- */
 .avatar { position: relative; display: block; width: 1080px; height: 1080px; overflow: hidden; background: var(--roxo); }

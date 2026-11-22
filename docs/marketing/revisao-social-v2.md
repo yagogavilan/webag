@@ -43,11 +43,55 @@ Pergunta "isso para o dedo?" por peça: **vídeo do lojista** sim, o alerta real
 | 1 | **Bug no painel do lojista**: no alerta "Pedido novo" o botão "Recusar" aparece cortado e colado na borda esquerda do alerta (só a ponta direita do contorno é visível, ao lado de "Aceitar"). No real, o lojista pode não conseguir recusar pelo alerta. Cobri na peça, mas é defeito de produto | mobile-dev (painel) e QA |
 | 2 | **Chip "Entrega" no alerta** (post 3 e vídeo do lojista): o post 3 deixou de ser "sem promessa de entrega" (era o motivo do chip "Outro bairro" na v2.1). Depende do parecer J8 como o resto do kit. Se o CEO quiser o post 3 antes do J8, cobrir o chip (um `div` de 120 x 40 px sobre o chip) ou usar `Outro bairro` só no texto | CEO, jurídico |
 | 3 | `video-engine.js` registra `.webm` como segunda fonte. Se o Chromium do render não tiver H.264, o MP4 não toca e o `.webm` não existe (404 derruba o render). Gerar `.webm` dos 4 clipes ou usar Chrome com H.264 | mobile-dev (pipeline) |
-| 4 | `video-roteiro.md` (§1, §2, §3, §5) e `instagram-legendas.md` ainda descrevem cartões desenhados e "Pediu."; o roteiro não foi reescrito nesta rodada (decisão de economia): a fonte de verdade das cenas agora são os comentários dos dois HTML | product-designer (próxima rodada) |
+| 4 | (resolvido na v2.3) `video-roteiro.md` e `instagram-legendas.md` foram reescritos para o que as artes mostram | product-designer |
 
 ### 0.5 Passada "remover um acessório"
 
 Saíram: o rótulo "Tela ilustrativa." (os 3 cartões e os 2 posts), o toque desenhado e a animação do botão que virava "Pedido aceito" (o toque agora é do clipe), o subtítulo "Peça sem sair do lugar." do post 2 subiu para junto do CTA para a captura ganhar altura.
+
+## 0.6 v2.3 (2026-11-22): trava 5 limpa, UI a 44 px ou mais, CTA único em 60 px
+
+Mesmo limite: **sem Bash, nada renderizado**; li as capturas (`src/capturas/*.png`) e os scripts de captura, **não vi nenhum quadro de vídeo**. Conferir no primeiro render: coluna "Conferir".
+
+### 0.6.1 O que mudou em cada peça (resposta aos pareceres v2.2)
+
+| Peça | Trava 5 (o que saiu) | Ampliação | CTA | Outras mudanças | Conferir no render |
+|---|---|---|---|---|---|
+| Post 0 | n/a (sem tela real) | Cartão "Saiu para entrega" desenhado, 520 x 300, UI a 44 e 64 px, "Tela de exemplo" | "Siga @webag" 60 px (sem sino, sem ícone) | Moto solta virou cartão do app; título 148 para 140 px | Cartão 520 px e a moto de 170 px não se tocam com "Saiu para"; título cabe em 5 linhas |
+| Post 1 | n/a | Título 110 para 100 px, balão lima 108 para 96 px (abriram espaço) | "Chame no direct: @webag" 60 px | **Linha "No Webag, o pedido de quem mora longe chega no seu painel."** (48 px), no lugar de "O Webag entrega para você." para **não** criar dependência do J8 | Altura total: CTA termina em ~1276 de 1350 |
+| Post 2 | Saíram "22:13" x2, "Aguardando motoboy", faixa de horário, nº do pedido | Captura real (34 px) virou **réplica** do cartão do app (`.stat`), 936 x 708, UI de 44 a 88 px, mesma moto do app | "Siga @webag" 60 px lima | Sub "Peça da loja, sem sair do lugar." (responde ao "passar na loja"); "Tela de exemplo" | Cartão termina em 1140, frase em 1170; moto (250 px) à direita do título de 88 px |
+| Post 3 | Saíram o código "WB-6J5R8", "Responda em 9:53" e o chip "Entrega" (o post **voltou a ser sem J8**) | Captura real em 4 faixas, k = 1,42: texto 31,6 para 45 px; valor R$ 135,80 a 92 px | "Chame no direct: @webag" 60 px | Chip desenhado "Outro bairro" (motivo do "além da sua rua"); botão "Aceitar" desenhado (o real passa da janela); "Tela de exemplo" | **Emendas das faixas** (cartão branco em fundo branco: não deve aparecer); faixa S3 ("2 itens", folga de 10 px na captura) |
+| Vídeo lojista | Código e contagem fora/sob bloco branco; chip "Entrega" sob bloco | Recorte k = 2,1: texto de 21 para 44 px; janela 912 x 987 (era 836 x 871) | "Chame no direct." + "@webag" (84 px), entra em **12,5 s** (era 12,0; o vídeo tem 15 s, então 2,5 s de CTA) | Balão 1 de 76 para 100 px no quadro 0; títulos 1 linha menores (140 px) para caber a janela; "Tela de exemplo" | **Recorte do clipe** (x 689 a 1123, y 360 a 830 do clipe): se aparecer o código no topo, subir `top` do vídeo; se o texto do chip/contagem vazar, aumentar `.cvc`/`.cvt`; cursor entra pela direita |
+| Vídeo cliente | Os **clipes saíram** (horário previsto, "22:23" repetido, "Últimas 2 unidades"); entraram 2 capturas estáticas limpas e a réplica do acompanhamento | Vitrine k = 1,16 (nome 44 px); produto k = 0,68 (nome 48 px); réplica a 44 px ou mais | "Siga" + "@webag" (100 px) em **12,5 s** | **Quadro 0 com "Aquela loja que você adora. Não entrega."**; virada em 1,6 s (risco + soco de escala + moto); cortes `[0, 3, 5.5, 8, 11.5, 15]`; tênis 38/R$ 189,90 saiu (um produto só: camiseta R$ 49,90); "Peça." mostra o aviso "Adicionado à sacola" | Soco de escala do título (1,08 x 875 px = 945 de 1080 px) não corta a margem; coordenadas do recorte da vitrine (2ª fileira não entra) |
+
+### 0.6.2 Reavaliação (rubrica `avaliar-post`; conservadora; margem ±0,15; **não substitui o render nem a estrategista**)
+
+Critérios na ordem gancho, ideia, identificação, prova, miniatura, CTA, autenticidade. Só subi o critério que a mudança ataca; o resto ficou com a nota da estrategista.
+
+| Peça | G | I | Id | P | M | C | A | Nota v2.3 | Antes | Leitura |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Post 1 | 4 | 5 | 4 | 3 | 4 | 4,5 | 4 | **4,05** | 3,9 | Passa. Ideia 5 porque agora diz o que o Webag faz; prova 3 é o teto de uma peça de dor |
+| Post 3 | 3,5 | 4,5 | 4 | 4,5 | 4 | 4,5 | 4 | **4,08** | 3,5 | Passa. Real, limpo, 45 px |
+| Vídeo lojista | 4 | 4 | 4 | 4 | 4 | 4,5 | 4 | **4,05** | 3,7 | Passa. Prova 4 (não 4,5): cartão sem título e botão cortado à direita |
+| Post 2 | 4 | 4 | 4 | 4 | 4 | 4,5 | 3,5 | **4,00** | 3,7 | No limite. Prova 4: é réplica rotulada, não captura |
+| Vídeo cliente | 4 | 4 | 3,5 | 4 | 4 | 4,5 | 3,5 | **3,93** | 3,3 | **Abaixo de 4,0.** Id e A travam: "Aquela loja que você adora" segue afeto, não cena; sem material real do fundador |
+| Post 0 | 4 | 4 | 3,5 | 3,5 | 4,5 | 4,5 | 3,5 | **3,90** | 3,6 | **Abaixo de 4,0.** Mesmo motivo; prova 3,5 (cartão pequeno, desenhado) |
+
+Nenhuma peça tem critério <= 2. **Travas:** 1 a 5 limpas (nenhum código, horário, contagem, "Pago no app", "Últimas unidades", comida; os valores e produtos são do banco de demonstração, rotulados "Tela de exemplo"); **trava 6**: J8 marcado em `pendencias.md` IJ1 (posts 0 e 2, vídeo do cliente, cena 6 do lojista); **posts 1 e 3 e o vídeo do lojista sem a cena 6 não dependem do J8**.
+O que sobe os dois que ficaram abaixo (não é texto; é ativo): uma frase literal de cliente dita ao fundador ou uma foto/gravação real dele (Id e A +0,5 cada = +0,125) e o parecer J8 para a promessa sair sem "[hipótese]". Com isso os dois passam de 4,0.
+
+### 0.6.3 Passada "remover um acessório"
+
+Saíram: o sino e a linha do sino (post 0, vídeo do cliente), a faixa branca `.strip` do "Recusar" (o recorte novo já fica fora), o chip "Entrega" e "Aguardando motoboy" (J8 desnecessário nas telas), os clipes do cliente (e com eles os 4 `.webm` pendentes para ele), o subtítulo "Sem sair do lugar." da cena "Peça." (o aviso "Adicionado à sacola" faz o trabalho).
+
+### 0.6.4 Decisões que o CEO pode querer reverter
+
+| # | Decisão | Por quê |
+|---|---|---|
+| 1 | Post 1 usa "o pedido de quem mora longe chega no seu painel" e **não** "O Webag entrega para você." | A segunda tornaria o único post sem J8 dependente do J8 (trava 6). Se o CEO preferir a frase de entrega, o post 1 passa a `[J8]` |
+| 2 | Cliente: capturas estáticas e réplica no lugar dos clipes | Não consigo ver nem editar os MP4; os clipes têm horário e escassez em quadros que não controlo |
+| 3 | Réplica desenhada no post 2, post 0 e cena 4 do cliente | A captura do acompanhamento tem horário em toda etapa e "Chega entre ..." no cartão; cobrir daria um quadro cheio de remendos |
+| 4 | "@webag" nas artes vem de `config.json` | Provisório (IF1); trocar no JSON e rodar o render, sem mexer em HTML |
 
 ## 1. O que mudou por peça (resposta ao parecer)
 

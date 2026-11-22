@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 0, apresentação (cliente) "Aquela loja que você adora. Não entrega. Agora entrega." (1080 x 1350), v2.1</title>
+<title>Webag: post 0, apresentação (cliente) "Aquela loja que você adora. Não entrega. Agora entrega." (1080 x 1350), v2.3</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -12,24 +12,36 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
 
-/* Larguras (0,53 em por caractere, Bricolage 800 a 148 px): "Aquela loja" 11 car = 863; "Não Agora" 9 car = 706; "entrega." 8 car = 627 + marca-texto. Todas <= 936. */
-.p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 148px; }
-/* a virada: loja que não entrega -> loja + moto. Duas ilustrações do kit (sem foto de terceiros, sem tela, sem botão) */
-.p0 .par { position: absolute; left: 72px; top: 868px; width: 936px; height: 300px; display: flex; align-items: center; justify-content: space-between; }
-.p0 .tile { width: 420px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); box-shadow: 10px 10px 0 var(--noite); }
+/* v2.3. Eixo vertical (px): título 140 px (5 linhas de 129) 132 a 776; par loja -> app 810 a 1110; legenda "Tela de exemplo" 1122 a 1154; CTA 60 px 1200 a 1270.
+   Larguras (0,53 em por caractere, Bricolage 800 a 140 px): "Aquela loja" 11 car = 816; "Não Agora" 9 car = 668; "entrega." 8 car = 594 + marca-texto. Todas <= 936.
+   O par: ilustração da fachada (300 px) -> seta (84) -> cartão "Saiu para entrega" (520 x 300), réplica do app com texto de 44 e 64 px ("Saiu para" 9 car x 0,5 x 64 = 288 + 28; a moto começa em x 344). */
+.p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 140px; }
+.p0 .par { position: absolute; left: 72px; top: 810px; width: 936px; height: 300px; display: flex; align-items: center; justify-content: space-between; }
+.p0 .tile { width: 300px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); box-shadow: 10px 10px 0 var(--noite); }
 .p0 .tile img { width: 100%; height: 100%; object-fit: cover; }
-.p0 .tile.moto img { object-position: 50% 70%; }
-.p0 .seta { width: 96px; height: 72px; }
-.p0 .cta { top: 1212px; display: flex; align-items: center; gap: 22px; color: var(--lima); }
-.p0 .cta svg { width: 47px; height: 64px; flex: none; }
+.p0 .seta { width: 84px; height: 63px; }
+.p0 .mini { position: relative; width: 520px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); color: var(--branco); box-shadow: 10px 10px 0 var(--noite); }
+.p0 .mini .lb { position: absolute; left: 28px; top: 22px; font: 800 44px/1.2 var(--texto); color: var(--lima); white-space: nowrap; }
+.p0 .mini .tt { position: absolute; left: 28px; top: 78px; font: 800 64px/1 var(--texto); letter-spacing: -0.02em; white-space: nowrap; }
+.p0 .mini .tt span { display: block; }
+.p0 .mini .art { position: absolute; right: 6px; top: 62px; width: 170px; height: 160px; }
+.p0 .mini .art img { width: 100%; height: 100%; object-fit: contain; }
+.p0 .mini .bar { position: absolute; left: 28px; right: 28px; bottom: 26px; display: flex; gap: 10px; }
+.p0 .mini .bar i { flex: 1; height: 18px; border-radius: 9px; background: #443C4C; }
+.p0 .mini .bar i.on { background: var(--roxo); }
+.p0 .mini .bar i.cur { background: var(--lima); }
+.p0 .ex { position: absolute; right: 72px; top: 1122px; font: 700 32px/1 var(--texto); color: var(--branco); }
+.p0 .cta { top: 1200px; font-size: 60px; color: var(--branco); white-space: nowrap; }
 </style>
+<script src="../social-cfg.js" defer></script>
 </head>
 <body>
-<main class="post roxo p0" role="img" aria-label="Webag, em breve. Aquela loja que você adora. Não entrega. A palavra Não está riscada e no lugar vem Agora: Agora entrega. Ilustração: de uma loja de bairro para uma moto com a sacola do Webag. Siga e ative o sininho.">
+<main class="post roxo p0" role="img" aria-label="Webag, em breve. Aquela loja que você adora. Não entrega. A palavra Não está riscada e no lugar vem Agora: Agora entrega. Embaixo, uma ilustração de loja de bairro, uma seta e uma tela de exemplo do app com o aviso Saiu para entrega, A caminho, e a moto com a sacola do Webag. Siga @webag.">
 
   <!-- Ideia: a MESMA frase vira. "Aquela loja que você adora. ~~Não~~ Agora entrega." A palavra que importa (entrega.) é a mesma nos dois estados e fica em lima.
-       Sem banner borrado, sem botão falso, sem captura de tela. A virada é lida em 1 s: o risco lima em "Não" e "Agora" ao lado.
-       CTA na arte: "Siga e ative o sininho." em 52 px (lima sobre roxo = 3,9:1, texto grande em negrito). -->
+       v2.3: (1) CTA único em 60 px: "Siga" + o @ de src/config.json (provisório "@webag", IF1) em marca-texto lima: o destino é o que se vê; sem sininho, sem ícone de sino.
+       (2) a moto virou o cartão "Saiu para entrega" do app (réplica desenhada, sem horário, sem código), rotulado "Tela de exemplo": é a única prova de produto do post.
+       Depende do parecer J8 (pendencias.md IJ1): "Agora entrega", "Saiu para entrega". -->
   <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
   <div class="emb">Em breve</div>
 
@@ -44,13 +56,16 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
   <div class="par" aria-hidden="true">
     <div class="tile"><img src="../assets/fachada-loja.svg" alt=""></div>
     <svg class="seta" viewBox="0 0 96 72"><path d="M8 36H76M52 10L82 36L52 62" fill="none" stroke="#D6FF4A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div class="tile moto"><img src="../assets/etapa-a-caminho.svg" alt=""></div>
+    <div class="mini">
+      <p class="lb">A caminho</p>
+      <p class="tt"><span>Saiu para</span><span>entrega</span></p>
+      <div class="art"><img src="../assets/etapa-a-caminho.svg" alt=""></div>
+      <div class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></div>
+    </div>
   </div>
+  <p class="ex" aria-hidden="true">Tela de exemplo</p>
 
-  <p class="cta">
-    <svg viewBox="64 10 272 372" aria-hidden="true"><g fill="#D6FF4A"><path d="M200 44 C140 44 108 92 108 158 L108 232 C108 258 98 274 72 294 L72 312 L328 312 L328 294 C302 274 292 258 292 232 L292 158 C292 92 260 44 200 44 Z"/><circle cx="200" cy="32" r="18"/><path d="M154 326 L246 326 A46 46 0 0 1 154 326 Z"/></g></svg>
-    <span>Siga e ative o sininho.</span>
-  </p>
+  <p class="cta">Siga <span class="mk"><span data-handle data-fit="500">@webag</span></span></p>
 
 </main>
 </body>

@@ -40,7 +40,18 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
 .cta-box { position: absolute; left: 84px; width: 912px; background: var(--lima); color: var(--noite); border-radius: 28px; padding: 52px 56px 60px; }
 .cta-box p { font-family: var(--display); font-weight: 800; line-height: 0.92; letter-spacing: -0.045em; white-space: nowrap; }
 .cta-box p span { display: block; }
-.esc { position: absolute; left: 84px; font: 600 38px/1.25 var(--texto); color: rgba(255, 255, 255, 0.92); }
+.esc { position: absolute; left: 84px; font: 700 44px/1.25 var(--texto); color: rgba(255, 255, 255, 0.95); }
+/* v2.3: o @ do CTA (src/social-cfg.js preenche [data-handle] com o instagram de config.json). Fica em bloco próprio, inline-block para medir a largura (data-fit). */
+.cta-box p .hd { margin-top: 14px; line-height: 1; letter-spacing: 0; font-family: var(--texto); font-weight: 800; }
+.cta-box p .hd span { display: inline-block; }
+
+/* v2.3: janela de imagem real com recorte ampliado. .fx = invólucro animável do recorte (o motor escreve transform nele); .cv = bloco sólido que cobre dado de demonstração
+   (mesma cor do fundo do cartão, então não se vê a emenda). */
+.win .fx { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; }
+.win .fx img { position: absolute; max-width: none; }
+.win .cv { position: absolute; background: #FFFFFF; }
+.win .selo { z-index: 2; }
+.vtoast { position: absolute; display: flex; align-items: center; padding: 22px 34px 26px; border-radius: 26px; background: var(--noite); color: var(--branco); font: 800 46px/1.1 var(--texto); white-space: nowrap; box-shadow: 10px 10px 0 var(--lima); }
 
 /* pré-visualização manual (só com ?preview): régua para arrastar o tempo. Não usada pelo render. */
 #prev { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px; background: #111; color: #fff; font: 14px/1 var(--texto); z-index: 9; display: flex; gap: 12px; align-items: center; }

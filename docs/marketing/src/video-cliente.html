@@ -2,101 +2,152 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: vídeo Stories 15 s para CLIENTE (1080 x 1920, 30 fps), v2.2 "Aquela loja que você adora. Agora entrega."</title>
+<title>Webag: vídeo Stories 15 s para CLIENTE (1080 x 1920, 30 fps), v2.3 "Aquela loja que você adora. Não entrega. Agora entrega."</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="social.css">
 <link rel="stylesheet" href="video.css">
+<script src="social-cfg.js" defer></script>
 <style>
 /* Contrato com o render: palco 1080x1920, window.__duration = 15, window.__fps = 30, window.setTime(t) devolve Promise (video-engine.js).
-   Um público (quem compra), uma ideia ("Aquela loja que você adora. Agora entrega."), uma ação ("Siga e ative o sininho.").
-   v2.2: as cenas 2, 3 e 4 mostram CLIPES REAIS do app (src/clips/, ver README de lá) em janelas .win recortadas; nada mais de cartão desenhado.
-   Margens seguras do Stories: topo 250 px, base 340 px, laterais 84 px. Todo texto fica entre y=290 e y=1500; as janelas terminam em y<=1560.
+   Um público (quem compra), uma ideia ("Aquela loja que você adora. Agora entrega."), uma ação ("Siga @webag"; o @ vem de src/config.json).
+   v2.3: NENHUM clipe do app. Os clipes de src/clips/ mostram horário previsto ("Chega entre 22:xx"), horários repetidos na linha do tempo e "Últimas 2 unidades", e não dá para limpá-los
+   sem ver os quadros. No lugar: (a) duas CAPTURAS ESTÁTICAS limpas (app-loja-produtos.png e app-produto.png, 1170x2532, sem horário, sem código, sem escassez) recortadas e ampliadas, com
+   movimento próprio (toque, zoom, aviso); (b) a RÉPLICA do cartão de acompanhamento (.stat em social.css), sem horário. Selo "Tela de exemplo" em todas.
+   Margens seguras do Stories: topo 250 px, base 340 px, laterais 84 px. Todo texto entre y=290 e y=1580.
 
-   RECORTES (clipe 1170x2532; k = 912/1170 = 0,7795 para as janelas de 912 px; px do clipe -> px do palco)
-   - Cena 2 (app-loja, a partir de 2,5 s): recorte y=130 a 1413 do clipe (vitrine, toque na camiseta, página do produto com preço). k*130 = 101,3. Janela 912 x 1000.
-     Por que 2,5 s: antes disso o tempo previsto de chegada da loja ("22:38 – 23:08") ainda está na tela rolando. Em 2,45 s a linha já saiu do recorte (conta em revisao-social-v2.md).
-   - Cena 3 (app-sacola, 0,3 a 1,8 s): recorte y=1430 a 2532 (chips de número, botão Adicionar, aviso "Adicionado à sacola" no rodapé). k*1430 = 1114,7. Janela 912 x 858.
-     Para antes da sacola abrir (2,08 s), onde aparece "Chega entre 22:50 e 23:20".
-   - Cena 4 (app-acompanhar, 0 a 4 s): recorte y=1135 a 2328 (barra de progresso, linha do tempo). k*1135 = 884,7. Janela 912 x 930.
-     O recorte começa abaixo da faixa "Chega entre ..." do cartão escuro (que mede até y~1105 no estado mais alto). Cada etapa nova aparece na linha do tempo.
-   Larguras (Bricolage 800, 0,53 em/car.): "Aquela loja" a 150 px = 875; "Não Agora" = 715; "entrega." = 636 + marca-texto; "Escolha" a 130 px = 482; "Acompanhe" a 130 px = 620; "cada etapa." a 130 px = 758;
-   "Peça." a 230 px = 280; "Em breve." a 180 px = 858; "Siga e ative" a 120 px = 763. Todas <= 912. */
+   RECORTES (px da captura 1170x2532; display do Read = 924 x 2000, fator 1,2662)
+   - Cena 2 "Escolha na loja.": app-loja-produtos, k = 1,16, janela 912 x 990 em (84, 560); recorte x 40 a 826, y 330 a 1183. Entra: 1º cartão de produto inteiro (camiseta, R$ 49,90, nome a 44 px)
+     e 1/2 do 2º (bermuda) sangrando na borda. Fora: abas "Todos/Camisetas..." (y < 291) e a 2ª fileira (começa em y 1194). Imagem 1357,2 x 2937, left -46,4, top -382,8.
+     O toque (círculo) fica no centro do 1º cartão: (308, 385) na janela.
+   - Cena 3 "Peça.": app-produto, k = 0,68, janela 796 x 960 em (142, 500); recorte x 0 a 1170, y 190 a 1602: a arte da camiseta, "R$ 49,90" e "Camiseta básica algodão" (nome a 70 x 0,68 = 48 px).
+     Fora: botões voltar/favoritar (y < 158), "Novo", o cartão de tamanho e a barra "Adicionar" (y > 1560). Imagem 795,6 x 1721,8, left 0, top -129,2. O aviso "Adicionado à sacola" é desenhado (o do app, em 46 px) e sobe em 6,9 s.
+   - Cena 4 "Acompanhe cada etapa.": réplica .stat 912 x 809 em (84, 590): "Em separação" passa a "Saiu para entrega" em 9,6 s (barra, título, ilustração e linha do tempo).
+   Larguras (Bricolage 800, 0,53 em/car.): "Aquela loja" a 150 px = 875 (x 1,08 no soco = 945, cabe em 1080); "Não Agora" = 715; "entrega." = 636 + marca-texto; "Escolha" a 130 px = 482; "na loja." = 551;
+   "Peça." a 190 px = 503; "Acompanhe" a 130 px = 620; "cada etapa." a 130 px = 758; "Em breve." a 180 px = 858; "Siga" a 150 px; "@webag" (Figtree 800, 100 px) ~ 300 px. Todas <= 912. */
 @font-face { font-family: "Bricolage Grotesque"; font-weight: 800; font-display: block; src: url("../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
 
+/* cena 1 */
+#tw1 { position: absolute; left: 0; top: 0; width: 1080px; height: 1100px; transform-origin: 84px 640px; }
 #h1 { top: 290px; font-size: 150px; }
-#tf1 { left: 84px; top: 1080px; width: 400px; height: 300px; box-shadow: 10px 10px 0 var(--noite); }
-#sa1 { left: 492px; top: 1194px; }
-#tm1 { left: 596px; top: 1080px; width: 400px; height: 300px; box-shadow: 10px 10px 0 var(--noite); }
+#tf1 { left: 84px; top: 1130px; width: 400px; height: 300px; box-shadow: 10px 10px 0 var(--noite); }
+#sa1 { left: 492px; top: 1244px; }
+#tm1 { left: 596px; top: 1130px; width: 400px; height: 300px; box-shadow: 10px 10px 0 var(--noite); }
 
+/* cena 2 */
 #h2 { top: 290px; font-size: 130px; }
-#c2 { left: 84px; top: 556px; width: 912px; height: 1000px; --sh: var(--lima); }
-#slot2 video { width: 912px; height: 1973.6px; top: -101.3px; }
+#sel2 { right: 84px; top: 480px; }
+#c2 { left: 84px; top: 560px; width: 912px; height: 990px; --sh: var(--lima); }
+#fx2 { transform-origin: 308px 385px; }
+#fx2 img { left: -46.4px; top: -382.8px; width: 1357.2px; height: 2937px; }
+#tap2 { left: 308px; top: 385px; }
 
-#h3 { top: 290px; font-size: 230px; }
-#v3 { top: 530px; }
-#c3 { left: 84px; top: 650px; width: 912px; height: 858px; --sh: var(--noite); }
-#slot3 video { width: 912px; height: 1973.6px; top: -1114.7px; }
+/* cena 3 */
+#h3 { top: 290px; font-size: 190px; }
+#sel3 { right: 84px; top: 400px; }
+#c3 { left: 142px; top: 500px; width: 796px; height: 960px; --sh: var(--noite); }
+#fx3 img { left: 0; top: -129.2px; width: 795.6px; height: 1721.8px; }
+#toast3 { left: 142px; top: 1470px; }
 
+/* cena 4 */
 #h4 { top: 290px; font-size: 130px; }
-#c4 { left: 84px; top: 556px; width: 912px; height: 930px; --sh: var(--lima); }
-#slot4 video { width: 912px; height: 1973.6px; top: -884.7px; }
+#c4 { left: 84px; top: 590px; width: 912px; height: 809px; box-shadow: 14px 14px 0 var(--lima); border-radius: 34px; }
+#c4 .selo { right: 24px; bottom: 22px; }
+#cb { transform-origin: 0 50%; }
 
+/* cena 5 */
 #logo5 { position: absolute; left: 84px; top: 300px; width: 560px; height: 154px; }
 #h5 { top: 520px; font-size: 180px; }
 #cta5 { top: 790px; }
-#cta5 p { font-size: 120px; }
+#cta5 p { font-size: 150px; }
+#hd5 { font-size: 100px; transform-origin: 0 50%; }
 #esc5 { top: 1190px; }
 </style>
 </head>
 <body>
 <div id="stage">
 
-  <!-- 1  0,0 a 3,5 s  GANCHO E VIRADA NA MESMA ARTE (tipografia desenhada, sem mudança da v2.1). Quadro 0: "Aquela loja que você adora." 0,7 s: "Não entrega." (entrega. em lima).
-       2,1 s: o risco lima cai sobre "Não" e "Agora" aparece ao lado: "Agora entrega." (promessa antes dos 4 s; depende do parecer J8, pendencias IJ1). -->
+  <!-- 1  0,0 a 3,0 s  GANCHO E VIRADA NA MESMA ARTE. Quadro 0: "Aquela loja que você adora. Não entrega." (as duas frases já estão na tela; "entrega." em lima).
+       0 a 1,6 s: a arte anda (leve aproximação do título; a fachada entra pela esquerda). 1,6 s: o risco lima corta "Não" (0,14 s), "Agora" entra, o título dá um soco de escala (1,02 para 1,08 e volta)
+       e entram a seta e o cartão "Saiu para entrega" (promessa em 1,7 s, antes dos 4 s; depende do parecer J8, pendencias IJ1). Nada fica parado por mais de 1,1 s. -->
   <section class="sc bgr" id="s1">
-    <h2 class="d vh" id="h1">
-      <span class="ln" id="l1a">Aquela loja</span>
-      <span class="ln" id="l1b">que você</span>
-      <span class="ln" id="l1c">adora.</span>
-      <span class="ln" id="l1d"><span class="no">Não<i class="strike"><b id="k1"></b></i></span> <span class="ag" id="ag1">Agora</span></span>
-      <span class="ln" id="l1e"><span class="mk"><span>entrega.</span></span></span>
-    </h2>
+    <div id="tw1">
+      <h2 class="d vh" id="h1">
+        <span class="ln" id="l1a">Aquela loja</span>
+        <span class="ln" id="l1b">que você</span>
+        <span class="ln" id="l1c">adora.</span>
+        <span class="ln" id="l1d"><span class="no">Não<i class="strike"><b id="k1"></b></i></span> <span class="ag" id="ag1">Agora</span></span>
+        <span class="ln" id="l1e"><span class="mk"><span>entrega.</span></span></span>
+      </h2>
+    </div>
     <div class="tile" id="tf1"><img src="assets/fachada-loja.svg" alt=""></div>
     <svg class="seta" id="sa1" viewBox="0 0 96 72" aria-hidden="true"><path d="M8 36H76M52 10L82 36L52 62" fill="none" stroke="#D6FF4A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div class="tile moto" id="tm1"><img src="assets/etapa-a-caminho.svg" alt=""></div>
   </section>
 
-  <!-- 2  3,5 a 5,0 s  ESCOLHA NA LOJA: clipe real app-loja de 2,5 a 4,0 s. Vitrine da Moda Express Franco termina de rolar (2,5 a 2,96 s),
-       o dedo toca na camiseta (3,21 a 3,47 s) e abre a página do produto (a partir de 3,47 s = cena 4,47 s). -->
+  <!-- 2  3,0 a 5,5 s  ESCOLHA NA LOJA: captura real da vitrine (produtos do app), ampliada. Toque no 1º produto em 4,1 s; a imagem se aproxima dele até o corte (5,4 s). -->
   <section class="sc bgn" id="s2">
     <h2 class="d vh" id="h2"><span class="ln" id="l2a">Escolha</span><span class="ln l" id="l2b">na loja.</span></h2>
-    <div class="win" id="c2" aria-hidden="true"><div class="vslot" id="slot2"></div></div>
+    <div class="selo" id="sel2" aria-hidden="true">Tela de exemplo</div>
+    <div class="win" id="c2" aria-hidden="true">
+      <div class="fx" id="fx2"><img src="capturas/app-loja-produtos.png" alt=""></div>
+      <div class="tap" id="tap2"></div>
+    </div>
   </section>
 
-  <!-- 3  5,0 a 6,5 s  PEÇA: clipe real app-sacola de 0,3 a 1,8 s. O dedo escolhe o número (0,35 a 0,6 s), toca em Adicionar (1,0 a 1,27 s) e o aviso
-       "Adicionado à sacola" sobe no rodapé. (v2.1 dizia "Pediu."; adicionar à sacola ainda não é pedir, então o verbo virou "Peça.", paralelo a "Escolha" e "Acompanhe".) -->
-  <section class="sc bgl" id="s3">
+  <!-- 3  5,5 a 8,0 s  PEÇA: captura real da página do produto (arte, preço, nome), ampliada; o aviso "Adicionado à sacola" sobe em 6,9 s. -->
+  <section class="sc bgr" id="s3">
     <h2 class="d vh" id="h3"><span class="ln" id="l3a">Peça.</span></h2>
-    <p class="vs" id="v3">Sem sair do lugar.</p>
-    <div class="win" id="c3" aria-hidden="true"><div class="vslot" id="slot3"></div></div>
+    <div class="selo" id="sel3" aria-hidden="true">Tela de exemplo</div>
+    <div class="win" id="c3" aria-hidden="true">
+      <div class="fx" id="fx3"><img src="capturas/app-produto.png" alt=""></div>
+    </div>
+    <div class="vtoast" id="toast3" aria-hidden="true">Adicionado à sacola</div>
   </section>
 
-  <!-- 4  6,5 a 10,5 s  ACOMPANHE: clipe real app-acompanhar inteiro (4 s). Clipe 0 a 1,1 s = "Em separação" (cena 6,5 a 7,6 s); 1,1 a 2,3 s = "Aguardando motoboy" (7,6 a 8,8 s);
-       2,3 a 4,0 s = "Saiu para entrega" (8,8 a 10,5 s). "Saiu para entrega" / "A caminho" dependem do parecer J8. -->
-
+  <!-- 4  8,0 a 11,5 s  ACOMPANHE: réplica do cartão do app. 8,0 a 9,6 s "Etapa 3 de 5 . Em separação"; em 9,6 s vira "Etapa 4 de 5 . A caminho / Saiu para entrega" (J8): o destaque da linha do tempo desce uma linha,
+       a barra enche, o título e a ilustração trocam. Sem horário, sem código, sem "Aguardando motoboy". -->
   <section class="sc bgn" id="s4">
     <h2 class="d vh" id="h4"><span class="ln" id="l4a">Acompanhe</span><span class="ln l" id="l4b">cada etapa.</span></h2>
-    <div class="win" id="c4" aria-hidden="true"><div class="vslot" id="slot4"></div></div>
+    <div class="stat" id="c4" aria-hidden="true">
+      <div class="top">
+        <div class="lyr" id="ta">
+          <p class="lb">Etapa 3 de 5</p>
+          <p class="tt"><span>Em separação</span></p>
+          <div class="art"><img src="assets/etapa-separando.svg" alt=""></div>
+          <div class="bar"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i><i></i></div>
+        </div>
+        <div class="lyr" id="tb">
+          <p class="lb">Etapa 4 de 5 · A caminho</p>
+          <p class="tt"><span>Saiu para</span><span>entrega</span></p>
+          <div class="art"><img src="assets/etapa-a-caminho.svg" alt=""></div>
+          <div class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur" id="cb"></i><i></i></div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="track allk">
+          <div class="rows">
+            <div class="hl" id="hl4" style="top:101.2px"></div>
+            <ol>
+              <li class="done"><i><u class="ud"></u></i>Pedido aceito</li>
+              <li><i><u class="un" id="m1n"></u><u class="ud" id="m1d"></u></i>Em separação</li>
+              <li class="todo"><i><u class="un" id="m2n"></u></i>Saiu para entrega</li>
+              <li class="todo"><i></i>Entregue</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="selo">Tela de exemplo</div>
+    </div>
   </section>
 
-  <!-- 5  10,5 a 15,0 s  CTA ÚNICO: "Siga e ative o sininho." (em 10,75 s). "Em breve", sem data. -->
+  <!-- 5  11,5 a 15,0 s  CTA ÚNICO: "Siga @webag" (o @ vem de config.json; provisório) entra em 12,5 s = 2,5 s antes do fim. "Em breve", sem data. -->
   <section class="sc bgr" id="s5">
     <img id="logo5" src="assets/webag-logo-branca.svg" alt="Webag">
     <h2 class="d vh" id="h5"><span class="ln" id="l5a">Em <span class="mk"><span>breve.</span></span></span></h2>
-    <div class="cta-box" id="cta5"><p><span>Siga e ative</span><span>o sininho.</span></p></div>
+    <div class="cta-box" id="cta5"><p><span>Siga</span><span class="hd" id="hd5"><span data-handle data-fit="760">@webag</span></span></p></div>
     <p class="esc" id="esc5">Começamos por Francisco Morato e região.</p>
   </section>
 
@@ -107,42 +158,51 @@
 WBVideo({
   duration: 15,
   fps: 30,
-  // cortes em múltiplos de 0,5 s (120 BPM). Para casar com outra trilha, mude só estes valores. Cortes visíveis no vídeo: 4 de cena + 1 do clipe da loja (toque abre o produto)
-  // + 1 do clipe da sacola (toque em Adicionar) + 2 trocas de etapa do acompanhamento = 8.
-  cuts: [0, 3.5, 5, 6.5, 10.5, 15],
-  // clipes reais (src/clips/, ver README de lá). inn = segundo do clipe que aparece no 1º quadro da cena.
-  clips: [
-    { slot: 'slot2', scene: 2, base: 'clips/app-loja', inn: 2.5 },
-    { slot: 'slot3', scene: 3, base: 'clips/app-sacola', inn: 0.3 },
-    { slot: 'slot4', scene: 4, base: 'clips/app-acompanhar', inn: 0 }
-  ],
+  // cortes em múltiplos de 0,5 s (120 BPM). Para casar com outra trilha, mude só estes valores. Cortes visíveis: 4 de cena + o soco da virada (1,6 s) + o toque (4,1 s) +
+  // o aviso "Adicionado à sacola" (6,9 s) + a troca de etapa (9,6 s) + o CTA (12,5 s).
+  cuts: [0, 3, 5.5, 8, 11.5, 15],
   tracks: function (h) {
     var tr = h.tr, snap = h.snap, rise = h.rise, bump = h.bump, pop = h.pop;
-    // 1: "Aquela loja que você adora." no quadro 0; "Não entrega." em 0,7 s; a fachada em 0,95 s;
-    //    em 2,1 s o risco cresce sobre "Não" (0,14 s), "Agora" aparece em 2,25 s, "entrega." salta em 2,3 s e entram a seta e a moto
+    // 1: as duas frases já estão no quadro 0 (nada começa invisível). 0 a 1,6 s: aproximação lenta do título (1,00 a 1,02) e a fachada entra pela esquerda (0,5 a 1,5 s).
+    //    1,6 s: risco em "Não" (0,14 s), soco do título (1,02 a 1,08 em 0,10 s; volta a 1,00 em 0,35 s), "Agora" em 1,72 s, "entrega." salta, seta e moto em 1,9 s.
     snap('l1a', 0.0, 8); snap('l1b', 0.0, 8); snap('l1c', 0.0, 8);
-    rise('l1d', 0.70, 24, 0.14);
-    rise('l1e', 0.80, 24, 0.14);
-    rise('tf1', 0.95, 30, 0.16);
-    tr('k1', 'sx', 2.10, 0.14, 0, 1, 'out3');
-    pop('ag1', 2.25, 0.20, 0.85);
-    bump('l1e', 2.30, 0.20, 0.94);
-    pop('sa1', 2.30, 0.20, 0.80);
-    pop('tm1', 2.30, 0.22, 0.90);
-    // 2: título no corte; a janela sobe 60 px em 0,2 s (a janela já está visível no 1º quadro)
-    snap('l2a', 3.5, 10); snap('l2b', 3.5, 10);
-    tr('c2', 'y', 3.50, 0.20, 60, 0, 'out5');
-    // 3
-    snap('l3a', 5.0, 10); snap('v3', 5.0, 10);
-    tr('c3', 'y', 5.00, 0.20, 60, 0, 'out5');
-    // 4
-    snap('l4a', 6.5, 10); snap('l4b', 6.5, 10);
-    tr('c4', 'y', 6.50, 0.20, 60, 0, 'out5');
-    // 5: logo e "Em breve." no corte; o CTA sobe em 10,75 s (opaco em 10,87 s, legível por 4,1 s); escopo em 11,1 s
-    snap('logo5', 10.5, 8);
-    bump('l5a', 10.5, 0.18, 0.92);
-    rise('cta5', 10.75, 60, 0.22);
-    rise('esc5', 11.10, 14, 0.14);
+    tr('tw1', 'sx', 0.00, 1.60, 1.00, 1.02, 'lin');  tr('tw1', 'sy', 0.00, 1.60, 1.00, 1.02, 'lin');
+    tr('tw1', 'sx', 1.60, 0.10, 1.02, 1.08, 'out3'); tr('tw1', 'sy', 1.60, 0.10, 1.02, 1.08, 'out3');
+    tr('tw1', 'sx', 1.70, 0.35, 1.08, 1.00, 'out3'); tr('tw1', 'sy', 1.70, 0.35, 1.08, 1.00, 'out3');
+    tr('tf1', 'o', 0.50, 0.10, 0, 1, 'lin');
+    tr('tf1', 'x', 0.50, 1.00, -80, 0, 'out3');
+    tr('k1', 'sx', 1.60, 0.14, 0, 1, 'out3');
+    pop('ag1', 1.72, 0.20, 0.85);
+    bump('l1e', 1.75, 0.20, 0.94);
+    pop('sa1', 1.90, 0.20, 0.80);
+    pop('tm1', 1.90, 0.22, 0.90);
+    // 2: título no corte; a janela sobe 60 px em 0,2 s. Toque em 4,1 s (aparece, aperta e some em 4,55 s); a imagem se aproxima do 1º produto de 4,35 a 5,4 s.
+    snap('l2a', 3.0, 10); snap('l2b', 3.0, 10);
+    tr('c2', 'y', 3.00, 0.20, 60, 0, 'out5');
+    pop('tap2', 4.10, 0.18, 0.60);
+    tr('tap2', 'sx', 4.30, 0.12, 1, 0.8, 'out3'); tr('tap2', 'sy', 4.30, 0.12, 1, 0.8, 'out3');
+    tr('tap2', 'o', 4.50, 0.08, 1, 0, 'lin');
+    tr('fx2', 'sx', 4.35, 1.05, 1, 1.40, 'out3'); tr('fx2', 'sy', 4.35, 1.05, 1, 1.40, 'out3');
+    // 3: título no corte; a janela sobe 60 px; o aviso sobe em 6,9 s
+    snap('l3a', 5.5, 10);
+    tr('c3', 'y', 5.50, 0.20, 60, 0, 'out5');
+    rise('toast3', 6.90, 40, 0.22);
+    // 4: título no corte; o cartão sobe 60 px. Em 9,6 s: troca de etapa (título, barra, ilustração), o destaque desce uma linha, os marcadores trocam; o segmento da barra enche de 9,65 a 10,65 s.
+    snap('l4a', 8.0, 10); snap('l4b', 8.0, 10);
+    tr('c4', 'y', 8.00, 0.20, 60, 0, 'out5');
+    tr('ta', 'o', 9.60, 0.05, 1, 0, 'lin');
+    tr('tb', 'o', 9.60, 0.05, 0, 1, 'lin');
+    tr('hl4', 'y', 9.60, 0.25, 0, 101.2, 'out3');
+    tr('m1n', 'o', 9.60, 0.10, 1, 0, 'lin');
+    tr('m1d', 'o', 9.60, 0.10, 0, 1, 'lin');
+    tr('m2n', 'o', 9.60, 0.10, 0, 1, 'lin');
+    tr('cb', 'sx', 9.65, 1.00, 0.15, 1, 'out3');
+    // 5: logo e "Em breve." no corte; o CTA sobe em 12,5 s (opaco em 12,63 s, legível por 2,4 s); o @ salta em 13,0 s; escopo em 12,9 s
+    snap('logo5', 11.5, 8);
+    bump('l5a', 11.5, 0.18, 0.92);
+    rise('cta5', 12.5, 60, 0.22);
+    bump('hd5', 13.0, 0.25, 0.90);
+    rise('esc5', 12.9, 14, 0.14);
   }
 });
 </script>
