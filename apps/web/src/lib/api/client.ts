@@ -37,9 +37,18 @@ function queryString(query: RequestOptions['query']): string {
  * Contrato provisório: os tipos vêm de `./admin` até o OpenAPI publicar estes endpoints (DT-014).
  */
 export async function apiRequest<T>(area: Area, path: string, options: RequestOptions = {}): Promise<T> {
+  return request<T>(`/api/proxy/${area}/${path}`, options);
+}
+
+/** Leituras e abertura de "Ver como o lojista" (BFF `/api/view-as`): a credencial vive em cookie `httpOnly`, o navegador nunca a vê. */
+export async function viewAsRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return request<T>(`/api/view-as/${path}`, options);
+}
+
+async function request<T>(url: string, options: RequestOptions): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`/api/proxy/${area}/${path}${queryString(options.query)}`, {
+    response = await fetch(`${url}${queryString(options.query)}`, {
       method: options.method ?? 'GET',
       headers: {
         accept: 'application/json',

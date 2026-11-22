@@ -38,6 +38,11 @@ export interface UpstreamInit {
   contentType?: string;
   /** Repassado como `Idempotency-Key` (criar produto: repetir o envio não duplica). */
   idempotencyKey?: string;
+  /**
+   * Credencial `vas_` de "Ver como o lojista" (ADR-018 D8): vai SÓ no cabeçalho `X-View-As`, somada ao Bearer do admin. Campo explícito e
+   * de uso exclusivo das rotas `app/api/view-as`; nunca em URL, corpo nem log (esta função não registra cabeçalhos).
+   */
+  viewAs?: string;
 }
 
 export interface UpstreamResult {
@@ -52,6 +57,7 @@ export async function callApi(path: string, init: UpstreamInit = {}): Promise<Up
   if (init.body !== undefined) headers.set('content-type', init.contentType ?? 'application/json');
   if (init.idempotencyKey) headers.set('idempotency-key', init.idempotencyKey);
   if (init.accessToken) headers.set('authorization', `Bearer ${init.accessToken}`);
+  if (init.viewAs) headers.set('x-view-as', init.viewAs);
   // Só o BFF, com o segredo, pode declarar o IP do cliente (a API ignora o X-Forwarded-For sem ele).
   const secret = bffSecret();
   if (secret) headers.set('x-webag-bff-secret', secret);

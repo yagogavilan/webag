@@ -106,7 +106,7 @@ describe('QueuePage (A1)', () => {
     expect(await screen.findByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
   });
 
-  it('suporte vê "Ver" e não tem "Analisar a mais antiga"; financeiro não acessa', async () => {
+  it('suporte e financeiro veem "Ver" e não têm "Analisar a mais antiga" (WB-355: stores:read é dos 4 perfis)', async () => {
     vi.stubGlobal('fetch', queue([row('a', { name: 'Casa Bela' })]).impl);
     const view = renderPanel(<QueuePage />, 'support');
     await screen.findByText('Casa Bela');
@@ -114,7 +114,9 @@ describe('QueuePage (A1)', () => {
     expect(screen.queryByTestId('admin.fila.analyze-oldest')).not.toBeInTheDocument();
     view.unmount();
     renderPanel(<QueuePage />, 'finance');
-    expect(await screen.findByTestId('no-access')).toBeInTheDocument();
+    await screen.findByText('Casa Bela');
+    expect(screen.getByTestId('admin.fila.row-a-open')).toHaveTextContent('Ver');
+    expect(screen.queryByTestId('admin.fila.analyze-oldest')).not.toBeInTheDocument();
   });
 });
 

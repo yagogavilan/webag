@@ -1,0 +1,50 @@
+/* "Ver como o lojista" (WB-352). Só variáveis --wb-*; a cor "noite" (surface-ink) é a do admin, para ninguém confundir com a conta do lojista. */
+.banner {
+  position: sticky; top: 0; z-index: var(--wb-z-index-sticky, 20);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--wb-space-3);
+  padding: var(--wb-space-3) var(--wb-layout-screen-padding-x);
+  background: var(--wb-color-surface-ink); color: var(--wb-color-text-on-ink);
+}
+.bannerTitle { flex: 1 1 220px; margin: 0; display: flex; align-items: center; gap: var(--wb-space-2); min-width: 0; overflow-wrap: anywhere; }
+.timer {
+  display: inline-flex; align-items: center; gap: var(--wb-space-1); min-height: 32px; padding: 0 var(--wb-space-3);
+  border-radius: var(--wb-radius-pill); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.timerAttention { background: var(--wb-color-feedback-warning-base); color: var(--wb-color-text-primary); }
+.exit { min-height: 44px; padding: 0 var(--wb-space-4); border: 0; border-radius: var(--wb-radius-pill); background: var(--wb-color-accent-base); color: var(--wb-color-accent-on-base); cursor: pointer; }
+.exit:focus-visible { outline: var(--wb-border-width-strong) solid #fff; outline-offset: 2px; }
+.exit:disabled { opacity: 0.6; cursor: default; }
+
+/* A visão não pode deixar o campo focado atrás do banner (WCAG 2.4.11). */
+.scope { scroll-padding-top: 96px; display: flex; flex-direction: column; gap: var(--wb-space-4); }
+
+.nav { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }
+.navItem, .navOff {
+  display: inline-flex; flex-direction: column; justify-content: center; min-height: 48px; padding: 0 var(--wb-space-4);
+  border-radius: var(--wb-radius-pill); border: 1px solid var(--wb-color-border-default); text-decoration: none; color: var(--wb-color-text-primary);
+}
+.navItem:hover { background: var(--wb-color-surface-sunken); }
+.navItem:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }
+.navItem[aria-current='page'] { background: var(--wb-color-surface-brand-subtle); border-color: var(--wb-color-action-primary); color: var(--wb-color-text-brand); }
+.navOff { border-style: dashed; color: var(--wb-color-text-secondary); cursor: default; }
+.offTag { display: inline-flex; align-items: center; gap: var(--wb-space-1); color: var(--wb-color-text-secondary); }
+
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wb-space-3); }
+.card { padding: var(--wb-space-4); border: 1px solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-lg, 16px); background: var(--wb-color-surface-card); display: flex; flex-direction: column; gap: var(--wb-space-2); }
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); flex-wrap: wrap; }
+.line { display: flex; align-items: center; gap: var(--wb-space-3); padding: var(--wb-space-3) var(--wb-space-4); border: 1px solid var(--wb-color-border-subtle); border-radius: var(--wb-radius-lg, 16px); background: var(--wb-color-surface-card); }
+.lineGrow { flex: 1; min-width: 0; }
+.lineOff { background: var(--wb-color-surface-sunken); color: var(--wb-color-text-secondary); }
+.thumb { width: 48px; height: 48px; border-radius: 12px; overflow: hidden; flex: none; background: var(--wb-color-surface-sunken); }
+.tnum { font-variant-numeric: tabular-nums; }
+.help { margin: 0; color: var(--wb-color-text-secondary); }
+.dl { display: grid; gap: var(--wb-space-3); margin: 0; }
+.dl dt { color: var(--wb-color-text-secondary); }
+.dl dd { margin: 0; }
+.ended { display: flex; flex-direction: column; align-items: center; gap: var(--wb-space-3); text-align: center; padding: var(--wb-space-6) 0; }
+.cols { display: grid; gap: var(--wb-space-4); }
+.reasonNote { color: var(--wb-color-text-secondary); }
+.stack { display: flex; flex-direction: column; gap: var(--wb-space-2); }
+.link { background: none; border: 0; padding: 0; min-height: 44px; display: inline-flex; align-items: center; color: var(--wb-color-text-brand); text-decoration: underline; cursor: pointer; font: inherit; }
+.link:focus-visible { outline: var(--wb-border-width-strong) solid var(--wb-color-border-focus); outline-offset: 2px; }

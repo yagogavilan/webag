@@ -6,6 +6,7 @@ import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { refreshSession } from '@/server/refresh';
 import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/upstream';
+import { clearedViewAsCookie } from '@/server/view-as';
 
 /**
  * Proxy da API para o navegador (BFF). Põe o Bearer a partir do cookie HttpOnly, renova uma vez em 401 e só
@@ -96,8 +97,16 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   const response = respond(result);
   if (completesReset && result.status < 400) writeCookies(response.cookies, [clearedPendingCookie('reset')]);
   if (renewed) writeCookies(response.cookies, sessionCookies(area, renewed));
-  if (result.status === 401 && !renewed && refresh) writeCookies(response.cookies, clearedCookies(area));
-  if (result.status < 400 && ENDS_SESSION.has(joined)) writeCookies(response.cookies, clearedCookies(area));
+  // A visão "Ver como" morre junto com a sessão do admin (ADR-018 D8): o cookie dela sai quando a sessão sai.
+  const dropView = (): void => (area === 'admin' ? writeCookies(response.cookies, [clearedViewAsCookie()]) : undefined);
+  if (result.status === 401 && !renewed && refresh) {
+    writeCookies(response.cookies, clearedCookies(area));
+    dropView();
+  }
+  if (result.status < 400 && ENDS_SESSION.has(joined)) {
+    writeCookies(response.cookies, clearedCookies(area));
+    dropView();
+  }
   // Redefinir senha só abre sessão para o lojista; o admin sempre passa pelo 2º fator (SEC-095).
   if (result.status < 400 && ROTATES_TOKENS.has(joined) && (joined !== 'auth/password/reset' || area === 'lojista')) {
     const tokens = parseJson<{ tokens?: TokenPair }>(result.text)?.tokens;
