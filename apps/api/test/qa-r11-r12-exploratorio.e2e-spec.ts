@@ -404,7 +404,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
 
   // ===================================================================== tabela de preço e estoque (WB-377 leitura)
   describe('tabela de preço e estoque: filtros hostis, paginação estável, perfis', () => {
-    it.fails('BUG-038: q com %, _, \\, aspas, NUL e emoji; limit 0, -1, 101, abc; cursor lixo; sectionId inválido: 200 ou 400, nunca 500; coringa % não casa tudo', async () => {
+    it('BUG-038: q com %, _, \\, aspas, NUL e emoji; limit 0, -1, 101, abc; cursor lixo; sectionId inválido: 200 ou 400, nunca 500; coringa % não casa tudo', async () => {
       const { merchant, id } = await freshStore();
       for (let i = 0; i < 3; i += 1) await activeProduct(merchant, id, 1000 + i);
       const get = (query: Record<string, string>) => ctx.http.get(`${base(id)}/products/table`).query(query).set(as(merchant));
@@ -482,7 +482,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(await versionOf(id)).toBe(v);
     });
 
-    it.fails('BUG-038: NUL e controle em nome, descrição e nota do motivo: 4xx ou texto limpo, nunca 500 (o PostgreSQL recusa \\u0000)', async () => {
+    it('BUG-038: NUL e controle em nome, descrição e nota do motivo: 4xx ou texto limpo, nunca 500 (o PostgreSQL recusa \\u0000)', async () => {
       const { id } = await freshStore();
       const bodies = [
         { changes: { name: 'Loja\u0000Nula' }, reason: ask },
@@ -574,7 +574,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(active.length).toBeLessThanOrEqual(1);
     });
 
-    it.fails('BUG-038: nota do motivo hostil (NUL, 201 caracteres, só espaços, emoji): 4xx ou texto limpo, nunca 500', async () => {
+    it('BUG-038: nota do motivo hostil (NUL, 201 caracteres, só espaços, emoji): 4xx ou texto limpo, nunca 500', async () => {
       const admin = await createAdmin(ctx, 'super_admin');
       const seen: string[] = [];
       for (const note of ['Pedido\u0000NUL', 'x'.repeat(201), '    ', '\u{1F355} ligou pedindo ajuda']) {

@@ -18,6 +18,22 @@ const STATUS_DEFAULTS: Record<number, { code: string; title: string }> = {
 
 /** Códigos do PostgreSQL que significam "saturado", não "bug": consulta cancelada por `statement_timeout` e sem conexão livre no servidor. */
 const SATURATION_PG_CODES: ReadonlySet<string> = new Set(['57014', '53300']);
+/**
+ * BUG-038: o PostgreSQL recusa o byte NUL (`\u0000`) em `text` (22021, invalid byte sequence) e em `jsonb` (22P05, unsupported Unicode escape). É entrada inválida do
+ * usuário, não bug: 422 em qualquer rota, sem pilha e sem Sentry, em vez de corrigir campo a campo (hoje e nas rotas futuras).
+ */
+const INVALID_TEXT_PG_CODES: ReadonlySet<string> = new Set(['22021', '22P05']);
+
+function hasPgCode(exception: unknown, codes: ReadonlySet<string>): boolean {
+  let current: unknown = exception;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string' && codes.has(code)) return true;
+    current = cause;
+  }
+  return false;
+}
+
 /** Falha do pool do `pg` quando todas as conexões estão em uso por mais que `connectionTimeoutMillis` (BUG-035). */
 const POOL_EXHAUSTED = /timeout exceeded when trying to connect/i;
 /** O log de saturação é agregado: uma linha por janela, com a contagem, em vez de uma pilha por requisição. */
@@ -86,6 +102,11 @@ export class ProblemFilter implements ExceptionFilter {
       const fallback = STATUS_DEFAULTS[status] ?? { code: `HTTP_${status}`, title: 'Erro' };
       code = fallback.code;
       title = fallback.title;
+    } else if (hasPgCode(exception, INVALID_TEXT_PG_CODES)) {
+      status = 422;
+      code = 'INVALID_TEXT';
+      title = 'Texto inválido';
+      detail = 'O texto contém um caractere inválido (nulo). Remova-o e tente de novo.';
     } else if (isDbSaturation(exception)) {
       // Sob saturação o cliente deve tentar de novo depois, não receber "erro interno" (BUG-035). Sem Sentry: o sinal é a taxa de 503.
       status = 503;

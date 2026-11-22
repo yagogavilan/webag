@@ -103,3 +103,18 @@ describe('ProblemFilter: indisponibilidade sob saturação (BUG-035)', () => {
     expect(logged[1]).toMatchObject({ event: 'http.db_saturated', count: 400 });
   });
 });
+
+describe('ProblemFilter: texto com NUL (BUG-038)', () => {
+  it.each(['22021', '22P05'])('erro %s do PostgreSQL vira 422 INVALID_TEXT, sem pilha e sem SQL na resposta', (pgCode) => {
+    const error = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const cause = Object.assign(new Error('invalid byte sequence for encoding "UTF8": 0x00'), { code: pgCode });
+
+    const out = run(new ProblemFilter(), drizzleError(cause));
+
+    expect(out.status).toBe(422);
+    expect(out.body).toMatchObject({ status: 422, code: 'INVALID_TEXT' });
+    expect(JSON.stringify(out.body)).not.toContain('Failed query');
+    expect(error).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});
