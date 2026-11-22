@@ -105,6 +105,7 @@ describe('validateEnv', () => {
       ['CORS_ORIGINS vazio', { CORS_ORIGINS: '' }, /CORS_ORIGINS/],
       ['CORS_ORIGINS com *', { CORS_ORIGINS: '*' }, /CORS_ORIGINS/],
       ['/docs ligado', { API_DOCS_ENABLED: 'true' }, /API_DOCS_ENABLED/],
+      ['DB_STATEMENT_TIMEOUT_MS=0, consulta sem teto (SEC-203)', { DB_STATEMENT_TIMEOUT_MS: '0' }, /DB_STATEMENT_TIMEOUT_MS/],
       ['provedor fake', { PAYMENT_PROVIDER: 'fake' }, /PAYMENT_PROVIDER/],
       ['MP sem segredo de webhook', { MP_WEBHOOK_SECRET: undefined }, /MP_WEBHOOK_SECRET/],
       ['credencial de teste do MP', { MP_ACCESS_TOKEN: 'TEST-123' }, /MP_ACCESS_TOKEN/],

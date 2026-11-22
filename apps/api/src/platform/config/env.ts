@@ -71,8 +71,13 @@ export const envSchema = z
     DB_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
     /** Teto de uma consulta (ms): protege o pool de uma consulta fora de controle. 0 = sem teto. Relatórios longos devem rodar em job, não na requisição. */
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(30_000),
-    /** Fecha a conexão de quem abriu transação e esqueceu (ms). 0 = desligado. */
-    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(30_000),
+    /**
+     * Fecha a conexão de quem abriu transação e esqueceu (ms). 0 = desligado. O servidor MATA a conexão (SQLSTATE 25P03) e o pool só a descarta
+     * (`database.module.ts` trata o erro: nunca derruba o processo). Nenhum código deve esperar rede com transação aberta (trabalho longo usa
+     * `SessionLockService`, fora de transação). Padrão 60 s: o dobro do `statement_timeout` e acima da maior chamada ao Mercado Pago
+     * (8 s x 3 tentativas = 24 s), como margem de segurança; é rede de proteção, não parte do desenho. Não baixar de 15 s.
+     */
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(60_000),
     /**
      * Cache em memória (por processo) do catálogo de lojas visíveis da descoberta e das seções "ofertas"/"mais vendidos" da home.
      * É o que impede cada posição diferente do cliente de refazer a consulta pesada. 0 = desligado (os testes e2e usam 0, pois criam dados e
@@ -215,6 +220,8 @@ export const envSchema = z
       const url = new URL(value);
       if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) fail(name, 'em produção precisa ser uma URL https pública (não localhost)');
     }
+    // SEC-203: 0 = "sem teto"; um valor copiado de outro ambiente por engano deixaria consulta sem limite e travaria o pool.
+    if (env.DB_STATEMENT_TIMEOUT_MS === 0) fail('DB_STATEMENT_TIMEOUT_MS', 'em produção precisa ser maior que 0 (consulta sem teto prende o pool)');
     const staging = env.APP_ENV === 'staging';
     if (env.PAYMENT_PROVIDER === 'fake' && !staging)
       fail('PAYMENT_PROVIDER', 'o provedor fake não sobe em produção (só com APP_ENV=staging)');

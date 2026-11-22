@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplica
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import type { RequestContext } from '../../platform/auth/decorators.js';
-import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
+import { DRIZZLE, SessionLockService, type Db, type LockHandle, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { REDIS } from '../../platform/redis/redis.module.js';
@@ -114,6 +114,7 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     private readonly params: ParametersService,
     private readonly flags: FeatureFlagsService,
     private readonly audit: AuditService,
+    private readonly locks: SessionLockService,
   ) {}
 
   registerListener(listener: PaymentListener): void {
@@ -803,15 +804,13 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
    * UM pagamento não derruba o laço (conta falhas), a ordem é estável e só uma instância concilia por vez.
    */
   async reconcile(now = new Date()): Promise<{ checked: number; synced: number; alerts: number; failures: number; skipped?: true }> {
-    // Trava entre instâncias: a transação segura o lock até o fim; o trabalho em si usa o pool normal.
-    return this.db.transaction(async (lockTx) => {
-      const [lock] = (await lockTx.execute(sql`select pg_try_advisory_xact_lock(hashtext('webag:payments:reconcile')) as ok`)).rows as { ok: boolean }[];
-      if (!lock?.ok) return { checked: 0, synced: 0, alerts: 0, failures: 0, skipped: true as const };
-      return this.reconcileLocked(now);
-    });
+    // Trava entre instâncias em CONEXÃO DEDICADA fora de transação (B1): o laço chama o Mercado Pago por candidato (minutos no total) e
+    // uma transação aberta e ociosa nesse tempo seria morta por `idle_in_transaction_session_timeout`. O trabalho usa o pool normal.
+    const run = await this.locks.tryRun('webag:payments:reconcile', (lock) => this.reconcileLocked(now, lock));
+    return run.acquired ? run.value : { checked: 0, synced: 0, alerts: 0, failures: 0, skipped: true as const };
   }
 
-  private async reconcileLocked(now: Date): Promise<{ checked: number; synced: number; alerts: number; failures: number }> {
+  private async reconcileLocked(now: Date, lock: LockHandle): Promise<{ checked: number; synced: number; alerts: number; failures: number }> {
     const pendingBefore = new Date(now.getTime() - 5 * 60_000);
     const since48h = new Date(now.getTime() - 48 * 3_600_000);
     await this.recoverCreating(new Date(now.getTime() - 2 * 60_000)).catch((e: Error) => this.logger.error(`conciliação (creating): ${e.message}`));
@@ -837,6 +836,11 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
     let alerts = 0;
     let failures = 0;
     for (const attempt of candidates) {
+      // A conexão que segura a trava caiu: outra instância pode ter assumido; para aqui (a próxima rodada retoma, o laço é idempotente).
+      if (lock.lost()) {
+        this.logger.warn('conciliação interrompida: a trava foi perdida (conexão caiu)');
+        break;
+      }
       try {
         const remote = await this.provider.getPayment(attempt.providerPaymentId!, { storeId: attempt.storeId, receiverAccountId: attempt.receiverAccountId });
         if (!remote) {

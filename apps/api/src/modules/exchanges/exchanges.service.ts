@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplica
 import { and, asc, count, eq, inArray, isNotNull, isNull, lte, ne, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
-import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
+import { DRIZZLE, SessionLockService, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
@@ -108,6 +108,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
     readonly bus: ExchangeEventBus,
+    private readonly locks: SessionLockService,
   ) {}
 
   onModuleInit(): void {
@@ -560,9 +561,9 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
   private async payOnce(principal: Principal, exchangeId: string, input: { paymentMethod: 'pix' | 'card'; card?: { token: string; installments: number; paymentMethodId?: string | undefined; issuerId?: string | undefined } | undefined; payerDocument?: string | undefined }) {
     // Trava por troca que NÃO é a linha da troca: a aprovação do cartão roda dentro de `createPayment` e trava a troca em outra
     // conexão (`onAttemptTransition`); segurar a linha aqui seria deadlock. Quem chega durante a cobrança recebe 409 e tenta de novo.
-    return this.db.transaction(async (lock) => {
-      const [got] = (await lock.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`exchange-pay:${exchangeId}`})) as ok`)).rows as { ok: boolean }[];
-      if (!got?.ok) throw new AppError(409, 'EXCHANGE_PAYMENT_IN_PROGRESS', 'Pagamento em andamento', { detail: 'Já estamos processando o pagamento desta troca. Aguarde um instante.', retryAfterSeconds: 2 });
+    // A trava é de SESSÃO em conexão dedicada, fora de transação (B1): `createPayment` chama o Mercado Pago e uma transação ociosa
+    // nesse tempo seria morta por `idle_in_transaction_session_timeout`.
+    const run = await this.locks.tryRun(`exchange-pay:${exchangeId}`, async () => {
       const [ex] = await this.db.select().from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.userId, principal.userId)));
       if (!ex) throw errors.notFound('Troca não encontrada.');
       if (ex.status !== 'awaiting_fee') throw errors.conflict('EXCHANGE_NOT_AWAITING_FEE', 'Não há nada a pagar nesta troca');
@@ -583,6 +584,8 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       });
       return this.paymentView(ex, attempt);
     });
+    if (!run.acquired) throw new AppError(409, 'EXCHANGE_PAYMENT_IN_PROGRESS', 'Pagamento em andamento', { detail: 'Já estamos processando o pagamento desta troca. Aguarde um instante.', retryAfterSeconds: 2 });
+    return run.value;
   }
 
   async paymentForCustomer(userId: string, exchangeId: string) {
