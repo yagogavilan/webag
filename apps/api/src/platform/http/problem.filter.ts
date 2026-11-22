@@ -16,10 +16,42 @@ const STATUS_DEFAULTS: Record<number, { code: string; title: string }> = {
   429: { code: 'RATE_LIMITED', title: 'Muitas tentativas' },
 };
 
+/** Códigos do PostgreSQL que significam "saturado", não "bug": consulta cancelada por `statement_timeout` e sem conexão livre no servidor. */
+const SATURATION_PG_CODES: ReadonlySet<string> = new Set(['57014', '53300']);
+/** Falha do pool do `pg` quando todas as conexões estão em uso por mais que `connectionTimeoutMillis` (BUG-035). */
+const POOL_EXHAUSTED = /timeout exceeded when trying to connect/i;
+/** O log de saturação é agregado: uma linha por janela, com a contagem, em vez de uma pilha por requisição. */
+const SATURATION_LOG_WINDOW_MS = 10_000;
+const SATURATION_RETRY_AFTER_SECONDS = 2;
+
+/** Percorre a cadeia `cause` (o Drizzle embrulha o erro do `pg`). A mensagem só é lida no erro de ponta: o embrulho traz o SQL e os parâmetros. */
+function isDbSaturation(exception: unknown): boolean {
+  let current: unknown = exception;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string' && SATURATION_PG_CODES.has(code)) return true;
+    if (cause === undefined && POOL_EXHAUSTED.test(current.message)) return true;
+    current = cause;
+  }
+  return false;
+}
+
 /** Todo erro sai como application/problem+json (RFC 9457), sem stack trace e sem vazar detalhe interno. */
 @Catch()
 export class ProblemFilter implements ExceptionFilter {
   private readonly logger = new Logger('Problem');
+  private saturationPending = 0;
+  private lastSaturationLogAt = 0;
+
+  /** BUG-035: 1 aviso por janela com a contagem (sem pilha, sem SQL). A primeira ocorrência avisa na hora. */
+  private logSaturation(): void {
+    this.saturationPending += 1;
+    const now = Date.now();
+    if (now - this.lastSaturationLogAt < SATURATION_LOG_WINDOW_MS && this.lastSaturationLogAt !== 0) return;
+    this.logger.warn({ event: 'http.db_saturated', count: this.saturationPending, windowMs: SATURATION_LOG_WINDOW_MS }, 'Banco saturado: respondendo 503 com Retry-After');
+    this.saturationPending = 0;
+    this.lastSaturationLogAt = now;
+  }
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
@@ -54,6 +86,14 @@ export class ProblemFilter implements ExceptionFilter {
       const fallback = STATUS_DEFAULTS[status] ?? { code: `HTTP_${status}`, title: 'Erro' };
       code = fallback.code;
       title = fallback.title;
+    } else if (isDbSaturation(exception)) {
+      // Sob saturação o cliente deve tentar de novo depois, não receber "erro interno" (BUG-035). Sem Sentry: o sinal é a taxa de 503.
+      status = 503;
+      code = 'SERVICE_UNAVAILABLE';
+      title = 'Serviço indisponível no momento';
+      detail = 'Estamos com muitas requisições. Tente de novo em instantes.';
+      retryAfter = SATURATION_RETRY_AFTER_SECONDS;
+      this.logSaturation();
     } else {
       // Erro inesperado: registra com o requestId, nunca devolve a mensagem ao cliente.
       this.logger.error(

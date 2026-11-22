@@ -47,7 +47,7 @@ describe('contrato OpenAPI x rotas reais', () => {
   it('operações planejadas (`x-planned`) ainda não existem como rota; ao implementar, remover a marca (e o contrato passa a valer)', () => {
     const real = new Set(routes().map((r) => r.key));
     expect(planned.filter((o) => real.has(o.key)).map((o) => o.key)).toEqual([]);
-    expect(planned.every((o) => /^Onda \d/.test(o.op['x-planned'] ?? ''))).toBe(true);
+    expect(planned.every((o) => /^(Onda \d|v1\.1 R\d)/.test(o.op['x-planned'] ?? ''))).toBe(true);
   });
 
   it('segurança: `security: []` exatamente nas rotas @Public (SEC-021)', () => {

@@ -146,6 +146,21 @@ Sem tabela nova (O6.2/O6.4): relatórios do admin são consultas sobre `orders`,
 | `payment_alerts.resolved_by uuid null`, `resolution_note varchar(300) null` | B3: quem encerrou o alerta à mão e a nota (nulos quando o sistema encerra). Sem FK (só o id do admin; a auditoria guarda o resto) |
 | `user_status_history` | B4: bloqueios e desbloqueios do admin (`action`, `reason`, `actor_id`, `suspended_store_ids`). Retém (prova do ato; privacy-map) |
 
+## v1.1 R1 (PLANEJADO, ADR-018; nenhuma migração escrita ainda, a numeração segue a 0057)
+
+Só o que o contrato `v1.1 R1` exige. Cada migração: SQL revisado à mão, `lock_timeout` curto, coluna nova nula ou com default constante, índice em tabela viva com `CONCURRENTLY` em migração própria, nota de reversão.
+
+| Migração prevista | Mudança | Para quê |
+|---|---|---|
+| 0058 `r1_catalog_version` | `products.version int not null default 1`, `products.via text` (CHECK: camera, duplicate, paste, spreadsheet, form), `products.created_by_admin_id uuid null`, `products.duplicated_from uuid null`; CHECK `status = 'draft' or char_length(name) between 2 and 80` (afrouxa o nome só em rascunho; `name = ''` é rascunho novo); `stores.version int not null default 1`; índice parcial `products (store_id, updated_at) where status = 'draft'` (limite de 50 e vencimento de 30 dias) | D1, D2 (WB-370/371/372, WB-351 C6) |
+| 0059 `r1_audit_store_id` | `audit_log.store_id uuid null` + índice `(store_id, at desc, id desc)` em migração `CONCURRENTLY` própria. O gatilho append-only não muda. **Papel de banco:** `webag_migrator` passa a ser dono do `audit_log`; `webag_app` só `INSERT` e `SELECT` (D-06, C-ADM-06) | D9 (WB-350 C4, WB-354) |
+| 0060 `r1_admin_edit_support` | `admin_view_sessions` (id, admin_id, store_id, reason_code, note, token_hash único, expires_at, ended_at), `store_admin_changes` (feed do lojista: store_id, audit_id, type, summary, at), `store_change_digest` (store_id, audit_id, sent_at null; índice parcial `where sent_at is null`), `product_bulk_batches` e `product_bulk_batch_items` (previous_price_cents, applied_price_cents, para o desfazer de 10 min) | D6, D8, D10, WB-352/353/377 |
+| 0061 `r1_category_templates` | `categories.template jsonb`, `categories.description_required boolean not null default false`, `categories.description_min_chars smallint not null default 20`; seed dos 8 modelos (Cosméticos e Eletrônicos com `description_required = true`) | D13 (WB-375, DEC-106) |
+| 0062 `r1_product_creation_metrics` | `product_creation_metrics` (store_id, product_id único, via, started_at, first_photo_at, published_at, photos_count, variations_count); sem texto do produto | D11 (WB-379) |
+| 0063 `r1_analytics` | `analytics_events` (`PARTITION BY RANGE (occurred_at)`, partições diárias criadas e removidas por job; única `(event_id, occurred_at)`; colunas: name, session_id, store_id, product_id, origin, city_id, platform, app_version), `analytics_order_paid` (store_id, session_id null, hour, is_new_to_store; **sem `order_id`, `user_id` nem valor**), `analytics_daily` e `analytics_order_paid_daily` (agregados, sem `session_id`). `webag_app` (API) só `INSERT` nas tabelas brutas; quem lê é o job de agregação, com papel `webag_worker` [HIPÓTESE: segunda string de conexão só para o worker; se o tech-lead achar pesado para o piloto, fica a regra de código e um teste que prova que nenhum repositório de rota lê o bruto]. Nenhuma coluna referencia `users` (teste de classificação SEC-158/167) | D12 (WB-361/363) |
+
+Parâmetros novos (`parameters.definitions.ts`, auditados): `rascunhos_max_por_loja` 50, `rascunho_validade_dias` 30, `reajuste_max_pct` 30, `admin_preco_variacao_max_pct` 30, `cadastro_sessao_max_min` 15, `analytics_retencao_dias` 90, `analytics_celula_min` 5, `analytics_sessoes_novas_ip_hora` 30; `import_max_linhas` sobe o teto de 500 para 1.000. Flags novas (todas `default: false`, C-GEN-01): `coleta_eventos`, `medicao_padrao_ligada`, `admin_edita_catalogo_sem_pedido`.
+
 ## Mapa das migrações (0000 a 0053)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 

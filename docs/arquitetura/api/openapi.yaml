@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Webag API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contrato da API do Webag (fonte da verdade, ver skill `contrato-api` e ADR-007).
     Recursos de negócio ficam sob `/v1`. Endpoints operacionais (`/health`) ficam fora do versionamento.
@@ -12,6 +12,10 @@ info:
     A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
     Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
     Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
+    Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem na R1.2, quando o web do admin (único consumidor) migra.
+    Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
+    "Ver como o lojista" (v1.1 R1): as rotas de LEITURA da loja marcadas `x-view-as: true` (dados da loja, produtos, pedidos, trocas, avaliações) aceitam também a credencial `viewAsAuth`; nenhuma rota de escrita, financeira, de documento, de equipe ou de exportação a aceita (403 `VIEW_AS_READ_ONLY`).
+    Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
 servers:
   - url: http://localhost:3000
     description: Desenvolvimento local
@@ -80,6 +84,10 @@ tags:
     description: Ajuda (FAQ e contatos) do cliente e do lojista, editável pelo admin
   - name: content-reports
     description: Denúncia de avaliação, produto ou loja e moderação
+  - name: analytics
+    description: "Coleta de eventos de navegação sem identificar a conta (v1.1 R1, WB-361; flag `coleta_eventos`, só staging até o J24)"
+  - name: admin-analytics
+    description: Acessos agregados (mínimo de 5 por célula) e cobertura da medição (v1.1 R1, WB-363)
 security:
   - bearerAuth: []
 paths:
@@ -3014,7 +3022,7 @@ paths:
       - uploads
       operationId: createUpload
       summary: Pedir um upload (POST pré-assinado)
-      description: "A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído."
+      description: "A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído. **v1.1 R1:** admin com `store-catalog:write` (super admin e operação) também pede `product_image` com o `storeId` da loja que está ajustando (WB-353 C8); o upload fica de dono = admin e o envio é auditado. Foto de produto aceita só JPEG, PNG ou WebP (sem SVG e sem HEIC; o app converte no aparelho), até 5 MB e 40 MP, sem animação, assinatura dos bytes conferida (C-CAD-01)."
       requestBody:
         required: true
         content:
@@ -3046,7 +3054,7 @@ paths:
       - uploads
       operationId: completeUpload
       summary: Concluir o upload (valida e processa)
-      description: "Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado)."
+      description: "Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). **v1.1 R1 (SEC-195, C-CAD-02):** nenhum objeto da foto de produto, variantes OU original, mantém EXIF/GPS (o original é substituído pela versão recodificada sem metadados, ou apagado depois das variantes). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado)."
       parameters:
       - name: id
         in: path
@@ -3161,6 +3169,10 @@ paths:
       tags:
       - stores
       operationId: getStore
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Ver a loja
       description: Qualquer membro. O CPF/CNPJ vem inteiro só para o dono; funcionário vê mascarado. `settings` só para o dono.
       parameters:
@@ -3356,6 +3368,10 @@ paths:
       tags:
       - stores
       operationId: getStoreSettings
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Configuração da loja (dono)
       description: Permissão `settings`.
       parameters:
@@ -4086,7 +4102,7 @@ paths:
       - admin-stores
       operationId: listAdminStores
       summary: Fila de lojas
-      description: "Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em \"correção pedida\"."
+      description: "Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em \"correção pedida\". **v1.1 R1 (WB-350):** `status=all`, busca `q` por nome ou cidade e os atalhos `noActiveProduct` (loja aprovada sem produto ativo: a loja a ativar) e `ownCommission`; os itens ganham `activeProducts`, `orders30d`, `sales30dCents`, `commissionPct` e `commissionSource` (campos novos, opcionais). Páginas de até 50 (a tela pede 25 ou 50; 100 não cabe no limite de 3G)."
       parameters:
       - name: status
         in: query
@@ -4100,7 +4116,28 @@ paths:
           - rejected
           - suspended
           - closed
-        description: "Padrão: in_review"
+          - all
+        description: "Padrão: in_review. `all` = todas (v1.1 R1)"
+      - name: q
+        in: query
+        description: "v1.1 R1: nome da loja ou cidade (até 80 caracteres)"
+        schema:
+          type: string
+          maxLength: 80
+      - name: noActiveProduct
+        in: query
+        description: "v1.1 R1: só lojas aprovadas sem produto ativo"
+        schema:
+          type: string
+          enum:
+          - 'true'
+      - name: ownCommission
+        in: query
+        description: "v1.1 R1: só lojas com comissão própria"
+        schema:
+          type: string
+          enum:
+          - 'true'
       - $ref: "#/components/parameters/Cursor"
       - $ref: "#/components/parameters/Limit"
       responses:
@@ -4159,8 +4196,9 @@ paths:
       tags:
       - admin-stores
       operationId: editAdminStore
-      summary: Editar dados da loja
-      description: "Permissão `stores:write` (super e operação). Grava antes/depois na auditoria."
+      deprecated: true
+      summary: Editar dados da loja (substituída por `editAdminStoreProfile`)
+      description: "**DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; sai na R1.2, quando o web do admin (único consumidor) migra. Permissão `stores:write` (super e operação). Grava antes/depois na auditoria."
       parameters:
       - name: storeId
         in: path
@@ -4410,8 +4448,9 @@ paths:
       tags:
       - admin-stores
       operationId: editAdminStoreSettings
-      summary: Editar configuração da loja (admin)
-      description: "Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria."
+      deprecated: true
+      summary: Editar configuração da loja (substituída por `editAdminStoreConfig`)
+      description: "**DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; sai na R1.2. Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria."
       parameters:
       - name: storeId
         in: path
@@ -4532,6 +4571,10 @@ paths:
     get:
       tags: [catalog]
       operationId: listProducts
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Listar produtos da loja
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Filtros por status, busca, seção e estoque baixo; paginação por cursor."
       parameters:
@@ -4561,7 +4604,7 @@ paths:
       tags: [catalog]
       operationId: createProduct
       summary: Criar produto (rascunho)
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. **v1.1 R1:** também `DRAFT_LIMIT_REACHED` (50 rascunhos por loja, RN-Q2; vale para todo caminho que cria rascunho). O cadastro rápido usa `createProductDraft`."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: Idempotency-Key, in: header, schema: { type: string, minLength: 8, maxLength: 80 } }
@@ -4618,17 +4661,25 @@ paths:
       tags: [catalog]
       operationId: importProducts
       summary: Importar produtos por planilha (CSV)
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula) **ou, na v1.1 R1 (WB-376 C6, C9, C-CAD-05), `.xlsx`**; até 1 MB e **1.000 linhas** (`import_max_linhas` sobe de 500 para 1.000; 1.001 linhas ou arquivo maior: 422 `IMPORT_FILE_INVALID` e nada é criado). Planilha: lê VALORES e nunca avalia fórmula; limite de descompressão (bomba de zip recusada); macros e vínculos externos ignorados; fórmula e HTML em texto saem literais e escapados em qualquer CSV (C-CAD-04). **Mapeamento de colunas:** `nameColumn`, `priceColumn`, `stockColumn` e `sizeColumn` (índice da coluna, a partir de 1) quando o cabeçalho não bate com o modelo; no `preview` a resposta traz `headers`, `suggestedMapping` e as 3 primeiras linhas em `sampleRows`. `commit` cria rascunhos (via `spreadsheet`), sem foto: a etapa de fotos vem depois (RN-Q8). Aceita `Idempotency-Key`: repetir o `commit` não duplica. `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: mode, in: query, schema: { type: string, enum: [preview, commit], default: preview } }
         - { name: onExisting, in: query, schema: { type: string, enum: [skip, update], default: skip } }
+        - { name: nameColumn, in: query, description: 'v1.1 R1: coluna do nome (1 a 50)', schema: { type: integer, minimum: 1, maximum: 50 } }
+        - { name: priceColumn, in: query, description: 'v1.1 R1: coluna do preço', schema: { type: integer, minimum: 1, maximum: 50 } }
+        - { name: stockColumn, in: query, description: 'v1.1 R1: coluna do estoque', schema: { type: integer, minimum: 1, maximum: 50 } }
+        - { name: sizeColumn, in: query, description: 'v1.1 R1: coluna do tamanho (opcional)', schema: { type: integer, minimum: 1, maximum: 50 } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
         content:
           text/csv:
             schema:
               { type: string }
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+            schema:
+              { type: string, format: binary }
       responses:
         '200':
           description: Resumo da importação
@@ -4655,7 +4706,7 @@ paths:
       tags: [catalog]
       operationId: bulkProducts
       summary: Ação em massa
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura)."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -4687,6 +4738,10 @@ paths:
     get:
       tags: [catalog]
       operationId: getProduct
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Detalhe do produto
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
       parameters:
@@ -4709,10 +4764,11 @@ paths:
       tags: [catalog]
       operationId: updateProduct
       summary: Editar produto e promoção
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422. **v1.1 R1:** `If-Match` com a `version` (409 `PRODUCT_VERSION_CONFLICT`); `description` pode ser limpa em rascunho; categoria com `descriptionRequired` (modelo da categoria) exige descrição de no mínimo `descriptionMinChars` ao publicar (422 `DESCRIPTION_REQUIRED`), nas duas vias. Preço do lojista não pede confirmação do servidor: a confirmação inline acima de `reajuste_max_pct` é da tela (WB-377 C8)."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchVersion' }
       requestBody:
         required: true
         content:
@@ -4735,7 +4791,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/ProductVersionConflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
     delete:
@@ -4762,10 +4818,11 @@ paths:
       tags: [catalog]
       operationId: setProductVariants
       summary: Definir variações e estoque
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` (\"X unidades estão reservadas em pedidos\"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` (\"X unidades estão reservadas em pedidos\"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`. **v1.1 R1 (grade, WB-374):** a tabela tamanho x cor é gerada NO APP e salva aqui (até `variacoes_max`, 100); remover combinação com unidades reservadas é 409 `STOCK_BELOW_RESERVED` (\"X unidades reservadas\"); preço por combinação em `priceCents`. `If-Match` com a `version` do produto (409 `PRODUCT_VERSION_CONFLICT`)."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchVersion' }
       requestBody:
         required: true
         content:
@@ -4788,7 +4845,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/ProductVersionConflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/stores/{storeId}/products/{productId}/variants/{variantId}/stock:
@@ -4796,11 +4853,12 @@ paths:
       tags: [catalog]
       operationId: adjustVariantStock
       summary: Ajuste rápido de estoque
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite. **v1.1 R1:** `If-Match` com a `version` do produto (edição em linha da tabela: \"Este produto foi alterado agora\")."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchVersion' }
       requestBody:
         required: true
         content:
@@ -4823,7 +4881,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/ProductVersionConflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/stores/{storeId}/products/{productId}/images:
@@ -4831,10 +4889,11 @@ paths:
       tags: [catalog]
       operationId: setProductImages
       summary: Definir fotos (ordem = posição; a 1ª é a capa)
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`. **v1.1 R1:** `If-Match` com a `version` do produto; o envio das fotos é em segundo plano e o produto não publica enquanto a capa não terminar de subir (o app espera; o servidor recusa publicar sem foto concluída: 422 `PRODUCT_INCOMPLETE`)."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchVersion' }
       requestBody:
         required: true
         content:
@@ -4857,7 +4916,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/ProductVersionConflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/stores/{storeId}/products/{productId}/publish:
@@ -4865,10 +4924,11 @@ paths:
       tags: [catalog]
       operationId: publishProduct
       summary: Publicar produto
-      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu."
+      description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu. **v1.1 R1:** categoria com `descriptionRequired` e descrição vazia ou menor que `descriptionMinChars`: 422 `DESCRIPTION_REQUIRED` (no campo `description`); `If-Match` com a `version`; grava `product_create_published` com `duration_s` e `via` (WB-379) e, se o produto vier de rascunho aberto em 2 aparelhos, 409 `PRODUCT_VERSION_CONFLICT`. Nada digitado se perde em nenhum erro."
       parameters:
         - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchVersion' }
       responses:
         '200':
           description: Produto
@@ -4883,7 +4943,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/ProductVersionConflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /v1/stores/{storeId}/products/{productId}/pause:
@@ -4942,6 +5002,10 @@ paths:
     get:
       tags: [catalog]
       operationId: listSections
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Seções da vitrine
       description: "Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`)."
       parameters:
@@ -5962,6 +6026,10 @@ paths:
     get:
       tags: [orders]
       operationId: listStoreOrders
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Pedidos da loja (painel, WB-067)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. `scope`: `new` (recebidos), `in_progress` (aceito a pronto) e `history` (entregue, cancelado, recusado). Mais recentes primeiro, por cursor. Preços só com a permissão `sales_values`."
       parameters:
@@ -5988,6 +6056,10 @@ paths:
     get:
       tags: [orders]
       operationId: countStoreOrders
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Contagem por grupo (badge de novos)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS."
       parameters:
@@ -6008,6 +6080,10 @@ paths:
     get:
       tags: [orders]
       operationId: getStoreOrder
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Detalhe do pedido na loja (WB-068)
       description: "Permissão da loja: `orders` (dono ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Só pedidos já PAGOS. Cliente só com o primeiro nome; telefone só enquanto o pedido está em andamento e é de entrega. O código de retirada NUNCA aparece aqui. `values` e preços unitários só com `sales_values` (senão `null`)."
       parameters:
@@ -6654,6 +6730,10 @@ paths:
     get:
       tags: [exchanges]
       operationId: listStoreExchanges
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Fila de trocas da loja (WB-172)
       description: "Permissão da loja `exchanges`. `scope`: pending (aguardando resposta), in_progress, history."
       parameters:
@@ -6677,6 +6757,10 @@ paths:
     get:
       tags: [exchanges]
       operationId: getStoreExchange
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Detalhe da troca para a loja
       description: "Troca de outra loja: 404."
       parameters:
@@ -7194,7 +7278,7 @@ paths:
       tags: [privacy]
       operationId: requestDataExport
       summary: Pedir a exportação dos meus dados (senha)
-      description: "Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`)."
+      description: "Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`). **v1.1 R1 (WB-369 C1, SEC-194):** o arquivo ganha `notices.measurement` com o texto \"A medição de uso não está ligada à sua conta e fica guardada por até 90 dias; por isso não entra neste arquivo\" (nunca \"anônima\"); a coleta não tem coluna ligada a `users`, então nada dela entra no arquivo nem precisa ser apagado na exclusão da conta."
       requestBody:
         required: true
         content:
@@ -7702,6 +7786,10 @@ paths:
     get:
       tags: [stores]
       operationId: getStoreReviewsSummary
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Resumo das avaliações da loja (Início e Avaliações do lojista, W.6)
       description: "Permissão da loja `reviews`. Mesmo universo de `listStoreReviews` (publicadas, de produto e da loja). `average` com 1 casa (nulo sem avaliações; sem o mínimo de exibição: é o painel do dono). `distribution` por nota 1 a 5; `withoutReply`: ainda sem resposta da loja."
       parameters:
@@ -8829,6 +8917,10 @@ paths:
     get:
       tags: [stores]
       operationId: listStoreReviews
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
       summary: Avaliações da loja no painel (com a resposta)
       description: "Permissão da loja `reviews`. Só publicadas; autor abreviado ('Joana L.'). Funcionário sem a permissão: 403; outra loja: 404."
       parameters:
@@ -8907,12 +8999,904 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  # ======================================================================================================================
+  # v1.1 R1 (ADR-018): cadastro rápido, admin de lojas e coleta em staging. Contrato publicado ANTES do código:
+  # toda operação abaixo leva `x-planned: v1.1 R1` até ser implementada (remover a marca no PR que implementa).
+  # ======================================================================================================================
+  /v1/stores/{storeId}/catalog/quick-start:
+    get:
+      tags: [catalog]
+      operationId: getCatalogQuickStart
+      x-planned: v1.1 R1
+      summary: Dados de partida da tela Produtos (WB-370, WB-371, RN-Q1)
+      description: "Uma chamada só para a tela de Produtos e o \"Novo produto\" (3G): categoria sugerida (a última usada pela loja ou a mais frequente), rascunho mais recente (\"Continuar de onde parei\"), contagem e limite de rascunhos, quantos produtos ativos estão sem descrição e os limites que o app usa na tela (`variacoes_max`, `reajuste_max_pct`). Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Sem dado de cliente."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      responses:
+        '200':
+          description: Dados de partida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogQuickStart' }
+              example:
+                suggestedCategoryId: 3f2b8c1e-5d44-4a0b-9d7a-0a6f1f9b2c11
+                draftCount: 2
+                draftLimit: 50
+                latestDraft: { id: 7d9e2a40-1c3b-4f5e-8a61-2b7c9d0e4f12, name: Camiseta básica preta, basePriceCents: null, cover: null, missing: [price, photo], updatedAt: '2026-11-22T17:32:00Z', expiresAt: '2026-12-22T17:32:00Z', expiresInDays: 30, version: 3, via: camera }
+                withoutDescriptionCount: 12
+                limits: { variantsMax: 100, reajusteMaxPct: 30 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/stores/{storeId}/product-drafts:
+    get:
+      tags: [catalog]
+      operationId: listProductDrafts
+      x-planned: v1.1 R1
+      summary: Rascunhos da loja (WB-371)
+      description: "Aba \"Rascunhos (n)\" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (50) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Rascunhos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductDraftPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    post:
+      tags: [catalog]
+      operationId: createProductDraft
+      x-planned: v1.1 R1
+      summary: Abrir um rascunho ao tocar em "Novo produto" (WB-370 C1, WB-371, RN-Q2)
+      description: "O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: \"\"` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` (\"Limite de 50 rascunhos\", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` (\"Esse tipo de produto não é permitido no Webag\"; a tela mostra o link para os Termos do Lojista e \"Escolher outra categoria\"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductDraftRequest' }
+            example: { via: camera }
+      responses:
+        '201':
+          description: "Rascunho criado (`status: draft`, `version: 1`)"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/stores/{storeId}/product-drafts/batch:
+    post:
+      tags: [catalog]
+      operationId: createProductDraftsBatch
+      x-planned: v1.1 R1
+      summary: Criar rascunhos a partir da lista colada (WB-376 C4, RN-Q8)
+      description: "Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o \"Juntar 3 linhas em 1 produto\" (preço por variação quando diferem). **Atômico quanto ao limite:** se `rascunhos atuais + itens` passar de 50, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` [HIPÓTESE: 100 linhas contra 50 rascunhos é um conflito do PRD; ver ADR-018, pergunta ao PO]. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE]."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductDraftsBatchRequest' }
+      responses:
+        '201':
+          description: Rascunhos criados e linhas recusadas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateProductDraftsBatchResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/stores/{storeId}/products/{productId}/duplicate:
+    post:
+      tags: [catalog]
+      operationId: duplicateProduct
+      x-planned: v1.1 R1
+      summary: Duplicar produto (WB-372, RN-Q4)
+      description: "Cria um RASCUNHO com nome \"<nome> (cópia)\", mesma categoria, descrição, preço, atributos e variações; NÃO copia fotos, SKU, estoque (começa em 1 por variação, ou 0 em grade) nem promoção (C1, C3). A cópia é um produto novo e passa pela moderação ao publicar (C4: duplicar produto arquivado ou pausado pela moderação nunca herda o estado). Grava no histórico \"duplicado de <id>\" (C5). **Posse conferida:** produto de outra loja é 404 igual a inexistente (C6, C-CAD-10). Duplicar a variação (C2) é edição da tabela de variações no app, salva por `setProductVariants`; não tem rota. `Idempotency-Key` obrigatória. 422 `DRAFT_LIMIT_REACHED`. Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      responses:
+        '201':
+          description: Rascunho da cópia
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/category-templates:
+    get:
+      tags: [categories]
+      operationId: listCategoryTemplates
+      x-planned: v1.1 R1
+      summary: Modelos por categoria (WB-375, RN-Q6)
+      description: "Público e sem dado pessoal (como `/v1/categories`; ETag/304). Para cada categoria com modelo: atributos e valores sugeridos (tamanhos P a GG; 34 a 44 em calçado), avisos (`sizeChartHint` = tabela de medidas; `noVoluntaryExchangeHint` = sugerir \"sem troca voluntária\" em íntimos e higiene) e `descriptionRequired` com `descriptionMinChars` (RN-Q1, DEC-106: Cosméticos e Eletrônicos, 20 caracteres). O modelo SÓ SUGERE; a única exigência que ele carrega é `descriptionRequired`, validada no servidor nas duas vias (rápida e formulário completo): 422 `DESCRIPTION_REQUIRED` ao publicar. Categoria sem modelo não aparece (C5). Limitada ao total de categorias ativas (no máximo 100 itens, sem paginação; `nextCursor` sempre nulo, como em `listCategories`)."
+      security: []
+      responses:
+        '200':
+          description: Modelos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryTemplateList' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/category-templates/{categoryId}:
+    put:
+      tags: [categories]
+      operationId: setCategoryTemplate
+      x-planned: v1.1 R1
+      x-admin-permission: 'categories:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Editar o modelo de uma categoria (Could, RN-Q6)
+      description: "Permissão de admin: `categories:write` (super admin e operação). Substitui o modelo da categoria (os 8 modelos iniciais vêm do seed). Alterar `descriptionRequired` vale na hora para novas publicações (produtos já ativos não são afetados). Auditado (antes/depois). Texto puro; até 12 atributos e 30 valores por atributo."
+      parameters:
+        - { name: categoryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetCategoryTemplateRequest' }
+      responses:
+        '200':
+          description: Modelo salvo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CategoryTemplate' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/stores/{storeId}/products/table:
+    get:
+      tags: [catalog]
+      operationId: listProductTable
+      x-planned: v1.1 R1
+      x-view-as: true
+      security:
+        - bearerAuth: []
+        - viewAsAuth: []
+      summary: Tabela de preço e estoque (WB-377, edição em massa)
+      description: "Lista enxuta para a tela \"Preços e estoque\": por produto, preço, \"Você recebe\" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: \"Selecionar os 12 da busca\"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito \"Este produto foi alterado agora\". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table` antes de `/products/{productId}`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: status, in: query, schema: { type: string, enum: [active, paused] } }
+        - { name: sectionId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Linhas da tabela
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductTablePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/stores/{storeId}/products/bulk/{batchId}/undo:
+    post:
+      tags: [catalog]
+      operationId: undoBulkBatch
+      x-planned: v1.1 R1
+      summary: Desfazer um reajuste em massa por até 10 minutos (WB-377 C4)
+      description: "Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Lote já desfeito: 409 `BATCH_ALREADY_UNDONE`. Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Resultado do desfazer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkUndoResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+  /v1/stores/{storeId}/products/bulk-batches:
+    get:
+      tags: [catalog]
+      operationId: listBulkBatches
+      x-planned: v1.1 R1
+      summary: Histórico das ações em massa da loja (WB-377 C7)
+      description: "Cada ação em massa (reajuste, pausar, reativar, mover de seção) registra quem, quando e quantos itens (`itemsCount`); inclui as feitas pela Webag (`source: admin`, autor \"Webag\", sem nome de pessoa). Mais recentes primeiro; cursor. Permissão da loja: `catalog`; não-membro 404."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Lotes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkBatchPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/stores/{storeId}/admin-changes:
+    get:
+      tags: [stores]
+      operationId: listStoreAdminChanges
+      x-planned: v1.1 R1
+      summary: O que a Webag alterou na minha loja (WB-353 C1, C11)
+      description: "O lojista vê no próprio painel uma linha por alteração feita pelo admin em preço, estoque, catálogo, status, horário e pausa, com antes/depois e o motivo em texto; o autor é sempre \"Webag\" (nunca o nome da pessoa, J27). Ação em massa aparece como UMA linha agregada. Mais recentes primeiro; cursor. Permissão da loja: dono, ou funcionário com `catalog`; os demais 404 (SEC-020). Não traz dado de cliente."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Alterações
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreAdminChangePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/metrics/product-creation:
+    get:
+      tags: [reports]
+      operationId: getProductCreationMetrics
+      x-planned: v1.1 R1
+      x-admin-permission: 'reports:operations'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Tempo de cadastro de produto, mediana e p90 (WB-379 C2)
+      description: "Permissão de admin: `reports:operations` (super admin, operação e financeiro; suporte 403). Mede a meta de 60 s (HIP-Q1) a partir de `product_create_started` (abrir \"Novo produto\"), `photo_captured` (1ª foto anexada) e `product_create_published`, agrupado por `via` (camera, duplicate, paste, spreadsheet, form) ou por loja. **Só conta cadastro contínuo:** publicação até `cadastro_sessao_max_min` (15 min [HIPÓTESE]) depois do início; o resto vem em `interrupted` e fica fora da mediana. Grupo com menos de 5 cadastros devolve `insufficient: true` e nenhum percentil. Sem texto, nome ou preço de produto."
+      parameters:
+        - { name: days, in: query, schema: { type: integer, enum: [7, 30, 90], default: 30 } }
+        - { name: groupBy, in: query, schema: { type: string, enum: [via, store], default: via } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Medianas e p90
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductCreationMetrics' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  # ---- Admin de lojas (WB-350 a WB-355). Toda rota abaixo declara `x-admin-permission` e `x-admin-profiles` (C-ADM-01):
+  # o teste de contrato confere os perfis contra ADMIN_PERMISSIONS e percorre as rotas /v1/admin/* com os 4 perfis + um sem permissão.
+  /v1/admin/stores/{storeId}/overview:
+    get:
+      tags: [admin-stores]
+      operationId: getAdminStoreOverview
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Ficha 360 da loja (WB-350 C1, C3)
+      description: "Permissão `stores:read` (os 4 perfis; suporte vê sem botões de edição, C2 é da tela e a API já recusa a escrita). Uma chamada para a aba Resumo: dados não fiscais, situação, operação agora (aberta, pausada por quem e até quando), comissão efetiva com a ORIGEM (loja, categoria ou padrão: \"categoria Calçados: 12%\", RN-10), indicadores dos últimos 30 dias (produtos ativos, pedidos, GMV, cancelamentos com %), 5 pedidos recentes (sem dado do cliente). `version` da loja é o valor para `expectedVersion` das edições. Loja sem pedido: `indicators.empty: true` (\"Sem pedidos nos últimos 30 dias\"). Documento, razão social e conta de recebimento NÃO vêm aqui (C4)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      responses:
+        '200':
+          description: Ficha
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/stores/{storeId}/history:
+    get:
+      tags: [admin-stores]
+      operationId: listAdminStoreHistory
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Histórico de alterações da loja (WB-350 C4, WB-354)
+      description: "Permissão `stores:read` (os 4 perfis veem). Trilha por loja sobre o `audit_log` append-only: alterações do admin, do lojista e do sistema, cada linha com antes, depois e motivo. Filtros: `type`, `actorAdminId`, `from`/`to` (data, America/Sao_Paulo, máximo 400 dias). `restorable` é verdadeiro só para preço e estoque com valor anterior conhecido. Visita de \"Ver como\" aparece com `type: access` (abertura e encerramento; as telas navegadas não são gravadas). Mais recentes primeiro; cursor. Sem dado pessoal de cliente."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/StoreHistoryType' } }
+        - { name: actorAdminId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Histórico
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreHistoryPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/stores/{storeId}/history.csv:
+    get:
+      tags: [admin-stores]
+      operationId: exportAdminStoreHistory
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-history:export'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Exportar o histórico da loja em CSV (WB-354 C3, C-ADM-09)
+      description: "Permissão PRÓPRIA `store-history:export` (super admin, operação e financeiro; suporte 403). Mesmos filtros de `listAdminStoreHistory`. CSV UTF-8 com cabeçalho, no máximo 10.000 linhas (mais que isso: 422 `EXPORT_TOO_LARGE`, reduza o período), SEM dado pessoal, com proteção de fórmula (helper do SEC-156: célula iniciada por `=`, `+`, `-` ou `@` sai escapada). Cada exportação grava uma linha de auditoria (quem, filtros, linhas). Limite de 10 por hora por admin (429 com `Retry-After`) [HIPÓTESE]. Resposta `Cache-Control: private, no-store`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/StoreHistoryType' } }
+        - { name: actorAdminId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Arquivo CSV
+          content:
+            text/csv:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/stores/{storeId}/history/{entryId}/restore:
+    post:
+      tags: [admin-stores]
+      operationId: restoreAdminStoreHistoryEntry
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Restaurar preço ou estoque anterior (WB-354 C1, C2, C5, C-ADM-08)
+      description: "Permissão `stores:write` (super admin e operação). **Nada é apagado:** grava um NOVO registro (`type` do original, `restores: <entryId>`) e a contagem do `audit_log` só cresce (C5); o lojista é avisado (C1). Se o valor atual já não é o que a linha original deixou (outra pessoa mudou depois), responde 409 `RESTORE_VALUE_CHANGED` com o valor atual e só restaura com `confirmOverride: true` (C2). Restaurar preço obedece às regras do admin: motivo de preço, `confirmLargeChange` acima de `admin_preco_variacao_max_pct` e **redução acima de 50% só super admin** (403 `SUPER_ADMIN_REQUIRED`). Linha já restaurada: 409 `ENTRY_ALREADY_RESTORED`; linha não restaurável: 422 `ENTRY_NOT_RESTORABLE`. Também é o \"Desfazer\" de 8 s do toast (a resposta de toda edição traz `auditEntryId`). Sem `Idempotency-Key`: restaurar a mesma linha duas vezes é 409."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: entryId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreHistoryEntryRequest' }
+      responses:
+        '200':
+          description: Valor restaurado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/profile:
+    patch:
+      tags: [admin-stores]
+      operationId: editAdminStoreProfile
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
+      description: "Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substitui `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), que aceita razão social e endereço e fica `deprecated` (ver ADR-018). Motivo do catálogo obrigatório (`reason`; \"Solicitado pelo lojista\" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreProfileEditRequest' }
+      responses:
+        '200':
+          description: Loja atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/config/{section}:
+    put:
+      tags: [admin-stores]
+      operationId: editAdminStoreConfig
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
+      description: "Permissão `stores:write` (super admin e operação). Substitui `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), que NÃO recebe motivo nem versão e fica `deprecated` (ver ADR-018). `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: section, in: path, required: true, schema: { type: string, enum: [hours, holidays, delivery, pickup, exchange-policy] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreConfigEditRequest' }
+      responses:
+        '200':
+          description: Configuração salva
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/pause:
+    post:
+      tags: [admin-stores]
+      operationId: pauseStoreAsAdmin
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Pausar a loja pelo admin (WB-351 C1)
+      description: "Permissão `stores:write` (super admin e operação; suporte NÃO pausa, RN-13). A loja fecha para novos pedidos na hora (pedidos em aberto seguem) e reabre sozinha ao fim do prazo (`kind`, como `pauseStore`). Motivo do catálogo obrigatório; `expectedVersion` da loja. Aviso ao lojista na hora (painel e e-mail) e `audit_log` com autor, antes, depois e motivo. A vitrine em cache é invalidada em até 5 s (DEC-113)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPauseStoreRequest' }
+      responses:
+        '200':
+          description: Loja pausada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/resume:
+    post:
+      tags: [admin-stores]
+      operationId: resumeStoreAsAdmin
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Reabrir a loja pausada pelo admin ("Reabrir agora")
+      description: "Permissão `stores:write`. Encerra a pausa (do lojista ou do admin) com motivo obrigatório e `expectedVersion`; aviso ao lojista na hora; auditado. Sem pausa ativa: 409 `STORE_NOT_PAUSED`. Mudança de situação da loja (suspender, reativar) continua nas rotas `suspendStore` e `reactivateStore` (`stores:decide`, transições da RN-16, motivo de 5 a 500 caracteres; WB-351 C5)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminResumeStoreRequest' }
+      responses:
+        '200':
+          description: Loja reaberta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/view-as:
+    post:
+      tags: [admin-stores]
+      operationId: openViewAs
+      x-planned: v1.1 R1
+      x-admin-permission: 'view-as:open'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Abrir "Ver como o lojista" (somente leitura) (WB-352)
+      description: "Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE]."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpenViewAsRequest' }
+      responses:
+        '201':
+          description: Credencial de visualização
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ViewAsSession' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/view-as/{viewAsId}/end:
+    post:
+      tags: [admin-stores]
+      operationId: endViewAs
+      x-planned: v1.1 R1
+      x-admin-permission: 'view-as:open'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Encerrar "Ver como o lojista" ("Sair da visualização")
+      description: "Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close`. Idempotente: encerrar de novo devolve 204."
+      parameters:
+        - { name: viewAsId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Encerrada
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  # ---- Admin edita o catálogo da loja (WB-353). Mesmas regras do lojista (RN-Q1, RN-06, moderação) mais: motivo, versão, aviso e auditoria por item.
+  /v1/admin/stores/{storeId}/products:
+    get:
+      tags: [admin-stores]
+      operationId: listAdminStoreProducts
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Catálogo da loja na ficha (aba Catálogo)
+      description: "Permissão `stores:read` (os 4 perfis leem; só super admin e operação escrevem). Mesma linha de `listProductTable` (preço, \"Você recebe\", estoque disponível e reservado, `version`) com `youReceiveCents` visível. Filtros `q`, `status` (`active`, `paused`, `draft`), `sectionId`; cursor; `matchingCount` exato."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: status, in: query, schema: { type: string, enum: [active, paused, draft] } }
+        - { name: sectionId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Linhas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductTablePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/stores/{storeId}/product-drafts:
+    post:
+      tags: [admin-stores]
+      operationId: createAdminProductDraft
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Criar produto pela loja (o admin usa o mesmo cadastro rápido, WB-353 C8)
+      description: "Permissão `store-catalog:write` (super admin e operação). Cria um rascunho na loja com o autor (admin) gravado; o produto só nasce `active` com foto, nome e preço (publicação por `setAdminProductStatus`) e a moderação (WB-107) vale igual. Motivo do catálogo obrigatório; `Idempotency-Key` obrigatória; 422 `DRAFT_LIMIT_REACHED` (os 50 rascunhos são da LOJA, contados juntos). Fotos: o admin envia por `/v1/uploads` com `storeId` da loja (autorização de admin com `store-catalog:write`; o upload fica auditado). Aviso ao lojista agregado (C11)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCreateProductDraftRequest' }
+      responses:
+        '201':
+          description: Rascunho criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/stores/{storeId}/products/{productId}:
+    get:
+      tags: [admin-stores]
+      operationId: getAdminStoreProduct
+      x-planned: v1.1 R1
+      x-admin-permission: 'stores:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Detalhe do produto da loja (admin)
+      description: "Permissão `stores:read`. Devolve o `Product` com `version` (o valor de `expectedVersion` das edições). Produto de outra loja: 404."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+      responses:
+        '200':
+          description: Produto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [admin-stores]
+      operationId: editAdminStoreProduct
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Editar produto e PREÇO pela loja (WB-353 C1 a C3, C5, C9)
+      description: "Permissão `store-catalog:write` (super admin e operação). `changes` é o corpo de `updateProduct`. **Preço (`basePriceCents`, promoção):** só aceita os motivos `requested_by_merchant`, `obvious_price_error`, `legal_or_inspection_order` e `agreed_campaign` (outro: 422 `PRICE_REASON_NOT_ALLOWED`, C2) e, a cada edição, o motivo da sessão não basta: o corpo traz o motivo escolhido (DEC-108). Variação acima de `admin_preco_variacao_max_pct` (30) sem `confirmLargeChange: true`: 422 `PRICE_CHANGE_NEEDS_CONFIRMATION` com `fromCents`, `toCents`, `changePct` e `youReceiveCents` do valor novo (C3). **Redução acima de 50% só super admin:** operação recebe 403 `SUPER_ADMIN_REQUIRED` (C9, D-04, vale também para a soma de edições em 24 h [HIPÓTESE: Security confirma]). **Concorrência (C5):** `expectedVersion` do produto; diferente = 409 `PRODUCT_VERSION_CONFLICT` (\"O lojista alterou este produto agora\"), nada é sobrescrito. 422 `DESCRIPTION_REQUIRED`, `PRICE_OUT_OF_RANGE`, `PROMOTION_INVALID`. O lojista é avisado (painel; e-mail-resumo a cada 10 min, até 20 itens e \"+N\") e o `audit_log` guarda autor, antes, depois e motivo. Compra desse produto por conta ligada a admin ou a membro da loja em até 24 h gera alerta à operação (C10, C-ADM-04). Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProductEditRequest' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ProductVersionConflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/products/{productId}/variants:
+    put:
+      tags: [admin-stores]
+      operationId: setAdminStoreProductVariants
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Definir variações e estoque pela loja
+      description: "Permissão `store-catalog:write`. `data` é o corpo de `setProductVariants` (até `variacoes_max`, estoque 0 a 99.999, SKU único na loja). **Estoque nunca abaixo do reservado** (409 `STOCK_BELOW_RESERVED`, RN-06, C4). Preço por variação segue as regras de preço de `editAdminStoreProduct` (motivos permitidos, `confirmLargeChange`, redução acima de 50% só super admin). `expectedVersion` do produto (409 `PRODUCT_VERSION_CONFLICT`). Uma linha de auditoria por variação alterada."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminSetVariantsRequest' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ProductVersionConflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/products/{productId}/variants/{variantId}/stock:
+    post:
+      tags: [admin-stores]
+      operationId: adjustAdminStoreVariantStock
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Ajustar o estoque de uma variação pela loja (WB-353 C4)
+      description: "Permissão `store-catalog:write`. `data` é `{ delta }` ou `{ set }` (como `adjustVariantStock`), sob lock da variação; estoque abaixo do reservado é 409 `STOCK_BELOW_RESERVED` (\"Estoque menor que o reservado (3). Use 3 ou mais.\") e fora de 0..99.999 é 422. `expectedVersion` do produto. Auditado com antes/depois; o aviso ao lojista entra no resumo de 10 min."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStockAdjustRequest' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ProductVersionConflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/products/{productId}/images:
+    put:
+      tags: [admin-stores]
+      operationId: setAdminStoreProductImages
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Definir fotos do produto pela loja
+      description: "Permissão `store-catalog:write`. `data` é o corpo de `setProductImages` (até 8; cada foto é um upload `product_image` concluído DA MESMA LOJA). `expectedVersion` do produto. Auditado."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminSetImagesRequest' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ProductVersionConflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/products/{productId}/status:
+    post:
+      tags: [admin-stores]
+      operationId: setAdminStoreProductStatus
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Publicar, pausar ou reativar o produto pela loja
+      description: "Permissão `store-catalog:write`. `status: active` publica (o produto só nasce ativo com foto, nome e preço: 422 `PRODUCT_INCOMPLETE` lista o que falta; palavra suspeita não bloqueia e vai a `moderationStatus: review`; categoria com `descriptionRequired` sem descrição: 422 `DESCRIPTION_REQUIRED`); `paused` tira da vitrine. Produto pausado ou removido pela moderação: 403 `PRODUCT_MODERATED` (o admin de loja não reabre o que a moderação pausou; isso é `products:moderate`). `expectedVersion` do produto. Auditado; a vitrine em cache é invalidada em até 5 s ao pausar (DEC-113)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProductStatusRequest' }
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminEditResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ProductVersionConflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/stores/{storeId}/products/bulk:
+    post:
+      tags: [admin-stores]
+      operationId: bulkAdminStoreProducts
+      x-planned: v1.1 R1
+      x-admin-permission: 'store-catalog:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
+      description: "Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminBulkProductsRequest' }
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminBulkResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  # ---- Coleta de eventos de navegação, só em STAGING até o J24 (WB-360, 361, 363, 369). Flag `coleta_eventos` nasce DESLIGADA (C-GEN-01).
+  /v1/analytics/events:
+    post:
+      tags: [analytics]
+      operationId: ingestAnalyticsEvents
+      x-planned: v1.1 R1
+      summary: Enviar eventos de navegação, sem identificar a conta (WB-361)
+      description: "**Rota PÚBLICA e sem identidade de propósito (C-ANA-01):** o app NÃO envia `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; o nginx não grava IP nem user-agent dela; o `session_id` só trafega no corpo e não vai a log, pedido nem usuário. Corpo em lote: até 100 eventos e 64 KB (acima: 413 `PAYLOAD_TOO_LARGE` ou 422), Zod estrito (campo fora do esquema, texto livre ou `user_id`: 422 `VALIDATION_FAILED` e a rejeição é CONTADA, C6; o lote inteiro é recusado). Idempotente por `eventId` (reenvio do lote não duplica, C5). Resposta SEMPRE 202 quando válido, com `accepted`, `duplicates` e `discarded` (evento com `storeId` ou `productId` inexistente é descartado e contado; com a flag `coleta_eventos` desligada TUDO é descartado em silêncio: o app não distingue). Limites (C-ANA-03): 60 requisições por minuto por sessão e por IP (chave = HMAC do IP no Redis, validade de até 120 s; IP em claro nunca) e, no máximo, 30 sessões novas por hora por IP (a 31ª é DESCARTADA e contada, sem erro) `[HIPÓTESE: parâmetro]`. `occurredAt` é do aparelho e o servidor o limita a [-24 h, +5 min] e o grava truncado ao minuto. O `order_paid` NÃO vem por aqui: o servidor o grava ao confirmar o pagamento, com hora cheia e sem `order_id`, `user_id` nem valor (SEC-194). O app não envia com conta de lojista ou admin logada nem com o opt-out ligado (C-ANA-08): decisão do app."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnalyticsEventsRequest' }
+            example:
+              events:
+                - { name: app_session_started, eventId: 0d3e5a7c-2b61-4f08-9a74-5c1e8b3d6f20, sessionId: 9b1c4e72-6a35-4d18-8f02-7e5a3c9d1b46, occurredAt: '2026-11-22T14:03:10Z', platform: android, appVersion: 1.1.0, cityId: 5c8a1f3e-7b24-4e69-a0d1-3f6b9c2e8a75 }
+                - { name: store_viewed, eventId: 4a7f2c19-8d03-4b5e-a1c6-9e0d3b7f5a82, sessionId: 9b1c4e72-6a35-4d18-8f02-7e5a3c9d1b46, occurredAt: '2026-11-22T14:03:40Z', storeId: 2e9d6b4a-1c58-4f37-8a0e-6d3b9f1c7a24, origin: home }
+      responses:
+        '202':
+          description: Lote recebido (não significa que todos foram gravados)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsIngestResult' }
+              example: { accepted: 2, duplicates: 0, discarded: 0 }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/analytics/access:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminAnalyticsAccess
+      x-planned: v1.1 R1
+      x-admin-permission: 'analytics:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Acessos agregados por loja, produto ou origem (WB-363 C3, C6 a C8; base da WB-362)
+      description: "Permissão `analytics:read` (super admin, operação e financeiro; **suporte 403**, WB-362 C6). Lê SÓ o agregado diário (nunca o bruto: nenhuma API nem tela lê o bruto e o papel do admin não tem leitura nessa tabela, C-ANA-04). Períodos fechados terminando ontem: 7, 30 ou 90 dias (o admin pode 90; o lojista só 7 e 30, R5). **Supressão no servidor (C-ANA-05, RN-A2):** célula com menos de 5 sessões NUNCA traz valor nem `n` (`suppressed: true`); todas as células suprimidas viram UMA linha \"Outras\" (`isOther: true`); se \"Outras\" nascer de uma só célula, absorve a menor visível; se ainda ficar < 5, a linha mostra \"menos de 5\" e **nenhum total da resposta é exato**: os totais vêm arredondados a múltiplo de 5 com `approximate: true` (\"cerca de\"). Total menos as partes publicadas nunca revela a célula suprimida (teste). Vendas e pedidos do banco ficam FORA desta resposta (seguem exatos em outro lugar). Flag `coleta_eventos` desligada: 409 `FEATURE_DISABLED` (staging: ligada). `generatedAt` e `cached` (cache de 5 min por parâmetros normalizados, com a permissão checada ANTES de ler o cache). Consulta com tempo limite de 5 s, 30 por minuto por admin."
+      parameters:
+        - { name: days, in: query, schema: { type: integer, enum: [7, 30, 90], default: 7 } }
+        - { name: groupBy, in: query, required: true, schema: { type: string, enum: [store, product, origin] } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, description: 'Obrigatório com `groupBy=product` ou `origin`: a quebra é sempre de UMA loja', schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Relatório agregado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsAccessReport' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/analytics/coverage:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminAnalyticsCoverage
+      x-planned: v1.1 R1
+      x-admin-permission: 'analytics:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Cobertura da medição por semana e cidade (RN-A10, WB-363 C9)
+      description: "Permissão `analytics:read` (suporte 403). Cobertura = `order_paid` do app (Android e iOS) COM `session_id` dividido pelo `order_paid` do app, por semana e cidade, calculada no job de agregação (sem coluna nova em `orders` e SEM contar opt-out: desligar a medição não gera evento). Só aparece com 20 pedidos ou mais na semana (`insufficient: true` e `coveragePct: null` abaixo disso); meta >= 85% [HIPÓTESE]. É estimativa, não contagem de quem desligou. `session_id` nunca existe no agregado. Mais recentes primeiro; cursor."
+      parameters:
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Cobertura
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsCoveragePage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    viewAsAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: "Credencial de visualização de `openViewAs` (v1.1 R1, WB-352): só vale nas rotas GET marcadas `x-view-as: true`, para a loja e o motivo da abertura, por até 30 min. Qualquer outra rota ou método com ela: 403 `VIEW_AS_READ_ONLY`."
   parameters:
     Cursor:
       name: cursor
@@ -8946,6 +9930,32 @@ components:
       in: query
       description: 'Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)'
       schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    StoreIdPath:
+      name: storeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProductIdPath:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: "Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`"
+      schema: { type: string, minLength: 8, maxLength: 80 }
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: "Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400"
+      schema: { type: string, minLength: 8, maxLength: 80 }
+    IfMatchVersion:
+      name: If-Match
+      in: header
+      description: "Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)"
+      schema: { type: integer, minimum: 1 }
   responses:
     ValidationError:
       description: Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
@@ -8990,6 +10000,24 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: "Indisponibilidade momentânea sob saturação (pool do banco esgotado ou consulta cancelada por tempo, BUG-035): `code` `SERVICE_UNAVAILABLE`, `Retry-After` em segundos, sem pilha nem SQL. O app tenta de novo depois do prazo. Não é erro do pedido"
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: Corpo acima do limite da rota (`code` `PAYLOAD_TOO_LARGE`)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ProductVersionConflict:
+      description: "`PRODUCT_VERSION_CONFLICT`: o produto mudou depois da versão informada (\"O lojista alterou este produto agora\"); traz a versão atual em `current`. Também cobre as demais regras de conflito da rota (`STOCK_BELOW_RESERVED`, `STORE_NOT_APPROVED`, `OPEN_ORDERS`, `IDEMPOTENCY_IN_PROGRESS`), que usam o `code` próprio sem `current`"
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProductVersionConflictProblem' }
   schemas:
     HealthIndicator:
       type: object
@@ -10536,6 +11564,10 @@ components:
         id:
           type: string
           format: uuid
+        version:
+          type: integer
+          minimum: 1
+          description: "v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo"
         live:
           type: boolean
           description: "Z.1 / DEC-072f: loja \"no ar\" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo"
@@ -11387,6 +12419,25 @@ components:
           type: boolean
         holderMismatch:
           type: boolean
+        activeProducts:
+          type: integer
+          description: "v1.1 R1: produtos ativos (0 = \"Nenhum\", a loja a ativar)"
+        orders30d:
+          type: integer
+          description: "v1.1 R1: pedidos pagos nos últimos 30 dias"
+        sales30dCents:
+          type: integer
+          description: "v1.1 R1: GMV dos últimos 30 dias, em centavos (0 = \"Sem pedidos\")"
+        commissionPct:
+          type: number
+          description: "v1.1 R1: comissão efetiva (RN-10)"
+        commissionSource:
+          type: string
+          enum:
+          - store
+          - category
+          - default
+          description: "v1.1 R1: `store` = comissão própria desta loja"
     AdminStoreDetail:
       type: object
       required:
@@ -11578,6 +12629,7 @@ components:
         low: { type: boolean, description: Disponível maior que zero e menor ou igual ao limite da loja }
     Product:
       type: object
+      description: 'Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'
       required: [id, name, description, sizeChart, noVoluntaryExchange, categoryId, sectionId, status, moderationStatus, moderationReason, basePriceCents, promotion, variantAttributes, variants, images, soldOut, publishedAt, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
@@ -11614,6 +12666,10 @@ components:
         publishedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1, description: 'v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo' }
+        via: { $ref: '#/components/schemas/ProductVia' }
+        draftExpiresAt: { type: [string, 'null'], format: date-time, description: 'v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)' }
+        missing: { type: array, items: { $ref: '#/components/schemas/ProductMissingField' }, description: 'v1.1 R1: o que falta para publicar (vazio fora de rascunho)' }
     ProductSummary:
       type: object
       required: [id, name, status, moderationStatus, sectionId, basePriceCents, fromPriceCents, cover, availableTotal, low, soldOut, variantCount, updatedAt]
@@ -11631,6 +12687,7 @@ components:
         soldOut: { type: boolean }
         variantCount: { type: integer }
         updatedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1, description: 'v1.1 R1 (opcional para o app antigo)' }
     ProductPage:
       type: object
       required: [data, nextCursor]
@@ -11724,6 +12781,7 @@ components:
       properties:
         productIds: { type: array, minItems: 1, maxItems: 200, items: { type: string, format: uuid } }
         dryRun: { type: boolean, default: false }
+        confirmLargeChange: { type: boolean, default: false, description: 'v1.1 R1 (WB-377 C3): confirma reajuste acima de `reajuste_max_pct` em algum item. Sem isto, 422 `BULK_NEEDS_CONFIRMATION` (nada é aplicado)' }
         action:
           oneOf:
             - { type: object, additionalProperties: false, required: [type], properties: { type: { const: pause } } }
@@ -11737,6 +12795,10 @@ components:
         dryRun: { type: boolean }
         willChange: { type: integer }
         changed: { type: integer }
+        preview: { type: array, items: { $ref: '#/components/schemas/BulkPreviewItem' }, description: 'v1.1 R1: só em reajuste de preço (preço antigo, novo e "Você recebe" por item; a mesma contagem do botão "Selecionar os N")' }
+        requiresConfirmation: { type: boolean, description: 'v1.1 R1: algum item passa de `reajuste_max_pct` (a tela mostra a caixa "Conferi os valores novos")' }
+        batchId: { type: [string, 'null'], format: uuid, description: 'v1.1 R1: lote gravado (nulo em `dryRun`); base de `undoBulkBatch`' }
+        undoUntil: { type: [string, 'null'], format: date-time, description: 'v1.1 R1: 10 min depois da aplicação, só em reajuste de preço' }
         blocked:
           type: array
           items:
@@ -11767,6 +12829,9 @@ components:
         created: { type: integer }
         updated: { type: integer }
         skipped: { type: integer }
+        headers: { type: array, items: { type: string }, description: 'v1.1 R1: cabeçalho lido (texto puro)' }
+        suggestedMapping: { type: object, additionalProperties: { type: integer }, description: 'v1.1 R1: palpite do sistema, ex.: { name: 1, price: 3, stock: 4 }; falta uma obrigatória = ausente da chave' }
+        sampleRows: { type: array, maxItems: 3, items: { type: array, items: { type: string } }, description: 'v1.1 R1: 3 primeiras linhas para o seletor "Qual coluna é cada coisa?"' }
     AdminProduct:
       type: object
       required: [id, name, description, storeId, storeName, categoryId, status, moderationStatus, moderationReason, moderatedAt, basePriceCents, createdAt]
@@ -14040,4 +15105,693 @@ components:
       required: [data, nextCursor]
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/StoreReview' } }
+        nextCursor: { type: [string, 'null'] }
+    # ======================================================================================================================
+    # v1.1 R1 (ADR-018). Dinheiro em centavos inteiros (`...Cents`), como no restante do catálogo.
+    # ======================================================================================================================
+    ProductVia:
+      type: string
+      enum: [camera, duplicate, paste, spreadsheet, form]
+      description: 'Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'
+    ProductMissingField:
+      type: string
+      enum: [name, price, photo, category, stock, description]
+      description: 'O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`'
+    ProductDraftSummary:
+      type: object
+      required: [id, name, basePriceCents, cover, missing, updatedAt, expiresAt, expiresInDays, version, via]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 80, description: 'Vazio ("") enquanto o lojista não digitou' }
+        basePriceCents: { type: [integer, 'null'] }
+        cover: { type: [object, 'null'], additionalProperties: { type: string }, description: 'Largura em px para URL pública WebP; nulo sem foto' }
+        missing: { type: array, items: { $ref: '#/components/schemas/ProductMissingField' } }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, description: '30 dias após a última alteração (RN-Q2)' }
+        expiresInDays: { type: integer, minimum: 0, description: 'Dias inteiros até vencer; 3 ou menos mostra "Será apagado em N dias"' }
+        version: { type: integer, minimum: 1 }
+        via: { $ref: '#/components/schemas/ProductVia' }
+    ProductDraftPage:
+      type: object
+      required: [data, nextCursor, count, limit]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ProductDraftSummary' } }
+        nextCursor: { type: [string, 'null'] }
+        count: { type: integer, minimum: 0, description: 'Total de rascunhos da loja (não só desta página)' }
+        limit: { type: integer, example: 50 }
+    CatalogQuickStart:
+      type: object
+      required: [suggestedCategoryId, draftCount, draftLimit, latestDraft, withoutDescriptionCount, limits]
+      properties:
+        suggestedCategoryId: { type: [string, 'null'], format: uuid, description: 'A última categoria usada na loja; sem histórico, a mais frequente; sem produtos, nulo' }
+        draftCount: { type: integer, minimum: 0 }
+        draftLimit: { type: integer, example: 50 }
+        latestDraft: { oneOf: [{ $ref: '#/components/schemas/ProductDraftSummary' }, { type: 'null' }], description: 'Para "Continuar: Camiseta básica preta"' }
+        withoutDescriptionCount: { type: integer, minimum: 0, description: 'Produtos ativos sem descrição ("X produtos sem descrição"; só lembrete, não bloqueia)' }
+        limits:
+          type: object
+          required: [variantsMax, reajusteMaxPct]
+          properties:
+            variantsMax: { type: integer, example: 100 }
+            reajusteMaxPct: { type: number, example: 30, description: 'Confirmação inline de preço e reajuste acima deste percentual (nos dois sentidos)' }
+    CreateProductDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [via]
+      properties:
+        via: { $ref: '#/components/schemas/ProductVia' }
+        name: { type: string, maxLength: 80, description: 'Opcional; "" ou ausente = ainda sem nome' }
+        categoryId: { type: [string, 'null'], format: uuid }
+        basePriceCents: { type: [integer, 'null'], description: 'Centavos, de 1 a 9999999 (422 fora da faixa)' }
+    DraftBatchVariant:
+      type: object
+      additionalProperties: false
+      required: [attributes]
+      properties:
+        attributes: { type: object, additionalProperties: { type: string, maxLength: 40 }, example: { Tamanho: M } }
+        stock: { type: integer, minimum: 0, maximum: 99999, default: 1 }
+        priceCents: { type: [integer, 'null'], description: 'Preço próprio quando difere do produto (linhas juntadas com preços diferentes)' }
+    DraftBatchItem:
+      type: object
+      additionalProperties: false
+      required: [clientRef, name]
+      properties:
+        clientRef: { type: string, minLength: 1, maxLength: 40, description: 'Referência do app (ex.: número da linha) para casar a resposta; não é persistida' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        basePriceCents: { type: [integer, 'null'], description: 'Nulo = "Falta o preço" (vira rascunho mesmo assim)' }
+        quantity: { type: integer, minimum: 0, maximum: 99999, default: 1, description: 'Estoque quando não há `variants`' }
+        variantAttributes: { type: array, maxItems: 3, items: { type: string, maxLength: 30 }, description: 'Nomes dos atributos de `variants` (ex.: Tamanho)' }
+        variants: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/DraftBatchVariant' } }
+        categoryId: { type: [string, 'null'], format: uuid }
+    CreateProductDraftsBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [via, items]
+      properties:
+        via: { type: string, enum: [paste, spreadsheet] }
+        items: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/DraftBatchItem' } }
+    CreateProductDraftsBatchResult:
+      type: object
+      required: [created, rejected]
+      properties:
+        created:
+          type: array
+          items:
+            type: object
+            required: [clientRef, productId, missing]
+            properties:
+              clientRef: { type: string }
+              productId: { type: string, format: uuid }
+              missing: { type: array, items: { $ref: '#/components/schemas/ProductMissingField' }, description: 'Ex.: ["photo"] na etapa de fotos' }
+        rejected:
+          type: array
+          items:
+            type: object
+            required: [clientRef, code, message]
+            properties:
+              clientRef: { type: string }
+              code: { type: string, enum: [NAME_REQUIRED, NAME_TOO_LONG, PRICE_OUT_OF_RANGE, QUANTITY_OUT_OF_RANGE, VARIANTS_INVALID, CATEGORY_FORBIDDEN] }
+              message: { type: string }
+    CategoryTemplateAttribute:
+      type: object
+      additionalProperties: false
+      required: [name, values]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 30, example: Tamanho }
+        values: { type: array, maxItems: 30, items: { type: string, maxLength: 40 }, example: [P, M, G, GG], description: 'SUGESTÕES: nenhum vem marcado (evita estoque falso)' }
+    CategoryTemplate:
+      type: object
+      required: [categoryId, attributes, sizeChartHint, noVoluntaryExchangeHint, descriptionRequired, descriptionMinChars]
+      properties:
+        categoryId: { type: string, format: uuid }
+        attributes: { type: array, items: { $ref: '#/components/schemas/CategoryTemplateAttribute' } }
+        sizeChartHint: { type: boolean, description: 'Moda e calçado: lembrar a tabela de medidas (WB-246)' }
+        noVoluntaryExchangeHint: { type: boolean, description: 'Íntimos e higiene: sugerir "Não aceita troca por tamanho ou cor" (WB-244); só sugestão' }
+        descriptionRequired: { type: boolean, description: 'RN-Q1 / DEC-106: a descrição é obrigatória ao publicar, nas duas vias' }
+        descriptionMinChars: { type: integer, example: 20 }
+    CategoryTemplateList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/CategoryTemplate' } }
+        nextCursor: { type: 'null' }
+    SetCategoryTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [attributes, sizeChartHint, noVoluntaryExchangeHint, descriptionRequired]
+      properties:
+        attributes: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/CategoryTemplateAttribute' } }
+        sizeChartHint: { type: boolean }
+        noVoluntaryExchangeHint: { type: boolean }
+        descriptionRequired: { type: boolean }
+        descriptionMinChars: { type: integer, minimum: 1, maximum: 200, default: 20 }
+    ProductTableRow:
+      type: object
+      required: [id, name, status, moderationStatus, cover, basePriceCents, youReceiveCents, available, reserved, variantCount, singleVariantId, version, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [draft, active, paused] }
+        moderationStatus: { type: string, enum: [ok, review, paused, removed] }
+        cover: { type: [object, 'null'], additionalProperties: { type: string } }
+        basePriceCents: { type: [integer, 'null'] }
+        youReceiveCents: { type: [integer, 'null'], description: '"Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo)' }
+        available: { type: integer, description: 'Soma de (estoque - reservado) das variações ativas' }
+        reserved: { type: integer, description: 'Soma reservada em pedidos ("2 reservadas em pedidos")' }
+        variantCount: { type: integer }
+        singleVariantId: { type: [string, 'null'], format: uuid, description: 'Preenchido quando há UMA variação: o estoque se edita na linha (`adjustVariantStock`)' }
+        version: { type: integer, minimum: 1, description: 'Para `If-Match` na edição em linha' }
+        updatedAt: { type: string, format: date-time }
+    ProductTablePage:
+      type: object
+      required: [data, nextCursor, matchingCount]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ProductTableRow' } }
+        nextCursor: { type: [string, 'null'] }
+        matchingCount: { type: integer, minimum: 0, description: 'Contagem exata do filtro (botão "Selecionar os 12 da busca")' }
+    BulkPreviewItem:
+      type: object
+      required: [productId, name, fromCents, toCents, changePct, youReceiveCents, exceedsLimit]
+      properties:
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        fromCents: { type: integer }
+        toCents: { type: integer }
+        changePct: { type: number, description: 'Positivo ou negativo, 1 casa' }
+        youReceiveCents: { type: [integer, 'null'], description: '"Você recebe" do preço novo' }
+        exceedsLimit: { type: boolean, description: 'Acima de `reajuste_max_pct` (pede a caixa "Conferi os valores novos")' }
+    BulkBatch:
+      type: object
+      required: [id, kind, itemsCount, source, actorName, at, undoUntil, undone]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [price_adjust, pause, resume, move_section] }
+        itemsCount: { type: integer }
+        source: { type: string, enum: [merchant, admin] }
+        actorName: { type: string, description: 'Nome do membro da loja; "Webag" quando `source: admin` (nunca o nome da pessoa)' }
+        at: { type: string, format: date-time }
+        undoUntil: { type: [string, 'null'], format: date-time, description: 'Só reajuste de preço; 10 min depois de `at`' }
+        undone: { type: boolean }
+    BulkBatchPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/BulkBatch' } }
+        nextCursor: { type: [string, 'null'] }
+    BulkUndoResult:
+      type: object
+      required: [batchId, reverted, skipped]
+      properties:
+        batchId: { type: string, format: uuid }
+        reverted: { type: integer }
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [productId, name, reason]
+            properties:
+              productId: { type: string, format: uuid }
+              name: { type: string }
+              reason: { type: string, enum: [CHANGED_AFTER], description: 'Editado depois do reajuste: não é sobrescrito' }
+    StoreAdminChange:
+      type: object
+      required: [id, at, type, summary, target, reasonLabel, before, after, actor]
+      properties:
+        id: { type: integer }
+        at: { type: string, format: date-time }
+        type: { $ref: '#/components/schemas/StoreHistoryType' }
+        summary: { type: string, example: 'A Webag alterou o preço de Camiseta básica preta de R$ 50,00 para R$ 45,00' }
+        target: { type: [string, 'null'], description: 'Nome do produto ou da área (horário, pausa); sem dado de cliente' }
+        reasonLabel: { type: string, example: 'Solicitado pelo lojista (WhatsApp, 24/11)' }
+        before: { type: [object, 'null'], additionalProperties: true }
+        after: { type: [object, 'null'], additionalProperties: true }
+        actor: { type: string, enum: [Webag] }
+    StoreAdminChangePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StoreAdminChange' } }
+        nextCursor: { type: [string, 'null'] }
+    ProductCreationMetrics:
+      type: object
+      required: [days, groupBy, minSample, computedAt, rows, nextCursor]
+      properties:
+        days: { type: integer }
+        groupBy: { type: string, enum: [via, store] }
+        minSample: { type: integer, example: 5 }
+        computedAt: { type: string, format: date-time }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [key, label, n, interrupted, insufficient, medianSeconds, p90Seconds]
+            properties:
+              key: { type: string, description: 'Valor de `via` ou id da loja' }
+              label: { type: string }
+              n: { type: integer, description: 'Cadastros contínuos publicados no período' }
+              interrupted: { type: integer, description: 'Publicados depois do limite de sessão contínua; fora da mediana' }
+              insufficient: { type: boolean, description: 'n < minSample' }
+              medianSeconds: { type: [integer, 'null'] }
+              p90Seconds: { type: [integer, 'null'] }
+        nextCursor: { type: [string, 'null'] }
+    # ---- Admin de lojas
+    AdminReasonCode:
+      type: string
+      enum: [requested_by_merchant, error_fix, moderation, operational_decision, other, obvious_price_error, legal_or_inspection_order, agreed_campaign]
+      description: |
+        Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.
+        **Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").
+    AdminReason:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { $ref: '#/components/schemas/AdminReasonCode' }
+        note: { type: string, maxLength: 200, description: 'Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro' }
+    AdminEditResult:
+      type: object
+      required: [product, auditEntryIds, merchantNotified]
+      properties:
+        product: { $ref: '#/components/schemas/Product' }
+        auditEntryIds: { type: array, items: { type: integer }, description: 'Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)' }
+        merchantNotified: { type: string, enum: [now, digest, aggregate], description: '`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)' }
+    AdminStoreEditResult:
+      type: object
+      required: [storeVersion, auditEntryId, merchantNotified]
+      properties:
+        storeVersion: { type: integer, minimum: 1, description: 'Nova versão da loja' }
+        auditEntryId: { type: integer }
+        merchantNotified: { type: string, enum: [now, digest, aggregate] }
+    StoreHistoryType:
+      type: string
+      enum: [price, stock, catalog, hours, holidays, delivery, pickup, exchange_policy, pause, status, profile, commission, access, bulk, restore, other]
+      description: '`access` = abertura e encerramento de "Ver como o lojista". Filtros da tela: Tudo, Preço, Estoque, Horário, Acesso'
+    AdminStoreHistoryEntry:
+      type: object
+      required: [id, at, type, target, actor, summary, before, after, reason, restorable, restoredByEntryId]
+      properties:
+        id: { type: integer, description: 'Id da linha do `audit_log` (append-only)' }
+        at: { type: string, format: date-time }
+        type: { $ref: '#/components/schemas/StoreHistoryType' }
+        target:
+          type: object
+          required: [type, id, label]
+          properties:
+            type: { type: string, enum: [store, product, variant, config] }
+            id: { type: [string, 'null'], format: uuid }
+            label: { type: [string, 'null'], description: 'Nome do produto ou da seção; sem dado de cliente' }
+        actor:
+          type: object
+          required: [kind, name]
+          properties:
+            kind: { type: string, enum: [admin, merchant, system] }
+            name: { type: [string, 'null'], description: 'Nome do admin ou do membro (o lojista só vê "Webag" em `listStoreAdminChanges`)' }
+        summary: { type: string }
+        before: { type: [object, 'null'], additionalProperties: true }
+        after: { type: [object, 'null'], additionalProperties: true }
+        reason: { oneOf: [{ $ref: '#/components/schemas/AdminReason' }, { type: 'null' }] }
+        restorable: { type: boolean, description: 'Preço e estoque com valor anterior conhecido e ainda não restaurados' }
+        restoredByEntryId: { type: [integer, 'null'] }
+    AdminStoreHistoryPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AdminStoreHistoryEntry' } }
+        nextCursor: { type: [string, 'null'] }
+    RestoreHistoryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        confirmOverride: { type: boolean, default: false, description: 'Restaurar mesmo com o valor atual diferente do que a linha deixou (C2)' }
+        confirmLargeChange: { type: boolean, default: false }
+    AdminStoreOverview:
+      type: object
+      required: [store, operation, commission, indicators, recentOrders]
+      properties:
+        store:
+          type: object
+          required: [id, name, status, city, ownerName, version, live, phone, whatsapp, description]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: [string, 'null'] }
+            status: { type: string, enum: [draft, in_review, correction_requested, approved, rejected, suspended, closed] }
+            city: { type: [string, 'null'] }
+            ownerName: { type: [string, 'null'] }
+            version: { type: integer, minimum: 1, description: 'Valor de `expectedVersion` das edições da loja' }
+            live: { type: boolean }
+            phone: { type: [string, 'null'] }
+            whatsapp: { type: [string, 'null'] }
+            description: { type: [string, 'null'] }
+        operation:
+          type: object
+          required: [openNow, closesAt, pause]
+          properties:
+            openNow: { type: boolean }
+            closesAt: { type: [string, 'null'], format: date-time }
+            pause:
+              oneOf:
+                - type: object
+                  required: [until, by, reasonLabel]
+                  properties:
+                    until: { type: [string, 'null'], format: date-time, description: 'Nulo = até reabrir' }
+                    by: { type: string, enum: [merchant, admin] }
+                    reasonLabel: { type: [string, 'null'] }
+                - type: 'null'
+        commission:
+          type: object
+          required: [pct, source, sourceLabel]
+          properties:
+            pct: { type: number }
+            source: { type: string, enum: [store, category, default] }
+            sourceLabel: { type: string, example: 'Categoria Calçados' }
+        indicators:
+          type: object
+          required: [empty, activeProducts, orders, gmv, cancellations]
+          properties:
+            empty: { type: boolean, description: 'Sem pedidos nos últimos 30 dias' }
+            activeProducts: { type: integer }
+            orders: { type: integer }
+            gmv: { $ref: '#/components/schemas/Money' }
+            cancellations:
+              type: object
+              required: [count, pct]
+              properties:
+                count: { type: integer }
+                pct: { type: [number, 'null'], description: 'Nulo com menos de 20 pedidos (DEC-108: poucos dados)' }
+        recentOrders:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [id, status, total, createdAt]
+            properties:
+              id: { type: string, format: uuid }
+              status: { type: string }
+              total: { $ref: '#/components/schemas/Money' }
+              createdAt: { type: string, format: date-time }
+    AdminStoreProfileChanges:
+      type: object
+      additionalProperties: false
+      description: 'Lista FECHADA de campos editáveis pelo admin (C-ADM-03). Qualquer outro campo é recusado'
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 300 }
+        phone: { type: string }
+        whatsapp: { type: string }
+    AdminStoreProfileEditRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, changes]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        changes: { $ref: '#/components/schemas/AdminStoreProfileChanges' }
+    AdminStoreConfigEditRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, data]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        data:
+          oneOf:
+            - { $ref: '#/components/schemas/HoursRequest' }
+            - { $ref: '#/components/schemas/HolidaysRequest' }
+            - { $ref: '#/components/schemas/DeliveryRequest' }
+            - { $ref: '#/components/schemas/PickupRequest' }
+            - { $ref: '#/components/schemas/ExchangePolicyRequest' }
+    AdminPauseStoreRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, kind]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        kind: { type: string, enum: [30m, 1h, 2h, end_of_day, until_resume] }
+    AdminResumeStoreRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+    ViewAsReasonCode:
+      type: string
+      enum: [merchant_support, investigate_issue, check_registration, other]
+      description: 'Suporte ao lojista por telefone, investigar um problema, conferir o cadastro, outro (com `note`)'
+    OpenViewAsRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code: { $ref: '#/components/schemas/ViewAsReasonCode' }
+            note: { type: string, maxLength: 200 }
+    ViewAsSession:
+      type: object
+      required: [id, token, storeId, storeName, expiresAt, reason]
+      properties:
+        id: { type: string, format: uuid }
+        token: { type: string, description: 'Credencial opaca de visualização, mostrada UMA vez; vai em `Authorization: Bearer` nas rotas `x-view-as`' }
+        storeId: { type: string, format: uuid }
+        storeName: { type: [string, 'null'] }
+        expiresAt: { type: string, format: date-time, description: 'No máximo 30 min, ou o fim da sessão do admin, o que vier antes' }
+        reason: { type: object, required: [code], properties: { code: { $ref: '#/components/schemas/ViewAsReasonCode' }, note: { type: string } } }
+    AdminCreateProductDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, data]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        data: { $ref: '#/components/schemas/CreateProductDraftRequest' }
+    AdminProductEditRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, changes]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        confirmLargeChange: { type: boolean, default: false, description: 'Confirma variação de preço acima de `admin_preco_variacao_max_pct` depois de ver o novo "Você recebe"' }
+        changes: { $ref: '#/components/schemas/UpdateProductRequest' }
+    AdminSetVariantsRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, data]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        confirmLargeChange: { type: boolean, default: false }
+        data: { $ref: '#/components/schemas/SetVariantsRequest' }
+    AdminStockAdjustRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, data]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        data: { $ref: '#/components/schemas/StockAdjustBody' }
+    AdminSetImagesRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, data]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        data: { $ref: '#/components/schemas/SetImagesRequest' }
+    AdminProductStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion, status]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        expectedVersion: { type: integer, minimum: 1 }
+        status: { type: string, enum: [active, paused] }
+    AdminBulkProductsRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, productIds, action]
+      properties:
+        reason: { $ref: '#/components/schemas/AdminReason' }
+        productIds: { type: array, minItems: 1, maxItems: 200, items: { type: string, format: uuid } }
+        dryRun: { type: boolean, default: false }
+        action:
+          oneOf:
+            - { type: object, additionalProperties: false, required: [type], properties: { type: { const: pause } } }
+            - { type: object, additionalProperties: false, required: [type], properties: { type: { const: resume } } }
+            - { type: object, additionalProperties: false, required: [type, value], properties: { type: { const: stock_set }, value: { type: integer, minimum: 0, maximum: 99999 } } }
+            - { type: object, additionalProperties: false, required: [type, value], properties: { type: { const: stock_adjust }, value: { type: integer, minimum: -99999, maximum: 99999 } } }
+    AdminBulkResult:
+      type: object
+      required: [dryRun, willChange, changed, auditEntries, blocked, batchId, merchantNotified]
+      properties:
+        dryRun: { type: boolean }
+        willChange: { type: integer }
+        changed: { type: integer }
+        auditEntries: { type: integer, description: 'Uma por item alterado (C-ADM-07)' }
+        batchId: { type: [string, 'null'], format: uuid }
+        merchantNotified: { type: string, enum: [aggregate], description: 'Um único aviso agregado com o motivo' }
+        blocked:
+          type: array
+          items:
+            type: object
+            required: [productId, name, reason]
+            properties:
+              productId: { type: string, format: uuid }
+              name: { type: string }
+              reason: { type: string, enum: [STOCK_BELOW_RESERVED, PRODUCT_MODERATED, NOT_ACTIVE] }
+    ProductVersionConflictProblem:
+      allOf:
+        - { $ref: '#/components/schemas/Problem' }
+        - type: object
+          required: [current]
+          properties:
+            current:
+              type: object
+              required: [version, updatedAt]
+              properties:
+                version: { type: integer }
+                updatedAt: { type: string, format: date-time }
+                basePriceCents: { type: [integer, 'null'] }
+    PriceChangeConfirmationProblem:
+      allOf:
+        - { $ref: '#/components/schemas/Problem' }
+        - type: object
+          description: 'Extensão do 422 `PRICE_CHANGE_NEEDS_CONFIRMATION` e do 422 `BULK_NEEDS_CONFIRMATION`: o que o diálogo mostra antes de confirmar'
+          properties:
+            fromCents: { type: integer }
+            toCents: { type: integer }
+            changePct: { type: number }
+            youReceiveCents: { type: [integer, 'null'] }
+    # ---- Coleta de eventos (staging)
+    AnalyticsOrigin:
+      type: string
+      enum: [banner, home, search, category, favorites, external_link, push]
+      description: 'De onde veio o toque (RN-A6). `?o=<canal>` do link da loja cai em `external_link` genérico (WB-368 cortada)'
+    AppSessionStartedEvent:
+      type: object
+      additionalProperties: false
+      required: [name, eventId, sessionId, occurredAt, platform, appVersion, cityId]
+      properties:
+        name: { const: app_session_started }
+        eventId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        platform: { type: string, enum: [ios, android] }
+        appVersion: { type: string, pattern: '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' }
+        cityId: { type: [string, 'null'], format: uuid }
+    StoreViewedEvent:
+      type: object
+      additionalProperties: false
+      required: [name, eventId, sessionId, occurredAt, storeId, origin]
+      properties:
+        name: { const: store_viewed }
+        eventId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        storeId: { type: string, format: uuid }
+        origin: { $ref: '#/components/schemas/AnalyticsOrigin' }
+    ProductViewedEvent:
+      type: object
+      additionalProperties: false
+      required: [name, eventId, sessionId, occurredAt, storeId, productId, origin]
+      properties:
+        name: { const: product_viewed }
+        eventId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        storeId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        origin: { $ref: '#/components/schemas/AnalyticsOrigin' }
+    ItemAddedEvent:
+      type: object
+      additionalProperties: false
+      required: [name, eventId, sessionId, occurredAt, storeId, productId]
+      properties:
+        name: { const: item_added }
+        eventId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        storeId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+    AnalyticsEvent:
+      oneOf:
+        - { $ref: '#/components/schemas/AppSessionStartedEvent' }
+        - { $ref: '#/components/schemas/StoreViewedEvent' }
+        - { $ref: '#/components/schemas/ProductViewedEvent' }
+        - { $ref: '#/components/schemas/ItemAddedEvent' }
+      discriminator:
+        propertyName: name
+        mapping:
+          app_session_started: '#/components/schemas/AppSessionStartedEvent'
+          store_viewed: '#/components/schemas/StoreViewedEvent'
+          product_viewed: '#/components/schemas/ProductViewedEvent'
+          item_added: '#/components/schemas/ItemAddedEvent'
+    AnalyticsEventsRequest:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/AnalyticsEvent' } }
+    AnalyticsIngestResult:
+      type: object
+      required: [accepted, duplicates, discarded]
+      properties:
+        accepted: { type: integer }
+        duplicates: { type: integer }
+        discarded: { type: integer, description: 'Loja ou produto inexistente, sessão nova acima do teto do IP ou coleta desligada' }
+    AnalyticsCell:
+      type: object
+      required: [suppressed]
+      description: 'Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente'
+      properties:
+        suppressed: { type: boolean }
+        n: { type: integer, minimum: 5 }
+    AnalyticsAccessRow:
+      type: object
+      required: [key, label, isOther, visits, productOpens, bagAdds]
+      properties:
+        key: { type: [string, 'null'], description: 'Id da loja, do produto ou da origem; nulo na linha "Outras"' }
+        label: { type: string, description: 'Nome, origem ou "Outras" / "Menos de 5"' }
+        isOther: { type: boolean }
+        visits: { $ref: '#/components/schemas/AnalyticsCell' }
+        productOpens: { $ref: '#/components/schemas/AnalyticsCell' }
+        bagAdds: { $ref: '#/components/schemas/AnalyticsCell' }
+    AnalyticsAccessReport:
+      type: object
+      required: [period, groupBy, generatedAt, cached, approximateTotals, totals, rows, nextCursor]
+      properties:
+        period: { type: object, required: [from, to], properties: { from: { type: string, format: date }, to: { type: string, format: date, description: 'Ontem (America/Sao_Paulo)' } } }
+        groupBy: { type: string, enum: [store, product, origin] }
+        generatedAt: { type: string, format: date-time, description: '`atualizado_em`' }
+        cached: { type: boolean, description: '`em_cache`' }
+        approximateTotals: { type: boolean, description: 'Verdadeiro quando houve supressão: os totais vêm arredondados a múltiplo de 5 ("cerca de")' }
+        totals:
+          type: object
+          required: [visits, productOpens, bagAdds]
+          properties:
+            visits: { type: integer }
+            productOpens: { type: integer }
+            bagAdds: { type: integer }
+        rows: { type: array, items: { $ref: '#/components/schemas/AnalyticsAccessRow' } }
+        nextCursor: { type: [string, 'null'] }
+    AnalyticsCoverageRow:
+      type: object
+      required: [weekStart, cityId, cityName, insufficient, coveragePct]
+      properties:
+        weekStart: { type: string, format: date, description: 'Segunda-feira (America/Sao_Paulo)' }
+        cityId: { type: string, format: uuid }
+        cityName: { type: string }
+        insufficient: { type: boolean, description: 'Menos de 20 pedidos do app na semana' }
+        coveragePct: { type: [number, 'null'] }
+    AnalyticsCoveragePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/AnalyticsCoverageRow' } }
         nextCursor: { type: [string, 'null'] }

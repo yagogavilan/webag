@@ -11,8 +11,12 @@
  * A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
+ * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem na R1.2, quando o web do admin (único consumidor) migra.
+ * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
+ * "Ver como o lojista" (v1.1 R1): as rotas de LEITURA da loja marcadas `x-view-as: true` (dados da loja, produtos, pedidos, trocas, avaliações) aceitam também a credencial `viewAsAuth`; nenhuma rota de escrita, financeira, de documento, de equipe ou de exportação a aceita (403 `VIEW_AS_READ_ONLY`).
+ * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
  *
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import * as zod from 'zod';
 
@@ -3660,7 +3664,7 @@ export const CompleteResetPasswordResponse = zod.object({
 
 
 /**
- * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído.
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído. **v1.1 R1:** admin com `store-catalog:write` (super admin e operação) também pede `product_image` com o `storeId` da loja que está ajustando (WB-353 C8); o upload fica de dono = admin e o envio é auditado. Foto de produto aceita só JPEG, PNG ou WebP (sem SVG e sem HEIC; o app converte no aparelho), até 5 MB e 40 MP, sem animação, assinatura dos bytes conferida (C-CAD-01).
  * @summary Pedir um upload (POST pré-assinado)
  */
 
@@ -3684,7 +3688,7 @@ export const CreateUploadResponse = zod.object({
 
 
 /**
- * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
+ * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). **v1.1 R1 (SEC-195, C-CAD-02):** nenhum objeto da foto de produto, variantes OU original, mantém EXIF/GPS (o original é substituído pela versão recodificada sem metadados, ou apagado depois das variantes). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
  * @summary Concluir o upload (valida e processa)
  */
 export const CompleteUploadParams = zod.object({
@@ -3746,12 +3750,14 @@ export const CreateStoreBody = zod.object({
   "fiscalResponsibilityAccepted": zod.boolean().optional()
 })
 
+
 export const createStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const createStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const CreateStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -3862,6 +3868,7 @@ export const CreateStoreResponse = zod.object({
  * Uma por conta na 1.0.
  * @summary Lojas das quais sou membro
  */
+
 export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
@@ -3869,6 +3876,7 @@ export const listMyStoresResponseDataItemSettingsHoursItemIntervalsItemEndRegExp
 export const ListMyStoresResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -3985,12 +3993,14 @@ export const GetStoreParams = zod.object({
   "storeId": zod.uuid()
 })
 
+
 export const getStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const getStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const GetStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -4146,12 +4156,14 @@ export const UpdateStoreProfileBody = zod.object({
   "coverAssetId": zod.uuid().nullish()
 })
 
+
 export const updateStoreProfileResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const updateStoreProfileResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const UpdateStoreProfileResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -4325,12 +4337,14 @@ export const SubmitStoreParams = zod.object({
   "storeId": zod.uuid()
 })
 
+
 export const submitStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const submitStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const SubmitStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -4982,9 +4996,11 @@ export const AcceptStoreInvitationResponse = zod.object({
 
 
 /**
- * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida".
+ * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida". **v1.1 R1 (WB-350):** `status=all`, busca `q` por nome ou cidade e os atalhos `noActiveProduct` (loja aprovada sem produto ativo: a loja a ativar) e `ownCommission`; os itens ganham `activeProducts`, `orders30d`, `sales30dCents`, `commissionPct` e `commissionSource` (campos novos, opcionais). Páginas de até 50 (a tela pede 25 ou 50; 100 não cabe no limite de 3G).
  * @summary Fila de lojas
  */
+export const listAdminStoresQueryQMax = 80;
+
 export const listAdminStoresQueryCursorMax = 200;
 
 export const listAdminStoresQueryLimitDefault = 20;
@@ -4993,7 +5009,10 @@ export const listAdminStoresQueryLimitMax = 50;
 
 
 export const ListAdminStoresQueryParams = zod.object({
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']).optional().describe('Padrão: in_review'),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed', 'all']).optional().describe('Padrão: in_review. `all` = todas (v1.1 R1)'),
+  "q": zod.string().max(listAdminStoresQueryQMax).optional().describe('v1.1 R1: nome da loja ou cidade (até 80 caracteres)'),
+  "noActiveProduct": zod.enum(['true']).optional().describe('v1.1 R1: só lojas aprovadas sem produto ativo'),
+  "ownCommission": zod.enum(['true']).optional().describe('v1.1 R1: só lojas com comissão própria'),
   "cursor": zod.string().max(listAdminStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
   "limit": zod.int().min(1).max(listAdminStoresQueryLimitMax).default(listAdminStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
@@ -5007,7 +5026,12 @@ export const ListAdminStoresResponse = zod.object({
   "city": zod.string().nullish(),
   "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
   "overdue": zod.boolean(),
-  "holderMismatch": zod.boolean()
+  "holderMismatch": zod.boolean(),
+  "activeProducts": zod.int().optional().describe('v1.1 R1: produtos ativos (0 = "Nenhum", a loja a ativar)'),
+  "orders30d": zod.int().optional().describe('v1.1 R1: pedidos pagos nos últimos 30 dias'),
+  "sales30dCents": zod.int().optional().describe('v1.1 R1: GMV dos últimos 30 dias, em centavos (0 = "Sem pedidos")'),
+  "commissionPct": zod.number().optional().describe('v1.1 R1: comissão efetiva (RN-10)'),
+  "commissionSource": zod.enum(['store', 'category', 'default']).optional().describe('v1.1 R1: `store` = comissão própria desta loja')
 })),
   "nextCursor": zod.string().nullable()
 })
@@ -5021,6 +5045,7 @@ export const GetAdminStoreParams = zod.object({
   "storeId": zod.uuid()
 })
 
+
 export const getAdminStoreResponseStoreSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const getAdminStoreResponseStoreSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const getAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
@@ -5030,6 +5055,7 @@ export const getAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new 
 export const GetAdminStoreResponse = zod.object({
   "store": zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5227,8 +5253,9 @@ export const GetAdminStoreResponse = zod.object({
 
 
 /**
- * Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
- * @summary Editar dados da loja
+ * **DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; sai na R1.2, quando o web do admin (único consumidor) migra. Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
+ * @deprecated
+ * @summary Editar dados da loja (substituída por `editAdminStoreProfile`)
  */
 export const EditAdminStoreParams = zod.object({
   "storeId": zod.uuid()
@@ -5281,12 +5308,14 @@ export const EditAdminStoreBody = zod.object({
 }).optional()
 })
 
+
 export const editAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const EditAdminStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5421,12 +5450,14 @@ export const ApproveStoreParams = zod.object({
   "storeId": zod.uuid()
 })
 
+
 export const approveStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const approveStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const ApproveStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5541,12 +5572,14 @@ export const ReactivateStoreParams = zod.object({
   "storeId": zod.uuid()
 })
 
+
 export const reactivateStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const reactivateStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const ReactivateStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5675,12 +5708,14 @@ export const RequestStoreCorrectionBody = zod.object({
 })).min(1).max(requestStoreCorrectionBodyItemsMax)
 })
 
+
 export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const requestStoreCorrectionResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const RequestStoreCorrectionResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5804,12 +5839,14 @@ export const RejectStoreBody = zod.object({
   "reason": zod.string().min(rejectStoreBodyReasonMin).max(rejectStoreBodyReasonMax)
 })
 
+
 export const rejectStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const rejectStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const RejectStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -5933,12 +5970,14 @@ export const SuspendStoreBody = zod.object({
   "reason": zod.string().min(suspendStoreBodyReasonMin).max(suspendStoreBodyReasonMax)
 })
 
+
 export const suspendStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const suspendStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const SuspendStoreResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -6046,8 +6085,9 @@ export const SuspendStoreResponse = zod.object({
 
 
 /**
- * Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
- * @summary Editar configuração da loja (admin)
+ * **DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; sai na R1.2. Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
+ * @deprecated
+ * @summary Editar configuração da loja (substituída por `editAdminStoreConfig`)
  */
 export const EditAdminStoreSettingsParams = zod.object({
   "storeId": zod.uuid(),
@@ -6099,12 +6139,14 @@ export const DecideStoreDataReviewBody = zod.object({
   "reason": zod.string().min(decideStoreDataReviewBodyReasonMin).max(decideStoreDataReviewBodyReasonMax)
 })
 
+
 export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 export const decideStoreDataReviewResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
 
 
 export const DecideStoreDataReviewResponse = zod.object({
   "id": zod.uuid(),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
   "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
   "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
   "documentType": zod.enum(['cpf', 'cnpj']),
@@ -6237,6 +6279,9 @@ export const ListProductsQueryParams = zod.object({
   "limit": zod.int().min(1).max(listProductsQueryLimitMax).default(listProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
 })
 
+
+
+
 export const ListProductsResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
@@ -6251,14 +6296,15 @@ export const ListProductsResponse = zod.object({
   "low": zod.boolean(),
   "soldOut": zod.boolean(),
   "variantCount": zod.int(),
-  "updatedAt": zod.iso.datetime({"offset":true})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1 (opcional para o app antigo)')
 })),
   "nextCursor": zod.string().nullable()
 })
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. **v1.1 R1:** também `DRAFT_LIMIT_REACHED` (50 rascunhos por loja, RN-Q2; vale para todo caminho que cria rascunho). O cadastro rápido usa `createProductDraft`.
  * @summary Criar produto (rascunho)
  */
 export const CreateProductParams = zod.object({
@@ -6299,6 +6345,7 @@ export const createProductResponseBasePriceCentsMax = 9999999;
 
 export const createProductResponseVariantsItemStockMin = 0;
 export const createProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6343,8 +6390,12 @@ export const CreateProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
@@ -6359,7 +6410,7 @@ export const GetProductImportTemplateResponse = zod.unknown()
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula) **ou, na v1.1 R1 (WB-376 C6, C9, C-CAD-05), `.xlsx`**; até 1 MB e **1.000 linhas** (`import_max_linhas` sobe de 500 para 1.000; 1.001 linhas ou arquivo maior: 422 `IMPORT_FILE_INVALID` e nada é criado). Planilha: lê VALORES e nunca avalia fórmula; limite de descompressão (bomba de zip recusada); macros e vínculos externos ignorados; fórmula e HTML em texto saem literais e escapados em qualquer CSV (C-CAD-04). **Mapeamento de colunas:** `nameColumn`, `priceColumn`, `stockColumn` e `sizeColumn` (índice da coluna, a partir de 1) quando o cabeçalho não bate com o modelo; no `preview` a resposta traz `headers`, `suggestedMapping` e as 3 primeiras linhas em `sampleRows`. `commit` cria rascunhos (via `spreadsheet`), sem foto: a etapa de fotos vem depois (RN-Q8). Aceita `Idempotency-Key`: repetir o `commit` não duplica. `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
  * @summary Importar produtos por planilha (CSV)
  */
 export const ImportProductsParams = zod.object({
@@ -6368,11 +6419,37 @@ export const ImportProductsParams = zod.object({
 
 export const importProductsQueryModeDefault = `preview`;
 export const importProductsQueryOnExistingDefault = `skip`;
+export const importProductsQueryNameColumnMax = 50;
+
+export const importProductsQueryPriceColumnMax = 50;
+
+export const importProductsQueryStockColumnMax = 50;
+
+export const importProductsQuerySizeColumnMax = 50;
+
+
 
 export const ImportProductsQueryParams = zod.object({
   "mode": zod.enum(['preview', 'commit']).default(importProductsQueryModeDefault),
-  "onExisting": zod.enum(['skip', 'update']).default(importProductsQueryOnExistingDefault)
+  "onExisting": zod.enum(['skip', 'update']).default(importProductsQueryOnExistingDefault),
+  "nameColumn": zod.int().min(1).max(importProductsQueryNameColumnMax).optional().describe('v1.1 R1: coluna do nome (1 a 50)'),
+  "priceColumn": zod.int().min(1).max(importProductsQueryPriceColumnMax).optional().describe('v1.1 R1: coluna do preço'),
+  "stockColumn": zod.int().min(1).max(importProductsQueryStockColumnMax).optional().describe('v1.1 R1: coluna do estoque'),
+  "sizeColumn": zod.int().min(1).max(importProductsQuerySizeColumnMax).optional().describe('v1.1 R1: coluna do tamanho (opcional)')
 })
+
+export const importProductsHeaderIdempotencyKeyMin = 8;
+export const importProductsHeaderIdempotencyKeyMax = 80;
+
+
+
+export const ImportProductsHeader = zod.object({
+  "Idempotency-Key": zod.string().min(importProductsHeaderIdempotencyKeyMin).max(importProductsHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const importProductsResponseSampleRowsMax = 3;
+
+
 
 export const ImportProductsResponse = zod.object({
   "totalLines": zod.int(),
@@ -6387,12 +6464,15 @@ export const ImportProductsResponse = zod.object({
   "committed": zod.boolean(),
   "created": zod.int(),
   "updated": zod.int(),
-  "skipped": zod.int()
+  "skipped": zod.int(),
+  "headers": zod.array(zod.string()).optional().describe('v1.1 R1: cabeçalho lido (texto puro)'),
+  "suggestedMapping": zod.record(zod.string(), zod.int()).optional().describe('v1.1 R1: palpite do sistema, ex.: { name: 1, price: 3, stock: 4 }; falta uma obrigatória = ausente da chave'),
+  "sampleRows": zod.array(zod.array(zod.string())).max(importProductsResponseSampleRowsMax).optional().describe('v1.1 R1: 3 primeiras linhas para o seletor "Qual coluna é cada coisa?"')
 })
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura).
  * @summary Ação em massa
  */
 export const BulkProductsParams = zod.object({
@@ -6402,10 +6482,12 @@ export const BulkProductsParams = zod.object({
 export const bulkProductsBodyProductIdsMax = 200;
 
 export const bulkProductsBodyDryRunDefault = false;
+export const bulkProductsBodyConfirmLargeChangeDefault = false;
 
 export const BulkProductsBody = zod.object({
   "productIds": zod.array(zod.uuid()).min(1).max(bulkProductsBodyProductIdsMax),
   "dryRun": zod.boolean().default(bulkProductsBodyDryRunDefault),
+  "confirmLargeChange": zod.boolean().default(bulkProductsBodyConfirmLargeChangeDefault).describe('v1.1 R1 (WB-377 C3): confirma reajuste acima de `reajuste_max_pct` em algum item. Sem isto, 422 `BULK_NEEDS_CONFIRMATION` (nada é aplicado)'),
   "action": zod.union([zod.object({
   "type": zod.literal("pause")
 }),zod.object({
@@ -6424,6 +6506,18 @@ export const BulkProductsResponse = zod.object({
   "dryRun": zod.boolean(),
   "willChange": zod.int(),
   "changed": zod.int(),
+  "preview": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "fromCents": zod.int(),
+  "toCents": zod.int(),
+  "changePct": zod.number().describe('Positivo ou negativo, 1 casa'),
+  "youReceiveCents": zod.int().nullable().describe('"Você recebe" do preço novo'),
+  "exceedsLimit": zod.boolean().describe('Acima de `reajuste_max_pct` (pede a caixa "Conferi os valores novos")')
+})).optional().describe('v1.1 R1: só em reajuste de preço (preço antigo, novo e "Você recebe" por item; a mesma contagem do botão "Selecionar os N")'),
+  "requiresConfirmation": zod.boolean().optional().describe('v1.1 R1: algum item passa de `reajuste_max_pct` (a tela mostra a caixa "Conferi os valores novos")'),
+  "batchId": zod.uuid().nullish().describe('v1.1 R1: lote gravado (nulo em `dryRun`); base de `undoBulkBatch`'),
+  "undoUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: 10 min depois da aplicação, só em reajuste de preço'),
   "blocked": zod.array(zod.object({
   "productId": zod.uuid(),
   "name": zod.string(),
@@ -6451,6 +6545,7 @@ export const getProductResponseBasePriceCentsMax = 9999999;
 
 export const getProductResponseVariantsItemStockMin = 0;
 export const getProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6495,17 +6590,28 @@ export const GetProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422. **v1.1 R1:** `If-Match` com a `version` (409 `PRODUCT_VERSION_CONFLICT`); `description` pode ser limpa em rascunho; categoria com `descriptionRequired` (modelo da categoria) exige descrição de no mínimo `descriptionMinChars` ao publicar (422 `DESCRIPTION_REQUIRED`), nas duas vias. Preço do lojista não pede confirmação do servidor: a confirmação inline acima de `reajuste_max_pct` é da tela (WB-377 C8).
  * @summary Editar produto e promoção
  */
 export const UpdateProductParams = zod.object({
   "storeId": zod.uuid(),
   "productId": zod.uuid()
+})
+
+
+
+
+export const UpdateProductHeader = zod.object({
+  "If-Match": zod.int().min(1).optional().describe('Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)')
 })
 
 export const updateProductBodyNameMin = 2;
@@ -6540,6 +6646,7 @@ export const updateProductResponseBasePriceCentsMax = 9999999;
 
 export const updateProductResponseVariantsItemStockMin = 0;
 export const updateProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6584,8 +6691,12 @@ export const UpdateProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
@@ -6601,12 +6712,19 @@ export const ArchiveProductResponse = zod.void()
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`. **v1.1 R1 (grade, WB-374):** a tabela tamanho x cor é gerada NO APP e salva aqui (até `variacoes_max`, 100); remover combinação com unidades reservadas é 409 `STOCK_BELOW_RESERVED` ("X unidades reservadas"); preço por combinação em `priceCents`. `If-Match` com a `version` do produto (409 `PRODUCT_VERSION_CONFLICT`).
  * @summary Definir variações e estoque
  */
 export const SetProductVariantsParams = zod.object({
   "storeId": zod.uuid(),
   "productId": zod.uuid()
+})
+
+
+
+
+export const SetProductVariantsHeader = zod.object({
+  "If-Match": zod.int().min(1).optional().describe('Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)')
 })
 
 export const setProductVariantsBodyAttributesItemMax = 30;
@@ -6642,6 +6760,7 @@ export const setProductVariantsResponseBasePriceCentsMax = 9999999;
 
 export const setProductVariantsResponseVariantsItemStockMin = 0;
 export const setProductVariantsResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6686,18 +6805,29 @@ export const SetProductVariantsResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite. **v1.1 R1:** `If-Match` com a `version` do produto (edição em linha da tabela: "Este produto foi alterado agora").
  * @summary Ajuste rápido de estoque
  */
 export const AdjustVariantStockParams = zod.object({
   "storeId": zod.uuid(),
   "productId": zod.uuid(),
   "variantId": zod.uuid()
+})
+
+
+
+
+export const AdjustVariantStockHeader = zod.object({
+  "If-Match": zod.int().min(1).optional().describe('Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)')
 })
 
 export const AdjustVariantStockBody = zod.union([zod.object({
@@ -6728,12 +6858,19 @@ export const AdjustVariantStockResponse = zod.object({
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`. **v1.1 R1:** `If-Match` com a `version` do produto; o envio das fotos é em segundo plano e o produto não publica enquanto a capa não terminar de subir (o app espera; o servidor recusa publicar sem foto concluída: 422 `PRODUCT_INCOMPLETE`).
  * @summary Definir fotos (ordem = posição; a 1ª é a capa)
  */
 export const SetProductImagesParams = zod.object({
   "storeId": zod.uuid(),
   "productId": zod.uuid()
+})
+
+
+
+
+export const SetProductImagesHeader = zod.object({
+  "If-Match": zod.int().min(1).optional().describe('Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)')
 })
 
 export const setProductImagesBodyImageIdsMax = 20;
@@ -6754,6 +6891,7 @@ export const setProductImagesResponseBasePriceCentsMax = 9999999;
 
 export const setProductImagesResponseVariantsItemStockMin = 0;
 export const setProductImagesResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6798,17 +6936,28 @@ export const SetProductImagesResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu. **v1.1 R1:** categoria com `descriptionRequired` e descrição vazia ou menor que `descriptionMinChars`: 422 `DESCRIPTION_REQUIRED` (no campo `description`); `If-Match` com a `version`; grava `product_create_published` com `duration_s` e `via` (WB-379) e, se o produto vier de rascunho aberto em 2 aparelhos, 409 `PRODUCT_VERSION_CONFLICT`. Nada digitado se perde em nenhum erro.
  * @summary Publicar produto
  */
 export const PublishProductParams = zod.object({
   "storeId": zod.uuid(),
   "productId": zod.uuid()
+})
+
+
+
+
+export const PublishProductHeader = zod.object({
+  "If-Match": zod.int().min(1).optional().describe('Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)')
 })
 
 export const publishProductResponseNameMax = 80;
@@ -6821,6 +6970,7 @@ export const publishProductResponseBasePriceCentsMax = 9999999;
 
 export const publishProductResponseVariantsItemStockMin = 0;
 export const publishProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6865,8 +7015,12 @@ export const PublishProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
@@ -6888,6 +7042,7 @@ export const pauseProductResponseBasePriceCentsMax = 9999999;
 
 export const pauseProductResponseVariantsItemStockMin = 0;
 export const pauseProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6932,8 +7087,12 @@ export const PauseProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
@@ -6955,6 +7114,7 @@ export const resumeProductResponseBasePriceCentsMax = 9999999;
 
 export const resumeProductResponseVariantsItemStockMin = 0;
 export const resumeProductResponseVariantsItemStockMax = 99999;
+
 
 
 
@@ -6999,8 +7159,12 @@ export const ResumeProductResponse = zod.object({
   "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
-  "updatedAt": zod.iso.datetime({"offset":true})
-})
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
 
 
 /**
@@ -13172,7 +13336,7 @@ export const GetMyDataExportResponse = zod.object({
 
 
 /**
- * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`).
+ * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`). **v1.1 R1 (WB-369 C1, SEC-194):** o arquivo ganha `notices.measurement` com o texto "A medição de uso não está ligada à sua conta e fica guardada por até 90 dias; por isso não entra neste arquivo" (nunca "anônima"); a coleta não tem coluna ligada a `users`, então nada dela entra no arquivo nem precisa ser apagado na exclusão da conta.
  * @summary Pedir a exportação dos meus dados (senha)
  */
 export const RequestDataExportBody = zod.object({
@@ -15433,3 +15597,2008 @@ export const DeleteReviewReplyParams = zod.object({
 })
 
 export const DeleteReviewReplyResponse = zod.void()
+
+
+/**
+ * Uma chamada só para a tela de Produtos e o "Novo produto" (3G): categoria sugerida (a última usada pela loja ou a mais frequente), rascunho mais recente ("Continuar de onde parei"), contagem e limite de rascunhos, quantos produtos ativos estão sem descrição e os limites que o app usa na tela (`variacoes_max`, `reajuste_max_pct`). Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Sem dado de cliente.
+ * @summary Dados de partida da tela Produtos (WB-370, WB-371, RN-Q1)
+ */
+export const GetCatalogQuickStartParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getCatalogQuickStartResponseDraftCountMin = 0;
+
+export const getCatalogQuickStartResponseLatestDraftOneNameMax = 80;
+
+export const getCatalogQuickStartResponseLatestDraftOneExpiresInDaysMin = 0;
+
+
+export const getCatalogQuickStartResponseWithoutDescriptionCountMin = 0;
+
+
+
+export const GetCatalogQuickStartResponse = zod.object({
+  "suggestedCategoryId": zod.uuid().nullable().describe('A última categoria usada na loja; sem histórico, a mais frequente; sem produtos, nulo'),
+  "draftCount": zod.int().min(getCatalogQuickStartResponseDraftCountMin),
+  "draftLimit": zod.int(),
+  "latestDraft": zod.union([zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(getCatalogQuickStartResponseLatestDraftOneNameMax).describe('Vazio ("") enquanto o lojista não digitou'),
+  "basePriceCents": zod.int().nullable(),
+  "cover": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP; nulo sem foto'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('30 dias após a última alteração (RN-Q2)'),
+  "expiresInDays": zod.int().min(getCatalogQuickStartResponseLatestDraftOneExpiresInDaysMin).describe('Dias inteiros até vencer; 3 ou menos mostra "Será apagado em N dias"'),
+  "version": zod.int().min(1),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo')
+}),zod.null()]).describe('Para "Continuar: Camiseta básica preta"'),
+  "withoutDescriptionCount": zod.int().min(getCatalogQuickStartResponseWithoutDescriptionCountMin).describe('Produtos ativos sem descrição ("X produtos sem descrição"; só lembrete, não bloqueia)'),
+  "limits": zod.object({
+  "variantsMax": zod.int(),
+  "reajusteMaxPct": zod.number().describe('Confirmação inline de preço e reajuste acima deste percentual (nos dois sentidos)')
+})
+})
+
+
+/**
+ * Aba "Rascunhos (n)" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (50) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Rascunhos da loja (WB-371)
+ */
+export const ListProductDraftsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listProductDraftsQueryCursorMax = 200;
+
+export const listProductDraftsQueryLimitDefault = 20;
+export const listProductDraftsQueryLimitMax = 50;
+
+
+
+export const ListProductDraftsQueryParams = zod.object({
+  "cursor": zod.string().max(listProductDraftsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listProductDraftsQueryLimitMax).default(listProductDraftsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listProductDraftsResponseDataItemNameMax = 80;
+
+export const listProductDraftsResponseDataItemExpiresInDaysMin = 0;
+
+
+export const listProductDraftsResponseCountMin = 0;
+
+
+
+export const ListProductDraftsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(listProductDraftsResponseDataItemNameMax).describe('Vazio ("") enquanto o lojista não digitou'),
+  "basePriceCents": zod.int().nullable(),
+  "cover": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP; nulo sem foto'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('30 dias após a última alteração (RN-Q2)'),
+  "expiresInDays": zod.int().min(listProductDraftsResponseDataItemExpiresInDaysMin).describe('Dias inteiros até vencer; 3 ou menos mostra "Será apagado em N dias"'),
+  "version": zod.int().min(1),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo')
+})),
+  "nextCursor": zod.string().nullable(),
+  "count": zod.int().min(listProductDraftsResponseCountMin).describe('Total de rascunhos da loja (não só desta página)'),
+  "limit": zod.int()
+})
+
+
+/**
+ * O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: ""` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` ("Limite de 50 rascunhos", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` ("Esse tipo de produto não é permitido no Webag"; a tela mostra o link para os Termos do Lojista e "Escolher outra categoria"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos.
+ * @summary Abrir um rascunho ao tocar em "Novo produto" (WB-370 C1, WB-371, RN-Q2)
+ */
+export const CreateProductDraftParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createProductDraftHeaderIdempotencyKeyMin = 8;
+export const createProductDraftHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateProductDraftHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createProductDraftHeaderIdempotencyKeyMin).max(createProductDraftHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const createProductDraftBodyNameMax = 80;
+
+
+
+export const CreateProductDraftBody = zod.object({
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "name": zod.string().max(createProductDraftBodyNameMax).optional().describe('Opcional; "" ou ausente = ainda sem nome'),
+  "categoryId": zod.uuid().nullish(),
+  "basePriceCents": zod.int().nullish().describe('Centavos, de 1 a 9999999 (422 fora da faixa)')
+})
+
+export const createProductDraftResponseNameMax = 80;
+
+export const createProductDraftResponseDescriptionMax = 1000;
+
+export const createProductDraftResponseSizeChartMax = 2000;
+
+export const createProductDraftResponseBasePriceCentsMax = 9999999;
+
+export const createProductDraftResponseVariantsItemStockMin = 0;
+export const createProductDraftResponseVariantsItemStockMax = 99999;
+
+
+
+
+export const CreateProductDraftResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(createProductDraftResponseNameMax),
+  "description": zod.string().max(createProductDraftResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(createProductDraftResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(createProductDraftResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(createProductDraftResponseVariantsItemStockMin).max(createProductDraftResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
+
+
+/**
+ * Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o "Juntar 3 linhas em 1 produto" (preço por variação quando diferem). **Atômico quanto ao limite:** se `rascunhos atuais + itens` passar de 50, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` [HIPÓTESE: 100 linhas contra 50 rascunhos é um conflito do PRD; ver ADR-018, pergunta ao PO]. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE].
+ * @summary Criar rascunhos a partir da lista colada (WB-376 C4, RN-Q8)
+ */
+export const CreateProductDraftsBatchParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createProductDraftsBatchHeaderIdempotencyKeyMin = 8;
+export const createProductDraftsBatchHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateProductDraftsBatchHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createProductDraftsBatchHeaderIdempotencyKeyMin).max(createProductDraftsBatchHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const createProductDraftsBatchBodyItemsItemClientRefMax = 40;
+
+export const createProductDraftsBatchBodyItemsItemNameMax = 80;
+
+export const createProductDraftsBatchBodyItemsItemQuantityDefault = 1;
+export const createProductDraftsBatchBodyItemsItemQuantityMin = 0;
+export const createProductDraftsBatchBodyItemsItemQuantityMax = 99999;
+
+export const createProductDraftsBatchBodyItemsItemVariantAttributesItemMax = 30;
+
+export const createProductDraftsBatchBodyItemsItemVariantAttributesMax = 3;
+
+export const createProductDraftsBatchBodyItemsItemVariantsItemAttributesMaxOne = 40;
+
+export const createProductDraftsBatchBodyItemsItemVariantsItemStockDefault = 1;
+export const createProductDraftsBatchBodyItemsItemVariantsItemStockMin = 0;
+export const createProductDraftsBatchBodyItemsItemVariantsItemStockMax = 99999;
+
+export const createProductDraftsBatchBodyItemsItemVariantsMax = 100;
+
+export const createProductDraftsBatchBodyItemsMax = 100;
+
+
+
+export const CreateProductDraftsBatchBody = zod.object({
+  "via": zod.enum(['paste', 'spreadsheet']),
+  "items": zod.array(zod.object({
+  "clientRef": zod.string().min(1).max(createProductDraftsBatchBodyItemsItemClientRefMax).describe('Referência do app (ex.: número da linha) para casar a resposta; não é persistida'),
+  "name": zod.string().min(1).max(createProductDraftsBatchBodyItemsItemNameMax),
+  "basePriceCents": zod.int().nullish().describe('Nulo = "Falta o preço" (vira rascunho mesmo assim)'),
+  "quantity": zod.int().min(createProductDraftsBatchBodyItemsItemQuantityMin).max(createProductDraftsBatchBodyItemsItemQuantityMax).default(createProductDraftsBatchBodyItemsItemQuantityDefault).describe('Estoque quando não há `variants`'),
+  "variantAttributes": zod.array(zod.string().max(createProductDraftsBatchBodyItemsItemVariantAttributesItemMax)).max(createProductDraftsBatchBodyItemsItemVariantAttributesMax).optional().describe('Nomes dos atributos de `variants` (ex.: Tamanho)'),
+  "variants": zod.array(zod.object({
+  "attributes": zod.record(zod.string(), zod.string().max(createProductDraftsBatchBodyItemsItemVariantsItemAttributesMaxOne)),
+  "stock": zod.int().min(createProductDraftsBatchBodyItemsItemVariantsItemStockMin).max(createProductDraftsBatchBodyItemsItemVariantsItemStockMax).default(createProductDraftsBatchBodyItemsItemVariantsItemStockDefault),
+  "priceCents": zod.int().nullish().describe('Preço próprio quando difere do produto (linhas juntadas com preços diferentes)')
+})).max(createProductDraftsBatchBodyItemsItemVariantsMax).optional(),
+  "categoryId": zod.uuid().nullish()
+})).min(1).max(createProductDraftsBatchBodyItemsMax)
+})
+
+export const CreateProductDraftsBatchResponse = zod.object({
+  "created": zod.array(zod.object({
+  "clientRef": zod.string(),
+  "productId": zod.uuid(),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).describe('Ex.: ["photo"] na etapa de fotos')
+})),
+  "rejected": zod.array(zod.object({
+  "clientRef": zod.string(),
+  "code": zod.enum(['NAME_REQUIRED', 'NAME_TOO_LONG', 'PRICE_OUT_OF_RANGE', 'QUANTITY_OUT_OF_RANGE', 'VARIANTS_INVALID', 'CATEGORY_FORBIDDEN']),
+  "message": zod.string()
+}))
+})
+
+
+/**
+ * Cria um RASCUNHO com nome "<nome> (cópia)", mesma categoria, descrição, preço, atributos e variações; NÃO copia fotos, SKU, estoque (começa em 1 por variação, ou 0 em grade) nem promoção (C1, C3). A cópia é um produto novo e passa pela moderação ao publicar (C4: duplicar produto arquivado ou pausado pela moderação nunca herda o estado). Grava no histórico "duplicado de <id>" (C5). **Posse conferida:** produto de outra loja é 404 igual a inexistente (C6, C-CAD-10). Duplicar a variação (C2) é edição da tabela de variações no app, salva por `setProductVariants`; não tem rota. `Idempotency-Key` obrigatória. 422 `DRAFT_LIMIT_REACHED`. Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Duplicar produto (WB-372, RN-Q4)
+ */
+export const DuplicateProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const duplicateProductHeaderIdempotencyKeyMin = 8;
+export const duplicateProductHeaderIdempotencyKeyMax = 80;
+
+
+
+export const DuplicateProductHeader = zod.object({
+  "Idempotency-Key": zod.string().min(duplicateProductHeaderIdempotencyKeyMin).max(duplicateProductHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const duplicateProductResponseNameMax = 80;
+
+export const duplicateProductResponseDescriptionMax = 1000;
+
+export const duplicateProductResponseSizeChartMax = 2000;
+
+export const duplicateProductResponseBasePriceCentsMax = 9999999;
+
+export const duplicateProductResponseVariantsItemStockMin = 0;
+export const duplicateProductResponseVariantsItemStockMax = 99999;
+
+
+
+
+export const DuplicateProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(duplicateProductResponseNameMax),
+  "description": zod.string().max(duplicateProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(duplicateProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(duplicateProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(duplicateProductResponseVariantsItemStockMin).max(duplicateProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
+
+
+/**
+ * Público e sem dado pessoal (como `/v1/categories`; ETag/304). Para cada categoria com modelo: atributos e valores sugeridos (tamanhos P a GG; 34 a 44 em calçado), avisos (`sizeChartHint` = tabela de medidas; `noVoluntaryExchangeHint` = sugerir "sem troca voluntária" em íntimos e higiene) e `descriptionRequired` com `descriptionMinChars` (RN-Q1, DEC-106: Cosméticos e Eletrônicos, 20 caracteres). O modelo SÓ SUGERE; a única exigência que ele carrega é `descriptionRequired`, validada no servidor nas duas vias (rápida e formulário completo): 422 `DESCRIPTION_REQUIRED` ao publicar. Categoria sem modelo não aparece (C5). Limitada ao total de categorias ativas (no máximo 100 itens, sem paginação; `nextCursor` sempre nulo, como em `listCategories`).
+ * @summary Modelos por categoria (WB-375, RN-Q6)
+ */
+export const listCategoryTemplatesResponseDataItemAttributesItemNameMax = 30;
+
+export const listCategoryTemplatesResponseDataItemAttributesItemValuesItemMax = 40;
+
+export const listCategoryTemplatesResponseDataItemAttributesItemValuesMax = 30;
+
+export const listCategoryTemplatesResponseDataMax = 100;
+
+
+
+export const ListCategoryTemplatesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "categoryId": zod.uuid(),
+  "attributes": zod.array(zod.object({
+  "name": zod.string().min(1).max(listCategoryTemplatesResponseDataItemAttributesItemNameMax),
+  "values": zod.array(zod.string().max(listCategoryTemplatesResponseDataItemAttributesItemValuesItemMax)).max(listCategoryTemplatesResponseDataItemAttributesItemValuesMax).describe('SUGESTÕES: nenhum vem marcado (evita estoque falso)')
+})),
+  "sizeChartHint": zod.boolean().describe('Moda e calçado: lembrar a tabela de medidas (WB-246)'),
+  "noVoluntaryExchangeHint": zod.boolean().describe('Íntimos e higiene: sugerir "Não aceita troca por tamanho ou cor" (WB-244); só sugestão'),
+  "descriptionRequired": zod.boolean().describe('RN-Q1 / DEC-106: a descrição é obrigatória ao publicar, nas duas vias'),
+  "descriptionMinChars": zod.int()
+})).max(listCategoryTemplatesResponseDataMax),
+  "nextCursor": zod.null()
+})
+
+
+/**
+ * Permissão de admin: `categories:write` (super admin e operação). Substitui o modelo da categoria (os 8 modelos iniciais vêm do seed). Alterar `descriptionRequired` vale na hora para novas publicações (produtos já ativos não são afetados). Auditado (antes/depois). Texto puro; até 12 atributos e 30 valores por atributo.
+ * @summary Editar o modelo de uma categoria (Could, RN-Q6)
+ */
+export const SetCategoryTemplateParams = zod.object({
+  "categoryId": zod.uuid()
+})
+
+export const setCategoryTemplateBodyAttributesItemNameMax = 30;
+
+export const setCategoryTemplateBodyAttributesItemValuesItemMax = 40;
+
+export const setCategoryTemplateBodyAttributesItemValuesMax = 30;
+
+export const setCategoryTemplateBodyAttributesMax = 12;
+
+export const setCategoryTemplateBodyDescriptionMinCharsDefault = 20;
+export const setCategoryTemplateBodyDescriptionMinCharsMax = 200;
+
+
+
+export const SetCategoryTemplateBody = zod.object({
+  "attributes": zod.array(zod.object({
+  "name": zod.string().min(1).max(setCategoryTemplateBodyAttributesItemNameMax),
+  "values": zod.array(zod.string().max(setCategoryTemplateBodyAttributesItemValuesItemMax)).max(setCategoryTemplateBodyAttributesItemValuesMax).describe('SUGESTÕES: nenhum vem marcado (evita estoque falso)')
+})).max(setCategoryTemplateBodyAttributesMax),
+  "sizeChartHint": zod.boolean(),
+  "noVoluntaryExchangeHint": zod.boolean(),
+  "descriptionRequired": zod.boolean(),
+  "descriptionMinChars": zod.int().min(1).max(setCategoryTemplateBodyDescriptionMinCharsMax).default(setCategoryTemplateBodyDescriptionMinCharsDefault)
+})
+
+export const setCategoryTemplateResponseAttributesItemNameMax = 30;
+
+export const setCategoryTemplateResponseAttributesItemValuesItemMax = 40;
+
+export const setCategoryTemplateResponseAttributesItemValuesMax = 30;
+
+
+
+export const SetCategoryTemplateResponse = zod.object({
+  "categoryId": zod.uuid(),
+  "attributes": zod.array(zod.object({
+  "name": zod.string().min(1).max(setCategoryTemplateResponseAttributesItemNameMax),
+  "values": zod.array(zod.string().max(setCategoryTemplateResponseAttributesItemValuesItemMax)).max(setCategoryTemplateResponseAttributesItemValuesMax).describe('SUGESTÕES: nenhum vem marcado (evita estoque falso)')
+})),
+  "sizeChartHint": zod.boolean().describe('Moda e calçado: lembrar a tabela de medidas (WB-246)'),
+  "noVoluntaryExchangeHint": zod.boolean().describe('Íntimos e higiene: sugerir "Não aceita troca por tamanho ou cor" (WB-244); só sugestão'),
+  "descriptionRequired": zod.boolean().describe('RN-Q1 / DEC-106: a descrição é obrigatória ao publicar, nas duas vias'),
+  "descriptionMinChars": zod.int()
+})
+
+
+/**
+ * Lista enxuta para a tela "Preços e estoque": por produto, preço, "Você recebe" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: "Selecionar os 12 da busca"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito "Este produto foi alterado agora". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table` antes de `/products/{productId}`.
+ * @summary Tabela de preço e estoque (WB-377, edição em massa)
+ */
+export const ListProductTableParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listProductTableQueryQMax = 80;
+
+export const listProductTableQueryCursorMax = 200;
+
+export const listProductTableQueryLimitDefault = 20;
+export const listProductTableQueryLimitMax = 50;
+
+
+
+export const ListProductTableQueryParams = zod.object({
+  "q": zod.string().max(listProductTableQueryQMax).optional(),
+  "status": zod.enum(['active', 'paused']).optional(),
+  "sectionId": zod.uuid().optional(),
+  "cursor": zod.string().max(listProductTableQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listProductTableQueryLimitMax).default(listProductTableQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+
+export const listProductTableResponseMatchingCountMin = 0;
+
+
+
+export const ListProductTableResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']),
+  "cover": zod.record(zod.string(), zod.string()).nullable(),
+  "basePriceCents": zod.int().nullable(),
+  "youReceiveCents": zod.int().nullable().describe('"Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo)'),
+  "available": zod.int().describe('Soma de (estoque - reservado) das variações ativas'),
+  "reserved": zod.int().describe('Soma reservada em pedidos ("2 reservadas em pedidos")'),
+  "variantCount": zod.int(),
+  "singleVariantId": zod.uuid().nullable().describe('Preenchido quando há UMA variação: o estoque se edita na linha (`adjustVariantStock`)'),
+  "version": zod.int().min(1).describe('Para `If-Match` na edição em linha'),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable(),
+  "matchingCount": zod.int().min(listProductTableResponseMatchingCountMin).describe('Contagem exata do filtro (botão "Selecionar os 12 da busca")')
+})
+
+
+/**
+ * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Lote já desfeito: 409 `BATCH_ALREADY_UNDONE`. Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Desfazer um reajuste em massa por até 10 minutos (WB-377 C4)
+ */
+export const UndoBulkBatchParams = zod.object({
+  "storeId": zod.uuid(),
+  "batchId": zod.uuid()
+})
+
+export const UndoBulkBatchResponse = zod.object({
+  "batchId": zod.uuid(),
+  "reverted": zod.int(),
+  "skipped": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "reason": zod.enum(['CHANGED_AFTER']).describe('Editado depois do reajuste: não é sobrescrito')
+}))
+})
+
+
+/**
+ * Cada ação em massa (reajuste, pausar, reativar, mover de seção) registra quem, quando e quantos itens (`itemsCount`); inclui as feitas pela Webag (`source: admin`, autor "Webag", sem nome de pessoa). Mais recentes primeiro; cursor. Permissão da loja: `catalog`; não-membro 404.
+ * @summary Histórico das ações em massa da loja (WB-377 C7)
+ */
+export const ListBulkBatchesParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listBulkBatchesQueryCursorMax = 200;
+
+export const listBulkBatchesQueryLimitDefault = 20;
+export const listBulkBatchesQueryLimitMax = 50;
+
+
+
+export const ListBulkBatchesQueryParams = zod.object({
+  "cursor": zod.string().max(listBulkBatchesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listBulkBatchesQueryLimitMax).default(listBulkBatchesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const ListBulkBatchesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['price_adjust', 'pause', 'resume', 'move_section']),
+  "itemsCount": zod.int(),
+  "source": zod.enum(['merchant', 'admin']),
+  "actorName": zod.string().describe('Nome do membro da loja; "Webag" quando `source: admin` (nunca o nome da pessoa)'),
+  "at": zod.iso.datetime({"offset":true}),
+  "undoUntil": zod.iso.datetime({"offset":true}).nullable().describe('Só reajuste de preço; 10 min depois de `at`'),
+  "undone": zod.boolean()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * O lojista vê no próprio painel uma linha por alteração feita pelo admin em preço, estoque, catálogo, status, horário e pausa, com antes/depois e o motivo em texto; o autor é sempre "Webag" (nunca o nome da pessoa, J27). Ação em massa aparece como UMA linha agregada. Mais recentes primeiro; cursor. Permissão da loja: dono, ou funcionário com `catalog`; os demais 404 (SEC-020). Não traz dado de cliente.
+ * @summary O que a Webag alterou na minha loja (WB-353 C1, C11)
+ */
+export const ListStoreAdminChangesParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listStoreAdminChangesQueryCursorMax = 200;
+
+export const listStoreAdminChangesQueryLimitDefault = 20;
+export const listStoreAdminChangesQueryLimitMax = 50;
+
+
+
+export const ListStoreAdminChangesQueryParams = zod.object({
+  "cursor": zod.string().max(listStoreAdminChangesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listStoreAdminChangesQueryLimitMax).default(listStoreAdminChangesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const ListStoreAdminChangesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.int(),
+  "at": zod.iso.datetime({"offset":true}),
+  "type": zod.enum(['price', 'stock', 'catalog', 'hours', 'holidays', 'delivery', 'pickup', 'exchange_policy', 'pause', 'status', 'profile', 'commission', 'access', 'bulk', 'restore', 'other']).describe('`access` = abertura e encerramento de "Ver como o lojista". Filtros da tela: Tudo, Preço, Estoque, Horário, Acesso'),
+  "summary": zod.string(),
+  "target": zod.string().nullable().describe('Nome do produto ou da área (horário, pausa); sem dado de cliente'),
+  "reasonLabel": zod.string(),
+  "before": zod.record(zod.string(), zod.unknown()).nullable(),
+  "after": zod.record(zod.string(), zod.unknown()).nullable(),
+  "actor": zod.enum(['Webag'])
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão de admin: `reports:operations` (super admin, operação e financeiro; suporte 403). Mede a meta de 60 s (HIP-Q1) a partir de `product_create_started` (abrir "Novo produto"), `photo_captured` (1ª foto anexada) e `product_create_published`, agrupado por `via` (camera, duplicate, paste, spreadsheet, form) ou por loja. **Só conta cadastro contínuo:** publicação até `cadastro_sessao_max_min` (15 min [HIPÓTESE]) depois do início; o resto vem em `interrupted` e fica fora da mediana. Grupo com menos de 5 cadastros devolve `insufficient: true` e nenhum percentil. Sem texto, nome ou preço de produto.
+ * @summary Tempo de cadastro de produto, mediana e p90 (WB-379 C2)
+ */
+export const getProductCreationMetricsQueryDaysDefault = 30;
+export const getProductCreationMetricsQueryGroupByDefault = `via`;
+export const getProductCreationMetricsQueryCursorMax = 200;
+
+export const getProductCreationMetricsQueryLimitDefault = 20;
+export const getProductCreationMetricsQueryLimitMax = 50;
+
+
+
+export const GetProductCreationMetricsQueryParams = zod.object({
+  "days": zod.union([zod.literal(7),zod.literal(30),zod.literal(90)]).default(getProductCreationMetricsQueryDaysDefault),
+  "groupBy": zod.enum(['via', 'store']).default(getProductCreationMetricsQueryGroupByDefault),
+  "storeId": zod.uuid().optional(),
+  "cursor": zod.string().max(getProductCreationMetricsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(getProductCreationMetricsQueryLimitMax).default(getProductCreationMetricsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const GetProductCreationMetricsResponse = zod.object({
+  "days": zod.int(),
+  "groupBy": zod.enum(['via', 'store']),
+  "minSample": zod.int(),
+  "computedAt": zod.iso.datetime({"offset":true}),
+  "rows": zod.array(zod.object({
+  "key": zod.string().describe('Valor de `via` ou id da loja'),
+  "label": zod.string(),
+  "n": zod.int().describe('Cadastros contínuos publicados no período'),
+  "interrupted": zod.int().describe('Publicados depois do limite de sessão contínua; fora da mediana'),
+  "insufficient": zod.boolean().describe('n < minSample'),
+  "medianSeconds": zod.int().nullable(),
+  "p90Seconds": zod.int().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão `stores:read` (os 4 perfis; suporte vê sem botões de edição, C2 é da tela e a API já recusa a escrita). Uma chamada para a aba Resumo: dados não fiscais, situação, operação agora (aberta, pausada por quem e até quando), comissão efetiva com a ORIGEM (loja, categoria ou padrão: "categoria Calçados: 12%", RN-10), indicadores dos últimos 30 dias (produtos ativos, pedidos, GMV, cancelamentos com %), 5 pedidos recentes (sem dado do cliente). `version` da loja é o valor para `expectedVersion` das edições. Loja sem pedido: `indicators.empty: true` ("Sem pedidos nos últimos 30 dias"). Documento, razão social e conta de recebimento NÃO vêm aqui (C4).
+ * @summary Ficha 360 da loja (WB-350 C1, C3)
+ */
+export const GetAdminStoreOverviewParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+
+export const getAdminStoreOverviewResponseRecentOrdersMax = 5;
+
+
+
+export const GetAdminStoreOverviewResponse = zod.object({
+  "store": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().nullable(),
+  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
+  "city": zod.string().nullable(),
+  "ownerName": zod.string().nullable(),
+  "version": zod.int().min(1).describe('Valor de `expectedVersion` das edições da loja'),
+  "live": zod.boolean(),
+  "phone": zod.string().nullable(),
+  "whatsapp": zod.string().nullable(),
+  "description": zod.string().nullable()
+}),
+  "operation": zod.object({
+  "openNow": zod.boolean(),
+  "closesAt": zod.iso.datetime({"offset":true}).nullable(),
+  "pause": zod.union([zod.object({
+  "until": zod.iso.datetime({"offset":true}).nullable().describe('Nulo = até reabrir'),
+  "by": zod.enum(['merchant', 'admin']),
+  "reasonLabel": zod.string().nullable()
+}),zod.null()])
+}),
+  "commission": zod.object({
+  "pct": zod.number(),
+  "source": zod.enum(['store', 'category', 'default']),
+  "sourceLabel": zod.string()
+}),
+  "indicators": zod.object({
+  "empty": zod.boolean().describe('Sem pedidos nos últimos 30 dias'),
+  "activeProducts": zod.int(),
+  "orders": zod.int(),
+  "gmv": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "cancellations": zod.object({
+  "count": zod.int(),
+  "pct": zod.number().nullable().describe('Nulo com menos de 20 pedidos (DEC-108: poucos dados)')
+})
+}),
+  "recentOrders": zod.array(zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "total": zod.object({
+  "amount": zod.int().describe('Centavos'),
+  "currency": zod.enum(['BRL'])
+}).describe('Valor monetário em centavos.'),
+  "createdAt": zod.iso.datetime({"offset":true})
+})).max(getAdminStoreOverviewResponseRecentOrdersMax)
+})
+
+
+/**
+ * Permissão `stores:read` (os 4 perfis veem). Trilha por loja sobre o `audit_log` append-only: alterações do admin, do lojista e do sistema, cada linha com antes, depois e motivo. Filtros: `type`, `actorAdminId`, `from`/`to` (data, America/Sao_Paulo, máximo 400 dias). `restorable` é verdadeiro só para preço e estoque com valor anterior conhecido. Visita de "Ver como" aparece com `type: access` (abertura e encerramento; as telas navegadas não são gravadas). Mais recentes primeiro; cursor. Sem dado pessoal de cliente.
+ * @summary Histórico de alterações da loja (WB-350 C4, WB-354)
+ */
+export const ListAdminStoreHistoryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listAdminStoreHistoryQueryCursorMax = 200;
+
+export const listAdminStoreHistoryQueryLimitDefault = 20;
+export const listAdminStoreHistoryQueryLimitMax = 50;
+
+
+
+export const ListAdminStoreHistoryQueryParams = zod.object({
+  "type": zod.enum(['price', 'stock', 'catalog', 'hours', 'holidays', 'delivery', 'pickup', 'exchange_policy', 'pause', 'status', 'profile', 'commission', 'access', 'bulk', 'restore', 'other']).optional(),
+  "actorAdminId": zod.uuid().optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional(),
+  "cursor": zod.string().max(listAdminStoreHistoryQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listAdminStoreHistoryQueryLimitMax).default(listAdminStoreHistoryQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listAdminStoreHistoryResponseDataItemReasonOneNoteMax = 200;
+
+
+
+export const ListAdminStoreHistoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.int().describe('Id da linha do `audit_log` (append-only)'),
+  "at": zod.iso.datetime({"offset":true}),
+  "type": zod.enum(['price', 'stock', 'catalog', 'hours', 'holidays', 'delivery', 'pickup', 'exchange_policy', 'pause', 'status', 'profile', 'commission', 'access', 'bulk', 'restore', 'other']).describe('`access` = abertura e encerramento de "Ver como o lojista". Filtros da tela: Tudo, Preço, Estoque, Horário, Acesso'),
+  "target": zod.object({
+  "type": zod.enum(['store', 'product', 'variant', 'config']),
+  "id": zod.uuid().nullable(),
+  "label": zod.string().nullable().describe('Nome do produto ou da seção; sem dado de cliente')
+}),
+  "actor": zod.object({
+  "kind": zod.enum(['admin', 'merchant', 'system']),
+  "name": zod.string().nullable().describe('Nome do admin ou do membro (o lojista só vê "Webag" em `listStoreAdminChanges`)')
+}),
+  "summary": zod.string(),
+  "before": zod.record(zod.string(), zod.unknown()).nullable(),
+  "after": zod.record(zod.string(), zod.unknown()).nullable(),
+  "reason": zod.union([zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(listAdminStoreHistoryResponseDataItemReasonOneNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),zod.null()]),
+  "restorable": zod.boolean().describe('Preço e estoque com valor anterior conhecido e ainda não restaurados'),
+  "restoredByEntryId": zod.int().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão PRÓPRIA `store-history:export` (super admin, operação e financeiro; suporte 403). Mesmos filtros de `listAdminStoreHistory`. CSV UTF-8 com cabeçalho, no máximo 10.000 linhas (mais que isso: 422 `EXPORT_TOO_LARGE`, reduza o período), SEM dado pessoal, com proteção de fórmula (helper do SEC-156: célula iniciada por `=`, `+`, `-` ou `@` sai escapada). Cada exportação grava uma linha de auditoria (quem, filtros, linhas). Limite de 10 por hora por admin (429 com `Retry-After`) [HIPÓTESE]. Resposta `Cache-Control: private, no-store`.
+ * @summary Exportar o histórico da loja em CSV (WB-354 C3, C-ADM-09)
+ */
+export const ExportAdminStoreHistoryParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const ExportAdminStoreHistoryQueryParams = zod.object({
+  "type": zod.enum(['price', 'stock', 'catalog', 'hours', 'holidays', 'delivery', 'pickup', 'exchange_policy', 'pause', 'status', 'profile', 'commission', 'access', 'bulk', 'restore', 'other']).optional(),
+  "actorAdminId": zod.uuid().optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+})
+
+export const ExportAdminStoreHistoryResponse = zod.unknown()
+
+
+/**
+ * Permissão `stores:write` (super admin e operação). **Nada é apagado:** grava um NOVO registro (`type` do original, `restores: <entryId>`) e a contagem do `audit_log` só cresce (C5); o lojista é avisado (C1). Se o valor atual já não é o que a linha original deixou (outra pessoa mudou depois), responde 409 `RESTORE_VALUE_CHANGED` com o valor atual e só restaura com `confirmOverride: true` (C2). Restaurar preço obedece às regras do admin: motivo de preço, `confirmLargeChange` acima de `admin_preco_variacao_max_pct` e **redução acima de 50% só super admin** (403 `SUPER_ADMIN_REQUIRED`). Linha já restaurada: 409 `ENTRY_ALREADY_RESTORED`; linha não restaurável: 422 `ENTRY_NOT_RESTORABLE`. Também é o "Desfazer" de 8 s do toast (a resposta de toda edição traz `auditEntryId`). Sem `Idempotency-Key`: restaurar a mesma linha duas vezes é 409.
+ * @summary Restaurar preço ou estoque anterior (WB-354 C1, C2, C5, C-ADM-08)
+ */
+
+
+
+export const RestoreAdminStoreHistoryEntryParams = zod.object({
+  "storeId": zod.uuid(),
+  "entryId": zod.int().min(1)
+})
+
+export const restoreAdminStoreHistoryEntryBodyReasonNoteMax = 200;
+
+export const restoreAdminStoreHistoryEntryBodyConfirmOverrideDefault = false;
+export const restoreAdminStoreHistoryEntryBodyConfirmLargeChangeDefault = false;
+
+export const RestoreAdminStoreHistoryEntryBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(restoreAdminStoreHistoryEntryBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "confirmOverride": zod.boolean().default(restoreAdminStoreHistoryEntryBodyConfirmOverrideDefault).describe('Restaurar mesmo com o valor atual diferente do que a linha deixou (C2)'),
+  "confirmLargeChange": zod.boolean().default(restoreAdminStoreHistoryEntryBodyConfirmLargeChangeDefault)
+})
+
+export const restoreAdminStoreHistoryEntryResponseProductNameMax = 80;
+
+export const restoreAdminStoreHistoryEntryResponseProductDescriptionMax = 1000;
+
+export const restoreAdminStoreHistoryEntryResponseProductSizeChartMax = 2000;
+
+export const restoreAdminStoreHistoryEntryResponseProductBasePriceCentsMax = 9999999;
+
+export const restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMin = 0;
+export const restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const RestoreAdminStoreHistoryEntryResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(restoreAdminStoreHistoryEntryResponseProductNameMax),
+  "description": zod.string().max(restoreAdminStoreHistoryEntryResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(restoreAdminStoreHistoryEntryResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(restoreAdminStoreHistoryEntryResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMin).max(restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substitui `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), que aceita razão social e endereço e fica `deprecated` (ver ADR-018). Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * @summary Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
+ */
+export const EditAdminStoreProfileParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const editAdminStoreProfileBodyReasonNoteMax = 200;
+
+
+export const editAdminStoreProfileBodyChangesNameMin = 2;
+export const editAdminStoreProfileBodyChangesNameMax = 80;
+
+export const editAdminStoreProfileBodyChangesDescriptionMax = 300;
+
+
+
+export const EditAdminStoreProfileBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(editAdminStoreProfileBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "changes": zod.object({
+  "name": zod.string().min(editAdminStoreProfileBodyChangesNameMin).max(editAdminStoreProfileBodyChangesNameMax).optional(),
+  "description": zod.string().max(editAdminStoreProfileBodyChangesDescriptionMax).optional(),
+  "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional()
+}).describe('Lista FECHADA de campos editáveis pelo admin (C-ADM-03). Qualquer outro campo é recusado')
+})
+
+
+
+
+export const EditAdminStoreProfileResponse = zod.object({
+  "storeVersion": zod.int().min(1).describe('Nova versão da loja'),
+  "auditEntryId": zod.int(),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate'])
+})
+
+
+/**
+ * Permissão `stores:write` (super admin e operação). Substitui `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), que NÃO recebe motivo nem versão e fica `deprecated` (ver ADR-018). `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`.
+ * @summary Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
+ */
+export const EditAdminStoreConfigParams = zod.object({
+  "storeId": zod.uuid(),
+  "section": zod.enum(['hours', 'holidays', 'delivery', 'pickup', 'exchange-policy'])
+})
+
+export const editAdminStoreConfigBodyReasonNoteMax = 200;
+
+
+export const editAdminStoreConfigBodyDataOneDaysItemWeekdayMin = 0;
+export const editAdminStoreConfigBodyDataOneDaysItemWeekdayMax = 6;
+
+export const editAdminStoreConfigBodyDataOneDaysItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const editAdminStoreConfigBodyDataOneDaysItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const editAdminStoreConfigBodyDataOneDaysItemIntervalsMax = 3;
+
+export const editAdminStoreConfigBodyDataOneDaysMax = 7;
+
+export const editAdminStoreConfigBodyDataTwoHolidaysItemLabelMax = 60;
+
+export const editAdminStoreConfigBodyDataTwoHolidaysMax = 366;
+
+export const editAdminStoreConfigBodyDataThreePrepMinutesMin = 5;
+export const editAdminStoreConfigBodyDataThreePrepMinutesMax = 120;
+
+
+export const editAdminStoreConfigBodyDataThreeEtaMaxMinutesMax = 1440;
+
+export const editAdminStoreConfigBodyDataFourAddressMax = 200;
+
+export const editAdminStoreConfigBodyDataFourInstructionsMax = 200;
+
+
+export const editAdminStoreConfigBodyDataFourPrepMaxMinutesMax = 1440;
+
+export const editAdminStoreConfigBodyDataFiveVoluntaryDaysMin = 0;
+export const editAdminStoreConfigBodyDataFiveVoluntaryDaysMax = 90;
+
+export const editAdminStoreConfigBodyDataFiveCollectionFeeCentsMin = 0;
+
+
+
+export const EditAdminStoreConfigBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(editAdminStoreConfigBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "data": zod.union([zod.object({
+  "days": zod.array(zod.object({
+  "weekday": zod.int().min(editAdminStoreConfigBodyDataOneDaysItemWeekdayMin).max(editAdminStoreConfigBodyDataOneDaysItemWeekdayMax).describe('0 = domingo'),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(editAdminStoreConfigBodyDataOneDaysItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(editAdminStoreConfigBodyDataOneDaysItemIntervalsItemEndRegExp)
+})).max(editAdminStoreConfigBodyDataOneDaysItemIntervalsMax)
+})).max(editAdminStoreConfigBodyDataOneDaysMax)
+}),zod.object({
+  "holidays": zod.array(zod.object({
+  "date": zod.iso.date(),
+  "label": zod.string().max(editAdminStoreConfigBodyDataTwoHolidaysItemLabelMax).optional()
+})).max(editAdminStoreConfigBodyDataTwoHolidaysMax)
+}),zod.object({
+  "acceptsDelivery": zod.boolean(),
+  "prepMinutes": zod.int().min(editAdminStoreConfigBodyDataThreePrepMinutesMin).max(editAdminStoreConfigBodyDataThreePrepMinutesMax).nullish().describe('DEC-053: preparo da loja no ETA (min); null volta ao padrão do admin (`entrega_preparo_padrao_min`); ausente não muda. 422 se preparo + despacho + folga da faixa passa do teto `entrega_max_min` (DEC-054).'),
+  "etaMinMinutes": zod.int().min(1).optional().describe('Ignorado desde a DEC-053 (o ETA é calculado).'),
+  "etaMaxMinutes": zod.int().max(editAdminStoreConfigBodyDataThreeEtaMaxMinutesMax).optional(),
+  "radiusKm": zod.number().optional(),
+  "feeMode": zod.enum(['fixed', 'by_distance']).optional(),
+  "feeFixedCents": zod.int().optional(),
+  "tiers": zod.array(zod.looseObject({
+
+})).optional(),
+  "minOrderCents": zod.int().optional(),
+  "freeAboveCents": zod.int().optional()
+}).describe('DEC-036: o lojista escolhe só entrega pela Webag (`acceptsDelivery`) e o tempo de preparo. Taxa de entrega, faixas, raio, pedido mínimo e entrega grátis são do ADMIN (`/v1/admin/delivery-fees` e parâmetros globais). Os campos legados (`radiusKm`, `feeMode`, `feeFixedCents`, `tiers`, `minOrderCents`, `freeAboveCents`) são aceitos e IGNORADOS, para apps já publicados não quebrarem; saem numa versão futura.'),zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean().optional(),
+  "address": zod.string().max(editAdminStoreConfigBodyDataFourAddressMax).optional(),
+  "instructions": zod.string().max(editAdminStoreConfigBodyDataFourInstructionsMax).optional(),
+  "prepMinMinutes": zod.int().min(1),
+  "prepMaxMinutes": zod.int().max(editAdminStoreConfigBodyDataFourPrepMaxMinutesMax)
+}),zod.object({
+  "voluntaryDays": zod.int().min(editAdminStoreConfigBodyDataFiveVoluntaryDaysMin).max(editAdminStoreConfigBodyDataFiveVoluntaryDaysMax).describe('0 = não aceita troca voluntária (tamanho/cor); senão entre `troca_voluntaria_dias_min` (3) e `troca_voluntaria_dias_max` (30), definidos pelo admin (422 `INVALID_EXCHANGE_POLICY` fora disso). Arrependimento (7 dias) e defeito (30/90 dias) são piso legal fixo e não são campos.'),
+  "collectionFeeCents": zod.int().min(editAdminStoreConfigBodyDataFiveCollectionFeeCentsMin).optional().describe('Ignorado (DEC-037): a taxa de coleta da troca é da tabela do admin por região (`exchangeFeeCents` das faixas), cobrada só depois da aprovação.'),
+  "confirmDefault": zod.boolean().optional()
+})])
+})
+
+
+
+
+export const EditAdminStoreConfigResponse = zod.object({
+  "storeVersion": zod.int().min(1).describe('Nova versão da loja'),
+  "auditEntryId": zod.int(),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate'])
+})
+
+
+/**
+ * Permissão `stores:write` (super admin e operação; suporte NÃO pausa, RN-13). A loja fecha para novos pedidos na hora (pedidos em aberto seguem) e reabre sozinha ao fim do prazo (`kind`, como `pauseStore`). Motivo do catálogo obrigatório; `expectedVersion` da loja. Aviso ao lojista na hora (painel e e-mail) e `audit_log` com autor, antes, depois e motivo. A vitrine em cache é invalidada em até 5 s (DEC-113).
+ * @summary Pausar a loja pelo admin (WB-351 C1)
+ */
+export const PauseStoreAsAdminParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const pauseStoreAsAdminBodyReasonNoteMax = 200;
+
+
+
+
+export const PauseStoreAsAdminBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(pauseStoreAsAdminBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "kind": zod.enum(['30m', '1h', '2h', 'end_of_day', 'until_resume'])
+})
+
+
+
+
+export const PauseStoreAsAdminResponse = zod.object({
+  "storeVersion": zod.int().min(1).describe('Nova versão da loja'),
+  "auditEntryId": zod.int(),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate'])
+})
+
+
+/**
+ * Permissão `stores:write`. Encerra a pausa (do lojista ou do admin) com motivo obrigatório e `expectedVersion`; aviso ao lojista na hora; auditado. Sem pausa ativa: 409 `STORE_NOT_PAUSED`. Mudança de situação da loja (suspender, reativar) continua nas rotas `suspendStore` e `reactivateStore` (`stores:decide`, transições da RN-16, motivo de 5 a 500 caracteres; WB-351 C5).
+ * @summary Reabrir a loja pausada pelo admin ("Reabrir agora")
+ */
+export const ResumeStoreAsAdminParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const resumeStoreAsAdminBodyReasonNoteMax = 200;
+
+
+
+
+export const ResumeStoreAsAdminBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(resumeStoreAsAdminBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1)
+})
+
+
+
+
+export const ResumeStoreAsAdminResponse = zod.object({
+  "storeVersion": zod.int().min(1).describe('Nova versão da loja'),
+  "auditEntryId": zod.int(),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate'])
+})
+
+
+/**
+ * Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE].
+ * @summary Abrir "Ver como o lojista" (somente leitura) (WB-352)
+ */
+export const OpenViewAsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const openViewAsBodyReasonNoteMax = 200;
+
+
+
+export const OpenViewAsBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['merchant_support', 'investigate_issue', 'check_registration', 'other']).describe('Suporte ao lojista por telefone, investigar um problema, conferir o cadastro, outro (com `note`)'),
+  "note": zod.string().max(openViewAsBodyReasonNoteMax).optional()
+})
+})
+
+export const OpenViewAsResponse = zod.object({
+  "id": zod.uuid(),
+  "token": zod.string().describe('Credencial opaca de visualização, mostrada UMA vez; vai em `Authorization: Bearer` nas rotas `x-view-as`'),
+  "storeId": zod.uuid(),
+  "storeName": zod.string().nullable(),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('No máximo 30 min, ou o fim da sessão do admin, o que vier antes'),
+  "reason": zod.object({
+  "code": zod.enum(['merchant_support', 'investigate_issue', 'check_registration', 'other']).describe('Suporte ao lojista por telefone, investigar um problema, conferir o cadastro, outro (com `note`)'),
+  "note": zod.string().optional()
+})
+})
+
+
+/**
+ * Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close`. Idempotente: encerrar de novo devolve 204.
+ * @summary Encerrar "Ver como o lojista" ("Sair da visualização")
+ */
+export const EndViewAsParams = zod.object({
+  "viewAsId": zod.uuid()
+})
+
+export const EndViewAsResponse = zod.void()
+
+
+/**
+ * Permissão `stores:read` (os 4 perfis leem; só super admin e operação escrevem). Mesma linha de `listProductTable` (preço, "Você recebe", estoque disponível e reservado, `version`) com `youReceiveCents` visível. Filtros `q`, `status` (`active`, `paused`, `draft`), `sectionId`; cursor; `matchingCount` exato.
+ * @summary Catálogo da loja na ficha (aba Catálogo)
+ */
+export const ListAdminStoreProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listAdminStoreProductsQueryQMax = 80;
+
+export const listAdminStoreProductsQueryCursorMax = 200;
+
+export const listAdminStoreProductsQueryLimitDefault = 20;
+export const listAdminStoreProductsQueryLimitMax = 50;
+
+
+
+export const ListAdminStoreProductsQueryParams = zod.object({
+  "q": zod.string().max(listAdminStoreProductsQueryQMax).optional(),
+  "status": zod.enum(['active', 'paused', 'draft']).optional(),
+  "sectionId": zod.uuid().optional(),
+  "cursor": zod.string().max(listAdminStoreProductsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listAdminStoreProductsQueryLimitMax).default(listAdminStoreProductsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+
+export const listAdminStoreProductsResponseMatchingCountMin = 0;
+
+
+
+export const ListAdminStoreProductsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'active', 'paused']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']),
+  "cover": zod.record(zod.string(), zod.string()).nullable(),
+  "basePriceCents": zod.int().nullable(),
+  "youReceiveCents": zod.int().nullable().describe('"Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo)'),
+  "available": zod.int().describe('Soma de (estoque - reservado) das variações ativas'),
+  "reserved": zod.int().describe('Soma reservada em pedidos ("2 reservadas em pedidos")'),
+  "variantCount": zod.int(),
+  "singleVariantId": zod.uuid().nullable().describe('Preenchido quando há UMA variação: o estoque se edita na linha (`adjustVariantStock`)'),
+  "version": zod.int().min(1).describe('Para `If-Match` na edição em linha'),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable(),
+  "matchingCount": zod.int().min(listAdminStoreProductsResponseMatchingCountMin).describe('Contagem exata do filtro (botão "Selecionar os 12 da busca")')
+})
+
+
+/**
+ * Permissão `store-catalog:write` (super admin e operação). Cria um rascunho na loja com o autor (admin) gravado; o produto só nasce `active` com foto, nome e preço (publicação por `setAdminProductStatus`) e a moderação (WB-107) vale igual. Motivo do catálogo obrigatório; `Idempotency-Key` obrigatória; 422 `DRAFT_LIMIT_REACHED` (os 50 rascunhos são da LOJA, contados juntos). Fotos: o admin envia por `/v1/uploads` com `storeId` da loja (autorização de admin com `store-catalog:write`; o upload fica auditado). Aviso ao lojista agregado (C11).
+ * @summary Criar produto pela loja (o admin usa o mesmo cadastro rápido, WB-353 C8)
+ */
+export const CreateAdminProductDraftParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createAdminProductDraftHeaderIdempotencyKeyMin = 8;
+export const createAdminProductDraftHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateAdminProductDraftHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createAdminProductDraftHeaderIdempotencyKeyMin).max(createAdminProductDraftHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const createAdminProductDraftBodyReasonNoteMax = 200;
+
+export const createAdminProductDraftBodyDataNameMax = 80;
+
+
+
+export const CreateAdminProductDraftBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(createAdminProductDraftBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "data": zod.object({
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "name": zod.string().max(createAdminProductDraftBodyDataNameMax).optional().describe('Opcional; "" ou ausente = ainda sem nome'),
+  "categoryId": zod.uuid().nullish(),
+  "basePriceCents": zod.int().nullish().describe('Centavos, de 1 a 9999999 (422 fora da faixa)')
+})
+})
+
+export const createAdminProductDraftResponseProductNameMax = 80;
+
+export const createAdminProductDraftResponseProductDescriptionMax = 1000;
+
+export const createAdminProductDraftResponseProductSizeChartMax = 2000;
+
+export const createAdminProductDraftResponseProductBasePriceCentsMax = 9999999;
+
+export const createAdminProductDraftResponseProductVariantsItemStockMin = 0;
+export const createAdminProductDraftResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const CreateAdminProductDraftResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(createAdminProductDraftResponseProductNameMax),
+  "description": zod.string().max(createAdminProductDraftResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(createAdminProductDraftResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(createAdminProductDraftResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(createAdminProductDraftResponseProductVariantsItemStockMin).max(createAdminProductDraftResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `stores:read`. Devolve o `Product` com `version` (o valor de `expectedVersion` das edições). Produto de outra loja: 404.
+ * @summary Detalhe do produto da loja (admin)
+ */
+export const GetAdminStoreProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const getAdminStoreProductResponseNameMax = 80;
+
+export const getAdminStoreProductResponseDescriptionMax = 1000;
+
+export const getAdminStoreProductResponseSizeChartMax = 2000;
+
+export const getAdminStoreProductResponseBasePriceCentsMax = 9999999;
+
+export const getAdminStoreProductResponseVariantsItemStockMin = 0;
+export const getAdminStoreProductResponseVariantsItemStockMax = 99999;
+
+
+
+
+export const GetAdminStoreProductResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(getAdminStoreProductResponseNameMax),
+  "description": zod.string().max(getAdminStoreProductResponseDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(getAdminStoreProductResponseSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(getAdminStoreProductResponseBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(getAdminStoreProductResponseVariantsItemStockMin).max(getAdminStoreProductResponseVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.')
+
+
+/**
+ * Permissão `store-catalog:write` (super admin e operação). `changes` é o corpo de `updateProduct`. **Preço (`basePriceCents`, promoção):** só aceita os motivos `requested_by_merchant`, `obvious_price_error`, `legal_or_inspection_order` e `agreed_campaign` (outro: 422 `PRICE_REASON_NOT_ALLOWED`, C2) e, a cada edição, o motivo da sessão não basta: o corpo traz o motivo escolhido (DEC-108). Variação acima de `admin_preco_variacao_max_pct` (30) sem `confirmLargeChange: true`: 422 `PRICE_CHANGE_NEEDS_CONFIRMATION` com `fromCents`, `toCents`, `changePct` e `youReceiveCents` do valor novo (C3). **Redução acima de 50% só super admin:** operação recebe 403 `SUPER_ADMIN_REQUIRED` (C9, D-04, vale também para a soma de edições em 24 h [HIPÓTESE: Security confirma]). **Concorrência (C5):** `expectedVersion` do produto; diferente = 409 `PRODUCT_VERSION_CONFLICT` ("O lojista alterou este produto agora"), nada é sobrescrito. 422 `DESCRIPTION_REQUIRED`, `PRICE_OUT_OF_RANGE`, `PROMOTION_INVALID`. O lojista é avisado (painel; e-mail-resumo a cada 10 min, até 20 itens e "+N") e o `audit_log` guarda autor, antes, depois e motivo. Compra desse produto por conta ligada a admin ou a membro da loja em até 24 h gera alerta à operação (C10, C-ADM-04). Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * @summary Editar produto e PREÇO pela loja (WB-353 C1 a C3, C5, C9)
+ */
+export const EditAdminStoreProductParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const editAdminStoreProductBodyReasonNoteMax = 200;
+
+
+export const editAdminStoreProductBodyConfirmLargeChangeDefault = false;
+export const editAdminStoreProductBodyChangesNameMin = 2;
+export const editAdminStoreProductBodyChangesNameMax = 80;
+
+export const editAdminStoreProductBodyChangesDescriptionMax = 1000;
+
+export const editAdminStoreProductBodyChangesSizeChartMax = 2000;
+
+
+
+export const EditAdminStoreProductBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(editAdminStoreProductBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "confirmLargeChange": zod.boolean().default(editAdminStoreProductBodyConfirmLargeChangeDefault).describe('Confirma variação de preço acima de `admin_preco_variacao_max_pct` depois de ver o novo "Você recebe"'),
+  "changes": zod.object({
+  "name": zod.string().min(editAdminStoreProductBodyChangesNameMin).max(editAdminStoreProductBodyChangesNameMax).optional(),
+  "description": zod.string().max(editAdminStoreProductBodyChangesDescriptionMax).nullish(),
+  "categoryId": zod.uuid().nullish(),
+  "sectionId": zod.uuid().nullish(),
+  "basePriceCents": zod.int().nullish(),
+  "promoPriceCents": zod.int().nullish(),
+  "promoStartsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "promoEndsAt": zod.iso.datetime({"offset":true}).nullish(),
+  "sizeChart": zod.string().max(editAdminStoreProductBodyChangesSizeChartMax).nullish(),
+  "noVoluntaryExchange": zod.boolean().optional()
+})
+})
+
+export const editAdminStoreProductResponseProductNameMax = 80;
+
+export const editAdminStoreProductResponseProductDescriptionMax = 1000;
+
+export const editAdminStoreProductResponseProductSizeChartMax = 2000;
+
+export const editAdminStoreProductResponseProductBasePriceCentsMax = 9999999;
+
+export const editAdminStoreProductResponseProductVariantsItemStockMin = 0;
+export const editAdminStoreProductResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const EditAdminStoreProductResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(editAdminStoreProductResponseProductNameMax),
+  "description": zod.string().max(editAdminStoreProductResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(editAdminStoreProductResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(editAdminStoreProductResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(editAdminStoreProductResponseProductVariantsItemStockMin).max(editAdminStoreProductResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `store-catalog:write`. `data` é o corpo de `setProductVariants` (até `variacoes_max`, estoque 0 a 99.999, SKU único na loja). **Estoque nunca abaixo do reservado** (409 `STOCK_BELOW_RESERVED`, RN-06, C4). Preço por variação segue as regras de preço de `editAdminStoreProduct` (motivos permitidos, `confirmLargeChange`, redução acima de 50% só super admin). `expectedVersion` do produto (409 `PRODUCT_VERSION_CONFLICT`). Uma linha de auditoria por variação alterada.
+ * @summary Definir variações e estoque pela loja
+ */
+export const SetAdminStoreProductVariantsParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const setAdminStoreProductVariantsBodyReasonNoteMax = 200;
+
+
+export const setAdminStoreProductVariantsBodyConfirmLargeChangeDefault = false;
+export const setAdminStoreProductVariantsBodyDataAttributesItemMax = 30;
+
+export const setAdminStoreProductVariantsBodyDataAttributesMax = 5;
+
+export const setAdminStoreProductVariantsBodyDataVariantsItemAttributesMaxOne = 40;
+
+export const setAdminStoreProductVariantsBodyDataVariantsItemSkuMax = 40;
+
+export const setAdminStoreProductVariantsBodyDataVariantsMax = 300;
+
+
+
+export const SetAdminStoreProductVariantsBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(setAdminStoreProductVariantsBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "confirmLargeChange": zod.boolean().default(setAdminStoreProductVariantsBodyConfirmLargeChangeDefault),
+  "data": zod.object({
+  "attributes": zod.array(zod.string().max(setAdminStoreProductVariantsBodyDataAttributesItemMax)).max(setAdminStoreProductVariantsBodyDataAttributesMax).describe('Nomes dos atributos (até 3 válidos). Vazio = sem variação'),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid().optional(),
+  "attributes": zod.record(zod.string(), zod.string().max(setAdminStoreProductVariantsBodyDataVariantsItemAttributesMaxOne)),
+  "stock": zod.int().optional(),
+  "priceCents": zod.int().nullish(),
+  "sku": zod.string().max(setAdminStoreProductVariantsBodyDataVariantsItemSkuMax).nullish()
+})).min(1).max(setAdminStoreProductVariantsBodyDataVariantsMax)
+})
+})
+
+export const setAdminStoreProductVariantsResponseProductNameMax = 80;
+
+export const setAdminStoreProductVariantsResponseProductDescriptionMax = 1000;
+
+export const setAdminStoreProductVariantsResponseProductSizeChartMax = 2000;
+
+export const setAdminStoreProductVariantsResponseProductBasePriceCentsMax = 9999999;
+
+export const setAdminStoreProductVariantsResponseProductVariantsItemStockMin = 0;
+export const setAdminStoreProductVariantsResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const SetAdminStoreProductVariantsResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(setAdminStoreProductVariantsResponseProductNameMax),
+  "description": zod.string().max(setAdminStoreProductVariantsResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(setAdminStoreProductVariantsResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(setAdminStoreProductVariantsResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(setAdminStoreProductVariantsResponseProductVariantsItemStockMin).max(setAdminStoreProductVariantsResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `store-catalog:write`. `data` é `{ delta }` ou `{ set }` (como `adjustVariantStock`), sob lock da variação; estoque abaixo do reservado é 409 `STOCK_BELOW_RESERVED` ("Estoque menor que o reservado (3). Use 3 ou mais.") e fora de 0..99.999 é 422. `expectedVersion` do produto. Auditado com antes/depois; o aviso ao lojista entra no resumo de 10 min.
+ * @summary Ajustar o estoque de uma variação pela loja (WB-353 C4)
+ */
+export const AdjustAdminStoreVariantStockParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid(),
+  "variantId": zod.uuid()
+})
+
+export const adjustAdminStoreVariantStockBodyReasonNoteMax = 200;
+
+
+
+
+export const AdjustAdminStoreVariantStockBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(adjustAdminStoreVariantStockBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "data": zod.union([zod.object({
+  "delta": zod.int()
+}),zod.object({
+  "set": zod.int()
+})])
+})
+
+export const adjustAdminStoreVariantStockResponseProductNameMax = 80;
+
+export const adjustAdminStoreVariantStockResponseProductDescriptionMax = 1000;
+
+export const adjustAdminStoreVariantStockResponseProductSizeChartMax = 2000;
+
+export const adjustAdminStoreVariantStockResponseProductBasePriceCentsMax = 9999999;
+
+export const adjustAdminStoreVariantStockResponseProductVariantsItemStockMin = 0;
+export const adjustAdminStoreVariantStockResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const AdjustAdminStoreVariantStockResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(adjustAdminStoreVariantStockResponseProductNameMax),
+  "description": zod.string().max(adjustAdminStoreVariantStockResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(adjustAdminStoreVariantStockResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(adjustAdminStoreVariantStockResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(adjustAdminStoreVariantStockResponseProductVariantsItemStockMin).max(adjustAdminStoreVariantStockResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `store-catalog:write`. `data` é o corpo de `setProductImages` (até 8; cada foto é um upload `product_image` concluído DA MESMA LOJA). `expectedVersion` do produto. Auditado.
+ * @summary Definir fotos do produto pela loja
+ */
+export const SetAdminStoreProductImagesParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const setAdminStoreProductImagesBodyReasonNoteMax = 200;
+
+
+export const setAdminStoreProductImagesBodyDataImageIdsMax = 20;
+
+
+
+export const SetAdminStoreProductImagesBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(setAdminStoreProductImagesBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "data": zod.object({
+  "imageIds": zod.array(zod.uuid()).max(setAdminStoreProductImagesBodyDataImageIdsMax)
+})
+})
+
+export const setAdminStoreProductImagesResponseProductNameMax = 80;
+
+export const setAdminStoreProductImagesResponseProductDescriptionMax = 1000;
+
+export const setAdminStoreProductImagesResponseProductSizeChartMax = 2000;
+
+export const setAdminStoreProductImagesResponseProductBasePriceCentsMax = 9999999;
+
+export const setAdminStoreProductImagesResponseProductVariantsItemStockMin = 0;
+export const setAdminStoreProductImagesResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const SetAdminStoreProductImagesResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(setAdminStoreProductImagesResponseProductNameMax),
+  "description": zod.string().max(setAdminStoreProductImagesResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(setAdminStoreProductImagesResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(setAdminStoreProductImagesResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(setAdminStoreProductImagesResponseProductVariantsItemStockMin).max(setAdminStoreProductImagesResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `store-catalog:write`. `status: active` publica (o produto só nasce ativo com foto, nome e preço: 422 `PRODUCT_INCOMPLETE` lista o que falta; palavra suspeita não bloqueia e vai a `moderationStatus: review`; categoria com `descriptionRequired` sem descrição: 422 `DESCRIPTION_REQUIRED`); `paused` tira da vitrine. Produto pausado ou removido pela moderação: 403 `PRODUCT_MODERATED` (o admin de loja não reabre o que a moderação pausou; isso é `products:moderate`). `expectedVersion` do produto. Auditado; a vitrine em cache é invalidada em até 5 s ao pausar (DEC-113).
+ * @summary Publicar, pausar ou reativar o produto pela loja
+ */
+export const SetAdminStoreProductStatusParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const setAdminStoreProductStatusBodyReasonNoteMax = 200;
+
+
+
+
+export const SetAdminStoreProductStatusBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(setAdminStoreProductStatusBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "expectedVersion": zod.int().min(1),
+  "status": zod.enum(['active', 'paused'])
+})
+
+export const setAdminStoreProductStatusResponseProductNameMax = 80;
+
+export const setAdminStoreProductStatusResponseProductDescriptionMax = 1000;
+
+export const setAdminStoreProductStatusResponseProductSizeChartMax = 2000;
+
+export const setAdminStoreProductStatusResponseProductBasePriceCentsMax = 9999999;
+
+export const setAdminStoreProductStatusResponseProductVariantsItemStockMin = 0;
+export const setAdminStoreProductStatusResponseProductVariantsItemStockMax = 99999;
+
+
+
+
+export const SetAdminStoreProductStatusResponse = zod.object({
+  "product": zod.object({
+  "id": zod.uuid(),
+  "name": zod.string().max(setAdminStoreProductStatusResponseProductNameMax),
+  "description": zod.string().max(setAdminStoreProductStatusResponseProductDescriptionMax).nullable(),
+  "sizeChart": zod.string().max(setAdminStoreProductStatusResponseProductSizeChartMax).nullable().describe('Tabela de medidas (WB-246): reduz troca por tamanho.'),
+  "noVoluntaryExchange": zod.boolean().describe('Produto sem troca voluntária (sob medida, personalizado, íntimo, higiene): tamanho/cor ficam inertes; arrependimento e defeito seguem (DEC-037).'),
+  "categoryId": zod.uuid().nullable(),
+  "sectionId": zod.uuid().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'archived']),
+  "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
+  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "basePriceCents": zod.int().min(1).max(setAdminStoreProductStatusResponseProductBasePriceCentsMax).nullable(),
+  "promotion": zod.object({
+  "priceCents": zod.int().nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "active": zod.boolean().describe('Calculado na leitura; o fim da promoção não depende de job')
+}),
+  "variantAttributes": zod.array(zod.string()),
+  "variants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "attributes": zod.record(zod.string(), zod.string()),
+  "sku": zod.string().nullable(),
+  "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "stock": zod.int().min(setAdminStoreProductStatusResponseProductVariantsItemStockMin).max(setAdminStoreProductStatusResponseProductVariantsItemStockMax),
+  "reserved": zod.int(),
+  "available": zod.int().describe('estoque menos reservado'),
+  "soldOut": zod.boolean(),
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.uuid().describe('Id do upload (`/uploads`)'),
+  "position": zod.int(),
+  "urls": zod.record(zod.string(), zod.string()).nullable().describe('Largura em px para URL pública WebP')
+})),
+  "soldOut": zod.boolean().describe('Todas as variações sem disponível'),
+  "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true}),
+  "version": zod.int().min(1).optional().describe('v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo'),
+  "via": zod.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']).optional().describe('Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo'),
+  "draftExpiresAt": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)'),
+  "missing": zod.array(zod.enum(['name', 'price', 'photo', 'category', 'stock', 'description']).describe('O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`')).optional().describe('v1.1 R1: o que falta para publicar (vazio fora de rascunho)')
+}).describe('Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.'),
+  "auditEntryIds": zod.array(zod.int()).describe('Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`)'),
+  "merchantNotified": zod.enum(['now', 'digest', 'aggregate']).describe('`now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)')
+})
+
+
+/**
+ * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia).
+ * @summary Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
+ */
+export const BulkAdminStoreProductsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const bulkAdminStoreProductsBodyReasonNoteMax = 200;
+
+export const bulkAdminStoreProductsBodyProductIdsMax = 200;
+
+export const bulkAdminStoreProductsBodyDryRunDefault = false;
+export const bulkAdminStoreProductsBodyActionThreeValueMin = 0;
+export const bulkAdminStoreProductsBodyActionThreeValueMax = 99999;
+
+export const bulkAdminStoreProductsBodyActionFourValueMin = -99999;
+export const bulkAdminStoreProductsBodyActionFourValueMax = 99999;
+
+
+
+export const BulkAdminStoreProductsBody = zod.object({
+  "reason": zod.object({
+  "code": zod.enum(['requested_by_merchant', 'error_fix', 'moderation', 'operational_decision', 'other', 'obvious_price_error', 'legal_or_inspection_order', 'agreed_campaign']).describe('Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.\n**Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").\n'),
+  "note": zod.string().max(bulkAdminStoreProductsBodyReasonNoteMax).optional().describe('Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro')
+}),
+  "productIds": zod.array(zod.uuid()).min(1).max(bulkAdminStoreProductsBodyProductIdsMax),
+  "dryRun": zod.boolean().default(bulkAdminStoreProductsBodyDryRunDefault),
+  "action": zod.union([zod.object({
+  "type": zod.literal("pause")
+}),zod.object({
+  "type": zod.literal("resume")
+}),zod.object({
+  "type": zod.literal("stock_set"),
+  "value": zod.int().min(bulkAdminStoreProductsBodyActionThreeValueMin).max(bulkAdminStoreProductsBodyActionThreeValueMax)
+}),zod.object({
+  "type": zod.literal("stock_adjust"),
+  "value": zod.int().min(bulkAdminStoreProductsBodyActionFourValueMin).max(bulkAdminStoreProductsBodyActionFourValueMax)
+})])
+})
+
+export const BulkAdminStoreProductsResponse = zod.object({
+  "dryRun": zod.boolean(),
+  "willChange": zod.int(),
+  "changed": zod.int(),
+  "auditEntries": zod.int().describe('Uma por item alterado (C-ADM-07)'),
+  "batchId": zod.uuid().nullable(),
+  "merchantNotified": zod.enum(['aggregate']).describe('Um único aviso agregado com o motivo'),
+  "blocked": zod.array(zod.object({
+  "productId": zod.uuid(),
+  "name": zod.string(),
+  "reason": zod.enum(['STOCK_BELOW_RESERVED', 'PRODUCT_MODERATED', 'NOT_ACTIVE'])
+}))
+})
+
+
+/**
+ * **Rota PÚBLICA e sem identidade de propósito (C-ANA-01):** o app NÃO envia `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; o nginx não grava IP nem user-agent dela; o `session_id` só trafega no corpo e não vai a log, pedido nem usuário. Corpo em lote: até 100 eventos e 64 KB (acima: 413 `PAYLOAD_TOO_LARGE` ou 422), Zod estrito (campo fora do esquema, texto livre ou `user_id`: 422 `VALIDATION_FAILED` e a rejeição é CONTADA, C6; o lote inteiro é recusado). Idempotente por `eventId` (reenvio do lote não duplica, C5). Resposta SEMPRE 202 quando válido, com `accepted`, `duplicates` e `discarded` (evento com `storeId` ou `productId` inexistente é descartado e contado; com a flag `coleta_eventos` desligada TUDO é descartado em silêncio: o app não distingue). Limites (C-ANA-03): 60 requisições por minuto por sessão e por IP (chave = HMAC do IP no Redis, validade de até 120 s; IP em claro nunca) e, no máximo, 30 sessões novas por hora por IP (a 31ª é DESCARTADA e contada, sem erro) `[HIPÓTESE: parâmetro]`. `occurredAt` é do aparelho e o servidor o limita a [-24 h, +5 min] e o grava truncado ao minuto. O `order_paid` NÃO vem por aqui: o servidor o grava ao confirmar o pagamento, com hora cheia e sem `order_id`, `user_id` nem valor (SEC-194). O app não envia com conta de lojista ou admin logada nem com o opt-out ligado (C-ANA-08): decisão do app.
+ * @summary Enviar eventos de navegação, sem identificar a conta (WB-361)
+ */
+export const ingestAnalyticsEventsBodyEventsItemOneAppVersionRegExp = new RegExp('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$');
+export const ingestAnalyticsEventsBodyEventsMax = 100;
+
+
+
+export const IngestAnalyticsEventsBody = zod.object({
+  "events": zod.array(zod.union([zod.object({
+  "name": zod.enum(['app_session_started']),
+  "eventId": zod.uuid(),
+  "sessionId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "platform": zod.enum(['ios', 'android']),
+  "appVersion": zod.string().regex(ingestAnalyticsEventsBodyEventsItemOneAppVersionRegExp),
+  "cityId": zod.uuid().nullable()
+}),zod.object({
+  "name": zod.enum(['store_viewed']),
+  "eventId": zod.uuid(),
+  "sessionId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "storeId": zod.uuid(),
+  "origin": zod.enum(['banner', 'home', 'search', 'category', 'favorites', 'external_link', 'push']).describe('De onde veio o toque (RN-A6). `?o=<canal>` do link da loja cai em `external_link` genérico (WB-368 cortada)')
+}),zod.object({
+  "name": zod.enum(['product_viewed']),
+  "eventId": zod.uuid(),
+  "sessionId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "storeId": zod.uuid(),
+  "productId": zod.uuid(),
+  "origin": zod.enum(['banner', 'home', 'search', 'category', 'favorites', 'external_link', 'push']).describe('De onde veio o toque (RN-A6). `?o=<canal>` do link da loja cai em `external_link` genérico (WB-368 cortada)')
+}),zod.object({
+  "name": zod.enum(['item_added']),
+  "eventId": zod.uuid(),
+  "sessionId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})])).min(1).max(ingestAnalyticsEventsBodyEventsMax)
+})
+
+export const IngestAnalyticsEventsResponse = zod.object({
+  "accepted": zod.int(),
+  "duplicates": zod.int(),
+  "discarded": zod.int().describe('Loja ou produto inexistente, sessão nova acima do teto do IP ou coleta desligada')
+})
+
+
+/**
+ * Permissão `analytics:read` (super admin, operação e financeiro; **suporte 403**, WB-362 C6). Lê SÓ o agregado diário (nunca o bruto: nenhuma API nem tela lê o bruto e o papel do admin não tem leitura nessa tabela, C-ANA-04). Períodos fechados terminando ontem: 7, 30 ou 90 dias (o admin pode 90; o lojista só 7 e 30, R5). **Supressão no servidor (C-ANA-05, RN-A2):** célula com menos de 5 sessões NUNCA traz valor nem `n` (`suppressed: true`); todas as células suprimidas viram UMA linha "Outras" (`isOther: true`); se "Outras" nascer de uma só célula, absorve a menor visível; se ainda ficar < 5, a linha mostra "menos de 5" e **nenhum total da resposta é exato**: os totais vêm arredondados a múltiplo de 5 com `approximate: true` ("cerca de"). Total menos as partes publicadas nunca revela a célula suprimida (teste). Vendas e pedidos do banco ficam FORA desta resposta (seguem exatos em outro lugar). Flag `coleta_eventos` desligada: 409 `FEATURE_DISABLED` (staging: ligada). `generatedAt` e `cached` (cache de 5 min por parâmetros normalizados, com a permissão checada ANTES de ler o cache). Consulta com tempo limite de 5 s, 30 por minuto por admin.
+ * @summary Acessos agregados por loja, produto ou origem (WB-363 C3, C6 a C8; base da WB-362)
+ */
+export const getAdminAnalyticsAccessQueryDaysDefault = 7;
+export const getAdminAnalyticsAccessQueryCursorMax = 200;
+
+export const getAdminAnalyticsAccessQueryLimitDefault = 20;
+export const getAdminAnalyticsAccessQueryLimitMax = 50;
+
+
+
+export const GetAdminAnalyticsAccessQueryParams = zod.object({
+  "days": zod.union([zod.literal(7),zod.literal(30),zod.literal(90)]).default(getAdminAnalyticsAccessQueryDaysDefault),
+  "groupBy": zod.enum(['store', 'product', 'origin']),
+  "cityId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional().describe('Obrigatório com `groupBy=product` ou `origin`: a quebra é sempre de UMA loja'),
+  "cursor": zod.string().max(getAdminAnalyticsAccessQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(getAdminAnalyticsAccessQueryLimitMax).default(getAdminAnalyticsAccessQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const getAdminAnalyticsAccessResponseRowsItemVisitsNMin = 5;
+
+export const getAdminAnalyticsAccessResponseRowsItemProductOpensNMin = 5;
+
+export const getAdminAnalyticsAccessResponseRowsItemBagAddsNMin = 5;
+
+
+
+export const GetAdminAnalyticsAccessResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date().describe('Ontem (America/Sao_Paulo)')
+}),
+  "groupBy": zod.enum(['store', 'product', 'origin']),
+  "generatedAt": zod.iso.datetime({"offset":true}).describe('`atualizado_em`'),
+  "cached": zod.boolean().describe('`em_cache`'),
+  "approximateTotals": zod.boolean().describe('Verdadeiro quando houve supressão: os totais vêm arredondados a múltiplo de 5 ("cerca de")'),
+  "totals": zod.object({
+  "visits": zod.int(),
+  "productOpens": zod.int(),
+  "bagAdds": zod.int()
+}),
+  "rows": zod.array(zod.object({
+  "key": zod.string().nullable().describe('Id da loja, do produto ou da origem; nulo na linha "Outras"'),
+  "label": zod.string().describe('Nome, origem ou "Outras" / "Menos de 5"'),
+  "isOther": zod.boolean(),
+  "visits": zod.object({
+  "suppressed": zod.boolean(),
+  "n": zod.int().min(getAdminAnalyticsAccessResponseRowsItemVisitsNMin).optional()
+}).describe('Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente'),
+  "productOpens": zod.object({
+  "suppressed": zod.boolean(),
+  "n": zod.int().min(getAdminAnalyticsAccessResponseRowsItemProductOpensNMin).optional()
+}).describe('Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente'),
+  "bagAdds": zod.object({
+  "suppressed": zod.boolean(),
+  "n": zod.int().min(getAdminAnalyticsAccessResponseRowsItemBagAddsNMin).optional()
+}).describe('Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente')
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão `analytics:read` (suporte 403). Cobertura = `order_paid` do app (Android e iOS) COM `session_id` dividido pelo `order_paid` do app, por semana e cidade, calculada no job de agregação (sem coluna nova em `orders` e SEM contar opt-out: desligar a medição não gera evento). Só aparece com 20 pedidos ou mais na semana (`insufficient: true` e `coveragePct: null` abaixo disso); meta >= 85% [HIPÓTESE]. É estimativa, não contagem de quem desligou. `session_id` nunca existe no agregado. Mais recentes primeiro; cursor.
+ * @summary Cobertura da medição por semana e cidade (RN-A10, WB-363 C9)
+ */
+export const getAdminAnalyticsCoverageQueryCursorMax = 200;
+
+export const getAdminAnalyticsCoverageQueryLimitDefault = 20;
+export const getAdminAnalyticsCoverageQueryLimitMax = 50;
+
+
+
+export const GetAdminAnalyticsCoverageQueryParams = zod.object({
+  "cityId": zod.uuid().optional(),
+  "cursor": zod.string().max(getAdminAnalyticsCoverageQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(getAdminAnalyticsCoverageQueryLimitMax).default(getAdminAnalyticsCoverageQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const GetAdminAnalyticsCoverageResponse = zod.object({
+  "data": zod.array(zod.object({
+  "weekStart": zod.iso.date().describe('Segunda-feira (America/Sao_Paulo)'),
+  "cityId": zod.uuid(),
+  "cityName": zod.string(),
+  "insufficient": zod.boolean().describe('Menos de 20 pedidos do app na semana'),
+  "coveragePct": zod.number().nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
