@@ -1,0 +1,32 @@
+# Migracao 0061 com nome legado (QA, 2026-11-22, commit 4d25e5f, PostgreSQL 16.15, banco seed-large)
+NOTICE:  database "webag_mig2" does not exist, skipping
+CREATE DATABASE
+## antes: 57 migracoes (ate a 0056); 1 produto ativo com nome de 1 caractere
+57
+legado: 0000413c-01ab-409a-800f-926b740f895d nome=A
+UPDATE 1
+ruins (checagem previa do guia 16): 1
+## aplicar (migrate.js, como no job de deploy)
+Migrações aplicadas
+migracoes: 62
+products_name_len convalidated=false
+## WARNING no log do PostgreSQL:
+2026-11-22 17:40:41.791 UTC [6280] WARNING:  products_name_len ficou NOT VALID: 1 produto(s) nao rascunho com nome fora de 2 a 80 caracteres. Veja docs/deploy/guia-deploy.md secao 16.
+## UPDATE do produto legado enquanto NOT VALID
+-- update products set base_price_cents=1234 where id='0000413c-01ab-409a-800f-926b740f895d'
+ERROR:  new row for relation "products" violates check constraint "products_name_len"
+-- update products set status='paused' where id='0000413c-01ab-409a-800f-926b740f895d'
+ERROR:  new row for relation "products" violates check constraint "products_name_len"
+-- update products set status='archived' where id='0000413c-01ab-409a-800f-926b740f895d'
+ERROR:  new row for relation "products" violates check constraint "products_name_len"
+-- update products set updated_at=now() where id='0000413c-01ab-409a-800f-926b740f895d'
+ERROR:  new row for relation "products" violates check constraint "products_name_len"
+-- update products set name='Nome ok' where id='0000413c-01ab-409a-800f-926b740f895d'
+UPDATE 1
+## procedimento do guia 16: SELECT, VALIDATE, conferir
+0
+ALTER TABLE
+convalidated=true
+## VALIDATE com nome ruim novo
+ALTER TABLE
+ERROR:  check constraint "products_name_len" of relation "products" is violated by some row

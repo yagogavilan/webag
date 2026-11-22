@@ -1,0 +1,8 @@
+# base correta (2e88880) x 4d25e5f, 3 execucoes
+URLs comparadas: 609 | idênticas: 609 | diferentes: 0
+URLs comparadas: 609 | idênticas: 609 | diferentes: 0
+URLs comparadas: 609 | idênticas: 609 | diferentes: 0
+
+# 1a tentativa com a copia errada de base (anterior ao 2e88880): 1 URL diferente (ordem de lojas de empate)
+URLs comparadas: 609 | idênticas: 608 | diferentes: 1
+{"url":"/v1/search/suggestions?lat,lng&q=pao","statusA":200,"statusB":200,"at":394,"a":"2de153108aa\",\"name\":\"Pão integral 19291\"}],\"stores\":[{\"id\":\"a413c5f1-31da-4d19-a162-d3dd2ebc199f\",\"name\":\"Pão & Relógio 11\"},{\"id\":\"12e34665","b":"2de153108aa\",\"name\":\"Pão integral 19291

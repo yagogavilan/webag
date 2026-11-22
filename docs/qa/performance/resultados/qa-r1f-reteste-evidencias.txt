@@ -1,0 +1,23 @@
+[QA reteste] apagar rascunho 2x em série: 204 e 404
+[QA reteste] apagar rascunho 3x em paralelo: 204,404,404
+[QA reteste] cópia de produto removido: status=draft eventos de moderação na cópia=1
+[QA reteste] apagar a cópia (com evento de moderação): HTTP 500 {"type":"https://api.webag.com.br/errors/internal-error","title":"Erro interno","status":500,"code":"INTERNAL_ERROR"}
+[QA reteste] sweepExpired com rascunho vencido que tem evento de moderação: erro=Failed query: delete from "products" where ("products"."status" = $1 and "products"."updated_at" < $2) returning "id"
+params: draft,2026-10-23T16:48:06.500Z; comum apagado=false; cópia apagada=false
+[QA reteste] histórico do lojista: ["profile/merchant","pause/merchant","pause/merchant","exchange_policy/merchant","pickup/merchant","holidays/merchant","hours/merchant"]
+[QA reteste] lojista reenvia o mesmo horário: linhas de auditoria store.hours = 2; a 2ª é "de X para X"? false
+[QA reteste] histórico profile do lojista: [{"id":23,"at":"2026-11-22T16:48:06.896Z","type":"profile","target":{"type":"store","id":"b9df8cef-2c41-425e-adb7-08a8da5d1f2d","label":"Dados da loja"},"actor":{"kind":"merchant","name":"Maria Teste"},"summary":"Dados da loja alterados","before":{"description":null},"after":{"description":"Só a descrição mudou"},"reason":null,"restorable":false,"restoredByEntryId":null}]
+[QA reteste] varredura NUL: {"endereço street":{"status":422,"code":"INVALID_TEXT"},"endereço complement":{"status":422,"code":"INVALID_TEXT"},"produto name (POST)":{"status":422,"code":"INVALID_TEXT"},"produto description (POST)":{"status":422,"code":"INVALID_TEXT"},"produto description (PATCH)":{"status":422,"code":"INVALID_TEXT"},"variação attributes (jsonb)":{"status":400,"code":"VALIDATION_FAILED"},"perfil lojista description":{"status":422,"code":"INVALID_TEXT"},"feriado label":{"status":422,"code":"INVALID_TEXT"},"retirada instructions":{"status":422,"code":"INVALID_TEXT"},"importação CSV (célula)":{"status":422,"code":"IMPORT_FILE_INVALID"},"rascunho em lote (nome)":{"status":201},"lista produtos q":{"status":422,"code":"INVALID_TEXT"},"tabela q":{"status":422,"code":"INVALID_TEXT"},"admin perfil name":{"status":422,"code":"INVALID_TEXT"}}
+[QA reteste] reenvio do valor atual de hours: HTTP 200 -; versão 2 -> 3; e-mails ao lojista: 1
+[QA reteste] reenvio do valor atual de holidays: HTTP 422 NO_CHANGE; versão 2 -> 2; e-mails ao lojista: 0
+[QA reteste] reenvio do valor atual de pickup: HTTP 422 NO_CHANGE; versão 2 -> 2; e-mails ao lojista: 0
+[QA reteste] reenvio do valor atual de exchange-policy: HTTP 422 NO_CHANGE; versão 2 -> 2; e-mails ao lojista: 0
+[QA reteste] reenvio do valor atual de delivery: HTTP 422 NO_CHANGE; versão 2 -> 2; e-mails ao lojista: 0
+[QA reteste] mudança real em hours (fim do expediente): HTTP 200 -
+[QA reteste] mudança real em holidays (rótulo do feriado): HTTP 200 -
+[QA reteste] mudança real em exchange-policy (prazo de troca): HTTP 200 -
+[QA reteste] mudança real em delivery (preparo): HTTP 200 -
+[QA reteste] mudança real em pickup (preparo máximo da retirada (enabled igual)): HTTP 422 NO_CHANGE
+[QA reteste] mudança real em pickup (instruções da retirada (enabled igual)): HTTP 422 NO_CHANGE
+[QA reteste] edição mista, antes/depois: [{"name":"Loja 6d098","description":null},{"name":"Loja 6d098","description":"Descrição mista QA"}]
+[QA reteste] bulk misto: prévia={"dryRun":true,"willChange":1,"changed":0,"blocked":[],"preview":[{"productId":"5de3b917-34ff-49f0-8730-db6b4a246e9c","name":"Produto 436255bc","version":2,"fromCents":1000,"toCents":1100,"changePct":10,"youReceiveCents":935,"exceedsLimit": aplicação=200 {"dryRun":false,"willChange":1,"changed":1,"blocked":[],"preview":[{"productId":"5de3b917-34ff-49f0-8730-db6b4a246e9c","name":"Produto 436255bc","version":2,"fromCents":1000,"toCents":1100,"changePct":10,"youReceiveCents":935,"exceedsLimit"
