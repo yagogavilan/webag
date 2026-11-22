@@ -8,6 +8,8 @@
 ## Veredito
 
 > **Atualização 2026-11-22 (Re-revisão, ao final):** SEC-199, SEC-202 e SEC-203 corrigidos. **Veto levantado com condições** (DEC-115). SEC-200 e SEC-201 seguem abertos como dívida com prazo no G4 do v1.1. Novo: SEC-204 (Baixa).
+>
+> **Atualização 2026-11-22 (Re-revisão 2, ao final):** SEC-201 e SEC-204 **corrigidos**. Veto ao merge **levantado sem condição de Security** (DEC-115). Única pendência de Security para deploy de produção: SEC-200 (Média), corrigir ou fundador aceitar. Novo: SEC-205 (Baixa, só com 2+ réplicas).
 
 **REPROVADO, com veto ao merge e ao deploy desta mudança enquanto SEC-199 (Alta) estiver aberto.** A correção é pequena: ver a correção mínima no achado. O resto foi aprovado com ressalvas. A autenticação em uma consulta manteve todas as checagens, `Cache-Control` ficou mais restrito do que antes, os caches não guardam dado pessoal e o checkout continua recalculando tudo na hora. O webhook não ganhou janela de replay.
 
@@ -15,7 +17,7 @@
 |---|---|---|
 | Alta | SEC-199 | Sim |
 | Média | SEC-200 (pré-existente, ampliado pelo guia §14.5) | Não |
-| Baixa | SEC-201, SEC-202, SEC-203 | Não |
+| Baixa | SEC-201, SEC-202, SEC-203 (re-revisões: SEC-204, SEC-205) | Não |
 
 ## Achados
 
@@ -66,7 +68,7 @@ Como verificar: carga com 100 clientes do mesmo IP (60 com socket aberto) navega
 ```
 
 ```
-SEC-201 | Severidade: Baixa | Status: Aberto (decisão do PO)
+SEC-201 | Severidade: Baixa | Status: Corrigido (07e2278 + d1be18e; ver Re-revisão 2). Resíduo com 2+ réplicas: SEC-205
 Onde: discovery.service.ts (offerPool 60 s + cache Redis da home 30 s), store-feed.service.ts (catálogo 15 s + feed Redis 30 s), browse.service.ts (base de loja/produto e vitrine 10 s).
 Problema: depois que a moderação remove um produto ou a loja é suspensa, a vitrine continua mostrando o conteúdo por um tempo. Produto removido segue na seção "Ofertas"
   da home por até ~90 s (60 + 30). Loja suspensa: o `ST_DWithin` por posição é feito na hora e já filtra `status = 'approved'` (store-feed.service.ts, consulta `near`),
@@ -156,7 +158,7 @@ Análise estática do diff e das dependências diretas, mais um experimento loca
 ### Achado novo
 
 ```
-SEC-204 | Severidade: Baixa | Status: Aberto
+SEC-204 | Severidade: Baixa | Status: Corrigido (8943b3a; ver Re-revisão 2). DT-085 (tirar o refresh da transação) segue como dívida
 Onde: apps/api/src/platform/config/env.ts:80 (`DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` aceita de 1 a 600000) e stores/payment-account.service.ts:167-176.
 Problema: o comentário diz "não baixar de 15 s", mas o boot aceita qualquer valor >= 1. Com menos de ~8 s, o refresh OAuth (transação aberta durante
   a chamada ao MP, timeout de 8 s) pode ser encerrado depois que o MP girou o token e antes do UPDATE.
@@ -200,3 +202,55 @@ Condições:
 Por que não bloqueiam o merge: o `main` não vai para produção sem G4 (regra 7.3). Nenhum dos dois tem impacto financeiro; o checkout relê o banco, como prova o e2e. E SEC-200 já existia antes desta mudança.
 
 **Limites:** PG 16 local (produção usa 18), sem carga, sem nginx, sem PgBouncer e sem a suíte e2e completa. Não fiz pentest.
+
+---
+
+## Re-revisão 2 (2026-11-22)
+
+- **Escopo:** `git diff d941de2..HEAD -- apps/api packages/shared docs/deploy docs/arquitetura` (commits `07e2278`, `8943b3a`, `ab8ae84`, `d1be18e`; docs `017e235`, `fdb5b7e`; 33 arquivos). Li tudo o que é código de produção do diff e os chamadores de 1 salto. Variantes: todos os escritores de `stores`, `products`, `payment_accounts`, `cities` e `store_settings` (drizzle e SQL cru). **Não li:** os e2e além dos títulos e das asserções de `Cache-Control`, e o restante do guia de deploy fora do §14.
+- **Execução (PostgreSQL 16 e Redis locais; produção usa PG 18):** unitários `platform/cache`, `platform/config` e `platform/database` (inclui `session-lock.spec.ts` novo): 72 de 72 verdes. e2e `discovery-cache`, `cache-control`, `db-idle-timeout`, `exchanges`, `browse` e `discovery`: 64 de 64 verdes. **Não rodei:** teste de mutação (a cópia descartável foi negada nesta sessão; a eficácia dos testes de `invalidate` foi conferida só por leitura: sem `local-cache.ts:27`, "invalidar com um cálculo em andamento" guardaria o valor antigo; sem `:37`, "invalidar durante o recálculo que falha" devolveria o valor retirado), suíte e2e completa, 2 réplicas reais, queda real do Redis, PG 18.
+
+### Verificações pedidas
+
+| Item | Resultado | Evidência |
+|---|---|---|
+| (a) Invalidação apaga cache, cópia stale e cálculo em andamento | **OK.** `invalidate` faz `delete` da entrada inteira (valor, cópia do stale-if-error e promessa). O cálculo em andamento só grava se a entrada ainda for a dele (`pending` por identidade). Se não for, entrega o valor a quem já esperava e não guarda nada. No erro, propaga em vez de servir o valor antigo. Filtro por valor apaga a entrada que só tem cálculo (`value` indefinido conta como "apagar", `browse.service.ts` `ofStore`). Ordem segura: invalidação depois do commit, e o cálculo iniciado depois lê o dado novo (read committed) | `local-cache.ts:27`, `:37`, `:64-72`; `local-cache.spec.ts` (5 casos novos); e2e `discovery-cache.e2e-spec.ts:186`, `:215`, `:228`, `:276` |
+| (a) Cobertura dos eventos | **OK para DEC-113.** Moderação (pausar/remover/restaurar), transição de status da loja, pausa/retomada, conta de recebimento (conectar, desconectar, liberar), cidade (`active`), exclusão e restauração da conta do dono, e edição do catálogo. Redis `home`/`feed`: `bump` por versão, e o cálculo em voo grava na versão antiga, que fica inalcançável. Escritores sem invalidação (seguem o TTL, aceito pela DEC-113 como mudança comercial ou sem exposição): perfil da loja e aprovação de nome pendente (`stores.service.ts:270`, `admin-stores.service.ts:227`), sinalização automática por palavra suspeita (o conteúdo novo não estava em cache), retenção de token do dono excluído (`retention.service.ts:171`; a loja já saiu do ar no pedido de exclusão) | `storefront-cache.service.ts:71-79`; `git grep` dos escritores |
+| (b) Pub/sub | **OK.** Canal `webag:storefront:invalidate:<db>`, montado só da configuração (`storefront-cache.service.ts:10`). Mensagem = `origin` (UUID aleatório do processo) + escopo + `storeId`/`productId` (UUIDs). Não leva dado pessoal. Nenhuma string do cliente chega ao canal. Os IDs vêm do registro já autorizado; o lote é `z.array(z.uuid()).max(200)` (`catalog.schemas.ts:67`), serializado com `JSON.stringify`. Redis fora: `bump` e `publish` falham abertos (`cache.service.ts:56-62`, `storefront-cache.service.ts:74-78`), a escrita de negócio não recebe 500 e o cache local da réplica que escreveu já foi apagado antes (`:72`). Na reconexão, apaga tudo (`:101`). Observação: a mensagem recebida não passa por schema (`:106`), mas só quem escreve no Redis consegue forjá-la, e o efeito máximo é esvaziar caches (carga no banco). Quem tem esse acesso já tem poder maior (rate limit, antirreplay). Sem achado | e2e `:302` (2 instâncias, mesmo Redis, sem eco) |
+| (c) Nenhum cache novo com dado de usuário; privado continua privado | **OK.** Nenhum cache novo. As chaves continuam `storeId`, `productId`, `storeId\|seção\|offset\|limite`, `offers`/`best`, modo. `Cache-Control`: vitrine e avaliações `public, max-age=5`, sem posição; loja, produto e home `private, max-age=5`, com posição. Nenhuma rota autenticada mudou. O padrão `private, no-store` (`app.setup.ts`) e o de erro (`problem.filter.ts:31`, `:68`) não estão no diff. `privacy.controller.ts:142` e `admin.controllers.ts:300` seguem `no-store`. Teste: `cache-control.e2e-spec.ts` (404 da rota `public` volta a `private, no-store`) | `browse.controller.ts:15-17`, `discovery.controller.ts:33-34` |
+| (d) Busca `search/*` com `private, max-age=30` | **Aceito como risco Baixo, sem achado.** A resposta fica só no aparelho de quem buscou (`private`: proxy não guarda). No servidor, a busca não tem cache próprio de resultado, e o catálogo de lojas que ela usa (`directories`) é invalidado. Tocar no item abre a página de loja/produto (5 s) e a sacola/checkout, que releem o banco (`discovery-cache.e2e-spec.ts`). Pior caso: o cartão de um produto retirado aparece por até 30 s, só para quem já tinha buscado antes da retirada. Não alcança terceiros nem cria pedido. Se a moderação de conteúdo ilegal exigir zero no aparelho, basta baixar para 5 s como na DEC-116 (decisão do PO, não minha) | `discovery.controller.ts:52-78` |
+| (e) SEC-204 e `env.spec` | **OK.** `env.ts:211-212` recusa de 1 a 14999 depois do `return` de não produção (`:184`), então vale em produção e staging (`NODE_ENV=production`), e dev/teste continuam livres (o e2e usa 1000). 0 (desligado) segue aceito: é escolha explícita, que não reabre o cenário (sem timeout, a conexão do refresh não é morta). Testes: `env.spec.ts:87` (padrão, 15000, 60000 e 0 passam; dev/teste aceitam 1000), `:114-115` (5000 e 14999 derrubam o boot) | |
+| Trava de sessão (`ab8ae84`) | **Melhorou.** Se a própria `pg_try_advisory_lock` falhar (timeout ou rede, quando o servidor pode ter concedido sem a resposta chegar), a conexão é destruída (`database.module.ts:53-61`, `:75`). Assim não volta ao pool com a trava de sessão presa. Testes: `session-lock.spec.ts` (5 casos: obtida, ocupada, falha na obtenção, falha no unlock, `lost()`) e `exchanges.e2e-spec.ts` (pagamento de troca concorrente com provedor lento) | |
+
+### Achado novo
+
+```
+SEC-205 | Severidade: Baixa | Status: Aberto (só se aplica com 2+ réplicas da API; hoje 1 réplica, guia §14.2)
+Onde: storefront-cache.service.ts:72-75 (ordem: apaga local -> bump do Redis -> publica) e :97-102 (a 1ª conexão do assinante não apaga nada).
+Problema: com 2+ réplicas, entre o `bump` de `home`/`feed` (feito pela réplica A) e a chegada da mensagem à réplica B, uma requisição da home em B
+  falha no Redis (versão nova), recalcula com o catálogo LOCAL de B ainda velho e grava o resultado na versão NOVA do Redis por 30 s, servido a TODAS as réplicas.
+  A janela é a latência do pub/sub (milissegundos). Se o assinante de B estiver reconectando, porém, a janela chega ao TTL local (15 s) e o envenenamento dura até 15 + 30 s.
+  O guia §14.6 diz que "aquela réplica segue o TTL", mas o efeito alcança todas.
+Cenário: loja suspensa ou produto removido pela moderação volta à home de todos por até 30 s logo depois de sumir. Reputação, sem dinheiro (a sacola relê o banco).
+Correção recomendada (backend-dev, antes da 2ª réplica, junto com DT-082/ADR-017): repetir o `bump('home'|'feed')` ~1 a 2 s depois do publish ("duplo apagar"),
+  ou a réplica que recebe a mensagem também fazer `bump`; e tratar como reconexão também a 1ª conexão do assinante que veio depois de um erro (apagar tudo no `ready`
+  sempre é barato).
+Como verificar: e2e com 2 instâncias no mesmo Redis, com a mensagem atrasada artificialmente em B, uma home calculada em B dentro da janela e um GET depois
+  de 5 s em A sem a loja suspensa.
+```
+
+### Status dos achados
+
+| ID | Status | Evidência |
+|---|---|---|
+| SEC-200 (Média) | **Aberto** | Sem mudança em `infra/` nem no rate limit desde `d941de2` |
+| SEC-201 (Baixa) | **Fechado** | Ver (a), (b), (c) e (d). A condição da DEC-115 ("apagar, não vencer", e2e com TTL > 0 em até 5 s) foi cumprida e testada; o cliente/proxy foi alinhado pela DEC-116 |
+| SEC-204 (Baixa) | **Fechado** | Ver (e). DT-085 continua como dívida de desenho, sem bloqueio |
+| SEC-205 (Baixa) | **Aberto** | Pré-requisito: 2ª réplica. Não bloqueia nada com 1 réplica |
+
+### Veredito
+
+**Veto ao merge levantado sem condição de Security** (as condições da DEC-105 que são do QA e do tech-lead continuam). Não há Crítica nem Alta aberta.
+Para **deploy de produção** deste trabalho, a única pendência de Security é **SEC-200** (Média): corrigir ou o fundador aceitar o risco em `docs/decisoes.md` no G4. SEC-205 entra como pré-requisito da 2ª réplica (junto da pendência do Socket.IO no guia §14.2).
+
+**Limites:** PG 16 local, 1 processo, Redis sem falha injetada, sem carga, sem a suíte e2e completa, sem teste de mutação nesta rodada e sem pentest.
