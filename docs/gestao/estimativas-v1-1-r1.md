@@ -98,3 +98,23 @@ Os acréscimos e cortes abaixo são os do parecer, aceitos como estão, mais o q
 | I7: `getAdminAnalyticsCoverage` fora da R1 até a decisão | -0,5 | Parecer; volta com a decisão |
 | I12: remover as 2 rotas legadas já na R1.1 (continua 0,2, só antecipa) | 0 | CEO |
 | Fora da conta | +0,4 (A6, parser local, mobile-dev) | Parecer |
+
+## 8. UT gastas na R1.1 + R1.2 e no back-end da R1.3 (backend-dev, 2026-11-22, `[HIPÓTESE]`)
+**Método (não há medição):** o PM declarou as UT realizadas como "não medidas" (`plano-v1-1.md` §11) e nenhuma ferramenta daqui mede uso de janela. Contei **marcos fechados** (entrega com testes, commit e retorno ao CEO), que é a definição de UT do §1, a partir do histórico do git de 2026-11-22 (commits de `apps/api` entre `12:27` e `16:21`) e das minhas rodadas. Erro esperado: **±1,5 UT**. Os commits são de uma só pessoa/agente por vez; o relógio do git NÃO serve como UT (vários marcos cabem em uma hora quando o agente tem o contrato pronto).
+
+| Bloco | Marcos | UT | Evidência |
+|---|---|---|---|
+| Contrato, ADR-018, estimativas e 1ª correção do contrato (fora da conta do plano, R-40) | 2 | (1,0, não contada) | `83369df`, `e238a68`, `395f34c`, `e8b6624` |
+| R1.1: remoção das 2 rotas, WB-355 (142 rotas), WB-352 "Ver como" (VA-01..26) | 3 | 3,0 | `c206744`, `a161333`, `dc6b3fa` |
+| R1.1: WB-350 ficha 360, WB-351 edição pelo admin, D-06 boot e AO-01..05 | 2 | 2,0 | `7e4cfe6`, `553b533` |
+| R1.1: correções do review (I1, I3 `down`, I4, I5, SEC-210, SEC-212) | 1 | 0,8 | `87e4a5d`, `a176b5d`, `3b610df`, `6aa708d` |
+| R1.2: versão, I4, D18 `runInTransaction`, rascunhos, duplicar, lote, `quickPublish`, medição, SEC-195 | 2 | 2,0 | `9c2fd36` |
+| R1.2: modelos, F8/F9, caminhos sem 2ª conexão (DT-094) | 1 | 0,7 | `c88bd08` |
+| R1.2: lote do threat model §17 (SEC-213/214/215/218, `limitPct`, DT-094 lint) | 1 | 0,5 | `642c58d`, `5bd50a2` |
+| Itens que entraram depois (GET da configuração do admin, SEC-221) | 1 | 0,3 | `c50ac7a`, `b39a878` |
+| QA: BUG-036 a 040, 042, 044, 047 | 1 | 0,6 | `5f9bd7a` a `6ef6655`, `0261d30` |
+| **Total R1.1 + R1.2 (back-end)** | | **~9,9** (faixa 8,4 a 11,4) | |
+
+**Gatilho de 9,4 UT (plano §11): não dá para afirmar nem negar.** A faixa cobre os dois lados (a estimativa pontual, 9,9, passa por 0,5). Por precaução, a recomendação é tratar como **ultrapassado**. Como a ordem de corte do §10.3 já está resolvida assim: o item 1 (CSV e "restaurar" do WB-354) e o item 3 (`.xlsx` no servidor, WB-376) **não foram feitos** (não estavam na minha entrega); o item 2 (PUT de modelo) já estava feito na R1.2; o item 4 (massa do admin) foi construído nesta rodada (~0,6 UT) e o item 5 (R1.4) não foi tocado. Se o CEO quiser honrar o corte à risca, **a massa do admin é a única coisa já gasta que ele pode mandar não mergear** (reversível: uma rota e um serviço).
+
+**R1.3 back-end (esta rodada):** DT-088 (API pública de `orders` e `catalog`) 0,2; contrato 0,2; lotes, `batchId`, `undoBulkBatch`, `listBulkBatches` e migração 0063 (consumidores do D18, BK-01, BK-08) 0,6; `adjustVariantStock` com `productVersion` 0,1; `bulkAdminStoreProducts` 0,6; documentos e regressão 0,2 = **~1,9 UT** (planejado para este recorte: 0,15 + 0,3 + 1,0 + 0,5 + 0,2 = ~2,2). Faltam da R1.3 (back-end): WB-353 (9 rotas de produto do admin, ~1,5), WB-354 (restaurar e CSV, 0,3), WB-376 (lote já existe; `.xlsx` e mapeamento, ~0,6 a 1,1), aviso C15 da WB-352 (`store_change_digest`, ~0,2) e A3/A9 do review R1.1 (~0,2).
