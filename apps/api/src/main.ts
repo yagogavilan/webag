@@ -18,6 +18,10 @@ async function bootstrap(): Promise<void> {
     environment: config.get('APP_ENV', { infer: true }) ?? config.get('NODE_ENV', { infer: true }),
     tracesSampleRate: config.get('SENTRY_TRACES_SAMPLE_RATE', { infer: true }),
   });
+  // Atrás do nginx com conexões reutilizadas (upstream keepalive) o Node precisa manter a conexão ociosa por MAIS tempo que o proxy (padrão 5 s derruba no meio e vira 502).
+  const server = app.getHttpServer() as { keepAliveTimeout: number; headersTimeout: number };
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
   await app.listen(config.get('API_PORT', { infer: true }), '0.0.0.0');
 }
 

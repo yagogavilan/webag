@@ -34,9 +34,15 @@ class PgPoolLifecycle implements OnApplicationShutdown {
       useFactory: (config: ConfigService<Env, true>) =>
         new pg.Pool({
           connectionString: config.get('DATABASE_URL', { infer: true }),
-          max: 10,
+          max: config.get('DB_POOL_MAX', { infer: true }),
           connectionTimeoutMillis: 3_000,
           idleTimeoutMillis: 30_000,
+          application_name: 'webag-api',
+          // Parâmetros de sessão na abertura da conexão (valem para todas as consultas do pool):
+          //  - statement_timeout: uma consulta fora de controle não prende o pool para sempre (0 = sem teto);
+          //  - idle_in_transaction_session_timeout: transação esquecida aberta segura lock e conexão (padrão do skill postgres-postgis-performance);
+          //  - pg_trgm.word_similarity_threshold: o limite 0,5 da busca por semelhança (`<%`), para o índice GIN de trigramas ser usado (ver product-feed.service).
+          options: `-c statement_timeout=${config.get('DB_STATEMENT_TIMEOUT_MS', { infer: true })} -c idle_in_transaction_session_timeout=${config.get('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', { infer: true })} -c pg_trgm.word_similarity_threshold=0.5`,
         }),
     },
     {

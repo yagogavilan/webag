@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { stdSerializers } from 'pino';
+import { startTime } from 'pino-http';
 import { LoggerModule } from 'nestjs-pino';
 import { maskCoordinates, maskTokenPaths } from './platform/logging/mask.js';
 import { HealthModule } from './health/health.module.js';
@@ -83,6 +84,16 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
           },
           autoLogging: {
             ignore: (req) => req.url?.startsWith('/health') ?? false,
+          },
+          // Desempenho: o log de acesso de TODA requisição bem-sucedida custa ~10% da CPU da API (escrita síncrona de ~1 KB por requisição) e duplica o log do nginx
+          // (IP, rota, status e tempo). Em `slow` (padrão) só vão para o log (nível info): erro 5xx/4xx e requisição lenta (>= HTTP_SLOW_MS); o resto sai em debug (liga
+          // com LOG_LEVEL=debug). `HTTP_ACCESS_LOG=all` volta ao comportamento anterior. A latência por rota continua no resumo `http.latency` (platform/observability/latency.ts).
+          customLogLevel: (_req, res, err) => {
+            if (err || res.statusCode >= 500) return 'error';
+            if (res.statusCode >= 400) return 'warn';
+            if (config.get('HTTP_ACCESS_LOG', { infer: true }) === 'all') return 'info';
+            const started = (res as unknown as Record<symbol, number | undefined>)[startTime];
+            return started !== undefined && Date.now() - started >= config.get('HTTP_SLOW_MS', { infer: true }) ? 'info' : 'debug';
           },
           transport:
             config.get('NODE_ENV', { infer: true }) === 'development'
