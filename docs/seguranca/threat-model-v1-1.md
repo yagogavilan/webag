@@ -394,7 +394,7 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 - **Correção recomendada:** C-ANA-04 (sem leitura humana do bruto, hora do `order_paid` truncada, expurgo em 90 dias ou menos) e ajuste do texto: "dados de uso não ligados à sua conta, guardados por até 90 dias"; levar ao J24 a pergunta sobre o bruto (pseudônimo) separada da pergunta sobre os agregados (anônimos). Encaminhado ao PO para o texto.
 - **Como verificar:** permissão de banco do papel do admin sem leitura no bruto; texto revisado na política e na tela.
 
-### SEC-195 | Severidade: Baixa | Status: Aberto
+### SEC-195 | Severidade: Baixa | Status: Corrigido para foto de produto (2026-11-22, §17, `c88bd08`); resíduo em logo, capa e documento (§17.4 item 3)
 - **Onde:** `apps/api/src/modules/media/media.service.ts:134-144` (variantes públicas sem metadados, mas o **original** continua no bucket privado); compare com `:128-133` (foto de troca: o original é substituído).
 - **Problema:** foto de produto tirada com a câmera do lojista (a via principal da R1) guarda o EXIF com GPS no original, muitas vezes a casa do MEI. O PRD (§Segurança e WB-378 C9) promete "EXIF removido".
 - **Cenário:** vazamento do bucket privado ou envio do original à IA revela a localização da casa do lojista.
@@ -436,7 +436,7 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 - **Correção recomendada:** máscara estrita no apresentador `view_as` (§14.3): só primeiro nome e bairro, mesmo em pedido ativo. PO reescreve C2 e C8 (D-09).
 - **Como verificar:** VA-12 e VA-13.
 
-### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Desenho fechado (ADR-018 D17 e D18, §15.3), código pendente (BK-01 a BK-08; a R1.1 não toca a idempotência, §16)
+### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Corrigido no código (2026-11-22, §17 sobre `c88bd08`: BK-01 a BK-07 verdes localmente); falta CI verde (SEC-212) e BK-08/`bulkAdminStoreProducts` na R1.3; variante no estoque: SEC-218
 - **Onde:** `apps/api/src/modules/idempotency/idempotency.service.ts:85-86` (a resposta é gravada em comando separado, depois do efeito de `fn`) e `:74-77` (reivindicação sem resposta há mais de 120 s é apagada e a repetição executa de novo).
 - **Problema:** se o processo cai entre o commit de `fn` e a gravação da resposta, a repetição depois de 120 s reaplica o efeito. Para escrita com chave natural (pedido) há proteção própria; para reajuste relativo em massa (B2 do tech-lead) não há.
 - **Cenário:** deploy ou queda no meio de "+10% em 80 produtos"; o painel repete com a mesma chave após o timeout e o preço sobe 21%. Dinheiro do cliente e reputação da loja.
@@ -717,3 +717,102 @@ Escopo: `git diff 379ff18~1..553b533 -- apps/api docs/arquitetura` (commits `dc6
 - **Bloqueia o G4 da R1 quando a R1.2 entrar:** SEC-208 (BK-01 a BK-08), DB-05 e VA-14 do `listProductTable`.
 - **Pode ir como condição (corrigir na R1.2, antes do G5/produção):** SEC-210, SEC-211 e observações 3 e 4.
 - **Não validado:** BFF do web (`upstream.ts`, cookie da visão) e as telas; imagem Docker e `main.ts` subindo sem `NODE_ENV` (o teste importa o `AppModule`); log do nginx e evento real no Sentry; leitura linha a linha de todo o `view-as.e2e-spec.ts`; `pnpm audit` (sem dependência nova no diff). Não substitui pentest.
+
+## 17. Revisão do código R1.2 (2026-11-22, sobre `c88bd08`)
+
+Escopo: `git diff 553b533..c88bd08 -- apps/api docs/arquitetura` (commits `9c2fd36`, `c88bd08`; 56 arquivos). Lidos por inteiro: `idempotency.service.ts`, `drafts.service.ts`, `product-table.service.ts`, `product-metrics.service.ts`, adaptadores `vision.ts` e `ean.ts`, migração 0061; diff completo de `catalog.service.ts`, `catalog.controllers.ts`, `catalog.schemas.ts`, `media.service.ts`, `categories.service.ts`, `admin.controllers.ts`, `admin.schemas.ts`, `stores.service.ts`; e, por variante, o caminho de importação CSV (`catalog.service.ts:1000-1068`), `audit.service.ts:63-84`, `retention.service.ts` (órfãos), `privacy-map.ts`, `database.module.ts` (pool). Não lidos linha a linha: os 3 e2e `r12-*` (só os nomes dos casos e BK-06/07), o seed `onda1.ts`, o snapshot do drizzle. Skills: `revisao-diferencial-de-mudancas`, `analise-de-variantes`, `defaults-inseguros-e-armadilhas-de-api`.
+
+### 17.1 Testes executados (PostgreSQL 16 e Redis locais)
+| Suíte | Resultado |
+|---|---|
+| `r12-catalog-version-audit`, `r12-drafts`, `r12-templates-table` (e2e) | 46/46 verdes |
+| Os 3 acima + `db-roles` com `TEST_DB_AS_APP=1 REQUIRE_DB_ROLES=1` (papel `webag_app`, DT-090) | 64/64 verdes: a tabela nova e as escritas da R1.2 funcionam sem privilégio extra |
+| `rbac`, `sec167-privacy-map`, `catalog`, `view-as` (e2e, regressão) | 63/63 verdes |
+| `admin-order-view-audit` (AO-01 a AO-05), `db-role-boot`, `production-boot` (DB-01) com `REQUIRE_DB_ROLES=1` | 14/14 verdes |
+| Unitários de `catalog`, `idempotency`, `openapi`, `category-templates` | 217/217 verdes (15 arquivos) |
+| CI do GitHub | **Não rodou:** `c88bd08` sem check-run (`gh api .../check-runs` = 0); `REQUIRE_DB_ROLES` segue fora do `ci.yml` (SEC-212 aberta) |
+| Busca de segredo no diff (`APP_USR-`, chave privada, `AKIA`, senha literal) | Nada. Nenhuma dependência nova (sem `pnpm audit`) |
+
+### 17.2 Status dos controles pedidos
+| Controle | Resultado | Evidência |
+|---|---|---|
+| SEC-208: chave, efeito e resposta no mesmo commit | OK | `idempotency.service.ts:95-116` (reivindicação, `fn(tx)` e `update` da resposta na mesma `db.transaction`); BK-01, BK-02 |
+| SEC-208: 422 com corpo diferente | OK | `:107-109`; BK-05 e teste direto do `runInTransaction` |
+| SEC-208: janela de dupla aplicação | Fechada no caminho novo: sem `STALE_CLAIM_MS`; a concorrente espera no índice único e lê a linha commitada (`:103-111`); erro de `fn` desfaz tudo e libera a chave | BK-03. **Premissa:** isolamento READ COMMITTED (padrão; nenhum código muda). Em REPEATABLE READ a leitura após o conflito não veria a linha (registrar no comentário do método) |
+| SEC-208: ordem de id | OK: `orderBy(asc(products.id)).for('update')` e variações ordenadas por id no `bulk`; 2ª barreira `WHERE version = :v` | teste "ordens opostas sem deadlock" |
+| SEC-208: escopo da chave (rota, loja, ator) | OK nas 5 escritas novas: `drafts.service.ts:197-199`, `catalog.controllers.ts:210` | BK-06 cobre só outra loja; **falta o caso mesma loja, outro funcionário** (código correto, sem teste) |
+| SEC-208: `expectedVersions` obrigatório e completo | OK: o controller exige cobertura de todos os `productIds` antes da transação | BK-07 |
+| DT-094 (pool) | Nenhum `this.db` dentro dos 5 `fn` (conferido chamada a chamada: `present` recebe `context`, `assertCategoryAllowed`/`assertDescription`/`flagIfSuspect`/`auditProduct` recebem `tx`). Pior caso atenuado: `connectionTimeoutMillis: 3_000` (`database.module.ts:132`) vira 500 em 3 s, não trava. Falta o mecanismo (lint ou teste com pool de 1) | DT-094 segue com o tech-lead; sem SEC |
+| DB-05 | OK: `audit.record(tx, ...)` na transação do efeito em todas as escritas I4 | e2e DB-05 |
+| VA-14 (`listProductTable`) | OK: `includeReceive` só com membro que tem `catalog`; com "Ver como" o membro nem é consultado (`catalog.controllers.ts` `productTable`; `product-table.service.ts:61,73`) | e2e C6 e VA-14 |
+| IDOR entre lojas | OK: `requireProduct` sempre por (loja, id) (`catalog.service.ts:113`); `bulk` 404 se algum id não é da loja; foto do `quickPublish` exige loja e finalidade (`drafts.service.ts:357`); origem do `duplicate` conferida dentro da transação | e2e "outra loja = 404" nas 4 rotas |
+| Funcionário sem `catalog` | `@StorePermission('catalog')` nas 6 rotas de escrita e leitura de rascunho; `member` só na tabela (DEC-118) | Lido no código; **sem e2e específico** (guard genérico, SEC-020) |
+| Limites | Teto de 100 sob `FOR NO KEY UPDATE` da loja (I3 testado com concorrência); lote `max(100)`; nome 200 na borda e 80 na linha; `quickPublish` até 8 fotos; 10 lotes/h por loja; 240 rascunhos/h. **Exceção: importação CSV fura o teto (SEC-213)** | e2e WB-371 e WB-376 |
+| Upload e foto | Tipos JPEG/PNG/WebP, magic bytes = tipo declarado, até 40 MP, tamanho por `upload_max_mb`, chave do objeto gerada pelo servidor (nome do cliente não entra), toda foto de produto recodificada (poliglota não sobrevive no storage). Sem URL do usuário buscada pelo servidor (sem SSRF) | `media.service.ts`, e2e C11/C12 |
+| SEC-195 | **Corrigido** para `product_image` (original substituído por WebP sem metadados, variantes saem dele). Resíduo: `store_logo`, `store_cover` e `store_document` ainda guardam o original com EXIF no privado (`media.service.ts:124-147`) | e2e com GPS |
+| `category-templates` | OK: `PUT` com `@AdminOnly('categories:write')`, Zod estrito sem caractere de controle, `FOR UPDATE` e auditoria antes/depois na mesma transação; `GET` público sem dado pessoal | e2e com 4 perfis |
+| Dado pessoal no `audit_log` | IP e User-Agent do lojista/funcionário em toda escrita de catálogo, sem prazo (SEC-217) | `audit.service.ts:77-78`, `privacy-map.ts:18` |
+| Mídia órfã (DT-093) e LGPD | Nenhum caminho apaga foto de produto do storage (SEC-216) | `grep deleteObject` |
+| Flags F8/F9 e adaptadores | OK: `ia_visao_real` e `ean_base_externa` nascem `false`; o módulo só registra `FakeProductVisionProvider` e `DisabledExternalEanLookup`; nenhuma chamada de rede no diff; saída da IA validada por schema estrito | `catalog.module.ts:43-45`, `adapters.spec.ts` |
+| Logs novos | Só ids, contagens e tempos; nenhum texto do produto ou dado pessoal | 5 linhas `logger.*` do diff |
+
+**Status dos testes de abuso da §15.6:** AO-01 a AO-05 verdes (não mudaram na R1.2); BK-01 a BK-07 verdes localmente; **BK-08 (`undo`) e `bulkAdminStoreProducts` ficam para a R1.3** (sem tabelas de lote); DB-01 a DB-05 verdes localmente. Nada disso rodou no CI.
+
+### 17.3 Achados novos
+
+#### SEC-213 | Severidade: Média | Status: Aberto | Dono: backend-dev
+- **Onde:** `apps/api/src/modules/catalog/catalog.service.ts:1056` (`updateFromImport` grava `basePriceCents` com `tx.update(products)`) e `:1064` (estoque por `set`), fora de `editProduct` e sem `auditProduct`; `:1030` (`createFromImport` cria produto com status padrão `draft` sem `assertDraftCapacity`).
+- **Problema:** a importação CSV é edição de catálogo do lojista que não sobe `version` nem grava antes/depois no `audit_log` (contra D2 "único helper" e D20 b "trilha completa"); e cria rascunhos sem o teto de 100 (DEC-118).
+- **Cenário de ataque:** funcionário com `catalog` (ou conta tomada) muda o preço de 500 produtos por planilha; o histórico da ficha 360 e o futuro "restaurar" não mostram nada (só `store_activity` com contagens); uma prévia de reajuste aberta antes continua "válida" porque a versão não subiu. Em paralelo, 20 importações/h x 500 linhas criam milhares de rascunhos, contornando o teto.
+- **Correção recomendada:** no `updateFromImport`, `editProduct(tx, id, { basePriceCents })` e `auditProduct(..., CATALOG_AUDIT.price, ...)` por produto alterado (estoque: `product.stock_adjust`); no commit, `assertDraftCapacity(tx, store.id, novos, limite)` antes de criar.
+- **Como verificar:** e2e: importar planilha que muda o preço de 2 produtos = `version` +1 e 2 linhas `product.price` com `store_id`; loja com 100 rascunhos + planilha com 1 produto novo = 422 `DRAFT_LIMIT_REACHED` e nada criado.
+
+#### SEC-214 | Severidade: Baixa | Status: Aberto | Dono: backend-dev (PO confirma)
+- **Onde:** `apps/api/src/modules/catalog/drafts.service.ts:388-411` (só recusa `archived`; aceita produto `active`/`paused`) e `catalog.controllers.ts` `quickPublish` (`If-Match` opcional).
+- **Problema:** o "publicar em 2 campos" também sobrescreve produto já publicado e pula as regras do `updateProduct`/`adjustStock`: não roda `validatePromotion` (promoção maior ou igual ao preço normal) e grava `stock` abaixo do reservado (o `CHECK` do banco devolve 500).
+- **Cenário de ataque:** repetição tardia do app (chave vencida em 24 h, sem `If-Match`) reverte nome, preço e fotos editados depois da publicação; ou o lojista monta um "de/por" invertido que a edição normal recusa. Sem ganho para terceiro; integridade do catálogo e confiança do cliente.
+- **Correção recomendada:** exigir `status = 'draft'` (senão 409 `QUICK_PUBLISH_NOT_APPLICABLE`; o app trata `active` igual como sucesso, R6 a) ou tornar `If-Match` obrigatório nesta rota.
+- **Como verificar:** e2e: `quick-publish` em produto ativo = 409 e nada muda.
+
+#### SEC-215 | Severidade: Baixa | Status: Aberto | Dono: PO decide; backend-dev implementa
+- **Onde:** `drafts.service.ts:313-333` (cópia de produto com `moderationStatus` `removed`/`paused`); `catalog/db/schema.ts:47` (`moderationStatus` nasce `ok`); a "moderação ao publicar" do contrato é só a palavra suspeita (`flagIfSuspect`).
+- **Problema:** produto removido pela moderação volta à vitrine em 2 chamadas (duplicar e publicar), com o mesmo texto e preço. A WB-372 C4 diz "passa pela moderação ao publicar", mas a moderação é posterior.
+- **Cenário de ataque:** lojista de produto proibido ou falsificado tem o item removido e o republica na hora; o admin só percebe se procurar. Risco jurídico e de reputação; sinal de detecção já existe (`duplicated_from`).
+- **Correção recomendada:** cópia de `removed`/`paused` nasce com `moderationStatus = 'review'` e aparece na fila do admin com o vínculo; ou recusar duplicar `removed` (422 `PRODUCT_MODERATED`).
+- **Como verificar:** e2e: duplicar produto removido e publicar = cópia em `review` (ou 422).
+
+#### SEC-216 | Severidade: Média | Status: Aberto (parte pré-existente; agravado pela R1.2) | Dono: backend-dev
+- **Onde:** nenhum `deleteObject` para `product_image` (`grep`: só troca, exportação, documento e upload rejeitado); `retention.service.ts:178-187` só limpa upload `pending`/`rejected`; vencimento do rascunho (`drafts.service.ts:67-76`, DT-093), troca de fotos (`setImages`, `quickPublish:407`) e moderação `removed` deixam as variantes no bucket **público**.
+- **Problema:** foto de produto removida, substituída, de rascunho vencido ou de produto retirado pela moderação continua acessível pela URL pública, sem prazo e sem caminho de exclusão.
+- **Cenário de ataque:** lojista fotografa o produto com o rosto ou documento de alguém, troca a foto, e a URL antiga (já vista na vitrine, em cache ou indexada) continua servindo a imagem; ordem de retirada de conteúdo ilegal só tira o produto, não o arquivo. LGPD (eliminação, art. 16 e 18 VI `[validar com o jurídico]`) e risco jurídico.
+- **Correção recomendada:** (1) moderação `removed` apaga as variantes públicas na hora (o original privado fica para prova, com prazo); (2) varredura de `product_image` `ready` sem `product_images` há mais de 7 dias apaga original e variantes (DT-093, mesmo padrão de `retention.service.ts:119-120`); (3) runbook de retirada manual por `assetId`.
+- **Como verificar:** e2e: trocar a foto e rodar a varredura com o relógio + 8 dias = objetos privado e públicos ausentes; remover pela moderação = variantes ausentes.
+
+#### SEC-217 | Severidade: Baixa | Status: Aberto | Dono: backend-dev; jurídico valida o prazo
+- **Onde:** `audit.service.ts:77-78` (IP e User-Agent de quem não é cliente), agora em toda escrita de catálogo via `CatalogActor.ctx`; `privacy-map.ts:18` (`audit_log` `retain`, append-only, sem prazo); `before`/`after` com nome e descrição livres.
+- **Problema:** a R1.2 multiplica o volume de dado pessoal de funcionários e lojistas (IP, aparelho) numa tabela sem expurgo; descrição com telefone digitado pelo lojista fica para sempre.
+- **Cenário:** vazamento do banco expõe o histórico de IP de cada funcionário por anos; pedido de eliminação do titular não tem como ser atendido nem depois do prazo legal de guarda.
+- **Correção recomendada:** definir prazo do `audit_log` (ex.: 5 anos, como SEC-185 `[HIPÓTESE: validar]`) e o expurgo por runbook com `webag_migrator`; até lá, nas ações `product.*` do lojista, guardar só o IP truncado e sem User-Agent (o `access_log` já guarda 6 meses).
+- **Como verificar:** `privacy-map.ts` com prazo e runbook; linha `product.update` sem User-Agent.
+
+#### SEC-218 | Severidade: Baixa | Status: Aberto (variante pré-existente da SEC-208) | Dono: backend-dev
+- **Onde:** `catalog.controllers.ts:266` (`adjustVariantStock` com `{ delta }` relativo usa `idempotency.run`, escopo `stock:${store.id}` sem ator) e `idempotency.service.ts:74-77` (`STALE_CLAIM_MS`).
+- **Problema:** é escrita relativa no caminho antigo, contra o resíduo aceito da §15.3 ("escrita relativa usa a transacional").
+- **Cenário:** queda entre o commit do "+5" e a gravação da resposta; o app repete a mesma chave após 120 s sem `If-Match` e o estoque sobe +10: venda acima do físico e cancelamento.
+- **Correção recomendada:** `runInTransaction('stock:' + loja + ':' + ator, ...)` com `adjustStock(..., tx)`.
+- **Como verificar:** teste análogo ao BK-02 para o estoque.
+
+### 17.4 Observações (sem SEC)
+1. BK-06: acrescentar "mesma loja, outro funcionário, mesma chave" (o código já isola por `userId`).
+2. E2E de funcionário sem `catalog` = 403 nas 6 rotas novas e na matriz de contrato (o `rbac.e2e-spec` só confere as públicas).
+3. Resíduo da SEC-195 (logo, capa, documento com EXIF no privado): aplicar a mesma recodificação na R1.3; o documento em PDF fica de fora.
+4. O lote consome o limite de 10/h antes da idempotência: repetir com a mesma chave conta. Só experiência de uso.
+5. Web: `bulk-bar.tsx` ainda manda `price_adjust` sem chave nem versões (400). Falha segura; mobile-dev ajusta.
+6. Limite do corpo JSON assumido como o padrão do Express (100 kb); `app.setup.ts` só define o de CSV. Confirmar.
+
+### 17.5 Parecer para o G4 da R1
+- **Nenhum achado Crítico ou Alto na R1.2.** SEC-208 passa a **"Corrigido no código"** para o reajuste em massa do lojista e as 4 escritas do cadastro rápido (revisão diferencial feita, §15.7 item 4); vira "Corrigido" com o CI verde. SEC-195 corrigida para foto de produto. DB-05 e VA-14 verdes.
+- **Continua bloqueando o G4 da R1:** CI verde no PR com a SEC-212 aplicada (nenhum commit da R1.1/R1.2 tem execução registrada); quando a R1.3 entrar, BK-08 e `bulkAdminStoreProducts` pela mesma revisão.
+- **Condição antes da R1.3** (o restaurar e o digest dependem da trilha): SEC-213 e SEC-218.
+- **Condição antes do G5/produção:** SEC-216 (com DT-093), SEC-217, SEC-214, SEC-215 (decisão do PO), SEC-210 e SEC-211.
+- **Não validado:** telas e BFF do web; storage real (S3/CDN: cache das variantes públicas depois da exclusão); comportamento com PgBouncer; carga no pool (DT-094); seed `onda1.ts` em produção; leitura linha a linha dos e2e `r12-*`. Não substitui pentest.
