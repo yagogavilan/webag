@@ -44,7 +44,7 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 1. Ficha 360 da loja: dados, status, horário e pausa, comissão efetiva, catálogo, pedidos recentes, indicadores (30 dias), cupons e campanhas, histórico de alterações.
 2. Edição pelo admin de: dados cadastrais não fiscais (nome de exibição, descrição, contato, WhatsApp), horários, feriados, pausa, modos entrega e retirada, tempo de preparo, política de trocas, status (RN-16).
 3. Edição de catálogo pelo admin: produto, variação, **preço**, estoque, ativar e pausar, fotos, seções; ação em massa; criar produto (usa o cadastro rápido, `prd/v1-1-cadastro-rapido.md`).
-4. "Ver como o lojista": visão **somente leitura** das telas do lojista, com faixa fixa "Visualização do admin" e dados do cliente mascarados como o lojista vê (RN-14).
+4. "Ver como o lojista": visão **somente leitura** das telas do lojista, com faixa fixa "Visualização do admin". Nível **visualizador** (DEC-119, DEC-120): **nunca** mostra dado pessoal de cliente (só primeiro nome e bairro, nem em pedido ativo), CPF/CNPJ, razão social, comissão, "Você recebe" nem conta de recebimento. Para dado de cliente, o admin usa a ficha do pedido (WB-108), não esta visão.
 5. Comissão por loja e por categoria com vigência (WB-105), no mesmo lugar, com prévia do "Você recebe".
 6. Trilha de auditoria por loja, filtrável por autor, tipo e período; "restaurar valor anterior" para preço e estoque.
 7. Aviso automático ao lojista (painel e e-mail) de toda alteração do admin em preço, estoque, status, horário e pausa, com o motivo.
@@ -78,7 +78,7 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 - Alteração de preço maior que `admin_preco_variacao_max_pct` (padrão 30, parâmetro) pede confirmação extra com o valor novo e o "Você recebe". **Redução acima de 50% só pelo super admin** (DEC-103 D-04).
 - **Motivo por sessão (DEC-108):** o admin escolhe o motivo ao abrir a loja e a tela o pré-preenche; **cada alteração grava o motivo** no `audit_log` e mostra confirmação com antes e depois; o motivo da sessão vale por 30 min ou até trocar de loja; preço exige um dos 4 motivos permitidos a cada edição.
 - **Aviso ao lojista:** pausa, status e horário avisam na hora (painel e e-mail). Preço, estoque e catálogo: uma linha por alteração no painel e **um e-mail-resumo a cada 10 min** (até 20 itens e "+N"). Ação em massa: **1 aviso agregado** com o motivo (não 200).
-- **"Ver como o lojista":** credencial de visualização ligada a (admin, loja, motivo), válida por até 30 min e encerrada com a sessão do admin; grava abertura e encerramento no `audit_log`, **não** as telas navegadas.
+- **"Ver como o lojista":** credencial de visualização ligada a (admin, loja, motivo), válida por até 30 min, **sem renovação** (para continuar, abre outra, com novo motivo), encerrada com a sessão do admin; **uma visão ativa por admin**; só leituras da lista fechada de telas do lojista (pedidos, produtos, trocas, avaliações, dados e horários da loja); nível visualizador fixo, mesmo se o admin for membro da loja (threat model §14, DEC-119). Grava abertura e encerramento (com a causa e o total de leituras) no `audit_log`, **não** as telas navegadas. O acesso a dado pessoal de cliente **não** passa por aqui: é a ficha do pedido no admin (WB-108 C2: nome abreviado, e-mail e celular parciais, endereço só com bairro e cidade); "Revelar" segue cortado (DEC-071) e só volta pelo gatilho da WB-352 C14.
 - **Concorrência:** cada produto tem versão; se o lojista alterou no meio da edição, o admin vê "O lojista alterou este produto agora" e escolhe recarregar. Nunca sobrescreve em silêncio.
 - Estoque nunca menor que o reservado (RN-06). Produto ativo exige foto, nome e preço (mesmas regras do lojista, WB-060).
 - O admin **não** edita: CPF/CNPJ, razão social, documentos, conta de recebimento, dados bancários, equipe da loja.
@@ -126,7 +126,7 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 - **Desempenho:** p95 de um widget <= 2 s com 12 meses de dados; painel de 8 widgets carrega em <= 4 s com cache frio e <= 1 s com cache (`[HIPÓTESE]`; testes de carga com volume de 10 mil clientes). Consulta com tempo limite de 5 s e cancelamento. Cache de 5 min por (métrica, parâmetros). Escala: leitura sobre **agregados diários** (tabela de resumo) e não sobre `orders` direto (decisão técnica dos devs); atualização por hora.
 - **Segurança:** consultas parametrizadas sobre registro de métricas; lista de permissão de métricas, dimensões e filtros; limite de 30 consultas por minuto por usuário; auditoria de exportação; sem dado pessoal em nenhum widget; revisão do Security antes do release (consulta é superfície de ataque).
 - **Acessibilidade:** gráfico com resumo em texto e tabela alternativa; não depender só de cor; teclado.
-- **LGPD:** painéis agregados; "Ver como o lojista" respeita o mascaramento da RN-14 e grava acesso.
+- **LGPD:** painéis agregados; "Ver como o lojista" é mais restrito que a RN-14: não expõe dado pessoal de cliente nem em pedido ativo (SEC-207, DEC-120) e grava acesso.
 
 ## Histórias e critérios de aceite
 
@@ -150,13 +150,19 @@ Como admin, quero ajustar horário, pausa e dados da loja, para resolver pedidos
 ### WB-352 "Ver como o lojista vê" (somente leitura) — Must — dep: WB-350, WB-216
 Como suporte, quero ver o painel como o lojista vê, para ajudá-lo sem pedir senha.
 - **C1** Dado o botão "Ver como o lojista" e o motivo, então abre as telas do lojista com faixa "Visualização do admin" e nenhum botão que altere dado.
-- **C2** Dado pedido de cliente nessa visão, então nome, telefone e endereço seguem a regra da RN-14 (mascarados fora de pedido ativo).
+- **C2** (SEC-207, DEC-120) Dado pedido de cliente nessa visão, **inclusive pedido ativo** (recebido, aceito, em preparo, saiu para entrega), então aparecem só primeiro nome, bairro, itens, preços, totais, status e linha do tempo; sobrenome, telefone, e-mail, CPF, rua, número, complemento, CEP, coordenadas, observação do cliente e código de entrega não aparecem (a RN-14 vale para o lojista, não para esta visão).
 - **C3** Dado a abertura, então grava em `audit_log` quem, qual loja, quando e o motivo.
 - **C4** Dado tentativa de envio de formulário nessa visão por requisição direta, então o servidor recusa (403).
 - **C5** Dado a sessão do admin expirando, então a visão fecha.
 - **C6** (C-ADM-02) Dado a visão aberta, então a credencial de visualização é ligada a (admin, loja, motivo), vale até 30 minutos e encerra com a sessão do admin; o ator no `audit_log` continua sendo o admin.
 - **C7** (C-ADM-02) Dado qualquer método diferente de GET e HEAD, ou GET com efeito (marcar como lido, revelar contato, baixar documento ou exportação), então 403 na visão (guard global).
-- **C8** (C-ADM-02) Dado pedido fora de pedido ativo, então a **resposta da API** já vem mascarada (RN-14), não só a tela.
+- **C8** (C-ADM-02, SEC-207, VA-11 a VA-14) Dado qualquer leitura permitida na visão, então a **resposta da API** já vem sem os campos proibidos, em pedido ativo ou não (não só a tela): pedido sem sobrenome, telefone, e-mail, CPF, endereço além do bairro, observação e código de entrega; troca sem texto livre e fotos do cliente nem dados de reembolso; loja sem CPF/CNPJ, razão social, comissão, tarifa, conta de recebimento e contato de notificação; produto sem "Você recebe" nem campo de comissão. Teste: o mesmo pedido ativo lido pelo lojista traz o dado e lido pela visão não traz.
+- **C10** Dado admin que já tem uma visão aberta, quando abre outra (mesma loja ou outra), então a primeira deixa de valer na hora e a nova vale por até 30 min; dado a 11ª abertura na mesma hora, então recusa com "Muitas aberturas. Tente em alguns minutos." (429).
+- **C11** Dado a visão com 30 min completos, então a próxima leitura é recusada e a tela mostra "A visualização terminou. Abra de novo para continuar" com novo motivo; não há renovação automática. Dado o admin tocando "Sair da visualização", então a credencial deixa de valer imediatamente e o encerramento é gravado.
+- **C12** Dado a visão aberta, quando se tenta ler o que fica fora da lista (documentos, conta de recebimento, equipe, convites, financeiro, repasses, cupons, comanda, chat, exportações, notificações), então 403 e a tela mostra a etiqueta "Só o lojista" no lugar; dado a mesma credencial usada em outra loja, em outro navegador ou por outro admin, então 403 sem nenhum dado.
+- **C13** (nível fixo) Dado admin que também é membro ou dono da loja, quando abre a visão, então recebe o mesmo nível visualizador (C2 e C8), nunca o de dono.
+- **C14** (caminho alternativo; dado de cliente para suporte) Dado que o suporte precisa de dado de cliente (ex.: lojista diz "o cliente não atende"), então o caminho é a ficha do pedido no admin (WB-108 C2), aberta pelo número do pedido: nome abreviado, e-mail e celular parciais, endereço só com bairro e cidade, mais itens, pagamento e linha do tempo; o contato com o cliente sai pelo canal da Webag (suporte Webag ou operador de entrega ativa, `prd/logistica.md`), nunca por dado copiado do lojista. Dado que a ficha precisa ser aberta, então a abertura grava `audit_log` (quem, pedido, quando); dado perfil sem `orders:read`, então 403. **Não há "Revelar" dado completo na v1.1** (DEC-071 cortou WB-108 C4); `[HIPÓTESE]` gatilho de volta: 3 casos em que o suporte não resolveu sem o dado completo, e então volta com motivo, auditoria por pedido e perfil limitado, parecer do Security.
+- **C15** (Should; D-09 do threat model) Dado a abertura da visão, então o lojista vê, no feed de alterações do painel dele, "A Webag visualizou o painel da sua loja em <data e hora>", sem nome de pessoa e sem o texto da nota do admin.
 - **C9** (C-ADM-02) Dado abrir sem motivo, então 422; dado a abertura, então a linha de `audit_log` existe antes de qualquer dado ser devolvido; o encerramento ou a expiração também é gravado; as telas navegadas não são gravadas.
 
 ### WB-353 Admin edita catálogo e preços da loja — Must — dep: WB-350, WB-060, WB-061, WB-066
@@ -180,6 +186,7 @@ Como fundador, quero ver quem mudou o quê numa loja e desfazer, para corrigir e
 - **C3** (C-ADM-09) Dado exportação do histórico, então CSV com proteção de fórmula, com permissão própria, até 10 mil linhas, sem dado pessoal e auditada; perfil suporte recebe 403.
 - **C4** (C-ADM-06, DEC-103 D-06) Dado o papel de banco da API, quando tenta `UPDATE audit_log` ou `ALTER TABLE audit_log DISABLE TRIGGER`, então erro: a API roda com papel que **não é dono** da tabela (migração com outro papel); o gatilho append-only continua valendo.
 - **C5** (C-ADM-08) Dado "Restaurar", então cria novo registro e a contagem de linhas do `audit_log` só aumenta; se o valor mudou depois, pede confirmação.
+- **C6** (WB-352 C3, C10, C11) Dado o filtro "Acesso" do histórico, então lista abertura e encerramento de "Ver como" com admin, motivo, causa do fim (saiu, expirou, substituída, sessão encerrada) e total de leituras, sem as telas navegadas e sem dado pessoal; dado perfil sem permissão de ver a ficha, então 403.
 
 ### WB-355 Permissões por perfil nas ações novas — Must — dep: WB-100, WB-350
 Como fundador, quero que cada perfil faça só o que lhe cabe, para limitar o dano de um erro.
