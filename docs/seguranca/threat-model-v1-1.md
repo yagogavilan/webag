@@ -684,7 +684,7 @@ Escopo: `git diff 379ff18~1..553b533 -- apps/api docs/arquitetura` (commits `dc6
 
 ### 16.3 Achados novos
 
-#### SEC-210 | Severidade: Baixa | Status: Aberto | Dono: backend-dev
+#### SEC-210 | Severidade: Baixa | Status: Fechado no código (6aa708d; VA-27); CI pendente | Dono: backend-dev
 - **Onde:** `apps/api/src/modules/identity/view-as.service.ts:163` (`enforce(..., false)`: limite de leitura falha aberto) e `:179-181` (o portão `redis.set` vem antes do `recordStandalone`; erro do Redis cai no `.catch` de `:173` e a linha `view_as.denied` não é gravada; a contagem de 20 negações também para).
 - **Problema:** com o Redis fora, a visão fica sem o teto de 120 leituras/min, sem encerramento por abuso e sem trilha das negações.
 - **Cenário:** insider com a visão aberta lê páginas de pedidos e trocas sem limite durante até 30 min numa queda do Redis; as tentativas de mutação não deixam rastro. Impacto limitado: dado já mascarado, 1 loja por visão e a abertura continua falhando fechada.
@@ -698,7 +698,7 @@ Escopo: `git diff 379ff18~1..553b533 -- apps/api docs/arquitetura` (commits `dc6
 - **Correção:** lista sem `description` (só código do motivo); detalhe grava `admin.exchange.view` com o mesmo padrão de `auditOpen` dos pedidos (dedupe 10 min, falha = 500); fotos só no detalhe.
 - **Como verificar:** e2e análogo a AO-01 a AO-05 para trocas; isca no texto da troca ausente da lista do admin.
 
-#### SEC-212 | Severidade: Baixa | Status: Aberto | Dono: backend-dev
+#### SEC-212 | Severidade: Baixa | Status: Fechado no código (6aa708d, `ci.yml` e `production-boot`); CI pendente | Dono: backend-dev
 - **Onde:** `.github/workflows/ci.yml:47-51` (sem `REQUIRE_DB_ROLES`); `apps/api/test/production-boot.e2e-spec.ts` (`it.skipIf` do caso D-06); `db-roles` e `db-role-boot` pulam se o global-setup não criar os papéis.
 - **Problema:** DB-01 a DB-04 podem ficar "verdes" no CI por estarem pulados; e o commit `553b533` não tem execução de CI registrada.
 - **Correção:** `REQUIRE_DB_ROLES: '1'` no `env` do job; no `production-boot`, falhar em vez de pular quando a variável estiver ligada.
@@ -816,3 +816,64 @@ Escopo: `git diff 553b533..c88bd08 -- apps/api docs/arquitetura` (commits `9c2fd
 - **Condição antes da R1.3** (o restaurar e o digest dependem da trilha): SEC-213 e SEC-218.
 - **Condição antes do G5/produção:** SEC-216 (com DT-093), SEC-217, SEC-214, SEC-215 (decisão do PO), SEC-210 e SEC-211.
 - **Não validado:** telas e BFF do web; storage real (S3/CDN: cache das variantes públicas depois da exclusão); comportamento com PgBouncer; carga no pool (DT-094); seed `onda1.ts` em produção; leitura linha a linha dos e2e `r12-*`. Não substitui pentest.
+
+## 18. Apêndice: revisão do front/BFF do "Ver como" e das telas de admin da R1.1 (2026-11-22, sobre `7896689`)
+
+Exigida pela DEC-126 item 5 antes do G4. Escopo: commits `713db8f` (WB-352), `7fef536` (WB-350/351) e `7896689` (WB-350) em `apps/web`. Lidos por inteiro: `src/server/view-as.ts`, `app/api/view-as/{open,end,session,read/[...path]}/route.ts`, `src/server/upstream.ts`, `src/server/csrf.ts`, `src/lib/api/view-as.ts`, `src/features/view-as/{use-view-as.ts,open-dialog.tsx,banner.tsx,boundary.tsx,view-as-page.tsx}`, a página `lojas/[id]/ver-como/page.tsx`; diff do proxy (`app/api/proxy/[area]/[...path]/route.ts`), do logout, de `cookies.ts`, de `client.ts` e de `order-detail-page.tsx`; trechos de `screens.tsx` (pedidos, detalhe, trocas, avaliações), `store-ficha.tsx` (perfil, últimos pedidos, histórico), `store-detail.tsx` (permissões), `all-stores.tsx` (links), `admin-permissions.ts`, `next.config.ts`, `config.ts`, `prod-config.ts`, `admin-shell.tsx` (logout), `disputes/exchange-case-page.tsx` (SEC-211). Não lidos linha a linha: `edit-dialogs.tsx`, `admin-reason.tsx` além do armazenamento, `queue-page.tsx`, CSS. Skills: `revisao-diferencial-de-mudancas`, `analise-de-variantes`, `defaults-inseguros-e-armadilhas-de-api`.
+
+### 18.1 Testes executados
+`npx vitest run` em `src/server/view-as-routes.spec.ts`, `src/features/view-as`, `src/features/stores`, `src/features/admin-ops/orders.spec.tsx`, `src/server/{cookies,csrf}.spec.ts`, `src/lib`: **24 arquivos, 275 testes verdes**. Não rodados: Playwright (disco quase cheio) e navegador real; `pnpm audit` (os 3 commits não mudam dependências).
+
+### 18.2 Verificações pedidas
+| Item | Resultado | Evidência |
+|---|---|---|
+| Credencial `vas_` só em cookie `httpOnly`/`SameSite=Strict` | **Ok.** Sai do corpo do `open` (só `id`, `storeId`, `storeName`, `expiresAt`); `session` não a devolve; nunca em URL, `localStorage`, estado do React; `upstream.ts` não loga cabeçalhos; web sem Sentry e sem `console.*` com dado; `Referrer-Policy: no-referrer` global | `open/route.ts:44-46`; `session/route.ts:11`; `upstream.ts:60`; `next.config.ts:23`; teste `view-as.spec.tsx:325` e `view-as-routes.spec.ts:224` |
+| Cache | **Ok.** As 4 rotas respondem `cache-control: no-store`; `fetch` do BFF com `cache: 'no-store'`; página `force-dynamic`; a API também manda `private, no-store` | `read/route.ts:30`; `upstream.ts:72`; `view-as.service.ts:148` |
+| CSRF em `open` e `end` | **Ok.** `csrfProblem` (cabeçalho `X-Webag-Client`, `Sec-Fetch-Site`, `Origin`) + cookie `Strict`. Só o `open` tem teste de CSRF (obs. 3) | `open/route.ts:26`; `end/route.ts:11` |
+| Fixação/replay entre admins ou sessões | **Ok na API** (credencial presa a `admin_user_id` + `admin_session_id`, §14.4 passo 5). No BFF, cookie de outro admin ou plantado por host irmão não dá leitura, mas engana o estado da tela e pode travar a visão: **SEC-219** | `session/route.ts:10-11`; `view-as.ts:15` |
+| Open-redirect/SSRF no `read` | **Ok.** Base fixa (`API_URL`); caminho só passa se casar com a regex fechada das 13 rotas com UUID, ancorada (`..`, `%2F` e palavras fora da lista não casam); loja do caminho = loja do cookie; só `GET` exportado; query repassada começa em `?` e não muda o caminho; `redirect: 'manual'`; timeout 15 s. `HEAD` cai no `GET` do Next (leitura) | `view-as.ts:59-63`; `read/route.ts:16-24`; `upstream.ts:68-74` |
+| Proxy comum e `X-View-As` | **Ok.** `callApi` monta os cabeçalhos do zero; o proxy não passa `viewAs`; o cookie tem `Path=/api/view-as` e nem chega ao proxy | `proxy/route.ts:61`; teste `view-as-routes.spec.ts:213` |
+| XSS (nome da loja, motivo, troca) | **Ok.** Nenhum `dangerouslySetInnerHTML`; tudo em texto do React; links montados com IDs da API ou da rota, nenhum `href` vindo de texto livre; CSP com nonce no `/admin`. Nome da loja no cookie vai com `encodeURIComponent` (sem injeção de atributo) | `grep` em `src` e `app`; `view-as.ts:32` |
+| Dados proibidos mesmo se a API errar | **Ok.** As telas da visão desenham por lista permitida (primeiro nome, bairro, itens, status, código do motivo) e os testes usam isca (sobrenome, telefone, rua, `description`, fotos, CNPJ, comissão, e-mail de notificação) que não pode aparecer | `screens.tsx:55-70,107,205-208`; `view-as.spec.tsx:188,274,285` |
+| Permissões front x API | **Ok.** `admin-permissions.ts` é espelho com teste que lê a matriz da API; `view-as:open` = 4 perfis (decisão do PRD); edição exige `stores:write`; a API continua sendo quem barra | `admin-permissions.ts:4-8,76`; `store-detail.tsx:44-46,98` |
+| Logout limpa a credencial | **Ok.** Logout, 401 sem renovação (proxy e `read`) e `logout-all` apagam o cookie; inatividade chama o logout. Login/MFA não limpam um cookie antigo (parte da SEC-219). O cache do React Query não é limpo no logout (obs. 4) | `logout/route.ts:27`; `proxy/route.ts:100-109`; `view-as.ts:95` |
+| `sessionStorage` e motivo | Guarda código e, se "Outro", a nota livre de até 200 caracteres; sobrevive ao logout na mesma aba; a tela não pede para não escrever dado de cliente (§16.4 item 4): **SEC-220** | `use-view-as.ts:40-61`; `open-dialog.tsx:117` |
+| Ficha do pedido (C14) | **Ok.** A API já mascara nome, e-mail e celular e manda só bairro/cidade/UF (`admin-orders-read.service.ts:173,175`); a nota só aparece com dado buscado agora (`isFetchedAfterMount`). Com o dedupe de 10 min (D20 aceita) a reabertura não gera linha nova, mas o acesso está coberto pela anterior: texto aceitável | `order-detail-page.tsx:99-104,135-137` |
+| SEC-211 no que o front mostra | A lista de disputas **não** desenha `description`, mas a resposta da API a traz (visível no DevTools). O caso (`exchange-case-page.tsx:68,110`) mostra o texto e também `timeline[].reason`, que é a cópia dos 200 primeiros caracteres do texto (`exchanges.service.ts:277`), para os 4 perfis. Correção continua na API (SEC-211, que já cita `timeline[].reason`); o front não precisa mudar | |
+| Analytics | **Ok.** Nenhum evento em `features/view-as` e `features/stores` | `grep` |
+
+### 18.3 Achados novos
+
+#### SEC-219 | Severidade: Baixa | Status: Aberto | Dono: mobile-dev (web)
+- **Onde:** `apps/web/src/server/view-as.ts:15` (prefixo `__Secure-`, `Path=/api/view-as`); `app/api/view-as/session/route.ts:10-11` (estado "ativo", loja, nome e fim lidos só do cookie, sem conferir sessão de admin); rotas `app/api/session/[area]/{login,mfa}` não apagam o cookie da visão.
+- **Problema:** `__Secure-` aceita `Domain=`; um host irmão (lojista ou site público, que o SEC-116 isolou justamente com `__Host-`) consegue plantar `__Secure-wb_admin_vas` para o domínio pai. O BFF confia nos metadados do cookie para a tela e não consegue apagar o cookie com `Domain` (o `clearedViewAsCookie` é sem `Domain`).
+- **Cenário de ataque:** XSS no painel do lojista grava um cookie com `Max-Age` longo, credencial do próprio atacante e nome de loja à escolha. No navegador do admin, o cookie plantado (mais antigo) vem primeiro: o banner mostra "Visualizando como <texto do atacante>" e toda leitura dá `VIEW_AS_EXPIRED`; a visão fica inutilizável até o cookie vencer. Sem vazamento de dado nem ação em nome do admin (a API exige a mesma sessão). Variante sem ataque: admin B entra no mesmo navegador depois de A fechar a aba sem sair e vê "visão aberta" de A até a primeira leitura falhar.
+- **Correção recomendada:** usar `__Host-wb_admin_vas` com `Path=/` (o `Path` restrito não é fronteira de segurança: o cookie já é `httpOnly` e o proxy não o lê); apagar o cookie da visão no sucesso do login/MFA do admin; na rota `session`, responder `active:false` se não houver cookie de sessão do admin.
+- **Como verificar:** teste do BFF: `Set-Cookie` do `open` começa com `__Host-` e tem `Path=/`; sucesso do MFA devolve o cookie da visão com `Max-Age=0`; `session` sem cookie de sessão = `active:false`.
+
+#### SEC-220 | Severidade: Baixa | Status: Aberto | Dono: mobile-dev (web); PO confirma o texto
+- **Onde:** `apps/web/src/features/view-as/use-view-as.ts:40-61` (`wb:view-as:last-reason` com a nota livre); variante em `src/components/panel/admin-reason.tsx:32-52` (`wb:admin:session-reason`); `admin-shell.tsx:74-87` (logout não limpa); `open-dialog.tsx:117` (campo sem orientação).
+- **Problema:** a nota livre do motivo (até 200 caracteres, vai também ao `audit_log` append-only) não tem orientação para não incluir dado de cliente (pedido do §16.4 item 4) e fica no `sessionStorage` depois do logout, na mesma aba.
+- **Cenário:** suporte escreve "cliente Maria 11 9xxxx reclamou" na nota; o texto fica para sempre na auditoria e, na aba, é pré-preenchido para o próximo admin que usar o mesmo navegador e reabrir uma visão.
+- **Correção recomendada:** dica no campo ("Não escreva nome, telefone ou endereço de cliente"); apagar as duas chaves no logout e na perda de sessão (`onSessionLost`).
+- **Como verificar:** teste de componente: texto da dica presente; depois do logout, `sessionStorage` sem `wb:view-as:last-reason` nem `wb:admin:session-reason`.
+
+#### SEC-221 | Severidade: Média | Status: Aberto (pré-existente; variante achada nesta revisão) | Dono: mobile-dev (web)
+- **Onde:** `apps/web/src/server/config.ts:9` (`COOKIE_SECURE` sobreposto por variável) e `src/server/prod-config.ts:23-39` (não recusa `COOKIE_SECURE=false` em produção).
+- **Problema:** falha aberta configurável: um `COOKIE_SECURE=false` esquecido em produção tira `Secure` e os prefixos `__Host-`/`__Secure-` de **todos** os cookies (sessão do admin e do lojista, `vas_`, pendentes de MFA e reset), desfazendo o SEC-116 sem nenhum aviso.
+- **Cenário:** variável copiada do ambiente de teste local; cookies de sessão passam a aceitar `Domain` (tossing por host irmão) e podem sair em HTTP antes do HSTS valer.
+- **Correção recomendada:** em `productionConfigProblems`, recusar `COOKIE_SECURE` diferente de `true` (exceto com `WEBAG_ALLOW_LOCAL_ORIGINS=true`, já usado no Playwright).
+- **Como verificar:** caso novo em `prod-config.spec.ts`: produção com `COOKIE_SECURE=false` devolve problema; com o escape de teste, não.
+
+### 18.4 Observações (sem SEC)
+1. `view-as-page.tsx:23`: `isViewAsTab` usa `in` (aceita `aba=constructor`, tela em branco). Usar `Object.hasOwn`. Mesma classe do §16.4 item 1; só robustez.
+2. **[Suspeita]** `app/admin/(painel)/lojas/[id]/page.tsx` e `ver-como/page.tsx` não validam `id` como UUID antes de montar caminhos do proxy (`admin/stores/${id}/...`). Se o Next decodificar `%2F` no parâmetro (confirmar no navegador), o `fetch` normaliza `..` antes do envio, então o filtro de `..` do proxy não pega e a regex `admin/.+` aceita: um link forjado redireciona leituras GET para outra rota de admin com as permissões do próprio admin (client-side path traversal). Exploração de escrita é improvável (as ações dependem de a ficha carregar). Pré-existente em todas as páginas de admin com `[id]`; validar UUID na página é barato. A visão em si está protegida (regex do BFF e `mine`).
+3. Falta teste de CSRF para `end` (o código tem a checagem).
+4. Logout e perda de sessão não chamam `queryClient.clear()`: dado mascarado da visão e das fichas fica em memória até o `gcTime`. Pré-existente; recomendável junto com a SEC-220.
+5. A nota "Esta abertura ficou registrada" (C14) depende do `auditOpen` da API (falha = 500, §16); manter assim.
+
+### 18.5 Parecer para o G4 da R1
+- **Front/BFF do "Ver como" e telas de admin da R1.1: nenhum achado Crítico ou Alto. Esta revisão não bloqueia o G4.** Os pontos declarados pelo dev conferem, com uma discordância: `__Secure-` com `Path` restrito é pior que `__Host-` com `Path=/` (SEC-219).
+- **Continua valendo para o G4:** as condições do §16.5 e §17.5 (CI verde com SEC-212).
+- **Condição antes do G5/produção:** SEC-219, SEC-220, SEC-221 (além das já listadas, incluindo SEC-211 na API) e obs. 2 e 4.
+- **Não validado:** comportamento real do navegador (ordem de cookies com mesmo nome, prefixos em HTTPS), Playwright da visão contra a API real, log do nginx/CDN (se registra `Cookie`), build de produção do Next. Não substitui pentest.
