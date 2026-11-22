@@ -298,9 +298,10 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TTL_DAYS`, `REFRESH_ABSOLUTE_TTL_DAYS`, `REFRESH_REUSE_WINDOW_SECONDS` | Não | Duração de sessão (padrões: 900 s, 30 d, 90 d, 30 s) | Só se o produto mudar a regra; adicione em `environment` do serviço `api` |
 | `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE` | Não | Erros da API no Sentry, sem dado pessoal; vazio = desligado. Traces de 0 a 1 (0 = só erros) | Sentry > Projeto > Settings > Client Keys (DSN) |
 | `DB_POOL_MAX` | Não | Conexões do pool por processo da API (padrão 10). Regra: `(réplicas da API + worker) x DB_POOL_MAX <= PG_MAX_CONNECTIONS - 20` (folga para migração, backup e manutenção). Seção 14.2 | Só se mudar o número de réplicas |
-| `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | Não | Teto de uma consulta (padrão 30 s; 0 = sem teto) e de transação esquecida aberta (padrão 30 s). Consulta/relatório que passe disso deve virar job | Padrões |
-| `FEED_DIRECTORY_TTL_SECONDS`, `HOME_SECTIONS_TTL_SECONDS`, `BROWSE_CACHE_TTL_SECONDS` | Não | Cache em memória (por processo) do catálogo de lojas da descoberta (15 s), das seções "ofertas" e "mais vendidos" da home (60 s) e da vitrine/página de loja e produto (10 s). 0 = desligado. A loja nova, o produto novo ou o estoque aparecem na home em até esse tempo + 30 s | Padrões |
+| `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | Não | Teto de uma consulta (padrão 30 s; **0 = sem teto e o boot recusa em produção**) e de transação parada aberta (padrão 60 s; 0 = desligado; não baixe de 15 s). O servidor encerra a conexão que passa disso; a API trata o erro sem cair e nunca espera rede com transação aberta (conciliação e cobrança de troca usam trava em conexão dedicada). Consulta/relatório que passe do teto deve virar job | Padrões; o compose já repassa estas variáveis |
+| `FEED_DIRECTORY_TTL_SECONDS`, `HOME_SECTIONS_TTL_SECONDS`, `BROWSE_CACHE_TTL_SECONDS` | Não | Cache em memória (por processo) do catálogo de lojas da descoberta (15 s), das seções "ofertas" e "mais vendidos" da home (60 s) e da vitrine/página de loja e produto (10 s). 0 = desligado. **Defasagem real (soma das camadas, seção 14.6):** loja nova 45 s, loja suspensa 30 s, ofertas e mais vendidos 90 s, páginas de loja/produto 40 s; sacola e pedido 0 s | Padrões |
 | `HTTP_ACCESS_LOG`, `HTTP_SLOW_MS` | Não | `slow` (padrão): o log de acesso da API só registra erro (4xx/5xx) e requisição lenta (>= 500 ms); o nginx já guarda todos os acessos. `all` volta a logar toda requisição (custa ~10% de CPU em carga) | Padrões |
+| `API_MAX_OLD_SPACE_MB` | Não | Teto do heap do Node (`--max-old-space-size`): 1024 (VPS 4 GB) ou 1536 (8 GB ou mais). Sem ele o V8 disputa memória com banco, Redis e web | Padrão |
 | `LATENCY_LOG_INTERVAL_SECONDS` | Não | A cada N s (60) a API escreve UM log `http.latency` com p50/p95/p99 por rota (modelo da rota, sem id nem coordenada). Seção 14.4 | Padrão |
 
 ### 6.2 Painel web (`apps/web`) e demais serviços
@@ -553,6 +554,9 @@ O `infra/docker-compose.prod.yml` já aplica estes parâmetros; ajuste os valore
 | `effective_io_concurrency` | 200 | 200 | 200 | SSD/NVMe |
 | `jit` | off | off | off | JIT só atrasa consultas curtas de OLTP |
 | `wal_compression`, `checkpoint_timeout` | on, 15min | on, 15min | on, 15min | Menos escrita em disco |
+| `max_wal_size` (`PG_MAX_WAL_SIZE`) | 2GB | 2GB | 4GB | Com `checkpoint_timeout=15min` o padrão (1GB) dispara checkpoint por tamanho |
+| `log_parameter_max_length` | 0 | 0 | 0 | Consulta lenta no log SEM parâmetros (e-mail, busca, coordenadas; SEC-202) |
+| `shm_size` do contêiner (compose) | 256mb | 256mb | 256mb | O padrão do Docker é 64 MB e junção paralela com `work_mem` maior falha com "could not resize shared memory segment" |
 | `shared_preload_libraries` | `pg_stat_statements` | idem | idem | Medição (14.3) |
 
 Depois de mudar os `PG_*`: `sh infra/scripts/prod.sh up -d postgres` (reinicia o banco; ~10 s de indisponibilidade, faça fora do pico). Confira: `sh infra/scripts/prod.sh exec postgres psql -U webag -c "show shared_buffers"`.
@@ -560,7 +564,9 @@ Depois de mudar os `PG_*`: `sh infra/scripts/prod.sh up -d postgres` (reinicia o
 ### 14.2 Conexões e réplicas da API
 - Cada processo da API abre até `DB_POOL_MAX` (10) conexões. Hoje: 1 API (+ worker de jobs, quando houver) = 10 a 20 conexões. Com 3 réplicas da API: 30 + 10 (worker) = 40, longe das 100 do servidor.
 - **Capacidade de 1 processo (medida):** ~160 a 230 req/s da jornada completa a 100% de 1 vCPU (a API é de thread única). Para o pico de 300 req/s planeje **2 a 3 réplicas** da API atrás do nginx (`deploy.replicas` no compose ou serviços `api1`, `api2` num `upstream`). **Pendência bloqueante antes de escalar:** com mais de 1 réplica, o Socket.IO precisa do adaptador Redis (`@socket.io/redis-adapter`; um evento de pedido emitido na réplica A tem de chegar ao socket conectado na B) e o nginx precisa de afinidade para o transporte de *polling* (`ip_hash`). Isso é dependência nova: exige ADR e aprovação do tech-lead (ver "Fica para depois" no relatório). Até lá, **1 réplica** (suficiente para o piloto e para ~100 req/s com folga).
-- PgBouncer só se `max_connections` apertar: modo *transaction*; a API não usa `LISTEN/NOTIFY` nem *advisory lock* de sessão em conexão do pool (a conciliação usa conexão dedicada), mas o parâmetro de conexão `options` (timeouts) precisa ir no PgBouncer (`ignore_startup_parameters`/`server_reset_query`). Teste antes.
+- PgBouncer só se `max_connections` apertar. Atenção (DT-085): a conciliação de pagamentos e a cobrança de troca usam *advisory lock* de **sessão** em conexão dedicada (`SessionLockService`), que **não funciona em modo *transaction***: essas conexões precisam ir direto ao PostgreSQL (ou o lock vira lease em linha antes). Além disso, os parâmetros de conexão `options` (`statement_timeout`, `idle_in_transaction_session_timeout` e `pg_trgm.word_similarity_threshold=0.5`) precisam ser aceitos pelo PgBouncer (`ignore_startup_parameters = options`) e reaplicados; a API loga `db.session_settings` no boot e avisa se o limite do `pg_trgm` não chegou (a busca por erro de digitação mudaria sem erro nenhum). Teste antes.
+- Timeouts: o PostgreSQL **encerra** a conexão parada em transação por mais de `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`. A API registra `conexão em uso caiu` (warn) e segue; se esse aviso aparecer no log, é um código esperando rede com transação aberta e deve ser corrigido (abra issue, não suba o timeout).
+- Memória: o compose não define `mem_limit` (depende do servidor); o heap do Node é limitado por `API_MAX_OLD_SPACE_MB`.
 
 ### 14.3 Medir o banco (uma vez por semana no começo)
 ```bash
@@ -582,3 +588,18 @@ Meta `[HIPÓTESE]`: nenhuma consulta de leitura da jornada do cliente com média
 - **Conexão reaproveitada com a API:** hoje cada requisição abre uma conexão nova até `api:3000`. Em carga, declare `upstream webag_api { server api:3000; keepalive 64; }`, use `proxy_pass http://webag_api;` e, no `location`, `proxy_set_header Connection "";` (o `proxy_http_version 1.1` já existe). A API já mantém a conexão ociosa por 65 s (`keepAliveTimeout`), mais que o nginx, para não dar 502 na conexão reaproveitada.
 - **Limite por IP:** `limit_req ... rate=30r/s burst=60` e `limit_conn 50` por IP. Operadoras móveis colocam centenas de clientes atrás do mesmo IP (CGNAT): com 1.000 usuários simultâneos, um IP de operadora pode passar de 30 req/s e tomar `429`. Sugestão `[HIPÓTESE, calibrar com o piloto]`: `rate=60r/s burst=120` e `limit_conn 100` no `server` da API; o limite fino (login, busca) continua na própria API, por IP + conta.
 - **Fotos:** o bucket público já responde `Cache-Control: public, max-age=31536000, immutable` (as variantes têm o id do arquivo na chave: imutáveis). Se as fotos passarem por nginx/Cloudflare (`FILES_HOST`), mantenha esse cabeçalho e ligue o cache de borda (Cloudflare: *Cache Everything* para o host de arquivos).
+
+### 14.6 Defasagem real da vitrine (cache em memória + Redis + aparelho)
+O que o cliente vê na descoberta pode estar atrasado pela SOMA das camadas; o que ele compra, nunca (sacola, pedido e pagamento leem o banco na hora). Medido por teste com TTL real em `apps/api/test/discovery-cache.e2e-spec.ts`.
+
+| Mudança no banco | Onde aparece | Atraso máximo | Camadas |
+|---|---|---|---|
+| Loja nova ou alterada | Lojas perto de você, novidades, busca de lojas | 45 s | diretório em memória 15 s + cache da posição no Redis 30 s |
+| Loja suspensa ou bloqueada | Lojas perto de você | 30 s | consulta por raio ao vivo; só o Redis da posição |
+| Oferta nova, produto removido pela moderação, mais vendidos | Ofertas e Mais vendidos da home | 90 s | `HOME_SECTIONS_TTL_SECONDS` 60 s + Redis 30 s |
+| Preço, estoque, loja pausada ou suspensa, produto removido | Página da loja, do produto e vitrine | 40 s | `BROWSE_CACHE_TTL_SECONDS` 10 s + `max-age=30` no aparelho |
+| Qualquer coisa | Sacola, pedido, pagamento, acompanhamento | 0 s | sem cache |
+
+- Banco fora do ar: o valor antigo segue sendo servido por até 4x o TTL; erro de negócio (404 de loja suspensa) nunca é mascarado. Resposta de erro sai sempre `private, no-store`.
+- Para reduzir (ex.: remoção urgente por moderação) sem esperar: reiniciar o contêiner `api` (`prod.sh restart api`) limpa os caches em memória e, passados 30 s, o Redis da posição também expirou. O aceite desta janela é decisão do PO (`docs/qa/performance/api-2026-11-22.md`, seção 12). Com 2+ réplicas, cada uma tem a sua fase (DT-082).
+
