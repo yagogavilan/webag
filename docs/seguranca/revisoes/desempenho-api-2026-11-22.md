@@ -7,6 +7,8 @@
 
 ## Veredito
 
+> **Atualização 2026-11-22 (Re-revisão, ao final):** SEC-199, SEC-202 e SEC-203 corrigidos. **Veto levantado com condições** (DEC-115). SEC-200 e SEC-201 seguem abertos como dívida com prazo no G4 do v1.1. Novo: SEC-204 (Baixa).
+
 **REPROVADO, com veto ao merge e ao deploy desta mudança enquanto SEC-199 (Alta) estiver aberto.** A correção é pequena: ver a correção mínima no achado. O resto foi aprovado com ressalvas. A autenticação em uma consulta manteve todas as checagens, `Cache-Control` ficou mais restrito do que antes, os caches não guardam dado pessoal e o checkout continua recalculando tudo na hora. O webhook não ganhou janela de replay.
 
 | Severidade | Achados | Bloqueia |
@@ -18,7 +20,7 @@
 ## Achados
 
 ```
-SEC-199 | Severidade: Alta | Status: Aberto
+SEC-199 | Severidade: Alta | Status: Corrigido (8d861f9; ver Re-revisão)
 Onde: apps/api/src/platform/config/env.ts:75 (padrão 30 s) e platform/database/database.module.ts:45 (`idle_in_transaction_session_timeout` no pool);
       payments.service.ts:805-811 (conciliação segura `lockTx` parada enquanto concilia no pool), exchanges.service.ts:563-575 (trava + createPayment no MP),
       stores/payment-account.service.ts:167-174 (trava + refresh OAuth no MP); database.module.ts:35 (pool sem listener de 'error').
@@ -79,7 +81,7 @@ Como verificar: e2e com TTL > 0 (hoje os caches estão desligados no e2e): suspe
 ```
 
 ```
-SEC-202 | Severidade: Baixa | Status: Aberto (pré-existente; o compose foi alterado neste diff)
+SEC-202 | Severidade: Baixa | Status: Corrigido (d4f1968; ver Re-revisão)
 Onde: infra/docker-compose.prod.yml (comando do postgres, `log_min_duration_statement=1000`).
 Problema: no PostgreSQL 13 ou mais novo, `log_parameter_max_length` vale -1 por padrão. Toda consulta lenta vai para o log do contêiner COM os parâmetros
   (e-mail no login, termo de busca, lat/lng da descoberta, telefone).
@@ -89,7 +91,7 @@ Como verificar: `select pg_sleep(1.1), $1` com o parâmetro 'x@y.com' não deixa
 ```
 
 ```
-SEC-203 | Severidade: Baixa | Status: Aberto
+SEC-203 | Severidade: Baixa | Status: Corrigido no item (1) (8d861f9); item (2), calibração do teto, segue como recomendação. Ver Re-revisão
 Onde: env.ts:73 e 75 (`min(0)`: 0 significa "sem teto"), database.module.ts:37-45.
 Problema: (1) armadilha de configuração: um `DB_STATEMENT_TIMEOUT_MS=0` por engano (ou copiado de outro ambiente) volta a deixar consulta sem teto, sem aviso.
   (2) 30 s é um teto generoso para o caminho HTTP com pool de 10: 10 requisições lentas e simultâneas seguram o pool por 30 s, e todos os outros recebem 500
@@ -129,3 +131,72 @@ Como verificar: boot com `APP_ENV=production` e `DB_STATEMENT_TIMEOUT_MS=0` falh
 ## Limites desta revisão
 
 Análise estática do diff e das dependências diretas, mais um experimento local (pg + drizzle contra PostgreSQL 16) para confirmar SEC-199. Não rodei e2e nem carga, não testei o nginx, e produção usa PostgreSQL 18. Não fiz pentest. O custo dos limites por IP com CGNAT depende de dado real de operadora, que não tenho ([HIPÓTESE]).
+
+---
+
+## Re-revisão (2026-11-22)
+
+- **Escopo:** `8d861f9` (antes de `2103c50`, lido com `git show`) e `git diff 2103c50..HEAD -- apps/api infra docker-compose*.yml docs/arquitetura` (`f8e85b1`, `eb9b936`, `d4f1968`, `25b9931`; 20 arquivos). Também li `docs/deploy/guia-deploy.md` §14.5 e as DEC-105 e DEC-113. Não li: os PRDs e o design do `2103c50` (são só documentos de produto).
+- **Execução (PostgreSQL 16 e Redis locais; produção usa PG 18):**
+  - e2e `db-idle-timeout`, `cache-control` e `payments`: 36 de 36 verdes. e2e `discovery-cache`, `principal` e `exchanges`: 37 de 37 verdes. Unitários `platform/cache`, `platform/config` e `platform/observability`: 61 de 61 verdes.
+  - **Mutação** (cópia descartável do código, fora do repositório): sem os dois listeners de `error` do pool, 2 testes do `db-idle-timeout` ficam vermelhos (`uncaughtException` capturado). Com a conciliação de volta ao `pg_try_advisory_xact_lock` dentro de `db.transaction`, 1 teste fica vermelho: a conciliação concorrente **não** volta `skipped`, ou seja, duas rodariam juntas. Os testes provam o controle; não estão verdes por acaso.
+  - SEC-202 conferido no PG 16 com `\bind`: com `log_parameter_max_length=0` o log não tem `DETAIL: parameters:`; com -1, tem.
+  - **Não rodei:** a suíte e2e completa (a DEC-105 pede 2 execuções verdes ao QA), carga, nginx, PG 18 e PgBouncer.
+
+### Status dos achados
+
+| ID | Status | Evidência |
+|---|---|---|
+| SEC-199 (Alta) | **Fechado** | (a) Queda do processo: `database.module.ts:127` (`pool.on('error')`, conexão ociosa) e `:128-129` (`client.on('error')` posto no `connect`; o pg-pool tira o listener dele durante o empréstimo). Teste: `db-idle-timeout.e2e-spec.ts`, "transação esquecida..." e "conexão ociosa do pool terminada...", vermelhos sem o fix. (b) Transação ociosa como trava: `SessionLockService.tryRun` (`database.module.ts:43-67`) usa `pg_try_advisory_lock` de sessão em conexão dedicada **fora de transação**, com `pg_advisory_unlock` antes de devolver a conexão e `release(true)` se a conexão caiu ou o unlock falhou. Usos: conciliação (`payments.service.ts:810`, com `lock.lost()` interrompendo o laço em `:841`) e pagamento de troca (`exchanges.service.ts:566-588`; a checagem de dono `userId` continua em `:567`). Teste: "a conciliação com provedor lento..." (3 x 1,2 s com timeout de 1 s): termina, a 2ª chamada volta `skipped` e `pg_locks` fica sem trava ao final. (c) Refresh OAuth (`payment-account.service.ts:167-176`): continua com transação durante 1 chamada ao MP, mas com `timeout: 8_000, maxRetries: 0` (`:128`) e o novo padrão de 60 s (`env.ts:80`). Fica dentro da margem e está registrado em DT-085. Ver SEC-204 |
+| SEC-200 (Média) | **Aberto** | `infra/nginx` sem mudança (`git diff --stat` vazio); `rate-limit.guard.ts` sem mudança. O guia §14.5 (`guia-deploy.md:589`) já cita `limit_conn 50`, mas propõe 100 sem zona própria para `/socket.io/` e não cita os limites por IP da API (`refresh`, `order-create`, `coupon-apply`). `n429` não entrou no `http.latency` |
+| SEC-201 (Baixa) | **Aberto** (a DEC-113 decidiu: TTL aceito para mudança comercial; **invalidação em até 5 s obrigatória** para moderação, suspensão e desativação; ainda não implementada) | Agora existe o teste que faltava: `discovery-cache.e2e-spec.ts:156` e `:173` (com cache ligado, produto removido e loja suspensa são recusados na sacola e no pedido na hora). Logo, **sem impacto financeiro, comprovado**. A exposição de conteúdo retirado continua. **Agravante novo:** o stale-if-error (`local-cache.ts:35`) serve o valor antigo por até 4x o TTL quando o recálculo falha por erro de infraestrutura (ofertas e mais vendidos: até 240 + 30 s). `AppError` (404 de loja suspensa) nunca é mascarado: `local-cache.spec.ts`, "erro de NEGÓCIO..." |
+| SEC-202 (Baixa) | **Fechado** | `infra/docker-compose.prod.yml:76-77` (`log_parameter_max_length=0`); `..._on_error` já vale 0 por padrão. Conferido no PG 16 (acima). Resíduo: consulta com valor literal no texto (não parametrizado) continua no log. O drizzle parametriza; não procurei `sql.raw` com dado pessoal |
+| SEC-203 (Baixa) | **Fechado** no item (1) | `env.ts:223-224` recusa `DB_STATEMENT_TIMEOUT_MS=0` com `NODE_ENV=production` (vale também para staging). Teste: `env.spec.ts:108`. O compose passa a variável com padrão 30000 (`docker-compose.prod.yml:245`). Item (2), calibrar o teto HTTP com `pg_stat_statements`, continua como recomendação, sem bloqueio |
+
+### Achado novo
+
+```
+SEC-204 | Severidade: Baixa | Status: Aberto
+Onde: apps/api/src/platform/config/env.ts:80 (`DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` aceita de 1 a 600000) e stores/payment-account.service.ts:167-176.
+Problema: o comentário diz "não baixar de 15 s", mas o boot aceita qualquer valor >= 1. Com menos de ~8 s, o refresh OAuth (transação aberta durante
+  a chamada ao MP, timeout de 8 s) pode ser encerrado depois que o MP girou o token e antes do UPDATE.
+Cenário de falha: um operador "aperta" o timeout para 5000 achando que é ganho de segurança. Nas lojas com token perto de vencer, o refresh lento perde o par novo
+  (o refresh_token antigo morre ao renovar). A loja fica sem conseguir cobrar até reconectar a conta de recebimento: venda perdida, sem vazamento.
+  O processo não cai mais (SEC-199).
+Correção recomendada (backend-dev): no superRefine de produção, aceitar só 0 ou >= 15000; ou, melhor (DT-085), tirar o refresh da transação: lease em linha por loja,
+  chamada ao MP fora da transação, gravação do par novo em transação curta.
+Como verificar: env.spec com `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=5000` em produção falha no boot.
+```
+
+### Regressões novas verificadas
+
+| Item | Resultado | Evidência |
+|---|---|---|
+| Conciliação de pagamentos | **Sem regressão; melhorou.** Antes, a trava morria aos 30 s e duas conciliações podiam rodar juntas; o teste de mutação confirma isso. Agora a trava dura a rodada inteira. Exclusão mútua com a forma `xact` pela mesma chave `hashtext` (bigint de 1 argumento). Uma conexão presa por rodada, como antes. Se `pool.connect()` falhar, o erro vai ao `catch` do timer (`payments.service.ts:142`) | `database.module.ts:43-67`, teste acima |
+| Pagamento de troca | **Sem regressão.** Mesma checagem de dono e de estado, mesma resposta 409 quando a trava está ocupada (`exchanges.service.ts:587`), mesmo consumo de conexão (antes: a da transação; agora: a dedicada). A trava pega **antes** da checagem de dono já existia: um terceiro que conheça o UUID da troca só consegue causar 409 por milissegundos, e o limite é 20/h (`exchanges.controllers.ts:123`). Lacuna de teste: nenhum e2e de troca com provedor lento | `exchanges.e2e-spec.ts` verde |
+| Webhook do MP | **Sem janela nova de replay.** Só mudou o relógio: vencimento, marcação e backoff usam o `now()` do banco (`payments.service.ts:395`, `:402`, `:415`, `:430`; `make_interval` com parâmetro ligado, sem SQL montado como texto). Assinatura, antirreplay, unicidade `(provider, event_key)`, re-consulta ao MP e `SKIP LOCKED` não estão no diff. A observação da 1ª revisão (lease com o relógio da API) foi resolvida. Testes: `payments.e2e-spec.ts`, "mesmo milissegundo" e "dois processadores simultâneos consultam o provedor UMA vez" | |
+| Variante do relógio | Os estornos (`payments.service.ts:724`, `:730`, `:783`) usam o relógio da API dos dois lados. Hoje isso é consistente. Com mais de uma réplica, a diferença de relógio entre hosts entra no lease (já coberto por ADR-017/DT-083). Sem achado | |
+| Isolamento de cache entre áreas e clientes | **OK, com teste.** As chaves continuam sem posição nem usuário. A distância é calculada por requisição. `discovery-cache.e2e-spec.ts:59` (2 áreas) e `:88` (2 clientes, mesma área), com TTL real | |
+| Dado pessoal em cache | **Melhorou.** Antes, o cache da loja guardava a linha inteira, com o CPF/CNPJ completo (MEI = CPF da pessoa). Agora guarda só a máscara (`browse.service.ts:126`), e o cache do produto guarda só `id`, `name` e cidade (`:266`). Teste: `discovery-cache.e2e-spec.ts:244`. `legalName` e o endereço da loja continuam: são dados do fornecedor exigidos e já públicos | |
+| Chave do cursor | **Melhorou.** `offsetOf` (`browse.service.ts:41-44`) normaliza para um inteiro >= 0: cursor forjado não cria entrada nova nem chega ao `OFFSET` como texto ou número negativo. Teste: `discovery-cache.e2e-spec.ts:227` | |
+| `Cache-Control` em erro | **Melhorou.** Todo erro sai com `private, no-store` (`problem.filter.ts:68`, e `:31` no `/health`), inclusive 401 e 404 de rota `public`. Teste: `cache-control.e2e-spec.ts` | |
+| Log | Os logs novos não carregam dado pessoal: `db.session_settings` (só parâmetros), queda de conexão (`error.message` do pg, sem parâmetros) e trava (`exchange-pay:<uuid>`). `LatencyRecorder` só é instalado com o resumo ligado (`app.setup.ts`) | |
+| DoS por conexão dedicada ou trava | **Sem piora.** Uma conexão por trava, como a transação de antes. A trava de troca é por `exchangeId`, então chamadas repetidas na mesma troca devolvem a conexão na hora. Esgotar o pool exige N trocas distintas em `awaiting_fee` (pedido entregue mais troca aprovada com taxa), com limite de 20/h. Resíduo conhecido: trava de sessão atrás de PgBouncer em modo transação (DT-085) | |
+| Compose | `NODE_OPTIONS`, `DB_*`, TTLs e log repassados com padrões seguros (`docker-compose.prod.yml:241-252`). Nenhum segredo novo. `shm_size` e `max_wal_size` não afetam segurança | |
+
+Observação sem achado: a suíte e2e emite o aviso do pg "client.query() when the client is already executing a query" (deprecado no pg 9). A origem não foi localizada; fica para o tech-lead, porque vira erro na atualização do pg.
+
+### Veredito
+
+**Veto (DEC-105) levantado com condições** para o merge do trabalho de desempenho no `main`. Do lado de Security, não há Crítica nem Alta aberta.
+
+Condições:
+1. Valem as outras condições da DEC-105, que não são minhas: e2e completo 2 vezes verde (QA) e re-revisão do tech-lead.
+2. **SEC-200 e SEC-201 não bloqueiam o merge.** Vão como dívida registrada, com prazo no **G4 do v1.1**, e bloqueiam qualquer deploy de produção deste trabalho antes disso (inclusive como patch do v1.0):
+   - SEC-201: a invalidação da DEC-113 tem de **apagar** a entrada (`clear`/`delete`), não só vencer o TTL. Se só vencer, o stale-if-error pode ressuscitar o conteúdo retirado. O e2e com TTL > 0 deve provar a retirada em até 5 s.
+   - SEC-200: zona `limit_conn` própria para `/socket.io/`, chave por `userId` (ou por sessão) em `refresh`, `order-create` e `coupon-apply`, e `n429` por rota no `http.latency`. Por ser Média, o fundador pode aceitar o risco no G4 se o piloto for pequeno. A aceitação vai para `docs/decisoes.md`.
+3. SEC-204 (Baixa) e DT-085 entram na onda. Não bloqueiam.
+
+Por que não bloqueiam o merge: o `main` não vai para produção sem G4 (regra 7.3). Nenhum dos dois tem impacto financeiro; o checkout relê o banco, como prova o e2e. E SEC-200 já existia antes desta mudança.
+
+**Limites:** PG 16 local (produção usa 18), sem carga, sem nginx, sem PgBouncer e sem a suíte e2e completa. Não fiz pentest.
