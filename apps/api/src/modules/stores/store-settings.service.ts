@@ -192,7 +192,8 @@ export class StoreSettingsService {
       const before = await this.weeklyHours(store.id, tx);
       await tx.delete(storeHours).where(eq(storeHours.storeId, store.id));
       if (rows.length > 0) await tx.insert(storeHours).values(rows.map((r) => ({ storeId: store.id, ...r })));
-      return this.record(tx, store, actor, ctx, 'hours', before, rows);
+      // BUG-044: antes e depois na MESMA forma (o que ficou gravado, por dia); com `rows` (lista plana) o "mesmo horário" nunca batia com o antes (objeto por dia).
+      return this.record(tx, store, actor, ctx, 'hours', before, await this.weeklyHours(store.id, tx));
     });
   }
 
@@ -274,19 +275,28 @@ export class StoreSettingsService {
     return this.run(actor, store.id, exec, async (tx) => {
       const [locked] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!input.enabled && !locked?.acceptsDelivery) throw errors.unprocessable('INVALID_PICKUP', 'Configuração inválida', { errors: [{ field: 'enabled', message: 'Ative a entrega para desligar a retirada.' }] });
+      const next = {
+        pickupEnabled: input.enabled,
+        pickupUseStoreAddress: input.useStoreAddress,
+        pickupAddress: input.useStoreAddress ? null : (input.address ?? null),
+        pickupInstructions: input.instructions ?? null,
+        pickupPrepMinMinutes: input.prepMinMinutes,
+        pickupPrepMaxMinutes: input.prepMaxMinutes,
+      };
       await tx
         .update(storeSettings)
-        .set({
-          pickupEnabled: input.enabled,
-          pickupUseStoreAddress: input.useStoreAddress,
-          pickupAddress: input.useStoreAddress ? null : (input.address ?? null),
-          pickupInstructions: input.instructions ?? null,
-          pickupPrepMinMinutes: input.prepMinMinutes,
-          pickupPrepMaxMinutes: input.prepMaxMinutes,
-          updatedAt: new Date(),
-        })
+        .set({ ...next, updatedAt: new Date() })
         .where(eq(storeSettings.storeId, store.id));
-      return this.record(tx, store, actor, ctx, 'pickup', { enabled: locked?.pickupEnabled }, { enabled: input.enabled });
+      // BUG-044: antes e depois com TODOS os campos editáveis (o "nada mudou" do admin sai daqui): só `enabled` deixava preparo, endereço e instruções passarem por "sem mudança".
+      const summary = (v: { pickupEnabled: boolean; pickupUseStoreAddress: boolean; pickupAddress: string | null; pickupInstructions: string | null; pickupPrepMinMinutes: number | null; pickupPrepMaxMinutes: number | null } | undefined) => ({
+        enabled: v?.pickupEnabled,
+        useStoreAddress: v?.pickupUseStoreAddress,
+        address: v?.pickupAddress ?? null,
+        instructions: v?.pickupInstructions ?? null,
+        prepMinMinutes: v?.pickupPrepMinMinutes,
+        prepMaxMinutes: v?.pickupPrepMaxMinutes,
+      });
+      return this.record(tx, store, actor, ctx, 'pickup', summary(locked), summary(next));
     });
   }
 

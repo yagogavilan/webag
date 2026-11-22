@@ -133,7 +133,7 @@ describe('QA reteste final R1.1 + R1.2: vizinhas das correções BUG-036 a 040',
       expect([r.status, r.archivedAt !== null, r.name.length > 1]).toEqual(['archived', true, true]);
     });
 
-    it.fails('BUG-042: rascunho que é CÓPIA de produto removido pela moderação (nasce com evento de moderação): "Apagar" devolve 204 e libera a vaga', async () => {
+    it('BUG-042: rascunho que é CÓPIA de produto removido pela moderação (nasce com evento de moderação): "Apagar" devolve 204 e libera a vaga', async () => {
       const { merchant, id } = await freshStore();
       const pid = await activeProduct(merchant, id, 4000);
       const bad = await createAdmin(ctx, 'operations');
@@ -153,7 +153,7 @@ describe('QA reteste final R1.1 + R1.2: vizinhas das correções BUG-036 a 040',
       }
     });
 
-    it.fails('BUG-042: vencimento de 30 dias: um rascunho vencido COM evento de moderação não pode derrubar a varredura dos outros (sweepExpired não lança e apaga os demais)', async () => {
+    it('BUG-042: vencimento de 30 dias: um rascunho vencido COM evento de moderação não pode derrubar a varredura dos outros (sweepExpired não lança e apaga os demais)', async () => {
       const { merchant, id } = await freshStore();
       const pid = await activeProduct(merchant, id, 4100);
       await ctx.http.post(`/v1/admin/products/${pid}/moderation`).set(as(ops)).send({ action: 'pause', reason: 'Teste QA vencimento' }).expect((r) => expect([200, 201, 204]).toContain(r.status));
@@ -297,8 +297,7 @@ describe('QA reteste final R1.1 + R1.2: vizinhas das correções BUG-036 a 040',
     };
     // um caso por seção: o valor gravado e reenviado igual deve dar 422 NO_CHANGE, sem versão, sem histórico, sem e-mail
     for (const section of Object.keys(initial)) {
-      const known = section === 'hours' ? it.fails : it; // BUG-044: horário reenviado igual ainda dá 200
-      known(`${section === 'hours' ? 'BUG-044: ' : ''}admin reenvia o valor ATUAL de "${section}": 422 NO_CHANGE, versão igual, nenhuma linha em store_admin_changes, nenhum e-mail ao lojista`, async () => {
+      it(`${section === 'hours' ? 'BUG-044: ' : ''}admin reenvia o valor ATUAL de "${section}": 422 NO_CHANGE, versão igual, nenhuma linha em store_admin_changes, nenhum e-mail ao lojista`, async () => {
         const { merchant, id } = await freshStore();
         expect((await putSection(id, section, initial[section], await versionOf(id))).status).toBe(200);
         ctx.mail.outbox.length = 0;
@@ -330,8 +329,7 @@ describe('QA reteste final R1.1 + R1.2: vizinhas das correções BUG-036 a 040',
       ['pickup', { enabled: true, useStoreAddress: true, prepMinMinutes: 10, prepMaxMinutes: 20 }, { enabled: true, useStoreAddress: true, prepMinMinutes: 10, prepMaxMinutes: 25 }, 'preparo máximo da retirada (enabled igual)'],
       ['pickup', { enabled: true, useStoreAddress: true, prepMinMinutes: 10, prepMaxMinutes: 20 }, { enabled: true, useStoreAddress: true, instructions: 'Tocar a campainha', prepMinMinutes: 10, prepMaxMinutes: 20 }, 'instruções da retirada (enabled igual)'],
     ] as const) {
-      const known = section === 'pickup' ? it.fails : it; // BUG-044: o resumo de auditoria da retirada só tem `enabled`
-      known(`${section === 'pickup' ? 'BUG-044: ' : ''}NO_CHANGE não engole mudança REAL em "${section}" (${label}): 200 e grava`, async () => {
+      it(`${section === 'pickup' ? 'BUG-044: ' : ''}NO_CHANGE não engole mudança REAL em "${section}" (${label}): 200 e grava`, async () => {
         const { id } = await freshStore();
         expect((await putSection(id, section, first, await versionOf(id))).status).toBe(200);
         const v = await versionOf(id);

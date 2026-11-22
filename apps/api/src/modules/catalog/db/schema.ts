@@ -149,14 +149,15 @@ export const moderationTerms = pgTable(
   (t) => [uniqueIndex('moderation_terms_uq').on(t.kind, t.value)],
 );
 
-/** Histórico de moderação (append-only na prática): base da regra "3 remoções em 30 dias". */
+/**
+ * Histórico de moderação (append-only na prática): base da regra "3 remoções em 30 dias". BUG-042: `product_id` é anulável com `ON DELETE SET NULL`: apagar um
+ * rascunho (a rota de excluir ou o vencimento de 30 dias) não pode falhar por causa do evento, e a remoção já contada para a loja continua contando (`store_id`).
+ */
 export const productModerationEvents = pgTable(
   'product_moderation_events',
   {
     id: uuid().primaryKey().default(sql`gen_random_uuid()`),
-    productId: uuid()
-      .notNull()
-      .references(() => products.id),
+    productId: uuid().references(() => products.id, { onDelete: 'set null' }),
     storeId: uuid()
       .notNull()
       .references(() => stores.id),
@@ -165,7 +166,11 @@ export const productModerationEvents = pgTable(
     actorId: uuid().references(() => users.id),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('product_moderation_events_store_idx').on(t.storeId, t.action, t.createdAt)],
+  (t) => [
+    index('product_moderation_events_store_idx').on(t.storeId, t.action, t.createdAt),
+    // FK sem índice faria cada rascunho apagado varrer a tabela (SET NULL procura as filhas por `product_id`).
+    index('product_moderation_events_product_idx').on(t.productId),
+  ],
 );
 
 /**

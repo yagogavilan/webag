@@ -12,6 +12,7 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import type { Env } from '../../src/platform/config/env.js';
+import { restoreFeesIfTouched } from './fees.js';
 import { ParametersService } from '../../src/modules/admin/index.js';
 import { PG_POOL } from '../../src/platform/database/database.module.js';
 import * as schema from '../../src/platform/database/schema.js';
@@ -77,15 +78,21 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   await app.get(ParametersService).update('endereco_pino_max_m', 0, 'testes usam pontos isolados', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
   // DEC-072: o padrão de produção da comissão é 15%, mas os testes de dinheiro usam contas redondas de 10%; o padrão real é testado em `dec072-rules`.
   await app.get(ParametersService).update('comissao_padrao_pct', 10, 'testes de dinheiro usam 10%', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
-  return {
+  const context: TestContext = {
     app,
     http: withRandomIp(request(app.getHttpServer())),
     mail: mail.current!,
     db,
     pool,
     redis,
-    close: () => app.close(),
+    // BUG-047: parâmetro global do admin e tabela de frete que o arquivo mexeu voltam ao básico aqui, mesmo se um `expect` falhou antes do `restoreFees` do próprio teste
+    // (sem isso, a falha de um arquivo envenenava o seguinte: `sec155` A3 com frete zerado, desconto 500 em vez de 1.000).
+    close: async () => {
+      await restoreFeesIfTouched(context).catch(() => undefined);
+      await app.close();
+    },
   };
+  return context;
 }
 
 /**

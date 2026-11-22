@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DeliveriesService, type DeliveryMessageData } from '../src/modules/logistics/index.js';
 import { auditLog, deliveries, deliveryEvents } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
+import { leaksCode } from './helpers/code-leak.js';
 import { createAdmin, ensureLegalDocs } from './helpers/fixtures.js';
 
 type Admin = Awaited<ReturnType<typeof createAdmin>>;
@@ -176,7 +177,7 @@ describe('Logística da Webag: motoboys e corridas (WB-230 a WB-239)', () => {
       expect(wa.message).toContain('Volumes: 2. Obs.: tocar a campainha');
       expect(wa.message).toContain('Pagamento: pago no app. Não cobrar do cliente.');
       expect(wa.message).not.toMatch(/R\$|@|cpf/i);
-      expect(wa.message).not.toContain(code); // o código é do cliente: nunca na mensagem
+      expect(leaksCode(wa.message, code)).toBe(false); // o código é do cliente: nunca na mensagem
       expect(wa.link.startsWith(`https://wa.me/${m.phone}?text=`)).toBe(true);
       await ctx.http.post(`${base}/deliveries/${d.id}/whatsapp-sent`).set(H(support)).expect(403);
       await ctx.http.post(`${base}/deliveries/${d.id}/whatsapp-sent`).set(H(ops)).expect(204);
@@ -195,7 +196,7 @@ describe('Logística da Webag: motoboys e corridas (WB-230 a WB-239)', () => {
       expect((await status(ops, d.id, { action: 'confirm' })).body.status).toBe('courier_en_route');
       expect((await status(ops, d.id, { action: 'picked_up' })).body.status).toBe('out_for_delivery');
       const code = (await dbRow(d.id)).deliveryCode!;
-      expect(JSON.stringify(await get(d.id))).not.toContain(code); // o painel nunca recebe o código
+      expect(leaksCode(await get(d.id), code)).toBe(false); // o painel nunca recebe o código
       const delivered = await status(ops, d.id, { action: 'delivered', code });
       expect(delivered.body.status).toBe('delivered');
       const detail = await get(d.id);

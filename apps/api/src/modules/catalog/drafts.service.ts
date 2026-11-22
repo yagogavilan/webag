@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
-import { and, count, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { AppError, errors, type FieldError } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore } from '../../platform/http/pagination.js';
@@ -19,6 +19,8 @@ import { applyAdjust } from './domain/stock.js';
 import { attributesKey, validateVariantSet } from './domain/variants.js';
 
 const SWEEP_MS = 10 * 60_000;
+/** Rascunhos apagados por `DELETE` na varredura de vencimento (uma transação curta por lote). */
+const SWEEP_BATCH = 200;
 /** Lote colado: 10 por hora por loja `[HIPÓTESE]` (contrato `createProductDraftsBatch`). */
 const BATCH_PER_HOUR = 10;
 
@@ -64,15 +66,47 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** Apaga os rascunhos parados há mais que `rascunho_validade_dias` (RN-Q2). Variações, fotos e medição vão junto (cascata). Devolve quantos. */
+  /**
+   * Apaga os rascunhos parados há mais que `rascunho_validade_dias` (RN-Q2). Variações, fotos e medição vão junto (cascata). Devolve quantos.
+   * BUG-042: em lotes, e erro de um lote não derruba a varredura: o lote que falha é refeito linha a linha, e a linha ruim é registrada e pulada
+   * (nunca bloqueia as demais, de nenhuma loja). Cada rodada tenta as ruins de novo, então a correção do dado destrava sozinha.
+   */
   async sweepExpired(now = new Date()): Promise<number> {
     const days = await this.params.getNumber('rascunho_validade_dias');
     const limit = new Date(now.getTime() - days * 86_400_000);
-    const rows = await this.db
-      .delete(products)
-      .where(and(eq(products.status, 'draft'), lt(products.updatedAt, limit)))
-      .returning({ id: products.id });
-    if (rows.length > 0) this.logger.log({ event: 'product.draft_expired', count: rows.length });
+    const expired = and(eq(products.status, 'draft'), lt(products.updatedAt, limit));
+    const failed = new Set<string>();
+    let deleted = 0;
+    for (;;) {
+      const batch = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(failed.size > 0 ? and(expired, notInArray(products.id, [...failed])) : expired)
+        .orderBy(asc(products.updatedAt), asc(products.id))
+        .limit(SWEEP_BATCH);
+      if (batch.length === 0) break;
+      const ids = batch.map((row) => row.id);
+      try {
+        deleted += await this.deleteExpired(ids, expired);
+      } catch (batchError) {
+        this.logger.warn({ event: 'product.draft_expire_batch_failed', size: ids.length, error: (batchError as Error).message });
+        for (const id of ids) {
+          try {
+            deleted += await this.deleteExpired([id], expired);
+          } catch (rowError) {
+            failed.add(id);
+            this.logger.error({ event: 'product.draft_expire_failed', productId: id, error: (rowError as Error).message });
+          }
+        }
+      }
+    }
+    if (deleted > 0) this.logger.log({ event: 'product.draft_expired', count: deleted });
+    return deleted;
+  }
+
+  /** Reaplica o filtro de vencido no `DELETE` (o rascunho pode ter sido editado ou publicado entre o `SELECT` e aqui). */
+  private async deleteExpired(ids: string[], expired: SQL | undefined): Promise<number> {
+    const rows = await this.db.delete(products).where(and(inArray(products.id, ids), expired)).returning({ id: products.id });
     return rows.length;
   }
 
