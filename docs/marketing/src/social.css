@@ -96,7 +96,7 @@ svg, img { display: block; }
 .p2 .emb { color: var(--noite); }
 .p2 h1 { position: absolute; left: 72px; top: 124px; font-size: 132px; }
 .p2 .shot { left: 72px; top: 520px; width: 860px; height: 678px; border-radius: 34px; background: var(--noite); box-shadow: 12px 12px 0 var(--roxo); }
-.p2 .sticker { left: 716px; top: 150px; font-size: 50px; }
+.p2 .sticker { left: 736px; top: 140px; font-size: 46px; padding: 12px 22px 16px; }
 .p2 .cta { position: absolute; left: 72px; top: 1236px; font: 800 42px/50px var(--texto); }
 
 /* ---------- post 3: o sininho (convite) ---------- */

@@ -81,7 +81,7 @@ Começamos por Francisco Morato e região.
 #Webag #FranciscoMorato
 ```
 
-Texto alternativo: "Fundo noite. Ativa o sininho. Ilustração de um sino lima tocando, com marcas roxas dos dois lados. A gente avisa quando abrir. Começamos por Francisco Morato e região. Em breve."
+Texto alternativo: "Fundo noite. Ativa o sininho. Assim vai chegar quando abrir: aviso de celular do Webag com o texto Abrimos. Aquela loja que você gosta agora entrega. Ilustração de um sino lima tocando. A gente avisa quando abrir. Francisco Morato e região. Em breve." O aviso é desenho nosso (rotulado na peça); o texto final do push é do PO.
 `[HIPÓTESE]` O caminho "Seguindo, notificações" muda por versão do Instagram: conferir na conta antes de publicar.
 
 ### Legenda do vídeo (Stories, e Reel se for)
@@ -115,10 +115,10 @@ Por que o post de lojista fica na semana 2 e não na 3: sem loja não há app (r
 | Peça | Fundo | Ideia | Imagem dominante |
 |---|---|---|---|
 | Perfil | Roxo | Símbolo grande, 81% da largura | O símbolo |
-| Post 0 | Roxo | A frase termina na tela real: "...agora" + banner "Entrega pelo Webag" | Banner real do app, 900 px |
+| Post 0 | Roxo | A frase termina na tela real: "...agora" + banner "Entrega pelo Webag" | Banner real do app, 936 px |
 | Post 1 | Roxo | O momento (fim do dia) e a prova: a linha do tempo do pedido | Duas telas reais empilhadas, 900 px |
-| Post 2 | Lima | Recruta lojista: o pedido chegando no painel | Cartão real do painel, 820 px, sombra roxa |
-| Post 3 | Noite | Um toque: o sininho. Urgência sem data | Sino lima de 620 px |
+| Post 2 | Lima | Recruta lojista: o pedido chegando no painel | Cartão real do painel, 860 px, sombra roxa |
+| Post 3 | Noite | Um toque: o sininho. Urgência sem data = mostrar o aviso que a pessoa vai receber | Aviso de celular (desenho nosso) de 936 px + sino lima de 320 px |
 
 Grade (3 colunas, mais novo primeiro): post 3 noite, post 2 lima, post 1 roxo; post 0 roxo na linha de baixo. Nenhuma composição se repete: tipografia + banner (0), duas telas empilhadas (1), cartão sobre lima (2), ilustração (3).
 Recorte do feed: 4:5 vira 3:4 na grade do perfil (corta ~34 px de cada lado); todo conteúdo fica a 72 px das bordas (exceto o rodapé do post 2, a ~60 px).

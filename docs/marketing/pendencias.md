@@ -111,20 +111,20 @@ Regra de leitura: nada aqui é fato de produto até alguém fechar o item. `[HIP
 
 ---
 
-# Pendências do Instagram e do vídeo de 15 s
+# Pendências do Instagram e do vídeo de 15 s (v2, refeita em 2026-11-22)
 
-Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-story.html`, `src/social.css`. Textos: `instagram-legendas.md`, `video-roteiro.md`. Autor: product-designer. Data: 2026-11-20. `[HIPÓTESE]` = não validado.
+Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-story.html`, `src/social.css`. Textos: `instagram-legendas.md`, `video-roteiro.md`, `revisao-social-v2.md`. Autor: product-designer. `[HIPÓTESE]` = não validado. Os itens da v1 (2026-11-20) foram substituídos por esta lista.
 
 ## I. Técnico (bloqueia o primeiro render)
 
 | # | Item | O que fazer |
 |---|---|---|
-| I1 | **PNGs não copiados para `src/assets-social/`** (sem Bash). Os HTML já apontam para lá | `mkdir -p docs/marketing/src/assets-social && cp docs/telas/{01-app-inicio,04-app-loja,09-app-pix,11-app-acompanhamento}.png docs/marketing/src/assets-social/` |
-| I2 | **O servidor do render só serve `src/`** (`scripts/marketing-render.mjs`, `startServer`, linhas 152 a 163: caminho fora de `src` dá 403/404). As `@font-face` com `../../design/...` (as minhas e as do `base.css`) viram `/design/...` na URL e dão 404, o que o `openPage` trata como erro. Só funciona em `file://` | Opção A (1 linha de código): servir `docs/` como raiz e abrir `/marketing/src/...`. Opção B (sem mexer no script): copiar as fontes para `src/assets-social/fonts/` e trocar o caminho nas `@font-face` (6 arquivos). Preciso do CEO/dev do pipeline para escolher; eu ajusto o caminho em 5 minutos se for a B |
-| I3 | Fontes: **Bricolage está em `docs/design/recursos/fontes/`**, não em `docs/design/fonts/` (que só tem Figtree e Fredoka). Usei o caminho certo de cada uma | Só registro; mesmo achado do T2 acima |
-| I4 | Não rodei render. Larguras e quebras foram calculadas com a métrica estimada da Bricolage 800 (~0,55 em por caractere, com tracking -0,045 em). Pontos de maior risco: título do post 0 (156 px), "Vai abrir." do post 3 (196 px), "antes de" e "breve." do vídeo (224 px e 300 px), numerais de 640 px | Se algum estourar, reduzo o `font-size` da linha; me devolva o quadro |
-| I5 | Capturas estão em `deviceScaleFactor: 1` (390x844). No vídeo e no post 0 o aparelho amplia 1,06x e o texto da tela fica levemente macio | Regerar `docs/telas/` com `deviceScaleFactor: 2` (2x = 780x1688). Os HTML não mudam |
-| I6 | O pipeline mede `scrollHeight` da raiz: o aparelho do post 0 que sai pela base foi recortado numa caixa `.vp` para não contar como overflow | Nada |
+| I1 | **Clipes do app ainda não existem** (`src/clips/` ausente em 2026-11-22). O vídeo espera `painel-pedido-novo`, `app-loja`, `app-sacola`, `app-acompanhar` (`.mp4`, e `.webm` de reserva). Sem eles o `<video>` mostra a captura estática e o render sai com nota 3 (`revisao-social-v2.md`) | Mobile-dev grava conforme `video-roteiro.md` §5 (viewport vertical 390x844, 30 fps, pedido "agora", loja de moda, sem prazo). Depois rodar `window.__clipInfo()` no console, ajustar `inn` na tabela `SEG` do `video-story.html` e conferir o `README` dos clipes (eu assumi vertical 390x844) |
+| I2 | **O render deve aguardar a Promise de `setTime(t)`** (vídeo) e `window.__ready`. `setTime` agora devolve Promise que resolve após o `seeked` de cada `<video>` ativo + 2 quadros de pintura (teto 3 s). Chromium do Playwright costuma vir **sem H.264**: se os clipes não tocarem, gravar também `.webm` (já há `<source>` de reserva) ou usar Chrome instalado | CEO/dev do pipeline |
+| I3 | **O servidor do render só serve `src/`** (`scripts/marketing-render.mjs`, `startServer`: caminho fora de `src` dá 403/404). Dependem de fora de `src/`: as `@font-face` (`../../design/...`) e duas telas (`docs/telas/06-app-sacola.png` poster do vídeo; `docs/telas/20-lojista-pedidos-novos-mobile.png` no post 2 e poster do vídeo) | Opção A: servir `docs/` como raiz. Opção B: `cp docs/telas/{06-app-sacola,20-lojista-pedidos-novos-mobile}.png docs/marketing/src/assets-social/` e trocar os 3 `src` (post 2, 2 posters no `CLIPS`); fontes para `src/assets-social/fonts/` |
+| I4 | Usadas em `src/assets-social/` (existem): `01-app-inicio.png` (post 0), `11-app-acompanhamento.png` (post 1, poster do vídeo), `04-app-loja.png` (poster). `09-app-pix.png` **não é mais usada** (PIX saiu das peças) | Pode remover do kit |
+| I5 | **Não renderizei.** Larguras com 0,50 em/caractere; linhas de risco em `revisao-social-v2.md` §5 | Devolva o quadro que estourar; ajusto o `font-size` |
+| I6 | Capturas em `deviceScaleFactor: 1` (390x844) ampliadas 2,3 a 2,5x (posts) e 2,77x (vídeo): texto da tela fica macio. Seed com "Banana prata" e "Mercadinho Boa Compra" | Regerar `docs/telas/` com `deviceScaleFactor: 2` e loja de moda/casa de demonstração (pendências C1 a C3). Os recortes são proporcionais: nenhum HTML muda |
 
 ## II. Depende do fundador
 
@@ -132,23 +132,26 @@ Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, 
 |---|---|---|
 | IF1 | **Usuário (handle) do Instagram** e **link da bio** (site/WhatsApp). `config.json` tem `@webag` como valor provisório; as peças não mostram o handle de propósito (o CTA é "Siga esta página") | Bio, perfil |
 | IF2 | **Trilha do vídeo**: escolher na biblioteca de áudio do Instagram (ver `video-roteiro.md` §6: 120 BPM, instrumental, batida seca, começar na batida 1). Conferir se a conta comercial acessa o catálogo `[HIPÓTESE]` | Vídeo |
-| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** O vídeo e os posts dizem só "Em breve". Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda a cena G | Vídeo, post 3 |
-| IF4 | Aprovar a **assinatura** "Escolha no app. Receba em casa." (C3 do PO) usada no post 0, na bio e na cena B do vídeo | Perfil, post 0, vídeo |
-| IF5 | Aprovar o **cartaz do post 1** (18h, 19h, 21h): é uma situação das personas, não validada `[HIPÓTESE]` | Post 1, cena A |
-| IF6 | Autorizar a publicação do perfil e dos 4 posts (peça externa; ver J1 abaixo) | Todas |
+| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda a cena 10 do vídeo e o post 3 | Vídeo, post 3 |
+| IF4 | Aprovar a **promessa** "Aquela loja que você gosta agora entrega." (post 0, bio, cenas 8 e 9 do vídeo). Substitui a assinatura "Escolha no app. Receba em casa." da v1 | Perfil, post 0, vídeo |
+| IF5 | Aprovar **"Tem loja? Venda além da sua rua."** e decidir o que dizer sobre custo ("comissão só quando vende", "sem mensalidade", percentual): a legenda do post 2 **não** afirma nada até a decisão (`direcao-criativa.md` §3) | Post 2, bio |
+| IF6 | **Fotos reais** (fachada de loja da região, mão com sacola, motoboy) e 5 a 10 s de vídeo vertical do celular: eliminam o ar de demonstração. As peças têm espaço e funcionam sem | Posts 0 e 1, vídeo |
+| IF7 | Autorizar a publicação do perfil e dos 4 posts (peça externa; ver IJ1) e **como guardar o contato do lojista** que chamar no direct (finalidade, consentimento, LGPD) | Todas, post 2 |
 
 ## III. Depende do jurídico
 
 | # | Item | Risco |
 |---|---|---|
-| IJ1 | "Entrega pelo Webag", "receba em casa" e a tela com "entrega Webag" (J1 acima: parecer sobre motoboys, DEC-039 J8). **Nenhuma peça externa sai antes do parecer e do G5** (`posicionamento.md` §4). Plano B sem entrega: bio e cena B passam a "Escolha no app. Pague com PIX." e o post 0 troca o título; me peça a versão | Alto |
-| IJ2 | A tela da loja (captura 04) mostra "20% off", "Em oferta" e "Retire grátis". Oferta divulgada vincula (J2 acima). O rótulo "Telas do app em teste" está no vídeo (4 a 10 s) e no post 2. Se o PO preferir, troco a captura 04 por outra | Médio |
-| IJ3 | A captura 11 mostra faixa de horário ("Chega entre 03:06 – 03:31"); é o app como está, sem prazo na copy (mesma dúvida do C8 acima) | Baixo |
+| IJ1 | "Agora entrega", "a loja passa aí", "O motoboy leva." e "Saiu para entrega" prometem entrega pelo Webag (J1 acima: parecer sobre motoboys, DEC-039 J8). **Nenhuma peça externa sai antes do parecer e do G5** (`posicionamento.md` §4). Plano B sem entrega: retirada na loja ("Aquela loja que você gosta agora tem pedido pelo app"); me peça a versão | Alto |
+| IJ2 | O vídeo usa a loja de demonstração (cenas 2 e 3): se mostrar "20% off" ou "Retire grátis", é oferta divulgada (J2). O aviso "Telas do app em teste." está nas cenas 1 a 7 | Médio |
+| IJ3 | O cartão de acompanhamento mostra faixa de horário; no post 1 os recortes a escondem e no vídeo a faixa da cena 7 a cobre (mesma dúvida do C8) | Baixo |
 
 ## IV. Observações de produto/design
 
 | # | Item |
 |---|---|
-| IP1 | Usei as capturas 01 (só o topo, antes de "Lojas perto de você"), 04, 09 (com o código copia e cola coberto) e 11. Não usei 03, 05 e 06 (degradê de placeholder). A 01 mostra categorias (Mercado, Farmácia, Pet, Casa e construção): vale o F2 acima, só aparecem as que existirem no lançamento |
-| IP2 | A foto de perfil centraliza o conteúdo do símbolo no círculo. O ícone do app (`webag-icone-app-v4.src.svg`) usa o ponto (82; 54,5) como centro e acaba com o desenho ~46 px mais baixo em 1024; para o perfil corrigi, então os dois não são idênticos pixel a pixel. Vale o dev do ícone rever |
-| IP3 | O "em breve" sem data por 3 semanas desgasta. Recomendo decidir a data (ou parar a série no post 3 e silenciar) para não manter público esperando sem aviso |
+| IP1 | Capturas usadas: 01 (só o banner "Entrega pelo Webag", sem "Lojas perto de você" nem categorias), 11 (cartão e linha do tempo, sem horário), 20-mobile (cartão do pedido novo, com a idade coberta) e, como poster do vídeo, 04 e 06. Não usei 03 e 05 (degradê de placeholder) nem 09 (PIX) |
+| IP2 | A foto de perfil tem o símbolo 25% maior que a v1 (880 px) e o desenho ~26 px acima do centro geométrico da caixa (centro ótico). O ícone do app usa outro ponto de centro (ver IP2 da v1: ~46 px mais baixo em 1024); vale o dev do ícone rever |
+| IP3 | O "em breve" sem data por 3 semanas desgasta. Recomendo decidir a data (ou parar a série no post 3 e silenciar) |
+| IP4 | **Texto do push de abertura** ("Abrimos. Aquela loja que você gosta agora entrega.") aparece desenhado no post 3: PO define o texto final. Também confirmar o caminho do "sininho" no Instagram (post 3, legenda) |
+| IP5 | Painel: o recorte do post 2 mostra o rótulo "Pago no app" dentro do cartão real. É fato da tela, não argumento; se o fundador quiser zero menção, cubro o chip (1 linha no HTML) |

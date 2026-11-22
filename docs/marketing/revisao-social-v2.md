@@ -33,8 +33,8 @@ Nenhuma nota ficou abaixo de 4 depois da refeita do post 3. Isso **não** signif
 |---|---|---|---|---|---|
 | 1 Sem pagamento como argumento | ok | ok | ok ("Pago no app" só no cartão real) | ok | ok (barra de pagamento da sacola fora do quadro) |
 | 2 Uma ideia em 1 frase | A loja agora entrega | A loja passa aí | Venda além da sua rua | Receba o aviso | Um pedido, dois lados |
-| 3 Título >= 110 px e <= 10 palavras | 160 px, 7 palavras | 116 px, 6 palavras | 140 px, 6 palavras | 220 px, 3 palavras | 128 a 340 px |
-| 4 Tela >= 40% da área e UI >= 24 px | banner 900x504 = 37% da área + título (a tela é metade da peça; abaixo dos 40% de forma literal, **desvio consciente**: a outra metade é a frase que a tela completa) | 900x793 = 53% | 820x646 = 39% (**desvio de 1 ponto**; subir para 860 se couber no render) | n/a (o aviso é desenho) | cenas 1 a 7 em tela cheia |
+| 3 Título >= 110 px e <= 10 palavras | 160 px, 7 palavras | 116 px, 6 palavras | 132 px, 6 palavras | 220 px, 3 palavras | 128 a 340 px |
+| 4 Tela >= 40% da área e UI >= 24 px | banner 936x524 = 34% (**desvio consciente**: a frase de 589 px de altura é a outra metade e a tela a completa; esticar a tela tiraria o título do tamanho gigante) | duas telas, 900x793 = 49% | 860x678 = 40% | n/a (o aviso é desenho nosso, 936x310 = 20%) | cenas 1 a 7 em tela cheia |
 | 5 Voz humana | ok | ok | ok | ok | ok |
 | 6 Sem emoji, degradê, mascote, IA | ok | ok | ok | ok | ok |
 | 7 Pré-lançamento sem data/prazo/superlativo | "Em breve" | "Em breve"; "19h40" é a hora da pessoa, não prazo | "Cadastro em breve" | "Em breve" | "Em breve." |
@@ -59,7 +59,7 @@ Nenhuma nota ficou abaixo de 4 depois da refeita do post 3. Isso **não** signif
 | 1 | Larguras: calculei com 0,50 em/caractere. Linhas mais largas: "você gosta" (800 px de 936), "passar na loja?" (870 de 936), "sininho." (880 de 936), "Saiu para" e "escolheu." no vídeo | 0, 1, 3, vídeo | Estourar a margem; reduzir o `font-size` da linha |
 | 2 | Recortes: coordenadas tiradas de capturas em 390x844 a olho (±2 px). Faixa de papel nas bordas do recorte do post 0 é proposital; no post 1 confirmar se o "00:51" ficou coberto | 0, 1, 2 | Fio da captura aparecendo na borda do recorte |
 | 3 | Nitidez: capturas em 1x (390 px) ampliadas 2,3 a 2,5x ficam macias. Regerar `docs/telas/` com `deviceScaleFactor: 2` (os recortes são proporcionais; não mudam os HTML) | 0, 1, 2 | Texto da UI "mole" |
-| 4 | Adesivo do post 1 sobre a linha do tempo e adesivo do post 2 ao lado do título ("Tem loja?" termina em x~700, o adesivo começa em 716) | 1, 2 | Sobreposição |
+| 4 | Adesivo do post 1 sobre a linha do tempo e adesivo do post 2 ao lado do título ("Tem loja?" termina em x~666 e "Venda além" em x~732; o adesivo começa em 736 e fica a ~64 px da borda direita) | 1, 2 | Sobreposição |
 | 5 | Faixas do vídeo: posição assume clipe 390x844 em `cover` (escala 2,77). Faixa da cena 7 (770 px) cobre o horário previsto do cartão | vídeo | Cobrir o botão certo; ajustar altura e `object-position` |
 | 6 | Fonte Bricolage em `design/recursos/fontes/`; Figtree em `design/fonts/`; o servidor do render só serve `src/` (pendência I2) | todas | 404 de fonte |
 | 7 | O pipeline mede `scrollHeight` da raiz: o aparelho não sai mais pela base (sem moldura), então não há overflow esperado | posts | n/a |
