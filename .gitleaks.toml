@@ -1,7 +1,10 @@
 # Configuração do gitleaks (SEC-085). Estende as regras padrão e só libera o que é, comprovadamente, valor de
 # desenvolvimento publicado de propósito. Nunca adicione aqui uma credencial real: revogue e rotacione.
-# Regra para novas exceções (SEC-222): uma allowlist por fixture, com targetRules, caminho E valor exato (condition AND).
-# Nada de liberar um caminho inteiro para todas as regras. Revisão: docs/seguranca/revisoes/gitleaks-2026-11-22.md
+# Regra para novas exceções (SEC-222): dentro da regra que disparou ([[rules]] id = <regra>), com caminho E valor
+# exato (condition = "AND"). Nada de liberar um caminho inteiro para todas as regras.
+# Atenção (gitleaks 8.28): `targetRules` em [[allowlists]] global NÃO se aplica às regras herdadas de useDefault;
+# por isso as exceções ficam em [[rules.allowlists]], que o extend mescla com a regra padrão de mesmo id.
+# Revisão: docs/seguranca/revisoes/gitleaks-2026-11-22.md
 title = "webag"
 
 [extend]
@@ -19,51 +22,66 @@ regexes = [
   '''very-long-random-production[A-Za-z0-9-]*''',
 ]
 
-# Fixtures da API e compose de dev. SEC-222: antes liberava estes caminhos para TODAS as regras (uma chave privada,
-# token do Mercado Pago ou JWT colado num teste passaria). Agora só a regra genérica, que é a que dispara em senhas
-# e tokens de teste; as regras específicas (private-key, jwt, aws, etc.) continuam valendo nesses caminhos.
-[[allowlists]]
+[[rules]]
+id = "generic-api-key"
+
+# SEC-085/SEC-222: fixtures da API e compose/env de dev. A exceção por caminho fica presa à regra genérica (a que
+# dispara em senhas e tokens de teste), de forma explícita: regras específicas (private-key, jwt, mercadopago-*)
+# continuam valendo nesses caminhos.
+[[rules.allowlists]]
 description = "SEC-085/SEC-222: senhas e tokens de teste da API e do compose de dev (só generic-api-key)"
-targetRules = ["generic-api-key"]
 paths = [
-  '''infra/env\.example''',
-  '''apps/api/test/.*''',
-  '''apps/api/src/.*\.spec\.ts''',
-  '''docker-compose\.yml''',
+  '''^infra/env\.example$''',
+  '''^apps/api/test/.*''',
+  '''^apps/api/src/.*\.spec\.ts$''',
+  '''^docker-compose\.yml$''',
 ]
 
-# SEC-222: falsos positivos do CI de 2026-11-22 (28 achados, 9 valores). Cada um: regra + caminho + valor exato.
-[[allowlists]]
-description = "SEC-222: senha da conta de teste do Maestro (maria@exemplo.test, dominio .test) no comentario de uso dos fluxos e2e"
-targetRules = ["generic-api-key"]
+# SEC-222: falsos positivos do CI de 2026-11-22 (28 achados, 9 valores). Cada um: caminho + valor exato.
+[[rules.allowlists]]
+description = "SEC-222: senha da conta de teste do Maestro (dominio .test) no comentario de uso dos fluxos e2e"
 condition = "AND"
 paths = ['''^apps/mobile/e2e/[a-z-]+\.yaml$''']
 regexes = ['''^Cachorro-Azul-2024$''']
 
-[[allowlists]]
+[[rules.allowlists]]
 description = "SEC-222: token sequencial de teste da URL do cartao (SEC-126)"
-targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^apps/mobile/__tests__/card-url\.test\.ts$''']
 regexes = ['''^0123456789abcdef0123$''']
 
-[[allowlists]]
+[[rules.allowlists]]
 description = "SEC-222: nova senha ficticia no teste do formulario de recuperacao do admin"
-targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^apps/web/src/features/auth/forgot-form\.spec\.tsx$''']
 regexes = ['''^Nova-Senha-2026-xyz$''']
 
-[[allowlists]]
+[[rules.allowlists]]
 description = "SEC-222: mfaToken e nova senha ficticios nos testes das rotas de sessao do BFF (respostas mockadas)"
-targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^apps/web/src/server/session-routes\.spec\.ts$''']
 regexes = ['''^tok-123456789012345678901$''', '''^Nova-Senha-123$''']
 
-[[allowlists]]
+[[rules.allowlists]]
+description = "SEC-222: JWT forjado sem assinatura (alg none) do reteste PAP-6; a regra generica o pega quando a jwt e liberada"
+condition = "AND"
+paths = ['''^docs/qa/retestes/papeis\.mjs$''']
+regexes = ['''^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJ4Iiwicm9sZSI6ImFkbWluIn0\.$''']
+
+# SEC-222: o conjunto padrão do gitleaks 8.28 não tem regra para o Mercado Pago; um access token (produção APP_USR-
+# ou teste TEST-) num arquivo liberado para a regra genérica, ou fora de atribuição com nome de chave, passaria.
+# Formato: <APP_USR|TEST>-<app id>-<data MMDDHH>-<hash 32 hex>-<user id>. A public key (UUID) é pública e não entra.
+[[rules]]
+id = "mercadopago-access-token"
+description = "Access token do Mercado Pago (produção ou teste)"
+regex = '''\b(?:APP_USR|TEST)-\d{10,20}-\d{6}-[a-f0-9]{32}-\d{6,12}\b'''
+keywords = ["app_usr-", "test-"]
+
+[[rules]]
+id = "jwt"
+
+[[rules.allowlists]]
 description = "SEC-222: JWT forjado sem assinatura (alg none, role admin) usado no reteste PAP-6 para provar que a API recusa"
-targetRules = ["jwt"]
 condition = "AND"
 paths = ['''^docs/qa/retestes/papeis\.mjs$''']
 regexes = ['''^eyJhbGciOiJub25lIn0\.eyJzdWIiOiJ4Iiwicm9sZSI6ImFkbWluIn0\.$''']

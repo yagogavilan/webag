@@ -59,6 +59,11 @@ export class StoreSettingsService {
       ref.id = await this.audit.record(tx, ctx, { action: `store.${action}`, targetType: 'store', targetId: store.id, storeId: store.id, before: before as Record<string, unknown>, after: after as Record<string, unknown>, ...(actor.reason ? { reason: actor.reason } : {}) });
     } else {
       await tx.insert(storeActivity).values({ storeId: store.id, actorId: actor.userId, action: `store.${action}`, details: { before, after } as Record<string, unknown> });
+      // BUG-037: a ficha 360 lê o `audit_log`; o lojista entra com autor `merchant` e antes/depois (`store_activity` segue sendo o log do painel do lojista).
+      // Preferências pessoais do lojista (aviso por e-mail, limite de estoque baixo) não são "alteração da loja": ficam só no log dele.
+      if (action !== 'notifications' && action !== 'low_stock_threshold') {
+        ref.id = await this.audit.record(tx, ctx, { action: `store.${action}`, targetType: 'store', targetId: store.id, storeId: store.id, before: before as Record<string, unknown>, after: after as Record<string, unknown> });
+      }
     }
     return ref;
   }

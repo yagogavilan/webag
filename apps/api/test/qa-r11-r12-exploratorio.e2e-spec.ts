@@ -695,7 +695,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(data.filter((e) => e.actor.kind === 'merchant').length).toBeGreaterThanOrEqual(4);
     });
 
-    it.fails('BUG-037: horário, pausa e dados da loja alterados pelo LOJISTA entram no histórico da ficha 360 com actor.kind = merchant (review I2 a; WB-350 C4 "filtra por autor")', async () => {
+    it('BUG-037: horário, pausa e dados da loja alterados pelo LOJISTA entram no histórico da ficha 360 com actor.kind = merchant (review I2 a; WB-350 C4 "filtra por autor")', async () => {
       const { merchant, id } = await freshStore();
       await ctx.http.put(`${base(id)}/hours`).set(as(merchant)).send({ days: [{ weekday: 2, intervals: [{ start: '08:00', end: '12:00' }] }] }).expect(204);
       await ctx.http.patch(`${base(id)}/profile`).set(as(merchant)).send({ description: 'Nova descrição da loja pelo lojista' }).expect(200);

@@ -285,6 +285,17 @@ export class StoresService {
       }
       if (actor.kind === 'admin') {
         await this.audit.record(tx, ctx, { action: 'store.update', targetType: 'store', targetId: store.id, before: this.auditView(before), after: this.auditView(row) });
+      } else {
+        // BUG-037: o histórico da ficha 360 (admin) lê o `audit_log`; o lojista entra com autor `merchant` e só o que mudou (antes/depois). Mudança que vai à análise
+        // (`pending`) aparece só como "enviada para análise", sem o valor.
+        const was = this.auditView(before);
+        const now = this.auditView(row);
+        const changed = Object.keys(now).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k]));
+        const pick = (view: Record<string, unknown>) => Object.fromEntries(changed.map((k) => [k, view[k]]));
+        const pendingKeys = Object.keys(pending);
+        if (changed.length > 0 || pendingKeys.length > 0) {
+          await this.audit.record(tx, ctx, { action: 'store.update', targetType: 'store', targetId: store.id, storeId: store.id, before: changed.length > 0 ? pick(was) : null, after: { ...(changed.length > 0 ? pick(now) : {}), ...(pendingKeys.length > 0 ? { pendingReview: pendingKeys } : {}) } });
+        }
       }
       return row;
     });

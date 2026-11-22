@@ -105,11 +105,21 @@ describe('reversão das migrações 0058 a 0061 (I3)', () => {
       for (const n of DOWNS) await c.query(readFileSync(path.join(ROOT, 'drizzle/down', `${n}.sql`), 'utf8'));
     });
 
-    // Reaplica: o migrator volta a achar as quatro pendentes.
+    // QA r1-1/r1-2: produto legado NÃO rascunho com nome fora de 2 a 80 caracteres não pode derrubar a 0061 (o VALIDATE falharia e desfaria tudo).
+    await withClient(url, async (c) => {
+      const storeId = (await c.query<{ id: string }>(`SELECT id FROM stores LIMIT 1`)).rows[0]!.id;
+      await c.query(`INSERT INTO products (store_id, name, status) VALUES ($1, 'A', 'active')`, [storeId]);
+    });
+
+    // Reaplica: o migrator volta a achar as quatro pendentes (e a 0061 deixa o CHECK como NOT VALID, com aviso, por causa do legado).
     await runMigrations(url);
     await withClient(url, async (c) => {
       expect(await structure(c)).toHaveLength(9 + 4 + 2 + 3);
-      expect(await counts(c)).toEqual({ u: 1, s: 1, a: 1, p: 1 });
+      expect(await counts(c)).toEqual({ u: 1, s: 1, a: 1, p: 2 });
+      expect((await c.query(`SELECT convalidated FROM pg_constraint WHERE conname = 'products_name_len'`)).rows[0].convalidated).toBe(false);
+      // Saneado o legado, o VALIDATE passa (o passo do guia de deploy §16).
+      await c.query(`UPDATE products SET name = 'Produto legado' WHERE name = 'A'`);
+      await c.query(`ALTER TABLE products VALIDATE CONSTRAINT products_name_len`);
       expect((await c.query(`SELECT version FROM stores`)).rows[0].version).toBe(1); // coluna recriada com o default
     });
   }, 120_000);
