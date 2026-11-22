@@ -7,13 +7,17 @@ sao de demonstracao: nada e cobrado.
 
 1) INSTALE (uma vez so)             Guia completo: docs/guias/rodar-no-meu-computador.md
    - Git        git-scm.com                       (Mac: vem com as "ferramentas de linha de comando")
-   - Node 24    nodejs.org  (instalador LTS; minimo 22.12)
-   - pnpm       no terminal:  corepack enable      (Windows: PowerShell COMO ADMINISTRADOR; Mac: se pedir, sudo corepack enable)
+   - Node 24    nodejs.org  (escolha a versao 24 de forma explicita; minimo 22.12; nao use a "Current")
+   - pnpm       Windows: no Prompt de Comando (cmd, nao PowerShell):  npm install -g pnpm@10.28.0
+                Mac: no Terminal:  corepack enable   (se pedir, sudo corepack enable)
    - Docker Desktop  docker.com/products/docker-desktop  (abra e deixe ABERTO)
 
 2) BAIXE E ABRA O TERMINAL NA PASTA
    https://github.com/yagogavilan/webag/archive/refs/heads/main.zip
-   Extraia numa pasta sem espacos nem acentos (ex.: C:\webag ou ~/webag).
+   Extraia numa pasta curta, sem espacos nem acentos (ex.: C:\webag ou ~/webag). O zip cria a pasta "webag-main":
+   a pasta certa e a que tem o arquivo package.json. Windows: botao direito no .zip > Propriedades > Desbloquear,
+   antes de extrair (senao o duplo clique no .bat mostra "O Windows protegeu o computador": Mais informacoes > Executar).
+   Terminal na pasta (Windows): na barra de endereco do Explorador digite  cmd  e Enter.
 
 3) RODE
    Opcao A, duplo clique:  Mac: iniciar-webag.command    Windows: iniciar-webag.bat
