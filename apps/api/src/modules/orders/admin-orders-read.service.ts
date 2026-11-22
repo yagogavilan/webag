@@ -45,6 +45,9 @@ export interface AdminOrderQuery {
  * destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Cancelar e estornar são as ações que já existiam (`POST /v1/admin/orders/{id}/cancel|refunds`);
  * aqui o detalhe diz quais o perfil pode usar e quanto ainda pode estornar.
  */
+/** Janela de dedupe da auditoria de abertura da ficha do pedido (D20 a). */
+export const ORDER_VIEW_DEDUPE_MS = 10 * 60_000;
+
 @Injectable()
 export class AdminOrdersReadService {
   constructor(
@@ -106,7 +109,20 @@ export class AdminOrdersReadService {
     return { data: page.map(presentRow), nextCursor: last ? encodeCursor({ at: last.createdAt.toISOString(), id: last.id }) : null };
   }
 
-  async detail(profile: AdminProfile, orderId: string) {
+  /**
+   * WB-352 C14 / ADR-018 D20(a): a ficha do pedido é o ÚNICO caminho de dado de cliente para o suporte, então cada abertura grava `admin.order.view` (admin,
+   * sessão, pedido, loja, hora; NUNCA o conteúdo) ANTES de devolver o dado. Falha na consulta de dedupe ou na gravação = erro 500 sem corpo (falha
+   * fechada). Dedupe `[HIPÓTESE]`: no máximo 1 linha por (admin, pedido) a cada 10 min, contada da ÚLTIMA linha gravada (a recarga da tela não incha a trilha;
+   * a coleta de muitos pedidos distintos continua com uma linha por pedido). Sem estado em memória; a corrida entre duas aberturas pode gravar 2 linhas (aceito).
+   */
+  private async auditOpen(admin: Principal, ctx: RequestContext, orderId: string, storeId: string, now = new Date()): Promise<void> {
+    const last = (await this.audit.lastByActor(this.db, { action: 'admin.order.view', targetType: 'order', actorId: admin.userId, targetIds: [orderId] })).get(orderId);
+    if (last && now.getTime() - last.getTime() < ORDER_VIEW_DEDUPE_MS) return;
+    await this.audit.record(this.db, ctx, { action: 'admin.order.view', targetType: 'order', targetId: orderId, storeId, after: { adminSessionId: admin.sessionId } });
+  }
+
+  async detail(admin: Principal, ctx: RequestContext, orderId: string) {
+    const profile = admin.adminProfile as AdminProfile;
     const [row] = await this.db
       .select({ order: orders, storeName: stores.name, storeCity: stores.addressCityName, customerName: users.name, customerEmail: users.email, customerPhone: users.phone })
       .from(orders)
@@ -115,6 +131,7 @@ export class AdminOrdersReadService {
       .where(eq(orders.id, orderId));
     if (!row) throw errors.notFound('Pedido não encontrado.');
     const { order } = row;
+    await this.auditOpen(admin, ctx, order.id, order.storeId);
     const [items, events, attempts, exchanges, [delivery], [review]] = await Promise.all([
       this.db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
       this.db.select({ e: orderEvents, actorName: users.name }).from(orderEvents).leftJoin(users, eq(users.id, orderEvents.actorUserId)).where(eq(orderEvents.orderId, order.id)).orderBy(asc(orderEvents.id)),
