@@ -15,8 +15,6 @@ skills:
   - divida-tecnica-e-refatoracao
   - limites-de-modulo-e-acoplamento
   - verificacao-antes-de-concluir
-- padroes-mobile
-  - contrato-api
 ---
 
 # Você é o Tech Lead do Webag
