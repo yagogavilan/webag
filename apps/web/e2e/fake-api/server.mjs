@@ -847,7 +847,11 @@ const mustProduct = (res, ctx) => {
   if (!p || p.storeId !== s.id) return void problem(res, 404, 'NOT_FOUND', 'Não encontrado');
   return p;
 };
-const touch = (p) => (p.updatedAt = now());
+/** Toda edição sobe a `version` do produto (como a API: `If-Match` e lote de reajuste). */
+const touch = (p) => {
+  p.updatedAt = now();
+  p.version = (p.version ?? 1) + 1;
+};
 
 route('GET', '/v1/stores/:id/products', {}, (req, res, ctx) => {
   const s = mustCatalog(res, ctx);
@@ -934,9 +938,78 @@ route('POST', '/v1/stores/:id/products/import', {}, (req, res, ctx) => {
   }
   json(res, 200, { ...base, committed: true, created: fresh.length, updated: 0, skipped: dup.length });
 });
+// Tabela "Preços e estoque" (WB-377): precisa vir antes de `/products/:pid`.
+route('GET', '/v1/stores/:id/products/table', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const q = (ctx.query.get('q') ?? '').toLowerCase();
+  const rows = storeProducts(s.id).filter((p) => (p.status === 'active' || p.status === 'paused') && p.name.toLowerCase().includes(q));
+  const data = rows.map((p) => {
+    const total = p.variants.reduce((sum, v) => sum + v.stock, 0);
+    return { id: p.id, name: p.name, status: p.status, moderationStatus: p.moderationStatus, cover: null, basePriceCents: p.basePriceCents, youReceiveCents: p.basePriceCents == null ? null : Math.round(p.basePriceCents * 0.84), available: total, reserved: 0, variantCount: p.variants.length, singleVariantId: p.variants.length === 1 ? p.variants[0].id : null, version: p.version ?? 1, updatedAt: p.updatedAt };
+  });
+  json(res, 200, { data, nextCursor: null, matchingCount: data.length });
+});
+// Lotes de reajuste de preço (desfazer por 10 min).
+const bulkBatches = new Map();
+const adjustPrice = (cents, a) => Math.round(a.mode === 'percent' ? cents * (1 + a.value / 100) : cents + a.value);
+function priceAdjust(res, store, body, idempotencyKey) {
+  const { productIds, action, dryRun } = body;
+  const items = productIds.map((id) => products.get(id)).filter((p) => p && p.storeId === store.id && p.basePriceCents != null);
+  const preview = items.map((p) => {
+    const toCents = adjustPrice(p.basePriceCents, action);
+    const changePct = Math.round(((toCents - p.basePriceCents) * 1000) / p.basePriceCents) / 10;
+    return { productId: p.id, name: p.name, version: p.version ?? 1, fromCents: p.basePriceCents, toCents, changePct, youReceiveCents: Math.round(toCents * 0.84), exceedsLimit: Math.abs(changePct) > 30 };
+  });
+  const blocked = preview.filter((x) => x.toCents < 1 || x.toCents > 9_999_999).map((x) => ({ productId: x.productId, name: x.name, reason: 'Preço fora da faixa' }));
+  const requiresConfirmation = preview.some((x) => x.exceedsLimit);
+  if (dryRun) return json(res, 200, { dryRun: true, willChange: preview.length, changed: 0, blocked, preview, requiresConfirmation, limitPct: 30, batchId: null, undoUntil: null });
+  if (!idempotencyKey) return problem(res, 400, 'IDEMPOTENCY_KEY_REQUIRED', 'Chave obrigatória');
+  const previous = bulkBatches.get(`key:${idempotencyKey}`);
+  if (previous) return json(res, 200, previous);
+  if (blocked.length) return problem(res, 422, 'BULK_BLOCKED', 'Preço fora da faixa', 'Algum preço sairia da faixa permitida.');
+  const expected = new Map((body.expectedVersions ?? []).map((x) => [x.productId, x.version]));
+  const conflicts = preview.filter((x) => expected.get(x.productId) !== x.version).map((x) => ({ productId: x.productId, name: x.name }));
+  if (conflicts.length) return problem(res, 409, 'BULK_VERSION_CONFLICT', 'Produto alterado', undefined, { extra: { conflicts } });
+  if (requiresConfirmation && !body.confirmLargeChange) return problem(res, 422, 'BULK_NEEDS_CONFIRMATION', 'Reajuste grande');
+  const batchId = randomUUID();
+  const applied = preview.map((x) => {
+    const p = products.get(x.productId);
+    p.basePriceCents = x.toCents;
+    touch(p);
+    return { id: p.id, name: p.name, from: x.fromCents, to: x.toCents, version: p.version };
+  });
+  const undoUntil = new Date(Date.now() + 600_000).toISOString();
+  bulkBatches.set(batchId, { storeId: store.id, applied, undoUntil, undone: null });
+  const result = { dryRun: false, willChange: preview.length, changed: preview.length, blocked: [], batchId, undoUntil };
+  bulkBatches.set(`key:${idempotencyKey}`, result);
+  json(res, 200, result);
+}
+route('POST', '/v1/stores/:id/products/bulk/:bid/undo', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const batch = bulkBatches.get(ctx.params[1]);
+  if (!batch || batch.storeId !== s.id) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
+  if (batch.undone) return json(res, 200, { ...batch.undone, alreadyUndone: true });
+  if (Date.parse(batch.undoUntil) < Date.now()) return problem(res, 410, 'UNDO_WINDOW_EXPIRED', 'Prazo acabou');
+  let reverted = 0;
+  const skipped = [];
+  for (const item of batch.applied) {
+    const p = products.get(item.id);
+    if (p.version !== item.version || p.basePriceCents !== item.to) skipped.push({ productId: p.id, name: p.name, reason: 'CHANGED_AFTER' });
+    else {
+      p.basePriceCents = item.from;
+      touch(p);
+      reverted++;
+    }
+  }
+  batch.undone = { batchId: ctx.params[1], alreadyUndone: false, reverted, skipped };
+  json(res, 200, batch.undone);
+});
 route('POST', '/v1/stores/:id/products/bulk', {}, (req, res, ctx) => {
   const s = mustCatalog(res, ctx);
   if (!s) return;
+  if (ctx.body.action.type === 'price_adjust') return priceAdjust(res, s, ctx.body, req.headers['idempotency-key']);
   const { productIds, action } = ctx.body;
   let changed = 0;
   for (const id of productIds) {
@@ -986,7 +1059,7 @@ route('POST', '/v1/stores/:id/products/:pid/variants/:vid/stock', {}, (req, res,
   if (!v) return problem(res, 404, 'NOT_FOUND', 'Não encontrado');
   v.stock = ctx.body.set !== undefined ? ctx.body.set : v.stock + ctx.body.delta;
   touch(p);
-  json(res, 200, presentVariant(v));
+  json(res, 200, { ...presentVariant(v), productVersion: p.version });
 });
 route('PUT', '/v1/stores/:id/products/:pid/images', {}, (req, res, ctx) => {
   const p = mustProduct(res, ctx);

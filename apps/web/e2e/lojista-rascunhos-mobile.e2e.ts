@@ -40,7 +40,8 @@ for (const vp of [
         const box = (await button.boundingBox())!;
         expect(box.x).toBeGreaterThanOrEqual(itemBox.x);
         expect(box.x + box.width).toBeLessThanOrEqual(itemBox.x + itemBox.width + 1);
-        expect(box.height).toBeGreaterThanOrEqual(36);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.width).toBeGreaterThanOrEqual(44);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       // evidência opcional: BUG048_SHOT=<pasta> grava um jpg pequeno do painel

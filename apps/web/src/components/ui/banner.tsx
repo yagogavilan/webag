@@ -9,11 +9,11 @@ type Tone = 'info' | 'success' | 'warning' | 'danger';
 
 const ICONS = { info: Info, success: CheckCircle, warning: Warning, danger: WarningCircle };
 
-/** Aviso inline: ícone + texto (+ ação). Erro usa `role="alert"`; os demais, região educada. */
-export function Banner({ tone = 'info', children, action, testId, offline }: { tone?: Tone; children: ReactNode; action?: ReactNode; testId?: string; offline?: boolean }) {
+/** Aviso inline: ícone + texto (+ ação). Erro usa `role="alert"`; os demais, região educada. `quiet` tira a região viva (texto que muda sozinho, como um contador: quem anuncia é outro elemento). */
+export function Banner({ tone = 'info', children, action, testId, offline, quiet }: { tone?: Tone; children: ReactNode; action?: ReactNode; testId?: string; offline?: boolean; quiet?: boolean }) {
   const Icon = offline ? WifiSlash : ICONS[tone];
   return (
-    <div className={cx(s.banner, s[tone])} role={tone === 'danger' ? 'alert' : 'status'} data-testid={testId}>
+    <div className={cx(s.banner, s[tone])} role={quiet ? undefined : tone === 'danger' ? 'alert' : 'status'} data-testid={testId}>
       <Icon size={24} weight="fill" aria-hidden="true" />
       <div className={s.bannerBody}>
         <div className={cx('wb-text-body', s.bannerText)}>{children}</div>

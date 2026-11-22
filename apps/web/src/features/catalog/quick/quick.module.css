@@ -60,6 +60,8 @@
 @media (min-width: 768px) { .draftItem { grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: 'thumb text actions'; } }
 .draftName { color: inherit; overflow-wrap: anywhere; }
 .draftActions { grid-area: actions; display: flex; gap: var(--wb-space-2); flex-wrap: wrap; justify-content: flex-end; }
+/* Alvo de toque de 44 px ou mais nos 3 botões (o `sm` do botão tem 40 px): o rascunho é tocado com o polegar, no celular. */
+.draftActions > button, .draftActions > a { min-height: var(--wb-size-touch-min); min-width: 44px; }
 
 /* Adicionar vários */
 .pasteArea { min-height: 200px; font-size: 1rem; }
@@ -78,3 +80,9 @@
 .cellInput { min-width: 7ch; font-variant-numeric: tabular-nums; }
 .rowNote { color: var(--wb-color-text-secondary); margin: 0; }
 .rowErr { color: var(--wb-color-text-danger); margin: 0; }
+
+/* Tabela de preços e estoque: caixa de seleção com alvo de 48 px ao lado do nome (no celular a linha é um cartão; o cabeçalho some). */
+.nameRow { display: flex; align-items: center; gap: var(--wb-space-1); }
+.nameText { min-width: 0; flex: 1; }
+.selectBox { flex: none; display: inline-grid; place-items: center; min-width: var(--wb-size-touch-min); min-height: var(--wb-size-touch-min); cursor: pointer; }
+.selectBox input { width: 24px; height: 24px; margin: 0; }
