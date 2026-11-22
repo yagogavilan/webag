@@ -159,6 +159,13 @@ describe('Ver como o lojista (WB-352)', () => {
       expect(res.status).toBe(429);
     });
 
+    it('A6 (review R1.1): a resposta de openViewAs, que leva a credencial no corpo, sai com Cache-Control private, no-store', async () => {
+      const admin = await createAdmin(ctx, 'operations');
+      const res = await open(admin, shop.store.id).expect(201);
+      expect(res.body.token).toMatch(/^vas_/);
+      expect(res.headers['cache-control']).toBe('private, no-store');
+    });
+
     it('VA-20: abrir a segunda visão encerra a primeira (replaced) e só a segunda vale', async () => {
       const admin = await createAdmin(ctx, 'operations');
       const first = await openOk(admin, shop.store.id);

@@ -147,7 +147,7 @@ export class AdminStoreEditService {
 
   private async run(admin: Principal, ctx: RequestContext, storeId: string, expectedVersion: number, reason: AdminReason, apply: (tx: Tx, store: Store, actor: Actor) => Promise<Applied>): Promise<AdminEditResult> {
     const outcome = await this.db.transaction(async (tx) => {
-      const [locked] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('update');
+      const [locked] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('no key update');
       if (!locked) throw errors.notFound('Loja não encontrada.');
       // C6: a versão é conferida sob o lock da loja, na mesma transação da alteração (equivale a `UPDATE ... WHERE version = :v`).
       if (locked.version !== expectedVersion) {

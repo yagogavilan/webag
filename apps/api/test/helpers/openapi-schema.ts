@@ -25,7 +25,10 @@ const FORMAT: Record<string, RegExp> = {
   uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   uri: /^[a-z][a-z0-9+.-]*:/i,
   date: /^\d{4}-\d{2}-\d{2}$/,
+  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
 };
+/** `binary` (upload) não tem o que conferir numa resposta JSON. Qualquer outro `format` LANÇA: um formato novo no contrato exige decidir como validar (A1). */
+const UNCHECKED_FORMATS = new Set(['binary']);
 
 export function validateValue(schema: Json, value: unknown, path = '$'): string[] {
   if (schema.$ref) {
@@ -45,6 +48,7 @@ export function validateValue(schema: Json, value: unknown, path = '$'): string[
     if (schema.pattern && !new RegExp(schema.pattern).test(value)) errors.push(`${path}: não casa com ${schema.pattern}`);
     if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${path}: curto`);
     if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${path}: longo`);
+    if (schema.format && !FORMAT[schema.format] && !UNCHECKED_FORMATS.has(schema.format)) throw new Error(`format não suportado pelo validador de teste: ${schema.format} (${path})`);
     if (schema.format && FORMAT[schema.format] && !FORMAT[schema.format]!.test(value)) errors.push(`${path}: formato ${schema.format}`);
   }
   if (typeof value === 'number') {
