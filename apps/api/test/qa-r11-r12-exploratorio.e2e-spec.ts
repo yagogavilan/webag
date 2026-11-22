@@ -304,7 +304,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect((await row(promo)).basePriceCents).toBe(10_000);
     });
 
-    it.fails('BUG-039: borda de centavo: +10% sobre R$ 0,01 não muda o preço; o lote não deve subir a versão nem gravar "de 1 para 1" no histórico (item sem mudança de preço)', async () => {
+    it('BUG-039: borda de centavo: +10% sobre R$ 0,01 não muda o preço; o lote não deve subir a versão nem gravar "de 1 para 1" no histórico (item sem mudança de preço)', async () => {
       const { merchant, id } = await freshStore();
       const cheap = await activeProduct(merchant, id, 1);
       const pv = await preview(id, [cheap], { type: 'price_adjust', mode: 'percent', value: 10 }, merchant).expect(200);
@@ -499,7 +499,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(seen, 'campos que dão 500 com NUL').toEqual([]);
     });
 
-    it.fails('BUG-039: edição sem mudança real (mesmo nome) não sobe a versão nem manda e-mail "A Webag alterou" ao lojista', async () => {
+    it('BUG-039: edição sem mudança real (mesmo nome) não sobe a versão nem manda e-mail "A Webag alterou" ao lojista', async () => {
       const { merchant, id } = await freshStore();
       const current = (await ctx.db.select().from(stores).where(eq(stores.id, id)))[0]!;
       const v = current.version;
@@ -543,7 +543,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       activeOrderId = created.id;
     });
 
-    it.fails('BUG-040: credencial com `expires_at` no passado e linha ainda ABERTA (varredura não rodou): a leitura é negada na hora (VIEW_AS_EXPIRED) e abrir outra visão fecha a velha', async () => {
+    it('BUG-040: credencial com `expires_at` no passado e linha ainda ABERTA (varredura não rodou): a leitura é negada na hora (VIEW_AS_EXPIRED) e abrir outra visão fecha a velha', async () => {
       const admin = await createAdmin(ctx, 'support');
       const opened = (await open(admin, shop.store.id).expect(201)).body as { id: string; token: string };
       await viewGet(admin, `${base(shop.store.id)}`, opened.token).expect(200);

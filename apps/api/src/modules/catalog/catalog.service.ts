@@ -935,7 +935,9 @@ export class CatalogService {
             variantPrices.push({ id: variant.id, priceCents: adjusted });
           }
           if (!blocked.some((b) => b.productId === product.id)) {
-            changes.push({ product, patch: { basePriceCents: next }, variantPrices });
+            // BUG-039: arredondou para o mesmo valor (ex.: +10% sobre R$ 0,01) e nenhuma variação mudou: não é alteração (sem versão +1 nem linha "de X para X").
+            const unchanged = next === product.basePriceCents && variantPrices.every((v) => variants.find((x) => x.id === v.id)?.priceCents === v.priceCents);
+            if (!unchanged) changes.push({ product, patch: { basePriceCents: next }, variantPrices });
             const pct = changePct(product.basePriceCents, next);
             preview.push({ productId: product.id, name: product.name, version: product.version, fromCents: product.basePriceCents, toCents: next, changePct: pct, youReceiveCents: estimate ? estimate(next, product.categoryId) : null, exceedsLimit: Math.abs(pct) > limitPct });
           }

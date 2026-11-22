@@ -99,9 +99,11 @@ export class ViewAsService implements OnApplicationBootstrap, OnApplicationShutd
     try {
       row = await this.db.transaction(async (tx) => {
         // Uma visão ativa por admin: abrir outra encerra a anterior (`replaced`) na mesma transação.
-        const replaced = await tx.update(adminViewSessions).set({ closedAt: now, closeCause: 'replaced' }).where(and(eq(adminViewSessions.adminUserId, principal.userId), isNull(adminViewSessions.closedAt))).returning();
+        // BUG-040: a que já venceu e a varredura (10 min) ainda não pegou fecha como `expired`, com `at = expires_at`, não como `replaced`.
+        const expired = sql`${adminViewSessions.expiresAt} <= ${now}`;
+        const replaced = await tx.update(adminViewSessions).set({ closedAt: sql`case when ${expired} then ${adminViewSessions.expiresAt} else ${now} end`, closeCause: sql`case when ${expired} then 'expired' else 'replaced' end` }).where(and(eq(adminViewSessions.adminUserId, principal.userId), isNull(adminViewSessions.closedAt))).returning();
         for (const old of replaced) {
-          await this.audit.record(tx, ctx, { action: 'view_as.close', targetType: 'store', targetId: old.storeId, storeId: old.storeId, after: { viewAsId: old.id, cause: 'replaced', ...(previousStats?.id === old.id ? previousStats.counts : { reads: 0, byOperation: {} }) } });
+          await this.audit.record(tx, ctx, { action: 'view_as.close', targetType: 'store', targetId: old.storeId, storeId: old.storeId, after: { viewAsId: old.id, cause: old.closeCause ?? 'replaced', ...(previousStats?.id === old.id ? previousStats.counts : { reads: 0, byOperation: {} }) } });
         }
         const [inserted] = await tx
           .insert(adminViewSessions)
@@ -134,7 +136,9 @@ export class ViewAsService implements OnApplicationBootstrap, OnApplicationShutd
     const [row] = await this.db.select().from(adminViewSessions).where(and(eq(adminViewSessions.id, viewAsId), eq(adminViewSessions.adminUserId, principal.userId)));
     if (!row) throw errors.notFound('Visualização não encontrada.');
     if (row.closedAt) return;
-    await this.close(row, 'ended', new Date(), ctx);
+    const now = new Date();
+    // BUG-040: visão vencida e ainda não varrida fecha como `expired` (no instante do vencimento), não como `ended`.
+    await this.close(row, row.expiresAt <= now ? 'expired' : 'ended', row.expiresAt <= now ? row.expiresAt : now, ctx);
   }
 
   // ===================================================================== autorizar (AuthGuard, passo de loja)

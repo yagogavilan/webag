@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
@@ -155,6 +156,10 @@ export class AdminStoreEditService {
       }
       const actor: Actor = { userId: admin.userId, kind: 'admin', reason: encodeReason(reason) };
       const applied = await apply(tx, locked, actor);
+      // BUG-039: antes = depois (ex.: mesmo nome): nada mudou. O 422 desfaz a transação (sem versão +1, sem linha de histórico, sem e-mail "A Webag alterou algo").
+      if (applied.before && applied.after && isDeepStrictEqual(applied.before, applied.after)) {
+        throw errors.unprocessable('NO_CHANGE', 'Nada mudou', { detail: 'O valor informado é igual ao atual. Nada foi alterado.' });
+      }
       const [bumped] = await tx.update(stores).set({ version: sql`${stores.version} + 1`, updatedAt: new Date() }).where(and(eq(stores.id, storeId), eq(stores.version, expectedVersion))).returning({ version: stores.version });
       if (!bumped) throw errors.conflict('STORE_VERSION_CONFLICT', 'A loja foi alterada', 'O lojista alterou a loja agora. Recarregue para ver a versão atual.');
       const reasonLabel = labelOf(reason);
