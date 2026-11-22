@@ -7,6 +7,11 @@
 <title>Webag para lojistas</title>
 <link rel="stylesheet" href="base.css">
 <!--
+  v2.3 (parecer v2.2, nota 3,9): s6 reescrito para não contradizer o s3 ("Não quero entregar? Você escolhe: o cliente retira na loja."; a entrega pelo
+  Webag é opção, a retirada continua); CTA único no s7 e s14 (WhatsApp do config.json, senão linhas à mão); nome do fundador só via config.json
+  (sem "Yago" fixo, sem "Estou montando o Webag", sem Instagram impresso); promessas não confirmadas fora do papel: "Cerca de 10 min" (s6) saiu e o
+  "10 minutos para aceitar" (s12) só entra com flags.prazoAceite = true. Cartão do s4 segue desenhado: a captura real (painel-pedido-aceitar.png)
+  traz código WB-..., nome e telefone de cliente, endereço e horário, e o texto útil ficaria a ~15 px na página.
   APRESENTAÇÃO DO LOJISTA, v2.1 (aplica a avaliação da estrategista de 2026-11-22; a v1 foi reprovada: "não gera interesse").
   Parte 1 "A conversa" = slides 1 a 7 (vende, lida em 3 minutos na porta da loja). Slide 8 = divisor. Parte 2 "Guia de início" = slides 9 a 14.
   v2.1: (1) o WhatsApp "Só retirando, tá?" é o slide 1 (gancho) e "Venda além da sua rua." o 2 (capa com tese);
@@ -148,13 +153,15 @@
     <p class="ss">CPF ou MEI.</p>
   </div>
   <div class="quad" style="left:960px;top:0;background:var(--noite);color:#fff">
-    <p class="qq">Não quero entregar.</p>
-    <h2 class="aa lima-t" style="font-size:104px">O cliente<br>retira<br>na loja.</h2>
+    <!-- v2.3: coerente com o slide 3. A entrega pelo Webag é opção; a retirada continua (o lojista escolhe). -->
+    <p class="qq">Não quero entregar?</p>
+    <h2 class="aa lima-t" style="font-size:112px">Você escolhe:</h2>
+    <p class="ss lima-t" style="color:#fff">O cliente retira na loja.</p>
   </div>
   <div class="quad" style="left:0;top:540px;background:var(--lima);color:var(--noite)">
     <p class="qq">Não entendo de sistema.</p>
     <h2 class="aa">Guiado.</h2>
-    <p class="ss">Cerca de 10 min.</p>
+    <p class="ss">Passo a passo.</p>
   </div>
   <!-- 4º quadrante: só com flags.trocaNoPainel = true entra "Troca?"; senão, a resposta que o painel já faz (Financeiro com extrato) -->
   <div class="quad off" data-flag="trocaNoPainel" style="left:960px;top:540px;background:var(--papel);color:var(--noite)">
@@ -172,28 +179,27 @@
   <span class="tag" style="left:120px;top:76px">Em breve</span>
   <h1 class="d" style="left:120px;top:176px;width:960px;font-size:150px;line-height:1.02">Seu nome<br>na lista de<br>abertura.</h1>
   <!-- Linhas para escrever à mão (impresso na visita) -->
-  <div class="abs" style="left:120px;top:690px;width:900px;background:var(--lima);border-radius:32px;padding:44px 48px">
+  <div class="abs" data-hide-if="whatsapp" style="left:120px;top:690px;width:900px;background:var(--lima);border-radius:32px;padding:44px 48px">
     <div class="fill"><span>Seu nome</span><i></i></div>
     <div class="fill"><span>Sua loja</span><i></i></div>
     <div class="fill"><span>Seu WhatsApp</span><i></i></div>
   </div>
-  <!-- Coluna da direita em fluxo (sem sobreposição): uma ação, quem é o Yago, contatos, nota de uso do contato -->
-  <div class="abs" style="left:1100px;top:96px;width:700px;display:flex;flex-direction:column;gap:28px">
-    <!-- Uma ação. Com WhatsApp no config.json: "Mande quero entrar". Sem: escrever à mão na lista ao lado -->
-    <div data-show-if="whatsapp" class="off" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:36px 44px">
-      <p class="dd" style="font-size:56px;line-height:1.06">Mande “quero entrar” no WhatsApp.</p>
+  <!-- v2.3: UMA ação só (sem Instagram, sem e-mail, sem frase de apresentação do fundador).
+       Com WhatsApp no config.json: "Mande quero entrar" + o número grande. Sem: linhas à mão ao lado e "O <nome> chama você".
+       O nome (provisório até o fundador informar) vem de config.json; nada de nome fixo no HTML. -->
+  <div class="abs" style="left:1100px;top:176px;width:700px;display:flex;flex-direction:column;gap:32px">
+    <div data-show-if="whatsapp" class="off" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:44px 48px">
+      <p class="dd" style="font-size:72px;line-height:1.06">Mande “quero entrar” no WhatsApp.</p>
     </div>
-    <div data-hide-if="whatsapp" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:36px 44px">
-      <p class="dd" style="font-size:56px;line-height:1.06">Escreva ao lado. O Yago chama você.</p>
-    </div>
-    <div class="contact" style="position:static;padding:44px 52px">
-      <h3>Fale com o Yago</h3>
-      <p class="sub">Estou montando o Webag.</p>
-      <div class="crow" data-cfg="whatsapp"><span class="lbl">WhatsApp</span><span class="val"></span></div>
-      <div class="crow" data-cfg="instagram"><span class="lbl">Instagram</span><span class="val"></span></div>
-      <div class="crow off" data-cfg="email" data-opt><span class="lbl">E-mail</span><span class="val"></span></div>
+    <div data-hide-if="whatsapp" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:44px 48px">
+      <p class="dd" style="font-size:72px;line-height:1.06">Escreva ao lado. <span data-cfg-text="nome" data-fallback="Yago">Yago</span> chama você.</p>
     </div>
     <p style="font:600 32px/1.3 var(--txt);color:#fff">Usamos seu contato só para avisar da abertura do cadastro.</p>
+  </div>
+  <!-- Com WhatsApp: o número ocupa o lugar das linhas à mão -->
+  <div data-show-if="whatsapp" class="off abs" style="left:120px;top:690px;width:900px;background:var(--lima);color:var(--noite);border-radius:32px;padding:44px 48px">
+    <p class="crow" style="margin:0"><span class="lbl" style="color:var(--noite)">WhatsApp</span></p>
+    <p class="dd" style="font-size:80px;line-height:1.05;margin-top:8px;overflow-wrap:anywhere" data-cfg-text="whatsapp" data-fallback="">&nbsp;</p>
   </div>
 </section>
 
@@ -288,14 +294,17 @@
 </section>
 
 <!-- 12. RECEBER E ACEITAR O PEDIDO -->
-<section class="slide roxo" id="s12" aria-label="Passo 4: aceite o pedido em até 10 minutos">
+<section class="slide roxo" id="s12" aria-label="Passo 4: aceite o pedido">
   <p class="kick" style="left:120px;top:64px">Guia de início · 4 de 6</p>
   <div class="prog" style="left:120px;top:116px"><i></i><i></i><i></i><i class="on"></i><i></i><i></i></div>
-  <h1 class="abs" style="left:120px;top:170px;width:820px;font-weight:800">
+  <!-- v2.3: o prazo de 10 minutos é [HIPÓTESE] (V4). Só entra com flags.prazoAceite = true em config.json; sem ele, texto sem número. -->
+  <h1 class="abs" data-flag="prazoAceite" style="left:120px;top:170px;width:820px;font-weight:800">
     <span class="dd lima-t" style="display:block;font-size:480px;line-height:.9">10</span>
     <span class="dd" style="display:block;font-size:80px;line-height:1.04;letter-spacing:-.03em;margin-top:14px">minutos para<br>aceitar o pedido.</span>
   </h1>
-  <p class="l" style="left:120px;top:880px;width:820px;font-size:40px">Sem resposta, o pedido é cancelado.</p>
+  <p class="l" data-flag="prazoAceite" style="left:120px;top:880px;width:820px;font-size:40px">Sem resposta, o pedido é cancelado.</p>
+  <h1 class="d" data-noflag="prazoAceite" style="left:120px;top:190px;width:820px;font-size:150px;line-height:1.02">Chegou?<br>Aceite<br>rápido.</h1>
+  <p class="l" data-noflag="prazoAceite" style="left:120px;top:780px;width:820px;font-size:48px">Com um toque, o cliente já sabe.</p>
   <div class="stage" style="left:1000px;top:150px;width:800px;height:230px;background:#fff;color:var(--noite)">
     <span class="nm" style="background:var(--lima);color:var(--noite)">1</span><div><h3 style="font-size:70px">O painel avisa</h3><p>Som e aviso na tela.</p></div>
   </div>
@@ -312,7 +321,8 @@
   <p class="kick" style="left:120px;top:64px">Guia de início · 5 de 6</p>
   <div class="prog" style="left:120px;top:116px"><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
   <h1 class="d" style="left:120px;top:176px;width:780px;font-size:190px;line-height:1.02">Pronto?<br>Marque.</h1>
-  <p class="l" style="left:120px;top:640px;width:620px;font-size:48px">O motoboy do Webag busca na loja.</p>
+  <!-- J8 (V5). v2.3: coerente com o slide 6 (o lojista escolhe entrega pelo Webag ou retirada). -->
+  <p class="l" style="left:120px;top:620px;width:640px;font-size:48px">Entrega pelo Webag: o motoboy busca na loja.</p>
   <div class="tile" style="left:1380px;top:120px;width:380px;height:380px;transform:rotate(4deg)"><img src="assets/etapa-a-caminho.svg" alt="Ilustração: moto do Webag com a sacola"></div>
   <!-- Cartão ILUSTRATIVO "em separação" com o botão Pronto para coleta (valores redondos, sem código, sem horário) -->
   <div class="xcard" role="group" aria-label="Exemplo de pedido em separação, 2 itens, R$ 188,00, com o botão Pronto para coleta" style="left:820px;top:600px;width:994px;height:316px;border-radius:40px;flex-direction:row;align-items:center;gap:36px;padding:40px 48px">
@@ -334,7 +344,7 @@
   <p class="l" style="left:120px;top:490px;width:820px">Vendas, comissão e o que cai na sua conta, com extrato.</p>
   <!-- Uma ação: com WhatsApp no config.json, "Mande quero entrar"; sem, linha para escrever à mão -->
   <p class="l off" data-show-if="whatsapp" style="left:120px;top:780px;width:820px;font-size:40px">Pronto para começar? Mande “quero entrar” no WhatsApp:</p>
-  <p class="l" data-hide-if="whatsapp" style="left:120px;top:780px;width:820px;font-size:40px">Pronto para começar? Chame o Yago no WhatsApp:</p>
+  <p class="l" data-hide-if="whatsapp" style="left:120px;top:780px;width:820px;font-size:40px">Pronto para começar? Chame <span data-cfg-text="nome" data-fallback="Yago">Yago</span> no WhatsApp:</p>
   <p class="d lima-t" style="left:120px;top:896px;width:820px;font-size:64px;letter-spacing:-.02em" data-cfg-text="whatsapp" data-fallback="(__) _____-____">(__) _____-____</p>
   <!-- Cartão ILUSTRATIVO do Financeiro: valores redondos, coerentes com o exemplo do slide 5 (R$ 1.000: comissão 15%, tarifa até 5%) -->
   <div class="xcard" role="group" aria-label="Exemplo de financeiro: vendas R$ 1.000,00, comissão menos R$ 150,00, tarifa de pagamento menos até R$ 50,00, você recebe cerca de R$ 800,00" style="left:1040px;top:90px;width:788px;height:902px;border-radius:48px;padding:64px 48px 48px">
@@ -363,7 +373,7 @@ var CAP_BASE = "../../telas/", CAP_EXT = ".png";
 /* Contato e flags: lê config.json (ou window.__CONFIG injetado pelo render). Campo vazio = linha para escrever à mão.
    flags: itens ainda não confirmados pelo fundador (padrão false = não aparecem no PDF). Mesmos valores de config.json. */
 (function () {
-  var DEFAULTS = { nome: "Yago", whatsapp: "", instagram: "@webag", site: "", email: "", flags: { semMensalidade: false, trocaNoPainel: false } };
+  var DEFAULTS = { nome: "Yago", whatsapp: "", instagram: "@webag", site: "", email: "", flags: { semMensalidade: false, trocaNoPainel: false, prazoAceite: false } };
   var injected = !!window.__CONFIG;
   var cfg = {};
   Object.keys(DEFAULTS).forEach(function (k) { cfg[k] = DEFAULTS[k]; });

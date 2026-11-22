@@ -1,4 +1,5 @@
 {
+  "_provisorios": "nome e instagram sao provisorios (pendencias.md V9): o fundador confirma ou troca antes de enviar. whatsapp vazio = linha para escrever a mao",
   "nome": "Yago",
   "whatsapp": "",
   "instagram": "@webag",
@@ -6,6 +7,7 @@
   "email": "",
   "flags": {
     "semMensalidade": false,
-    "trocaNoPainel": false
+    "trocaNoPainel": false,
+    "prazoAceite": false
   }
 }

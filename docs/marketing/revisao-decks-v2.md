@@ -1,3 +1,19 @@
+# v2.3 (rodada final, parecer v2.2: lojista 3,9 / cliente 3,8). Sem render e sem público: notas conservadoras, a estrategista refaz.
+
+| Parecer v2.2 | Aplicado |
+|---|---|
+| Lojista s6 contradiz s3 | "Não quero entregar? Você escolhe: o cliente retira na loja."; s13 passa a "Entrega pelo Webag: o motoboy busca na loja." |
+| Lojista: contato em branco, @/Yago assumidos, ação dupla | Uma ação (WhatsApp do config, senão linhas à mão); nome e @ só do `config.json` e marcados provisórios (V23) |
+| Lojista: promessas sem confirmação (V2, V4) | "Cerca de 10 min" saiu; "10 minutos" atrás de `flags.prazoAceite`; conta de 15% mantida rotulada como exemplo |
+| Lojista: prova é desenho | Não resolvido: a captura real tem dado de demonstração e ficaria ilegível (V25) |
+| Cliente: canal | Definido pelo CEO (celular, 30 s): texto mínimo 56 px, 5 slides, ~3 blocos de texto por slide, @ tocável |
+| Cliente: dois pedidos no s5; R$ 8,00; recursos não confirmados | Um pedido (Instagram); valor saiu; recursos conferidos no PRD (V21) |
+
+**Notas v2.3 (estimativa conservadora, rubrica `avaliar-post`):**
+- **Lojista Parte 1:** gancho 4,5 · ideia 4 · identificação 4 · prova 3 · miniatura 4,5 · CTA 4 · autenticidade 4 = **4,0**. Sem trava formal (J8 marcado em V20). Prova 3 segura a nota; sem o s6 contraditório e com CTA único, ideia e CTA sobem meio ponto cada.
+- **Cliente:** gancho 4,5 · ideia 4,5 · identificação 4 · prova 3 · miniatura 5 (texto de 104 a 260 px) · CTA 4 (um toque abre o Instagram; @ provisório) · autenticidade 3,5 = **4,1**. Fecha em 4,0 só se o @ for o real e J8 sair; com @ errado o CTA cai para 2 e a peça volta.
+- Não há como verificar leitura no celular sem render: a conta de ~11 pt para 56 px assume largura de 390 pt.
+
 # Autocrítica das apresentações v2.1 (após a avaliação da estrategista)
 
 Autor: product-designer | Data: 2026-11-22 | Critério: rubrica `avaliar-post` (gancho 25%, ideia 15%, identificação 15%, prova 15%, miniatura 10%, CTA 10%, autenticidade 10%). Parecer de origem: `avaliacoes/2026-11-22-apresentacao-lojista.md` (Parte 1 = 3,9) e `...-cliente.md` (3,4).
