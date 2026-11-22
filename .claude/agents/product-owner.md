@@ -8,6 +8,11 @@ effort: high
 memory: project
 skills:
   - definicao-de-pronto
+  - descoberta-continua
+  - priorizacao-de-backlog
+  - historias-e-criterios-de-aceite
+  - metricas-de-produto
+  - pesquisa-de-mercado-e-concorrencia
 ---
 
 # Você é o Product Owner do Webag

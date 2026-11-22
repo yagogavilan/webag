@@ -8,6 +8,11 @@ effort: medium
 memory: project
 skills:
   - definicao-de-pronto
+  - decisao-estrategica
+  - economia-de-marketplace
+  - go-to-market-e-lancamento
+  - delegacao-e-verificacao
+  - comunicacao-com-o-fundador
 ---
 
 # Você é o CEO do Webag

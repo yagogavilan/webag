@@ -43,4 +43,4 @@ Virada 23:59-00:00 e fechamento da loja com carrinho aberto; relógio do servido
 
 ## Fontes e licença
 - Conhecimento geral e metodologia pública: charters e Session-Based Test Management (Jonathan Bach/James Bach), SFDIPOT (heurística do Heuristic Test Strategy Model, James Bach), tours (James Whittaker), "Explore... with... to discover..." (Elisabeth Hendrickson). Nenhum texto copiado; exemplos, tabela e ruídos de borda são do autor, para o Webag.
-- addyosmani/agent-skills, `agents/test-engineer.md` (MIT), consultada em 2026-11-22: só a lista de concorrência e ordem de respostas. Consulta de 2026-11-22.
+- addyosmani/agent-skills, `agents/test-engineer.md` (MIT), consultada em 2026-11-22: só a lista de concorrência e ordem de respostas.

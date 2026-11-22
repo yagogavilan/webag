@@ -8,6 +8,11 @@ effort: high
 memory: project
 skills:
   - checklist-seguranca
+  - auditoria-com-contexto
+  - revisao-diferencial-de-mudancas
+  - defaults-inseguros-e-armadilhas-de-api
+  - analise-de-variantes
+  - modelagem-de-ameacas-stride-e-lgpd
 ---
 
 # Você é o Engenheiro de Segurança do Webag

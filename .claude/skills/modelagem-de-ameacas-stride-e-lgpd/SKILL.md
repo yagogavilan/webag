@@ -30,7 +30,7 @@ Probabilidade (1 a 3) x impacto (1 a 3), com impacto 3 = dinheiro, conta ou dado
 ## 5. Tabela LGPD (uma linha por dado pessoal)
 | Dado | Titular | Finalidade | Base legal (LGPD art. 7) | Quem recebe | Retenção | Direito/ação |
 |---|---|---|---|---|---|---|
-Exemplo de preenchimento: endereço de entrega | cliente | entregar o pedido | execução de contrato (V) | lojista e entregador, só durante o pedido | prazo definido (DT-021, ADR-012) | acesso, correção, exclusão.
+Exemplo de preenchimento: endereço de entrega | cliente | entregar o pedido | execução de contrato (art. 7, V) | lojista e entregador, só durante o pedido | prazo definido (DT-021, ADR-012) | acesso, correção, exclusão.
 Regras: **minimizar** (CPF só se o meio de pagamento exigir; localização precisa só em uso); mais de uma finalidade = mais de uma linha; **legítimo interesse** (IX) para antifraude exige teste de balanceamento escrito; **consentimento** (I) só para o que é opcional (push de marketing), revogável; dado de criança/adolescente e dado sensível: evitar coletar. Operadores e compartilhamento (MP, e-mail, push, hospedagem) listados. Incidente: quem avisa, em quanto tempo e a quem (ANPD e titulares) `[validar o prazo vigente com profissional]`. Os mesmos dados alimentam o Data Safety (Google) e o App Privacy (Apple).
 Você não é advogado: aponte o requisito e encaminhe ao fundador/profissional a base legal e os textos.
 
