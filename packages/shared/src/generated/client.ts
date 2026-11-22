@@ -31620,7 +31620,7 @@ export const getExportAdminStoreHistoryUrl = (storeId: string,
 }
 
 /**
- * Permissão PRÓPRIA `store-history:export` (super admin, operação e financeiro; suporte 403). Mesmos filtros de `listAdminStoreHistory`. CSV UTF-8 com cabeçalho, no máximo 10.000 linhas (mais que isso: 422 `EXPORT_TOO_LARGE`, reduza o período), SEM dado pessoal, com proteção de fórmula (helper do SEC-156: célula iniciada por `=`, `+`, `-` ou `@` sai escapada). Cada exportação grava uma linha de auditoria (quem, filtros, linhas). Limite de 10 por hora por admin (429 com `Retry-After`) [HIPÓTESE]. Resposta `Cache-Control: private, no-store`.
+ * Permissão PRÓPRIA `store-history:export` (super admin, operação e financeiro; suporte 403). Mesmos filtros de `listAdminStoreHistory`. CSV UTF-8 com cabeçalho, no máximo 10.000 linhas (mais que isso: 422 `EXPORT_TOO_LARGE`, reduza o período), SEM dado pessoal (`audit_log.before/after` pode carregar dado de membro: o CSV sai de uma LISTA DE CAMPOS por tipo de alteração, nunca do JSON bruto; tech-lead A10), com proteção de fórmula (helper do SEC-156: célula iniciada por `=`, `+`, `-` ou `@` sai escapada). Cada exportação grava uma linha de auditoria (quem, filtros, linhas). Limite de 10 por hora por admin (429 com `Retry-After`) [HIPÓTESE]. Resposta `Cache-Control: private, no-store`.
  * @summary Exportar o histórico da loja em CSV (WB-354 C3, C-ADM-09)
  */
 export const exportAdminStoreHistory = async (storeId: string,

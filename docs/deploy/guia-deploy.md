@@ -228,7 +228,7 @@ Funciona sem o nginx e o compose deste repositório: o provedor termina o HTTPS 
 
 ### 4.2 Passo a passo
 
-1. **Banco**: crie o Postgres, ative PostGIS (`CREATE EXTENSION IF NOT EXISTS postgis;` num cliente SQL, ou pelo painel). Copie a URL de conexão (`postgresql://...`). Se o provedor exige TLS, use `?sslmode=require` no fim.
+1. **Banco**: crie o Postgres, ative PostGIS (`CREATE EXTENSION IF NOT EXISTS postgis;` num cliente SQL, ou pelo painel; PostGIS exige superusuário, então o `webag_migrator` não consegue ativá-lo). Crie também os papéis `webag_migrator` e `webag_app` e rode o `infra/postgres/40-roles-grants.sql` como administrador do provedor (seção 15). Copie a URL de conexão (`postgresql://...`). Se o provedor exige TLS, use `?sslmode=require` no fim.
 2. **Redis**: crie e copie a URL.
 3. **R2**: crie os buckets `webag-public` e `webag-private`; em `webag-public` habilite acesso público por um domínio (ex.: `fotos.webag.com.br`) ou pelo domínio `r2.dev` (só ensaio); crie um token de API S3 com acesso aos dois. Configure **CORS** no bucket privado e no público para permitir `POST` e `GET` vindos de `https://admin.<domínio>` e `https://lojista.<domínio>` (o navegador envia fotos direto ao bucket, ADR-005). Equivalente do `infra/storage-init.sh` do ambiente local (BUG-025): no R2 (painel, bucket, Configurações > Política CORS) cole, para cada bucket, `[{"AllowedOrigins":["https://admin.<domínio>","https://lojista.<domínio>"],"AllowedMethods":["GET","PUT","POST","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]`. O método **POST** é obrigatório: o envio é um POST de formulário assinado (presigned POST), e sem ele a preflight passa mas o upload falha. Variáveis: `S3_ENDPOINT=https://<conta>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=true`, `S3_PUBLIC_URL=https://fotos.<domínio>`, chaves do token.
 4. **API**: crie o serviço apontando para o repositório e para `apps/api/Dockerfile`. Variáveis: as da tabela da seção 6 (use as secretas do provedor, não o `.env`). Lembre que `WEB_PUBLIC_URL` é `https://<PUBLIC_HOST>`, `LOJISTA_WEB_URL` é `https://<LOJISTA_HOST>` (links do lojista em e-mail; não use o host do admin) e `MP_OAUTH_REDIRECT_URI` é `https://<LOJISTA_HOST>/lojista/onboarding/4` (o compose do Caminho A preenche os dois sozinho). Em vez de `TRUST_PROXY=172.30.0.10`, use o **número de saltos** de proxy do provedor (comece com `1`; `[HIPÓTESE]` pode ser 2 se houver CDN na frente). Domínio personalizado: `api.<domínio>`.
@@ -270,7 +270,8 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `NODE_ENV` | Sim | `production` liga as travas de segurança | Fixo no compose |
 | `TRUST_PROXY` | Sim em produção | Quem pode declarar o IP do cliente (SEC-114/129) | Compose: `172.30.0.10` (IP fixo do nginx). Gerenciado: nº de saltos |
 | `BFF_SHARED_SECRET` | Sim (SEC-129) | Segredo entre painel web e API, >= 32 caracteres, igual nos dois | `[G]` |
-| `DATABASE_URL` | Sim | Conexão com o Postgres | Montada pelo compose; gerenciado: URL do provedor |
+| `DATABASE_URL` | Sim | Conexão da API com o Postgres, pelo papel `webag_app` (sem DDL, sem posse, sem superusuário; seção 15) | Montada pelo compose; gerenciado: URL do provedor para o papel `webag_app` |
+| `MIGRATION_DATABASE_URL` | Só no job `migrate` | Conexão do job de migração, pelo papel dono `webag_migrator`. A API nunca recebe esta variável | Montada pelo compose; gerenciado: URL do papel dono, no pre-deploy command |
 | `REDIS_URL` | Sim | Cache, limite de tentativas, filas | Montada pelo compose; gerenciado: URL do provedor |
 | `JWT_ACCESS_SECRET`, `AUTH_HMAC_KEY`, `CODE_HMAC_KEY`, `RECOVERY_HMAC_KEY`, `MFA_ENC_KEY` | Sim | Uma chave por finalidade; **todas diferentes** | `[G]` (ou `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`) |
 | `PAYMENT_TOKEN_ENC_KEY` | Sim | Cifra tokens OAuth do Mercado Pago dos lojistas (32 bytes em base64) | `[G]` (ou `openssl rand -base64 32`) |
@@ -323,7 +324,8 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `WEB_TRUST_FORWARDED_HOST` | web | Não | Só `true` se um proxy sobrescrever `X-Forwarded-Host`. O nginx deste repositório não precisa | |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | web (build) | Não | WhatsApp de suporte exibido nos painéis; entra no JavaScript do navegador, então **muda só com novo build** | Número com DDI |
 | `API_HOST`, `FILES_HOST`, `LETSENCRYPT_EMAIL` | nginx, certbot | Sim (VPS) | Nomes e e-mail do certificado | |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres | Sim (VPS) | Banco. A senha só com letras e números (entra numa URL) | `[G]` |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres | Sim (VPS) | Banco. `POSTGRES_USER` é o superusuário do cluster: só o backup e a manutenção usam. A senha só com letras e números (entra numa URL) | `[G]` |
+| `WEBAG_MIGRATOR_PASSWORD`, `WEBAG_APP_PASSWORD` | postgres, migrate, api, seed | Sim (VPS) | Senhas dos papéis `webag_migrator` e `webag_app` (seção 15). Só letras e números | `[G]` |
 | `REDIS_PASSWORD` | redis | Sim (VPS) | | `[G]` |
 | `COMPOSE_PROFILES` | compose | Não | `storage-local` = fotos no servidor; apague para usar R2/S3 | |
 | `WEBAG_VERSION`, `POSTGIS_IMAGE` | compose | Não | Etiqueta das imagens; imagem do banco (ARM: `imresamu/postgis:18-3.6-alpine`) | |
@@ -429,7 +431,7 @@ sh infra/scripts/prod.sh exec backup restore-postgres webag-pg-20261118T031500Z.
 # 5) Subir de novo e conferir
 sh infra/scripts/prod.sh up -d
 ```
-O script tenta antes um backup de segurança do estado atual. Depois da restauração, a API aplica migrações pendentes sozinha ao subir (serviço `migrate`).
+O script tenta antes um backup de segurança do estado atual. Depois da restauração, a API aplica migrações pendentes sozinha ao subir (serviço `migrate`). **D-06:** a restauração usa `--no-owner --no-privileges`, então as tabelas voltam com o superusuário como dono e sem privilégio para o `webag_app`. Antes do passo 5, rode de novo o `40-roles-grants.sql` (seção 15, passo 2); o `migrate` reafirma os privilégios do `webag_app` ao subir. Sem isso a API sobe, mas toda consulta falha com `permission denied`.
 
 ### 8.5 Servidor novo (perda total do servidor)
 
@@ -614,3 +616,44 @@ Limites que continuam valendo (leia antes de prometer "5 s"):
 - **Remoção urgente sem esperar (escrita direta no banco ou Redis fora):** reiniciar o contêiner `api` (`prod.sh restart api`) limpa os caches em memória e, passados 30 s, o Redis da posição também expirou; com 2+ réplicas, reinicie todas. O aceite da janela de preço, estoque e loja nova é decisão do PO (`docs/qa/performance/api-2026-11-22.md`, seção 12).
 - Banco fora do ar: o valor antigo segue sendo servido por até 4x o TTL, **exceto o que foi invalidado**; erro de negócio (404 de loja suspensa) nunca é mascarado. Resposta de erro sai sempre `private, no-store`.
 
+## 15. Papéis do banco (D-06, ADR-018 D9, tech-lead B4)
+
+**Por quê.** Em produção a API e o job `migrate` usavam o mesmo usuário, o superusuário do cluster: ele ignora posse, desliga gatilho (`DISABLE TRIGGER`) e apaga o histórico append-only (`audit_log`, razão contábil, estornos, consentimentos). Agora são dois papéis e o superusuário não é usado pela aplicação.
+
+| Papel | Quem usa | Pode | Não pode |
+|---|---|---|---|
+| `webag_migrator` | só o job `migrate` (`MIGRATION_DATABASE_URL`) | ser dono do banco e das tabelas, criar tabela, índice e gatilho; `lock_timeout` de 10 s | ser superusuário, criar papel ou banco |
+| `webag_app` | API e seed (`DATABASE_URL`) | `SELECT/INSERT/UPDATE/DELETE` nas tabelas e `USAGE` nas sequências; `SELECT` em `drizzle.__drizzle_migrations` (o `/health/ready` conta as migrações) | DDL, `TRUNCATE`, `DISABLE TRIGGER`, `session_replication_role`; nas 9 tabelas append-only só `INSERT` e `SELECT` (exceção: `UPDATE` das colunas `ip` e `platform` de `consents` e `terms_acceptances`, para a anonimização da SEC-159) |
+
+**Arquivos.** `infra/postgres/30-roles-create.sh` (cria os papéis; senhas do ambiente), `infra/postgres/40-roles-grants.sql` (extensões, posse, acesso; idempotente; como superusuário), `apps/api/src/platform/database/app-grants.ts` (privilégios do `webag_app` sobre as tabelas, reafirmados pelo `migrate` depois de cada migração; a lista das tabelas append-only é conferida por teste contra os gatilhos das migrações).
+
+**Passo a passo, VPS novo (volume vazio).** Nada a fazer além de preencher `WEBAG_MIGRATOR_PASSWORD` e `WEBAG_APP_PASSWORD` no `.env` (o `gen-secrets.sh` as sorteia). A 1ª inicialização do contêiner `postgres` cria os papéis e a posse; o `migrate` roda como `webag_migrator` e dá os privilégios ao `webag_app`.
+
+**Passo a passo, banco que JÁ EXISTE (produção atual, ou volume de desenvolvimento antigo).** Janela curta de manutenção; a API só troca de papel no passo 4.
+1. Gerar as duas senhas (`openssl rand -hex 24`) e pôr no `.env` com `WEBAG_MIGRATOR_PASSWORD` e `WEBAG_APP_PASSWORD`. **Backup antes** (seção 8) e teste de restauração em dia.
+2. Criar os papéis e a posse (como superusuário, dentro do contêiner):
+   ```bash
+   sh infra/scripts/prod.sh exec postgres sh /docker-entrypoint-initdb.d/30-roles-create.sh
+   sh infra/scripts/prod.sh exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/40-roles-grants.sql'
+   ```
+   (`docker compose` de um volume antigo não remonta os arquivos: `up -d postgres` com o compose novo recria o contêiner com as montagens, sem apagar o volume.)
+3. Rodar o job de migração com o dono: `sh infra/scripts/prod.sh run --rm migrate` (aplica as migrações pendentes e os privilégios do `webag_app`).
+4. Trocar a API para o `webag_app`: `up -d` com o compose novo (a `DATABASE_URL` da API já aponta para ele). Conferir `/health/ready` e um pedido de teste.
+5. Verificar (ver abaixo) e guardar a saída no registro da mudança.
+
+**Verificação (como `webag_app`; cada comando deve FALHAR).** Abrir o `psql` como o papel da API: `sh infra/scripts/prod.sh exec postgres sh -c 'PGPASSWORD="$WEBAG_APP_PASSWORD" psql -h 127.0.0.1 -U webag_app -d "$POSTGRES_DB"'`.
+```sql
+UPDATE audit_log SET action = action;        -- permission denied
+DELETE FROM audit_log;                       -- permission denied
+TRUNCATE audit_log;                          -- permission denied
+ALTER TABLE audit_log DISABLE TRIGGER ALL;   -- must be owner
+SET session_replication_role = replica;      -- permission denied
+CREATE TABLE x (id int);                     -- permission denied for schema public
+```
+E o que deve funcionar: `INSERT` e `SELECT` em `audit_log`; `SELECT count(*) FROM drizzle.__drizzle_migrations`.
+
+**Banco gerenciado (Caminho B).** O provedor cria o papel administrador; crie `webag_migrator` e `webag_app` por ele e rode o `40-roles-grants.sql` com o administrador (`CREATE EXTENSION postgis` pode já estar ativa; o script é idempotente). O pre-deploy command usa `MIGRATION_DATABASE_URL`; o serviço da API usa só a URL do `webag_app`. Se o provedor não permitir `ALTER DATABASE ... OWNER` ou `ALTER ... OWNER TO`, registre a exceção no `docs/decisoes.md`: sem posse separada o D-06 não se cumpre.
+
+**Rotação das senhas.** Repetir o passo 2 (a primeira linha só troca as senhas) e `up -d`.
+
+**Índices em tabela grande.** O `migrate` do Drizzle aplica todas as migrações pendentes numa única transação: `CREATE INDEX CONCURRENTLY` não roda nele. Nas tabelas do piloto o `CREATE INDEX` simples dentro da migração basta. Se `audit_log` ou `products` passarem de ~1 milhão de linhas (conferir com `select count(*)`), o índice é criado à mão, FORA do Drizzle, como `webag_migrator`: `CREATE INDEX CONCURRENTLY IF NOT EXISTS ...` e a migração correspondente usa `CREATE INDEX IF NOT EXISTS` com o mesmo nome (vira no-op).

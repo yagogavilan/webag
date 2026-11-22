@@ -82,8 +82,28 @@ testDb.pathname = `/${testDbName}`;
 const redis = new URL(process.env.REDIS_URL ?? fromDotEnv('REDIS_URL') ?? 'redis://localhost:6379');
 redis.pathname = `/${process.env.TEST_REDIS_DB ?? '15'}`;
 
+/**
+ * D-06 (ADR-018, tech-lead B4): papéis do banco de teste. As senhas padrão são as do compose de desenvolvimento
+ * (`WEBAG_MIGRATOR_PASSWORD`/`WEBAG_APP_PASSWORD`); o global-setup cria os papéis se faltarem (CI com o serviço `postgres` puro).
+ */
+export const TEST_ROLES = {
+  migrator: { user: 'webag_migrator', password: process.env.WEBAG_MIGRATOR_PASSWORD ?? 'webag_migrator_dev_only' },
+  app: { user: 'webag_app', password: process.env.WEBAG_APP_PASSWORD ?? 'webag_app_dev_only' },
+} as const;
+
+function asRole(role: { user: string; password: string }): string {
+  const url = new URL(testDb.toString());
+  url.username = role.user;
+  url.password = role.password;
+  return url.toString();
+}
+
 export const TEST_ENV = {
   adminDatabaseUrl,
   databaseUrl: testDb.toString(),
+  /** Conexão do dono (`webag_migrator`): só o global-setup a usa, para rodar as migrações como no job `migrate` de produção. */
+  migratorDatabaseUrl: asRole(TEST_ROLES.migrator),
+  /** Conexão do papel da API (`webag_app`): o teste de D-06 a usa; `TEST_DB_AS_APP=1` roda a suíte INTEIRA com ela. */
+  appDatabaseUrl: asRole(TEST_ROLES.app),
   redisUrl: redis.toString(),
 };

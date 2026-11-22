@@ -128,8 +128,12 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       expect(Object.keys(changes.properties).sort()).toEqual(['description', 'name', 'phone', 'whatsapp']);
     });
 
-    it('as duas rotas antigas de edição do admin ficam deprecated (sem motivo, razão social e endereço)', () => {
-      for (const id of ['editAdminStore', 'editAdminStoreSettings']) expect(all.find((o) => o.op.operationId === id)?.op.deprecated, id).toBe(true);
+    it('as duas rotas antigas de edição do admin ficam deprecated até o primeiro PR da R1.1, que as remove (I12)', () => {
+      for (const id of ['editAdminStore', 'editAdminStoreSettings']) {
+        const found = all.find((o) => o.op.operationId === id)!;
+        expect(found.op.deprecated, id).toBe(true);
+        expect(String(found.op.description), id).toContain('primeiro PR da R1.1');
+      }
     });
   });
 
@@ -173,6 +177,48 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       }
     });
 
+    it('reajuste e estoque em massa exigem Idempotency-Key e versão por item no servidor (B2)', () => {
+      for (const id of ['bulkProducts', 'bulkAdminStoreProducts']) {
+        const found = all.find((o) => o.op.operationId === id)!;
+        expect(hasParamRef(found.op, 'IdempotencyKey'), `${id}: header`).toBe(true);
+        const text = String(found.op.description);
+        expect(text, id).toContain('IDEMPOTENCY_KEY_REQUIRED');
+        expect(text, id).toContain('EXPECTED_VERSIONS_REQUIRED');
+        expect(text, id).toContain('BULK_VERSION_CONFLICT');
+        expect(found.op.responses['409'].$ref, id).toBe('#/components/responses/BulkVersionConflict');
+        const schema = requestSchema(found.op)!;
+        expect(schema.properties.expectedVersions.items.$ref, id).toBe('#/components/schemas/ExpectedVersion');
+        expect(schema.properties.expectedVersions.maxItems, id).toBe(200);
+      }
+      expect(schemas.BulkPreviewItem.required).toContain('version');
+      expect(schemas.AdminBulkResult.properties.preview.items.$ref).toBe('#/components/schemas/AdminBulkPreviewItem');
+    });
+
+    it('desfazer lote repetido devolve o mesmo resultado, sem 409 (A4)', () => {
+      const undo = all.find((o) => o.op.operationId === 'undoBulkBatch')!;
+      expect(String(undo.op.description)).toContain('alreadyUndone: true');
+      expect(String(undo.op.description)).not.toContain('BATCH_ALREADY_UNDONE');
+      expect(schemas.BulkUndoResult.required).toContain('alreadyUndone');
+    });
+
+    it('If-Match segue a sintaxe RFC 9110 (entity-tag entre aspas) e getProduct devolve ETag (A1)', () => {
+      const param = contract.components.parameters.IfMatchVersion;
+      expect(param.required).not.toBe(true);
+      expect(param.schema.type).toBe('string');
+      expect(new RegExp(param.schema.pattern).test('"7"')).toBe(true);
+      expect(new RegExp(param.schema.pattern).test('7')).toBe(false);
+      for (const id of ['getProduct', 'getAdminStoreProduct', 'quickPublishProduct']) {
+        const found = all.find((o) => o.op.operationId === id)!;
+        expect(found.op.responses['200'].headers.ETag, id).toBeDefined();
+      }
+    });
+
+    it('`current` do 409 de versão é opcional: os demais 409 mantêm o corpo antigo (I1)', () => {
+      const [, extension] = schemas.ProductVersionConflictProblem.allOf;
+      expect(extension.required).toBeUndefined();
+      expect(extension.properties.current).toBeDefined();
+    });
+
     it('lista nova é paginada por cursor com limite', () => {
       for (const { key, op } of r1.filter((o) => o.method === 'get')) {
         const schema = okSchema(op);
@@ -180,6 +226,30 @@ describe('contrato OpenAPI da v1.1 R1', () => {
         expect(hasParamRef(op, 'Cursor'), `${key}: cursor`).toBe(true);
         expect(hasParamRef(op, 'Limit'), `${key}: limit`).toBe(true);
       }
+    });
+  });
+
+  describe('cadastro rápido: limites e publicação em uma chamada (DEC-118, I11)', () => {
+    it('o teto de rascunhos é 100 e nunca fica abaixo do lote (B1)', () => {
+      expect(schemas.CatalogQuickStart.properties.draftLimit.example).toBe(100);
+      expect(schemas.ProductDraftPage.properties.limit.example).toBe(100);
+      const batch = schemas.CreateProductDraftsBatchRequest;
+      expect(batch.properties.items.maxItems).toBe(100);
+      expect(batch.properties.items.maxItems).toBeLessThanOrEqual(schemas.CatalogQuickStart.properties.draftLimit.example);
+      const text = JSON.stringify(contract.paths);
+      expect(text).not.toMatch(/50 rascunhos|Limite de 50/);
+      expect(String(all.find((o) => o.op.operationId === 'createProductDraftsBatch')!.op.description)).toContain('slotsAvailable');
+      expect(Object.keys(schemas.DraftLimitProblem.allOf[1].properties).sort()).toEqual(['draftCount', 'limit', 'slotsAvailable']);
+    });
+
+    it('publicar com nome e preço é UMA chamada transacional, idempotente e com If-Match', () => {
+      const quick = r1.find((o) => o.op.operationId === 'quickPublishProduct')!;
+      expect(hasParamRef(quick.op, 'IdempotencyKeyRequired')).toBe(true);
+      expect(hasParamRef(quick.op, 'IfMatchVersion')).toBe(true);
+      expect(quick.op.responses['409'].$ref).toBe('#/components/responses/ProductVersionConflict');
+      const request = requestSchema(quick.op)!;
+      expect(request.additionalProperties).toBe(false);
+      expect(request.required).toEqual(['name', 'basePriceCents', 'imageIds']);
     });
   });
 
@@ -237,11 +307,22 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       expect(cell.properties.n.minimum).toBe(5);
     });
 
-    it('relatórios de acesso e cobertura são só do admin e o suporte não os vê', () => {
-      for (const id of ['getAdminAnalyticsAccess', 'getAdminAnalyticsCoverage']) {
-        const found = adminR1.find((o) => o.op.operationId === id)!;
-        expect(found.op['x-admin-profiles']).not.toContain('support');
-      }
+    it('o relatório de acesso é só do admin e o suporte não o vê; a cobertura saiu da R1 (I7)', () => {
+      const found = adminR1.find((o) => o.op.operationId === 'getAdminAnalyticsAccess')!;
+      expect(found.op['x-admin-profiles']).not.toContain('support');
+      expect(all.find((o) => o.op.operationId === 'getAdminAnalyticsCoverage')).toBeUndefined();
+      expect(schemas.AnalyticsCoveragePage).toBeUndefined();
+    });
+
+    it('a coleta não deixa IP, user-agent nem session_id em log, e o limite por IP não perde evento em silêncio (I5, I6)', () => {
+      const ingest = all.find((o) => o.op.operationId === 'ingestAnalyticsEvents')!;
+      const text = String(ingest.op.description);
+      expect(text).toContain('nenhum log grava IP, user-agent, cabeçalhos nem `session_id`');
+      expect(text).toContain('access_log off');
+      expect(text).toContain('600 requisições por minuto');
+      expect(text).toContain('sessão pseudônima');
+      expect(Object.keys(schemas.AnalyticsAccessReport.properties.discards.properties).sort()).toEqual(['flag_off', 'rate_ip', 'rate_session', 'unknown_store']);
+      expect(schemas.AnalyticsIngestResult.properties.discarded.description).toContain('NÃO descarta');
     });
   });
 

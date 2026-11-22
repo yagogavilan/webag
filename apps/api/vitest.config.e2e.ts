@@ -18,7 +18,9 @@ export default defineConfig({
       // O e2e tem PostgreSQL e Redis reais: liga o teste de /health/ready com dependências no ar (antes ficava pulado sem esta variável).
       E2E_DEPS: '1',
       LOG_LEVEL: process.env.LOG_LEVEL ?? 'silent',
-      DATABASE_URL: TEST_ENV.databaseUrl,
+      // TEST_DB_AS_APP=1: a suíte inteira conecta como `webag_app` (sem superusuário), a prova de que a API não precisa de mais que isso (D-06).
+      // Os poucos testes que forçam `session_replication_role` precisam do superusuário e falham de propósito neste modo (ver guia de testes).
+      DATABASE_URL: process.env.TEST_DB_AS_APP === '1' ? TEST_ENV.appDatabaseUrl : TEST_ENV.databaseUrl,
       REDIS_URL: TEST_ENV.redisUrl,
       TRUST_PROXY: '1',
       // Desempenho: os caches em memória da descoberta ficam DESLIGADOS no e2e (os testes criam lojas/produtos e leem em seguida) e o resumo de latência não agenda timer.
