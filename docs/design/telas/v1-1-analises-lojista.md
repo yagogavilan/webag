@@ -7,7 +7,7 @@
 
 | # | Decisão | Por quê |
 |---|---|---|
-| 1 | **Nunca mostrar pessoa.** Nenhuma tela, arquivo ou aviso tem nome, lista ou "quem visitou". Há uma tag fixa "Medição anônima" e o link "Como medimos" | RN-A1; é o ponto que protege o cliente e o Webag (LGPD) |
+| 1 | **Nunca mostrar pessoa.** Nenhuma tela, arquivo ou aviso tem nome, lista ou "quem visitou". Há uma tag fixa **"Medição agregada"** (não "anônima": o dado bruto é pseudonimizado, DEC-137 e SEC-194) e o link "Como medimos" | RN-A1 e RN-A3; é o ponto que protege o cliente e o Webag (LGPD). Prometer "anônimo" ao lojista e ao cliente é promessa que o Webag não pode provar |
 | 2 | **Célula com menos de 5 vira texto "menos de 5"**, nunca zero, nunca barra cheia; loja com menos de 30 visitas vê **só os totais** com "Poucos dados ainda. Com menos de 30 visitas, mostramos só os totais." | RN-A2. Zero enganaria ("ninguém veio") |
 | 3 | **Funil de 4 barras com a conversão da etapa anterior escrita** ("32% da etapa anterior"), não só o total | O lojista precisa saber **onde** perde; conversão final isolada não diz |
 | 4 | **Comparação só quando há amostra**: abaixo de 20 nos dois períodos aparece "Poucos dados: sem comparação" e some o percentual | Percentual sobre 5 pedidos engana (mesma regra dos painéis do admin) |
@@ -21,7 +21,7 @@
 ## 1. Layout (de cima para baixo, ativo ou teste)
 
 1. Faixa de situação: "Teste grátis até 04/12: faltam 12 dias. Depois o módulo para de mostrar os números. Suas vendas continuam no painel." ou tag "Ativo até 21/12".
-2. Tag "Medição anônima" + "Como medimos".
+2. Tag "Medição agregada" + "Como medimos" (os 3 pontos de `v1-1-transparencia-medicao.md` §0.6 mais "Os dados de uso não são ligados à conta de ninguém e ficam guardados por até 90 dias", a frase SEC-194).
 3. Período (chips) + "Comparar com o período anterior".
 4. **Vendas**: cartão noite "Vendas em 7 dias R$ 842,40, 6 pedidos" com tag "Valor exato". Sem permissão de valores: "Valores ocultos para o seu acesso" e só a contagem.
 5. 4 KPI: Visitas, Abriram produto, Na sacola, Pedidos (cada um com "Subiu 23% sobre o período anterior" ou "Poucos dados: sem comparação").

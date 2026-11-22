@@ -1,19 +1,21 @@
 # Fluxos v1.1: painéis de gráficos e construtor
 
-> Autor: product-designer. Data: 2026-11-22. Spec: `telas/v1-1-admin-paineis.md`.
+> Autor: product-designer. Data: 2026-11-22 (revisado em DEC-137: 5 paineis, classes de sensibilidade, Sem permissao). Spec: `telas/v1-1-admin-paineis.md`.
 
 ## 1. Abrir painel pronto, filtrar, duplicar
 
 ```mermaid
 flowchart TD
   A[Admin > Paineis] --> P{Escolhe painel}
-  P --> PR[Pronto: Visao geral, Lojas, Cupons, Logistica]
+  P --> PR[Pronto: Visao geral, Vendas, Lojas, Entrega, Cupons]
   P --> MY[Meu painel: Quinzena]
   PR --> FL[Filtros globais: periodo, cidade, modo, loja, categoria, campanha]
   MY --> FL
   FL --> PD{Periodo maior que 400 dias?}
   PD -->|Sim| PD1[Periodo maximo de 400 dias] --> FL
-  PD -->|Nao| Q[Cada grafico consulta o servidor]
+  PD -->|Nao| PM0{Perfil pode ver a classe da metrica? Geral, Operacional, Financeira}
+  PM0 -->|Nao| BLK[Cartao Sem permissao: sem valor, sem consulta]
+  PM0 -->|Sim| Q[Cada grafico consulta o servidor]
   Q --> ST{Resultado do grafico}
   ST -->|Carregando| ST1[Skeleton independente]
   ST -->|Sem dados| ST2[Sem dados no periodo]
@@ -29,9 +31,7 @@ flowchart TD
   MY --> DP[Duplicar painel] --> MY
   MY --> EC[Enviar copia a outro admin - proposta] 
   MY --> DEL[Excluir painel: confirmacao, prontos nao afetados]
-  OK --> EXP{Exportar CSV?}
-  EXP -->|Perfil permite| EXP1[Baixa CSV + auditoria]
-  EXP -->|Nao| EXP2[Opcao ausente]
+  OK --> EXP[Exportar CSV: cortado na DEC-104, opcao ausente ate o gatilho voltar]
 ```
 
 ## 2. Construtor
@@ -39,7 +39,7 @@ flowchart TD
 ```mermaid
 flowchart TD
   B[Novo grafico] --> M[1 Medir: metrica agrupada por perfil]
-  M --> PM{Metrica financeira e perfil sem permissao?}
+  M --> PM{Classe da metrica fora do perfil? Financeira ou Operacional}
   PM -->|Sim| PM1[Nao aparece na lista]
   PM -->|Nao| DF[Mostra a definicao em 1 frase]
   DF --> D[2 Separar por: dimensao]

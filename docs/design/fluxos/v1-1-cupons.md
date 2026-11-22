@@ -1,6 +1,6 @@
 # Fluxos v1.1: cupons e campanhas (admin, lojista, cliente)
 
-> Autor: product-designer. Data: 2026-11-22. Specs: `telas/v1-1-admin-cupons.md`, `telas/v1-1-cupom-cliente.md`.
+> Autor: product-designer. Data: 2026-11-22 (revisado em DEC-137: 3 parametros, pior caso, textos do PRD, sem celular). Specs: `telas/v1-1-admin-cupons.md`, `telas/v1-1-cupom-cliente.md`.
 
 ## 1. Admin: criar e ativar campanha
 
@@ -9,12 +9,16 @@ flowchart TD
   L[Cupons > Nova campanha] --> PF{Perfil pode criar?}
   PF -->|Suporte| PF1[Sem acesso: peca ao administrador]
   PF -->|Operacao, Super, Financeiro| S1[1 Nome] --> S2[2 Quem paga]
-  S2 --> FR{Tipo frete gratis?}
-  FR -->|Sim| FR1[Loja paga e Dividido desabilitados:<br/>O frete e da Webag] --> S3
+  S2 --> PL{Parte da loja liberada? campanha_parte_da_loja, padrao desligado}
+  PL -->|Nao| PL1[Loja paga e Dividido desabilitados:<br/>depende do parecer J27] --> FR
+  PL -->|Sim| FR{Tipo frete gratis?}
+  FR -->|Sim, e campanha_frete_gratis desligado| FR0[Frete gratis desabilitado:<br/>depende do parecer J22 e J23] --> S3
+  FR -->|Sim, liberado| FR1[Loja paga e Dividido desabilitados:<br/>O frete e da Webag] --> S3
   FR -->|Nao| S3[3 Desconto: tipo e valor] --> S4[4 Quem pode usar] --> S5[5 Limites e validade]
-  S5 --> SIM[Simulacao ao vivo por faixa de entrega]
+  S3 -->|Percentual sem teto em R$| TE[Nao salva: informe o teto em R$] --> S3
+  S5 --> SIM[Simulacao ao vivo por faixa de entrega<br/>+ pior caso por pedido se percentual com custo Webag]
   SIM --> CK{Para ativar: pendencias?}
-  CK -->|Sim| CK1[Lista escrita: falta orcamento, minimo abaixo de R$ X...] --> S3
+  CK -->|Sim| CK1[Lista escrita: falta orcamento, minimo abaixo de R$ X,<br/>orcamento mensal da Webag R$ 0, soma acima do mensal...] --> S3
   CK -->|Nao| WHO{Quem esta logado}
   WHO -->|Operacao| RA[Salvar rascunho<br/>Quem ativa: Super ou Financeiro]
   WHO -->|Super ou Financeiro| AT[Ativar campanha]
@@ -67,19 +71,21 @@ flowchart TD
   A -->|Digita codigo| IN[Campo Aplicar]
   A -->|Ver cupons| LS[Lista: valor, condicao, validade, origem] --> IN
   IN --> NET{Rede?}
-  NET -->|Sem| N1[Sem conexao. Resumo continua o mesmo] --> IN
-  NET -->|Com| EV{Servidor avalia}
-  EV -->|Codigo nao existe| E1[Nao encontramos esse cupom] --> IN
-  EV -->|Muitas tentativas| E2[Tente de novo em 1 hora - neutro]
-  EV -->|Expirado| E3[Esse cupom expirou em data]
-  EV -->|Esgotado| E4[Cupom esgotado - continuar sem]
-  EV -->|Esgotado hoje| E5[Volta amanha - pedido segue sem cupom]
-  EV -->|Outra loja| E6[Vale so na loja X]
-  EV -->|Nao e 1a compra| E7[Valido so na primeira compra]
-  EV -->|Sem celular confirmado| E8[Confirme seu celular] --> CC[Confirmar celular] --> S
-  EV -->|Fraude ou margem negativa| E9[Cupom nao disponivel para este pedido - neutro]
-  EV -->|Falta subtotal| F[Faltam R$ X para usar o cupom<br/>barra + sugestao de produto]
-  F -->|Adiciona produto| EV
+  NET -->|Sem| N1[Sem conexao. Nao conseguimos aplicar o cupom agora - Tentar de novo] --> IN
+  NET -->|Com| EV{Servidor avalia - textos da tabela Mensagens ao cliente do PRD}
+  EV -->|Codigo inexistente, segmentado ou de outro publico| E1[Cupom invalido - campo com foco] --> IN
+  EV -->|10 tentativas por hora| E2[Muitas tentativas. Tente de novo em 1 hora]
+  EV -->|Expirado| E3[Esse cupom expirou em DD/MM - Ver cupons]
+  EV -->|Esgotado| E4[Cupom esgotado - continuar sem cupom]
+  EV -->|Esgotado hoje| E5[Cupom esgotado hoje. Volta amanha - pedido segue sem cupom]
+  EV -->|Cupom publico de outra loja| E6[Esse cupom vale so na loja X - Ver a loja X]
+  EV -->|Conta com pedido pago, primeira compra| E7[Cupom valido so na primeira compra]
+  EV -->|Conta ja usou, cupom comum| E10[Voce ja usou este cupom]
+  EV -->|E-mail nao confirmado| E8[Confirme seu e-mail para usar este cupom] --> CC[Confirmar e-mail] --> S
+  EV -->|CPF, aparelho, endereco ou velocidade| E9[Nao foi possivel aplicar este cupom a este pedido - Falar com o suporte - nunca diz o motivo]
+  EV -->|Margem menor ou igual a zero| E11[Cupom nao disponivel para este pedido - continuar sem cupom]
+  EV -->|Falta subtotal| F[Faltam R$ X para usar o cupom<br/>barra + Ver mais da loja - sem produto sugerido]
+  F -->|Ver mais da loja| S
   F -->|Ignora| SEM[Segue sem cupom: total nao muda]
   EV -->|Valido| OK[Cartao verde: origem e valor<br/>total recalcula]
   OK --> CK[Pagamento: mesmo resumo]
@@ -95,5 +101,5 @@ flowchart TD
   SP --> DEC{Admin com permissao de cupom}
   DEC -->|Manter| M[Proximo pedido da conta sem cupom]
   DEC -->|Liberar| L[Motivo obrigatorio + auditoria] --> OK[Conta volta a usar cupom]
-  SP -->|Revelar dado| RV[Pedido a pedido, com motivo, auditado - Security]
+  SP -->|Revelar dado| RV[Pedido a pedido, com motivo, auditado - WB-344 C12]
 ```

@@ -1,7 +1,21 @@
 # v1.1: índice das telas, mapa de histórias e pendências (R1 a R5)
 
 > Autor: product-designer. Datas: 2026-11-22. Protótipos: `docs/prototipo/v1-1-lojista-e-admin.html` (R1 e R2) e **`docs/prototipo/v1-1-logistica-e-analises.html` (R3 a R5)**. Rode `python3 docs/prototipo/inject_fonts.py` para embutir as fontes nos dois. Rotas e parâmetros no comentário do topo de cada arquivo.
-> **Limite honesto:** os dois protótipos foram escritos sem poder executá-los (sem Bash/navegador no ambiente do designer). O CEO abre no celular e no desktop antes de mostrar ao fundador e me devolve o que quebrar; trato como defeito meu. O segundo é maior e mais arriscado (simulação ao vivo): se travar, teste primeiro com `?estatico=1`.
+> **Limite honesto:** os dois protótipos foram escritos sem poder executá-los (sem Bash/navegador no ambiente do designer), **inclusive na revisão da DEC-137 (2026-11-22): as edições nos protótipos desta rodada não passaram por Chromium**. O CEO abre no celular e no desktop antes de mostrar ao fundador e me devolve o que quebrar; trato como defeito meu. O segundo é maior e mais arriscado (simulação ao vivo): se travar, teste primeiro com `?estatico=1`.
+
+## 0. Revisão DEC-137 (2026-11-22): correções de spec da R2
+
+O PRD prevalece sobre a spec (DEC-137). Cada linha abaixo é o que mudou; o detalhe está na seção "Revisão" no topo de cada spec.
+
+| Spec | O que mudou | Protótipo (não executado) |
+|---|---|---|
+| `v1-1-cupom-cliente.md` | Sem "confirmar celular" (vira "Confirme seu e-mail para usar este cupom", WB-344 C4); sem produto no "Faltam R$ X" (só "Ver mais da loja"); textos de fraude ("Não foi possível aplicar este cupom a este pedido" + "Falar com o suporte"), "Cupom inválido" e os demais **idênticos à tabela "Mensagens ao cliente" do PRD**; 10 tentativas por hora; frete grátis em duas linhas ("Entrega R$ 8,00" e "Desconto Webag (frete) -R$ 8,00"); vitrine só com elegíveis; eventos `coupon_shortfall_*`; todos os estados, movimento, celular e tela larga | `#/c/sacola`: códigos novos (EMAIL, USADO, PRIMCOMPRA, APARELHO, MARGEM); "Faltam" sem produto; notas neutras; atalho de teste renomeado "Só no protótipo" |
+| `v1-1-admin-cupons.md` | **Pior caso por pedido** do percentual (WB-340 C12) com "até N pedidos no pior caso"; teto em R$ obrigatório; **3 parâmetros desligados por padrão** (`campanha_frete_gratis`, `campanha_parte_da_loja`, `selo_de_por`) em Configurações, com a dependência de parecer (J22/J23, J27, J23) e a razão escrita onde o admin esbarra; orçamento mensal global R$ 0 (C10) e soma (C11); "Duplicar" sem orçamento; convite "Responda em 7 dias"; limite do cupom próprio (30%) | `#/a/cupom-novo`: bloco "Pior caso"; Frete grátis, Loja paga e Dividido desabilitados com a razão; "Ativar" pendente por orçamento mensal R$ 0. Liberar para testar: `?orcmes=1000&frete=1&parteloja=1` |
+| `v1-1-admin-paineis.md` | Painel **Vendas** incluído; "Logística" vira **"Entrega"**; os 5 painéis com o conteúdo do PRD (WB-357 C7) e o que cada perfil vê; **classes Geral, Operacional, Financeira**; widget sem permissão aparece como "Sem permissão" e não é consultado (C8); baixa amostra com `n` na tabela por loja (C9); export de widget marcado como cortado (DEC-104) | `#/a/paineis?p=vendas` e `p=entrega`; cupons e visão geral com o conteúdo do PRD; cartão "Sem permissão". **Lojas ainda é a versão anterior** (a tabela multimétrica só existe na spec) |
+| `v1-1-transparencia-medicao.md`, `v1-1-analises-lojista.md` | "Anônimo" sai; entra a frase SEC-194 **"dados de uso não ligados à sua conta, guardados por até 90 dias"** ao cliente; tag do lojista "Medição agregada" | `#/c/privacidade`, folha `#/c/aviso` e `#/l/analises` com os textos novos |
+| Protótipo `v1-1-lojista-e-admin.html` | **Defeito que encontrei na leitura:** o clique em botão sem `type` era ignorado pelo guard `t.type==='submit'` (o navegador devolve "submit" para botão sem atributo); troquei por `getAttribute('type')`. Se o protótipo já funcionava para o CEO, reverta essa linha | idem |
+
+**Perguntas novas ao PO desta rodada:** cupom próprio do lojista depende de `campanha_parte_da_loja`?; canal do "Falar com o suporte"; a linha de apoio do "Faltam" ("Seu pedido tem R$ 80,00. O cupom vale a partir de R$ 120,00.") é aceita?; contagem de widgets do snapshot (WB-357 C7) onde o PRD junta métricas com "e"; coluna sem permissão em tabela de classes mistas (omitir ou bloquear); aba "Vendas" do Suporte (tudo bloqueado). Detalhe em `v1-1-cupom-cliente.md` §13, `v1-1-admin-cupons.md` §10 e `v1-1-admin-paineis.md` §9.
 
 ## 1. Telas, rotas e notas (revisão heurística, 1 a 5)
 
@@ -32,7 +46,7 @@
 | WB-340 a 342, 345, 349 | 5 | WB-370 a 372, 374, 375, 378, 379 | 1 |
 | WB-341, 347, 348 | 5, 6 | WB-373, 376, 377 | 1, 2, 3 |
 | WB-343, 344, 346 | 5, 6 | WB-350 a 355 | 4 |
-| WB-356 a 359 | 7 | **WB-360 (aviso e opt-out)** | **15** |
+| WB-356 a 359 (WB-357 C6 a C9: 5 painéis, "Sem permissão", baixa amostra; WB-359 cortada) | 7 | **WB-360 (aviso e opt-out)** | **15** |
 | **WB-361 (coleta)** | sem tela; depende de 15 | **WB-362** | **14** |
 | **WB-363 (agregação)** | 14 (job com falha), mínimo de 5 em 13 e 14 | **WB-364, 365** | **13** |
 | **WB-366** | 14 (admin) e 13 (avisos do lojista) | **WB-367** | **13** |
@@ -93,7 +107,7 @@
 
 | Coberto no protótipo | Só na spec |
 |---|---|
-| Cadastro com câmera real, cronômetro, grade, duplicar, rascunho, leitor, IA `fake` por flag, estados; colar (regras do PRD), correção, fotos, planilha simulada; edição em massa com erros por linha, reajuste com prévia, 30%, desfazer 10 min; admin: lista, ficha em 5 abas, preço/estoque com motivo e desfazer, pausar, situação, comissão, histórico com restaurar, "Ver como"; cupons com simulação, pendências, 2º fator, relatório, Suspeitos, convite; cliente: 9 respostas de cupom; painéis e construtor | Conflito de rascunho em 2 aparelhos; limite de 100 rascunhos; duplicar variação; consentimento da IA real; limite de 5 MB; histórico de alterações em massa; conflito "o lojista alterou agora"; edição em massa pelo admin; exportação real; convites dentro do formulário; "pior caso" do percentual; vitrine de cupons em BottomSheet; checkout passo 2; consulta pesada, 429 e dado defasado; barra empilhada |
+| Cadastro com câmera real, cronômetro, grade, duplicar, rascunho, leitor, IA `fake` por flag, estados; colar (regras do PRD), correção, fotos, planilha simulada; edição em massa com erros por linha, reajuste com prévia, 30%, desfazer 10 min; admin: lista, ficha em 5 abas, preço/estoque com motivo e desfazer, pausar, situação, comissão, histórico com restaurar, "Ver como"; cupons com simulação, pendências, 2º fator, relatório, Suspeitos, convite; cliente: 9 respostas de cupom; painéis e construtor | Conflito de rascunho em 2 aparelhos; limite de 100 rascunhos; duplicar variação; consentimento da IA real; limite de 5 MB; histórico de alterações em massa; conflito "o lojista alterou agora"; edição em massa pelo admin; exportação real; convites dentro do formulário; Configurações > Campanhas (os 3 parâmetros, só a razão do bloqueio aparece no formulário); vitrine de cupons em BottomSheet; checkout passo 2; consulta pesada, 429 e dado defasado; barra empilhada |
 
 ## A2. Decisões de UX R1/R2 para validar
 
@@ -112,7 +126,7 @@
 
 | Para | O que preciso |
 |---|---|
-| **PO** | Foto por cor; juntar linhas coladas; descrição opcional em categorias de risco; texto "categoria proibida"; vitrine de cupons; "Enviar cópia"; limiares de baixa amostra; matriz métrica x dimensão e definições RN-15; painel "Vendas" |
+| **PO** | ~~Foto por cor; juntar linhas coladas; descrição opcional; texto "categoria proibida"; vitrine de cupons; "Enviar cópia"; limiares; matriz e RN-15; painel "Vendas"~~ **respondidas** (`v1-1-respostas-ao-time.md` §D). Abertas: ver §0 |
 | **Security** | Motivo por sessão; tempo e escopo do "Ver como"; rascunho local sem login; consentimento da IA; mensagens neutras de fraude; "Revelar dado" nos Suspeitos |
 | **tech-lead / mobile-dev** | Visão espelho; leitor de código no Safari; biblioteca de gráficos sem texto em SVG; tokens `color.chart.*`; `enterkeyhint` com lista virtualizada |
 | **backend-dev** | Custo previsto do motoboy por faixa (F4); `n`, `atualizado_em`, `em_cache`; reajuste em massa transacional; aviso agregado ao lojista em edição em massa do admin |
