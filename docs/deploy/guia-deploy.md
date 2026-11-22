@@ -641,6 +641,8 @@ Limites que continuam valendo (leia antes de prometer "5 s"):
 4. Trocar a API para o `webag_app`: `up -d` com o compose novo (a `DATABASE_URL` da API já aponta para ele). Conferir `/health/ready` e um pedido de teste.
 5. Verificar (ver abaixo) e guardar a saída no registro da mudança.
 
+**Recusa de boot (D-06, ADR-018 D19 item 1; R1.1).** Com `NODE_ENV=production` (e também com `NODE_ENV` ausente) a API RECUSA subir, com erro claro e saída diferente de zero, se o papel da `DATABASE_URL` for superusuário, dono do `audit_log` ou membro de `webag_migrator` (`apps/api/src/platform/database/db-role-guard.ts`; em `development` e `test` só avisa). **Ordem de implantação (R3 c do tech-lead):** esta verificação só pode ir para um ambiente DEPOIS de ele ter os papéis (passos 1 a 3) e a `DATABASE_URL` trocada para o `webag_app` (passo 4); implantar a versão nova da API antes disso deixa a API fora do ar, e é o comportamento desejado. No staging: passos 1 a 4, depois a versão nova da API. Em desenvolvimento local o compose define `NODE_ENV=development`.
+
 **Verificação (como `webag_app`; cada comando deve FALHAR).** Abrir o `psql` como o papel da API: `sh infra/scripts/prod.sh exec postgres sh -c 'PGPASSWORD="$WEBAG_APP_PASSWORD" psql -h 127.0.0.1 -U webag_app -d "$POSTGRES_DB"'`.
 ```sql
 UPDATE audit_log SET action = action;        -- permission denied

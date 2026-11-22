@@ -162,8 +162,11 @@ export const auditLog = pgTable(
     userAgent: text(),
     requestId: text(),
     reason: text(),
+    /** v1.1 R1 (D9): loja a que a ação se refere (histórico por loja, ficha 360). Nulo nas linhas anteriores à R1: o gatilho append-only impede o backfill. Sem FK de propósito. */
+    storeId: uuid(),
   },
   (t) => [
+    index('audit_log_store_at_idx').on(t.storeId, t.at.desc(), t.id.desc()),
     index('audit_log_at_idx').on(t.at),
     index('audit_log_actor_idx').on(t.actorId, t.at),
     index('audit_log_target_idx').on(t.targetType, t.targetId, t.at),

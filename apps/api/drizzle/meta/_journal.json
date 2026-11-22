@@ -407,6 +407,27 @@
       "when": 1795332201152,
       "tag": "0057_perf_reviews_store_published_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1795351780124,
+      "tag": "0058_r1_store_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795351784283,
+      "tag": "0059_r1_audit_store_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795353050981,
+      "tag": "0060_r1_admin_edit_support",
+      "breakpoints": true
     }
   ]
 }

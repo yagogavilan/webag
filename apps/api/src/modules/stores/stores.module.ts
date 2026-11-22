@@ -7,6 +7,7 @@ import { FinanceModule } from '../finance/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { MediaModule } from '../media/index.js';
 import { PaymentsModule } from '../payments/index.js';
+import { AdminViewAsController } from './admin-view-as.controller.js';
 import { AdminStoresController } from './admin-stores.controller.js';
 import { AdminStoresService } from './admin-stores.service.js';
 import { AdminExposureController, StoreExposureController } from './exposure-limit.controllers.js';
@@ -20,7 +21,7 @@ import { TeamService } from './team.service.js';
 
 @Module({
   imports: [AdminModule, FinanceModule, IdentityModule, MediaModule, PaymentsModule],
-  controllers: [StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
+  controllers: [AdminViewAsController, StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
   providers: [
     DeliveryQuoteRegistry,
     StoresService,

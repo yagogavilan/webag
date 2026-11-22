@@ -9641,7 +9641,6 @@ paths:
     post:
       tags: [admin-stores]
       operationId: openViewAs
-      x-planned: v1.1 R1
       x-admin-permission: 'view-as:open'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Abrir "Ver como o lojista" (somente leitura) (WB-352)
@@ -9670,7 +9669,6 @@ paths:
     post:
       tags: [admin-stores]
       operationId: endViewAs
-      x-planned: v1.1 R1
       x-admin-permission: 'view-as:open'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Encerrar "Ver como o lojista" ("Sair da visualização")
@@ -10228,7 +10226,7 @@ components:
       required: [accessToken, refreshToken, expiresIn, tokenType]
       properties:
         accessToken: { type: string, description: JWT HS256 de 15 min }
-        refreshToken: { type: string, description: Token opaco de 256 bits, rotativo }
+        refreshToken: { type: string, description: 'Token opaco de 256 bits, rotativo' }
         expiresIn: { type: integer, description: Segundos de validade do access token, example: 900 }
         tokenType: { type: string, enum: [Bearer] }
     UserSummary:
@@ -10498,7 +10496,7 @@ components:
         name: { type: string }
         email: { type: string, format: email }
         profile: { $ref: '#/components/schemas/AdminProfile' }
-        reactivation: { type: boolean, description: Link de reativação (redefinição de acesso), não convite novo }
+        reactivation: { type: boolean, description: 'Link de reativação (redefinição de acesso), não convite novo' }
         expired: { type: boolean }
         invitedByName: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
@@ -10895,7 +10893,7 @@ components:
         label: { type: string, example: Pagamento diverge do provedor }
         area: { $ref: '#/components/schemas/AdminAlertArea' }
         severity: { $ref: '#/components/schemas/AdminAlertSeverity' }
-        hint: { type: string, description: O que fazer, em uma frase }
+        hint: { type: string, description: 'O que fazer, em uma frase' }
     AdminAlert:
       type: object
       required: [id, kind, label, area, severity, hint, status, attemptId, details, links, createdAt, resolvedAt, resolvedByName, resolutionNote]
@@ -12730,9 +12728,9 @@ components:
         attributes: { type: object, additionalProperties: { type: string }, example: { Tamanho: P, Cor: Azul } }
         sku: { type: [string, 'null'] }
         priceCents: { type: [integer, 'null'], description: Preço próprio da variação; vazio usa o do produto }
-        effectivePriceCents: { type: [integer, 'null'], description: Preço vigente hoje (com a promoção, se ativa) }
+        effectivePriceCents: { type: [integer, 'null'], description: 'Preço vigente hoje (com a promoção, se ativa)' }
         originalPriceCents: { type: [integer, 'null'], description: Preço "de" quando há promoção ativa }
-        discountPercent: { type: [integer, 'null'], description: Percentual exibido, arredondado para baixo; abaixo de 1% não aparece }
+        discountPercent: { type: [integer, 'null'], description: 'Percentual exibido, arredondado para baixo; abaixo de 1% não aparece' }
         stock: { type: integer, minimum: 0, maximum: 99999 }
         reserved: { type: integer }
         available: { type: integer, description: estoque menos reservado }
@@ -12752,7 +12750,7 @@ components:
         sectionId: { type: [string, 'null'], format: uuid }
         status: { type: string, enum: [draft, active, paused, archived] }
         moderationStatus: { type: string, enum: [ok, review, paused, removed], description: Separado do status do lojista; só o admin altera }
-        moderationReason: { type: [string, 'null'], description: Motivo, só quando pausado ou removido pela moderação }
+        moderationReason: { type: [string, 'null'], description: 'Motivo, só quando pausado ou removido pela moderação' }
         basePriceCents: { type: [integer, 'null'], minimum: 1, maximum: 9999999 }
         promotion:
           type: object
@@ -13013,7 +13011,7 @@ components:
         id: { type: string, format: uuid }
         kind: { type: string, enum: [forbidden_category, suspect_word] }
         value: { type: string, description: 'Palavra normalizada, ou id da categoria' }
-        label: { type: [string, 'null'], description: Nome da categoria, ou a própria palavra }
+        label: { type: [string, 'null'], description: 'Nome da categoria, ou a própria palavra' }
         createdAt: { type: string, format: date-time }
     ModerationTermList:
       type: object
@@ -13034,7 +13032,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         label: { type: [string, 'null'], enum: [home, work, other, null] }
-        cep: { type: string, description: 8 dígitos, sem hífen }
+        cep: { type: string, description: '8 dígitos, sem hífen' }
         street: { type: string }
         number: { type: string, description: '"S/N" quando não há número' }
         complement: { type: [string, 'null'] }
@@ -13232,7 +13230,7 @@ components:
         eta: { oneOf: [{ $ref: '#/components/schemas/EtaRange' }, { type: 'null' }], description: 'DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.' }
         logisticsOpensAt: { type: [string, 'null'], format: date-time, description: 'BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.' }
         available: { type: boolean, description: 'Entrega na posição consultada (dentro do raio e de uma faixa)' }
-        feeCents: { type: [integer, 'null'], description: Taxa para a posição, antes de "grátis acima de X" }
+        feeCents: { type: [integer, 'null'], description: 'Taxa para a posição, antes de "grátis acima de X"' }
         freeShipping: { type: boolean, description: Taxa R$ 0 nessa posição }
         freeAboveCents: { type: integer, description: '0 = sem frete grátis por valor' }
         minOrderCents: { type: integer }
@@ -13569,8 +13567,8 @@ components:
       properties:
         code: { type: string, enum: [PRICE_CHANGED, QUANTITY_EXCEEDS_STOCK, OUT_OF_STOCK, UNAVAILABLE] }
         message: { type: string, description: Texto pt-BR sugerido }
-        fromCents: { type: integer, description: Só em `PRICE_CHANGED`, preço que o cliente viu }
-        toCents: { type: integer, description: Só em `PRICE_CHANGED`, preço vigente }
+        fromCents: { type: integer, description: 'Só em `PRICE_CHANGED`, preço que o cliente viu' }
+        toCents: { type: integer, description: 'Só em `PRICE_CHANGED`, preço vigente' }
         requestedQuantity: { type: integer, description: Só em `QUANTITY_EXCEEDS_STOCK` }
         maxQuantity: { type: integer, description: Só em `QUANTITY_EXCEEDS_STOCK` }
     CartItem:
@@ -13650,7 +13648,7 @@ components:
           type: array
           items: { type: string, enum: [EMPTY, ITEM_UNAVAILABLE, STORE_UNAVAILABLE, STORE_CLOSED, BELOW_MINIMUM, OUT_OF_RANGE, LOGISTICS_CLOSED, NEEDS_ADDRESS, PICKUP_UNAVAILABLE, ABOVE_MAX_ORDER, NEW_STORE_LIMIT] }
         opensAt: { type: [string, 'null'], format: date-time }
-        newStoreMaxOrder: { $ref: '#/components/schemas/Money', description: Teto por pedido da loja nova, quando o limite está ativo (WB-225) }
+        newStoreMaxOrder: { $ref: '#/components/schemas/Money', description: 'Teto por pedido da loja nova, quando o limite está ativo (WB-225)' }
     Cart:
       type: object
       required: [id, revision, store, items, coupon, delivery, summary, checkout, notices]

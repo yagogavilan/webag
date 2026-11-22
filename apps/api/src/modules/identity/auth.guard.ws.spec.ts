@@ -7,7 +7,7 @@ const wsContext = (client: { data?: Record<string, unknown> }): ExecutionContext
 
 describe('I10: mensagem de WebSocket nasce protegida', () => {
   // As dependências não são usadas no ramo de WebSocket.
-  const guard = new AuthGuard(null as never, null as never, null as never, null as never, null as never);
+  const guard = new AuthGuard(null as never, null as never, null as never, null as never, null as never, null as never);
 
   it('nega por padrão socket sem identidade do handshake; libera o autenticado', async () => {
     expect(await guard.canActivate(wsContext({ data: {} }))).toBe(false);

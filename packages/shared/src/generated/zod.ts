@@ -97,7 +97,7 @@ export const RegisterResponse = zod.object({
 }),
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),
@@ -140,7 +140,7 @@ export const LoginResponse = zod.union([zod.object({
 }),
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),
@@ -167,7 +167,7 @@ export const RefreshSessionBody = zod.object({
 
 export const RefreshSessionResponse = zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 })
@@ -247,7 +247,7 @@ export const ResetPasswordBody = zod.object({
 export const ResetPasswordResponse = zod.object({
   "tokens": zod.union([zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),zod.null()]),
@@ -291,7 +291,7 @@ export const AcceptAdminInvitationBody = zod.object({
 export const AcceptAdminInvitationResponse = zod.object({
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),
@@ -365,7 +365,7 @@ export const ChangePasswordBody = zod.object({
 export const ChangePasswordResponse = zod.object({
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 })
@@ -513,7 +513,7 @@ export const ListAdminsResponse = zod.object({
   "name": zod.string(),
   "email": zod.email(),
   "profile": zod.enum(['super_admin', 'operations', 'finance', 'support']),
-  "reactivation": zod.boolean().describe('Link de reativação (redefinição de acesso)'),
+  "reactivation": zod.boolean().describe('Link de reativação (redefinição de acesso), não convite novo'),
   "expired": zod.boolean(),
   "invitedByName": zod.string().nullable(),
   "createdAt": zod.iso.datetime({"offset":true}),
@@ -2970,7 +2970,7 @@ export const ListAdminAlertKindsResponse = zod.object({
   "label": zod.string(),
   "area": zod.enum(['payments', 'orders', 'logistics', 'exchanges', 'stores', 'privacy', 'platform']),
   "severity": zod.enum(['critical', 'warning', 'info']).describe('`critical`: dinheiro ou prazo legal em risco, agir no dia. `warning`: agir logo. `info`: acompanhar'),
-  "hint": zod.string().describe('O que fazer')
+  "hint": zod.string().describe('O que fazer, em uma frase')
 })),
   "nextCursor": zod.null()
 })
@@ -3625,7 +3625,7 @@ export const VerifyMfaResponse = zod.object({
 }),
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),
@@ -3654,7 +3654,7 @@ export const CompleteResetPasswordBody = zod.object({
 export const CompleteResetPasswordResponse = zod.object({
   "tokens": zod.union([zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),zod.null()]),
@@ -4988,7 +4988,7 @@ export const AcceptStoreInvitationBody = zod.object({
 export const AcceptStoreInvitationResponse = zod.object({
   "tokens": zod.object({
   "accessToken": zod.string().describe('JWT HS256 de 15 min'),
-  "refreshToken": zod.string().describe('Token opaco de 256 bits'),
+  "refreshToken": zod.string().describe('Token opaco de 256 bits, rotativo'),
   "expiresIn": zod.int().describe('Segundos de validade do access token'),
   "tokenType": zod.enum(['Bearer'])
 }),
@@ -6173,7 +6173,7 @@ export const CreateProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(createProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6187,9 +6187,9 @@ export const CreateProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(createProductResponseVariantsItemStockMin).max(createProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6393,7 +6393,7 @@ export const GetProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(getProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6407,9 +6407,9 @@ export const GetProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(getProductResponseVariantsItemStockMin).max(getProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6494,7 +6494,7 @@ export const UpdateProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(updateProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6508,9 +6508,9 @@ export const UpdateProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(updateProductResponseVariantsItemStockMin).max(updateProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6608,7 +6608,7 @@ export const SetProductVariantsResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(setProductVariantsResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6622,9 +6622,9 @@ export const SetProductVariantsResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(setProductVariantsResponseVariantsItemStockMin).max(setProductVariantsResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6680,9 +6680,9 @@ export const AdjustVariantStockResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(adjustVariantStockResponseStockMin).max(adjustVariantStockResponseStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6739,7 +6739,7 @@ export const SetProductImagesResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(setProductImagesResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6753,9 +6753,9 @@ export const SetProductImagesResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(setProductImagesResponseVariantsItemStockMin).max(setProductImagesResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6818,7 +6818,7 @@ export const PublishProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(publishProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6832,9 +6832,9 @@ export const PublishProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(publishProductResponseVariantsItemStockMin).max(publishProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6925,7 +6925,7 @@ export const QuickPublishProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(quickPublishProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -6939,9 +6939,9 @@ export const QuickPublishProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(quickPublishProductResponseVariantsItemStockMin).max(quickPublishProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -6997,7 +6997,7 @@ export const PauseProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(pauseProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -7011,9 +7011,9 @@ export const PauseProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(pauseProductResponseVariantsItemStockMin).max(pauseProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -7069,7 +7069,7 @@ export const ResumeProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(resumeProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -7083,9 +7083,9 @@ export const ResumeProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(resumeProductResponseVariantsItemStockMin).max(resumeProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -7297,7 +7297,7 @@ export const ListModerationTermsResponse = zod.object({
   "id": zod.uuid(),
   "kind": zod.enum(['forbidden_category', 'suspect_word']),
   "value": zod.string().describe('Palavra normalizada, ou id da categoria'),
-  "label": zod.string().nullish().describe('Nome da categoria'),
+  "label": zod.string().nullish().describe('Nome da categoria, ou a própria palavra'),
   "createdAt": zod.iso.datetime({"offset":true})
 })),
   "nextCursor": zod.null()
@@ -7321,7 +7321,7 @@ export const AddModerationTermResponse = zod.object({
   "id": zod.uuid(),
   "kind": zod.enum(['forbidden_category', 'suspect_word']),
   "value": zod.string().describe('Palavra normalizada, ou id da categoria'),
-  "label": zod.string().nullish().describe('Nome da categoria'),
+  "label": zod.string().nullish().describe('Nome da categoria, ou a própria palavra'),
   "createdAt": zod.iso.datetime({"offset":true})
 })
 
@@ -7380,7 +7380,7 @@ export const ListAddressesResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -7443,7 +7443,7 @@ export const CreateAddressBody = zod.object({
 export const CreateAddressResponse = zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -7471,7 +7471,7 @@ export const GetAddressParams = zod.object({
 export const GetAddressResponse = zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -7535,7 +7535,7 @@ export const UpdateAddressBody = zod.object({
 export const UpdateAddressResponse = zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -7772,7 +7772,7 @@ export const GetHomeResponse = zod.object({
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
-  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição, antes de "grátis acima de X"'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
@@ -7839,7 +7839,7 @@ export const GetHomeResponse = zod.object({
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
-  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição, antes de "grátis acima de X"'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
@@ -7874,7 +7874,7 @@ export const GetHomeResponse = zod.object({
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
-  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição, antes de "grátis acima de X"'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
@@ -8017,7 +8017,7 @@ export const SearchStoresResponse = zod.object({
 }).describe('DEC-053: faixa de chegada (preparo da loja + despacho + deslocamento, com folga de +-15 min), SEMPRE como faixa e nunca como número único. `fromAt`/`toAt` são o horário de relógio (\'Chega entre 15:40 e 16:40\'); `minMinutes`/`maxMinutes`, os minutos a partir de agora. Passando do teto `entrega_max_min` (120) NO FIM DA FAIXA (DEC-054: estimativa + folga) a loja não entrega para o endereço: `available=false` e `eta=null` (\'fora da área\').'),zod.null()]).optional().describe('DEC-053: faixa calculada para a posição; nulo quando a loja não entrega aí.'),
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016: com `available=false` por horário da logística, quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin ou quando entrega normalmente.'),
   "available": zod.boolean().describe('Entrega na posição consultada (dentro do raio e de uma faixa)'),
-  "feeCents": zod.int().nullable().describe('Taxa para a posição'),
+  "feeCents": zod.int().nullable().describe('Taxa para a posição, antes de "grátis acima de X"'),
   "freeShipping": zod.boolean().describe('Taxa R$ 0 nessa posição'),
   "freeAboveCents": zod.int().describe('0 = sem frete grátis por valor'),
   "minOrderCents": zod.int(),
@@ -8655,8 +8655,8 @@ export const GetCartResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -8720,7 +8720,7 @@ export const GetCartResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -8789,8 +8789,8 @@ export const ClearCartResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -8854,7 +8854,7 @@ export const ClearCartResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -8936,8 +8936,8 @@ export const SetCartItemResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9001,7 +9001,7 @@ export const SetCartItemResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -9074,8 +9074,8 @@ export const RemoveCartItemResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9139,7 +9139,7 @@ export const RemoveCartItemResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -9216,8 +9216,8 @@ export const ApplyCartCouponResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9281,7 +9281,7 @@ export const ApplyCartCouponResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -9349,8 +9349,8 @@ export const RemoveCartCouponResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9414,7 +9414,7 @@ export const RemoveCartCouponResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -9483,8 +9483,8 @@ export const AcknowledgeCartResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9548,7 +9548,7 @@ export const AcknowledgeCartResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -9630,8 +9630,8 @@ export const MergeCartResponse = zod.object({
   "warnings": zod.array(zod.object({
   "code": zod.enum(['PRICE_CHANGED', 'QUANTITY_EXCEEDS_STOCK', 'OUT_OF_STOCK', 'UNAVAILABLE']),
   "message": zod.string().describe('Texto pt-BR sugerido'),
-  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
-  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`'),
+  "fromCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço que o cliente viu'),
+  "toCents": zod.int().optional().describe('Só em `PRICE_CHANGED`, preço vigente'),
   "requestedQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`'),
   "maxQuantity": zod.int().optional().describe('Só em `QUANTITY_EXCEEDS_STOCK`')
 }))
@@ -9695,7 +9695,7 @@ export const MergeCartResponse = zod.object({
   "newStoreMaxOrder": zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).optional().describe('Teto por pedido da loja nova')
+}).optional().describe('Teto por pedido da loja nova, quando o limite está ativo (WB-225)')
 }),
   "notices": zod.array(zod.object({
   "code": zod.enum(['CART_EXPIRED', 'QUANTITY_ADJUSTED', 'STORE_REPLACED', 'MERGE_KEPT_ACCOUNT_CART', 'MERGE_ITEM_SKIPPED']),
@@ -10685,7 +10685,7 @@ export const CreateOrderResponse = zod.object({
   "address": zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -10929,7 +10929,7 @@ export const GetOrderResponse = zod.object({
   "address": zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -11155,7 +11155,7 @@ export const CancelOrderLateResponse = zod.object({
   "address": zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -11593,7 +11593,7 @@ export const CancelOrderResponse = zod.object({
   "address": zod.object({
   "id": zod.uuid(),
   "label": zod.union([zod.literal('home'),zod.literal('work'),zod.literal('other'),zod.literal(null)]).nullable(),
-  "cep": zod.string().describe('8 dígitos'),
+  "cep": zod.string().describe('8 dígitos, sem hífen'),
   "street": zod.string(),
   "number": zod.string().describe('"S/N" quando não há número'),
   "complement": zod.string().nullable(),
@@ -15683,7 +15683,7 @@ export const CreateProductDraftResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(createProductDraftResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -15697,9 +15697,9 @@ export const CreateProductDraftResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(createProductDraftResponseVariantsItemStockMin).max(createProductDraftResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -15836,7 +15836,7 @@ export const DuplicateProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(duplicateProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -15850,9 +15850,9 @@ export const DuplicateProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(duplicateProductResponseVariantsItemStockMin).max(duplicateProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -16330,7 +16330,7 @@ export const RestoreAdminStoreHistoryEntryResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(restoreAdminStoreHistoryEntryResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -16344,9 +16344,9 @@ export const RestoreAdminStoreHistoryEntryResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMin).max(restoreAdminStoreHistoryEntryResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -16736,7 +16736,7 @@ export const CreateAdminProductDraftResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(createAdminProductDraftResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -16750,9 +16750,9 @@ export const CreateAdminProductDraftResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(createAdminProductDraftResponseProductVariantsItemStockMin).max(createAdminProductDraftResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -16811,7 +16811,7 @@ export const GetAdminStoreProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(getAdminStoreProductResponseBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -16825,9 +16825,9 @@ export const GetAdminStoreProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(getAdminStoreProductResponseVariantsItemStockMin).max(getAdminStoreProductResponseVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -16918,7 +16918,7 @@ export const EditAdminStoreProductResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(editAdminStoreProductResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -16932,9 +16932,9 @@ export const EditAdminStoreProductResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(editAdminStoreProductResponseProductVariantsItemStockMin).max(editAdminStoreProductResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -17029,7 +17029,7 @@ export const SetAdminStoreProductVariantsResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(setAdminStoreProductVariantsResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -17043,9 +17043,9 @@ export const SetAdminStoreProductVariantsResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(setAdminStoreProductVariantsResponseProductVariantsItemStockMin).max(setAdminStoreProductVariantsResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -17124,7 +17124,7 @@ export const AdjustAdminStoreVariantStockResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(adjustAdminStoreVariantStockResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -17138,9 +17138,9 @@ export const AdjustAdminStoreVariantStockResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(adjustAdminStoreVariantStockResponseProductVariantsItemStockMin).max(adjustAdminStoreVariantStockResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -17218,7 +17218,7 @@ export const SetAdminStoreProductImagesResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(setAdminStoreProductImagesResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -17232,9 +17232,9 @@ export const SetAdminStoreProductImagesResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(setAdminStoreProductImagesResponseProductVariantsItemStockMin).max(setAdminStoreProductImagesResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
@@ -17308,7 +17308,7 @@ export const SetAdminStoreProductStatusResponse = zod.object({
   "sectionId": zod.uuid().nullable(),
   "status": zod.enum(['draft', 'active', 'paused', 'archived']),
   "moderationStatus": zod.enum(['ok', 'review', 'paused', 'removed']).describe('Separado do status do lojista; só o admin altera'),
-  "moderationReason": zod.string().nullable().describe('Motivo'),
+  "moderationReason": zod.string().nullable().describe('Motivo, só quando pausado ou removido pela moderação'),
   "basePriceCents": zod.int().min(1).max(setAdminStoreProductStatusResponseProductBasePriceCentsMax).nullable(),
   "promotion": zod.object({
   "priceCents": zod.int().nullable(),
@@ -17322,9 +17322,9 @@ export const SetAdminStoreProductStatusResponse = zod.object({
   "attributes": zod.record(zod.string(), zod.string()),
   "sku": zod.string().nullable(),
   "priceCents": zod.int().nullable().describe('Preço próprio da variação; vazio usa o do produto'),
-  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção'),
+  "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
-  "discountPercent": zod.int().nullable().describe('Percentual exibido'),
+  "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
   "stock": zod.int().min(setAdminStoreProductStatusResponseProductVariantsItemStockMin).max(setAdminStoreProductStatusResponseProductVariantsItemStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),

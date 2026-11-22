@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, CurrentViewAs, StorePermission, ViewAs, type Principal, type RequestContext, type ViewAsContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -132,16 +132,18 @@ export class ExchangesController {
 export class StoreExchangesController {
   constructor(private readonly exchanges: ExchangesService) {}
 
+  @ViewAs('listStoreExchanges')
   @StorePermission('exchanges')
   @Get()
-  list(@Param('storeId') storeId: string, @Query(new ZodPipe(storeListSchema)) query: z.infer<typeof storeListSchema>) {
-    return this.exchanges.listForStore(uuidParam(storeId), query);
+  list(@CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string, @Query(new ZodPipe(storeListSchema)) query: z.infer<typeof storeListSchema>) {
+    return this.exchanges.listForStore(uuidParam(storeId), query, view ? 'view_as' : 'store');
   }
 
+  @ViewAs('getStoreExchange')
   @StorePermission('exchanges')
   @Get(':id')
-  get(@Param('storeId') storeId: string, @Param('id') id: string) {
-    return this.exchanges.getForStore(uuidParam(storeId), idParam(id));
+  get(@CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string, @Param('id') id: string) {
+    return this.exchanges.getForStore(uuidParam(storeId), idParam(id), view ? 'view_as' : 'store');
   }
 
   @StorePermission('exchanges')

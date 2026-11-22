@@ -119,7 +119,7 @@ export const TokenPairTokenType = {
 export interface TokenPair {
   /** JWT HS256 de 15 min */
   accessToken: string;
-  /** Token opaco de 256 bits */
+  /** Token opaco de 256 bits, rotativo */
   refreshToken: string;
   /** Segundos de validade do access token */
   expiresIn: number;
@@ -441,7 +441,7 @@ export interface PendingAdminInvitation {
   name: string;
   email: string;
   profile: AdminProfile;
-  /** Link de reativação (redefinição de acesso) */
+  /** Link de reativação (redefinição de acesso), não convite novo */
   reactivation: boolean;
   expired: boolean;
   /** @nullable */
@@ -957,7 +957,7 @@ export interface AdminAlertKind {
   label: string;
   area: AdminAlertArea;
   severity: AdminAlertSeverity;
-  /** O que fazer */
+  /** O que fazer, em uma frase */
   hint: string;
 }
 
@@ -2871,7 +2871,7 @@ export interface ProductVariant {
      */
   priceCents: number | null;
   /**
-     * Preço vigente hoje (com a promoção
+     * Preço vigente hoje (com a promoção, se ativa)
      * @nullable
      */
   effectivePriceCents: number | null;
@@ -2881,7 +2881,7 @@ export interface ProductVariant {
      */
   originalPriceCents: number | null;
   /**
-     * Percentual exibido
+     * Percentual exibido, arredondado para baixo; abaixo de 1% não aparece
      * @nullable
      */
   discountPercent: number | null;
@@ -3006,7 +3006,7 @@ export interface Product {
   /** Separado do status do lojista; só o admin altera */
   moderationStatus: ProductModerationStatus;
   /**
-     * Motivo
+     * Motivo, só quando pausado ou removido pela moderação
      * @nullable
      */
   moderationReason: string | null;
@@ -3446,7 +3446,7 @@ export interface ModerationTerm {
   /** Palavra normalizada, ou id da categoria */
   value: string;
   /**
-     * Nome da categoria
+     * Nome da categoria, ou a própria palavra
      * @nullable
      */
   label?: string | null;
@@ -3492,7 +3492,7 @@ export interface Address {
   id: string;
   /** @nullable */
   label: AddressLabel;
-  /** 8 dígitos */
+  /** 8 dígitos, sem hífen */
   cep: string;
   street: string;
   /** "S/N" quando não há número */
@@ -3903,7 +3903,7 @@ export interface StoreDelivery {
   /** Entrega na posição consultada (dentro do raio e de uma faixa) */
   available: boolean;
   /**
-     * Taxa para a posição
+     * Taxa para a posição, antes de "grátis acima de X"
      * @nullable
      */
   feeCents: number | null;
@@ -4382,9 +4382,9 @@ export interface CartWarning {
   code: CartWarningCode;
   /** Texto pt-BR sugerido */
   message: string;
-  /** Só em `PRICE_CHANGED` */
+  /** Só em `PRICE_CHANGED`, preço que o cliente viu */
   fromCents?: number;
-  /** Só em `PRICE_CHANGED` */
+  /** Só em `PRICE_CHANGED`, preço vigente */
   toCents?: number;
   /** Só em `QUANTITY_EXCEEDS_STOCK` */
   requestedQuantity?: number;
@@ -4555,7 +4555,7 @@ export interface CartCheckout {
   blockers: CartCheckoutBlockersItem[];
   /** @nullable */
   opensAt: string | null;
-  /** Teto por pedido da loja nova */
+  /** Teto por pedido da loja nova, quando o limite está ativo (WB-225) */
   newStoreMaxOrder?: Money;
 }
 

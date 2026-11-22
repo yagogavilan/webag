@@ -17,6 +17,9 @@ import { PrincipalService } from './principal.service.js';
 import { SessionService } from './session.service.js';
 import { TicketService } from './ticket.service.js';
 import { TotpService } from './totp.service.js';
+import { ViewAsBootCheck } from './view-as.boot-check.js';
+import { ViewAsGuard } from './view-as.guard.js';
+import { ViewAsService } from './view-as.service.js';
 
 @Module({
   imports: [JwtModule.register({}), AdminModule, UsersModule],
@@ -31,10 +34,14 @@ import { TotpService } from './totp.service.js';
     SessionService,
     TicketService,
     TotpService,
+    ViewAsService,
+    ViewAsBootCheck,
     // Ordem: primeiro o rate limit (barato, protege o banco), depois a autenticação.
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
+    // WB-352: depois da autenticação; cabeçalho `X-View-As` sem visão autorizada = 403 (falha fechada).
+    { provide: APP_GUARD, useClass: ViewAsGuard },
   ],
-  exports: [AuthService, CodeService, SessionService, PasswordService, PrincipalService, TicketService],
+  exports: [AuthService, CodeService, SessionService, PasswordService, PrincipalService, TicketService, ViewAsService],
 })
 export class IdentityModule {}

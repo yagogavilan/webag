@@ -1,0 +1,2 @@
+ALTER TABLE "audit_log" ADD COLUMN "store_id" uuid;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "audit_log_store_at_idx" ON "audit_log" USING btree ("store_id","at" DESC NULLS LAST,"id" DESC NULLS LAST);

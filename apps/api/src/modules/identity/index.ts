@@ -8,3 +8,5 @@ export { AuthService } from './auth.service.js';
 export { CodeService } from './code.service.js';
 export { TicketService } from './ticket.service.js';
 export { emailSchema, passwordSchema, codeSchema } from './auth.schemas.js';
+export { ViewAsService } from './view-as.service.js';
+export { listViewAsHandlers, invalidViewAsHandlers } from './view-as.boot-check.js';

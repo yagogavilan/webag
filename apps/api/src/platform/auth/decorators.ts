@@ -7,6 +7,7 @@ export const IS_PUBLIC = 'webag:public';
 export const ADMIN_PERMISSION = 'webag:admin-permission';
 export const STORE_PERMISSION = 'webag:store-permission';
 export const ADMIN_SELF = 'webag:admin-self';
+export const VIEW_AS = 'webag:view-as';
 export const ROLES = 'webag:roles';
 export const REQUIRE_REAUTH = 'webag:reauth';
 export const ALLOW_PENDING_MFA = 'webag:allow-pending-mfa';
@@ -15,6 +16,12 @@ export const ALLOW_PENDING_MFA = 'webag:allow-pending-mfa';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 /** Exige perfil de admin com a permissão (tabela única em permissions.ts). */
 export const AdminOnly = (permission: AdminPermission) => SetMetadata(ADMIN_PERMISSION, permission);
+/**
+ * WB-352 (D8, threat model §14.4): a rota aceita a visão "Ver como o lojista" (opt-in). O argumento é o `operationId` do contrato, que o teste de
+ * VA-23 compara com o `x-view-as: true` do YAML nos dois sentidos. Exige `@Get` e `@StorePermission` no mesmo handler (a API não sobe se faltar).
+ * O handler decide a apresentação por `req.viewAs`, NUNCA por `principal.userId`.
+ */
+export const ViewAs = (operationId: string) => SetMetadata(VIEW_AS, operationId);
 /** WB-355: rota do admin sobre a PRÓPRIA conta (TOTP): qualquer perfil de admin, nunca outro papel. Negada no guard, antes da validação do corpo. */
 export const AdminSelf = () => SetMetadata(ADMIN_SELF, true);
 /** Exige membro da loja `:storeId` com a permissão; não-membro recebe 404 (SEC-020). */
@@ -51,8 +58,22 @@ export interface RequestContext {
   principal: Principal | null;
 }
 
+/** Visão "Ver como o lojista" resolvida pelo `ViewAsService.authorize` (principal continua sendo o do admin). */
+export interface ViewAsContext {
+  id: string;
+  storeId: string;
+  adminUserId: string;
+  adminSessionId: string;
+  reasonCode: string;
+  expiresAt: Date;
+  level: 'viewer';
+}
+
 export interface AuthedRequest extends Request {
   principal?: Principal;
+  viewAs?: ViewAsContext;
+  /** Nível de acesso à loja: na visão é o conjunto fixo do visualizador (constante no código, nunca do banco). */
+  storeAccess?: 'viewer';
 }
 
 export const CurrentPrincipal = createParamDecorator((_data: unknown, ctx: ExecutionContext): Principal => {
@@ -60,6 +81,9 @@ export const CurrentPrincipal = createParamDecorator((_data: unknown, ctx: Execu
   if (!req.principal) throw new Error('CurrentPrincipal usado em rota pública');
   return req.principal;
 });
+
+/** Visão "Ver como" da requisição (ou `null`). É ISTO, e nunca `principal.userId`, que decide a apresentação mascarada (§14.2). */
+export const CurrentViewAs = createParamDecorator((_data: unknown, ctx: ExecutionContext): ViewAsContext | null => ctx.switchToHttp().getRequest<AuthedRequest>().viewAs ?? null);
 
 export function buildContext(req: AuthedRequest): RequestContext {
   const device = req.headers['x-device-id'];

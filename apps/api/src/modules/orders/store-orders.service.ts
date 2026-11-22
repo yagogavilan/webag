@@ -53,6 +53,9 @@ export function storeActions(order: Pick<OrderRow, 'status' | 'mode'>, deliveryS
 const ACTIVE_STATUSES: readonly string[] = ['received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'ready_for_pickup'];
 const hasActiveOrderData = (status: string): boolean => ACTIVE_STATUSES.includes(status);
 
+/** `view_as`: visão "Ver como o lojista" do admin (WB-352): apresentação mascarada, decidida por `req.viewAs` e nunca pelo usuário. */
+export type StoreOrderMode = 'member' | 'view_as';
+
 @Injectable()
 export class StoreOrdersService {
   constructor(
@@ -84,7 +87,7 @@ export class StoreOrdersService {
 
   // =================================================================== leitura
 
-  async list(storeId: string, query: { scope?: StoreScope | undefined; number?: string | undefined; cursor?: string | undefined; limit?: unknown }, showValues: boolean): Promise<Page<Awaited<ReturnType<StoreOrdersService['summaries']>>[number]>> {
+  async list(storeId: string, query: { scope?: StoreScope | undefined; number?: string | undefined; cursor?: string | undefined; limit?: unknown }, showValues: boolean, mode: StoreOrderMode = 'member'): Promise<Page<Awaited<ReturnType<StoreOrdersService['summaries']>>[number]>> {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const statuses = query.scope ? SCOPES[query.scope] : [...SCOPES.new, ...SCOPES.in_progress, ...SCOPES.history];
@@ -95,7 +98,7 @@ export class StoreOrdersService {
       .orderBy(...timestampOrderDesc(orders.createdAt, orders.id))
       .limit(limit + 1);
     const page = rows.slice(0, limit);
-    const data = await this.summaries(page, showValues);
+    const data = await this.summaries(page, showValues, mode);
     const last = page.at(-1);
     return { data, nextCursor: rows.length > limit && last ? encodeCursor({ at: last.createdAt.toISOString(), id: last.id }) : null };
   }
@@ -109,7 +112,7 @@ export class StoreOrdersService {
   }
 
   /** I9: 2 consultas por página (itens e clientes) em vez de 2 por pedido. */
-  private async summaries(page: OrderRow[], showValues: boolean) {
+  private async summaries(page: OrderRow[], showValues: boolean, mode: StoreOrderMode) {
     if (page.length === 0) return [];
     const [items, customers] = await Promise.all([
       this.db.select().from(orderItems).where(inArray(orderItems.orderId, page.map((o) => o.id))).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
@@ -134,7 +137,8 @@ export class StoreOrdersService {
         itemCount: rows.reduce((n, i) => n + i.quantity, 0),
         firstItemName: rows[0]?.name ?? '',
         total: showValues ? money(order.totalCents) : null,
-        allowedActions: storeActions(order),
+        // Na visão do admin (WB-352) o visualizador não age: sempre vazio.
+        allowedActions: mode === 'view_as' ? [] : storeActions(order),
       };
     });
   }
@@ -147,7 +151,7 @@ export class StoreOrdersService {
   }
 
   /** Detalhe completo (WB-068): itens, entrega ou retirada, cliente, valores (se permitido) e histórico. */
-  async get(storeId: string, orderId: string, showValues: boolean) {
+  async get(storeId: string, orderId: string, showValues: boolean, mode: StoreOrderMode = 'member') {
     const order = await this.load(storeId, orderId);
     const [items, events, [customer], cancelRequest] = await Promise.all([
       this.db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.createdAt), asc(orderItems.id)),
@@ -159,6 +163,33 @@ export class StoreOrdersService {
     const delivery = order.mode === 'delivery' ? await this.deliveries.forOrder(order.id) : null;
     const [courier] = delivery?.courierId ? await this.db.select({ name: couriers.name }).from(couriers).where(eq(couriers.id, delivery.courierId)) : [];
     const finance = order.finance as { merchantNetBeforeProviderFeeCents?: number };
+    // WB-352 (§14.3, SEC-207, SEC-209): visão do admin por LISTA PERMITIDA, também em pedido ativo. Só primeiro nome e bairro; sem sobrenome, telefone,
+    // endereço, observação, código, `cancelRequest`, motivo do cancelamento nem `reason` da linha do tempo (texto livre do cliente), comissão ou líquido.
+    if (mode === 'view_as') {
+      const addr = (order.address ?? {}) as { neighborhood?: string | null };
+      const pick = (o: Record<string, unknown> | null, keys: string[]) => (o ? Object.fromEntries(keys.map((k) => [k, o[k] ?? null])) : null);
+      return {
+        id: order.id,
+        number: order.number,
+        status: order.status,
+        mode: order.mode,
+        createdAt: order.createdAt.toISOString(),
+        paidAt: order.paidAt?.toISOString() ?? null,
+        acceptedAt: order.acceptedAt?.toISOString() ?? null,
+        acceptDeadlineAt: order.status === 'received' ? (order.acceptDeadlineAt?.toISOString() ?? null) : null,
+        readyByAt: readyByAtOf(order),
+        customer: { firstName: firstName(customer?.name) },
+        items: items.map((i) => ({ name: i.name, attributes: i.attributes, image: { urls: i.image }, quantity: i.quantity, unitPrice: money(i.unitPriceCents), lineTotal: money(i.lineTotalCents) })),
+        delivery: order.mode === 'delivery' && order.address ? { neighborhood: active ? (addr.neighborhood ?? null) : null, etaMinMinutes: order.etaMinMinutes, etaMaxMinutes: order.etaMaxMinutes, eta: etaOfOrder(order) } : null,
+        pickup: order.mode === 'pickup' && order.pickup ? pick(order.pickup, ['prepMinMinutes', 'prepMaxMinutes']) : null,
+        values: { subtotal: money(order.subtotalCents), delivery: money(order.deliveryFeeCents), storeDiscount: money(order.storeCouponCents), total: money(order.totalCents) },
+        couponCode: order.couponCode,
+        timeline: events.map((e) => ({ status: e.toStatus, at: e.at.toISOString(), actor: e.actor })),
+        cancellation: order.cancelledAt && order.cancelledBy ? { by: order.cancelledBy, at: order.cancelledAt.toISOString() } : null,
+        logistics: delivery ? { status: delivery.status, courierFirstName: courier ? (courier.name.trim().split(/\s+/)[0] ?? null) : null, volumes: delivery.volumes } : null,
+        allowedActions: [] as never[],
+      };
+    }
     return {
       id: order.id,
       number: order.number,

@@ -16,6 +16,8 @@ export interface AuditEntry {
   /** Ator explícito (ex.: ação sem sessão, como convite aceito). Por padrão vem do contexto. */
   actorId?: string | null;
   actorRole?: string | null;
+  /** v1.1 R1 (D9): loja a que a ação se refere; alimenta o histórico por loja e a ficha 360. */
+  storeId?: string | null;
 }
 
 export interface AuditFilters {
@@ -72,6 +74,7 @@ export class AuditService {
       userAgent: ownCustomerAction ? null : ctx.userAgent,
       requestId: ctx.requestId,
       reason: entry.reason ?? null,
+      storeId: entry.storeId ?? null,
     });
   }
 

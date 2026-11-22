@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { CurrentPrincipal, Ctx, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { CurrentPrincipal, CurrentViewAs, Ctx, StorePermission, ViewAs, type Principal, type RequestContext, type ViewAsContext } from '../../platform/auth/decorators.js';
 import { memberHasStorePermission } from '../../platform/auth/permissions.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
@@ -50,23 +50,29 @@ export class StoreOrdersController {
     return member !== null && memberHasStorePermission(member, 'sales_values');
   }
 
+  @ViewAs('listStoreOrders')
   @StorePermission('orders')
   @Get()
-  async list(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Query(new ZodPipe(listSchema)) query: z.infer<typeof listSchema>) {
+  async list(@CurrentPrincipal() p: Principal, @CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string, @Query(new ZodPipe(listSchema)) query: z.infer<typeof listSchema>) {
     const id = uuidParam(storeId);
+    // WB-352: na visão a apresentação vem de `req.viewAs` (valores visíveis, nenhuma ação), nunca da associação do admin à loja.
+    if (view) return this.orders.list(id, { ...query, number: query.number }, true, 'view_as');
     return this.orders.list(id, { ...query, number: query.number }, await this.showValues(p.userId, id));
   }
 
+  @ViewAs('countStoreOrders')
   @StorePermission('orders')
   @Get('counts')
   counts(@Param('storeId') storeId: string) {
     return this.orders.counts(uuidParam(storeId));
   }
 
+  @ViewAs('getStoreOrder')
   @StorePermission('orders')
   @Get(':orderId')
-  async get(@CurrentPrincipal() p: Principal, @Param('storeId') storeId: string, @Param('orderId') orderId: string) {
+  async get(@CurrentPrincipal() p: Principal, @CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string, @Param('orderId') orderId: string) {
     const id = uuidParam(storeId);
+    if (view) return this.orders.get(id, orderIdParam(orderId), true, 'view_as');
     return this.orders.get(id, orderIdParam(orderId), await this.showValues(p.userId, id));
   }
 

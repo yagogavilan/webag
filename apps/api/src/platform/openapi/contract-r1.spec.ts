@@ -428,6 +428,23 @@ describe('contrato OpenAPI da v1.1 R1', () => {
     });
   });
 
+  describe('sanidade do YAML', () => {
+    it('nenhum schema tem chave desconhecida (descrição sem aspas em mapa de fluxo vira chave e some do contrato)', () => {
+      const OK = new Set(['$ref', 'type', 'properties', 'required', 'additionalProperties', 'items', 'oneOf', 'anyOf', 'allOf', 'enum', 'pattern', 'minimum', 'maximum', 'minLength', 'maxLength', 'minItems', 'maxItems', 'format', 'description', 'example', 'examples', 'title', 'default', 'deprecated', 'readOnly', 'writeOnly', 'nullable', 'externalDocs', 'maxProperties', 'minProperties', 'uniqueItems', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'const', 'not']);
+      const bad: string[] = [];
+      const walk = (node: any, path: string): void => {
+        if (Array.isArray(node)) return node.forEach((v, i) => walk(v, `${path}[${i}]`));
+        if (!node || typeof node !== 'object') return;
+        if (('type' in node || '$ref' in node || 'properties' in node) && !path.endsWith('properties')) {
+          for (const key of Object.keys(node)) if (!OK.has(key) && !key.startsWith('x-')) bad.push(`${path}: ${key}`);
+        }
+        for (const [k, v] of Object.entries(node)) walk(v, `${path}/${k}`);
+      };
+      walk(contract.components.schemas, 'schemas');
+      expect(bad).toEqual([]);
+    });
+  });
+
   describe('503 sob saturação (BUG-035)', () => {
     it('o contrato documenta 503 com Retry-After', () => {
       const response = contract.components.responses.ServiceUnavailable;

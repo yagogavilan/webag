@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import type { z } from 'zod';
-import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, ViewAs, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -25,6 +25,7 @@ export class CatalogController {
     return this.stores.getStore(uuidParam(storeId));
   }
 
+  @ViewAs('listProducts')
   @StorePermission('catalog')
   @Get('products')
   async list(@Param('storeId') storeId: string, @Query(new ZodPipe(listProductsSchema)) query: In<typeof listProductsSchema>) {
@@ -85,6 +86,7 @@ export class CatalogController {
     return this.idempotency.run(`bulk:${store.id}`, parseIdempotencyKey(idempotencyKey), body, () => this.catalog.bulk(store, { userId: principal.userId }, body));
   }
 
+  @ViewAs('getProduct')
   @StorePermission('catalog')
   @Get('products/:productId')
   async get(@Param('storeId') storeId: string, @Param('productId') productId: string) {
@@ -172,6 +174,7 @@ export class CatalogController {
 
   // ------------------------------------------------------------------- seções
 
+  @ViewAs('listSections')
   @StorePermission('catalog')
   @Get('sections')
   async sections(@Param('storeId') storeId: string) {

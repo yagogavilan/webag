@@ -120,8 +120,8 @@ describe('WB-355: matriz de permissões do admin (todas as rotas /v1/admin/*)', 
 
   it('a tabela única não tem permissão sem rota no contrato nem rota de admin fora dela', () => {
     const used = new Set(adminRoutes().map((r) => r.adminPermission).filter(Boolean));
-    // as 4 permissões novas da R1 só passam a ter rota quando a WB correspondente for implementada (WB-351 reutiliza stores:write; WB-352 usa view-as:open)
-    const PENDING_R1 = new Set(['store-catalog:write', 'store-history:export', 'view-as:open', 'analytics:read', 'stores:write']);
+    // as 4 permissões novas da R1 só passam a ter rota quando a WB correspondente for implementada (R1.2 a R1.4)
+    const PENDING_R1 = new Set(['store-catalog:write', 'store-history:export', 'analytics:read', 'stores:write']);
     const unused = Object.keys(ADMIN_PERMISSIONS).filter((p) => !used.has(p) && !PENDING_R1.has(p));
     expect(unused).toEqual([]);
   });
