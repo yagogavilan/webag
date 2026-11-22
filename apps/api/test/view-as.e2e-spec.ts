@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Controller, Get, Logger, Param } from '@nestjs/common';
 import { ModulesContainer } from '@nestjs/core';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { io, type Socket } from 'socket.io-client';
 import { vi } from 'vitest';
 import { StorePermission, ViewAs } from '../src/platform/auth/decorators.js';
@@ -394,6 +394,15 @@ describe('Ver como o lojista (WB-352)', () => {
       const [rowA] = await rows(a.userId);
       expect(rowA).toMatchObject({ closeCause: 'expired' });
       expect(rowA!.closedAt!.getTime()).toBe(past.getTime());
+      // I4: o encerramento da varredura é do SISTEMA, não do lojista nem do admin; o histórico da loja mostra actor.kind = 'system'.
+      const [closeLine] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.action, 'view_as.close'), eq(auditLog.targetId, shop.store.id), eq(auditLog.storeId, shop.store.id))).orderBy(desc(auditLog.id)).limit(1);
+      expect(closeLine).toMatchObject({ actorId: null, actorRole: 'system' });
+      expect(closeLine!.after).toMatchObject({ viewAsId: va.id, cause: 'expired', adminUserId: a.userId });
+      const viewer = await createAdmin(ctx, 'super_admin');
+      const feed = (await ctx.http.get(`/v1/admin/stores/${shop.store.id}/history?type=access&limit=50`).set(bearer(viewer.accessToken)).expect(200)).body.data as { id: number; summary: string; actor: { kind: string } }[];
+      const closed = feed.find((e) => e.id === closeLine!.id);
+      expect(closed, 'linha do sweep no histórico').toBeDefined();
+      expect(closed!.actor.kind).toBe('system');
       // logout
       const b = await createAdmin(ctx, 'support');
       const vb = await openOk(b, shop.store.id);

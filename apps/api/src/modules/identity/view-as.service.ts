@@ -200,7 +200,18 @@ export class ViewAsService implements OnApplicationBootstrap, OnApplicationShutd
     const closed = await this.db.transaction(async (tx) => {
       const [done] = await tx.update(adminViewSessions).set({ closedAt: at, closeCause: cause }).where(and(eq(adminViewSessions.id, row.id), isNull(adminViewSessions.closedAt))).returning({ id: adminViewSessions.id });
       if (!done) return false;
-      await this.audit.record(tx, ctx, { action: 'view_as.close', targetType: 'store', targetId: row.storeId, storeId: row.storeId, actorId: row.adminUserId, after: { viewAsId: row.id, cause, at: at.toISOString(), ...stats.counts } });
+      // I4: sem principal na chamada (varredura) o autor é o SISTEMA (`actorId` nulo, `actorRole` 'system'), nunca o admin com papel nulo, que o histórico leria como "lojista".
+      // De quem era a visão fica em `after.adminUserId`. Encerramento pelo próprio admin ou por abuso (há principal) segue com o admin como autor.
+      const bySystem = !ctx.principal;
+      await this.audit.record(tx, ctx, {
+        action: 'view_as.close',
+        targetType: 'store',
+        targetId: row.storeId,
+        storeId: row.storeId,
+        actorId: bySystem ? null : row.adminUserId,
+        ...(bySystem ? { actorRole: 'system' } : {}),
+        after: { viewAsId: row.id, cause, at: at.toISOString(), ...(bySystem ? { adminUserId: row.adminUserId } : {}), ...stats.counts },
+      });
       return true;
     });
     if (closed) await this.redis.del(this.readsKey(row.id), this.deniesKey(row.id)).catch(() => undefined);

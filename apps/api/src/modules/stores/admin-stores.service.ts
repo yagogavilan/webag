@@ -225,7 +225,7 @@ export class AdminStoresService {
       if (!before?.pendingChanges) throw errors.conflict('NO_PENDING_CHANGES', 'Não há alteração pendente');
       const [after] = await tx
         .update(stores)
-        .set({ ...(approve ? { name: before.pendingChanges.name ?? before.name } : {}), pendingChanges: null, updatedAt: new Date() })
+        .set({ ...(approve ? { name: before.pendingChanges.name ?? before.name } : {}), pendingChanges: null, version: sql`${stores.version} + 1`, updatedAt: new Date() })
         .where(eq(stores.id, storeId))
         .returning();
       if (!after) throw new Error('Falha ao decidir a alteração');

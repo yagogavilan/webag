@@ -557,8 +557,14 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
       await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
       const res = await ctx.http.patch(`/v1/stores/${store.id}/profile`).set(bearer(m.accessToken)).send({ name: 'Nome Novo', description: 'Descrição vale na hora' }).expect(200);
       expect(res.body).toMatchObject({ name: 'Nome Antigo', pendingReview: true, description: 'Descrição vale na hora' });
+      const versionBefore = (await ctx.http.get(`/v1/admin/stores/${store.id}/overview`).set(bearer(ops.accessToken)).expect(200)).body.store.version as number;
       const approved = await ctx.http.post(`/v1/admin/stores/${store.id}/data-review/approve`).set(bearer(ops.accessToken)).send({ reason: 'Nome conferido' }).expect(200);
       expect(approved.body.name).toBe('Nome Novo');
+      // I5 (ADR-018 D2): aprovar a pendência muda `stores.name`, então sobe a versão; quem estava com a ficha na versão antiga recebe 409 e não sobrescreve.
+      const versionAfter = (await ctx.http.get(`/v1/admin/stores/${store.id}/overview`).set(bearer(ops.accessToken)).expect(200)).body.store.version as number;
+      expect(versionAfter).toBe(versionBefore + 1);
+      const stale = await ctx.http.patch(`/v1/admin/stores/${store.id}/profile`).set(bearer(ops.accessToken)).send({ reason: { code: 'requested_by_merchant', note: 'ajuste' }, expectedVersion: versionBefore, changes: { description: 'Edição com a ficha velha' } }).expect(409);
+      expect(stale.body.code).toBe('STORE_VERSION_CONFLICT');
       await ctx.http.post(`/v1/admin/stores/${store.id}/data-review/approve`).set(bearer(ops.accessToken)).send({ reason: 'Nome conferido' }).expect(409);
     });
 
