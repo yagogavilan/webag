@@ -2,7 +2,7 @@
 
 > Mantido pelo `project-manager`. Fonte única do status. Plano: `plano-execucao.md`. Visão para o fundador: `../status.md`. Escopo: `docs/produto/backlog.md`. Fila técnica detalhada: `fila-backend-dev.md`. Retomada após reinício/limite de uso: primeira tarefa não `Aceito` da onda atual.
 
-**Onda atual:** Onda 8 (fechamento): código final congelado em `036e791` (DEC-083); só correção de bug achado por QA/Security entra depois   **Meta:** G4 aprovado com ressalvas por QA e Security (sem veto); falta o CEO registrar; G5 depende do fundador   **Atualizado:** 2026-11-20 (tip `3d40959`, só documentos)
+**v1.1 em planejamento: ver seção "v1.1" abaixo (2026-11-22).** **Onda atual (v1.0):** Onda 8 (fechamento): código final congelado em `036e791` (DEC-083); só correção de bug achado por QA/Security entra depois   **Meta:** G4 aprovado com ressalvas por QA e Security (sem veto); falta o CEO registrar; G5 depende do fundador   **Atualizado:** 2026-11-20 (tip `3d40959`, só documentos)
 
 **Bugs/SEC abertos (2026-11-20):** nenhum Crítico, Alto ou Médio aberto (QA e Security). Baixas: BUG-029 (flake de fixture), BUG-030 (e2e-real depende do pedido do seed), BUG-031 (app sem aviso "versão para revisão"), BUG-028b (Chromium); SEC-189, 186, 146, 149, 150, 161, 162, 163 (c/d), 174; SEC-169 aceito (DEC-067); BUG-010 fechado indicativo (capacidade só em staging). Fechados no tip: BUG-019, 026, 027, SEC-187, SEC-188. Checklist do brief §8: `checklist-dod.md`.
 
@@ -108,6 +108,31 @@ Paralelismo: no máximo 3 agentes. Sequência: mobile-dev em T8-00 (e V3-03); o 
 
 Fora da 1.0: WB-161 (Won't) e Fase 2 (WB-300 a 334).
 
+## v1.1 (R1 a R5): execução com agentes
+
+Plano, ondas, estimativa e DoR/DoD: `plano-v1-1.md`. Escopo: WB-340 a 399 (61 histórias, `backlog.md` §10). Tudo roda local; o que depende de parecer fica atrás de flag desligada (DEC-102). Retomada: primeira tarefa não `Aceito` abaixo. Atualizado: 2026-11-22. Cor da v1.1: **AMARELO** (nada construído; disco quase cheio e trabalho de desempenho sem commit).
+
+| ID | Tarefa | Dono | Status | Depende de / pronto quando |
+|---|---|---|---|---|
+| V0-01 | Liberar disco (I-05): 760 MB livres de 252 GB | CEO / fundador | Bloqueado | Sem isso commit e `pnpm` falham |
+| V0-02 | Commitar em marcos o desempenho pendente da API (20 arquivos, +480/-101, migração 0057) e BUG-029, 030, SEC-186, 189, 195 | backend-dev | A fazer | V0-01; árvore limpa |
+| V0-03 | Revisão de código do desempenho do backend | tech-lead | A fazer | V0-02; parecer escrito |
+| V0-04 | Revisão diferencial de segurança do mesmo conjunto (`plano-v1-1.md` §5) | security-engineer | A fazer | V0-02; parecer escrito |
+| V0-05 | BUG-031 e BUG-032 (`alerts.spec.tsx` com data fixa) | mobile-dev | A fazer | Teste estável 3 execuções |
+| V0-06 | Pendências de DoR do PO (WB-344 C4, WB-060 C1, SEC-194, perguntas do designer) | product-owner | A fazer | `plano-v1-1.md` §4 |
+| V0-07 | Telas R3 e R4 (rota, mapa, OK da loja, app do motoboy, rastreio) | product-designer | Em andamento | Uma onda à frente dos devs |
+| V0-08 | ADR do mapa/rota (spike L5, extrato Protomaps) e ADR do app courier | tech-lead | A fazer | G2 de R3 e R4 |
+| V0-09 | Base verde: e2e 3x, k6 `equivalencia.mjs`, regressão do G4 v1.0 | qa-engineer | A fazer | V0-03, V0-04, V0-05 |
+| R1.1 a R1.4 | R1: contrato, migrações, admin de lojas, cadastro rápido, coleta em staging, G4 local | backend-dev, mobile-dev, TL, SEC, QA | A fazer | V0-09; 18 histórias, 31,7 UT |
+| R2.1 a R2.4 | R2: motor de cupom, painéis prontos, acessos, G4 local | idem | A fazer | R1.4 ou contrato R2 (paralelo possível ao fim da R1.3); 37,0 UT |
+| R3.1 a R3.4 | R3: estados da entrega, OK da loja, rota, mapa, notificações, construtor | idem | A fazer | V0-08, SEC-196; 24,7 UT |
+| R4.0 | **SEC-193 e SEC-198** (bloqueantes da R4) | backend-dev + SEC | A fazer | R3.2 (391) |
+| R4.1 a R4.3 | R4: app do motoboy (`apps/courier`) e rastreio, G4 local | idem | A fazer | R4.0, ADR courier; Android real para fechar sem ressalva; 41,3 UT |
+| R5.1, R5.2 | R5: Análises pagas e IA `fake` | idem | A fazer | R1 (coleta) e R2; 12,3 UT |
+| VF-01 | Onda Final: congelar HEAD, reteste total, capturas, notas, relatório visual (`plano-v1-1.md` §7) | QA, designer, PM | A fazer | G4 local da última release; 12,3 UT |
+
+Flags desligadas em produção até parecer: `campanhas_cupom` (J22, J23, J27), `coleta_eventos` e `modulo_analises` (J24), `app_motoboy`, `rastreio_ao_vivo`, `saida_automatica` (J8, J26), `ia_visao_real` (J25, F8), `web_push_lojista`, `ean_base_externa`.
+
 ## RAID
 
 Escala: Probabilidade/Impacto = Alta, Média, Baixa. Datas no formato AAAA-MM-DD.
@@ -166,3 +191,20 @@ Escala: Probabilidade/Impacto = Alta, Média, Baixa. Datas no formato AAAA-MM-DD
 | R-28 | Risco | Relatório final curto (brief §8 item 7) não feito: DoD do brief incompleto na entrega | Média | Média | tech-lead / PM | T8-11; ver `checklist-dod.md` | Aberto (2026-11-20) |
 | A-09 | Ação | Reverificar SEC-187, SEC-188 e commits pós-RC; QA: reteste do RC e do tip | — | Alta | security-engineer / qa-engineer | Feito: `parecer-final-rc.md` (adendo em `036e791`) e `g4-final-tip.md` | Fechada (2026-11-20) |
 | A-10 | Ação | Fechar SEC-186 (Z4.1), SEC-189, BUG-031 e o relatório final | — | Média | backend-dev / mobile-dev / tech-lead | Z5.m1 feito. Relatório final antes da entrega; SEC-186 antes do piloto; SEC-189 antes de `LEGAL_REVIEWED=true` | A fazer (2026-11-20) |
+| I-05 | Problema | **Disco do ambiente a 99%** (760 MB livres de 252 GB; `node_modules` 1,8 GB, `.git` 252 MB): commit, `pnpm` e Docker podem falhar e perder trabalho não commitado | — | Alta | CEO / fundador | Ação: investigar o que ocupa (`du`), `pnpm store prune`, apagar exports e capturas fora do git | Gatilho: ENOSPC ou menos de 1 GB livre | Plano B: PMTiles, capturas e dumps nunca no git; mover para o armazenamento do projeto | Dono: CEO | Revisar em: 2026-11-23 | Aberto (2026-11-22) |
+| R-29 | Risco | Trabalho de desempenho do backend-dev (20 arquivos, +480/-101) **sem commit e sem revisão**, incluindo autenticação por SQL cru e `Cache-Control` global | Alta | Alta | backend-dev / tech-lead / security-engineer | Ação: commit em marcos, revisão diferencial (`plano-v1-1.md` §5) | Gatilho: arquivo ainda modificado ao iniciar a R1 | Plano B: branch `wip:` e reverter `principal.service.ts` e cabeçalhos globais se o parecer reprovar | Dono: backend-dev | Revisar em: 2026-11-23 | Aberto (2026-11-22) |
+| R-30 | Risco | Limite de uso e interrupções: 168 UT (faixa 122 a 234) sem data; R-04 agravado pelo tamanho | Alta | Alta | PM / CEO | Ação: marco de 1 UT, push imediato, redispatch pelo `git log` e pelo board | Gatilho: 2 interrupções na mesma onda ou onda com mais de 1,5x o previsto | Plano B: cortes de `plano-v1-1.md` §8 | Dono: PM | Revisar em: fim da W0 | Aberto (2026-11-22) |
+| R-31 | Risco | mobile-dev é gargalo único (cerca de 45% das UT: web, app e courier) | Alta | Média | CEO / PM | Ação: decisão D-A (2ª instância só em diretórios disjuntos) | Gatilho: fila do mobile-dev com mais de 2 ondas de atraso sobre o backend | Plano B: cortar na ordem DEC-100 | Dono: CEO | Revisar em: fim da R1.2 | Aberto (2026-11-22) |
+| R-32 | Risco | Parecer jurídico atrasado (J8, J22, J23, J24, J25, J26, J27): não impede construir, impede ligar; J22 também trava o piloto do v1.0 | Alta | Alta | Fundador | Ação: levar J22 a J27 em lote ao advogado (DEC-101) | Gatilho: release pronta sem parecer | Plano B: flag fica desligada; subir só o que não depende (cadastro rápido, admin de lojas, painéis); sem frete grátis nem coleta | Dono: fundador | Revisar em: 2026-11-29 | Aberto (2026-11-22) |
+| R-33 | Risco | Mapa sem rota real: heurística erra o ETA (gatilho DEC-096: erro > 10 min); tamanho do extrato Protomaps da Grande SP desconhecido (L5) | Média | Média | tech-lead / backend-dev | Ação: spike de 1 UT antes da R3; "abrir no Maps/Waze" já é a rota real | Gatilho: erro do ETA > 10 min, 3 ou mais motoboys ou 15 entregas por hora | Plano B: reduzir a área do extrato; linha reta marcada "aproximada"; pedir autorização para OSRM | Dono: tech-lead | Revisar em: antes da R3.1 | Aberto (2026-11-22) |
+| R-34 | Risco | GPS em segundo plano só se prova em **Android real**; o fundador testa em iPhone (`pnpm iphone`) e PWA foi descartado (DEC-097); build de APK exige Android SDK ou EAS na máquina `[HIPÓTESE]` | Alta | Alta | Fundador / mobile-dev | Ação: confirmar se há Android e como gerar o APK local | Gatilho: sem aparelho Android ao fim da R4.2 | Plano B: G4 da R4 "com ressalva: emulador"; concierge por WhatsApp na semana 0 do piloto; R4 desligada | Dono: fundador | Revisar em: antes da R4.1 | Aberto (2026-11-22) |
+| R-35 | Risco | Escopo: 61 histórias, 17 decisões F1 a F17, fundador pediu TUDO; pesquisa e PRD já geraram 6 PRDs | Alta | Alta | PO / CEO | Ação: histórias novas só com corte indicado; cortes sugeridos em `plano-v1-1.md` §8 | Gatilho: história nova depois da planning da release | Plano B: ordem de corte DEC-100 (piso nunca) | Dono: PO | Revisar em: fim de cada release | Aberto (2026-11-22) |
+| R-36 | Risco | Meta de cadastro em <= 60 s sem folga e sem usuário real (R-10 estendido): 25 a 38 s no feliz, 45 a 60 s com erro | Média | Alta | PO / fundador | Ação: teste com 5 pessoas do perfil; cronômetro do protótipo antes de codar | Gatilho: mediana > 60 s | Plano B: critério de morte do PRD (reduzir campos ou aceitar meta maior) | Dono: PO | Revisar em: fim da R1.3 | Aberto (2026-11-22) |
+| R-37 | Risco | Regressão do v1.0 congelado (`036e791`): a v1.1 altera RN-07/18/19 (`MOTOBOY_NA_LOJA`), WB-060 C1 e `Cache-Control`/auth da API | Média | Alta | QA / tech-lead | Ação: regressão do G4 v1.0 em toda release; migrações reversíveis atrás de flag | Gatilho: queda no e2e de regressão | Plano B: reverter a migração e manter flag desligada | Dono: QA | Revisar em: fim da R1.4 | Aberto (2026-11-22) |
+| D-11 | Dependência | Aparelho **Android** real e forma de gerar o APK (SDK local ou EAS) para a R4 | — | Alta | Fundador | Ver R-34 | Aberto (2026-11-22) |
+| D-12 | Dependência | Pareceres J8, J22 a J27 (estende D-06): só para ligar flags | — | Alta | Fundador / advogado | Ver R-32 | Aberto (2026-11-22) |
+| D-13 | Dependência | Decisões F2 (orçamento de cupom), F4 e cotação de motoboys (custo previsto), F5 (preço do módulo) | — | Média | Fundador | R2 usa orçamento R$ 0 por padrão (DEC-102) | Aberto (2026-11-22) |
+| D-14 | Dependência | 1 sessão do fundador por release (`pnpm iphone`, Docker Desktop) e 5 pessoas do perfil para o teste de 60 s; 5 lojistas para a porta falsa | — | Alta | Fundador | Agrupar numa janela por RC local | Aberto (2026-11-22) |
+| A-11 | Ação | Liberar disco antes da W0 (V0-01) | — | Alta | CEO / fundador | Ver I-05 | A fazer (2026-11-22) |
+| A-12 | Ação | Registrar BUG-032 (`alerts.spec.tsx` instável por data fixa) em `qa/bugs/` | — | Baixa | qa-engineer | Corrigir em V0-05 | A fazer (2026-11-22) |
+| A-13 | Ação | Decisões D-A a D-E de `plano-v1-1.md` §9 | — | Alta | CEO | Retorno do PM | A fazer (2026-11-22) |
