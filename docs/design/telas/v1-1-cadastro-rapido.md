@@ -1,7 +1,7 @@
 # Tela: Cadastro rápido de produto (celular)   (WB-370 a WB-375, WB-378, WB-379)
 
 > Autor: product-designer. Data: 2026-11-22. Status: proposta para G2. Release R1 (WB-373 e WB-378: R2 e R5, mesma tela).
-> Protótipo: `docs/prototipo/v1-1-lojista-e-admin.html#/l/produtos` (botão "Novo produto"; cronômetro na barra do protótipo). Em celular real, "Tirar foto" abre a câmera do aparelho.
+> Protótipo: `docs/prototipo/v1-1-lojista-e-admin.html#/l/produtos` (botão "Novo produto"; cronômetro na barra do protótipo). Em celular real, "Tirar foto" abre a câmera do aparelho. Barra do protótipo, em Estado: "Sem rede" (botão inerte), "Foto demora" (`UPLOAD_NOT_READY`; "Simular que passaram 30 s") e "Resposta perdida" (1º toque sem confirmação, 2º publica como sucesso).
 > Base: `prd/v1-1-cadastro-rapido.md`, `direcao-v3.md`, `design-system.md` §3.1b (VariationGrid, EarningsHint, PhotoPicker). Telas relacionadas: `v1-1-importar-colar.md`, `v1-1-edicao-em-massa.md`.
 
 ## 0. Decisões de UX (o CEO valida)
@@ -74,7 +74,7 @@ Mínimo para publicar (RN-Q1): nome, preço, 1 foto, quantidade (ou grade com es
 | "Guardar rascunho" ou fechar | Toast "Rascunho guardado. Continue quando quiser." Volta a Produtos > Rascunhos |
 | Categoria proibida | Recusa com o texto padrão do WB-060 C6 (PO fornece; não invento) |
 
-**Rascunho (WB-371).** Topo de Produtos: cartão noite "Continuar: Camiseta básica preta · Falta o preço · salvo há 2 h". Aba "Rascunhos (n)" separada dos ativos; cada linha mostra o que falta ("Falta a foto", "Falta o preço") e, aos 27 dias, "Será apagado em 3 dias". Limite 50: "Limite de 50 rascunhos. Publique ou apague algum para criar outro." Conflito entre 2 aparelhos: diálogo "Este rascunho foi alterado em outro aparelho às 14:10. Qual versão manter?" com "Manter a deste aparelho" e "Usar a do outro aparelho" (mostra nome e preço de cada uma). Rascunho nunca aparece ao cliente.
+**Rascunho (WB-371).** Topo de Produtos: cartão noite "Continuar: Camiseta básica preta · Falta o preço · salvo há 2 h". Aba "Rascunhos (n)" separada dos ativos; cada linha mostra o que falta ("Falta a foto", "Falta o preço") e, aos 27 dias, "Será apagado em 3 dias". Limite 100 (DEC-118): "Limite de 100 rascunhos. Publique ou apague algum para criar outro." Conflito entre 2 aparelhos: diálogo "Este rascunho foi alterado em outro aparelho às 14:10. Qual versão manter?" com "Manter a deste aparelho" e "Usar a do outro aparelho" (mostra nome e preço de cada uma). Rascunho nunca aparece ao cliente.
 
 ## 4. Grade tamanho x cor (WB-374, WB-375)
 
@@ -122,7 +122,12 @@ Botão "Sugerir pela foto" abaixo da foto (secundário). Carregando: "Analisando
 | Carregando | Formulário usável de imediato; categoria e modelo em skeleton até chegarem; foto mostra "Preparando a foto…" enquanto comprime; envio com barra "Enviando a foto… 60%" (anunciado a 25/50/75/100) |
 | Vazio (Produtos sem nenhum item) | Sacola da marca, "Sua vitrine está vazia", "Tire a foto de um produto para começar. Leva cerca de 1 minuto.", botão "Novo produto" + link "Colar lista do WhatsApp" |
 | Erro ao publicar (servidor) | Aviso no topo "Não conseguimos publicar agora. Seu produto está guardado. Tente de novo." + botão "Tentar de novo" |
-| Sem rede | Faixa "Sem internet: vamos enviar quando voltar." O botão vira "Guardar para enviar depois"; vai a Rascunhos com selo "Na fila para enviar"; sincroniza ao voltar |
+| Sem rede (DEC-126: **sem fila offline**) | Faixa "Sem internet. O que você digitou fica neste aparelho; publique quando voltar." "Publicar" e "Novo produto" ficam **inertes (`aria-disabled`, sem mudar de cor para "morto")**: ao tocar, mensagem "Sem internet. Conecte para publicar." (`role=alert`), nada é enviado e nada se perde. Sem selo "Na fila" e sem envio automático: ao voltar a rede, o lojista toca em "Publicar" e publica uma vez só. A **cópia local do formulário protege só contra recarga** da aba (volta da câmera), não é fila. Foto em envio pausa com "Sem internet. Conecte para enviar a foto." |
+| Publicando (WB-370 C3, C14) | Toque em "Publicar" com tudo válido: o botão vira "Publicando…" (`aria-busy`, `aria-disabled`, mesma largura; segundo toque é ignorado), anúncio "Publicando…". É **uma chamada só, tudo ou nada**: se qualquer regra falhar, nada é gravado e o formulário fica como estava |
+| Foto ainda enviando (`UPLOAD_NOT_READY`, C6) | O servidor ainda não terminou a foto. **Sem erro:** tela "Foto ainda enviando…" + "Falta pouco. Publicamos sozinho quando terminar. Você não perde o que digitou." O app repete com a mesma chave por até 30 s. Passou de 30 s: aviso "A foto está demorando. Tente publicar de novo." + botão "Publicar de novo"; nada se perde |
+| Resposta perdida (C15) | 1º toque sem resposta (rede caiu): "Não recebemos a confirmação. Toque em Publicar de novo: não vai duplicar." O 2º toque recebe conflito (409): o app consulta o produto e, se está ATIVO com os dados digitados, mostra **"Publicado" como sucesso, sem erro e sem citar conflito**. Se está ATIVO com outros dados: "Este produto já está publicado" (C16) com "Ver produto" `[proposta; PO valida]` |
+| Grade preenchida (C16) | "Publicar" segue o caminho da grade; o lojista não vê nenhuma diferença nem erro técnico |
+| Regra recusada (C17) | Erro no campo certo (nome, preço, descrição, categoria) com o texto do campo; o produto continua rascunho |
 | Sucesso | Tela "Publicado" (§3). Pausa de moderação: "Enviado para análise. Aparece na vitrine depois da aprovação." (se WB-107 se aplicar; PO confirma) |
 | Permissão negada (câmera) | "Sem acesso à câmera. Escolha uma foto da galeria." + "Como liberar" (passo a passo) |
 | Sem permissão de catálogo (funcionário) | "Você não tem acesso a Produtos. Peça ao dono da loja para liberar o catálogo para você." |
@@ -197,7 +202,7 @@ Do PRD: `product_create_started`, `photo_captured`, `product_create_published` (
 
 | Para | Pergunta |
 |---|---|
-| PO | 1. Foto por cor dentro de um produto com grade (moda): entra na v1.1 ou "Duplicar" basta? 2. Descrição opcional vale também para categorias de risco (cosméticos, eletrônicos)? 3. Texto padrão de "categoria proibida" (WB-060 C6) 4. Valor de `variacoes_max` 5. Moderação deixa o produto "em análise" ou ativo? |
+| PO | 1. Foto por cor dentro de um produto com grade (moda): entra na v1.1 ou "Duplicar" basta? 2. Descrição opcional vale também para categorias de risco (cosméticos, eletrônicos)? 3. Texto padrão de "categoria proibida" (WB-060 C6) 4. Valor de `variacoes_max` 5. Moderação deixa o produto "em análise" ou ativo? 6. Sem rede, "Guardar rascunho" também fica inerte ("Sem internet. Conecte para guardar.")? Assumi que sim, por coerência com DEC-126 (C8 só cita "Publicar" e "Novo produto"). 7. Texto da resposta perdida no 1º toque e do 409 com dados diferentes (C15 só cobre dados iguais): proponho os do §7 |
 | mobile-dev / tech-lead | 5. Leitor no Safari: biblioteca e licença; 6. Rascunho local: IndexedDB, limite e limpeza; 7. A aba recarrega ao voltar da câmera nos 3 aparelhos do T1? |
 | Security | 8. Rascunho no aparelho guarda nome e preço sem login por quanto tempo? Limpar ao sair da conta? 9. Texto do consentimento da IA e do aviso de EXIF removido |
 | backend-dev | 10. Compressão e remoção de EXIF no cliente ou no servidor |

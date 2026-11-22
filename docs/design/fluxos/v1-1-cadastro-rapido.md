@@ -28,12 +28,21 @@ flowchart TD
   V -->|Nao| V1[Erro no campo, foca o primeiro] --> E
   V -->|Categoria proibida| V2[Recusa com texto padrao] --> E
   V -->|Sim| N{Rede?}
-  N -->|Sem rede| N1[Guarda para enviar depois<br/>fila no aparelho] --> LST[Produtos > Rascunhos]
-  N -->|Servidor falhou| N2[Nao conseguimos publicar agora.<br/>Produto guardado] --> H
+  N -->|Sem rede| N1[Botao inerte com motivo:<br/>Sem internet. Conecte para publicar.<br/>Formulario fica na copia local<br/>so contra recarga, sem fila] --> H
   N -->|OK| U{Foto terminou de subir?}
   U -->|Nao| U1[Enviando a foto 60%<br/>publica sozinho] --> U
-  U1 -->|Sair| BG[Segue em segundo plano] --> LST
-  U -->|Sim| P[Publicado]
+  U1 -->|Sair| BG[Segue em segundo plano] --> LST[Produtos > Rascunhos]
+  U -->|Sim| Q[Publicando...<br/>quickPublish: 1 chamada, tudo ou nada]
+  Q -->|Publicado| P[Publicado]
+  Q -->|Regra recusada| V1
+  Q -->|Servidor falhou| N2[Nao conseguimos publicar agora.<br/>Produto guardado] --> H
+  Q -->|UPLOAD_NOT_READY| Q1[Foto ainda enviando<br/>repete sozinho, sem erro, ate 30 s]
+  Q1 -->|Terminou| Q
+  Q1 -->|Passou de 30 s| Q2[A foto esta demorando.<br/>Publicar de novo] --> H
+  Q -->|Sem resposta| Q3[Nao recebemos a confirmacao.<br/>Toque em Publicar de novo] --> H
+  H -->|2o toque: 409 de versao| Q4[App consulta o produto] --> Q5{ATIVO com os mesmos dados?}
+  Q5 -->|Sim| P
+  Q5 -->|Ja publicado, outros dados| Q6[Este produto ja esta publicado] --> LST
   P --> P1[Cadastrar outro] --> B
   P --> P2[Duplicar este<br/>sem fotos, EAN, SKU] --> C
   P --> P3[Ver meus produtos]
@@ -50,8 +59,8 @@ flowchart TD
   TB --> X{Rascunho parado}
   X -->|27 dias| W[Sera apagado em 3 dias]
   X -->|30 dias| DEL[Removido]
-  L --> NEW[Novo produto] --> LIM{50 rascunhos?}
-  LIM -->|Sim| LIM1[Limite de 50 rascunhos.<br/>Publique ou apague] --> TB
+  L --> NEW[Novo produto] --> LIM{100 rascunhos?}
+  LIM -->|Sim| LIM1[Limite de 100 rascunhos.<br/>Publique ou apague] --> TB
   LIM -->|Nao| OK[Segue o cadastro]
   F --> SV[Salvar] --> CF{Alterado em outro aparelho?}
   CF -->|Sim| CF1[Qual versao manter?<br/>deste aparelho / do outro] --> F
@@ -73,15 +82,19 @@ flowchart TD
   L -->|OK| R[Revisar: cartao por linha]
   P1 --> M[Qual coluna e cada coisa?] --> R
   P1 -->|Arquivo invalido| E4[Nao conseguimos ler o arquivo] --> P1
-  R --> J{Linhas parecem o mesmo produto?}
-  J -->|Sim| J1[Juntar em 1 com tamanhos] --> R
-  R --> FIX[Corrige preco, nome, qtd<br/>selo Pronta / Falta o preco]
+  R --> J{Mesmo produto e mesma cor?}
+  J -->|Sim| J1[Sugere juntar em 1 com tamanhos<br/>nunca junta sozinho] --> R
+  J -->|Cores diferentes| J2[Sem sugestao: produtos separados] --> R
+  R --> CF[Avisos: Linha cortada, Lemos N como tamanho,<br/>Mais de um preco, estoque na ultima linha<br/>todos com Confira]
+  CF --> FIX[Corrige preco, nome, qtd<br/>selo Pronta / Confira / Falta o preco]
+  R --> FIX
   FIX --> CR[Criar N rascunhos]
+  CR -->|Espaco menor que a lista| CR2[Voce tem espaco para N rascunhos<br/>Criar so os N primeiros] --> FT
   CR --> FT[Tirar as fotos: Foto em cada linha]
   FT --> PB{Publicar os validos n}
   PB -->|n = 0| PB1[Nenhum produto pronto.<br/>Tire as fotos primeiro] --> FT
   PB -->|n maior que 0| PB2[Publica os completos<br/>demais ficam rascunho] --> LST[Produtos]
-  CR -->|Sem rede| CR1[Guarda no aparelho<br/>envia quando voltar] --> LST
+  CR -->|Sem rede| CR1[Botao inerte com motivo<br/>texto colado fica no aparelho por 24 h] --> R
 ```
 
 ## 4. Edição em massa
@@ -95,6 +108,7 @@ flowchart TD
   VL -->|Preco fora do limite| VL1[Erro na linha, valor anterior fica]
   VL -->|Estoque menor que reservado| VL2[Estoque menor que o reservado N]
   VL -->|Conflito| VL3[Produto alterado agora: ver valor novo]
+  VL -->|Sem rede| VL4[Nao salvou: sem internet<br/>Tentar de novo; valor digitado fica]
   VL -->|OK| SV[Salvo na linha + voce recebe]
   ED --> SEL[Seleciona produtos] --> BAR[Barra: Reajustar preco / Pausar]
   BAR --> RJ[Reajuste: tipo, sinal, valor] --> PV[Previa: antes, depois, voce recebe]

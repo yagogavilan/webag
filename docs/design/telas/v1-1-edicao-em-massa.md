@@ -38,7 +38,7 @@
 | Carregando | Skeleton de 5 cartões com o formato real |
 | Vazio | "Nenhum produto para editar. Cadastre o primeiro produto para ajustar preço e estoque aqui." [Ir para Produtos] |
 | Erro | "Não conseguimos carregar agora. Seus dados estão salvos. Tente de novo em instantes." |
-| Sem rede | Faixa "Sem conexão. Mostrando o que já carregou." Campos seguem editáveis; a linha mostra "Na fila: salva quando voltar a internet"; reajuste em massa **fica inerte com o motivo escrito** (precisa de rede para a prévia do servidor) |
+| Sem rede | Faixa "Sem conexão. Mostrando o que já carregou." Campos seguem editáveis, mas **nada fica em fila** (DEC-126): a linha mostra "Não salvou: sem internet." com o botão "Tentar de novo" (WB-377 C1) e o valor digitado permanece; nunca aparece "Salvo". Reajuste em massa **fica inerte com o motivo escrito** ("Sem internet. Conecte para reajustar.": precisa de rede para a prévia do servidor) |
 | Sucesso | "Salvo" por linha; aviso de desfazer no reajuste |
 | Somente leitura (funcionário sem permissão de catálogo, C6) | Campos e caixas desabilitados; faixa "Você pode ver, mas não editar. Peça ao dono da loja para liberar o catálogo." |
 | Conflito (outro aparelho mudou o produto) | Na linha: "Este produto foi alterado agora. Toque para ver o valor novo." sem sobrescrever |
