@@ -45,7 +45,7 @@ Todas criadas pelo seed. **Nunca existem em produção** (o seed de produção s
 
 | Perfil | E-mail | Senha | Observação |
 |---|---|---|---|
-| Admin (super admin) | `admin@webag.local` | `SEED_ADMIN_PASSWORD` do seu `.env` (o `pnpm run setup` gera uma aleatória e a mostra no fim; com `CI=true` ou `WEBAG_FIXED_DEV_SECRETS=1` vale `Webag-Admin-Dev-2026`) | No 1º login o painel exige o 2º fator (ver abaixo) |
+| Admin (super admin) | `admin@webag.local` | `SEED_ADMIN_PASSWORD` do seu `.env` (o `pnpm run setup` gera uma aleatória, a mostra no fim e o `pnpm iphone` a repete no recado; com `CI=true` ou `WEBAG_FIXED_DEV_SECRETS=1` vale `Webag-Admin-Dev-2026`) | No 1º login o painel exige o 2º fator (ver abaixo) |
 | Lojista (dono) | `lojista.mercadinho-boa-compra@seed.webag.local` | `webag-seed-lojista-2026` | Há 12 lojas: troque o final pelo nome da loja (`lojista.farmacia-saude-ja@...`, `lojista.pet-shop-amigo-fiel@...`, `lojista.padaria-pao-quente@...` etc.; lista em `apps/api/seed/onda2.ts` e `onda3.ts`) |
 | Lojista (funcionário) | `funcionario.mercadinho-boa-compra@seed.webag.local` | `webag-seed-lojista-2026` | Só pedidos e catálogo; não vê financeiro, equipe nem configurações. Uma por loja |
 | Cliente | `cliente.ana@seed.webag.local` | `webag-seed-lojista-2026` | Também `bruno`, `carla`, `diego`, `elisa`, `fabio`. Endereço em Francisco Morato; cada um já tem pedidos de demonstração |

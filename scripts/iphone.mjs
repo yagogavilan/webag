@@ -2,7 +2,7 @@
 // `pnpm iphone`: deixa o Webag pronto para abrir no iPhone (Safari) pela rede Wi-Fi da sua casa e sobe tudo.
 //   1. descobre o endereço (IPv4) deste computador na rede local (macOS, Windows e Linux; ignora Docker, VPN e redes virtuais);
 //   2. grava no `.env` (com cópia do original em `.env.bak`, criada só uma vez, de forma idempotente) só os ENDEREÇOS que o celular precisa; nenhum segredo é lido nem escrito;
-//   3. confere Docker, banco e portas 3000, 3001 e 8081;
+//   3. confere Docker, banco e portas 3000, 3001 e 8081 e abre na rede só a 9000 do armazenamento (fotos; STORAGE_BIND=0.0.0.0);
 //   4. sobe API + site/painéis + app (reaproveita `pnpm dev`) e imprime o endereço para o Safari, os logins e como simular o pagamento.
 // Uso: pnpm iphone [--ip 192.168.0.10] [--check] [--help]
 //   --ip <IPv4>  usa este endereço em vez do detectado (se houver mais de uma rede, ou se a detecção errar)
@@ -27,8 +27,23 @@ export const PORTS = { api: 3000, web: 3001, app: 8081, storage: 9000 };
 export const SAFETY_NOTICE = [
   'ATENÇÃO: use SÓ no Wi-Fi da sua casa. Não use em Wi-Fi público, de convidados, de café, faculdade ou trabalho.',
   `Enquanto o Webag estiver rodando, qualquer aparelho deste Wi-Fi consegue abrir o ambiente de teste (portas ${PORTS.api} API, ${PORTS.web} site e painéis, ${PORTS.app} app, ${PORTS.storage} fotos).`,
+  `Só essas portas (${PORTS.api}, ${PORTS.web}, ${PORTS.app} e ${PORTS.storage} das fotos) ficam na rede; banco, Redis, e-mail de teste e console do armazenamento só abrem neste computador.`,
   'Ao terminar: Ctrl+C nesta janela e, para desligar o banco, pnpm infra:down.',
 ];
+
+/** Serviços de apoio do compose que o `pnpm iphone` precisa no ar. */
+export const DOCKER_SERVICES = ['postgres', 'redis', 'mailpit', 'storage'];
+
+/**
+ * O que subir no Docker. Fora do `--check`, o armazenamento é SEMPRE recriado com STORAGE_BIND=0.0.0.0 (o `up -d` recria só se a
+ * publicação da porta 9000 mudou), para o iPhone alcançar as fotos (SEC-190). Postgres, Redis, Mailpit e a 9001 não dependem da
+ * variável e seguem em 127.0.0.1. No `--check` nada é aberto na rede: sobe só o que falta, com o padrão (127.0.0.1).
+ */
+export function dockerUpPlan({ running = new Set(), check = false } = {}) {
+  const missing = DOCKER_SERVICES.filter((service) => !running.has(service));
+  if (check) return { services: missing, env: {} };
+  return { services: DOCKER_SERVICES.filter((service) => service === 'storage' || missing.includes(service)), env: { STORAGE_BIND: '0.0.0.0' } };
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Funções puras (testadas em scripts/iphone.test.mjs)
@@ -185,7 +200,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function buildBanner({ ip, expoSdk, withExpoGo = true, qrSafari = '', qrExpo = '', platform = process.platform, title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
+export function buildBanner({ ip, expoSdk, adminPassword, withExpoGo = true, qrSafari = '', qrExpo = '', platform = process.platform, title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
   const indent = (qr) => (qr ? ['', ...qr.trimEnd().split('\n').map((row) => `        ${row}`), ''] : []);
   const web = `http://${ip}:${PORTS.app}`;
   const line = '='.repeat(72);
@@ -220,7 +235,12 @@ export function buildBanner({ ip, expoSdk, withExpoGo = true, qrSafari = '', qrE
     '  3) Logins de demonstração (só desenvolvimento):',
     '        Cliente   cliente.ana@seed.webag.local            senha: webag-seed-lojista-2026',
     '        Lojista   lojista.mercadinho-boa-compra@seed.webag.local   mesma senha',
-    `        Painéis   http://${ip}:${PORTS.web}/lojista/entrar   e   /admin/entrar (admin@webag.local, pede 2º fator: veja o README)`,
+    '        (as senhas de cliente e lojista são públicas, só de demonstração)',
+    `        Painéis   http://${ip}:${PORTS.web}/lojista/entrar   e   http://${ip}:${PORTS.web}/admin/entrar`,
+    adminPassword
+      ? `        Admin     admin@webag.local   senha: ${adminPassword}   (aleatória; também está em SEED_ADMIN_PASSWORD no .env)`
+      : '        Admin     admin@webag.local   senha: a SEED_ADMIN_PASSWORD do seu .env (aleatória, gerada pelo setup)',
+    '                  Cadastre o 2º fator (autenticador) JÁ NO PRIMEIRO login: sem isso, quem estiver no Wi-Fi pode cadastrar o dele antes de você. Passo a passo no README.',
     '',
     '  4) Como concluir uma compra de mentira (nada é cobrado):',
     '        Escolha a cidade > uma loja > produto > sacola > finalizar com PIX.',
@@ -504,10 +524,10 @@ async function main() {
       ]);
     }
     const running = new Set((run('docker', ['compose', 'ps', '--status', 'running', '--services']).stdout ?? '').split(/\s+/).filter(Boolean));
-    const needed = ['postgres', 'redis', 'mailpit', 'storage'].filter((service) => !running.has(service));
-    if (needed.length > 0) {
-      step(`subindo no Docker: ${needed.join(', ')} (os dados anteriores são mantidos)...`);
-      const up = run('docker', ['compose', 'up', '-d', '--wait', ...needed], { stdio: 'inherit' });
+    const plan = dockerUpPlan({ running, check: options.check });
+    if (plan.services.length > 0) {
+      step(`subindo no Docker: ${plan.services.join(', ')} (os dados anteriores são mantidos${plan.env.STORAGE_BIND ? '; o armazenamento é recriado para abrir só a porta 9000 de fotos na rede' : ''})...`);
+      const up = run('docker', ['compose', 'up', '-d', '--wait', ...plan.services], { stdio: 'inherit', env: { ...process.env, ...plan.env } });
       if (up.status !== 0) {
         fail('o Docker não conseguiu subir o banco e os serviços de apoio.', [
           'Veja a mensagem acima. Causa mais comum: a porta 5432 (Postgres) ou 6379 (Redis) já é usada por outro programa.',
@@ -518,6 +538,12 @@ async function main() {
     const users = run('docker', ['compose', 'exec', '-T', 'postgres', 'psql', '-U', current.POSTGRES_USER ?? 'webag', '-d', current.POSTGRES_DB ?? 'webag', '-tAc', 'select count(*) from users']);
     if (users.status !== 0 || Number((users.stdout ?? '').trim()) < 1) {
       fail('o banco está vazio (o setup ainda não foi feito neste computador).', ['Rode: pnpm run setup', 'Depois: pnpm iphone']);
+    }
+    if (plan.env.STORAGE_BIND) {
+      const published = (run('docker', ['compose', 'port', 'storage', '9000']).stdout ?? '').trim();
+      if (published && !/^(0\.0\.0\.0|\[::\]):9000/.test(published)) {
+        step(`AVISO: a porta 9000 (fotos) ainda está publicada só em ${published}; as fotos das lojas não vão carregar no iPhone. Rode: pnpm infra:down e depois pnpm iphone de novo.`);
+      }
     }
     step('Docker e banco de dados no ar, com os dados de demonstração');
   }
@@ -552,7 +578,7 @@ async function main() {
   const qrExpo = await makeQr(`exp://${ip}:${PORTS.app}`);
 
   if (options.check) {
-    say(buildBanner({ ip, expoSdk, qrSafari, qrExpo, title: 'CONFERIDO (nada foi iniciado). Quando subir, o endereço do iPhone será este:' }));
+    say(buildBanner({ ip, expoSdk, adminPassword: current.SEED_ADMIN_PASSWORD, qrSafari, qrExpo, title: 'CONFERIDO (nada foi iniciado). Quando subir, o endereço do iPhone será este:' }));
     step('--check: tudo conferido; nada foi iniciado. Para subir: pnpm iphone');
     return;
   }
@@ -607,7 +633,7 @@ async function main() {
   if (!warmed) {
     say(`\n[iphone] AVISO: o app ainda não terminou de ser montado (passaram ${WARMUP_MS / 60_000} minutos ou ele deu erro; veja as mensagens acima). A 1ª abertura no iPhone pode demorar ou ficar em branco: espere um pouco e recarregue a página.`);
   }
-  say(buildBanner({ ip, expoSdk, qrSafari, qrExpo, title: warmed ? undefined : 'WEBAG NO AR (o app ainda pode estar sendo montado). ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }));
+  say(buildBanner({ ip, expoSdk, adminPassword: current.SEED_ADMIN_PASSWORD, qrSafari, qrExpo, title: warmed ? undefined : 'WEBAG NO AR (o app ainda pode estar sendo montado). ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }));
 }
 
 if (isMainModule(process.argv[1], import.meta.url)) {

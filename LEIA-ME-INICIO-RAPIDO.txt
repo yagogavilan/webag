@@ -38,13 +38,17 @@ sao de demonstracao: nada e cobrado.
    toque em "Simular pagamento". Pronto: pedido recebido.
    (Lojista: lojista.mercadinho-boa-compra@seed.webag.local, mesma senha,
     em http://SEU-IP:3001/lojista/entrar)
+   Essas senhas de cliente e lojista sao publicas, so de demonstracao.
+   ADMIN (http://SEU-IP:3001/admin/entrar, admin@webag.local): a senha e ALEATORIA,
+   fica no arquivo .env como SEED_ADMIN_PASSWORD e o terminal tambem a mostra.
+   Cadastre o 2o fator (autenticador) JA NO PRIMEIRO login: veja o README, "Segundo fator do admin".
 
 PARAR: Ctrl+C na janela.   VOLTAR OUTRO DIA: abra o Docker Desktop e rode "pnpm iphone".
 
 SE O IPHONE NAO ABRE: confira o mesmo Wi-Fi (nada de "convidados" ou dados moveis) e
 no aviso do firewall marque so "Redes privadas" (guia, secao 6, tem a regra restrita; nao desligue o firewall).
 USE SO NO WI-FI DA SUA CASA: enquanto roda, qualquer aparelho do mesmo Wi-Fi acessa o Webag
-de teste (portas 3000, 3001, 8081 e 9000). Nao use em Wi-Fi publico, de cafe, faculdade ou trabalho.
+de teste (so as portas 3000, 3001, 8081 e 9000; banco e Redis ficam so no computador). Nao use em Wi-Fi publico, de cafe, faculdade ou trabalho.
 Se o computador tiver mais de uma rede:  pnpm iphone --ip <IP do seu Wi-Fi>
 Mais problemas e solucoes: docs/guias/rodar-no-meu-computador.md (secao 6).
 

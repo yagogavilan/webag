@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   SAFETY_NOTICE,
   buildBanner,
+  dockerUpPlan,
   envUpdates,
   findBundlePaths,
   firewallHelp,
@@ -178,4 +179,28 @@ test('SEC-191: aviso de "só no Wi-Fi de casa" com as portas no recado final; fi
   }
   assert.ok(firewallHelp('win32').join('\n').includes('-Profile Private -RemoteAddress LocalSubnet'));
   assert.ok(firewallHelp('darwin').join('\n').includes('"node"'));
+});
+
+test('SEC-190: fora do --check o armazenamento é sempre recriado com STORAGE_BIND=0.0.0.0; no --check nada abre na rede', () => {
+  const all = new Set(['postgres', 'redis', 'mailpit', 'storage']);
+  assert.deepEqual(dockerUpPlan({ running: all }), { services: ['storage'], env: { STORAGE_BIND: '0.0.0.0' } });
+  assert.deepEqual(dockerUpPlan({ running: new Set() }).services, ['postgres', 'redis', 'mailpit', 'storage']);
+  assert.deepEqual(dockerUpPlan({ running: new Set(['postgres', 'storage']) }).services, ['redis', 'mailpit', 'storage']);
+  assert.deepEqual(dockerUpPlan({ running: all, check: true }), { services: [], env: {} });
+  assert.deepEqual(dockerUpPlan({ running: new Set(['redis']), check: true }), { services: ['postgres', 'mailpit', 'storage'], env: {} });
+});
+
+test('SEC-190: o aviso diz que só 3000, 3001, 8081 e 9000 ficam na rede', () => {
+  assert.ok(SAFETY_NOTICE.join(' ').includes('banco, Redis, e-mail de teste e console do armazenamento só abrem neste computador'));
+});
+
+test('SEC-192: recado mostra a senha aleatória do admin, o 2º fator no 1º login e as senhas públicas de lojista e cliente', () => {
+  const banner = buildBanner({ ip: '192.168.0.10', expoSdk: '58', adminPassword: 'Wb-exemplo-7' });
+  assert.ok(banner.includes('senha: Wb-exemplo-7'));
+  assert.ok(banner.includes('SEED_ADMIN_PASSWORD'));
+  assert.ok(banner.includes('2º fator'));
+  assert.ok(banner.includes('públicas'));
+  assert.ok(!banner.includes('Webag-Admin-Dev-2026'));
+  const sem = buildBanner({ ip: '192.168.0.10', expoSdk: '58' });
+  assert.ok(sem.includes('SEED_ADMIN_PASSWORD do seu .env'));
 });

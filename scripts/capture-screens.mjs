@@ -10,7 +10,7 @@
 // servido por um servidor estático local), e encerra o que subiu. Para usar o que já está rodando, informe APP_URL e/ou WEB_URL.
 //
 // Variáveis: API_URL (http://localhost:3000), WEB_URL (sobe em :3101), APP_URL (sobe em :8081), REAL_DB_URL (ajuste dos pedidos de
-// demonstração: atrasado e dentro do prazo; só em banco local), SEED_PASSWORD, ADMIN_EMAIL/ADMIN_PASSWORD, OUT_DIR (docs/telas),
+// demonstração: atrasado e dentro do prazo; só em banco local), SEED_PASSWORD, ADMIN_EMAIL/ADMIN_PASSWORD (sem ADMIN_PASSWORD, lê SEED_ADMIN_PASSWORD do .env da raiz), OUT_DIR (docs/telas),
 // ONLY (app,lojista,admin,site), PW_CHANNEL=chrome (usa o Chrome instalado se o Chromium do Playwright não existir), REUSE_APP_BUILD=1 e REUSE_WEB_BUILD=1 (não refazem o build do app web e do site).
 // Efeito colateral temporário (banco local, dados fictícios; desfeito ao terminar): faixa de entrega de 2 pedidos do seed, data de entrega de 1 pedido,
 // 1 cupom pessoal, o estado de 1 loja e o horário de outra. O script cria (uma vez) 2 clientes de demonstração `telas.compra@` e `telas.exclusao@` (como o `pnpm smoke`).
@@ -35,7 +35,16 @@ let APP = (process.env.APP_URL ?? '').replace(/\/+$/, '');
 const DB = process.env.REAL_DB_URL ?? 'postgresql://webag:webag_dev_only@localhost:5432/webag';
 const SEED_PASSWORD = process.env.SEED_PASSWORD ?? 'webag-seed-lojista-2026';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@webag.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'Webag-Admin-Dev-2026';
+/** SEED_ADMIN_PASSWORD do `.env` da raiz (aleatória, gerada pelo `pnpm run setup`); undefined se não houver. */
+function rootEnvAdminPassword() {
+  try {
+    const line = readFileSync(join(ROOT, '.env'), 'utf8').split(/\r?\n/).findLast((l) => /^\s*SEED_ADMIN_PASSWORD\s*=/.test(l));
+    return line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2') || undefined;
+  } catch {
+    return undefined;
+  }
+}
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? rootEnvAdminPassword() ?? 'Webag-Admin-Dev-2026';
 const CUSTOMER = 'cliente.ana@seed.webag.local';
 const MERCHANT = 'lojista.mercadinho-boa-compra@seed.webag.local';
 const ONLY = new Set((process.env.ONLY ?? 'app,lojista,admin,site').split(',').map((s) => s.trim()).filter(Boolean));

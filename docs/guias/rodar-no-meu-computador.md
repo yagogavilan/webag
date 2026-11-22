@@ -65,7 +65,7 @@ pnpm iphone
 
 `pnpm iphone --check` confere tudo e mostra o endereço e o que mudaria no `.env`, sem subir o app e **sem alterar o `.env`** (só leitura). O `pnpm iphone` normal grava o `.env` e guarda o original em `.env.bak` (criado uma única vez, não é sobrescrito nas execuções seguintes).
 
-**Segurança (leia):** use o `pnpm iphone` **só no Wi-Fi da sua casa**. Enquanto ele roda, qualquer aparelho do mesmo Wi-Fi consegue abrir o Webag de teste (portas 3000 API, 3001 site e painéis, 8081 app e 9000 fotos). Não use em Wi-Fi público, de convidados, de café, faculdade ou trabalho. O script repete este aviso no início e no fim. "Rede privada" no Windows é só para a rede de casa. Ao terminar: `Ctrl+C` e `pnpm infra:down`.
+**Segurança (leia):** use o `pnpm iphone` **só no Wi-Fi da sua casa**. Enquanto ele roda, qualquer aparelho do mesmo Wi-Fi consegue abrir o Webag de teste (portas 3000 API, 3001 site e painéis, 8081 app e 9000 fotos). Só essas quatro ficam na rede: o `pnpm iphone` recria o armazenamento de fotos para abrir a 9000, e banco, Redis, e-mail de teste e console do armazenamento continuam só neste computador. Não use em Wi-Fi público, de convidados, de café, faculdade ou trabalho. O script repete este aviso no início e no fim. "Rede privada" no Windows é só para a rede de casa. Ao terminar: `Ctrl+C` e `pnpm infra:down`.
 
 ## 4. No iPhone
 
@@ -83,7 +83,9 @@ pnpm iphone
 |---|---|---|
 | Cliente | `cliente.ana@seed.webag.local` (também `bruno`, `carla`, `diego`, `elisa`, `fabio`) | `webag-seed-lojista-2026` |
 | Lojista | `lojista.mercadinho-boa-compra@seed.webag.local` | `webag-seed-lojista-2026` |
-| Admin | `admin@webag.local` | `Webag-Admin-Dev-2026` (pede o 2º fator; veja o `README.md`) |
+| Admin | `admin@webag.local` | **Aleatória**: está no `.env` como `SEED_ADMIN_PASSWORD` (o `pnpm run setup` a mostra no fim e o `pnpm iphone` a imprime no recado). Não é a de lojista e cliente |
+
+As senhas de **cliente e lojista** são públicas (`webag-seed-lojista-2026`) e só servem para demonstração. A do **admin** não é: como qualquer aparelho do Wi-Fi alcança o painel enquanto o `pnpm iphone` roda, ela é gerada só para o seu computador (se o seu `.env` é anterior a isso, o setup avisa; para trocar, `pnpm infra:down -v`, apague o `.env` e rode `pnpm run setup`, o que apaga os dados locais). No **primeiro login** o admin precisa cadastrar o 2º fator (autenticador): faça isso **logo**, antes de qualquer outra pessoa do Wi-Fi; passo a passo em "Segundo fator do admin" no `README.md`.
 
 Cupons: `BEMVINDO10`, `FRETEGRATIS`, `LOJA5`.
 
