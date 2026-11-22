@@ -1,0 +1,28 @@
+  [info] produto escolhido: "Banana prata (kg)", presente em 3/4 superfícies: {"home":"absent","vitrine":"present","pagina":"present","busca":"present"}
+PASS  E1 | moderação REMOVE o produto com tudo quente: some de vitrine, pagina, busca em até 5 s  [HTTP 200 em 12 ms; home=126ms vitrine=131ms pagina=136ms busca=158ms]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/item-unavailable","title":"Produto indisponível","status":422,"detail":"Esse produto não está à venda agora.","code":"ITEM_UNAVAILABLE"}
+PASS  E1b | com o produto removido a sacola recusa (checkout lê o banco)  [HTTP 422 ITEM_UNAVAILABLE]
+N/T   E1d | INFORMATIVO: a página por id de produto REMOVIDO segue respondendo 200 com available=false (igual com o cache desligado); descrição e fotos ainda vêm no corpo?  [available=false motivo=MODERATED descricao=false fotos=0]
+PASS  E1c | moderação RESTAURA: volta a aparecer em até 5 s  [HTTP 200; vitrine=144ms pagina=149ms busca=166ms home=>12s]
+PASS  E2 | moderação PAUSA o produto: some de vitrine, pagina, busca em até 5 s  [HTTP 200; home=92ms vitrine=96ms pagina=99ms busca=115ms]
+PASS  E2b | restaurar depois da pausa: volta em até 5 s  [vitrine=104ms pagina=108ms busca=125ms home=>12s]
+PASS  E3 | loja SUSPENSA com tudo quente: some de home, vitrine, pagina, busca em até 5 s  [HTTP 200; home=29ms vitrine=32ms pagina=34ms busca=36ms]
+  [aviso] PUT /v1/cart/items devolveu HTTP 404 {"type":"https://api.webag.com.br/errors/not-found","title":"Não encontrado","status":404,"detail":"Produto não encontrado.","code":"NOT_FOUND"}
+PASS  E3c | sacola recusa item de loja suspensa  [HTTP 404 NOT_FOUND]
+PASS  E3d | loja REATIVADA: volta em até 5 s  [HTTP 200; home=35ms vitrine=41ms pagina=44ms busca=46ms]
+PASS  E6-offers | produto de "offers" removido pela moderação some da home em até 5 s (cache da seção é de 60 s)  [HTTP 200; home=111ms]
+PASS  E6-bestSellers | produto de "bestSellers" removido pela moderação some da home em até 5 s (cache da seção é de 60 s)  [HTTP 200; home=102ms]
+PASS  E7 | corrida: leitores concorrentes antes e depois da moderação; nenhuma resposta iniciada após o retorno traz o produto retirado  [HTTP 200; leituras antes=1307 depois=3177 com o produto depois=0]
+PASS  E4 | lojista altera o preço pela API: página e vitrine mostram o novo em até 5 s  [HTTP 200 em 7 ms; página=5ms vitrine=8ms]
+PASS  E5 | INFORMATIVO: escrita direta no banco aparece só pelo TTL (10 s, tolerância 11 s), como documentado; nenhuma rota do produto faz isso  [apareceu em 9971 ms]
+PASS  E8 | moderação feita na réplica 1 some da vitrine, página e busca da réplica 2 (cache quente) em até 5 s  [HTTP 200; réplica 2: vitrine=12ms pagina=24ms busca=74ms]
+PASS  E8b | restaurar volta a aparecer na réplica 2 em até 5 s  [vitrine=6ms pagina=12ms busca=48ms]
+PASS  E9a | preço alterado: cache ligado = cache desligado  [4 URLs idênticas]
+PASS  E9b | estoque zerado pelo lojista: cache ligado = cache desligado  [4 URLs idênticas]
+PASS  E9c | preço e estoque restaurados: cache ligado = cache desligado  [4 URLs idênticas]
+PASS  E9d | produto removido pela moderação: cache ligado = cache desligado (inclui a home)  [5 URLs idênticas]
+PASS  E9e | produto restaurado: cache ligado = cache desligado (inclui a home)  [5 URLs idênticas]
+PASS  E9f | loja suspensa: páginas da loja e do produto com cache ligado = cache desligado (home e busca: ver nota acima)  [3 URLs idênticas]
+PASS  E9g | loja reativada: páginas com cache ligado = cache desligado  [3 URLs idênticas]
+
+RESUMO: 22 passaram, 0 falharam, 1 não testadas

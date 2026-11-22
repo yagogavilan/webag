@@ -1,0 +1,421 @@
+######## smoke
+[smoke] API: http://127.0.0.1:3400
+
+1. Saúde e contrato
+  ok   GET /health
+  ok   GET /health/ready (banco e Redis no ar)
+  ok   GET /docs (contrato OpenAPI)
+
+2. Logins de demonstração
+  ok   cliente novo cadastrado (smoke.1795345651426@seed.webag.local)
+  ok   cliente: login com a conta recém-criada
+  ok   e-mail com o código de confirmação chegou ao Mailpit
+  ok   e-mail do cliente confirmado com o código
+  ok   lojista (dono): lojista.mercadinho-boa-compra@seed.webag.local
+  ok   lojista (funcionário): funcionario.mercadinho-boa-compra@seed.webag.local
+
+3. Catálogo
+  ok   lojas por perto (busca geográfica PostGIS) devolve o Mercadinho Boa Compra
+  ok   catálogo da loja devolve produtos disponíveis
+  ok   produto "Banana prata (kg)" tem variação
+  ok   endereço do cliente cadastrado
+
+4. Pedido de RETIRADA do início ao fim (PIX simulado)
+  ok   [pickup] item na sacola
+  ok   [pickup] sacola com total calculado pelo servidor (2396 centavos)
+  ok   [pickup] pedido criado aguardando o PIX
+  ok   [pickup] tentativa de pagamento localizada no banco
+  ok   [pickup] PIX simulado aprovado (mesmo caminho do webhook real)
+  ok   [pickup] pedido virou "received" (pago)
+  ok   funcionário aceita o pedido
+  ok   funcionário NÃO acessa a conta de recebimento (HTTP 403)
+  ok   em separação
+  ok   dono marca pronto para retirada
+  ok   cliente vê o código de retirada de 4 dígitos
+  ok   retirada concluída com o código
+
+5. Pedido de ENTREGA até a coleta pelo motoboy (PIX simulado)
+  ok   [delivery] item na sacola
+  ok   [delivery] sacola com total calculado pelo servidor (2996 centavos)
+  ok   [delivery] pedido criado aguardando o PIX
+  ok   [delivery] tentativa de pagamento localizada no banco
+  ok   [delivery] PIX simulado aprovado (mesmo caminho do webhook real)
+  ok   [delivery] pedido virou "received" (pago)
+  ok   dono aceita
+  ok   em separação
+  ok   pronto para coleta (corrida da logística criada)
+
+[smoke] TUDO CERTO
+
+real	0m0.760s
+user	0m0.212s
+sys	0m0.044s
+######## reg-onda7
+
+=== bug011 ===
+PASS  BUG-011a | admin cancela pedido pago: 200, status cancelled, estorno total, restante 0  [HTTP 200 {"status":"cancelled","refunded":{"amount":2996,"currency":"BRL"},"remaining":{"amount":0,"currency":"BRL"}}; total=2996]
+PASS  BUG-011b | o cliente vê o pedido cancelado (ator admin) e o pagamento estornado  [status=cancelled pagamento=refunded]
+PASS  BUG-011c | a loja NÃO consegue aceitar o pedido cancelado (era o defeito: 200)  [HTTP 409]
+PASS  BUG-011d | repetir o cancelamento é idempotente (200, sem segundo estorno)  [HTTP 200 {"status":"cancelled","refunded":{"amount":2996,"currency":"BRL"},"remaining":{"amount":0,"currency":"BRL"}}]
+PASS  BUG-011e | estoque devolvido ao cancelar (estoque/reservado volta ao valor de antes do pedido)  [antes 54/6; com o pedido 50/6; depois do cancelamento 54/6]
+PASS  BUG-011f | estorno total manual leva o pedido a cancelled e a loja não aceita mais (era o defeito original)  [estorno HTTP 200 {"status":"done","refunded":{"amount":2996,"currency":"BRL"},"remaining":{"amount":0,"currency":"BRL"}}; pedido=cancelled; accept HTTP 409]
+PASS  BUG-011g | estorno parcial mantém o pedido ativo (received)  [HTTP 200; pedido=received]
+PASS  BUG-011h | pedido entregue não pode ser cancelado (409 ORDER_NOT_CANCELLABLE)  [HTTP 409 {"type":"https://api.webag.com.br/errors/order-not-cancellable","title":"O pedido não pode ser cancelado","status":409,"detail":"O pedido está em \"de]
+PASS  BUG-011i | motivo com menos de 10 caracteres é recusado (400)  [HTTP 400]
+PASS  BUG-011j | cliente comum não chama a rota de admin (401/403)  [HTTP 403]
+PASS  BUG-011k | cancelar pedido pronto para coleta cancela a corrida e estorna  [corrida antes=ready_for_collection depois=cancelled; HTTP 200]
+
+=== bug012 ===
+PASS  BUG-012a | cancelar a corrida pronta para coleta encerra o pedido (cancelled), não o deixa parado  [HTTP 200; corrida=cancelled; pedido=cancelled]
+PASS  BUG-012b | o cliente é estornado por inteiro e o motivo vai ao pedido  [pagamento=refunded; cancelamento={"by":"admin","reason":"Entrega cancelada pela operação: Reteste QA BUG-012: operação cancela a corrida","at":"2026-11-22T11:08:32.260Z"}]
+PASS  BUG-012c | a loja não "volta para separação" um pedido cancelado  [HTTP 409]
+PASS  BUG-012d | repetir o cancelamento da corrida não estorna duas vezes (409 ou 200 idempotente, estorno único)  [HTTP 409; estornado=2996]
+PASS  BUG-012e | cancelar corrida já atribuída ao motoboy também encerra o pedido  [HTTP 200; pedido=cancelled]
+
+=== bug013 ===
+PASS  BUG-013a | 3 criações simultâneas da mesma revisão da sacola com chaves de idempotência DIFERENTES geram 1 pedido  [HTTP 409:CART_CHANGED 201:ok 409:CART_CHANGED; pedidos no banco=1]
+PASS  BUG-013b | toque duplo com a MESMA chave: um pedido só (o segundo recebe o mesmo pedido ou 409 "em andamento")  [HTTP 201/409; pedidos no banco=1]
+
+=== bug014 ===
+PASS  BUG-014a | pedido de retirada chega a ready_for_pickup  [HTTP 200]
+PASS  BUG-014b | pronto há 25 h: o cliente recebe UM aviso (pickup_reminded_at preenchido) e o pedido continua ativo  [lembrete=2026-11-22 11:08:34.421+00; status=ready_for_pickup]
+PASS  BUG-014c | a varredura seguinte não repete o aviso (claim atômico: pickup_reminded_at estável)  [eventos ready=1]
+PASS  BUG-014d | pronto há 49 h: cancelado pelo sistema, com estorno total  [status=cancelled; pagamento=refunded; motivo={"by":"system","reason":"Retirada não realizada em 48 h","at":"2026-11-22T11:09:14.431Z"}]
+PASS  BUG-014e | estoque devolvido (as unidades do pedido cancelado voltam ao estoque)  [estoque/reservado antes do cancelamento 46/14, depois 50/14 (a reserva é o próprio decremento de estoque)]
+PASS  BUG-014f | retirado antes do prazo fica entregue e não é cancelado depois  [HTTP 200; status=delivered]
+
+=== bug015 ===
+PASS  BUG-015a | cliente pede o cancelamento em separação: 202 e pedido continua in_preparation  [HTTP 202 {"id":"408067af-bfcb-4e3b-897a-b2e9a5e129a3","status":"pending","reason":"Reteste QA BUG-015","requestedAt":"2026-11-22T11:09:40.217Z","respondBy":"2026-11-22T1]
+PASS  BUG-015b | Order.cancelRequest mostra o pedido pendente  [{"id":"408067af-bfcb-4e3b-897a-b2e9a5e129a3","status":"pending","reason":"Reteste QA BUG-015","requestedAt":"2026-11-22T11:09:40.217Z","respondBy":"2026-11-22T11:19:40.217Z","decidedAt":null,"decidedBy":null,"decisionNote":null}]
+PASS  BUG-015c | pedir de novo é idempotente (mesma solicitação)  [HTTP 202]
+PASS  BUG-015d | pedido de outra conta: 404 (sem BOLA)  [HTTP 404]
+PASS  BUG-015e | a loja aceita: pedido cancelado e estorno total  [HTTP 200; status=cancelled; pagamento=refunded]
+PASS  BUG-015f | a loja recusa com motivo: o pedido segue em separação  [HTTP 200]
+PASS  BUG-015g | sem resposta da loja em 10 min o admin é alertado (alerta cancel_request_unanswered, uma vez)  [alerted_at=true; alerta visível=true]
+PASS  BUG-015h | o admin decide cancelando (200)  [HTTP 200]
+PASS  BUG-015i | em accepted o pedir-cancelamento é recusado (409, usa o cancelamento direto)  [HTTP 409]
+PASS  BUG-015j | cancelamento direto em accepted funciona e estorna  [HTTP 200]
+PASS  BUG-015k | "não recebi" a caminho: 202 {reported:true}  [HTTP 202 {"reported":true}]
+PASS  BUG-015l | repetir é idempotente (202) e gera UM alerta à operação  [HTTP 202; alertas=1]
+PASS  BUG-015m | "não recebi" em pedido de outra conta: 404  [HTTP 404]
+PASS  BUG-015n | "não recebi" com o pedido ainda recebido: 409 ORDER_NOT_REPORTABLE  [HTTP 409]
+N/T   BUG-015o | RN-07: "não recebi" impede a auto-conclusão em 24 h  [NÃO TESTADO: não executável pela API real (histórico append-only); ver repro/qa-notreceived-autoconclude.e2e-spec.ts: FALHA (pedido vira delivered), BUG-020]
+
+=== bug016 ===
+PASS  BUG-016a | disponibilidade da logística existe e está aberta no horário padrão (seg a sáb 09 às 20 h)  [HTTP 200 {"open":true,"closedBy":null,"opensAt":null,"pauses":[]}]
+PASS  BUG-016b | pausa geral com motivo: availability open=false closedBy=PAUSED  [pausa HTTP 200; {"open":false,"closedBy":"PAUSED","opensAt":null,"pauses":[{"id":"d6e60f38-78c5-4d3d-acfa-33fed3eb714e","cityId":null,"reason":"Reteste QA BUG-016: pausa geral","pausedAt":"2026-11-22T11:09:55.513Z"}]]
+PASS  BUG-016c | sacola de entrega bloqueada com LOGISTICS_CLOSED durante a pausa  [{"canCheckout":false,"blockers":["LOGISTICS_CLOSED"],"opensAt":null,"newStoreMaxOrder":{"amount":50000,"currency":"BRL"}}]
+PASS  BUG-016d | criar pedido de entrega durante a pausa é recusado no servidor (não só na tela)  [HTTP 422 {"type":"https://api.webag.com.br/errors/logistics-closed","title":"Entrega indisponível agora","status":422,"code":"LOGISTICS_CLOSED"}]
+PASS  BUG-016e | retirada continua disponível durante a pausa  [HTTP 201]
+PASS  BUG-016f | repetir a mesma pausa devolve a existente  [HTTP 200]
+PASS  BUG-016g | liberar: 204; liberar de novo: 409 NOT_PAUSED  [HTTP 204 e 409]
+PASS  BUG-016h | depois de liberar a entrega volta a ser aceita  [HTTP 201]
+PASS  BUG-016i | pausar só Franco da Rocha não bloqueia entrega para Francisco Morato  [pausa HTTP 200; pedido 201]
+PASS  BUG-016j | fora do horário: open=false closedBy=HOURS com opensAt; o carrinho informa quando a entrega volta  [{"open":false,"closedBy":"HOURS","opensAt":"2026-11-22T13:09:00.000Z","pauses":[]}; logisticsOpensAt=2026-11-22T13:09:00.000Z]
+PASS  BUG-016k | pedido de entrega fora do horário é recusado  [HTTP 422]
+PASS  BUG-016l | RN-19: faltando 20 min para fechar, a entrega cuja faixa termina depois do fechamento NÃO é oferecida  [eta=null; checkout={"canCheckout":false,"blockers":["LOGISTICS_CLOSED"],"opensAt":null,"newStoreMaxOrder":{"amount":50000,"currency":"BRL"}}; criar pedido HTTP 422]
+N/T   BUG-016m | domingo: logistica_dias=seg_sab fecha a entrega  [NÃO TESTADO: hoje é o dia 0 da semana (0 = domingo); só coberto por logistics-hours.e2e-spec]
+PASS  BUG-016n | estado final restaurado (aberto)  [{"open":true,"closedBy":null,"opensAt":null,"pauses":[]}]
+
+=== bug017 ===
+PASS  BUG-017a | chaves aposentadas (raio_padrao_km, repasse_periodicidade, dados_cliente_visivel_dias) não aparecem mais no painel  [102 parâmetros; presentes: nenhuma]
+PASS  BUG-017b | codigo_retirada_digitos=6: o código nasce com 6 dígitos e a loja conclui com ele  [código="769011"; errado HTTP 422; certo HTTP 200]
+PASS  BUG-017c | restaurado o padrão: código volta a 4 dígitos  [código="5123"]
+PASS  BUG-017d | loja_aceite_lembrete_min=3: pedido sem aceite há 4 min gera UM lembrete (accept_reminded_at)  [accept_reminded_at=2026-11-22 11:10:14.43+00]
+PASS  BUG-017e | retirada_prazo_horas=12: pronto há 13 h é cancelado (o parâmetro do painel altera o prazo)  [status=cancelled]
+PASS  BUG-017f | troca_voluntaria_dias_padrao=12: o painel do lojista passa a propor 12 dias (settings.exchange.defaultVoluntaryDays)  [HTTP 200; "defaultVoluntaryDays":12]
+N/T   BUG-017g | cancelamento_loja_alerta_pct e coleta_agendamento_dias_uteis  [NÃO TESTADO: precisam de amostra de 30 dias e de calendário de dias úteis; só cobertos por bug017-parameters.e2e-spec e parameters-wired.spec]
+
+=== bug018 ===
+PASS  BUG-018a | home traz "Mais vendidos" com os 60 pedidos de demonstração do seed  [HTTP 200; bestSellers=6 [{"id":"33e2a400-1d50-421a-bbf2-f57ec6aa1364","name":"Banana prata (kg)","image":{"urls":{}},"price":{"amount":599,"currency":"BRL"},"originalPrice":null,"discountPercent":null,"categoryId":"99b55bd6-264e-4d22-a684-e78292bb332a","store":{"i]
+PASS  BUG-018b | os itens são de lojas visíveis na região (todos com loja e preço)  [lojas distintas=6]
+PASS  BUG-018c | fora da região não aparece "Mais vendidos" de outra cidade  [HTTP 200; bestSellers=0]
+
+=== teto ===
+  CEPs escolhidos (fim da faixa -> CEP, km em linha reta): {"119":{"digits":"07700033","hood":"Centro","km":8.79115381790704},"120":{"digits":"07700059","hood":"Jardim São Judas","km":8.9082025635206},"121":{"digits":"07700035","hood":"Jardim São Judas","km":9.057431871959661}}
+PASS  TETO-119 | fim da faixa = 119 min (8.79 km): entrega oferecida  [fim da faixa servidor=119; available=true; OUT_OF_RANGE=false; faixa={"minMinutes":89,"maxMinutes":119,"fromAt":"2026-11-22T12:39:35.356Z","toAt":"2026-11-22T13:09:35.356Z"}; distanceM=8757]
+PASS  TETO-119b | o servidor cria o pedido no limite e grava a faixa dentro do teto  [HTTP 201 ; faixa gravada={"minMinutes":89,"maxMinutes":119,"fromAt":"2026-11-22T12:39:35.424Z","toAt":"2026-11-22T13:09:35.424Z"}]
+PASS  TETO-120 | fim da faixa = 120 min (8.91 km): entrega oferecida  [fim da faixa servidor=120; available=true; OUT_OF_RANGE=false; faixa={"minMinutes":90,"maxMinutes":120,"fromAt":"2026-11-22T12:40:35.568Z","toAt":"2026-11-22T13:10:35.568Z"}; distanceM=8873]
+PASS  TETO-120b | o servidor cria o pedido no limite e grava a faixa dentro do teto  [HTTP 201 ; faixa gravada={"minMinutes":90,"maxMinutes":120,"fromAt":"2026-11-22T12:40:35.624Z","toAt":"2026-11-22T13:10:35.624Z"}]
+PASS  TETO-121 | fim da faixa = 121 min (9.06 km): fora da área (OUT_OF_RANGE)  [fim da faixa servidor=undefined; available=false; OUT_OF_RANGE=true; faixa=null; distanceM=9022]
+PASS  TETO-121b | o servidor RECUSA criar o pedido acima do teto (não depende do app)  [HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-range","title":"Fora da área de entrega","status":422,"code":"OUT_OF_RANGE"}]
+PASS  TETO-RN02 | RN-02: o admin não consegue salvar um teto que nenhuma loja alcança (entrega_max_min=40 com preparo 20, despacho 15, folga 15) nem folga > teto/4 (60): 422  [teto=40 HTTP 422; folga=60 HTTP 422 (valores restaurados ao padrão logo depois)]
+PASS  TETO-home | a descoberta mostra a faixa em minutos (nunca número único)  [campo minMinutes presente na home]
+
+=== atraso ===
+PASS  ATRASO-1 | dentro da faixa: sem atraso e cancelar sem custo é 409 LATE_CANCEL_NOT_AVAILABLE  [delay={"late":false,"canCancelWithoutCost":false,"cancelAvailableAt":"2026-11-22T12:16:36.129Z","cancelMode":null,"respondWithinMin":10,"cancelRequest":null}]
+PASS  ATRASO-2 | 5 min depois do fim: late=true, aviso emitido uma vez, mas cancelar sem custo ainda é recusado (tolerância 15 min)  [delay={"late":true,"canCancelWithoutCost":false,"cancelAvailableAt":"2026-11-22T11:20:36.206Z","cancelMode":null,"respondWithinMin":10,"cancelRequest":null}; cancel-late HTTP 409]
+PASS  ATRASO-3 | limite da tolerância: 14 min depois do fim não libera; 16 min libera (cancelMode=immediate antes da saída)  [14: {"late":true,"canCancelWithoutCost":false,"cancelAvailableAt":"2026-11-22T11:11:44.436Z","cancelMode":null,"respondWithinMin":10,"cancelRequest":null}; 16: {"late":true,"canCancelWithoutCost":true,"cancelAvailableAt":"2026-11-22T11:09:44.484Z","cancelMode":"immediate
+PASS  ATRASO-4 | toque duplo em "Cancelar sem custo": um só efeito; pedido cancelado (ator cliente, motivo atraso), estorno TOTAL com a taxa de entrega  [HTTP 200/200; status=cancelled; total pago=2996 (frete=600); estornado=2996; corrida=sem corrida]
+PASS  ATRASO-5 | cancelar sem custo com o pedido pronto para coleta cancela também a corrida  [HTTP 200; corrida=cancelled]
+PASS  ATRASO-6 | depois de sair, o cancelamento sem custo vira PEDIDO à operação (status pending; pedido segue out_for_delivery)  [HTTP 200; status=out_for_delivery; cancelRequest={"id":"af606cfc-3ef3-4393-87c3-87aacec4143c","status":"pending","reason":"Atraso na entrega","requestedAt":"2026-11-22T11:10:45.176Z","respondBy":"2026-11-22T11:20:45.176Z","decidedAt":null,"decidedBy":null,"decisionN
+PASS  ATRASO-7 | operação responde "chega em até 10 min" (200) e o cliente pode pedir de novo  [HTTP 200 {"id":"af606cfc-3ef3-4393-87c3-87aacec4143c","status":"refused","reason":"Atraso na entrega","requestedAt":"2026-11-22T11:10:45.176Z","respondBy":"2026-11-22T11]
+PASS  ATRASO-8 | o cliente pede de novo: novo pedido pending  [HTTP 200; {"id":"31b93d64-ca81-49cd-ab20-021351681aea","status":"pending","reason":"Atraso na entrega","requestedAt":"2026-11-22T11:10:45.205Z","respondBy":"2026-11-22T11:20:45.205Z","decidedAt":null,"decidedBy":null,"decisionNote":null}]
+PASS  ATRASO-9 | ACEITE AUTOMÁTICO: sem resposta em 10 min o sistema aceita (decided_by system) e a corrida segue para devolução à loja  [pedido de cancelamento=approved/system; corrida=not_delivered]
+PASS  ATRASO-10 | responder depois do aceite automático: 409 NO_CANCEL_REQUEST  [HTTP 409]
+PASS  ATRASO-11 | devolução à loja confirmada: pedido cancelado e estorno total  [return_confirmed HTTP 200; loja HTTP 200; status=cancelled; pagamento=refunded]
+PASS  ATRASO-12 | quem cancelou por atraso NÃO recebe a compensação  [cupons de compensação=0]
+PASS  ATRASO-13 | entregue 20 min depois do fim da faixa: gera 1 cupom de frete grátis pessoal (30 dias, 1 uso)  [entrega HTTP 200; cupom=ATRASO83AKRAZA|free_shipping|0|1|1|2026-12-22]
+PASS  ATRASO-14 | cupom é intransferível: outra conta não consegue aplicar (COUPON_NOT_FOUND, sem revelar que existe)  [HTTP 422 COUPON_NOT_FOUND]
+PASS  ATRASO-15 | cupom de frete grátis não vale em pedido de retirada  [HTTP 422 {"type":"https://api.webag.com.br/errors/coupon-not-allowed","title":"Cupom não aplicado","status":422,"detail":"Cupom de entrega grátis só vale em pedido de en]
+PASS  ATRASO-16 | no próximo pedido de entrega o cupom zera a taxa de entrega  [summary={"subtotal":{"amount":2396,"currency":"BRL"},"delivery":{"amount":600,"currency":"BRL"},"deliveryEstimated":false,"freeShipping":false,"serviceFee":{"amount":0,"currency":"BRL"},"discount":{"amount":600,"currency":"BRL"},"total":{"amount":2396,"currency":"BRL"},"minimumTotalApplied":false,"platformDiscountCapp
+PASS  ATRASO-17 | cupom usado uma única vez (resgate registrado)  [resgates=1]
+PASS  ATRASO-18 | entregue no prazo: sem compensação  [HTTP 200]
+PASS  ATRASO-19 | limite: 14 min depois do fim da faixa (dentro da tolerância) não gera compensação
+PASS  ATRASO-20 | limite: 16 min depois do fim da faixa gera compensação (e uma só, mesmo que reprocesse)
+
+=== sec168 ===
+PASS  SEC-168a | 10 senhas erradas de IPs DIFERENTES somam no contador da conta; a senha certa então exige o código do e-mail (403 LOGIN_CODE_REQUIRED), não reabre direto  [erradas=401,401,401,401,401,401,401,401,401,401; certa sem código HTTP 403 LOGIN_CODE_REQUIRED]
+PASS  SEC-168b | código errado: 400; conta continua fechada; com o código certo reabre (204); o código é de uso único; depois o login volta (ou pede o 2º código do step-up)  [errado 400 CODE_INVALID; login fechado 403; certo 204  ; reuso 401; login depois 403; código usado=413963]
+PASS  SEC-168c | 12 tentativas erradas de IPs diferentes: todas 401 (terceiro não tranca o dono com 429); o dono (senha certa, IP novo) recebe 403 LOGIN_CODE_REQUIRED e reabre com o código (204)  [erradas=401,401,401,401,401,401,401,401,401,401,401,401; dono sem código 403 LOGIN_CODE_REQUIRED; com código 204]
+PASS  SEC-168d | sem ataque, a senha certa reabre direto (204, sem código)  [HTTP 204]
+PASS  SEC-168e | conta SEM e-mail confirmado sob ataque recebe a resposta genérica 401 (nunca o código)  [HTTP 401 INVALID_CREDENTIALS]
+PASS  SEC-168f | mesmo IP: a 6ª tentativa em diante é 429 (o X-Forwarded-For é honrado só atrás do proxy confiável)  [status=401,401,401,401,401,429,429]
+
+=== sec169 ===
+PASS  SEC-169a | ponto a ~27 km do CEP é recusado (422 ADDRESS_PIN_FAR_FROM_CEP)  [HTTP 422 ADDRESS_PIN_FAR_FROM_CEP]
+PASS  SEC-169b | CEP de Francisco Morato com cidade "Franco da Rocha": 422 ADDRESS_CEP_CITY_MISMATCH  [HTTP 422 ADDRESS_CEP_CITY_MISMATCH]
+PASS  SEC-169c | ponto a ~200 m do centro do CEP é aceito  [HTTP 201 ]
+PASS  SEC-169d | sem ponto, o servidor usa o do CEP  [HTTP 201 lat=-23.268243 lng=-46.746629]
+PASS  SEC-169e | editar o endereço para um ponto longe do CEP também é recusado  [HTTP 422 ADDRESS_PIN_FAR_FROM_CEP]
+PASS  SEC-169f | limite de 2000 m do centro do CEP: 1,9 km aceito (201) e 2,1 km recusado (422)  [1,9 km HTTP 201; 2,1 km HTTP 422 ADDRESS_PIN_FAR_FROM_CEP]
+PASS  SEC-169h | CEP que não existe (00000-000) é recusado mesmo com pino e cidade (ceebc28: "CEP must exist")  [HTTP 422 ADDRESS_CEP_NOT_FOUND; (07000-000 sem região: HTTP 422 ADDRESS_CEP_CITY_MISMATCH)]
+PASS  SEC-169g | CEP de São Paulo (fora das regiões): 422 REGION_NOT_SERVED  [HTTP 422 REGION_NOT_SERVED]
+
+=== sec170 ===
+  cupons de primeira compra no seed: BEMVINDO10:100
+  cupom de primeira compra do teste: QAPC879479 (criação HTTP 201)
+PASS  SEC-170a | primeira compra com QAPC879479: pedido nasce com desconto  [HTTP 201; desconto={"amount":240,"currency":"BRL"}]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+PASS  SEC-170b | multiconta: outra conta no MESMO CEP+número (só o complemento muda) não leva o cupom  [pedido=false desconto=undefined; HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"cartRevision",]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+PASS  SEC-170c | pedidos SIMULTÂNEOS (não pagos) no mesmo endereço: só um leva o desconto  [descontos concedidos=0; HTTP 400/400]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+PASS  SEC-155a | quem já tem pedido pago não usa o cupom de primeira compra de novo  [HTTP 400; desconto=undefined]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+FALHA SEC-155b | e-mail não confirmado: cupom de primeira compra recusado (COUPON_EMAIL_UNVERIFIED)  [HTTP 422 CART_EMPTY]
+PASS  SEC-170d | criar cupom de primeira compra SEM teto de usos (maxUses) é recusado pelo admin (4xx)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","message":"Invalid input: expected number, re]
+PASS  SEC-170e | com teto de usos (maxUses=5) o mesmo cupom é criado (201)  [HTTP 201 {"id":"9c7df09d-5736-445f-9650-97ed67d6986c","code":"QA7B80018","kind":"percent","value":10,"percentCapCents":null,"minO]
+PASS  SEC-170f | remover o teto depois (PATCH maxUses=null) de um cupom de primeira compra também é recusado  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  SEC-170g | o cupom de demonstração BEMVINDO10 do seed é de primeira compra e NÃO tem teto (maxUses nulo), contra a regra que o admin impõe  [max_uses=100 (só dados de desenvolvimento)]
+
+=== troca ===
+PASS  TROCA-1 | outra conta não pede troca do pedido alheio (404)  [HTTP 404]
+PASS  TROCA-2 | arrependimento nasce aprovado na hora e a resolução é sempre reembolso  [HTTP 201; status=approved; resolução=refund; taxa de coleta=0]
+PASS  TROCA-3 | o mesmo item não pode ser trocado duas vezes (409/422)  [HTTP 422 EXCHANGE_ALREADY_OPEN]
+PASS  TROCA-4 | a loja confirma o recebimento: troca concluída e reembolso feito (total do pedido)  [drop HTTP 200; receive HTTP 200; status=completed; reembolsado=2996/2996]
+PASS  TROCA-5 | coleta em casa cria a corrida de coleta na fila da logística  [HTTP 201 ; corrida=b3fa1aa9-251d-4466-880d-bf110486b3df|ready_for_collection|exchange_pickup]
+PASS  TROCA-6 | coleta percorre atribuir, a caminho, coletou e entregue à loja; a troca avança  [assign 200; passos 200,200; entrega-à-loja HTTP 200; troca=approved]
+PASS  TROCA-7 | a loja confirma o recebimento da coleta: troca concluída e reembolso total  [receive HTTP 200; status=completed; reembolsado=2996/2996]
+PASS  TROCA-8 | arrependimento fora dos 7 dias é recusado (piso legal: CDC art. 49)  [HTTP 422 EXCHANGE_WINDOW_EXPIRED]
+  [aviso] PUT /v1/cart/items devolveu HTTP 422 {"type":"https://api.webag.com.br/errors/out-of-stock","title":"Sem estoque","status":422,"detail":"Esse item esgotou.","code":"OUT_OF_STOCK"}
+FALHA TROCA-ERRO | a seção terminou com exceção  [Error: pedido recusado: 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"cartRevision","message":"Invalid input: expected number, received undefined"},{"field":"expectedTotalCents","message":"Invalid input: expected number, rec |     at paidAcc
+
+=== estoque ===
+PASS  ESTOQUE-1 | 6 clientes simultâneos disputam o estoque de 3 pedidos (3 rodadas): exatamente 3 vencem, 3 perdem com o MESMO código STOCK_CONFLICT e a reserva termina em 12 (nunca acima do estoque)  [[{"won":3,"lostCodes":["409:STOCK_CONFLICT","409:STOCK_CONFLICT","409:STOCK_CONFLICT"],"stock":12,"reserved":12},{"won":3,"lostCodes":["409:STOCK_CONFLICT","409:STOCK_CONFLICT","409:STOCK_CONFLIC
+
+=== limpeza ===
+  pedidos de teste abertos: 6; cancelados: 6
+
+RESUMO: 119 passaram, 2 falharam, 3 não testadas
+  FALHA SEC-155b | e-mail não confirmado: cupom de primeira compra recusado (COUPON_EMAIL_UNVERIFIED) [HTTP 422 CART_EMPTY]
+  FALHA TROCA-ERRO | a seção terminou com exceção [Error: pedido recusado: 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"cartRevision","message":"Invalid input: expected number, received undefined"},{"field":"expectedTotalCents","message":"Invalid input: expected number, rec |     at paidAc
+######## reg-onda7-rerun
+
+=== sec170 ===
+  cupons de primeira compra no seed: BEMVINDO10:100
+QAPC879479:50
+QA7B80018:5
+  cupom de primeira compra do teste: QAPC40175 (criação HTTP 201)
+PASS  SEC-170a | primeira compra com QAPC40175: pedido nasce com desconto  [HTTP 201; desconto={"amount":240,"currency":"BRL"}]
+PASS  SEC-170b | multiconta: outra conta no MESMO CEP+número (só o complemento muda) não leva o cupom  [pedido=true desconto={"amount":0,"currency":"BRL"}; HTTP 201 {"id":"9a3b4cf9-c0a3-43fa-ad47-d9397611dd32","number":"WB-36BQ6","status":"awaiting_payment","mode":"delivery","createdAt":"2026-11-22T11:14:00.649Z","updatedAt]
+PASS  SEC-170c | pedidos SIMULTÂNEOS (não pagos) no mesmo endereço: só um leva o desconto  [descontos concedidos=1; HTTP 201/422]
+PASS  SEC-155a | quem já tem pedido pago não usa o cupom de primeira compra de novo  [HTTP 201; desconto={"amount":0,"currency":"BRL"}]
+PASS  SEC-155b | e-mail não confirmado: cupom de primeira compra recusado (COUPON_EMAIL_UNVERIFIED)  [HTTP 422 COUPON_EMAIL_UNVERIFIED]
+PASS  SEC-170d | criar cupom de primeira compra SEM teto de usos (maxUses) é recusado pelo admin (4xx)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","message":"Invalid input: expected number, re]
+PASS  SEC-170e | com teto de usos (maxUses=5) o mesmo cupom é criado (201)  [HTTP 201 {"id":"89195ac6-5ee4-4b3e-b398-e1ae1104a12b","code":"QA7B41105","kind":"percent","value":10,"percentCapCents":null,"minO]
+PASS  SEC-170f | remover o teto depois (PATCH maxUses=null) de um cupom de primeira compra também é recusado  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  SEC-170g | o cupom de demonstração BEMVINDO10 do seed é de primeira compra e NÃO tem teto (maxUses nulo), contra a regra que o admin impõe  [max_uses=100 (só dados de desenvolvimento)]
+
+=== troca ===
+PASS  TROCA-1 | outra conta não pede troca do pedido alheio (404)  [HTTP 404]
+PASS  TROCA-2 | arrependimento nasce aprovado na hora e a resolução é sempre reembolso  [HTTP 201; status=approved; resolução=refund; taxa de coleta=0]
+PASS  TROCA-3 | o mesmo item não pode ser trocado duas vezes (409/422)  [HTTP 422 EXCHANGE_ALREADY_OPEN]
+PASS  TROCA-4 | a loja confirma o recebimento: troca concluída e reembolso feito (total do pedido)  [drop HTTP 200; receive HTTP 200; status=completed; reembolsado=2996/2996]
+PASS  TROCA-5 | coleta em casa cria a corrida de coleta na fila da logística  [HTTP 201 ; corrida=0dc975af-104e-439a-a04f-8b8ea680ae30|ready_for_collection|exchange_pickup]
+PASS  TROCA-6 | coleta percorre atribuir, a caminho, coletou e entregue à loja; a troca avança  [assign 200; passos 200,200; entrega-à-loja HTTP 200; troca=approved]
+PASS  TROCA-7 | a loja confirma o recebimento da coleta: troca concluída e reembolso total  [receive HTTP 200; status=completed; reembolsado=2996/2996]
+PASS  TROCA-8 | arrependimento fora dos 7 dias é recusado (piso legal: CDC art. 49)  [HTTP 422 EXCHANGE_WINDOW_EXPIRED]
+PASS  TROCA-9 | troca por tamanho/cor nasce "requested" (a loja decide)  [HTTP 201 ; status=requested]
+PASS  TROCA-10 | APROVAÇÃO AUTOMÁTICA: loja em silêncio além do prazo => aprovada pelo sistema (autoApproved=true, decidedBy=system)  [status=approved; autoApproved=true; decidedBy=system]
+PASS  TROCA-11 | loja recusa, cliente contesta: a troca vai para mediação e aparece na fila do admin  [refuse 200; contest 200 {"id":"ee3386d7-8f95-434d-8ace-69b8da3366e9","number":"TR-43BPM","orderId":"d62b639d-ca01-4fea-b2bc-37c0d74eb048","store; fila=true]
+
+=== limpeza ===
+  pedidos de teste abertos: 2; cancelados: 2
+
+RESUMO: 20 passaram, 0 falharam, 0 não testadas
+######## reg-papeis
+PASS  PAP-0 | atores preparados: 2 clientes, dono e funcionário da loja A, dono da loja B  [lojaB=fc761d77-9d5f-4350-81d4-71c7c8387cd8]
+PASS  PAP-1 | convite de admin: e-mail com link, aceite com senha, TOTP obrigatório; o mesmo convite não vale duas vezes (410)  [operations:reuso=410 finance:reuso=410 support:reuso=410]
+PASS  PAP-2 | a sessão limitada do convite (só TOTP liberado) NÃO acessa rotas de admin antes de configurar o TOTP (401/403), nem depois de pedir o segredo e antes de confirmar  [operations: antes=403 apos-setup=403; finance: antes=403 apos-setup=403; support: antes=403 apos-setup=403]
+N/T   PAP-2b | OBSERVAÇÃO: depois de confirmar o TOTP o mesmo token limitado passa a valer como sessão completa? (informativo; o esperado do contrato é pedir o login em 2 passos)  [GET /v1/admin/parameters com o token do convite depois do confirm = HTTP 200]
+PASS  PAP-MATRIZ | matriz de papéis x rotas: 143 verificações (IDOR entre clientes, cliente x loja x admin, funcionário x dono, loja x loja, 4 perfis de admin)  [143 de 143 conforme a tabela]
+PASS  PAP-3 | funcionário com "orders" aceita pedido (200) e a ação fica atribuída a ele  [HTTP 200]
+PASS  PAP-4 | dono da A pede pelo URL da A o pedido de OUTRA loja: 404 (não vaza por ID)  [HTTP 404]
+PASS  PAP-5 | suporte vê só as próprias ações na auditoria (o filtro é forçado no servidor)  [HTTP 200; 23 linhas; de outros atores=0]
+PASS  PAP-5b | super admin vê as ações de todos  [super 50 linhas vs suporte 23]
+PASS  PAP-6 | JWT forjado (alg none, role admin) é recusado (401)  [HTTP 401]
+PASS  PAP-7 | o refresh token não serve como access token (401)  [HTTP 401]
+N/T   PAP-8 | funcionário removido pelo dono perde o acesso na hora (sessão e permissões)  [NÃO TESTADO: cenário coberto por `O2-EQP` do e2e da API; não repeti por HTTP para não alterar a equipe do seed]
+PASS  PAP-9 | o detalhe da corrida para o suporte NÃO traz telefone nem endereço completo do cliente (SEC-144: só pelo "Revelar" com motivo e auditoria)  [HTTP 200; telefone no corpo=false]
+
+RESUMO: 11 passaram, 0 falharam, 2 não testadas
+######## reg-onda8
+
+=== wb259 ===
+PASS  WB259-1 | pedido sem pagamento: refund = null  [refund=null]
+PASS  WB259-2 | pedido pago em andamento: refund = null  [refund=null]
+PASS  WB259-3 | cancelamento do pedido pago por PIX: refund {valor total, method pix, status completed|processing, deadlineText de PIX}  [cancel HTTP 200; total=2996; refund={"amountCents":2996,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."}]
+PASS  WB259-4 | o valor estornado no provedor/ledger bate com o refund exposto  [ledger=2996 api=2996]
+PASS  WB259-5 | outra conta não vê o pedido nem o estorno (404)
+PASS  WB259-6 | estorno parcial: refund.amountCents = valor parcial (250), nunca o total; pedido segue ativo  [HTTP 200; refund={"amountCents":250,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."}; status=received]
+PASS  WB259-7 | estorno parcial + cancelamento: refund soma as intenções (total do pedido)  [refund={"amountCents":2996,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."} total=2996]
+PASS  WB259-8 | cartão simulado (fake_tok_approved) pela página segura: pedido criado e pago  [intent HTTP 201; página 200 provedor=fake; pay HTTP 200 {"orderId":"c08e5b60-d0fe-4903-86ac-ad04b3dbecec","status":"received","payment":{"method":"card","status":"approved"},"threeDsUrl":null}]
+PASS  WB259-9 | estorno de cartão: method card e o texto das faturas  [cancel HTTP 200; refund={"amountCents":2996,"method":"card","status":"completed","deadlineText":"Aparece na fatura do cartão em até 2 faturas, conforme o seu banco."}]
+PASS  WB259-10 | cartão recusado (saldo insuficiente): 422 PAYMENT_DECLINED, nenhum pedido pago  [HTTP 422 {"type":"https://api.webag.com.br/errors/payment-declined","title":"Pagamento recusado","status":422,"detail":"Saldo insuficiente no cartão. Tente outro cartão ]
+PASS  WB259-11 | cartão com 3DS: devolve threeDsUrl e o pedido não vira pago antes  [HTTP 200 threeDsUrl=https://fake-3ds.webag.local/challenge/fk480ab82a9da58c2e5674176e status=awaiting_payment]
+
+=== wb261 ===
+PASS  WB261-0 | a sacola traz a faixa com fromAt e toAt (ISO)  [{"minMinutes":21,"maxMinutes":51,"fromAt":"2026-11-22T11:35:26.665Z","toAt":"2026-11-22T12:05:26.665Z"}]
+PASS  WB261-1 | fim da faixa igual ao visto: cria (201) sem aviso  [HTTP 201 {"id":"a377514c-0031-43eb-afe7-4186d45164b0","number":"WB-7BG7G","status":"awaiting_payment","mode":"delivery","createdA]
+PASS  WB261-2 | app antigo (sem acceptedEtaToAt): cria (201)  [HTTP 201]
+PASS  WB261-3 | o cliente viu um fim MAIS TARDE que o atual (melhorou): cria (201)  [HTTP 201]
+PASS  WB261-4 | dentro da tolerância (visto 3 e 4 min antes do fim atual): NÃO avisa (201)  [-3 min: 201; -4 min: 201]
+PASS  WB261-5 | fora da tolerância (visto 7, 8 e 20 min antes): 409 ETA_CHANGED  [-7: 409 ETA_CHANGED; -8: 409; -20: 409]
+PASS  WB261-6 | 409 ETA_CHANGED traz eta {fromAt,toAt} novo e NÃO cria pedido nem tentativa de pagamento  [eta={"fromAt":"2026-11-22T11:35:27.230Z","toAt":"2026-11-22T12:05:27.230Z"}; pedidos ativos antes=0 depois=0]
+PASS  WB261-7 | o cliente confirma o horário novo: reenviar com o toAt devolvido cria (201), com Idempotency-Key nova  [HTTP 201 {"id":"34b95df9-01c9-4378-b3c4-19a77567f366","number":"WB-RZNGZ","status":"awaiting_payment","mode":"delivery","createdA]
+PASS  WB261-8 | acceptedEtaToAt inválido: 400  [HTTP 400]
+PASS  WB261-9 | retirada não tem faixa de entrega: o campo não gera ETA_CHANGED  [HTTP 201 ]
+PASS  WB261-10 | a faixa nova anda com o relógio em passos de minutos (granularidade ≤ 5 min), não por segundo  [toAt 2026-11-22T12:05:27.467Z -> 2026-11-22T12:05:29.515Z]
+
+=== wb262 ===
+PASS  WB262-1 | sem a hora informada vale a hora do clique (corrida e pedido)  [HTTP 200; deliveredAt=2026-11-22T11:14:29.968Z]
+PASS  WB262-2 | recuo de 4 min (até 5): vale, sem motivo; vira orders.delivered_at  [HTTP 200; resposta=2026-11-22T11:10:30.326Z; pedido=2026-11-22T11:10:30]
+PASS  WB262-3 | recuo acima de 5 min exige o motivo (400); "outro" exige a nota (400); com motivo vale (200) e nada mudou nas recusas  [sem motivo 400; other sem nota 400; com motivo 200]
+PASS  WB262-4 | hora real e hora do clique ficam no histórico da corrida (com motivo e recuo) e na auditoria  [histórico={"clickedAt": "2026-11-22T11:14:30.754Z", "deliveredAt": "2026-11-22T10:54:30.733Z", "backdatedMin": 20, "deliveredAtReason": "courier_notified_late"}; auditorias=1]
+PASS  WB262-5 | no futuro (+10 min): 422 DELIVERED_AT_IN_FUTURE; antes da saída (saiu há 30, informado 45): 422 DELIVERED_AT_BEFORE_DEPARTURE  [futuro 422 DELIVERED_AT_IN_FUTURE; antes 422 DELIVERED_AT_BEFORE_DEPARTURE]
+PASS  WB262-6 | as recusas não mudaram nada: a corrida segue "saiu para entrega"  [status=out_for_delivery]
+PASS  WB262-7 | mais de 60 min atrás: 422 DELIVERED_AT_TOO_OLD  [422 DELIVERED_AT_TOO_OLD]
+PASS  WB262-8 | compensação usa a hora REAL: entregue (informado) 12 min depois do fim da faixa = dentro da tolerância de 15 min: sem cupom  [eta antes=2026-11-22T12:05:31; HTTP 200; cupons=0]
+PASS  WB262-8b | entregue (informado) 17 min depois do fim da faixa (acima da tolerância de 15): 1 cupom  [HTTP 200]
+PASS  WB262-9 | entregue (hora real) 30 min depois do fim da faixa: 1 cupom de compensação  [HTTP 200; cupons=1]
+PASS  WB262-10 | hora real informada dentro do prazo (35 min atrás, a faixa terminou há 40): a hora do clique atrasada NÃO gera cupom  [HTTP 200; cupons=0]
+PASS  WB262-11 | não há como corrigir a hora depois de entregue (segunda chamada recusada, 409/422)  [HTTP 409 INVALID_DELIVERY_TRANSITION]
+
+=== cupom ===
+PASS  CUPOM-percent-sem | cupom percent SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-percent-zero | cupom percent com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-percent-com | cupom percent com maxUses 25 é criado (201)  [HTTP 201 {"id":"c146c392-78c9-4ad9-b954-28933b066a07","code":"QCPERMWRQP3FD","kind":"percent","value":10,"percentCapCents":2000,"minOrderCents":0,"startsAt":"2026-11-22T]
+PASS  CUPOM-fixed-sem | cupom fixed SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-fixed-zero | cupom fixed com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-fixed-com | cupom fixed com maxUses 25 é criado (201)  [HTTP 201 {"id":"aed8856b-a31d-4f9b-8fae-bebabfb7f728","code":"QCFIXMWRQP3FD","kind":"fixed","value":500,"percentCapCents":null,"minOrderCents":0,"startsAt":"2026-11-22T1]
+PASS  CUPOM-free_shipping-sem | cupom free_shipping SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-free_shipping-zero | cupom free_shipping com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-free_shipping-com | cupom free_shipping com maxUses 25 é criado (201)  [HTTP 201 {"id":"6ae2c6ef-1287-4d09-a0dd-2c38e2ab66c4","code":"QCFREMWRQP3FD","kind":"free_shipping","value":0,"percentCapCents":null,"minOrderCents":0,"startsAt":"2026-1]
+PASS  CUPOM-patch-null | tirar o teto depois (PATCH maxUses: null) é recusado (400)  [HTTP 400]
+PASS  CUPOM-patch-ok | alterar o teto para outro número é aceito (200)  [HTTP 200 {"id":"c146c392-78c9-4ad9-b954-28933b066a07","code":"QCPERMWRQP3FD","kind":"percent","value":10,"percentCapCents":2000,"]
+PASS  CUPOM-detalhe | detalhe traz maxCost (teto x desconto máximo) e usesByStore (WB-116 C5)  [maxCost={"amount":80000,"currency":"BRL"}; usesByStore=[]]
+PASS  CUPOM-primeira | cupom de primeira compra com maxUses é criado (201)  [HTTP 201]
+PASS  CUPOM-lista | a lista do admin não traz cupom ativo sem teto  [ativos sem teto=nenhum]
+
+=== csv ===
+PASS  CSV-1 | R1 Receita por pedido: 200 text/csv com as 15 colunas combinadas  [HTTP 200; colunas=pedido,loja,pago_em,status,bruto,cupom_loja,cupom_plataforma,comissao,taxa_entrega,taxa_servico,application_fee,taxa_provedor,liquido_lojista,estornos,total_pago]
+PASS  CSV-2 | R1: bruto, comissão, taxa de entrega, application_fee e total do pedido batem com o banco (reais com vírgula)  [csv={"pedido":"WB-MNS2F","loja":"Mercadinho Boa Compra","pago_em":"2026-11-22T11:14:32.780Z","status":"received","bruto":"23,96","cupom_loja":"0,00","cupom_plataforma":"0,00","comissao":"3,59","taxa_entrega":"6,00","taxa_servico":"0,00","application_fee":"9,59","taxa_prov
+PASS  CSV-3 | R1: pedido cancelado e estornado mostra estornos = total pago e status cancelled  [csv={"pedido":"WB-2F8BY","loja":"Mercadinho Boa Compra","pago_em":"2026-11-22T11:14:32.680Z","status":"cancelled","bruto":"23,96","cupom_loja":"0,00","cupom_plataforma":"0,00","comissao":"3,59","taxa_entrega":"6,00","taxa_servico":"0,00","application_fee":"9,59","taxa_provedor":"0,30","liquido_lojista"
+PASS  CSV-4 | R2 Estornos: 10 colunas, uma linha por estorno com valor, meio, motivo, ator e situação  [HTTP 200; 34 linhas; colunas=pedido,troca,loja,estornado_em,valor,meio,motivo,situacao,ator,ator_id]
+PASS  CSV-5 | R1: a soma da application_fee do CSV bate com a soma dos pedidos pagos da loja no período  [csv=50136; banco=50136]
+PASS  CSV-6 | cada exportação é auditada (report.export)  [auditorias=4]
+PASS  CSV-7 | 10.001 linhas: 422 EXPORT_TOO_LARGE com rows=10001 e maxRows=10000 e orientação para reduzir o intervalo  [HTTP 422 {"type":"https://api.webag.com.br/errors/export-too-large","title":"Período grande demais","status":422,"detail":"Período grande demais. Reduza o intervalo (máximo 10000 linhas). Encontradas: 10001.","code":"EXPORT_TOO_L]
+PASS  CSV-8 | exatamente 10.000 linhas: exporta (200) com 10.000 linhas  [HTTP 200; linhas=10000]
+PASS  CSV-9 | lojista (dono) 403, sem login 401, intervalo invertido 400  [dono 403; anônimo 401; invertido 400]
+PASS  CSV-10 | SEC-156: motivo que começa com "=" sai escapado no CSV (prefixo apóstrofo/espaço), nunca como fórmula  [WB-MNS2F;;Mercadinho Boa Compra;2026-11-22T11:14:36.558Z;1,11;pix;"'=HYPERLINK(""http://x"",""clique"") motivo com fórmula";done;super_admin;ce76e1d0-3bb2-40d4-8b25-1b86a62806cc]
+
+=== bug020 ===
+PASS  BUG020-1 | "não recebi" registrado com a corrida em "saiu para entrega" (202)  [HTTP 202]
+PASS  BUG020-2 | o aviso fica gravado no pedido (orders.not_received_at)  [not_received_at preenchido=t]
+PASS  BUG020-3 | controle: sem "não recebi", a corrida de 25 h é concluída pelo sistema (pedido delivered)  [status=delivered]
+PASS  BUG020-4 | com "não recebi": a corrida NÃO é concluída sozinha (pedido segue out_for_delivery)  [pedido=out_for_delivery; corrida=out_for_delivery]
+PASS  BUG020-5 | a operação recebe UM alerta delivery_auto_conclude_held (idempotente)  [alertas=1]
+PASS  BUG020-6 | a operação ainda decide à mão (fechar a corrida depois do aviso funciona)  [HTTP 200 {"id":"27156090-1ca2-41ab-ae84-1344ab634415","kind":"delivery","orderId":"784b3bf4-531e-4968-a3a8-91]
+
+=== bugs ===
+PASS  BUG-023a | o cupom de seed BEMVINDO10 (primeira compra) tem teto de usos (max_uses = 100)  [max_uses=100]
+PASS  BUG-023b | nenhum cupom da plataforma ativo sem teto no banco semeado  [sem teto e ativos=0]
+PASS  BUG-022a | entrega_max_min=40, 59 e entrega_faixa_min=60 são recusados (422 PARAMETER_OUT_OF_RANGE)  [40=422 PARAMETER_OUT_OF_RANGE; 59=422; faixa60=422]
+PASS  BUG-022b | entrega_min_por_km=60 (zera o alcance: 60 min por km) é recusado (4xx) e o negativo também  [min_por_km=60 HTTP 422 {"type":"https://api.webag.com.br/errors/parameter-out-of-range","title":"Valor fora da faixa","status":422,"detail":"O valor máximo é 30.","code":"PARAMETER_OU; -5 HTTP 422]
+PASS  BUG-022c | a recusa traz o teto mínimo e a prévia do alcance em km (mensagem útil ao admin)  [{"type":"https://api.webag.com.br/errors/parameter-out-of-range","title":"Valor fora da faixa","status":422,"detail":"O teto (40 min) menos a folga (15 min) precisa cobrir preparo (20) + despacho (15) + 5 min, ou seja, teto de pelo menos 55 min; senão nenhuma loja alcança ninguém. Com estes va
+PASS  BUG-022d | um valor válido (110) é aceito e o efeito aparece no alcance; reset volta ao padrão (120)  [HTTP 200]
+PASS  BUG-022e | restaurar o padrão funciona  [HTTP 200 {"key":"entrega_max_min","value":120,"default":120,"type":"int","min":30,"max":240,"values":null,"de]
+PASS  BUG-021a | faltando 20 min para o fechamento a entrega NÃO é oferecida (faixa termina depois) e o servidor recusa criar o pedido  [faixa=null; checkout={"canCheckout":false,"blockers":["LOGISTICS_CLOSED"],"opensAt":null}; criar pedido HTTP 422 LOGISTICS_CLOSED]
+PASS  BUG-021b | o cartão da descoberta mostra a mesma coisa (unavailableReason LOGISTICS_CLOSED, mesma conta; cache de até 30 s)  [available=false; unavailableReason=LOGISTICS_CLOSED]
+PASS  BUG-021c | com o fechamento 4 h depois a entrega é oferecida e o pedido nasce (sem falso bloqueio)  [HTTP 201; faixa={"minMinutes":21,"maxMinutes":51,"fromAt":"2026-11-22T11:37:18.063Z","toAt":"2026-11-22T12:07:18.063Z"}]
+PASS  BUG-021d | borda: fechando 1 min depois do fim da faixa (51 min) oferece; 2 min antes do fim da faixa NÃO oferece  [+1: pedido HTTP 201; -2: pedido HTTP 422 LOGISTICS_CLOSED]
+FALHA BUGS-ERRO | a seção terminou com exceção  [TypeError: fetch failed |     at node:internal/deps/undici/undici:15456:13 |     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)]
+
+=== sec180 ===
+PASS  SEC180-0 | o cliente pede a exclusão da conta (arrependimento ativo): 200  [HTTP 200 {"status":"pending","effectiveAt":"2026-11-25T11:16:18.597Z","cancelableUntil":"2026-11-25T11:16:18.597Z"}]
+PASS  SEC180-1 | ataque de 21 requisições (11 senhas erradas de 11 IPs + 5 rodadas de via A e "esqueci a senha" de 1 IP): 401 nas erradas, 200/202 nas rodadas  [requisições=21; erradas=401,401,401,401,401,401,401,401,401,401,401; rodadas=200/202 200/202 200/202 200/202 200/202]
+PASS  SEC180-2 | nenhum e-mail foi enviado ao dono durante o ataque (conta pendente: sem sinal ao titular, sem gasto de orçamento)  [e-mails antes=2 depois=2]
+PASS  SEC180-3 | o dono, de um IP novo, com a senha CERTA: 403 LOGIN_CODE_REQUIRED (antes da correção era 429 e a exclusão ficava irreversível)  [HTTP 403 LOGIN_CODE_REQUIRED]
+PASS  SEC180-4 | o código chegou ao e-mail do dono  [código=recebido; e-mails=3]
+PASS  SEC180-5 | repetir a senha certa com código ainda válido: 403 sem e-mail novo (não troca o código debaixo do dono)  [HTTP 403; e-mails=3]
+FALHA SEC180-6 | código errado 400; código certo 204 (uso único)  [errado 400; certo 400]
+PASS  SEC180-7 | a conta reabre: login 200 (ou step-up com código novo); o código usado não vale de novo  [reuso 400; login 403 ACCOUNT_BLOCKED]
+PASS  SEC180-8 | a operação recebeu o alerta account_deletion_under_attack, sem e-mail do titular no conteúdo  [alertas=4]
+
+=== coleta ===
+PASS  COLETA-0 | parâmetro coleta_atrasada_dias_uteis existe com valor 1 (faixa 1 a 5)  [{"key":"coleta_atrasada_dias_uteis","value":1,"default":1,"type":"int","min":1,"max":5,"values":null,"description":"Novo prazo da coleta atrasada, a contar do aviso ao cliente (dias úteis)","ref":"DEC]
+PASS  COLETA-1 | troca com coleta em casa cria a corrida exchange_pickup na fila da Logística  [troca HTTP 201; corrida=6a7bd115-1ef3-4a41-ba9b-91a08fc27193]
+PASS  COLETA-2 | a corrida aparece como Atrasada (overdue) na fila  [overdue=true]
+PASS  COLETA-3 | a varredura avisa o cliente UMA vez, com novo prazo de 1 dia útil (entre ~1 h e 4 dias corridos conforme fim de semana) a contar do aviso  [evento={"newDeadlineAt": "2026-11-23T11:21:14.323Z"}; prazo novo daqui a 24.0 h; hoje=Sun]
+PASS  COLETA-3b | 1 dia útil (não 3): o novo prazo cai no próximo dia útil (nem sábado nem domingo; da sexta são 72 h até a segunda) e nunca a mais de 4 dias corridos  [dia da semana (BRT) do prazo=1; daqui a 24.0 h]
+PASS  COLETA-4 | depois de mais uma varredura continua UM aviso ao cliente e UM alerta à operação (sem repetir)  [avisos=1; alertas=1]
+PASS  COLETA-5 | prazo do item vencido com a coleta atrasada SEM motoboy: a troca NÃO expira (relógio pausado por culpa da Webag)  [status da troca=approved]
+PASS  COLETA-6 | ao atribuir o motoboy, o prazo do cliente ganha o tempo do atraso (evento item_clock_paused)  [assign HTTP 200; prazo antes 2026-11-22T13:23:35.000Z depois 2026-11-26T13:26:45.000Z; item_clock_paused=1]
+PASS  COLETA-7 | controle: coleta que NÃO atrasou não mexe no prazo do item  [antes=2026-11-29 11:23:36.611+00; depois=2026-11-29 11:23:36.611+00]
+
+RESUMO: 92 passaram, 2 falharam, 0 não testadas
+  FALHA BUGS-ERRO | a seção terminou com exceção [TypeError: fetch failed |     at node:internal/deps/undici/undici:15456:13 |     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)]
+  FALHA SEC180-6 | código errado 400; código certo 204 (uso único) [errado 400; certo 400]
+
+real	9m11.461s
+user	0m5.553s
+sys	0m1.811s
+######## reg-sec180
+
+=== sec180 ===
+PASS  SEC180-0 | o cliente pede a exclusão da conta (arrependimento ativo): 200  [HTTP 200 {"status":"pending","effectiveAt":"2026-11-25T11:23:56.139Z","cancelableUntil":"2026-11-25T11:23:56.139Z"}]
+PASS  SEC180-1 | ataque de 21 requisições (11 senhas erradas de 11 IPs + 5 rodadas de via A e "esqueci a senha" de 1 IP): 401 nas erradas, 200/202 nas rodadas  [requisições=21; erradas=401,401,401,401,401,401,401,401,401,401,401; rodadas=200/202 200/202 200/202 200/202 200/202]
+PASS  SEC180-2 | nenhum e-mail foi enviado ao dono durante o ataque (conta pendente: sem sinal ao titular, sem gasto de orçamento)  [e-mails antes=2 depois=2]
+PASS  SEC180-3 | o dono, de um IP novo, com a senha CERTA: 403 LOGIN_CODE_REQUIRED (antes da correção era 429 e a exclusão ficava irreversível)  [HTTP 403 LOGIN_CODE_REQUIRED]
+PASS  SEC180-4 | o código chegou ao e-mail do dono  [código=recebido; e-mails=3]
+PASS  SEC180-5 | repetir a senha certa com código ainda válido: 403 sem e-mail novo (não troca o código debaixo do dono)  [HTTP 403; e-mails=3]
+PASS  SEC180-6 | código errado 400; código certo 204 (uso único)  [errado 400; certo 204]
+PASS  SEC180-7 | a conta reabre: login 200 (ou step-up com código novo); o código usado não vale de novo  [reuso 401; login 200 ]
+PASS  SEC180-8 | a operação recebeu o alerta account_deletion_under_attack, sem e-mail do titular no conteúdo  [alertas=5]
+
+RESUMO: 9 passaram, 0 falharam, 0 não testadas
+
+real	4m8.416s
+user	0m0.310s
+sys	0m0.096s
+######## reg-negocio
+PASS  REG-1 | lojista: cadastro, e-mail confirmado pelo código, papel de lojista com o aceite dos termos  [cadastro 201; verificação 204; papel 204]
+PASS  REG-2 | loja criada em rascunho com CPF válido (201)  [HTTP 201 draft]
+PASS  REG-2b | CPF inválido (111.111.111-11) é recusado (4xx)  [HTTP 400]
+PASS  REG-3 | perfil e endereço da loja (CEP resolvido, município atendido)  [HTTP 200 ]
+FALHA REGRESSAO-ERRO | a regressão terminou com exceção  [TypeError: fetch failed |     at node:internal/deps/undici/undici:15456:13 |     at process.processTicksAndRejections (node:internal/process/task_queues:103:5) |     at async uploadReal (file:///home/user/webag/docs/qa/retestes/onda-8.mjs:38:18)]
+
+RESUMO: 4 passaram, 1 falharam, 0 não testadas
+  FALHA REGRESSAO-ERRO | a regressão terminou com exceção [TypeError: fetch failed |     at node:internal/deps/undici/undici:15456:13 |     at process.processTicksAndRejections (node:internal/process/task_queues:103:5) |     at async uploadReal (file:///home/user/webag/docs/qa/retestes/onda-8.mjs:38:18)]

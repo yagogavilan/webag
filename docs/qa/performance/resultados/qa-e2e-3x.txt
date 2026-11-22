@@ -1,0 +1,17 @@
+# E2E completo da API, 3 execucoes seguidas (PostgreSQL 16.15 + PostGIS e Redis 7.0.15 locais, fileParallelism=false), commit d1be18e
+run 1 exit 0 dur 458s
+run 2 exit 0 dur 473s
+run 3 exit 0 dur 456s
+done
+-- execucao 1
+ Test Files  112 passed (112)
+      Tests  912 passed (912)
+   Duration  457.27s (transform 4.04s, setup 0ms, import 137.14s, tests 308.10s, environment 8ms)
+-- execucao 2
+ Test Files  112 passed (112)
+      Tests  912 passed (912)
+   Duration  471.61s (transform 4.22s, setup 0ms, import 143.97s, tests 315.55s, environment 8ms)
+-- execucao 3
+ Test Files  112 passed (112)
+      Tests  912 passed (912)
+   Duration  455.40s (transform 3.89s, setup 0ms, import 137.03s, tests 306.78s, environment 8ms)

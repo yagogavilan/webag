@@ -1,0 +1,29 @@
+
+== qa-cacheoff-1000R: 1000 VUs, 60 s medidos, 4956 req, 83 req/s, erros 11.26% | jornadas 1029, pedidos 46, falhas 0
+CPU% (100 = 1 vCPU): API 63.6 (pico 110), PG 115 (pico 236), Redis 0.9, gerador 8.0, máquina 84.4% | RAM máx: API 1758 MB, PG 629 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/home                                      1302    21.7    20768    30001    30005   34.3    19323    4782
+GET /v1/browse/stores/{id}                         956    15.9     6720    13475    14739    7.3     1065     663
+GET /v1/browse/stores/{id}/products                937    15.6     3463     6023     6325    2.3    10002    1656
+GET /v1/browse/products/{id}                       473     7.9     1421    13579    15192    1.5     1684     689
+GET /v1/search/suggestions                         352     5.9     5235    16701    19164    1.4      780     416
+GET /v1/search/products                            351     5.8      284     2769    19613    0.6    16331    2035
+GET /v1/me/addresses                               190     3.2     3187     3851     4025    0.0      424     307
+PUT /v1/cart/items/{variantId}                     184     3.1      838    12708    18817    0.0     1710     796
+GET /v1/browse/stores/{id}/products (pág. 2)       117     1.9     2381     5029     5717    4.3    10120    1774
+GET /v1/search/stores                               63     1.1     57.3     2144    17149    0.0     3338     748
+GET /v1/cart                                        31     0.5      698     1359     1385    0.0     1731     802
+
+Top consultas por tempo total (pg_stat_statements):
+  216307 ms     1080x  média  200.28  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+   27819 ms     1200x  média   23.18  select * from ( select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, ((p.base_price_cent
+    9212 ms      565x  média   16.30  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    7507 ms      530x  média   14.16  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    5861 ms     1680x  média    3.49  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+     951 ms     1677x  média    0.57  select "id", "store_id", "weekday", "start_min", "end_min" from "store_hours" where "store_hours"."store_id" in ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $
+     779 ms     1679x  média    0.46  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     609 ms     1202x  média    0.51  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     418 ms       12x  média   34.86  select "id", "number", "user_id", "store_id", "status", "mode", "cart_revision", "address", "eta_min_minutes", "eta_max_minutes", "eta_from_at", "eta_to_at", "e
+     355 ms     1049x  média    0.34  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     342 ms     1080x  média    0.32  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     250 ms     1159x  média    0.22  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
