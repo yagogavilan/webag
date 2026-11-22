@@ -361,7 +361,7 @@ describe('Loja no admin (A3)', () => {
     expect(screen.getByText(/Produto proibido/)).toBeInTheDocument();
     view.unmount();
     renderPanel(<StoreCasePage storeId="s1" />, 'support');
-    await screen.findByText('Você pode ver esta loja, mas não alterá-la.');
+    await screen.findByText('Você pode ver, mas não editar.');
     expect(screen.queryByTestId('admin.loja.reactivate')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Documentos' })).not.toBeInTheDocument();
   });
