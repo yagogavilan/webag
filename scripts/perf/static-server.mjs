@@ -24,11 +24,9 @@ function walk(dir, out = []) {
   return out;
 }
 
-/** Cache imutável só onde o nome muda com o conteúdo (hash no nome): bundles em _expo/static e assets. */
+/** Cache imutável só onde o nome muda com o conteúdo (o export do Expo põe hash em _expo/static e assets); o resto revalida por ETag. */
 export function cacheControlFor(relPath) {
-  if (/^(_expo\/static\/|assets\/)/.test(relPath) && /[.-][0-9a-f]{16,}\.[a-z0-9]+$/i.test(relPath.replace(/\.(gz|br)$/, ''))) return 'public, max-age=31536000, immutable';
-  if (relPath.startsWith('assets/') || relPath.startsWith('_expo/static/')) return 'public, max-age=31536000, immutable';
-  return 'no-cache';
+  return relPath.startsWith('_expo/static/') || relPath.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
 }
 
 /** `Accept-Encoding` -> 'br' | 'gzip' | null. */
@@ -40,10 +38,22 @@ export function pickEncoding(header) {
 }
 
 /**
+ * Dicas de pré-carga das fontes no HTML: o app só pede as fontes depois que o JS roda (expo-font), então elas esperavam o bundle
+ * inteiro baixar. Com `<link rel=preload>` baixam junto com o JS (em paralelo) e o texto aparece sem esperar uma 2ª viagem.
+ * Só as fontes do app (família Figtree e Bricolage) entram; o endereço vai igual ao que o expo-font pede (sem codificar @ e +), senão o navegador baixaria duas vezes.
+ */
+export function fontPreloadTags(paths) {
+  return paths
+    .filter((p) => /\.ttf$/i.test(p) && /(Figtree|BricolageGrotesque)_/.test(p))
+    .map((p) => `<link rel="preload" href="/${p}" as="font" type="font/ttf" crossorigin>`)
+    .join('');
+}
+
+/**
  * Carrega a pasta na memória (já comprimida) e serve. `spa`: caminho sem arquivo (rota do Expo Router) devolve o index.html.
  * Devolve `{ port, close, stats }`.
  */
-export async function startStaticServer({ dir, port = 8081, host = '0.0.0.0', compress = true, spa = true, quiet = false }) {
+export async function startStaticServer({ dir, port = 8081, host = '0.0.0.0', compress = true, spa = true, quiet = false, preloadFonts = true }) {
   const base = resolve(dir);
   const files = new Map();
   const t0 = Date.now();
@@ -57,6 +67,19 @@ export async function startStaticServer({ dir, port = 8081, host = '0.0.0.0', co
       entry.br = brotliCompressSync(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 9, [constants.BROTLI_PARAM_SIZE_HINT]: raw.length } });
     }
     files.set(rel, entry);
+  }
+  if (preloadFonts) {
+    const index = files.get('index.html');
+    if (index) {
+      const tags = fontPreloadTags([...files.keys()]);
+      const html = index.raw.toString('utf8');
+      if (tags && html.includes('</head>')) {
+        index.raw = Buffer.from(html.replace('</head>', `${tags}</head>`));
+        index.etag = `"${createHash('sha1').update(index.raw).digest('base64url').slice(0, 20)}"`;
+        index.gzip = gzipSync(index.raw, { level: 9 });
+        index.br = brotliCompressSync(index.raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 9 } });
+      }
+    }
   }
   if (!files.has('index.html')) throw new Error(`index.html não encontrado em ${base}: rode "expo export -p web" antes`);
   const stats = { requests: 0 };

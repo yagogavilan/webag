@@ -4,7 +4,10 @@
 //   2. grava no `.env` (com cópia do original em `.env.bak`, criada só uma vez, de forma idempotente) só os ENDEREÇOS que o celular precisa; nenhum segredo é lido nem escrito;
 //   3. confere Docker, banco e portas 3000, 3001 e 8081 e abre na rede só a 9000 do armazenamento (fotos; STORAGE_BIND=0.0.0.0);
 //   4. sobe API + site/painéis + app (reaproveita `pnpm dev`) e imprime o endereço para o Safari, os logins e como simular o pagamento.
-// Uso: pnpm iphone [--ip 192.168.0.10] [--check] [--help]
+// Uso: pnpm iphone [--producao] [--ip 192.168.0.10] [--check] [--help]
+//   --producao   (recomendado para TESTAR VELOCIDADE) compila o app web uma vez (`expo export -p web`, minificado) e o serve pronto, com gzip/brotli e
+//                cache longo nos arquivos com hash, na mesma porta 8081. O modo normal serve o pacote de DESENVOLVIMENTO (~12 MB, sem minificar,
+//                recarrega ao editar código): bom para programar, lento e não representa o app de verdade. Mudou o código? Rode de novo.
 //   --ip <IPv4>  usa este endereço em vez do detectado (se houver mais de uma rede, ou se a detecção errar)
 //   --check      só confere tudo e mostra o que mudaria; NÃO altera o `.env` e não sobe o app (bom para testar)
 // Variáveis: SKIP_DOCKER=1 (Postgres/Redis seus, como no `pnpm run setup`).
@@ -17,11 +20,14 @@ import { networkInterfaces } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startStaticServer } from './perf/static-server.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const isWindows = process.platform === 'win32';
 const WARMUP_MS = 4 * 60_000;
 export const PORTS = { api: 3000, web: 3001, app: 8081, storage: 9000 };
+/** Pasta do app web compilado no modo `--producao` (dentro de `dist/`, que o git ignora). */
+export const PRODUCTION_DIR = 'apps/mobile/dist/web';
 
 /** Aviso fixo de segurança (SEC-191): impresso no início e no fim do `pnpm iphone`. */
 export const SAFETY_NOTICE = [
@@ -184,11 +190,20 @@ export function mergeEnvText(text, updates) {
   return { text: out.endsWith(eol) || out === '' ? out : out + eol, changed };
 }
 
+/**
+ * Argumentos do turbo para subir o ambiente. Normal: tudo (`pnpm dev`: API, site e Metro). Produção: só API e site; o app é servido
+ * estático por este processo (porta 8081), então o Metro NÃO sobe.
+ */
+export function devArgs({ producao = false } = {}) {
+  return producao ? ['dev', '--env-mode=loose', '--filter=@webag/api', '--filter=@webag/web'] : ['dev', '--env-mode=loose'];
+}
+
 export function parseArgs(argv) {
-  const options = { ip: undefined, check: false, help: false, errors: [] };
+  const options = { ip: undefined, check: false, help: false, producao: false, errors: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--check') options.check = true;
+    else if (arg === '--producao' || arg === '--production') options.producao = true;
     else if (arg === '--help' || arg === '-h') options.help = true;
     else if (arg === '--ip') options.ip = argv[++i];
     else if (arg.startsWith('--ip=')) options.ip = arg.slice(5);
@@ -200,7 +215,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function buildBanner({ ip, expoSdk, adminPassword, withExpoGo = true, qrSafari = '', qrExpo = '', platform = process.platform, title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
+export function buildBanner({ ip, expoSdk, adminPassword, withExpoGo = true, production = false, qrSafari = '', qrExpo = '', platform = process.platform, title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
   const indent = (qr) => (qr ? ['', ...qr.trimEnd().split('\n').map((row) => `        ${row}`), ''] : []);
   const web = `http://${ip}:${PORTS.app}`;
   const line = '='.repeat(72);
@@ -218,7 +233,9 @@ export function buildBanner({ ip, expoSdk, adminPassword, withExpoGo = true, qrS
     '',
     '     Para ter o ícone do Webag na tela: botão Compartilhar (quadrado com seta)',
     '     > Adicionar à Tela de Início > Adicionar.',
-    '     A 1ª abertura demora (o app é montado na hora); as seguintes são mais rápidas.',
+    ...(production
+      ? ['     MODO PRODUÇÃO: o app já está compilado e comprimido (abre rápido; é o que vale para testar velocidade).', '     Mexeu no código do app? Pare (Ctrl+C) e rode de novo, ou use `pnpm iphone` (modo desenvolvimento, recarrega sozinho).']
+      : ['     A 1ª abertura demora (o app é montado na hora); as seguintes são mais rápidas.', '     Para testar VELOCIDADE use `pnpm iphone --producao` (este modo serve o pacote de desenvolvimento, bem maior e sem minificar).']),
     '',
   ];
   if (withExpoGo) {
@@ -453,10 +470,10 @@ const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    say('Uso: pnpm iphone [--ip 192.168.0.10] [--check]\n  --ip <IPv4>  usa este endereço em vez do detectado\n  --check      só confere tudo e mostra o que mudaria; NÃO altera o .env nem sobe nada');
+    say('Uso: pnpm iphone [--producao] [--ip 192.168.0.10] [--check]\n  --producao   app compilado e comprimido (rápido; use para testar velocidade). Sem a opção: modo desenvolvimento (recarrega ao editar)\n  --ip <IPv4>  usa este endereço em vez do detectado\n  --check      só confere tudo e mostra o que mudaria; NÃO altera o .env nem sobe nada');
     return;
   }
-  if (options.errors.length > 0) fail(options.errors[0], ['Uso: pnpm iphone [--ip 192.168.0.10] [--check]']);
+  if (options.errors.length > 0) fail(options.errors[0], ['Uso: pnpm iphone [--producao] [--ip 192.168.0.10] [--check]']);
   say('');
   for (const text of SAFETY_NOTICE) say(`[iphone] ${text}`);
   say('');
@@ -578,16 +595,29 @@ async function main() {
   const qrExpo = await makeQr(`exp://${ip}:${PORTS.app}`);
 
   if (options.check) {
-    say(buildBanner({ ip, expoSdk, adminPassword: current.SEED_ADMIN_PASSWORD, qrSafari, qrExpo, title: 'CONFERIDO (nada foi iniciado). Quando subir, o endereço do iPhone será este:' }));
+    say(buildBanner({ ip, expoSdk, adminPassword: current.SEED_ADMIN_PASSWORD, qrSafari, qrExpo, production: options.producao, withExpoGo: !options.producao, title: 'CONFERIDO (nada foi iniciado). Quando subir, o endereço do iPhone será este:' }));
     step('--check: tudo conferido; nada foi iniciado. Para subir: pnpm iphone');
     return;
   }
 
-  // 6. Sobe tudo (mesmo caminho do `pnpm dev`)
-  step('subindo API, site/painéis e app... (a primeira vez demora; aguarde a mensagem "WEBAG PRONTO")');
-  const devArgs = ['dev', '--env-mode=loose'];
-  const child = spawn('pnpm', devArgs, {
-    ...spawnOptions('pnpm', devArgs),
+  // 6. Sobe tudo (mesmo caminho do `pnpm dev`; em --producao o app vem compilado e é servido por este processo)
+  let staticApp = null;
+  if (options.producao) {
+    step('modo produção: compilando o app web (expo export -p web; leva 1 a 4 minutos)...');
+    const mobileDir = resolve(root, 'apps/mobile');
+    const exported = spawnSync(process.execPath, ['--env-file-if-exists=../../.env', './node_modules/expo/bin/cli', 'export', '-p', 'web', '--output-dir', 'dist/web'], {
+      cwd: mobileDir,
+      stdio: 'inherit',
+      env: { ...process.env, CI: '1', EXPO_NO_TELEMETRY: '1' },
+    });
+    if (exported.status !== 0) fail('não consegui compilar o app web (expo export).', ['Veja a mensagem acima. Para usar o modo de desenvolvimento: pnpm iphone (sem --producao)']);
+    staticApp = await startStaticServer({ dir: resolve(root, PRODUCTION_DIR), port: PORTS.app, host: '0.0.0.0' });
+    step(`app compilado servido na porta ${PORTS.app} (brotli/gzip, cache longo nos arquivos com hash)`);
+  }
+  step(options.producao ? 'subindo API e site/painéis... (aguarde a mensagem "WEBAG PRONTO")' : 'subindo API, site/painéis e app... (a primeira vez demora; aguarde a mensagem "WEBAG PRONTO")');
+  const turboArgs = devArgs({ producao: options.producao });
+  const child = spawn('pnpm', turboArgs, {
+    ...spawnOptions('pnpm', turboArgs),
     cwd: root,
     stdio: 'inherit',
     env: {
@@ -609,6 +639,7 @@ async function main() {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
       stopping = true;
+      void staticApp?.close();
       child.kill(signal);
     });
   }
@@ -620,11 +651,15 @@ async function main() {
     await sleep(2000);
     ready.api ||= (await httpGet(`http://127.0.0.1:${PORTS.api}/health`)) === 200;
     ready.web ||= (await httpGet(`http://127.0.0.1:${PORTS.web}/`, 8000)) > 0;
-    ready.app ||= (await httpGet(`http://127.0.0.1:${PORTS.app}/status`)) === 200;
+    ready.app ||= staticApp !== null || (await httpGet(`http://127.0.0.1:${PORTS.app}/status`)) === 200;
   }
   if (!Object.values(ready).every(Boolean)) {
     const waiting = Object.entries(ready).filter(([, ok]) => !ok).map(([name]) => ({ api: 'API (3000)', web: 'site (3001)', app: 'app (8081)' })[name]);
     say(`\n[iphone] AVISO: depois de 5 minutos ainda não responderam: ${waiting.join(', ')}. Veja as mensagens de erro acima.`);
+    return;
+  }
+  if (options.producao) {
+    say(buildBanner({ ip, expoSdk, adminPassword: current.SEED_ADMIN_PASSWORD, qrSafari, qrExpo, production: true, withExpoGo: false }));
     return;
   }
   // "PRONTO" só depois de o bundle do app estar montado: o 1º pedido do Safari dispararia a montagem (minutos) e a página ficaria em branco.

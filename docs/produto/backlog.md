@@ -529,3 +529,151 @@ Base: leitura de código, OpenAPI e relatórios (sem executar). A matriz complet
 | B4 | Sem Usuários no admin (WB-102) | busca, detalhe mascarado, bloquear e desbloquear com motivo; sem redefinir senha | backend-dev e web |
 | B5 | Sem Pedidos no admin (WB-108, 109) | lista com filtros, detalhe com linha do tempo, cancelar e estornar; sem CSV, "Atenção" nem "Revelar" | backend-dev e web |
 Ordem se o prazo apertar: B1, B2, B3, B4, B5 (o último a entrar). Correções pequenas junto: padrão de comissão 15%, tarifa do provedor no "Você recebe" (WB-242 C1), alcance mínimo de 3 km (HIP-P08), `troca_resposta_h` 6-72, parcelas lidas dos parâmetros, escolha do item na troca (WB-170), tabela de medidas no app (WB-246). Divergências e decisões: `revisao-funcional.md` §5 e DEC-070 a DEC-072.
+
+## 10. v1.1 (proposta do PO, 2026-11-22; pedido do fundador)
+
+Fontes: PRDs `docs/produto/prd/v1-1-cupons.md`, `v1-1-admin-e-paineis.md`, `v1-1-analises-lojista.md`, `v1-1-cadastro-rapido.md`, `v1-1-despacho-e-app-motoboy.md`, `v1-1-rastreio-e-notificacoes.md`. Pesquisa e decisões do fundador: `docs/produto/v1-1-pesquisa.md` (§11). Propostas de decisão: `decisoes.md` DEC-088 a DEC-101. **Os critérios de aceite em Gherkin estão em cada PRD, na história de mesmo ID** (o backlog indexa; não duplica). Status de todas: **proposta, sem DoR** (faltam spec de tela do designer, threat model do Security nas marcadas, estimativa dos devs).
+
+### 10.1 IDs e o que muda no que já existia
+- **Faixa usada: WB-340 a WB-399.** WB-300 a WB-334 seguem **reservados à fase 2** (§6.1 a §6.4); o pedido citava "WB-3xx" e esses números já estavam ocupados. Faixas: cupons 340-349; admin e painéis 350-359; análises 360-369; cadastro 370-379; despacho e app do motoboy 380-389; rastreio e notificações 390-399.
+- **Absorvidas:** WB-073 (cupons próprios) -> WB-346; WB-301 (app/página do motoboy) -> WB-383 a 387; WB-303 (rastreio) -> WB-392 a 395; WB-308 (painel de despacho com mapa) -> WB-380, 381, 388; WB-192 C2 (Web Push do lojista, cortado na DEC-071) -> WB-397; DT-059 (alerta de autoconsumo, DEC-060) -> WB-344 C7.
+- **Continuam na fase 2:** WB-300 (cadastro com documentos), WB-302 (despacho automático), WB-304 (prova por foto), WB-305, 306, 307, 309; WB-310 a 334. Cada um com o gatilho dos PRDs (seção "Fora do escopo").
+- **Muda em regra existente (aplicar ao aprovar a decisão indicada):** WB-060 C1 descrição opcional na via rápida (DEC-094); RN-07, RN-18, RN-19 (a loja confirma a saída; MOTOBOY_NA_LOJA; `deliveredAt` pelo app; ETA ao vivo informativo; DEC-099); RN-09 (fontes de custo, DEC-088 e DEC-089); RN-13 (matriz do admin, DEC-090).
+
+### 10.2 Priorização (RICE por módulo)
+Alcance em pessoas por mês no piloto `[HIPÓTESE; sem dado]`; esforço em pessoa-semana `[estimativa do PO; devs confirmam]` mais horas do fundador; confiança 50% sem fonte, 80% com respaldo no brief. Notas individuais dos devs e do CEO ainda não existem; este quadro é a minha, para discussão.
+
+| Módulo | Alcance | Impacto | Conf. | Esforço | RICE | Premissa e leitura |
+|---|---|---|---|---|---|---|
+| Cupons por fonte (WB-340 a 349) | 1.500 clientes | 1 | 50% | 4 | 188 | Alavanca de crescimento; depende de F2 e F4 |
+| Rastreio, OK da loja e notificações (390 a 399) | 1.000 | 2 | 50% | 8 | 125 | O "cadê meu pedido" ainda não foi medido |
+| Despacho com rota e link (380 a 382, 388) | 600 entregas | 1 | 50% | 3 | 100 | Custo zero; antecede o app |
+| App do motoboy (383 a 387, 389) | 600 entregas | 1 | 50% | 6 | 50 | Gatilho do §6.1 não medido; jurídico bloqueia |
+| Admin: gestão de lojas (350 a 355) | 33 | 2 | 80% | 3 | 18 | Brief §3.3; ativa lojas por concierge |
+| IA de cadastro (378, só interface e fake) | 30 lojas | 0,25 | 30% | 1 | 2 | Real fica fora (F8) |
+| Cadastro rápido (370 a 377, 379) | 30 lojas | 2 | 50% | 5 | 6 | **Liga a hipótese principal** (lojas vendem aqui) |
+| Módulo Análises do lojista (364 a 368) | 10 lojas | 1 | 30% | 3 | 1,0 | Sem evidência de disposição a pagar (HIP-A1) |
+| Coleta e análise de acessos do admin (360 a 363, 369) | 3 admins | 1 | 50% | 4 | 0,4 | Piso de LGPD; alimenta o resto |
+| Painel de gráficos (356 a 359) | 3 admins | 1 | 50% | 5 | 0,3 | Presets antes do construtor |
+
+**Como ler.** O RICE favorece o que atinge muitos clientes e pune o que atinge 3 admins ou 30 lojas, mesmo quando o item **destrava** a hipótese principal. Por isso **cadastro rápido e admin de lojas sobem na ordem pela dependência** (sem loja com produto não há pedido, e o cupom e o rastreio não têm o que acelerar), não pela nota. O que o RICE mostra de útil: **o app do motoboy e o módulo pago são os itens de pior retorno e maior risco**; ficam depois, com gatilho.
+
+**Piso (não competem por nota nem são cortados; marcados "piso" na §10.4, 13 histórias):** WB-343 (adesão da loja), 344 (antifraude), 347 (composição do preço, Portaria Senacon 61/2026), 352 e 355 (permissão e auditoria), 360, 361, 363 e 369 (LGPD da medição), 379 (a meta de 60 s precisa ser medida), 389, 395 e 399 (privacidade do motoboy e do rastreio), mais a revisão jurídica J22 a J27.
+
+### 10.3 Releases (ordem sugerida, o que depende do quê)
+Esforço total `[HIPÓTESE]`: ~39 pessoa-semana + horas do fundador (aparelho real, 5 entrevistas, 3 pareceres, cotação de motoboys). O fundador é o gargalo (RICE: esforço inclui as horas dele).
+
+| Release | Conteúdo | Valor | Depende de | Pronto quando |
+|---|---|---|---|---|
+| **R0 (em paralelo, sem código)** | Pareceres J22 a J27; cotação de 3 a 5 motoboys; 5 entrevistas (disposição a pagar pelas Análises, EAN, como usam cupom nos apps); decisões F1 a F17 (`pesquisa` §11); spikes L5, L6, L9 | Evita construir o que o jurídico ou o mercado barram; **J22 vale também para o v1.0 (G5)** | Fundador, advogado | Tabela de decisões respondida |
+| **R1 Oferta e controle** | Cadastro rápido: 370, 371, 372, 379, depois 374, 375, 376, 377. Admin: 350, 351, 352, 353, 355 (e 354). Coleta anônima de acessos **em staging**: 360, 361, 363, 369 (liga em produção só após J24) | Ativa lojas (a oferta é o gargalo); o admin cadastra pelo lojista; os dados começam a acumular | R0 (J24 para ligar a coleta); DoR dos itens | Teste de usabilidade com mediana <= 60 s; lojas com 1º produto em 24 h >= 80% |
+| **R2 Crescimento** | Cupons: 340, 341, 342, 343, 344, 345, 347, 349 (depois 346, 348). Admin: 356, 357 (painéis prontos), 362 (acessos), 373 (EAN base própria). 367 (porta falsa) | Alavanca de aquisição com custo limitado; o fundador enxerga o negócio | F1 a F4 e J22, J23; R1 (coleta e permissões) | Nenhuma campanha estoura orçamento; 0 desconto sem adesão; relatório confere com o ledger |
+| **R3 Entrega assistida** | 381, 382 (rota e link), 380 (mapa), 390 e 391 (OK da loja e estados, com a operação marcando pelo motoboy via WhatsApp), 396 (parte loja e admin), 397 (Web Push do lojista), 358 e 359 (construtor) | Mais entregas por hora, loja sabe o que fazer, **a custo zero** (heurística, link, Protomaps) | Spike L5 (mapa próprio); F11, F12 | Operação monta lote em <= 90 s; OK da loja com mediana <= 2 min |
+| **R4 App do motoboy e rastreio** | 383, 384, 385, 386, 387, 389 e 388; 392, 393, 394, 395, 399, 398, 396 (parte cliente) | Rastreio ao vivo, `deliveredAt` exato, menos trabalho manual | **J8 e J26 (bloqueiam)**, F10, F16; R3; aparelho real | >= 90% das corridas fechadas pelo app; bateria <= 12% por hora |
+| **R5 Análises pagas e IA** | 364, 365, 366, 368; 378 (interface e fake) | Receita nova e valor ao lojista | RN-A8 (8 semanas de dado, 5 lojas com 100 visitas), F5, F6; porta falsa com interesse | >= 3 lojas aceitam pagar após o teste |
+
+**Por que não a ordem do pedido (cupons primeiro).** Cupom sem loja com catálogo é custo sem retorno; o gatilho do app do motoboy (> 15 entregas por hora) não foi medido; e as Análises dependem de dado que só começa a existir com a coleta. Mantive a **coleta cedo** (R1, em staging) porque cada semana sem coletar é dado perdido para o R5. **Custo de oportunidade:** antecipar o app do motoboy (R4) para antes do R2 tira ~6 pessoa-semana dos cupons e do admin e adia a ativação de lojas; só faz sentido se o piloto mostrar o gatilho do §6.1 ou se o fundador o exigir (decisão dele, com o risco jurídico J8 à vista).
+
+**Se o prazo apertar (ordem de corte):** 1. R5 inteira; 2. construtor (358, 359); 3. R4 (ficar com localização pelo WhatsApp e a operação marcando etapas); 4. 346, 348, 354, 365; 5. 380 (mapa). **Nunca cortar** o piso do §10.2.
+
+### 10.4 Histórias do v1.1
+Formato: `WB-### | história | persona | método e nota | MoSCoW | release | dependências | status | fonte`. "RICE-x" remete ao módulo da §10.2; "piso" não tem nota.
+
+**Cupons (`prd/v1-1-cupons.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-340 | Admin cria campanha com fonte de custo (Webag, Loja, Dividido, Autofinanciado) | Admin | RICE-cupons 188 | Must | R2 | WB-116, WB-119; F1 | Proposta | Fundador 2026-11-22 |
+| WB-341 | Motor divide o desconto e aplica os tetos (margem, `application_fee`, "faltam R$ X") | Admin, cliente | RICE-cupons | Must | R2 | WB-340, WB-238; F2, F4 | Proposta | RN-09, RN-10 |
+| WB-342 | Orçamento total e diário e usos, com reserva atômica | Admin | RICE-cupons | Must | R2 | WB-341 | Proposta | SEC-155 |
+| WB-343 | Adesão da loja à campanha (aceite, teto, saída; sem adesão tácita) | Lojista | piso (confiança) | Must | R2 | WB-340, WB-192; J27 | Proposta | `pesquisa` §1 |
+| WB-344 | Antifraude (CPF, aparelho, endereço, velocidade) e "Suspeitos" | Admin | piso | Must | R2 | WB-341; Security | Proposta | SEC-170, DT-059 |
+| WB-345 | Relatório de custo real por campanha | Fundador | RICE-cupons | Must | R2 | WB-341, WB-114 | Proposta | Fundador |
+| WB-346 | Lojista cria cupom próprio (absorve WB-073) | Lojista | RICE-cupons | Should | R2 | WB-341, WB-343 | Proposta | WB-073 |
+| WB-347 | Cliente vê origem e composição do desconto | Cliente | piso (Portaria 61/2026) | Must | R2 | WB-341, WB-023; J22 | Proposta | `pesquisa` §2.2 |
+| WB-348 | Selo "de/por" só com preço de referência de 30 dias | Cliente, lojista | risco legal (CDC art. 37); se cortada, a loja não exibe percentual sem validação | Should | R2 | WB-062; J23 | Proposta | `pesquisa` §2.3 |
+| WB-349 | Pausar, encerrar e alertas de campanha | Admin | RICE-cupons | Must | R2 | WB-340 | Proposta | Fundador |
+
+**Admin e painéis (`prd/v1-1-admin-e-paineis.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-350 | Ficha 360 da loja no admin | Admin | RICE-admin 18 | Must | R1 | WB-104, WB-105 | Proposta | Brief §3.3 |
+| WB-351 | Admin edita dados, horário, pausa e status (motivo, aviso, auditoria) | Admin | RICE-admin | Must | R1 | WB-350, WB-056 | Proposta | Fundador |
+| WB-352 | "Ver como o lojista vê" (somente leitura) | Suporte | piso | Must | R1 | WB-350; Security | Proposta | Fundador; F15 |
+| WB-353 | Admin edita catálogo e preços da loja | Operação | RICE-admin | Must | R1 | WB-350, WB-060, WB-061; J27 | Proposta | Fundador |
+| WB-354 | Auditoria por loja e restaurar valor | Fundador | RICE-admin | Should | R1 | WB-353 | Proposta | WB-123 |
+| WB-355 | Permissões por perfil nas ações novas | Admin | piso | Must | R1 | WB-100 | Proposta | RN-13 |
+| WB-356 | Catálogo de métricas e dimensões | Fundador | RICE-painéis 0,3 | Must | R2 | WB-122 | Proposta | RN-15 |
+| WB-357 | Painéis prontos com filtros globais | Fundador | RICE-painéis | Should | R2 | WB-356 | Proposta | Fundador |
+| WB-358 | Construtor de widgets, salvar e duplicar painéis | Fundador | RICE-painéis | Should | R3 | WB-356 | Proposta | Fundador |
+| WB-359 | Exportar widget, desempenho e proteção | Fundador | RICE-painéis | Should | R3 | WB-358 | Proposta | SEC-156 |
+
+**Análises (`prd/v1-1-analises-lojista.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-360 | Aviso, controle e opt-out de medição no app | Cliente | piso (LGPD) | Must | R1 | WB-211; J24 | Proposta | `pesquisa` §3 |
+| WB-361 | Coleta de eventos de navegação sem identificar o cliente | Webag | piso | Must | R1 | WB-360; J24; F7 | Proposta | DEC-073 |
+| WB-362 | Admin: análise de acessos (lojas, produtos, perfil x produto, funil) | Fundador | RICE-acessos 0,4 | Should | R2 | WB-361, WB-363, WB-356 | Proposta | Fundador |
+| WB-363 | Agregação, mínimo de 5 e retenção de 90 dias | Webag | piso | Must | R1 | WB-361 | Proposta | LGPD |
+| WB-364 | Lojista: painel Análises (visitas, funil, origem) | Lojista | RICE-módulo 1,0 | Should | R5 | WB-363, WB-366 | Proposta | Fundador |
+| WB-365 | Lojista: produto visto x vendido e horário de pico | Lojista | RICE-módulo | Should | R5 | WB-364 | Proposta | Fundador |
+| WB-366 | Admin: ativar, testar e suspender o módulo por loja | Fundador | RICE-módulo | Should | R5 | WB-350; F5, F6 | Proposta | Fundador |
+| WB-367 | Lojista: porta falsa do módulo | Fundador | HIP-A1 | Should | R2 | WB-078 | Proposta | `pesquisa` L3 |
+| WB-368 | Origem por canal do link da loja | Lojista | RICE-módulo | Could | R5 | WB-361 | Proposta | Fundador |
+| WB-369 | Direitos do titular e medição (exportar, excluir, opor) | Cliente | piso | Must | R1 | WB-217, WB-215 | Proposta | LGPD |
+
+**Cadastro rápido (`prd/v1-1-cadastro-rapido.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-370 | Foto primeiro: cadastrar com 2 campos | Lojista | dependência da hipótese principal (RICE-cadastro 6) | Must | R1 | WB-060 | Proposta | Fundador; persona P2 |
+| WB-371 | Rascunho automático e retomada | Lojista | idem | Must | R1 | WB-370 | Proposta | Fundador |
+| WB-372 | Duplicar produto e variação | Lojista | idem | Must | R1 | WB-370 | Proposta | Fundador |
+| WB-373 | Código de barras com a câmera (EAN, base própria) | Lojista | idem | Should | R2 | WB-370; F9 | Proposta | Fundador |
+| WB-374 | Grade tamanho x cor | Lojista | idem | Should | R1 | WB-061, WB-375 | Proposta | Fundador |
+| WB-375 | Modelos por categoria | Lojista | idem | Should | R1 | WB-106 | Proposta | Fundador |
+| WB-376 | Colar texto do WhatsApp e importar planilha melhorada | Lojista | idem | Should | R1 | WB-370, WB-065 | Proposta | Fundador |
+| WB-377 | Edição em massa tipo planilha | Lojista, funcionário | idem | Should | R1 | WB-066 | Proposta | Fundador |
+| WB-378 | Adaptador de IA de visão (fake por padrão) | Lojista | RICE 2 | Could | R5 | WB-370; F8, J25 | Proposta | Fundador |
+| WB-379 | Medição do tempo de cadastro e roteiro do teste | PO | piso (meta) | Must | R1 | WB-370 | Proposta | Fundador |
+
+**Despacho e app do motoboy (`prd/v1-1-despacho-e-app-motoboy.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-380 | Admin: mapa da fila e atribuição visual | Operação | RICE-despacho 100 | Should | R3 | WB-230, WB-232; F11; L5 | Proposta | WB-308 |
+| WB-381 | Admin: agrupar e gerar rota (heurística própria) | Operação | RICE-despacho | Must | R3 | WB-256, WB-249 | Proposta | Fundador |
+| WB-382 | Rota por link: abrir no Maps ou Waze | Motoboy | RICE-despacho | Must | R3 | WB-381, WB-232 | Proposta | Fundador |
+| WB-383 | Cadastro e convite do motoboy | Operação | RICE-app 50 | Must | R4 | WB-231; J8, J26 | Proposta | WB-301 |
+| WB-384 | App: ver, aceitar e recusar corridas | Motoboy | RICE-app | Must | R4 | WB-383, WB-381 | Proposta | WB-301 |
+| WB-385 | Instalar e atualizar o app (APK Android) | Operação | RICE-app | Must | R4 | J8, J26; F10 | Proposta | Fundador |
+| WB-386 | App: etapas e botões de coleta e entrega | Motoboy | RICE-app | Must | R4 | WB-384, WB-391 | Proposta | Fundador |
+| WB-387 | App: GPS só na corrida, em segundo plano e sem sinal | Motoboy | RICE-app | Must | R4 | WB-384 | Proposta | Fundador |
+| WB-388 | Admin: motoboys ao vivo, sem sinal e reatribuir | Operação | RICE-app | Should | R4 | WB-380, WB-387 | Proposta | WB-308 |
+| WB-389 | Privacidade do motoboy (histórico, retenção, aviso) | Motoboy | piso (LGPD) | Must | R4 | WB-383, WB-387; J26 | Proposta | LGPD |
+
+**Rastreio e notificações (`prd/v1-1-rastreio-e-notificacoes.md`)**
+| ID | História | Persona | Nota | MoSCoW | Rel. | Dependências | Status | Fonte |
+|---|---|---|---|---|---|---|---|---|
+| WB-390 | Loja confirma a saída do pedido (OK de saída) | Loja | RICE-rastreio 125 | Must | R3 | WB-229, WB-386 ou operação, WB-391; F12 | Proposta | Fundador |
+| WB-391 | Estados, timeouts e divergências da entrega (reconcilia WB-262) | Operação | RICE-rastreio | Must | R3 | WB-233, WB-235 | Proposta | RN-07, RN-18, DEC-064 |
+| WB-392 | Cliente acompanha o motoboy no mapa | Cliente | RICE-rastreio | Must | R4 | WB-387, WB-390, WB-395; F13 | Proposta | WB-303 |
+| WB-393 | ETA ao vivo sem mudar a promessa | Cliente | RICE-rastreio | Should | R4 | WB-392 | Proposta | DEC-076 |
+| WB-394 | Sem sinal do motoboy ou do cliente | Cliente | RICE-rastreio | Must | R4 | WB-392 | Proposta | Fundador |
+| WB-395 | Privacidade e retenção do rastreio | Cliente, motoboy | piso | Must | R4 | WB-387; J26 | Proposta | LGPD |
+| WB-396 | Notificações do fluxo de saída e entrega | Loja, cliente, admin | RICE-rastreio | Must | R3 (loja e admin), R4 (cliente) | WB-390, WB-191, WB-192 | Proposta | Fundador |
+| WB-397 | Web Push do painel do lojista (reabre WB-192 C2) | Lojista | RICE-rastreio | Should | R3 | WB-396 | Proposta | DEC-071 |
+| WB-398 | Métricas do fluxo de saída e do rastreio | Fundador | RICE-rastreio | Should | R4 | WB-391 | Proposta | Skill métricas |
+| WB-399 | Encerrar o rastreio e fechar a entrega | Cliente | piso (privacidade) | Must | R4 | WB-386, WB-392 | Proposta | Fundador |
+
+**Contagem v1.1:** 60 histórias; Must 37, Should 21, Could 2, Won't 0 (o que ficou de fora está nas tabelas "Fora do escopo" de cada PRD, com gatilho). 37 Must em 60 passa de 60%: parte deles é **piso** (§10.2) e os demais são cortados por release, não por MoSCoW (ordem de corte em §10.3).
+
+### 10.5 Pareceres e perguntas que travam o DoR
+| Quem | Pergunta | Onde |
+|---|---|---|
+| Advogado do fundador (novos J22 a J27, em `decisoes.md`) | Portaria Senacon 61/2026 e a rubrica "taxa de entrega" (**vale para o v1.0**); cupom, regulamento e pedido mínimo; base legal da medição; IA de terceiros; GPS e vínculo do motoboy; edição de catálogo pelo admin e cobrança do módulo | `pesquisa` §11 F16 e F17; PRDs |
+| Designer | Fluxo da câmera e das 6 telas novas do cadastro; campanha e adesão; mapa e estados do rastreio (inclusive "Você é o 2º"); app do motoboy (alvo >= 56 pt, ao sol); painéis acessíveis | PRDs, "Perguntas em aberto" |
+| Security | Threat model: antifraude de cupom (identificadores), edição pelo admin e "ver como", consultas dos painéis, ingestão de eventos e anonimato real, convite e sessão do motoboy, posição falsificada, tickets de rastreio, IA e foto a terceiro | PRDs |
+| backend-dev e tech-lead | Ledger do custo de campanha; tabela de resumo dos painéis; esquema e partições de eventos e pontos; ADR de mapa (Protomaps), de app separado do motoboy e de `ProductVisionProvider` | PRDs |
+| mobile-dev | MapLibre nativo x Expo Go; leitor de código no Safari; rascunho local; Web Push no iPhone; limite de paradas do link do Maps | PRDs |
+| QA | Plano com aparelho real (bateria, GPS em segundo plano, câmera), carga dos painéis, varredura de log de `session_id`, testes de concorrência de orçamento | PRDs |
+
+### 10.6 Métricas e North Star
+A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metricas-de-produto`) **não muda**; o v1.1 mexe em entradas: lojas ativas (cadastro rápido, admin), conversão sessão para pedido pago e recompra (cupons, rastreio), % entregue na faixa (rota, OK da loja, app) e aceite (notificações). **Guardrails novos:** custo de campanha por cliente novo, % de usos suspeitos, tempo do OK da loja, % de saída automática, bateria do motoboy, cobertura da medição. Eventos de cada módulo estão no fim de cada PRD; nenhum carrega dado pessoal.

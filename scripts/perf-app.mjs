@@ -95,7 +95,7 @@ export function renderReport(before, after) {
 }
 
 export function parseArgs(argv) {
-  const o = { label: 'medida', runs: 3, net: 'lento', cpu: 4, dist: null, url: null, out: null, compress: true, report: null, help: false, errors: [] };
+  const o = { label: 'medida', runs: 3, net: 'lento', cpu: 4, dist: null, url: null, out: null, compress: true, preload: true, report: null, help: false, errors: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--label') o.label = argv[++i];
@@ -106,6 +106,7 @@ export function parseArgs(argv) {
     else if (a === '--url') o.url = argv[++i];
     else if (a === '--out') o.out = argv[++i];
     else if (a === '--no-compress') o.compress = false;
+    else if (a === '--no-preload') o.preload = false;
     else if (a === '--report') o.report = [argv[++i], argv[++i]];
     else if (a === '--help' || a === '-h') o.help = true;
     else o.errors.push(`opção desconhecida: ${a}`);
@@ -422,7 +423,7 @@ async function main() {
       await exportWeb(dist, api.base);
     }
     bundle = bundleSizes(dist);
-    server = await startStaticServer({ dir: dist, port: 8095, host: '127.0.0.1', compress: o.compress });
+    server = await startStaticServer({ dir: dist, port: 8095, host: '127.0.0.1', compress: o.compress, preloadFonts: o.preload });
     appUrl = `http://127.0.0.1:${server.port}`;
   }
   const exe = process.env.CHROMIUM_PATH || undefined;
