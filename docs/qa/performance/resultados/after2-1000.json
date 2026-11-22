@@ -1,0 +1,357 @@
+{
+ "label": "after2-1000",
+ "vus": 1000,
+ "durationS": 60.001,
+ "rampS": 20,
+ "thinkMs": [
+  1500,
+  4500
+ ],
+ "requests": 13960,
+ "rps": 232.66278895351746,
+ "errPct": 0,
+ "journeys": {
+  "journeys": 2741,
+  "orders": 148,
+  "orderFail": 0,
+  "empty": 0
+ },
+ "cpu": {
+  "sysAvg": 58.999327776245124,
+  "apiAvg": 129.103758576922,
+  "apiMax": 139.5,
+  "pgAvg": 77.691822262362,
+  "pgMax": 98.5,
+  "redisAvg": 2.1164667999000835,
+  "generatorAvg": 11.330533861622303
+ },
+ "ramMb": {
+  "apiMax": 583.734375,
+  "pgMax": 887.0078125
+ },
+ "routes": [
+  {
+   "label": "PUT /v1/cart/items/{variantId}",
+   "n": 1843,
+   "rps": 30.71615473075449,
+   "p50": 5665.792022,
+   "p95": 7262.14106,
+   "p99": 7822.980138,
+   "max": 8038.609461,
+   "errPct": 0,
+   "status": {
+    "200": 1843
+   },
+   "avgBytes": 1807.7183939229517,
+   "avgGzBytes": 798.8666666666667
+  },
+  {
+   "label": "GET /v1/home",
+   "n": 1814,
+   "rps": 30.232829452842452,
+   "p50": 1657.789362,
+   "p95": 5916.636114,
+   "p99": 6375.671467,
+   "max": 6559.352882,
+   "errPct": 0,
+   "status": {
+    "200": 1814
+   },
+   "avgBytes": 29380.244762954797,
+   "avgGzBytes": 4837.1
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}",
+   "n": 1797,
+   "rps": 29.94950084165264,
+   "p50": 1502.602248,
+   "p95": 2406.433724,
+   "p99": 3223.46448,
+   "max": 3599.274825,
+   "errPct": 0,
+   "status": {
+    "200": 1797
+   },
+   "avgBytes": 1137.6505286588758,
+   "avgGzBytes": 649.6333333333333
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products",
+   "n": 1796,
+   "rps": 29.93283445275912,
+   "p50": 17.898077,
+   "p95": 996.023433,
+   "p99": 1417.875111,
+   "max": 1589.579516,
+   "errPct": 0,
+   "status": {
+    "200": 1796
+   },
+   "avgBytes": 10325.861915367483,
+   "avgGzBytes": 1734.5666666666666
+  },
+  {
+   "label": "GET /v1/browse/products/{id}",
+   "n": 1784,
+   "rps": 29.7328377860369,
+   "p50": 2294.11623,
+   "p95": 3563.187839,
+   "p99": 4193.022916,
+   "max": 4277.523838,
+   "errPct": 0,
+   "status": {
+    "200": 1784
+   },
+   "avgBytes": 1730.2146860986547,
+   "avgGzBytes": 707.3333333333334
+  },
+  {
+   "label": "GET /v1/cart",
+   "n": 1738,
+   "rps": 28.966183896935053,
+   "p50": 5369.339215,
+   "p95": 6909.609917,
+   "p99": 7570.723305,
+   "max": 7977.31438,
+   "errPct": 0,
+   "status": {
+    "200": 1738
+   },
+   "avgBytes": 1764.156501726122,
+   "avgGzBytes": 798.4
+  },
+  {
+   "label": "GET /v1/search/products",
+   "n": 874,
+   "rps": 14.566423892935118,
+   "p50": 556.485589,
+   "p95": 908.760749,
+   "p99": 1047.170471,
+   "max": 2768.772574,
+   "errPct": 0,
+   "status": {
+    "200": 874
+   },
+   "avgBytes": 16412.136155606408,
+   "avgGzBytes": 2037.1666666666667
+  },
+  {
+   "label": "GET /v1/search/suggestions",
+   "n": 871,
+   "rps": 14.516424726254563,
+   "p50": 710.623366,
+   "p95": 3764.52799,
+   "p99": 4088.559077,
+   "max": 4187.619569,
+   "errPct": 0,
+   "status": {
+    "200": 871
+   },
+   "avgBytes": 801.8036739380022,
+   "avgGzBytes": 423.76666666666665
+  },
+  {
+   "label": "GET /v1/me/addresses",
+   "n": 515,
+   "rps": 8.583190280161997,
+   "p50": 499.838634,
+   "p95": 970.897047,
+   "p99": 1031.155535,
+   "max": 1135.776061,
+   "errPct": 0,
+   "status": {
+    "200": 515
+   },
+   "avgBytes": 423.7320388349515,
+   "avgGzBytes": 308.1333333333333
+  },
+  {
+   "label": "GET /v1/search/stores",
+   "n": 272,
+   "rps": 4.533257779037016,
+   "p50": 283.746417,
+   "p95": 497.644556,
+   "p99": 2329.897936,
+   "max": 2568.1937,
+   "errPct": 0,
+   "status": {
+    "200": 272
+   },
+   "avgBytes": 3691.051470588235,
+   "avgGzBytes": 756.3666666666667
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products (pág. 2)",
+   "n": 267,
+   "rps": 4.449925834569424,
+   "p50": 696.817933,
+   "p95": 1349.481858,
+   "p99": 1469.320201,
+   "max": 1635.671702,
+   "errPct": 0,
+   "status": {
+    "200": 267
+   },
+   "avgBytes": 10568.475655430711,
+   "avgGzBytes": 1789.8333333333333
+  },
+  {
+   "label": "GET /v1/orders/{id}",
+   "n": 185,
+   "rps": 3.0832819453009117,
+   "p50": 1671.317837,
+   "p95": 2255.357647,
+   "p99": 2338.453546,
+   "max": 2539.218116,
+   "errPct": 0,
+   "status": {
+    "200": 185
+   },
+   "avgBytes": 2336.2594594594593,
+   "avgGzBytes": 1070.8333333333333
+  },
+  {
+   "label": "POST /v1/orders",
+   "n": 75,
+   "rps": 1.2499791670138831,
+   "p50": 9089.223197,
+   "p95": 10893.845126,
+   "p99": 11361.003005,
+   "max": 11361.003005,
+   "errPct": 0,
+   "status": {
+    "201": 75
+   },
+   "avgBytes": 2347.76,
+   "avgGzBytes": 1070.4
+  },
+  {
+   "label": "GET /v1/orders/{id}/payment",
+   "n": 75,
+   "rps": 1.2499791670138831,
+   "p50": 807.991203,
+   "p95": 1318.812451,
+   "p99": 1345.683174,
+   "max": 1345.683174,
+   "errPct": 0,
+   "status": {
+    "200": 75
+   },
+   "avgBytes": 389.61333333333334,
+   "avgGzBytes": 304.93333333333334
+  },
+  {
+   "label": "GET /v1/orders",
+   "n": 54,
+   "rps": 0.8999850002499958,
+   "p50": 885.902751,
+   "p95": 1260.629407,
+   "p99": 1261.153633,
+   "max": 1261.153633,
+   "errPct": 0,
+   "status": {
+    "200": 54
+   },
+   "avgBytes": 909.9074074074074,
+   "avgGzBytes": 480.03333333333336
+  }
+ ],
+ "topStatements": [
+  {
+   "query": "select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid",
+   "calls": "1299",
+   "total_ms": "11235",
+   "mean_ms": "8.65",
+   "max_ms": "33.2",
+   "rows": "27279"
+  },
+  {
+   "query": "select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid",
+   "calls": "1449",
+   "total_ms": "9450",
+   "mean_ms": "6.52",
+   "max_ms": "42.3",
+   "rows": "8445"
+  },
+  {
+   "query": "select count(*) from \"orders\" where (\"orders\".\"store_id\" = $1 and \"orders\".\"status\" = $2)",
+   "calls": "5630",
+   "total_ms": "4061",
+   "mean_ms": "0.72",
+   "max_ms": "19.9",
+   "rows": "5630"
+  },
+  {
+   "query": "SELECT lower(public.unaccent($2, $1))",
+   "calls": "4272639",
+   "total_ms": "3233",
+   "mean_ms": "0.00",
+   "max_ms": "12.6",
+   "rows": "4272639"
+  },
+  {
+   "query": "select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location",
+   "calls": "2204",
+   "total_ms": "855",
+   "mean_ms": "0.39",
+   "max_ms": "3.8",
+   "rows": "402960"
+  },
+  {
+   "query": "select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv",
+   "calls": "1072",
+   "total_ms": "550",
+   "mean_ms": "0.51",
+   "max_ms": "5.6",
+   "rows": "21933"
+  },
+  {
+   "query": "select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid",
+   "calls": "1976",
+   "total_ms": "545",
+   "mean_ms": "0.28",
+   "max_ms": "3.6",
+   "rows": "59280"
+  },
+  {
+   "query": "select \"product_images\".\"product_id\", \"media_assets\".\"id\", \"media_assets\".\"owner_user_id\", \"media_assets\".\"store_id\", \"media_assets\".\"purpose\", \"media_assets\".\"",
+   "calls": "1976",
+   "total_ms": "487",
+   "mean_ms": "0.25",
+   "max_ms": "3.1",
+   "rows": "59280"
+  },
+  {
+   "query": "insert into \"cart_items\" (\"id\", \"cart_id\", \"variant_id\", \"product_id\", \"quantity\", \"seen_price_cents\", \"created_at\") values (default, $1, $2, $3, $4, $5, defaul",
+   "calls": "2741",
+   "total_ms": "360",
+   "mean_ms": "0.13",
+   "max_ms": "6.6",
+   "rows": "2741"
+  },
+  {
+   "query": "select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a",
+   "calls": "7181",
+   "total_ms": "352",
+   "mean_ms": "0.05",
+   "max_ms": "3.4",
+   "rows": "7181"
+  },
+  {
+   "query": "select distinct on (\"delivery_fee_tables\".\"scope_key\") \"id\", \"scope_type\", \"scope_key\", \"version\", \"effective_from\", \"reason\", \"created_by\", \"created_at\" from \"",
+   "calls": "25320",
+   "total_ms": "349",
+   "mean_ms": "0.01",
+   "max_ms": "3.1",
+   "rows": "25320"
+  },
+  {
+   "query": "select \"product_images\".\"product_id\", \"media_assets\".\"id\", \"media_assets\".\"owner_user_id\", \"media_assets\".\"store_id\", \"media_assets\".\"purpose\", \"media_assets\".\"",
+   "calls": "1374",
+   "total_ms": "307",
+   "mean_ms": "0.22",
+   "max_ms": "2.7",
+   "rows": "28807"
+  }
+ ]
+}

@@ -297,6 +297,11 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `API_DOCS_ENABLED` | Não | **Nunca** `true` em produção (o boot recusa) | |
 | `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TTL_DAYS`, `REFRESH_ABSOLUTE_TTL_DAYS`, `REFRESH_REUSE_WINDOW_SECONDS` | Não | Duração de sessão (padrões: 900 s, 30 d, 90 d, 30 s) | Só se o produto mudar a regra; adicione em `environment` do serviço `api` |
 | `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE` | Não | Erros da API no Sentry, sem dado pessoal; vazio = desligado. Traces de 0 a 1 (0 = só erros) | Sentry > Projeto > Settings > Client Keys (DSN) |
+| `DB_POOL_MAX` | Não | Conexões do pool por processo da API (padrão 10). Regra: `(réplicas da API + worker) x DB_POOL_MAX <= PG_MAX_CONNECTIONS - 20` (folga para migração, backup e manutenção). Seção 14.2 | Só se mudar o número de réplicas |
+| `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | Não | Teto de uma consulta (padrão 30 s; 0 = sem teto) e de transação esquecida aberta (padrão 30 s). Consulta/relatório que passe disso deve virar job | Padrões |
+| `FEED_DIRECTORY_TTL_SECONDS`, `HOME_SECTIONS_TTL_SECONDS`, `BROWSE_CACHE_TTL_SECONDS` | Não | Cache em memória (por processo) do catálogo de lojas da descoberta (15 s), das seções "ofertas" e "mais vendidos" da home (60 s) e da vitrine/página de loja e produto (10 s). 0 = desligado. A loja nova, o produto novo ou o estoque aparecem na home em até esse tempo + 30 s | Padrões |
+| `HTTP_ACCESS_LOG`, `HTTP_SLOW_MS` | Não | `slow` (padrão): o log de acesso da API só registra erro (4xx/5xx) e requisição lenta (>= 500 ms); o nginx já guarda todos os acessos. `all` volta a logar toda requisição (custa ~10% de CPU em carga) | Padrões |
+| `LATENCY_LOG_INTERVAL_SECONDS` | Não | A cada N s (60) a API escreve UM log `http.latency` com p50/p95/p99 por rota (modelo da rota, sem id nem coordenada). Seção 14.4 | Padrão |
 
 ### 6.2 Painel web (`apps/web`) e demais serviços
 
@@ -529,3 +534,51 @@ sh infra/scripts/prod.sh ps                      # conferir "healthy"
 | Webhook do MP não chega | URL errada, HTTPS inválido ou `MP_WEBHOOK_SECRET` errado | Seção 7, passos 3 a 6 |
 | `docker build` morre com `Killed` | Pouca memória | Crie swap (passo 3) ou use um servidor com mais RAM |
 | Disco enchendo | Imagens antigas e backups locais | `docker image prune -f`; reduza `BACKUP_KEEP_DAYS` |
+
+## 14. Desempenho e capacidade
+
+Medido em 2026-11-22 numa máquina de 4 vCPU/16 GB com tudo junto (gerador, API, PostgreSQL 16 + PostGIS 3.4, Redis): **só indicativo**, não aprova produção (relatório completo, com antes/depois e limites de validade: `docs/qa/performance/api-2026-11-22.md`). Alvo de capacidade: 10 mil usuários cadastrados, 1.000 simultâneos, ~100 a 300 req/s no pico, 1.000 conexões Socket.IO, VPS de 4 vCPU e 8 a 16 GB.
+
+### 14.1 PostgreSQL (o padrão de fábrica usa `shared_buffers=128MB`)
+O `infra/docker-compose.prod.yml` já aplica estes parâmetros; ajuste os valores no `.env` (`PG_*`) ao tamanho do servidor. A regra: o PostgreSQL usa ~25% da RAM em `shared_buffers`, `effective_cache_size` ~65% (só orienta o planejador, não reserva memória) e `work_mem` é **por operação de ordenação/junção por conexão** (não aumente sem conta: `work_mem x conexões ativas x operações` precisa caber na RAM que sobra).
+
+| Parâmetro | 4 GB (padrão do compose) | 8 GB | 16 GB | Por quê |
+|---|---|---|---|---|
+| `shared_buffers` | 768MB | 2GB | 4GB | Cache de páginas do banco |
+| `effective_cache_size` | 2GB | 5GB | 11GB | Ajuda o planejador a preferir índice |
+| `work_mem` | 8MB | 16MB | 24MB | Ordenação/hash sem ir a disco |
+| `maintenance_work_mem` | 128MB | 256MB | 512MB | Índices, `VACUUM`, `ANALYZE` |
+| `max_connections` | 100 | 100 | 100 | Ver 14.2 (não aumente: use PgBouncer se faltar) |
+| `random_page_cost` | 1.1 | 1.1 | 1.1 | SSD (padrão 4 é de disco giratório) |
+| `effective_io_concurrency` | 200 | 200 | 200 | SSD/NVMe |
+| `jit` | off | off | off | JIT só atrasa consultas curtas de OLTP |
+| `wal_compression`, `checkpoint_timeout` | on, 15min | on, 15min | on, 15min | Menos escrita em disco |
+| `shared_preload_libraries` | `pg_stat_statements` | idem | idem | Medição (14.3) |
+
+Depois de mudar os `PG_*`: `sh infra/scripts/prod.sh up -d postgres` (reinicia o banco; ~10 s de indisponibilidade, faça fora do pico). Confira: `sh infra/scripts/prod.sh exec postgres psql -U webag -c "show shared_buffers"`.
+
+### 14.2 Conexões e réplicas da API
+- Cada processo da API abre até `DB_POOL_MAX` (10) conexões. Hoje: 1 API (+ worker de jobs, quando houver) = 10 a 20 conexões. Com 3 réplicas da API: 30 + 10 (worker) = 40, longe das 100 do servidor.
+- **Capacidade de 1 processo (medida):** ~160 a 230 req/s da jornada completa a 100% de 1 vCPU (a API é de thread única). Para o pico de 300 req/s planeje **2 a 3 réplicas** da API atrás do nginx (`deploy.replicas` no compose ou serviços `api1`, `api2` num `upstream`). **Pendência bloqueante antes de escalar:** com mais de 1 réplica, o Socket.IO precisa do adaptador Redis (`@socket.io/redis-adapter`; um evento de pedido emitido na réplica A tem de chegar ao socket conectado na B) e o nginx precisa de afinidade para o transporte de *polling* (`ip_hash`). Isso é dependência nova: exige ADR e aprovação do tech-lead (ver "Fica para depois" no relatório). Até lá, **1 réplica** (suficiente para o piloto e para ~100 req/s com folga).
+- PgBouncer só se `max_connections` apertar: modo *transaction*; a API não usa `LISTEN/NOTIFY` nem *advisory lock* de sessão em conexão do pool (a conciliação usa conexão dedicada), mas o parâmetro de conexão `options` (timeouts) precisa ir no PgBouncer (`ignore_startup_parameters`/`server_reset_query`). Teste antes.
+
+### 14.3 Medir o banco (uma vez por semana no começo)
+```bash
+sh infra/scripts/prod.sh exec postgres psql -U webag -d webag -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"   # uma vez
+# Top 10 consultas por tempo total
+sh infra/scripts/prod.sh exec postgres psql -U webag -d webag -c "select calls, round(total_exec_time) total_ms, round(mean_exec_time::numeric,2) mean_ms, left(query,120) from pg_stat_statements order by total_exec_time desc limit 10;"
+# Índices nunca usados (candidatos a remover) e tabelas com leitura sequencial grande
+sh infra/scripts/prod.sh exec postgres psql -U webag -d webag -c "select relname, indexrelname, idx_scan from pg_stat_user_indexes where idx_scan = 0 order by pg_relation_size(indexrelid) desc limit 10;"
+sh infra/scripts/prod.sh exec postgres psql -U webag -d webag -c "select relname, seq_scan, seq_tup_read, n_live_tup from pg_stat_user_tables where seq_scan > 100 order by seq_tup_read desc limit 10;"
+```
+Meta `[HIPÓTESE]`: nenhuma consulta de leitura da jornada do cliente com média > 20 ms. Consulta lenta (> 1 s) já vai ao log do Postgres (`log_min_duration_statement`). Índice em tabela grande que já está em produção: crie com `CREATE INDEX CONCURRENTLY` (manual, fora de migração, pois o `drizzle` roda migração dentro de transação); em tabela pequena a migração normal basta.
+
+### 14.4 Latência da API e logs
+- A API escreve, a cada 60 s, uma linha JSON `"event":"http.latency"` com as 25 rotas mais lentas da janela (`p50`, `p95`, `p99`, `max`, `n`, `errors5xx`; rota por modelo, **sem id e sem coordenada**). Veja: `sh infra/scripts/prod.sh logs --since 10m api | grep http.latency | tail -1`. Alerta sugerido `[HIPÓTESE]`: `p95 > 1 s` por 3 janelas seguidas em qualquer rota, ou `errors5xx > 0,5%`.
+- O log de acesso por requisição da API agora só registra erro e requisição lenta; o acesso completo (IP real, rota, status, tempo) está no log do nginx (`prod.sh logs nginx`, campo `rt=`).
+
+### 14.5 nginx e rede `[HIPÓTESE: não testado aqui, sem nginx no ambiente de medição]`
+- **Compressão:** `gzip` já está ligado para JSON > 1 KB (`infra/nginx/templates/00-global.conf.template`). Brotli só se o nginx tiver o módulo (a imagem padrão não tem) ou se a Cloudflare ficar na frente (ela comprime em Brotli sozinha); o ganho sobre o gzip em JSON é de ~10 a 15%.
+- **Conexão reaproveitada com a API:** hoje cada requisição abre uma conexão nova até `api:3000`. Em carga, declare `upstream webag_api { server api:3000; keepalive 64; }`, use `proxy_pass http://webag_api;` e, no `location`, `proxy_set_header Connection "";` (o `proxy_http_version 1.1` já existe). A API já mantém a conexão ociosa por 65 s (`keepAliveTimeout`), mais que o nginx, para não dar 502 na conexão reaproveitada.
+- **Limite por IP:** `limit_req ... rate=30r/s burst=60` e `limit_conn 50` por IP. Operadoras móveis colocam centenas de clientes atrás do mesmo IP (CGNAT): com 1.000 usuários simultâneos, um IP de operadora pode passar de 30 req/s e tomar `429`. Sugestão `[HIPÓTESE, calibrar com o piloto]`: `rate=60r/s burst=120` e `limit_conn 100` no `server` da API; o limite fino (login, busca) continua na própria API, por IP + conta.
+- **Fotos:** o bucket público já responde `Cache-Control: public, max-age=31536000, immutable` (as variantes têm o id do arquivo na chave: imutáveis). Se as fotos passarem por nginx/Cloudflare (`FILES_HOST`), mantenha esse cabeçalho e ligue o cache de borda (Cloudflare: *Cache Everything* para o host de arquivos).

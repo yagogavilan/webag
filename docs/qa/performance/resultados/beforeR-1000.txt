@@ -1,0 +1,32 @@
+
+== beforeR-1000: 1000 VUs, 90 s medidos, 5467 req, 61 req/s, erros 22.79% | jornadas 921, pedidos 45, falhas 0
+CPU% (100 = 1 vCPU): API 104 (pico 152), PG 169 (pico 258), Redis 0.9, gerador 6.1, máquina 78.6% | RAM máx: API 1027 MB, PG 880 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/home                                      1748    19.4    30000    30004    30025   62.1    11123    4822
+GET /v1/browse/stores/{id}/products                659     7.3     1540     2524     2590    0.0    10326    1782
+GET /v1/browse/stores/{id}                         635     7.1     2964     5148     5544    0.0     1138     653
+GET /v1/browse/products/{id}                       502     5.6     3094     6889     7416    0.0     1731     707
+PUT /v1/cart/items/{variantId}                     479     5.3     7125    14634    15501    0.0     1712     798
+GET /v1/me/addresses                               406     4.5     1503     3153     3331    0.0      424     307
+GET /v1/cart                                       349     3.9     6820    14524    15506    0.0     1713     798
+GET /v1/search/suggestions                         293     3.3     1037    30003    30005   34.1      517     423
+GET /v1/search/products                            217     2.4      920    30000    30004   11.5    14528    2045
+GET /v1/browse/stores/{id}/products (pág. 2)        79     0.9     1372     2328     2550    0.0    10560    1780
+GET /v1/search/stores                               55     0.6    30000    30003    30010   63.6      938     657
+GET /v1/orders/{id}                                 17     0.2     3988     5467     5467    0.0     2329    1071
+POST /v1/orders                                     14     0.2    10795    19380    19380    0.0     2330    1072
+GET /v1/orders/{id}/payment                         14     0.2      988     2907     2907    0.0      390     304
+
+Top consultas por tempo total (pg_stat_statements):
+  209215 ms     1901x  média  110.06  select oi.product_id, sum(oi.quantity)::int as units from order_items oi join orders o on o.id = oi.order_id where o.store_id = any($1::uuid[]) and o.paid_at >=
+   64395 ms     2148x  média   29.98  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+   31229 ms      438x  média   71.30  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+   27501 ms     1901x  média   14.47  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    6947 ms  6734272x  média    0.00  SELECT lower(public.unaccent($2, $1))
+    3603 ms      480x  média    7.51  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    1426 ms     1887x  média    0.76  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+    1045 ms   265345x  média    0.00  select "id", "city_id", "reason", "paused_by", "paused_at", "resumed_at", "resumed_by" from "logistics_pauses" where "logistics_pauses"."resumed_at" is null ord
+     572 ms     1901x  média    0.30  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     554 ms     1901x  média    0.29  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+     546 ms     1052x  média    0.52  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     365 ms     9149x  média    0.04  select "key", "value", "updated_at", "updated_by" from "parameters"

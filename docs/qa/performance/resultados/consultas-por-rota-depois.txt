@@ -1,0 +1,14 @@
+GET /v1/home (cache quente)                  200  consultas   0  banco       0 ms  total     2.6 ms   29710 B  Cache-Control: private, max-age=30
+GET /v1/home (ponto novo = cache frio)       200  consultas  15  banco     1.0 ms  total    16.6 ms   29711 B  Cache-Control: private, max-age=30
+GET /v1/browse/stores/{id}                   200  consultas   5  banco     0.1 ms  total     5.3 ms    1162 B  Cache-Control: private, max-age=30
+GET /v1/browse/stores/{id}/products          200  consultas   0  banco       0 ms  total     1.9 ms   10668 B  Cache-Control: public, max-age=30
+GET /v1/browse/products/{id}                 200  consultas   5  banco     0.0 ms  total     4.4 ms    1972 B  Cache-Control: private, max-age=30
+GET /v1/search/suggestions                   200  consultas 3650  banco    22.0 ms  total    31.6 ms     794 B  Cache-Control: private, max-age=30
+GET /v1/search/products                      200  consultas 2155  banco    11.9 ms  total    20.2 ms   16444 B  Cache-Control: private, max-age=30
+GET /v1/search/stores                        200  consultas  32  banco     0.5 ms  total     7.9 ms    2384 B  Cache-Control: private, max-age=30
+PUT /v1/cart/items/{variantId}               200  consultas  29  banco     0.9 ms  total    16.4 ms    1757 B  Cache-Control: private, no-store
+GET /v1/cart                                 200  consultas  22  banco     0.5 ms  total    15.6 ms    1757 B  Cache-Control: private, no-store
+GET /v1/me/addresses                         200  consultas   2  banco     0.0 ms  total     2.5 ms     422 B  Cache-Control: private, no-store
+GET /v1/orders?scope=active                  200  consultas   2  banco     0.0 ms  total     3.0 ms      29 B  Cache-Control: private, no-store
+GET /v1/orders/{id} (acompanhar)             200  consultas  10  banco     0.2 ms  total     7.9 ms    1961 B  Cache-Control: private, no-store
+POST /v1/orders                              201  consultas  63  banco     3.0 ms  total    32.8 ms

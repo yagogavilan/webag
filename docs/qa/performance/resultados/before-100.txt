@@ -1,0 +1,33 @@
+
+== before-100: 100 VUs, 60 s medidos, 3199 req, 53 req/s, erros 0.00% | jornadas 533, pedidos 23, falhas 0
+CPU% (100 = 1 vCPU): API 33.7 (pico 53.0), PG 52.4 (pico 97.5), Redis 0.6, gerador 4.1, máquina 34.4% | RAM máx: API 254 MB, PG 482 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/products/{id}                       417     7.0      7.8     29.2     40.2    0.0     1708     704
+PUT /v1/cart/items/{variantId}                     413     6.9     17.2     64.3     83.3    0.0     1876     813
+GET /v1/browse/stores/{id}/products                412     6.9      7.5     21.2     32.9    0.0    10247    1739
+GET /v1/browse/stores/{id}                         412     6.9      8.4     27.9     36.3    0.0     1139     653
+GET /v1/cart                                       405     6.8     12.8     43.5     76.2    0.0     1823     800
+GET /v1/home                                       402     6.7      2.4      215      303    0.0    29354    4793
+GET /v1/search/suggestions                         205     3.4     12.9      135      185    0.0      800     434
+GET /v1/search/products                            204     3.4     51.5     84.9     97.2    0.0    16404    2031
+GET /v1/me/addresses                               128     2.1      2.8      9.7     13.7    0.0      424     308
+GET /v1/browse/stores/{id}/products (pág. 2)        54     0.9      6.8     11.9     22.3    0.0    10564    1792
+GET /v1/search/stores                               49     0.8      4.6     13.3     99.5    0.0     3871     776
+GET /v1/orders/{id}                                 48     0.8      7.5     23.6     70.0    0.0     2381    1055
+POST /v1/orders                                     18     0.3     28.7      105      105    0.0     2375    1076
+GET /v1/orders/{id}/payment                         18     0.3      3.9     16.8     16.8    0.0      390     302
+GET /v1/orders                                      14     0.2      4.3     15.8     15.8    0.0      827     442
+
+Top consultas por tempo total (pg_stat_statements):
+   17345 ms      226x  média   76.75  select oi.product_id, sum(oi.quantity)::int as units from order_items oi join orders o on o.id = oi.order_id where o.store_id = any($1::uuid[]) and o.paid_at >=
+   12091 ms      246x  média   49.15  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    5976 ms      248x  média   24.10  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+    2738 ms  3866097x  média    0.00  SELECT lower(public.unaccent($2, $1))
+    2324 ms      226x  média   10.28  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+    1714 ms      274x  média    6.26  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     305 ms      606x  média    0.50  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     151 ms      533x  média    0.28  select avg("rating")::float8, count(*)::int from "reviews" where (("reviews"."store_id" = $1 and "reviews"."product_id" is null) and "reviews"."status" = $2)
+     132 ms      587x  média    0.23  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+      99 ms     1089x  média    0.09  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+      84 ms     1672x  média    0.05  select "stores"."id", "stores"."owner_user_id", "stores"."status", "stores"."document_type", "stores"."document_number", "stores"."legal_name", "stores"."fiscal
+      82 ms    32446x  média    0.00  select "id", "city_id", "reason", "paused_by", "paused_at", "resumed_at", "resumed_by" from "logistics_pauses" where "logistics_pauses"."resumed_at" is null ord
