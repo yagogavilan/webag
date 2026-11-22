@@ -188,6 +188,56 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       expect(Object.keys(schemas.StoreViewAs.properties.address.oneOf[0].properties).sort()).toEqual(['city', 'neighborhood', 'state']);
     });
 
+    /** Percorre o schema resolvendo `$ref`; devolve o caminho de todo objeto com `properties` e `additionalProperties` diferente de `false`. */
+    function openObjects(node: any, path: string, seen: Set<string>, out: string[]): string[] {
+      if (!node || typeof node !== 'object') return out;
+      if (node.$ref) {
+        const name = String(node.$ref).split('/').pop() as string;
+        if (seen.has(name)) return out;
+        return openObjects(schemas[name], `${path}->${name}`, new Set([...seen, name]), out);
+      }
+      if (node.properties && node.additionalProperties !== false) out.push(path);
+      for (const [k, v] of Object.entries(node.properties ?? {})) openObjects(v, `${path}.${k}`, seen, out);
+      for (const key of ['items', 'additionalProperties']) if (typeof node[key] === 'object') openObjects(node[key], `${path}[${key}]`, seen, out);
+      for (const key of ['oneOf', 'anyOf', 'allOf']) (node[key] ?? []).forEach((v: Json, i: number) => openObjects(v, `${path}<${key}${i}>`, seen, out));
+      return out;
+    }
+    /** Todo nome de propriedade alcançável (resolvendo `$ref`). */
+    function propertyNames(node: any, seen: Set<string>, out: Set<string>): Set<string> {
+      if (!node || typeof node !== 'object') return out;
+      if (node.$ref) {
+        const name = String(node.$ref).split('/').pop() as string;
+        if (!seen.has(name)) propertyNames(schemas[name], new Set([...seen, name]), out);
+        return out;
+      }
+      for (const [k, v] of Object.entries(node.properties ?? {})) {
+        out.add(k);
+        propertyNames(v, seen, out);
+      }
+      for (const key of ['items', 'additionalProperties']) if (typeof node[key] === 'object') propertyNames(node[key], seen, out);
+      for (const key of ['oneOf', 'anyOf', 'allOf']) (node[key] ?? []).forEach((v: Json) => propertyNames(v, seen, out));
+      return out;
+    }
+
+    it('SEC-209: "estrito" vale em TODOS os níveis dos 5 schemas `...ViewAs` (inclusive os referenciados), e a linha do tempo não tem `reason`', () => {
+      for (const name of ['StoreViewAs', 'StoreSettingsViewAs', 'StoreOrderViewAs', 'ExchangeViewAs', 'ExchangePageViewAs']) {
+        expect(openObjects({ $ref: `#/components/schemas/${name}` }, name, new Set(), []), name).toEqual([]);
+      }
+      expect(Object.keys(schemas.StoreOrderViewAs.properties.timeline.items.properties).sort()).toEqual(['actor', 'at', 'status']);
+      expect(Object.keys(schemas.ExchangeViewAs.properties.timeline.items.properties).sort()).toEqual(['actor', 'at', 'from', 'to']);
+      for (const name of ['StoreOrderViewAs', 'ExchangeViewAs']) {
+        const names = propertyNames({ $ref: `#/components/schemas/${name}` }, new Set(), new Set());
+        expect([...names].filter((k) => /^(reason|description|note|observation|photos|text)$/.test(k)), name).toEqual([]);
+      }
+    });
+
+    it('os códigos do cabeçalho malformado seguem a §15.2 (vazio ou repetido = READ_ONLY; formato inválido ou vencido = EXPIRED)', () => {
+      const text = String(contract.components.securitySchemes.viewAsAuth.description);
+      expect(text).toMatch(/VAZIO ou REPETIDO.*VIEW_AS_READ_ONLY/);
+      expect(text).toMatch(/formato inválido.*vencida.*VIEW_AS_EXPIRED/);
+      expect(text).not.toMatch(/malformado, ou em qualquer outra/);
+    });
+
     it('a ficha do pedido no admin grava auditoria e não aceita a visão (WB-352 C14)', () => {
       const text = String(all.find((o) => o.op.operationId === 'getAdminOrder')!.op.description);
       expect(text).toContain('admin.order.view');
@@ -357,6 +407,24 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       expect(text).toContain('sessão pseudônima');
       expect(Object.keys(schemas.AnalyticsAccessReport.properties.discards.properties).sort()).toEqual(['flag_off', 'rate_ip', 'rate_session', 'unknown_store']);
       expect(schemas.AnalyticsIngestResult.properties.discarded.description).toContain('NÃO descarta');
+    });
+
+    it('as chaves Redis do limite por sessão E por IP são HMAC, com segredo próprio, e o sessionId não é identificador de aparelho (§15.5)', () => {
+      const text = String(all.find((o) => o.op.operationId === 'ingestAnalyticsEvents')!.op.description);
+      expect(text).toContain('chave Redis = HMAC do IP');
+      expect(text).toContain('variável de ambiente PRÓPRIA');
+      expect(text).toContain('diferente do `AUTH_HMAC_KEY`');
+      expect(text).toContain('no máximo 1 h');
+      expect(text).toMatch(/UUID novo a CADA abertura do app.*30 min sem uso.*nunca igual ao id do aparelho/s);
+    });
+  });
+
+  describe('quickPublishProduct: foto em processamento e resposta perdida (R6)', () => {
+    it('documenta o 422 UPLOAD_NOT_READY (transitório) e o 409 que o app trata como sucesso se o produto já está ativo', () => {
+      const text = String(all.find((o) => o.op.operationId === 'quickPublishProduct')!.op.description);
+      expect(text).toContain('422 `UPLOAD_NOT_READY`');
+      expect(text).toContain('MESMA `Idempotency-Key`');
+      expect(text).toContain('`status = active` com os mesmos dados como SUCESSO');
     });
   });
 

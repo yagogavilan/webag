@@ -7,7 +7,7 @@ import type pg from 'pg';
  * de tabelas append-only (abaixo) é a única exceção, guardada por teste contra os gatilhos das migrações.
  *
  * Sem o papel `webag_app` (desenvolvimento local sem o init de papéis, CI antigo) o passo é ignorado, e isto é dito no log.
- * Quem cria os papéis, as extensões e a posse dos objetos é `infra/postgres/20-roles-grants.sql`, como superusuário: o Drizzle
+ * Quem cria os papéis, as extensões e a posse dos objetos é `infra/postgres/30-roles-create.sh` e `40-roles-grants.sql`, como superusuário: o Drizzle
  * não consegue (e não deve) criar papel dentro de migração.
  */
 export const APP_ROLE = 'webag_app';
