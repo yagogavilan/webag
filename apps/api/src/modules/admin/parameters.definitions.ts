@@ -124,6 +124,11 @@ export const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   int('upload_max_mb', 5, 1, 20, 'Tamanho máximo de upload (MB)', 'HIP-034'),
   int('variacoes_max', 100, 1, 200, 'Variações por produto', 'HIP-034'),
   int('import_max_linhas', 500, 1, 500, 'Linhas por importação (teto de segurança SEC-052)', 'HIP-034'),
+  /** v1.1 R1 (ADR-018 D1, DEC-118): o teto nunca fica abaixo do lote colado de 100 linhas (o mínimo 100 impede o painel de baixá-lo). */
+  int('rascunhos_max_por_loja', 100, 100, 1000, 'Rascunhos de produto por loja (inclui os do lote colado, de até 100 itens)', 'DEC-118'),
+  int('rascunho_validade_dias', 30, 7, 90, 'Dias sem alteração até o rascunho de produto ser apagado (aviso 3 dias antes)', 'RN-Q2'),
+  int('reajuste_max_pct', 30, 5, 100, 'Preço de produto: variação (nos dois sentidos) acima da qual a edição pede confirmação (%)', 'RN-Q9'),
+  int('cadastro_sessao_max_min', 15, 5, 120, 'Cadastro rápido contínuo: minutos entre abrir "Novo produto" e publicar para entrar na mediana de tempo [HIPÓTESE]', 'D11'),
   int('cupom_total_minimo_cents', 100, 0, 1000, 'Total mínimo cobrado com cupom (centavos)', 'HIP-037'),
   int('estorno_super_admin_cents', 50000, 1000, undefined, 'Acima disto o estorno manual exige super admin (centavos)', 'HIP-039'),
   int('estorno_financeiro_dia_cents', 200000, 1000, undefined, 'Total que um operador do financeiro estorna por dia, em todos os pedidos; acima disto só o super admin (centavos)', 'SEC-142'),

@@ -1,0 +1,80 @@
+/* Cadastro rápido e "Adicionar vários" (WB-370 a WB-376). Só variáveis --wb-*; nenhuma cor ou medida solta. */
+.page { display: grid; gap: var(--wb-space-4); max-width: 640px; margin-inline: auto; width: 100%; padding-bottom: var(--wb-space-8); }
+.strip { display: flex; align-items: center; gap: var(--wb-space-2); color: var(--wb-color-text-secondary); min-height: var(--wb-size-touch-min); }
+.stripOffline { color: var(--wb-color-text-danger); }
+
+.cover { display: grid; gap: var(--wb-space-3); }
+.coverFrame { position: relative; aspect-ratio: 4 / 3; border-radius: var(--wb-radius-md); overflow: hidden; background: var(--wb-color-surface-sunken); display: grid; place-items: center; }
+.coverImg { width: 100%; height: 100%; object-fit: cover; }
+.thumbs { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.thumb { position: relative; width: 64px; height: 72px; border-radius: var(--wb-radius-sm); overflow: hidden; background: var(--wb-color-surface-sunken); }
+.thumbImg { width: 100%; height: 100%; object-fit: cover; }
+.thumbBar { position: absolute; inset-inline: 0; bottom: 0; height: 4px; background: var(--wb-color-border-default); }
+.thumbBarFill { display: block; height: 100%; background: var(--wb-color-accent-base); transform-origin: left; }
+.photoActions { display: flex; gap: var(--wb-space-2); flex-wrap: wrap; }
+.photoItemActions { display: flex; flex-direction: column; gap: var(--wb-space-1); }
+.photoCount { color: var(--wb-color-text-secondary); }
+.hiddenInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.help { margin: 0; color: var(--wb-color-text-secondary); }
+
+.fieldRow { display: grid; gap: var(--wb-space-3); }
+.fieldRowTwo { display: grid; gap: var(--wb-space-3); grid-template-columns: 1fr; }
+@media (min-width: 480px) { .fieldRowTwo { grid-template-columns: 1fr 1fr; } }
+.priceInput { font-variant-numeric: tabular-nums; }
+.earnings { padding: var(--wb-space-3); border-radius: var(--wb-radius-md); background: var(--wb-color-surface-sunken); }
+.stepper { display: flex; align-items: center; gap: var(--wb-space-2); }
+.stepperInput { width: 6ch; text-align: center; font-variant-numeric: tabular-nums; }
+
+.accordion { border: 1px solid var(--wb-color-border-default); border-radius: var(--wb-radius-md); }
+.accordionTrigger { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: var(--wb-space-2); min-height: var(--wb-size-touch-min); padding: var(--wb-space-3) var(--wb-space-4); background: none; border: 0; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.accordionBody { padding: var(--wb-space-4); display: grid; gap: var(--wb-space-4); border-top: 1px solid var(--wb-color-border-default); }
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }
+.swatch { display: inline-block; width: 16px; height: 16px; border-radius: var(--wb-radius-full); border: 1px solid var(--wb-color-border-default); }
+.gradeRows { display: grid; gap: var(--wb-space-2); list-style: none; margin: 0; padding: 0; }
+.gradeRow { display: flex; align-items: center; justify-content: space-between; gap: var(--wb-space-3); padding: var(--wb-space-3); border-radius: var(--wb-radius-md); background: var(--wb-color-surface-sunken); }
+.fillAll { display: flex; align-items: flex-end; gap: var(--wb-space-2); flex-wrap: wrap; }
+
+.footer { display: grid; gap: var(--wb-space-2); }
+@media (min-width: 1024px) { .footer { grid-template-columns: auto auto; justify-content: start; } }
+.publishButton { width: 100%; }
+.inert { opacity: 1; cursor: not-allowed; }
+
+.statusBox { display: grid; gap: var(--wb-space-3); padding: var(--wb-space-4); border-radius: var(--wb-radius-md); background: var(--wb-color-surface-sunken); }
+.progress { height: 8px; border-radius: var(--wb-radius-full); background: var(--wb-color-border-default); overflow: hidden; }
+.progressFill { display: block; height: 100%; background: var(--wb-color-accent-base); transition: width 150ms linear; }
+@media (prefers-reduced-motion: reduce) { .progressFill { transition: none; } }
+
+.done { display: grid; gap: var(--wb-space-4); justify-items: center; text-align: center; padding: var(--wb-space-6) var(--wb-space-4); }
+.doneThumb { width: 120px; height: 120px; border-radius: var(--wb-radius-md); overflow: hidden; background: var(--wb-color-surface-sunken); }
+.doneActions { display: grid; gap: var(--wb-space-2); width: 100%; }
+@media (min-width: 480px) { .doneActions { grid-template-columns: 1fr 1fr; } }
+
+.continueCard { display: grid; gap: var(--wb-space-2); padding: var(--wb-space-4); border-radius: var(--wb-radius-md); background: var(--wb-color-surface-ink); color: var(--wb-color-text-inverse); }
+.continueCard a { color: inherit; }
+.draftList { display: grid; gap: var(--wb-space-2); list-style: none; margin: 0; padding: 0; }
+/* BUG-048: no celular o texto ocupa a linha de cima (ao lado da miniatura) e as ações vêm em linha própria; no computador, 3 colunas. */
+.draftItem { display: grid; grid-template-columns: 48px minmax(0, 1fr); grid-template-areas: 'thumb text' 'actions actions'; gap: var(--wb-space-3); align-items: center; padding: var(--wb-space-3); border: 1px solid var(--wb-color-border-default); border-radius: var(--wb-radius-md); }
+.draftItem > :first-child { grid-area: thumb; }
+.draftText { grid-area: text; min-width: 0; }
+@media (min-width: 768px) { .draftItem { grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: 'thumb text actions'; } }
+.draftName { color: inherit; overflow-wrap: anywhere; }
+.draftActions { grid-area: actions; display: flex; gap: var(--wb-space-2); flex-wrap: wrap; justify-content: flex-end; }
+
+/* Adicionar vários */
+.pasteArea { min-height: 200px; font-size: 1rem; }
+.steps { display: flex; gap: var(--wb-space-2); list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.stepOn { font-weight: var(--wb-font-weight-bold); }
+.cards { display: grid; gap: var(--wb-space-3); list-style: none; margin: 0; padding: 0; }
+.card { display: grid; gap: var(--wb-space-3); padding: var(--wb-space-4); border: 1px solid var(--wb-color-border-default); border-radius: var(--wb-radius-md); }
+.cardHead { display: flex; justify-content: space-between; align-items: center; gap: var(--wb-space-2); }
+.cardGrid { display: grid; gap: var(--wb-space-3); grid-template-columns: 1fr 1fr; }
+.cardWide { grid-column: 1 / -1; }
+.sticky { position: sticky; bottom: calc(72px + env(safe-area-inset-bottom) + var(--wb-space-2)); display: grid; gap: var(--wb-space-2); padding: var(--wb-space-3); background: var(--wb-color-surface-card); border-top: 1px solid var(--wb-color-border-default); }
+@media (min-width: 1024px) { .sticky { bottom: 0; } }
+
+/* Preços e estoque */
+.tableWrap { overflow-x: auto; }
+.cellInput { min-width: 7ch; font-variant-numeric: tabular-nums; }
+.rowNote { color: var(--wb-color-text-secondary); margin: 0; }
+.rowErr { color: var(--wb-color-text-danger); margin: 0; }

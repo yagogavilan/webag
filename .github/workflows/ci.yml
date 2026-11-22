@@ -49,6 +49,8 @@ jobs:
       E2E_DEPS: '1'
       DATABASE_URL: postgresql://webag:webag_ci_only@localhost:5432/webag
       REDIS_URL: redis://localhost:6379
+      # SEC-212: os testes de papel de banco (db-roles, db-role-boot, production-boot/D-06) FALHAM, em vez de pular, se os papéis webag_migrator e webag_app faltarem.
+      REQUIRE_DB_ROLES: '1'
 
     steps:
       - uses: actions/checkout@v5

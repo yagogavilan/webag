@@ -13,15 +13,16 @@ import { formatClock } from '@/lib/format';
 import { asRoute } from '@/lib/routes';
 import { tid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
+import { AllStoresTab, NO_FILTERS, type AllStoresFilters } from './all-stores';
 import { sinceLabel } from './catalog';
 
 const T = (id: string) => tid('fila', id);
 
-type TabId = 'pending' | 'waiting';
+type TabId = 'pending' | 'waiting' | 'all';
 type FilterId = 'all' | 'overdue';
 const TAB_STATUS = { pending: 'in_review', waiting: 'correction_requested' } as const;
 
-function useQueue(tab: TabId, enabled: boolean) {
+function useQueue(tab: 'pending' | 'waiting', enabled: boolean) {
   return useInfiniteQuery({
     queryKey: storeKeys.queue(TAB_STATUS[tab]),
     queryFn: ({ pageParam }) => adminStoresApi.queue(TAB_STATUS[tab], pageParam),
@@ -41,16 +42,16 @@ export function DeadlineBadge({ row }: { row: QueueRow }) {
 const normalize = (value: string): string => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /** A1: fila de aprovação. A API devolve as mais antigas primeiro; a busca e o filtro "Atrasadas" são locais. */
-export function QueuePage() {
+export function QueuePage({ initialTab = 'pending', initialFilters = NO_FILTERS }: { initialTab?: TabId; initialFilters?: AllStoresFilters }) {
   const { canView, canEdit } = useSession();
   const online = useOnline();
   const allowed = canView('lojas');
-  const [tab, setTab] = useState<TabId>('pending');
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [filter, setFilter] = useState<FilterId>('all');
   const [search, setSearch] = useState('');
-  const pending = useQueue('pending', allowed);
-  const waiting = useQueue('waiting', allowed);
-  const active = tab === 'pending' ? pending : waiting;
+  const pending = useQueue('pending', allowed && tab !== 'all');
+  const waiting = useQueue('waiting', allowed && tab !== 'all');
+  const active = tab === 'waiting' ? waiting : pending;
   const decide = canEdit('lojas');
 
   const rowsOf = (query: typeof pending): QueueRow[] => query.data?.pages.flatMap((page) => page.data) ?? [];
@@ -179,8 +180,8 @@ export function QueuePage() {
   return (
     <div className={ui.stack}>
       <PageHeader
-        title="Fila de aprovação"
-        description="Lojas esperando decisão, as mais antigas primeiro."
+        title="Lojas"
+        description="Fila de aprovação (as mais antigas primeiro) e todas as lojas."
         action={
           decide && tab === 'pending' && oldest ? (
             <ButtonLink href={asRoute(`/admin/lojas/${oldest.id}`)} size="lg" data-testid={T('analyze-oldest')}>
@@ -196,11 +197,12 @@ export function QueuePage() {
         tabs={[
           { id: 'pending', label: `Para analisar (${count(pending)})`, testId: T('tab-pending') },
           { id: 'waiting', label: `Aguardando lojista (${count(waiting)})`, testId: T('tab-waiting') },
+          { id: 'all', label: 'Todas as lojas', testId: T('tab-all') },
         ]}
       />
-      <TextField label="Buscar por nome, cidade ou final do CPF/CNPJ" type="search" value={search} onChange={(event) => setSearch(event.target.value)} autoComplete="off" data-testid={T('search-input')} />
+      {tab === 'all' ? null : <TextField label="Buscar por nome, cidade ou final do CPF/CNPJ" type="search" value={search} onChange={(event) => setSearch(event.target.value)} autoComplete="off" data-testid={T('search-input')} />}
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className={ui.stack}>
-        {list}
+        {tab === 'all' ? <AllStoresTab initial={initialFilters} /> : list}
       </div>
     </div>
   );

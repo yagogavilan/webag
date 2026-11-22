@@ -1,6 +1,6 @@
 # Tela: Adicionar vários produtos (colar lista do WhatsApp e planilha)   (WB-376; usa WB-370, WB-371, WB-065)
 
-> Autor: product-designer. Data: 2026-11-22. Release R1. Protótipo: `#/l/colar` (já abre com 6 linhas de exemplo, uma sem preço).
+> Autor: product-designer. Data: 2026-11-22. Release R1. Protótipo: `#/l/colar` (já abre com 6 linhas de exemplo, uma sem preço; "Carregar exemplo com avisos" traz os casos da DEC-128: nº 10, dois preços, tam 52, mesma cor e cor diferente, cor com marcador, linha cortada no preço; Estado "Poucos rascunhos livres" e "Sem rede").
 > Entrada: Produtos > "Mais" > "Adicionar vários produtos", e link "Colar lista do WhatsApp" no estado vazio de Produtos.
 
 ## 0. Achado que muda o fluxo (o PO precisa ver)
@@ -38,21 +38,34 @@ Erros: vazio, "Cole a lista primeiro. Cada linha precisa de nome e preço, ex.: 
 | `Almofada xadrez 45 cm 35,00 6 un` | Almofada xadrez 45 cm | n/d | R$ 35,00 | 6 |
 | `Toalha de banho cinza 4 un` | Toalha de banho cinza | n/d | **Falta o preço** | 4 |
 
-Quantidade ausente vira 1. Tamanho numérico (calçado) **não** é lido da linha por padrão (confunde com medida: "45 cm"); vale só se a categoria for calçado `[a definir com o PO]`.
+Quantidade ausente vira 1. **Regras do leitor decididas na DEC-128 (WB-376 C8, C10 a C14), com o texto de cada aviso:**
+
+| Caso | O que o leitor faz | O que o lojista vê (pt-BR) |
+|---|---|---|
+| Cor sem marcador (`Camiseta básica preta P 49,90`) | A cor **fica no nome**. Só sugestão, sem pedir confirmação, sem selo e sem bloquear | Linha de apoio sob o nome: "Cor sugerida: preta. Dá para ajustar na grade depois." |
+| Cor com marcador (`cor azul`) | A cor sai do nome e vira a cor do item | "Cor: azul" (sem aviso) |
+| Marcador de tamanho (`tam 42`, `nº 10`), inteiro de 1 a 60, qualquer categoria | Lê o tamanho e marca **Confira**, sempre | "Lemos 10 como tamanho. Está certo?" [Está certo] [Não é tamanho] ("Não é tamanho" devolve o número ao nome) |
+| Fora da faixa (`tam 61`, `tam 0`, decimal) | Não lê; o número fica no nome | Nada |
+| Número solto sem marcador (`Calça jeans 52`) | Não lê como tamanho. Em calçado, 33 a 48 é lido e marcado "Confira" | Em calçado: "Lemos 42 como tamanho. Está certo?" |
+| Linha acima de 200 caracteres | **Corta com aviso** (nunca recusa a lista). O item nunca sai "Pronta" e o **preço lido fica "Confira"** (risco: "R$ 1.299,90" cortado vira R$ 1,00). As outras linhas não mudam | Selo "Confira" + "Linha cortada em 200 caracteres: confira o nome e o preço." Sob o campo Preço: "Confira o preço: a linha foi cortada." [Conferi] |
+| Mais de um preço (`Bermuda P 49,90 G 59,90 4 un`) | Marca "Mais de um preço" com "Separar em 2 linhas" | Selo "Mais de um preço" + [Separar em 2 linhas] |
+| Estoque ao separar preços | O número vai **só para a última linha**; a outra fica com estoque 1 (erra para menos, nunca para mais) | Aviso no cartão: "O estoque 4 ficou na última linha. Confira o estoque de cada uma." Selo "Confira" nas duas até o lojista tocar em [Conferi] |
 
 ## 3. Etapa 2: revisar
 
-Topo: **"6 linhas lidas: 5 prontas, 1 com problema"** (região viva, atualiza ao corrigir). Celular: **um cartão por linha** (não tabela): "Linha 3" + selo de situação; campos Nome, Tamanho, Quantidade, Preço em grade 2x2, todos editáveis, 48 px. Desktop (>= 1024): tabela com a mesma ordem e edição em linha.
+Topo: **"6 linhas lidas: 3 prontas, 2 para conferir, 1 com problema"** (região viva, atualiza ao corrigir; o trecho com zero some). Celular: **um cartão por linha** (não tabela): "Linha 3" + selo de situação; campos Nome, Tamanho, Quantidade, Preço em grade 2x2, todos editáveis, 48 px. Desktop (>= 1024): tabela com a mesma ordem e edição em linha.
 
 | Selo | Quando | Ícone |
 |---|---|---|
 | Pronta | nome e preço válidos e foto | check |
 | Falta a foto | nome e preço ok | câmera |
 | Falta o preço / Falta o nome | campo vazio ou inválido | alerta (campo com borda de erro e `aria-invalid`) |
+| Confira | linha cortada, tamanho lido por marcador, estoque movido ao separar (DEC-128). **Nunca "Pronta"** até o lojista tocar em [Conferi] ou corrigir; **não bloqueia** criar rascunho | alerta, cor de aviso (nunca só cor) |
+| Mais de um preço | duas ou mais ocorrências de preço na linha | alerta + botão "Separar em N linhas" |
 
 Mensagens de campo: "Preço inválido: use 79,90." · "Quantidade inválida: use um número de 0 a 99.999." · "Use até 80 caracteres."
 
-**Sugestão de juntar (proposta, PO decide):** linhas com o mesmo nome e preço e tamanhos diferentes. Aviso azul: "As linhas 1 e 2 parecem o mesmo produto em tamanhos diferentes. Juntar em 'Bermuda jeans' com tamanhos M e G?" [Juntar] [Manter separados]. Sem isso, 6 camisetas P/M/G/GG viram 6 produtos e a vitrine fica poluída. O PRD diz "cada linha vira um item": pergunta 1.
+**Sugestão de juntar (WB-376 C10; DEC-128 #1):** só sugere quando o **nome-base e a cor são iguais (ou sem cor)** e os tamanhos são diferentes; nunca junta sozinho. "Camiseta básica preta P" e "Camiseta básica branca P" **não** geram sugestão (foto por cor está fora da v1.1: juntar mostraria as mesmas fotos). Aviso azul: "As linhas 1 e 2 parecem o mesmo produto em tamanhos diferentes. Juntar em 'Bermuda jeans' com tamanhos M e G?" [Juntar] [Manter separados]. Com preços diferentes, o preço vira por variação. Linha de apoio: "Só juntamos linhas da mesma cor." Sem isso, 6 camisetas P/M/G/GG viram 6 produtos e a vitrine fica poluída. O PRD diz "cada linha vira um item": pergunta 1.
 
 Rodapé fixo: "Criar 6 rascunhos (1 com problema)" + link "Voltar e editar o texto". **Todas as linhas viram rascunho** (RN-Q2: existe desde que haja nome); as incompletas ficam marcadas.
 
@@ -75,7 +88,8 @@ Nota no topo: "Planilha é mais fácil no computador. No celular, prefira colar 
 | Carregando | "Lendo a lista…" (leitura é local, < 1 s; skeleton só se > 300 ms) |
 | Vazio | Campo vazio com exemplo fantasma; "Ler a lista" mostra o erro |
 | Erro | §2; falha ao criar rascunhos: "Não conseguimos criar os rascunhos agora. Sua lista está guardada. Tente de novo." |
-| Sem rede | A leitura funciona (é local). "Criar rascunhos" guarda no aparelho: "Sem internet: vamos enviar quando voltar." Fotos e publicação esperam a rede |
+| Sem rede (DEC-126: sem fila offline) | A leitura funciona (é local). "Criar rascunhos" fica **inerte com o motivo escrito** (`aria-disabled`): ao tocar, "Sem internet. Conecte para criar os rascunhos." O texto colado fica no aparelho por 24 h (WB-376 C15, RN-Q2): "Seu texto continua aqui. Volte quando tiver internet." Nada é enviado sozinho depois. Fotos e publicação também esperam a rede |
+| Espaço de rascunhos (WB-376 C15) | Antes de criar, se a lista não cabe: "Você tem espaço para 20 rascunhos." [Criar só os 20 primeiros] [Voltar e editar o texto]. Nada é criado em silêncio. Com 100: "Limite de 100 rascunhos. Publique ou apague algum." e o botão fica inerte com esse motivo |
 | Sucesso | Toast com a contagem (§4) e retorno a Produtos |
 | Permissão | Clipboard negado (§2); funcionário sem catálogo: "Você não tem acesso a Produtos…" |
 
@@ -99,6 +113,6 @@ WB-376 C1 (§2 tabela), C2 (§3), C3 (§2), C4 (§3 e §4), C5 (§2: `79.90`, `7
 
 | Para | Pergunta |
 |---|---|
-| PO | 1. Juntar linhas em um produto com variações entra? 2. Tamanho numérico de calçado lido da linha? 3. Limite e formatos da planilha 4. A etapa de fotos substitui "Publicar os válidos" como está no WB-376 C4? 5. Texto com mais de um preço ("P 49,90 G 59,90") |
+| PO | ~~1. Juntar linhas~~ resolvida (DEC-128: só sugere, mesma cor). ~~2. Tamanho numérico~~ resolvida (marcador 1 a 60 com "Confira"; calçado 33 a 48 sem marcador). 3. Limite e formatos da planilha 4. A etapa de fotos substitui "Publicar os válidos" como está no WB-376 C4? ~~5. Mais de um preço~~ resolvida (WB-376 C11 e C14) |
 | mobile-dev | 6. Ler a área de transferência no Safari pede permissão a cada vez? |
 | Security | 7. Linhas coladas ficam no aparelho até criar rascunho: retenção? |

@@ -12,6 +12,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from 'drizzle-orm/pg-core';
 
 /** ADR-003: papéis globais (customer, merchant) em `user_roles`; perfil de admin em `admin_profiles`. */
@@ -153,6 +154,43 @@ export const sessions = pgTable(
     mfaFactor: text({ enum: ['totp', 'recovery'] }),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+export const VIEW_AS_REASON_CODES = ['merchant_support', 'investigate_issue', 'check_registration', 'other'] as const;
+export const VIEW_AS_CLOSE_CAUSES = ['ended', 'expired', 'session_ended', 'replaced', 'permission_lost', 'abuse'] as const;
+
+/**
+ * v1.1 R1 (D8, threat model §14.5): credencial de "Ver como o lojista". Só o SHA-256 da credencial `vas_...` é guardado. Ligada à sessão do admin
+ * e vence com ela (`expires_at = least(opened_at + 30 min, sessions.absolute_expires_at)`), sem renovação. NÃO é append-only (tem `closed_at`):
+ * o histórico de abertura e encerramento vai ao `audit_log` (`view_as.open`, `view_as.close`).
+ * `store_id` sem FK a `stores` (identity não importa o módulo de lojas; a loja é validada por quem abre a visão).
+ */
+export const adminViewSessions = pgTable(
+  'admin_view_sessions',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    tokenHash: text().notNull(),
+    adminUserId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    adminSessionId: uuid()
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    storeId: uuid().notNull(),
+    reasonCode: text({ enum: VIEW_AS_REASON_CODES }).notNull(),
+    reasonNote: varchar({ length: 200 }),
+    openedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    closedAt: timestamp({ withTimezone: true }),
+    closeCause: text({ enum: VIEW_AS_CLOSE_CAUSES }),
+  },
+  (t) => [
+    uniqueIndex('admin_view_sessions_token_hash_uq').on(t.tokenHash),
+    // Uma visão ativa por admin: a corrida entre duas aberturas é decidida pelo banco (409 VIEW_AS_OPEN_CONFLICT).
+    uniqueIndex('admin_view_sessions_one_open_per_admin_uq').on(t.adminUserId).where(sql`${t.closedAt} is null`),
+    index('admin_view_sessions_open_expiry_idx').on(t.expiresAt).where(sql`${t.closedAt} is null`),
+    index('admin_view_sessions_admin_idx').on(t.adminUserId, t.openedAt),
+  ],
 );
 
 export const refreshTokens = pgTable(

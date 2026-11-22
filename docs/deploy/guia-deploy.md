@@ -228,7 +228,7 @@ Funciona sem o nginx e o compose deste repositório: o provedor termina o HTTPS 
 
 ### 4.2 Passo a passo
 
-1. **Banco**: crie o Postgres, ative PostGIS (`CREATE EXTENSION IF NOT EXISTS postgis;` num cliente SQL, ou pelo painel). Copie a URL de conexão (`postgresql://...`). Se o provedor exige TLS, use `?sslmode=require` no fim.
+1. **Banco**: crie o Postgres, ative PostGIS (`CREATE EXTENSION IF NOT EXISTS postgis;` num cliente SQL, ou pelo painel; PostGIS exige superusuário, então o `webag_migrator` não consegue ativá-lo). Crie também os papéis `webag_migrator` e `webag_app` e rode o `infra/postgres/40-roles-grants.sql` como administrador do provedor (seção 15). Copie a URL de conexão (`postgresql://...`). Se o provedor exige TLS, use `?sslmode=require` no fim.
 2. **Redis**: crie e copie a URL.
 3. **R2**: crie os buckets `webag-public` e `webag-private`; em `webag-public` habilite acesso público por um domínio (ex.: `fotos.webag.com.br`) ou pelo domínio `r2.dev` (só ensaio); crie um token de API S3 com acesso aos dois. Configure **CORS** no bucket privado e no público para permitir `POST` e `GET` vindos de `https://admin.<domínio>` e `https://lojista.<domínio>` (o navegador envia fotos direto ao bucket, ADR-005). Equivalente do `infra/storage-init.sh` do ambiente local (BUG-025): no R2 (painel, bucket, Configurações > Política CORS) cole, para cada bucket, `[{"AllowedOrigins":["https://admin.<domínio>","https://lojista.<domínio>"],"AllowedMethods":["GET","PUT","POST","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]`. O método **POST** é obrigatório: o envio é um POST de formulário assinado (presigned POST), e sem ele a preflight passa mas o upload falha. Variáveis: `S3_ENDPOINT=https://<conta>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=true`, `S3_PUBLIC_URL=https://fotos.<domínio>`, chaves do token.
 4. **API**: crie o serviço apontando para o repositório e para `apps/api/Dockerfile`. Variáveis: as da tabela da seção 6 (use as secretas do provedor, não o `.env`). Lembre que `WEB_PUBLIC_URL` é `https://<PUBLIC_HOST>`, `LOJISTA_WEB_URL` é `https://<LOJISTA_HOST>` (links do lojista em e-mail; não use o host do admin) e `MP_OAUTH_REDIRECT_URI` é `https://<LOJISTA_HOST>/lojista/onboarding/4` (o compose do Caminho A preenche os dois sozinho). Em vez de `TRUST_PROXY=172.30.0.10`, use o **número de saltos** de proxy do provedor (comece com `1`; `[HIPÓTESE]` pode ser 2 se houver CDN na frente). Domínio personalizado: `api.<domínio>`.
@@ -270,7 +270,8 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `NODE_ENV` | Sim | `production` liga as travas de segurança | Fixo no compose |
 | `TRUST_PROXY` | Sim em produção | Quem pode declarar o IP do cliente (SEC-114/129) | Compose: `172.30.0.10` (IP fixo do nginx). Gerenciado: nº de saltos |
 | `BFF_SHARED_SECRET` | Sim (SEC-129) | Segredo entre painel web e API, >= 32 caracteres, igual nos dois | `[G]` |
-| `DATABASE_URL` | Sim | Conexão com o Postgres | Montada pelo compose; gerenciado: URL do provedor |
+| `DATABASE_URL` | Sim | Conexão da API com o Postgres, pelo papel `webag_app` (sem DDL, sem posse, sem superusuário; seção 15) | Montada pelo compose; gerenciado: URL do provedor para o papel `webag_app` |
+| `MIGRATION_DATABASE_URL` | Só no job `migrate` | Conexão do job de migração, pelo papel dono `webag_migrator`. A API nunca recebe esta variável | Montada pelo compose; gerenciado: URL do papel dono, no pre-deploy command |
 | `REDIS_URL` | Sim | Cache, limite de tentativas, filas | Montada pelo compose; gerenciado: URL do provedor |
 | `JWT_ACCESS_SECRET`, `AUTH_HMAC_KEY`, `CODE_HMAC_KEY`, `RECOVERY_HMAC_KEY`, `MFA_ENC_KEY` | Sim | Uma chave por finalidade; **todas diferentes** | `[G]` (ou `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`) |
 | `PAYMENT_TOKEN_ENC_KEY` | Sim | Cifra tokens OAuth do Mercado Pago dos lojistas (32 bytes em base64) | `[G]` (ou `openssl rand -base64 32`) |
@@ -297,9 +298,9 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `API_DOCS_ENABLED` | Não | **Nunca** `true` em produção (o boot recusa) | |
 | `JWT_ACCESS_TTL_SECONDS`, `REFRESH_TTL_DAYS`, `REFRESH_ABSOLUTE_TTL_DAYS`, `REFRESH_REUSE_WINDOW_SECONDS` | Não | Duração de sessão (padrões: 900 s, 30 d, 90 d, 30 s) | Só se o produto mudar a regra; adicione em `environment` do serviço `api` |
 | `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE` | Não | Erros da API no Sentry, sem dado pessoal; vazio = desligado. Traces de 0 a 1 (0 = só erros) | Sentry > Projeto > Settings > Client Keys (DSN) |
-| `DB_POOL_MAX` | Não | Conexões do pool por processo da API (padrão 10). Regra: `(réplicas da API + worker) x DB_POOL_MAX <= PG_MAX_CONNECTIONS - 20` (folga para migração, backup e manutenção). Seção 14.2 | Só se mudar o número de réplicas |
+| `DB_POOL_MAX` | Não | Conexões do pool por processo da API (padrão 10). Regra: `(réplicas da API + worker) x DB_POOL_MAX <= PG_MAX_CONNECTIONS - 20` (folga para migração, backup e manutenção). Seção 14.2. Pool esgotado (3 s sem conexão livre) ou consulta cancelada por tempo responde 503 `SERVICE_UNAVAILABLE` com `Retry-After: 2` e UM aviso agregado por 10 s no log (`http.db_saturated`), sem pilha (BUG-035) | Só se mudar o número de réplicas |
 | `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | Não | Teto de uma consulta (padrão 30 s; **0 = sem teto e o boot recusa em produção**) e de transação parada aberta (padrão 60 s; 0 = desligado; não baixe de 15 s). O servidor encerra a conexão que passa disso; a API trata o erro sem cair e nunca espera rede com transação aberta (conciliação e cobrança de troca usam trava em conexão dedicada). Consulta/relatório que passe do teto deve virar job | Padrões; o compose já repassa estas variáveis |
-| `FEED_DIRECTORY_TTL_SECONDS`, `HOME_SECTIONS_TTL_SECONDS`, `BROWSE_CACHE_TTL_SECONDS` | Não | Cache em memória (por processo) do catálogo de lojas da descoberta (15 s), das seções "ofertas" e "mais vendidos" da home (60 s) e da vitrine/página de loja e produto (10 s). 0 = desligado. **Defasagem real (seção 14.6):** moderação, suspensão, pausa, conta de recebimento e cidade são APAGADAS na hora (DEC-113; no aparelho, até 30 s pelo `max-age`); loja nova 45 s, oferta nova 90 s, escrita direta no banco o TTL; sacola e pedido 0 s | Padrões |
+| `FEED_DIRECTORY_TTL_SECONDS`, `HOME_SECTIONS_TTL_SECONDS`, `BROWSE_CACHE_TTL_SECONDS` | Não | Cache em memória (por processo) do catálogo de lojas da descoberta (15 s), das seções "ofertas" e "mais vendidos" da home (60 s) e da vitrine/página de loja e produto (10 s). 0 = desligado. **Defasagem real (seção 14.6):** moderação, suspensão, pausa, conta de recebimento e cidade são APAGADAS na hora (DEC-113; no aparelho, até 5 s pelo `max-age`, DEC-116); loja nova 45 s, oferta nova 90 s, escrita direta no banco o TTL; sacola e pedido 0 s | Padrões |
 | `HTTP_ACCESS_LOG`, `HTTP_SLOW_MS` | Não | `slow` (padrão): o log de acesso da API só registra erro (4xx/5xx) e requisição lenta (>= 500 ms); o nginx já guarda todos os acessos. `all` volta a logar toda requisição (custa ~10% de CPU em carga) | Padrões |
 | `API_MAX_OLD_SPACE_MB` | Não | Teto do heap do Node (`--max-old-space-size`): 1024 (VPS 4 GB) ou 1536 (8 GB ou mais). Sem ele o V8 disputa memória com banco, Redis e web | Padrão |
 | `LATENCY_LOG_INTERVAL_SECONDS` | Não | A cada N s (60) a API escreve UM log `http.latency` com p50/p95/p99 por rota (modelo da rota, sem id nem coordenada). Seção 14.4 | Padrão |
@@ -319,11 +320,12 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `WEB_CLIENT_IP_HEADER` | web | Uma das duas | `x-real-ip`, que o nginx sobrescreve | Compose: já definida |
 | `WEB_TRUSTED_PROXY_HOPS` | web | Uma das duas | N-ésimo IP da direita do `X-Forwarded-For` (sem nginx; Caminho B) | Nº de proxies do provedor |
 | `STORAGE_ORIGIN` | web | Sim | Liberar o armazenamento no CSP para envio de fotos | = `S3_ENDPOINT` |
-| `COOKIE_SECURE` | web | Não | Padrão `true` em produção; não desligue | |
+| `COOKIE_SECURE` | web e API | Não | Deixe **sem definir** (padrão `true` em produção). Em produção, qualquer valor diferente de `true` (`false`, `0`, vazio, `True`) derruba o boot do web e da API (SEC-221). Só o teste local em modo produção usa `WEBAG_ALLOW_LOCAL_ORIGINS=true` no web | |
 | `WEB_TRUST_FORWARDED_HOST` | web | Não | Só `true` se um proxy sobrescrever `X-Forwarded-Host`. O nginx deste repositório não precisa | |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | web (build) | Não | WhatsApp de suporte exibido nos painéis; entra no JavaScript do navegador, então **muda só com novo build** | Número com DDI |
 | `API_HOST`, `FILES_HOST`, `LETSENCRYPT_EMAIL` | nginx, certbot | Sim (VPS) | Nomes e e-mail do certificado | |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres | Sim (VPS) | Banco. A senha só com letras e números (entra numa URL) | `[G]` |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres | Sim (VPS) | Banco. `POSTGRES_USER` é o superusuário do cluster: só o backup e a manutenção usam. A senha só com letras e números (entra numa URL) | `[G]` |
+| `WEBAG_MIGRATOR_PASSWORD`, `WEBAG_APP_PASSWORD` | postgres, migrate, api, seed | Sim (VPS) | Senhas dos papéis `webag_migrator` e `webag_app` (seção 15). Só letras e números | `[G]` |
 | `REDIS_PASSWORD` | redis | Sim (VPS) | | `[G]` |
 | `COMPOSE_PROFILES` | compose | Não | `storage-local` = fotos no servidor; apague para usar R2/S3 | |
 | `WEBAG_VERSION`, `POSTGIS_IMAGE` | compose | Não | Etiqueta das imagens; imagem do banco (ARM: `imresamu/postgis:18-3.6-alpine`) | |
@@ -429,7 +431,7 @@ sh infra/scripts/prod.sh exec backup restore-postgres webag-pg-20261118T031500Z.
 # 5) Subir de novo e conferir
 sh infra/scripts/prod.sh up -d
 ```
-O script tenta antes um backup de segurança do estado atual. Depois da restauração, a API aplica migrações pendentes sozinha ao subir (serviço `migrate`).
+O script tenta antes um backup de segurança do estado atual. Depois da restauração, a API aplica migrações pendentes sozinha ao subir (serviço `migrate`). **D-06:** a restauração usa `--no-owner --no-privileges`, então as tabelas voltam com o superusuário como dono e sem privilégio para o `webag_app`. Antes do passo 5, rode de novo o `40-roles-grants.sql` (seção 15, passo 2); o `migrate` reafirma os privilégios do `webag_app` ao subir. Sem isso a API sobe, mas toda consulta falha com `permission denied`.
 
 ### 8.5 Servidor novo (perda total do servidor)
 
@@ -614,3 +616,62 @@ Limites que continuam valendo (leia antes de prometer "5 s"):
 - **Remoção urgente sem esperar (escrita direta no banco ou Redis fora):** reiniciar o contêiner `api` (`prod.sh restart api`) limpa os caches em memória e, passados 30 s, o Redis da posição também expirou; com 2+ réplicas, reinicie todas. O aceite da janela de preço, estoque e loja nova é decisão do PO (`docs/qa/performance/api-2026-11-22.md`, seção 12).
 - Banco fora do ar: o valor antigo segue sendo servido por até 4x o TTL, **exceto o que foi invalidado**; erro de negócio (404 de loja suspensa) nunca é mascarado. Resposta de erro sai sempre `private, no-store`.
 
+## 15. Papéis do banco (D-06, ADR-018 D9, tech-lead B4)
+
+**Por quê.** Em produção a API e o job `migrate` usavam o mesmo usuário, o superusuário do cluster: ele ignora posse, desliga gatilho (`DISABLE TRIGGER`) e apaga o histórico append-only (`audit_log`, razão contábil, estornos, consentimentos). Agora são dois papéis e o superusuário não é usado pela aplicação.
+
+| Papel | Quem usa | Pode | Não pode |
+|---|---|---|---|
+| `webag_migrator` | só o job `migrate` (`MIGRATION_DATABASE_URL`) | ser dono do banco e das tabelas, criar tabela, índice e gatilho; `lock_timeout` de 10 s | ser superusuário, criar papel ou banco |
+| `webag_app` | API e seed (`DATABASE_URL`) | `SELECT/INSERT/UPDATE/DELETE` nas tabelas e `USAGE` nas sequências; `SELECT` em `drizzle.__drizzle_migrations` (o `/health/ready` conta as migrações) | DDL, `TRUNCATE`, `DISABLE TRIGGER`, `session_replication_role`; nas 9 tabelas append-only só `INSERT` e `SELECT` (exceção: `UPDATE` das colunas `ip` e `platform` de `consents` e `terms_acceptances`, para a anonimização da SEC-159) |
+
+**Arquivos.** `infra/postgres/30-roles-create.sh` (cria os papéis; senhas do ambiente), `infra/postgres/40-roles-grants.sql` (extensões, posse, acesso; idempotente; como superusuário), `apps/api/src/platform/database/app-grants.ts` (privilégios do `webag_app` sobre as tabelas, reafirmados pelo `migrate` depois de cada migração; a lista das tabelas append-only é conferida por teste contra os gatilhos das migrações).
+
+**Passo a passo, VPS novo (volume vazio).** Nada a fazer além de preencher `WEBAG_MIGRATOR_PASSWORD` e `WEBAG_APP_PASSWORD` no `.env` (o `gen-secrets.sh` as sorteia). A 1ª inicialização do contêiner `postgres` cria os papéis e a posse; o `migrate` roda como `webag_migrator` e dá os privilégios ao `webag_app`.
+
+**Passo a passo, banco que JÁ EXISTE (produção atual, ou volume de desenvolvimento antigo).** Janela curta de manutenção; a API só troca de papel no passo 4.
+1. Gerar as duas senhas (`openssl rand -hex 24`) e pôr no `.env` com `WEBAG_MIGRATOR_PASSWORD` e `WEBAG_APP_PASSWORD`. **Backup antes** (seção 8) e teste de restauração em dia.
+2. Criar os papéis e a posse (como superusuário, dentro do contêiner):
+   ```bash
+   sh infra/scripts/prod.sh exec postgres sh /docker-entrypoint-initdb.d/30-roles-create.sh
+   sh infra/scripts/prod.sh exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/40-roles-grants.sql'
+   ```
+   (`docker compose` de um volume antigo não remonta os arquivos: `up -d postgres` com o compose novo recria o contêiner com as montagens, sem apagar o volume.)
+3. Rodar o job de migração com o dono: `sh infra/scripts/prod.sh run --rm migrate` (aplica as migrações pendentes e os privilégios do `webag_app`).
+4. Trocar a API para o `webag_app`: `up -d` com o compose novo (a `DATABASE_URL` da API já aponta para ele). Conferir `/health/ready` e um pedido de teste.
+5. Verificar (ver abaixo) e guardar a saída no registro da mudança.
+
+**Recusa de boot (D-06, ADR-018 D19 item 1; R1.1).** Com `NODE_ENV=production` (e também com `NODE_ENV` ausente) a API RECUSA subir, com erro claro e saída diferente de zero, se o papel da `DATABASE_URL` for superusuário, dono do `audit_log` ou membro de `webag_migrator` (`apps/api/src/platform/database/db-role-guard.ts`; em `development` e `test` só avisa). **Ordem de implantação (R3 c do tech-lead):** esta verificação só pode ir para um ambiente DEPOIS de ele ter os papéis (passos 1 a 3) e a `DATABASE_URL` trocada para o `webag_app` (passo 4); implantar a versão nova da API antes disso deixa a API fora do ar, e é o comportamento desejado. No staging: passos 1 a 4, depois a versão nova da API. Em desenvolvimento local o compose define `NODE_ENV=development`.
+
+**Verificação (como `webag_app`; cada comando deve FALHAR).** Abrir o `psql` como o papel da API: `sh infra/scripts/prod.sh exec postgres sh -c 'PGPASSWORD="$WEBAG_APP_PASSWORD" psql -h 127.0.0.1 -U webag_app -d "$POSTGRES_DB"'`.
+```sql
+UPDATE audit_log SET action = action;        -- permission denied
+DELETE FROM audit_log;                       -- permission denied
+TRUNCATE audit_log;                          -- permission denied
+ALTER TABLE audit_log DISABLE TRIGGER ALL;   -- must be owner
+SET session_replication_role = replica;      -- permission denied
+CREATE TABLE x (id int);                     -- permission denied for schema public
+```
+E o que deve funcionar: `INSERT` e `SELECT` em `audit_log`; `SELECT count(*) FROM drizzle.__drizzle_migrations`.
+
+**Banco gerenciado (Caminho B).** O provedor cria o papel administrador; crie `webag_migrator` e `webag_app` por ele e rode o `40-roles-grants.sql` com o administrador (`CREATE EXTENSION postgis` pode já estar ativa; o script é idempotente). O pre-deploy command usa `MIGRATION_DATABASE_URL`; o serviço da API usa só a URL do `webag_app`. Se o provedor não permitir `ALTER DATABASE ... OWNER` ou `ALTER ... OWNER TO`, registre a exceção no `docs/decisoes.md`: sem posse separada o D-06 não se cumpre.
+
+**Rotação das senhas.** Repetir o passo 2 (a primeira linha só troca as senhas) e `up -d`.
+
+**Índices em tabela grande.** O `migrate` do Drizzle aplica todas as migrações pendentes numa única transação: `CREATE INDEX CONCURRENTLY` não roda nele. Nas tabelas do piloto o `CREATE INDEX` simples dentro da migração basta. Se `audit_log` ou `products` passarem de ~1 milhão de linhas (conferir com `select count(*)`), o índice é criado à mão, FORA do Drizzle, como `webag_migrator`: `CREATE INDEX CONCURRENTLY IF NOT EXISTS ...` e a migração correspondente usa `CREATE INDEX IF NOT EXISTS` com o mesmo nome (vira no-op).
+
+## 16. Migrações da R1 (0058 a 0062): bloqueios, horário e reversão
+
+Registrado a pedido do tech-lead (review R1.1, I3). O `migrate()` do Drizzle roda as pendentes numa transação só, e cada `ALTER` segura o bloqueio até o fim dela: aplicar **fora do horário de pico** e com `lock_timeout` de 10 s do `webag_migrator` (se estourar, a transação inteira volta e nada fica pela metade).
+
+| Migração | O que bloqueia escrita, e por quê |
+|---|---|
+| 0058 `r1_store_version` | `stores`: coluna nova com default constante (metadado, instantâneo no PG 18) |
+| 0059 `r1_audit_store_id` | `audit_log`: coluna nula e `CREATE INDEX` simples (sem `CONCURRENTLY`, que não cabe na transação): bloqueia INSERT no `audit_log` enquanto o índice é construído. Antes, registrar `select count(*) from audit_log` no staging; acima de ~1 milhão de linhas criar o índice à mão (regra 2 do modelo de dados) |
+| 0060 `r1_admin_edit_support` | `ADD FOREIGN KEY` para `users`, `sessions` e `stores`: bloqueia escrita nessas três até o fim da transação das migrações (tabelas novas e vazias, então é rápido) |
+| 0061 `r1_catalog_version` | `products` e `categories`: colunas novas e `CHECK` com `NOT VALID` + `VALIDATE`; o `VALIDATE` varre `products` (sem bloquear escrita por muito tempo) |
+| 0062 `r1_moderation_event_set_null` | `product_moderation_events` e `products`: troca a FK de `product_id` (`NO ACTION` para `ON DELETE SET NULL`, coluna anulável) e cria índice simples; tabela pequena, `lock_timeout` de 5 s no próprio script (BUG-042). A reversão APAGA os eventos órfãos (de rascunho já excluído): ver o cabeçalho de `down/0062.sql` |
+
+**Saneamento antes da 0061 (BUG-036 e QA R1.1/R1.2).** O `CHECK products_name_len` exige nome de 2 a 80 caracteres em todo produto que não é rascunho. A migração faz a checagem prévia: com legado fora da regra ela **não falha**, emite `WARNING` com a contagem e deixa o `CHECK` como `NOT VALID` (vale para escritas novas; nada é apagado nem alterado). Para achar e sanear antes (como `webag_migrator`; o ajuste do nome é do lojista ou do suporte, não é feito às cegas): `SELECT id, store_id, status, name FROM products WHERE status <> 'draft' AND char_length(name) NOT BETWEEN 2 AND 80;`. Depois de corrigir os nomes: `ALTER TABLE products VALIDATE CONSTRAINT products_name_len;`. Enquanto estiver `NOT VALID`, editar um desses produtos sem corrigir o nome dá 500 (o `CHECK` reavalia a linha): corrija o nome primeiro. Conferir: `SELECT convalidated FROM pg_constraint WHERE conname = 'products_name_len';` deve ser `t`.
+
+**Reversão (regra 5 do modelo de dados).** Scripts em `apps/api/drizzle/down/<NNNN>.sql` (o migrator não lê essa pasta). Executar como `webag_migrator`, uma migração por vez, da mais nova para a mais antiga, numa transação: `psql -1 -v ON_ERROR_STOP=1 -f apps/api/drizzle/down/0061.sql`. O próprio script apaga a linha da migração em `drizzle.__drizzle_migrations`, então o `migrate` a reaplica depois. **0060 e 0061 apagam dado** (tabelas e colunas novas): só com autorização do fundador fora do staging. `audit_log` não perde linha (só a coluna `store_id`). Provado por `apps/api/test/migrations-down.e2e-spec.ts` (aplica do zero, insere dados, reverte as quatro, confere as linhas, reaplica); o CI barra migração nova sem `down` (`src/platform/database/migrations-down.spec.ts`).

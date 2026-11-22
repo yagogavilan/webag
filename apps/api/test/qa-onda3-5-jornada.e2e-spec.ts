@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { LedgerService } from '../src/modules/finance/index.js';
 import { deliveries, exchangeRequests, orderItems, orders, paymentAttempts, paymentRefunds, productVariants } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
+import { leaksCode } from './helpers/code-leak.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
 import { addToCart, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith } from './helpers/orders.js';
 
@@ -111,7 +112,7 @@ describe('Jornada completa: PIX, aceite, pronto, motoboy, entrega, troca de tama
     expect(wa.link).toMatch(/^https:\/\/wa\.me\/\d+\?text=/);
     expect(wa.message).toContain('Não cobrar');
     expect(wa.message).not.toMatch(/R\$|@|cpf/i); // sem valores, e-mail nem CPF
-    expect(wa.message).not.toContain(code); // o código de entrega é do cliente
+    expect(leaksCode(wa.message, code)).toBe(false); // o código de entrega é do cliente
     expect(wa.message).not.toContain('Camiseta'); // sem itens
     await ctx.http.post(`${base}/deliveries/${j.deliveryId}/whatsapp-sent`).set(bearer(ops.accessToken)).expect(204);
     await ctx.http.post(`${base}/deliveries/${j.deliveryId}/status`).set(bearer(ops.accessToken)).send({ action: 'confirm' }).expect(200);

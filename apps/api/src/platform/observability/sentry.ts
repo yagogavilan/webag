@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node';
 import type { ErrorEvent } from '@sentry/node';
 import { maskCoordinates, maskPii } from '../logging/mask.js';
 
-const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webag-bff-secret', 'x-webag-client-ip', 'x-signature', 'x-forwarded-for', 'idempotency-key']);
+const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webag-bff-secret', 'x-webag-client-ip', 'x-signature', 'x-forwarded-for', 'idempotency-key', 'x-view-as']);
 
 /**
  * DT-039 / LGPD: nada de dado pessoal sai da API. Remove corpo, cookies, cabeçalhos sensíveis, IP e usuário; mascara e-mail e

@@ -1,0 +1,34 @@
+
+== head-100: 100 VUs, 60 s medidos, 3273 req, 55 req/s, erros 0.03% | jornadas 536, pedidos 21, falhas 2
+CPU% (100 = 1 vCPU): API 31.1 (pico 47.5), PG 26.2 (pico 41.0), Redis 0.9, gerador 6.7, máquina 17.0% | RAM máx: API 326 MB, PG 2073 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/products/{id}                       431     7.2      8.6     20.7     34.1    0.0     1707     706
+PUT /v1/cart/items/{variantId}                     424     7.1     19.2     43.0     65.3    0.0     1842     813
+GET /v1/browse/stores/{id}/products                418     7.0      6.9     16.4     23.4    0.0    10013    1747
+GET /v1/browse/stores/{id}                         418     7.0      9.0     23.0     33.5    0.0     1146     654
+GET /v1/cart                                       415     6.9     15.0     34.6     51.7    0.0     1788     797
+GET /v1/home                                       413     6.9      2.5     22.6     47.8    0.0    29524    4871
+GET /v1/search/products                            219     3.6     18.4     31.1     42.9    0.0    16419    2030
+GET /v1/search/suggestions                         218     3.6     17.6     65.8     82.4    0.0      819     427
+GET /v1/me/addresses                               127     2.1      2.9      6.1     11.5    0.0      424     308
+GET /v1/search/stores                               76     1.3      4.4     10.2     15.4    0.0     3934     805
+GET /v1/browse/stores/{id}/products (pág. 2)        48     0.8      7.1     13.9     27.6    0.0    10556    1787
+GET /v1/orders/{id}                                 31     0.5      6.9     13.8     17.3    0.0     2355    1078
+POST /v1/orders                                     13     0.2     31.7     46.5     46.5    7.7     2233    1021
+GET /v1/orders/{id}/payment                         12     0.2      3.3      4.4      4.4    0.0      390     302
+GET /v1/orders                                      10     0.2      5.0      7.0      7.0    0.0      829     445
+
+Top consultas por tempo total (pg_stat_statements):
+    3920 ms      302x  média   12.98  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    3421 ms      262x  média   13.06  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    1013 ms     1099x  média    0.92  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+     847 ms  1269114x  média    0.00  SELECT lower(public.unaccent($2, $1))
+     289 ms        2x  média  144.40  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+     225 ms      410x  média    0.55  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     139 ms     2175x  média    0.06  select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null
+     121 ms      252x  média    0.48  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+      98 ms     1368x  média    0.07  select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a
+      97 ms        6x  média   16.22  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+      93 ms      384x  média    0.24  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+      81 ms      357x  média    0.23  select avg("rating")::float8, count(*)::int from "reviews" where (("reviews"."store_id" = $1 and "reviews"."product_id" is null) and "reviews"."status" = $2)
+exit=0

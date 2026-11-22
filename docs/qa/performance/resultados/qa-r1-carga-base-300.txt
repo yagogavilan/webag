@@ -1,0 +1,33 @@
+
+== base-300: 300 VUs, 60 s medidos, 9637 req, 161 req/s, erros 0.00% | jornadas 1604, pedidos 70, falhas 0
+CPU% (100 = 1 vCPU): API 76.3 (pico 101), PG 71.9 (pico 93.5), Redis 1.8, gerador 9.4, máquina 40.9% | RAM máx: API 403 MB, PG 1192 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/products/{id}                      1254    20.9     12.1     80.3      292    0.0     1728     708
+GET /v1/browse/stores/{id}                        1238    20.6     10.4     51.4      153    0.0     1140     651
+GET /v1/browse/stores/{id}/products               1238    20.6      6.0     24.4     50.0    0.0    10240    1743
+PUT /v1/cart/items/{variantId}                    1234    20.6     28.8      142      419    0.0     1893     806
+GET /v1/cart                                      1227    20.4     20.7     92.4      284    0.0     1841     803
+GET /v1/home                                      1216    20.3      6.7     43.3     80.6    0.0    29411    4892
+GET /v1/search/suggestions                         614    10.2     22.3     82.4      116    0.0      810     410
+GET /v1/search/products                            614    10.2     22.5     54.7      103    0.0    16420    2025
+GET /v1/me/addresses                               376     6.3      3.8     18.1     39.7    0.0      423     308
+GET /v1/search/stores                              182     3.0      6.1     26.2     63.5    0.0     3722     778
+GET /v1/browse/stores/{id}/products (pág. 2)       171     2.9      7.8     40.8      126    0.0    10565    1784
+GET /v1/orders/{id}                                133     2.2      8.7     33.9     56.0    0.0     2404    1075
+POST /v1/orders                                     50     0.8     52.5      153      614    0.0     2403    1090
+GET /v1/orders/{id}/payment                         50     0.8      4.5     14.3     24.8    0.0      390     302
+GET /v1/orders                                      40     0.7      6.0     24.6     41.5    0.0      883     457
+
+Top consultas por tempo total (pg_stat_statements):
+   12298 ms      839x  média   14.66  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+   10247 ms      739x  média   13.87  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    2758 ms     3278x  média    0.84  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+    2599 ms  3578149x  média    0.00  SELECT lower(public.unaccent($2, $1))
+     478 ms      807x  média    0.59  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     382 ms      756x  média    0.51  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     254 ms     6486x  média    0.04  select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null
+     245 ms     4135x  média    0.06  select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a
+     234 ms      676x  média    0.35  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     233 ms     1604x  média    0.15  insert into "cart_items" ("id", "cart_id", "variant_id", "product_id", "quantity", "seen_price_cents", "created_at") values (default, $1, $2, $3, $4, $5, defaul
+     228 ms        2x  média  113.83  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+     209 ms      676x  média    0.31  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."

@@ -5,6 +5,7 @@ import { DeliveriesService } from '../src/modules/logistics/index.js';
 import { OrderEventBus, type OrderEvent } from '../src/modules/orders/order-events.bus.js';
 import { deliveries, deliveryEvents, paymentAlerts, paymentRefunds } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
+import { leaksCode } from './helpers/code-leak.js';
 import { createAdmin, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
 import { addToCart, cartView, approve, attemptOf, customerAt, orderRow, placeOrder, shopWith, type Shop } from './helpers/orders.js';
 
@@ -83,7 +84,7 @@ describe('Pedido com logística da Webag (WB-229, WB-233, WB-235)', () => {
     expect(view.tracking.deliveryCode).toBe(code); // o cliente vê o código a partir de "saiu para entrega"
     // a loja não consegue mexer (nem ver o código nem o telefone do motoboy)
     expect((await ctx.http.post(`${r.url}/status`).set(store(r.shop)).send({ status: 'delivered' })).status).toBe(409);
-    expect(JSON.stringify((await ctx.http.get(r.url).set(store(r.shop)).expect(200)).body)).not.toContain(code);
+    expect(leaksCode((await ctx.http.get(r.url).set(store(r.shop)).expect(200)).body, code)).toBe(false);
 
     await act(r.delivery.id, { action: 'delivered', code: code === '0000' ? '1111' : '0000' }).expect(422);
     await act(r.delivery.id, { action: 'delivered', code }).expect(200);

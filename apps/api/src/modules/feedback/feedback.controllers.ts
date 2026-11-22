@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { AdminOnly, Ctx, CurrentPrincipal, Public, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { AdminOnly, Ctx, CurrentPrincipal, Public, StorePermission, ViewAs, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -177,6 +177,7 @@ const replySchema = z.strictObject({ text: z.string().trim().min(1).max(500) });
 export class StoreReviewsController {
   constructor(private readonly reviews: StoreReviewsService) {}
 
+  @ViewAs('listStoreReviews')
   @StorePermission('reviews')
   @Get()
   list(@Param('storeId') storeId: string, @Query(new ZodPipe(reviewsQuery)) query: z.infer<typeof reviewsQuery>) {
@@ -184,6 +185,7 @@ export class StoreReviewsController {
   }
 
   /** W.6: resumo (média, total, distribuição 1 a 5, sem resposta) para o Início e a página de Avaliações. */
+  @ViewAs('getStoreReviewsSummary')
   @StorePermission('reviews')
   @Get('summary')
   summary(@Param('storeId') storeId: string) {

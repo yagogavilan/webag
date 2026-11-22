@@ -55,6 +55,8 @@ export interface CreateExchangeInput {
 }
 
 const SYSTEM_CTX: RequestContext = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
+/** Quem lê: o cliente, a loja/admin, ou a visão "Ver como o lojista" (WB-352, mascarada, decidida por `req.viewAs`). */
+type ExchangeView = 'customer' | 'store' | 'view_as';
 const money = (amount: number) => ({ amount, currency: 'BRL' as const });
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_MAX_FAILS = 5;
@@ -1038,7 +1040,7 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
 
   // =================================================================== leitura
 
-  private async present(ex: ExchangeRow, view: 'customer' | 'store', detail: boolean) {
+  private async basePresentation(ex: ExchangeRow) {
     const [item] = await this.db.select().from(orderItems).where(eq(orderItems.id, ex.orderItemId));
     const [order] = await this.db.select({ number: orders.number }).from(orders).where(eq(orders.id, ex.orderId));
     const [variant] = ex.newVariantId ? await this.db.select({ id: productVariants.id, attributes: productVariants.attributes }).from(productVariants).where(eq(productVariants.id, ex.newVariantId)) : [];
@@ -1076,6 +1078,12 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       createdAt: ex.createdAt.toISOString(),
       updatedAt: ex.updatedAt.toISOString(),
     };
+    return base;
+  }
+
+  private async present(ex: ExchangeRow, view: ExchangeView, detail: boolean) {
+    const base = await this.basePresentation(ex);
+    if (view === 'view_as') return this.presentViewAs(ex, base, detail);
     if (!detail) return base;
     const [events, runs] = await Promise.all([
       this.db.select().from(exchangeEvents).where(eq(exchangeEvents.exchangeId, ex.id)).orderBy(asc(exchangeEvents.id)),
@@ -1090,6 +1098,26 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
       timeline: events.map((e) => ({ from: e.fromStatus, to: e.toStatus, actor: e.actor, reason: e.reason, at: e.at.toISOString() })),
       runs: runs.map((r) => ({ id: r.id, kind: r.kind, status: r.status })),
     };
+  }
+
+  /**
+   * WB-352 (§14.3, SEC-209): troca na visão do admin por LISTA PERMITIDA. Sem a descrição digitada pelo cliente, fotos, dados de reembolso, justificativa
+   * da decisão nem `reason` da linha do tempo (no evento `requested` ele é a descrição do cliente). Nem assina a URL das fotos.
+   */
+  private async presentViewAs(ex: ExchangeRow, base: Awaited<ReturnType<ExchangesService['basePresentation']>>, detail: boolean) {
+    const out = {
+      id: base.id, number: base.number, orderId: base.orderId, storeId: base.storeId, orderNumber: base.orderNumber, status: base.status, type: base.type,
+      reasonCode: base.reasonCode, method: base.method, resolution: base.resolution, quantity: base.quantity, item: base.item, newVariant: base.newVariant,
+      fee: base.fee, difference: base.difference, totalDue: base.totalDue, feeDueAt: base.feeDueAt, feePaid: base.feePaid, answerDeadlineAt: base.answerDeadlineAt,
+      windowEndsAt: base.windowEndsAt, itemDueAt: base.itemDueAt, autoApproved: base.autoApproved, decidedBy: base.decidedBy, contestableUntil: base.contestableUntil,
+      contested: base.contested, createdAt: base.createdAt, updatedAt: base.updatedAt,
+    };
+    if (!detail) return out;
+    const [events, runs] = await Promise.all([
+      this.db.select().from(exchangeEvents).where(eq(exchangeEvents.exchangeId, ex.id)).orderBy(asc(exchangeEvents.id)),
+      this.deliveries.forExchange(ex.id),
+    ]);
+    return { ...out, timeline: events.map((e) => ({ from: e.fromStatus, to: e.toStatus, actor: e.actor, at: e.at.toISOString() })), runs: runs.map((r) => ({ id: r.id, kind: r.kind, status: r.status })) };
   }
 
   async getForCustomer(userId: string, exchangeId: string) {
@@ -1149,23 +1177,23 @@ export class ExchangesService implements OnModuleInit, OnApplicationBootstrap, O
     return { status: result.status, fee: money(result.feeCents), totalDue: money(this.dueCents(result)) };
   }
 
-  async getForStore(storeId: string, exchangeId: string) {
+  async getForStore(storeId: string, exchangeId: string, view: 'store' | 'view_as' = 'store') {
     const [ex] = await this.db.select().from(exchangeRequests).where(and(eq(exchangeRequests.id, exchangeId), eq(exchangeRequests.storeId, storeId)));
     if (!ex) throw errors.notFound('Troca não encontrada.');
-    return this.present(ex, 'store', true);
+    return this.present(ex, view, true);
   }
 
   async listForCustomer(userId: string, query: { cursor?: string | undefined; limit?: unknown }): Promise<Page<Awaited<ReturnType<ExchangesService['present']>>>> {
     return this.page(eq(exchangeRequests.userId, userId), 'customer', query);
   }
 
-  async listForStore(storeId: string, query: { scope?: 'pending' | 'in_progress' | 'history' | undefined; cursor?: string | undefined; limit?: unknown }) {
+  async listForStore(storeId: string, query: { scope?: 'pending' | 'in_progress' | 'history' | undefined; cursor?: string | undefined; limit?: unknown }, view: 'store' | 'view_as' = 'store') {
     const scope = { pending: ['requested'], in_progress: ['awaiting_fee', 'approved', 'item_received', 'in_mediation'], history: ['completed', 'rejected', 'cancelled', 'expired'] } as const;
     const filter = query.scope ? inArray(exchangeRequests.status, [...scope[query.scope]]) : undefined;
-    return this.page(and(eq(exchangeRequests.storeId, storeId), filter), 'store', query);
+    return this.page(and(eq(exchangeRequests.storeId, storeId), filter), view, query);
   }
 
-  private async page(where: ReturnType<typeof and>, view: 'customer' | 'store', query: { cursor?: string | undefined; limit?: unknown }) {
+  private async page(where: ReturnType<typeof and>, view: ExchangeView, query: { cursor?: string | undefined; limit?: unknown }) {
     const limit = parseLimit(query.limit);
     const cursor = decodeCursor<{ at: string; id: string }>(query.cursor);
     const rows = await this.db

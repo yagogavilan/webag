@@ -30,8 +30,8 @@
 .searchRow > :first-child { flex: 1; min-width: 0; }
 .selectToggle { flex: none; }
 @media (max-width: 1023px) {
-  table.productsTable tr.productRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: 'thumb name status' 'thumb price stock'; column-gap: var(--wb-space-3); row-gap: 0; align-items: center; padding: 2px 0; }
-  table.productsTable.selecting tr.productRow { grid-template-columns: var(--wb-size-touch-min) 48px minmax(0, 1fr) auto; grid-template-areas: 'check thumb name status' 'check thumb price stock'; }
+  table.productsTable tr.productRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) var(--wb-size-touch-min) auto; grid-template-areas: 'thumb name name status' 'thumb price more stock'; column-gap: var(--wb-space-3); row-gap: 0; align-items: center; padding: 2px 0; }
+  table.productsTable.selecting tr.productRow { grid-template-columns: var(--wb-size-touch-min) 48px minmax(0, 1fr) var(--wb-size-touch-min) auto; grid-template-areas: 'check thumb name name status' 'check thumb price more stock'; }
   table.productsTable tr.productRow td { padding: 0; min-width: 0; }
   table.productsTable td[data-label]::before { content: none; }
   table.productsTable td[data-primary]:not(.checkCell) { display: contents; }
@@ -44,7 +44,9 @@
   table.productsTable td.statusCell { grid-area: status; justify-self: end; }
   table.productsTable td.stockCell { grid-area: stock; justify-self: end; }
   table.productsTable td.actionsCell { display: contents; }
-  table.productsTable .editLink { display: none; }
+  table.productsTable .editLink, table.productsTable .dupInline { display: none; }
+  table.productsTable .rowMenu { display: grid; grid-area: more; place-items: center; }
+  table.productsTable .rowMenu button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
   /* "Salvando…/Salvo" some do fluxo para o estoque não alargar a coluna; o leitor de tela continua ouvindo. */
   table.productsTable .stepper [role='status'] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   table.productsTable .photoCell .productName { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -53,7 +55,9 @@
   table.productsTable .stepper button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
   table.productsTable caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
-@media (min-width: 1024px) { .selectToggle { display: none; } }
+@media (min-width: 1024px) { .selectToggle, .headerMore, .rowMenu { display: none; } }
+/* Atalhos do cabeçalho: botões no computador, um "Mais" no celular. O lembrete "sem descrição" fica em 1 linha no celular (só a contagem). */
+@media (max-width: 1023px) { .headerLinks, .reminderWhy { display: none; } }
 .checkCell input { width: 24px; height: 24px; }
 
 .bulkBar { position: sticky; top: 0; z-index: var(--wb-z-index-sticky); display: flex; flex-wrap: wrap; align-items: center; gap: var(--wb-space-2); padding: var(--wb-space-3); border-radius: var(--wb-radius-md); background: var(--wb-color-surface-inverse); color: var(--wb-color-text-inverse); box-shadow: var(--wb-shadow-md); }

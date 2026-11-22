@@ -1,0 +1,100 @@
+
+=== wb259 ===
+PASS  WB259-1 | pedido sem pagamento: refund = null  [refund=null]
+PASS  WB259-2 | pedido pago em andamento: refund = null  [refund=null]
+PASS  WB259-3 | cancelamento do pedido pago por PIX: refund {valor total, method pix, status completed|processing, deadlineText de PIX}  [cancel HTTP 200; total=2996; refund={"amountCents":2996,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."}]
+PASS  WB259-4 | o valor estornado no provedor/ledger bate com o refund exposto  [ledger=2996 api=2996]
+PASS  WB259-5 | outra conta não vê o pedido nem o estorno (404)
+PASS  WB259-6 | estorno parcial: refund.amountCents = valor parcial (250), nunca o total; pedido segue ativo  [HTTP 200; refund={"amountCents":250,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."}; status=received]
+PASS  WB259-7 | estorno parcial + cancelamento: refund soma as intenções (total do pedido)  [refund={"amountCents":2996,"method":"pix","status":"completed","deadlineText":"Volta para a conta que pagou o PIX. Costuma levar até 1 dia útil."} total=2996]
+PASS  WB259-8 | cartão simulado (fake_tok_approved) pela página segura: pedido criado e pago  [intent HTTP 201; página 200 provedor=fake; pay HTTP 200 {"orderId":"fc80d62f-3664-4bf9-b077-8ccf41e886a3","status":"received","payment":{"method":"card","status":"approved"},"threeDsUrl":null}]
+PASS  WB259-9 | estorno de cartão: method card e o texto das faturas  [cancel HTTP 200; refund={"amountCents":2996,"method":"card","status":"completed","deadlineText":"Aparece na fatura do cartão em até 2 faturas, conforme o seu banco."}]
+PASS  WB259-10 | cartão recusado (saldo insuficiente): 422 PAYMENT_DECLINED, nenhum pedido pago  [HTTP 422 {"type":"https://api.webag.com.br/errors/payment-declined","title":"Pagamento recusado","status":422,"detail":"Saldo insuficiente no cartão. Tente outro cartão ]
+PASS  WB259-11 | cartão com 3DS: devolve threeDsUrl e o pedido não vira pago antes  [HTTP 200 threeDsUrl=https://fake-3ds.webag.local/challenge/fkd4ca32af60503efc6c542ee5 status=awaiting_payment]
+
+=== wb261 ===
+PASS  WB261-0 | a sacola traz a faixa com fromAt e toAt (ISO)  [{"minMinutes":21,"maxMinutes":51,"fromAt":"2026-11-22T16:01:33.870Z","toAt":"2026-11-22T16:31:33.870Z"}]
+PASS  WB261-1 | fim da faixa igual ao visto: cria (201) sem aviso  [HTTP 201 {"id":"97ab6284-e05b-4e1e-95b7-9baf395e9f00","number":"WB-C6HMV","status":"awaiting_payment","mode":"delivery","createdA]
+PASS  WB261-2 | app antigo (sem acceptedEtaToAt): cria (201)  [HTTP 201]
+PASS  WB261-3 | o cliente viu um fim MAIS TARDE que o atual (melhorou): cria (201)  [HTTP 201]
+PASS  WB261-4 | dentro da tolerância (visto 3 e 4 min antes do fim atual): NÃO avisa (201)  [-3 min: 201; -4 min: 201]
+PASS  WB261-5 | fora da tolerância (visto 7, 8 e 20 min antes): 409 ETA_CHANGED  [-7: 409 ETA_CHANGED; -8: 409; -20: 409]
+PASS  WB261-6 | 409 ETA_CHANGED traz eta {fromAt,toAt} novo e NÃO cria pedido nem tentativa de pagamento  [eta={"fromAt":"2026-11-22T16:01:34.557Z","toAt":"2026-11-22T16:31:34.557Z"}; pedidos ativos antes=0 depois=0]
+PASS  WB261-7 | o cliente confirma o horário novo: reenviar com o toAt devolvido cria (201), com Idempotency-Key nova  [HTTP 201 {"id":"66acf732-243e-4657-ae62-79461c0985c7","number":"WB-3XGC8","status":"awaiting_payment","mode":"delivery","createdA]
+PASS  WB261-8 | acceptedEtaToAt inválido: 400  [HTTP 400]
+PASS  WB261-9 | retirada não tem faixa de entrega: o campo não gera ETA_CHANGED  [HTTP 201 ]
+PASS  WB261-10 | a faixa nova anda com o relógio em passos de minutos (granularidade ≤ 5 min), não por segundo  [toAt 2026-11-22T16:31:34.750Z -> 2026-11-22T16:31:36.794Z]
+
+=== wb262 ===
+PASS  WB262-1 | sem a hora informada vale a hora do clique (corrida e pedido)  [HTTP 200; deliveredAt=2026-11-22T15:40:37.317Z]
+PASS  WB262-2 | recuo de 4 min (até 5): vale, sem motivo; vira orders.delivered_at  [HTTP 200; resposta=2026-11-22T15:36:37.815Z; pedido=2026-11-22T15:36:37]
+PASS  WB262-3 | recuo acima de 5 min exige o motivo (400); "outro" exige a nota (400); com motivo vale (200) e nada mudou nas recusas  [sem motivo 400; other sem nota 400; com motivo 200]
+PASS  WB262-4 | hora real e hora do clique ficam no histórico da corrida (com motivo e recuo) e na auditoria  [histórico={"clickedAt": "2026-11-22T15:40:38.251Z", "deliveredAt": "2026-11-22T15:20:38.218Z", "backdatedMin": 20, "deliveredAtReason": "courier_notified_late"}; auditorias=1]
+PASS  WB262-5 | no futuro (+10 min): 422 DELIVERED_AT_IN_FUTURE; antes da saída (saiu há 30, informado 45): 422 DELIVERED_AT_BEFORE_DEPARTURE  [futuro 422 DELIVERED_AT_IN_FUTURE; antes 422 DELIVERED_AT_BEFORE_DEPARTURE]
+PASS  WB262-6 | as recusas não mudaram nada: a corrida segue "saiu para entrega"  [status=out_for_delivery]
+PASS  WB262-7 | mais de 60 min atrás: 422 DELIVERED_AT_TOO_OLD  [422 DELIVERED_AT_TOO_OLD]
+PASS  WB262-8 | compensação usa a hora REAL: entregue (informado) 12 min depois do fim da faixa = dentro da tolerância de 15 min: sem cupom  [eta antes=2026-11-22T16:31:39; HTTP 200; cupons=0]
+PASS  WB262-8b | entregue (informado) 17 min depois do fim da faixa (acima da tolerância de 15): 1 cupom  [HTTP 200]
+PASS  WB262-9 | entregue (hora real) 30 min depois do fim da faixa: 1 cupom de compensação  [HTTP 200; cupons=1]
+PASS  WB262-10 | hora real informada dentro do prazo (35 min atrás, a faixa terminou há 40): a hora do clique atrasada NÃO gera cupom  [HTTP 200; cupons=0]
+PASS  WB262-11 | não há como corrigir a hora depois de entregue (segunda chamada recusada, 409/422)  [HTTP 409 INVALID_DELIVERY_TRANSITION]
+
+=== cupom ===
+PASS  CUPOM-percent-sem | cupom percent SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-percent-zero | cupom percent com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-percent-com | cupom percent com maxUses 25 é criado (201)  [HTTP 201 {"id":"b88361a5-4fe2-4925-ab1b-6f4feb80a755","code":"QCPERMWS07C9P","kind":"percent","value":10,"percentCapCents":2000,"minOrderCents":0,"startsAt":"2026-11-22T]
+PASS  CUPOM-fixed-sem | cupom fixed SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-fixed-zero | cupom fixed com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-fixed-com | cupom fixed com maxUses 25 é criado (201)  [HTTP 201 {"id":"5fdf6b21-300d-4986-8437-6795ebc26ec3","code":"QCFIXMWS07C9P","kind":"fixed","value":500,"percentCapCents":null,"minOrderCents":0,"startsAt":"2026-11-22T1]
+PASS  CUPOM-free_shipping-sem | cupom free_shipping SEM maxUses é recusado (400, mensagem cita maxUses)  [HTTP 400 {"type":"https://api.webag.com.br/errors/validation-failed","title":"Dados inválidos","status":400,"code":"VALIDATION_FAILED","errors":[{"field":"maxUses","mess]
+PASS  CUPOM-free_shipping-zero | cupom free_shipping com maxUses 0 é recusado (400)  [HTTP 400]
+PASS  CUPOM-free_shipping-com | cupom free_shipping com maxUses 25 é criado (201)  [HTTP 201 {"id":"6df1fdb4-f2b1-468e-a43b-d5602818208f","code":"QCFREMWS07C9P","kind":"free_shipping","value":0,"percentCapCents":null,"minOrderCents":0,"startsAt":"2026-1]
+PASS  CUPOM-patch-null | tirar o teto depois (PATCH maxUses: null) é recusado (400)  [HTTP 400]
+PASS  CUPOM-patch-ok | alterar o teto para outro número é aceito (200)  [HTTP 200 {"id":"b88361a5-4fe2-4925-ab1b-6f4feb80a755","code":"QCPERMWS07C9P","kind":"percent","value":10,"percentCapCents":2000,"]
+PASS  CUPOM-detalhe | detalhe traz maxCost (teto x desconto máximo) e usesByStore (WB-116 C5)  [maxCost={"amount":80000,"currency":"BRL"}; usesByStore=[]]
+PASS  CUPOM-primeira | cupom de primeira compra com maxUses é criado (201)  [HTTP 201]
+PASS  CUPOM-lista | a lista do admin não traz cupom ativo sem teto  [ativos sem teto=nenhum]
+
+=== csv ===
+PASS  CSV-1 | R1 Receita por pedido: 200 text/csv com as 15 colunas combinadas  [HTTP 200; colunas=pedido,loja,pago_em,status,bruto,cupom_loja,cupom_plataforma,comissao,taxa_entrega,taxa_servico,application_fee,taxa_provedor,liquido_lojista,estornos,total_pago]
+PASS  CSV-2 | R1: bruto, comissão, taxa de entrega, application_fee e total do pedido batem com o banco (reais com vírgula)  [csv={"pedido":"WB-HQ8RU","loja":"Mercadinho Boa Compra","pago_em":"2026-11-22T15:40:40.657Z","status":"received","bruto":"23,96","cupom_loja":"0,00","cupom_plataforma":"0,00","comissao":"3,59","taxa_entrega":"6,00","taxa_servico":"0,00","application_fee":"9,59","taxa_provedor":"0,30","liquido_lojista":"20,07","estornos":"0,00","total_pago":"29,96"}; banco=2396,359,600,959,2996]
+PASS  CSV-3 | R1: pedido cancelado e estornado mostra estornos = total pago e status cancelled  [csv={"pedido":"WB-2WHSM","loja":"Mercadinho Boa Compra","pago_em":"2026-11-22T15:40:40.540Z","status":"cancelled","bruto":"23,96","cupom_loja":"0,00","cupom_plataforma":"0,00","comissao":"3,59","taxa_entrega":"6,00","taxa_servico":"0,00","application_fee":"9,59","taxa_provedor":"0,30","liquido_lojista":"-0,30","estornos":"29,96","total_pago":"29,96"}; total=2996]
+PASS  CSV-4 | R2 Estornos: 10 colunas, uma linha por estorno com valor, meio, motivo, ator e situação  [HTTP 200; 30 linhas; colunas=pedido,troca,loja,estornado_em,valor,meio,motivo,situacao,ator,ator_id]
+PASS  CSV-5 | R1: a soma da application_fee do CSV bate com a soma dos pedidos pagos da loja no período  [csv=46899; banco=46899]
+PASS  CSV-6 | cada exportação é auditada (report.export)  [auditorias=4]
+PASS  CSV-7 | 10.001 linhas: 422 EXPORT_TOO_LARGE com rows=10001 e maxRows=10000 e orientação para reduzir o intervalo  [HTTP 422 {"type":"https://api.webag.com.br/errors/export-too-large","title":"Período grande demais","status":422,"detail":"Período grande demais. Reduza o intervalo (máximo 10000 linhas). Encontradas: 10001.","code":"EXPORT_TOO_L]
+PASS  CSV-8 | exatamente 10.000 linhas: exporta (200) com 10.000 linhas  [HTTP 200; linhas=10000]
+PASS  CSV-9 | lojista (dono) 403, sem login 401, intervalo invertido 400  [dono 403; anônimo 401; invertido 400]
+PASS  CSV-10 | SEC-156: motivo que começa com "=" sai escapado no CSV (prefixo apóstrofo/espaço), nunca como fórmula  [WB-HQ8RU;;Mercadinho Boa Compra;2026-11-22T15:40:44.743Z;1,11;pix;"'=HYPERLINK(""http://x"",""clique"") motivo com fórmula";done;super_admin;f766e5d8-d633-4557-8178-e0d895c4b68f]
+
+=== bug020 ===
+PASS  BUG020-1 | "não recebi" registrado com a corrida em "saiu para entrega" (202)  [HTTP 202]
+PASS  BUG020-2 | o aviso fica gravado no pedido (orders.not_received_at)  [not_received_at preenchido=t]
+PASS  BUG020-3 | controle: sem "não recebi", a corrida de 25 h é concluída pelo sistema (pedido delivered)  [status=delivered]
+PASS  BUG020-4 | com "não recebi": a corrida NÃO é concluída sozinha (pedido segue out_for_delivery)  [pedido=out_for_delivery; corrida=out_for_delivery]
+PASS  BUG020-5 | a operação recebe UM alerta delivery_auto_conclude_held (idempotente)  [alertas=1]
+PASS  BUG020-6 | a operação ainda decide à mão (fechar a corrida depois do aviso funciona)  [HTTP 200 {"id":"a60c34e8-25e1-4a17-addd-cbd58b87cd4e","kind":"delivery","orderId":"b1c4d7ca-728e-4b05-90eb-5e]
+
+=== sec180 ===
+PASS  SEC180-0 | o cliente pede a exclusão da conta (arrependimento ativo): 200  [HTTP 200 {"status":"pending","effectiveAt":"2026-11-25T15:45:16.319Z","cancelableUntil":"2026-11-25T15:45:16.319Z"}]
+PASS  SEC180-1 | ataque de 21 requisições (11 senhas erradas de 11 IPs + 5 rodadas de via A e "esqueci a senha" de 1 IP): 401 nas erradas, 200/202 nas rodadas  [requisições=21; erradas=401,401,401,401,401,401,401,401,401,401,401; rodadas=200/202 200/202 200/202 200/202 200/202]
+PASS  SEC180-2 | nenhum e-mail foi enviado ao dono durante o ataque (conta pendente: sem sinal ao titular, sem gasto de orçamento)  [e-mails antes=2 depois=2]
+PASS  SEC180-3 | o dono, de um IP novo, com a senha CERTA: 403 LOGIN_CODE_REQUIRED (antes da correção era 429 e a exclusão ficava irreversível)  [HTTP 403 LOGIN_CODE_REQUIRED]
+PASS  SEC180-4 | o código chegou ao e-mail do dono  [código=recebido; e-mails=3]
+PASS  SEC180-5 | repetir a senha certa com código ainda válido: 403 sem e-mail novo (não troca o código debaixo do dono)  [HTTP 403; e-mails=3]
+PASS  SEC180-6 | código errado 400; código certo 204 (uso único)  [errado 400; certo 204]
+PASS  SEC180-7 | a conta reabre: login 200 (ou step-up com código novo); o código usado não vale de novo  [reuso 401; login 200 ]
+PASS  SEC180-8 | a operação recebeu o alerta account_deletion_under_attack, sem e-mail do titular no conteúdo  [alertas=4]
+
+=== coleta ===
+PASS  COLETA-0 | parâmetro coleta_atrasada_dias_uteis existe com valor 1 (faixa 1 a 5)  [{"key":"coleta_atrasada_dias_uteis","value":1,"default":1,"type":"int","min":1,"max":5,"values":null,"description":"Novo prazo da coleta atrasada, a contar do aviso ao cliente (dias úteis)","ref":"DEC]
+PASS  COLETA-1 | troca com coleta em casa cria a corrida exchange_pickup na fila da Logística  [troca HTTP 201; corrida=73f578a2-edf0-47a7-bf7f-aa74e12d364f]
+PASS  COLETA-2 | a corrida aparece como Atrasada (overdue) na fila  [overdue=true]
+PASS  COLETA-3 | a varredura avisa o cliente UMA vez, com novo prazo de 1 dia útil (entre ~1 h e 4 dias corridos conforme fim de semana) a contar do aviso  [evento={"newDeadlineAt": "2026-11-23T15:50:10.173Z"}; prazo novo daqui a 24.0 h; hoje=Sun]
+PASS  COLETA-3b | 1 dia útil (não 3): o novo prazo cai no próximo dia útil (nem sábado nem domingo; da sexta são 72 h até a segunda) e nunca a mais de 4 dias corridos  [dia da semana (BRT) do prazo=1; daqui a 24.0 h]
+PASS  COLETA-4 | depois de mais uma varredura continua UM aviso ao cliente e UM alerta à operação (sem repetir)  [avisos=1; alertas=1]
+PASS  COLETA-5 | prazo do item vencido com a coleta atrasada SEM motoboy: a troca NÃO expira (relógio pausado por culpa da Webag)  [status da troca=approved]
+PASS  COLETA-6 | ao atribuir o motoboy, o prazo do cliente ganha o tempo do atraso (evento item_clock_paused)  [assign HTTP 200; prazo antes 2026-11-22T17:52:31.000Z depois 2026-11-26T17:55:39.000Z; item_clock_paused=1]
+PASS  COLETA-7 | controle: coleta que NÃO atrasou não mexe no prazo do item  [antes=2026-11-29 15:52:32.326+00; depois=2026-11-29 15:52:32.326+00]
+
+RESUMO: 82 passaram, 0 falharam, 0 não testadas

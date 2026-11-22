@@ -309,7 +309,15 @@ describe('Catálogo: produto, variações, estoque, preço, seções, planilha, 
     it('ajuste que leva algum preço a <= 0 bloqueia a ação INTEIRA e lista os afetados; dryRun não altera; percentual e valor funcionam; produto alheio → 404', async () => {
       const cheap = await create({ basePriceCents: 100 }).expect(201);
       const dear = await create({ basePriceCents: 10_000 }).expect(201);
-      const act = (body: Record<string, unknown>) => ctx.http.post(path('/bulk')).set(as(owner)).send({ productIds: [cheap.body.id, dear.body.id], ...body });
+      // v1.1 R1 (B2, D17): reajuste sem `dryRun` exige `Idempotency-Key` e `expectedVersions` (a prévia devolve a `version` de cada item).
+      let seq = 0;
+      const versions = (...rows: { body: { id: string; version: number } }[]) => rows.map((r) => ({ productId: r.body.id, version: r.body.version }));
+      const act = (body: Record<string, unknown>) =>
+        ctx.http
+          .post(path('/bulk'))
+          .set(as(owner))
+          .set('Idempotency-Key', `bulk-legacy-${uniqueTag(6)}-${(seq += 1)}`)
+          .send({ productIds: [cheap.body.id, dear.body.id], expectedVersions: versions(cheap, dear), ...body });
 
       const blocked = await act({ action: { type: 'price_adjust', mode: 'amount', value: -500 } }).expect(422);
       expect(blocked.body.code).toBe('BULK_BLOCKED');
@@ -438,7 +446,7 @@ describe('Catálogo: produto, variações, estoque, preço, seções, planilha, 
 
       await moderate(id, { action: 'restore' }).expect(200);
       expect((await ctx.http.get(path(`/${id}`)).set(as(owner)).expect(200)).body.moderationStatus).toBe('ok');
-      const trail = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, id), eq(auditLog.targetType, 'product')));
+      const trail = (await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, id), eq(auditLog.targetType, 'product')))).filter((r) => r.action.startsWith('product.moderation_')); // I4: as edições do lojista também gravam `product.*` neste alvo
       expect(trail.map((r) => r.action).sort()).toEqual(['product.moderation_pause', 'product.moderation_restore']);
       expect(trail.find((r) => r.action === 'product.moderation_pause')).toMatchObject({ actorId: ops.userId, reason: 'Foto com marca registrada' });
       expect((await ctx.db.select().from(productModerationEvents).where(eq(productModerationEvents.productId, id))).length).toBe(2);

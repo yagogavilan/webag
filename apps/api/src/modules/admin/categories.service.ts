@@ -5,11 +5,19 @@ import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService } from './audit.service.js';
 import { CATEGORY_ICONS } from './categories.icons.js';
-import { categories } from './db/schema.js';
+import { categories, type CategoryTemplateJson } from './db/schema.js';
 import { isUniqueViolation } from './util.js';
 
 export type Category = typeof categories.$inferSelect;
 export type CategoryNode = Category & { children: Category[] };
+export interface CategoryTemplateView {
+  categoryId: string;
+  attributes: { name: string; values: string[] }[];
+  sizeChartHint: boolean;
+  noVoluntaryExchangeHint: boolean;
+  descriptionRequired: boolean;
+  descriptionMinChars: number;
+}
 
 const taken = () => errors.conflict('CATEGORY_NAME_TAKEN', 'Já existe uma categoria com esse nome neste nível');
 
@@ -28,6 +36,49 @@ export class CategoriesService {
     return visible
       .filter((row) => row.parentId === null)
       .map((root) => ({ ...root, children: visible.filter((row) => row.parentId === root.id) }));
+  }
+
+  /**
+   * WB-375: modelos das categorias ATIVAS (a subcategoria some com a mãe inativa, como em `tree(true)`). Só aparece a categoria que TEM modelo ou exige descrição (C5:
+   * sem modelo, o formulário segue sem sugestão). No máximo 100, sem paginação (`nextCursor` sempre nulo, como `listCategories`).
+   */
+  async templates(): Promise<CategoryTemplateView[]> {
+    const rows = await this.db.select().from(categories).where(eq(categories.active, true)).orderBy(asc(categories.position), asc(categories.name), asc(categories.id));
+    const activeRoots = new Set(rows.filter((row) => row.parentId === null).map((row) => row.id));
+    return rows
+      .filter((row) => (row.parentId === null || activeRoots.has(row.parentId)) && (row.template !== null || row.descriptionRequired))
+      .slice(0, 100)
+      .map((row) => this.presentTemplate(row));
+  }
+
+  presentTemplate(row: Category): CategoryTemplateView {
+    return {
+      categoryId: row.id,
+      attributes: row.template?.attributes ?? [],
+      sizeChartHint: row.template?.sizeChartHint ?? false,
+      noVoluntaryExchangeHint: row.template?.noVoluntaryExchangeHint ?? false,
+      descriptionRequired: row.descriptionRequired,
+      descriptionMinChars: row.descriptionMinChars,
+    };
+  }
+
+  /** WB-375 (Could): o admin substitui o modelo da categoria; vale na hora para NOVAS publicações. Auditado (antes/depois). */
+  async setTemplate(id: string, input: CategoryTemplateJson & { descriptionRequired: boolean; descriptionMinChars: number }, ctx: RequestContext): Promise<CategoryTemplateView> {
+    const names = input.attributes.map((attribute) => attribute.name.toLowerCase());
+    const duplicated = new Set(names).size !== names.length || input.attributes.some((attribute) => new Set(attribute.values.map((value) => value.toLowerCase())).size !== attribute.values.length);
+    if (duplicated) throw errors.unprocessable('TEMPLATE_INVALID', 'Modelo inválido', { detail: 'Atributo ou valor repetido no modelo.' });
+    return this.db.transaction(async (tx) => {
+      const [before] = await tx.select().from(categories).where(eq(categories.id, id)).for('update');
+      if (!before) throw errors.notFound('Categoria não encontrada.');
+      const [after] = await tx
+        .update(categories)
+        .set({ template: { attributes: input.attributes, sizeChartHint: input.sizeChartHint, noVoluntaryExchangeHint: input.noVoluntaryExchangeHint }, descriptionRequired: input.descriptionRequired, descriptionMinChars: input.descriptionMinChars, updatedAt: new Date() })
+        .where(eq(categories.id, id))
+        .returning();
+      if (!after) throw new Error('Falha ao salvar o modelo');
+      await this.audit.record(tx, ctx, { action: 'category.template_set', targetType: 'category', targetId: id, before: { ...this.presentTemplate(before) }, after: { ...this.presentTemplate(after) } });
+      return this.presentTemplate(after);
+    });
   }
 
   async create(

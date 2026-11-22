@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, lt, sql } from 'drizzle-orm';
-import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
+import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { idempotencyKeys } from './db/schema.js';
 
@@ -78,6 +78,42 @@ export class IdempotencyService {
       throw new AppError(409, 'IDEMPOTENCY_IN_PROGRESS', 'Requisição em andamento', { detail: 'A mesma requisição ainda está sendo processada. Tente de novo em instantes.', retryAfterSeconds: 2 });
     }
     throw errors.conflict('IDEMPOTENCY_IN_PROGRESS', 'Requisição em andamento');
+  }
+
+  /**
+   * SEC-208 / ADR-018 D18: reivindicação da chave, efeito de negócio e resposta guardada na MESMA transação. Se a transação não commita
+   * (erro de `fn`, versão que não bate, queda do processo), nada fica: nem efeito, nem chave órfã, e a repetição executa do zero. Se commita,
+   * a resposta guardada existe junto, então a repetição devolve o mesmo corpo e NUNCA reaplica (+10% aplicado duas vezes).
+   *
+   * Diferenças para `run` (de propósito): (a) sem `STALE_CLAIM_MS` (linha sem resposta só existe enquanto a transação está aberta; o `unique` faz a
+   * concorrente ESPERAR o commit ou o rollback da primeira, e então repete ou executa); (b) qualquer erro de `fn` desfaz tudo e libera a chave
+   * (erro 4xx de estado, como `BULK_VERSION_CONFLICT`, exige refazer a prévia; não é resposta para repetir); (c) o escopo é montado por quem chama
+   * como `rota:storeId:userId`, nunca só a rota. `fn` recebe a transação e TEM de gravar tudo por ela.
+   */
+  async runInTransaction<T>(scope: string, key: string, payload: unknown, fn: (tx: Tx) => Promise<T>): Promise<T> {
+    const requestHash = hashRequest(payload);
+    return this.db.transaction(async (tx) => {
+      // Chave vencida (24 h) some antes de reivindicar: a mesma chave volta a valer como nova.
+      await tx.delete(idempotencyKeys).where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key), lt(idempotencyKeys.expiresAt, new Date())));
+      const [claimed] = await tx
+        .insert(idempotencyKeys)
+        .values({ scope, key, requestHash, expiresAt: new Date(Date.now() + TTL_MS) })
+        .onConflictDoNothing()
+        .returning({ id: idempotencyKeys.id });
+      if (!claimed) {
+        // O `INSERT ... ON CONFLICT DO NOTHING` só chega aqui depois que a transação que tinha a chave terminou: a linha lida é a COMMITADA.
+        const [row] = await tx.select().from(idempotencyKeys).where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+        if (!row) throw new AppError(409, 'IDEMPOTENCY_IN_PROGRESS', 'Requisição em andamento', { detail: 'A mesma requisição ainda está sendo processada. Tente de novo em instantes.', retryAfterSeconds: 2 });
+        if (row.requestHash !== requestHash) {
+          throw new AppError(422, 'IDEMPOTENCY_KEY_REUSED', 'Chave de idempotência já usada com outro conteúdo', { detail: 'Use uma nova Idempotency-Key para uma requisição diferente.' });
+        }
+        if (row.responseStatus === null) throw new AppError(409, 'IDEMPOTENCY_IN_PROGRESS', 'Requisição em andamento', { detail: 'A mesma requisição ainda está sendo processada. Tente de novo em instantes.', retryAfterSeconds: 2 });
+        return row.responseBody as T;
+      }
+      const result = await fn(tx);
+      await tx.update(idempotencyKeys).set({ responseStatus: 200, responseBody: result ?? null }).where(eq(idempotencyKeys.id, claimed.id));
+      return result;
+    });
   }
 
   private async execute<T>(id: string, fn: () => Promise<T>, keepError: (error: AppError) => boolean = () => true): Promise<T> {

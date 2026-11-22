@@ -1,3 +1,4 @@
+import { clearStoredReasons } from '../stored-reasons';
 import { ApiError, networkError, toApiError } from './errors';
 
 export type Area = 'admin' | 'lojista';
@@ -11,6 +12,12 @@ export function onSessionLost(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** SEC-220: sessão perdida = motivos digitados na aba saem junto; depois avisa as telas inscritas. */
+function notifySessionLost(reason: Parameters<Listener>[0]): void {
+  clearStoredReasons();
+  listeners.forEach((listener) => listener(reason));
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -20,6 +27,8 @@ export interface RequestOptions {
   csv?: string;
   /** `Idempotency-Key` de uma escrita que o aparelho pode repetir (criar produto). */
   idempotencyKey?: string;
+  /** `If-Match` com a `version` lida do produto (409 `PRODUCT_VERSION_CONFLICT` se mudou em outro aparelho). */
+  ifMatch?: number;
 }
 
 function queryString(query: RequestOptions['query']): string {
@@ -37,9 +46,18 @@ function queryString(query: RequestOptions['query']): string {
  * Contrato provisório: os tipos vêm de `./admin` até o OpenAPI publicar estes endpoints (DT-014).
  */
 export async function apiRequest<T>(area: Area, path: string, options: RequestOptions = {}): Promise<T> {
+  return request<T>(`/api/proxy/${area}/${path}`, options);
+}
+
+/** Leituras e abertura de "Ver como o lojista" (BFF `/api/view-as`): a credencial vive em cookie `httpOnly`, o navegador nunca a vê. */
+export async function viewAsRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return request<T>(`/api/view-as/${path}`, options);
+}
+
+async function request<T>(url: string, options: RequestOptions): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`/api/proxy/${area}/${path}${queryString(options.query)}`, {
+    response = await fetch(`${url}${queryString(options.query)}`, {
       method: options.method ?? 'GET',
       headers: {
         accept: 'application/json',
@@ -47,6 +65,7 @@ export async function apiRequest<T>(area: Area, path: string, options: RequestOp
         ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(options.csv !== undefined ? { 'content-type': 'text/csv; charset=utf-8' } : {}),
         ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
+        ...(options.ifMatch !== undefined ? { 'if-match': `"${options.ifMatch}"` } : {}),
       },
       body: options.csv !== undefined ? options.csv : options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: 'same-origin',
@@ -60,7 +79,7 @@ export async function apiRequest<T>(area: Area, path: string, options: RequestOp
     const error = await toApiError(response);
     if (response.status === 401) {
       const reason = error.code === 'SESSION_IDLE' ? 'idle' : 'expired';
-      listeners.forEach((listener) => listener(reason));
+      notifySessionLost(reason);
     }
     throw error;
   }
@@ -78,7 +97,7 @@ export async function apiDownload(area: Area, path: string, query?: RequestOptio
   }
   if (!response.ok) {
     const error = await toApiError(response);
-    if (response.status === 401) listeners.forEach((listener) => listener(error.code === 'SESSION_IDLE' ? 'idle' : 'expired'));
+    if (response.status === 401) notifySessionLost(error.code === 'SESSION_IDLE' ? 'idle' : 'expired');
     throw error;
   }
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -100,6 +119,8 @@ export function saveBlob(blob: Blob, fileName: string): void {
 
 /** Chamada às rotas de sessão do BFF (login, logout, convite, cadastro do lojista). Não dispara "sessão perdida". */
 export async function sessionRequest<T>(area: Area, action: 'login' | 'mfa' | 'logout' | 'accept-invite' | 'register', body?: unknown): Promise<T> {
+  // SEC-220: o motivo digitado nunca sobrevive ao logout, mesmo se a chamada falhar.
+  if (action === 'logout') clearStoredReasons();
   let response: Response;
   try {
     response = await fetch(`/api/session/${area}/${action}`, {

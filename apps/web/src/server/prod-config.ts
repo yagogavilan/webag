@@ -28,6 +28,8 @@ export function productionConfigProblems(env: Env = process.env): string[] {
     if (!value) problems.push(`${name} é obrigatória em produção`);
     else if (!isPublicHost(value)) problems.push(`${name} deve ser um domínio público (sem protocolo e sem localhost)`);
   }
+  // SEC-221: `config.ts` só liga Secure/`__Host-` com o texto exato "true"; qualquer outro valor definido (false, 0, vazio, "True") derrubaria os cookies de sessão.
+  if (env.COOKIE_SECURE !== undefined && env.COOKIE_SECURE !== 'true') problems.push('COOKIE_SECURE não pode ser diferente de "true" em produção (cookies de sessão perderiam Secure); remova a variável');
   if (!env.BFF_SHARED_SECRET?.trim()) problems.push('BFF_SHARED_SECRET é obrigatória em produção');
   for (const name of ['PUBLIC_URL', 'REALTIME_URL', 'PLAY_STORE_URL', 'APP_STORE_URL']) {
     const value = env[name]?.trim();

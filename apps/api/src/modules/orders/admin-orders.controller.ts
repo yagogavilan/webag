@@ -61,9 +61,9 @@ export class AdminOrdersController {
   /** B5 / WB-108 C2: itens, valores (RN-10), pagamento, estornos, linha do tempo, corrida, trocas e avaliação; dado pessoal mascarado. */
   @AdminOnly('orders:read')
   @Get(':orderId')
-  detail(@CurrentPrincipal() principal: Principal, @Param('orderId') orderId: string) {
+  detail(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('orderId') orderId: string) {
     if (!UUID.test(orderId)) throw errors.notFound();
-    return this.read.detail(principal.adminProfile!, orderId);
+    return this.read.detail(principal, ctx, orderId);
   }
 
   /** Estorno manual total ou parcial: reautenticação, motivo, `Idempotency-Key` obrigatória e auditoria. */

@@ -1,0 +1,5 @@
+URLs comparadas: 609 | idênticas: 609 | diferentes: 0
+
+real	0m9.334s
+user	0m0.889s
+sys	0m0.105s

@@ -15,12 +15,12 @@ describe('matriz de menu do admin (onda-1b §AD0)', () => {
     expect(canEdit('operations', 'termos')).toBe(false);
   });
 
-  it('suporte vê as lojas sem decidir; financeiro não vê a fila', () => {
+  it('suporte e financeiro veem as lojas sem decidir (WB-355: stores:read é dos 4 perfis)', () => {
     expect(visibleNav('support').map((i) => i.section)).toEqual(['inicio', 'alertas', 'logistica', 'pedidos', 'lojas', 'usuarios', 'moderacao']);
     expect(canEdit('support', 'lojas')).toBe(false);
     expect(canOpenStoreDocuments('support')).toBe(false);
     expect(canOpenStoreDocuments('operations')).toBe(true);
-    expect(visibleNav('finance').map((i) => i.section)).toEqual(['inicio', 'alertas', 'logistica', 'pedidos', 'estornos', 'comissoes', 'frete', 'relatorios', 'trocas', 'cupons']);
+    expect(visibleNav('finance').map((i) => i.section)).toEqual(['inicio', 'alertas', 'logistica', 'pedidos', 'lojas', 'estornos', 'comissoes', 'frete', 'relatorios', 'trocas', 'cupons']);
   });
 
   it('Onda 6: marketing é só de super e operação; cupons o financeiro lê sem editar; titulares só o super', () => {

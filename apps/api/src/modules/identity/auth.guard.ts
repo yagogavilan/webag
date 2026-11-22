@@ -2,6 +2,7 @@ import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import {
   ADMIN_PERMISSION,
+  ADMIN_SELF,
   ALLOW_PENDING_MFA,
   buildContext,
   IS_PUBLIC,
@@ -20,6 +21,8 @@ import { AppError, errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
 import type { UserRole } from './db/schema.js';
 import { PrincipalService } from './principal.service.js';
+import { ViewAsService, viewAsHeaderOccurrences } from './view-as.service.js';
+import type { Response } from 'express';
 import { SessionService } from './session.service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,6 +42,7 @@ export class AuthGuard implements CanActivate {
     private readonly principals: PrincipalService,
     private readonly params: ParametersService,
     private readonly audit: AuditService,
+    private readonly viewAs: ViewAsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -93,11 +97,24 @@ export class AuthGuard implements CanActivate {
       }
     }
 
+    // WB-355: rota do admin sobre a própria conta (TOTP): qualquer perfil de admin; outro papel é negado e registrado, antes de o corpo ser validado.
+    if (this.reflector.getAllAndOverride<boolean | undefined>(ADMIN_SELF, targets) && !principal.adminProfile) {
+      await this.audit
+        .recordStandalone(buildContext(req), { action: 'admin.access_denied', targetType: 'route', targetId: `${req.method} ${req.path}`, after: { permission: 'admin-self' } })
+        .catch(() => undefined);
+      throw errors.forbidden();
+    }
+
     const roles = this.reflector.getAllAndOverride<UserRole[] | undefined>(ROLES, targets);
     if (roles && !roles.some((role) => principal.roles.includes(role))) throw errors.forbidden();
 
     const storePermission = this.reflector.getAllAndOverride<StorePermissionName | undefined>(STORE_PERMISSION, targets);
-    if (storePermission) await this.checkStore(req, principal.userId, storePermission);
+    if (storePermission) {
+      // WB-352 (DEC-119): com `X-View-As` o passo de loja é do `ViewAsService` (o `checkStore` daria 404 ao admin antes de qualquer guard posterior).
+      // `verifyAccess`, `principals.load`, inatividade, MFA e permissão de admin acima NÃO mudam.
+      if (req.headers['x-view-as'] !== undefined || viewAsHeaderOccurrences(req) > 0) await this.viewAs.authorize(req, context.switchToHttp().getResponse<Response>(), principal, context.getHandler());
+      else await this.checkStore(req, principal.userId, storePermission);
+    }
 
     if (this.reflector.getAllAndOverride<boolean | undefined>(REQUIRE_REAUTH, targets)) {
       const windowMs = (await this.params.getNumber('reauth_min')) * 60_000;

@@ -3,7 +3,7 @@ import type { Type } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DiscoveryService, MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { IS_PUBLIC } from '../../src/platform/auth/decorators.js';
+import { ADMIN_PERMISSION, ADMIN_SELF, ALLOW_PENDING_MFA, IS_PUBLIC } from '../../src/platform/auth/decorators.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Redis } from 'ioredis';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -12,6 +12,7 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import type { Env } from '../../src/platform/config/env.js';
+import { restoreFeesIfTouched } from './fees.js';
 import { ParametersService } from '../../src/modules/admin/index.js';
 import { PG_POOL } from '../../src/platform/database/database.module.js';
 import * as schema from '../../src/platform/database/schema.js';
@@ -77,15 +78,21 @@ export async function createTestApp(options: { controllers?: Type<unknown>[] } =
   await app.get(ParametersService).update('endereco_pino_max_m', 0, 'testes usam pontos isolados', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
   // DEC-072: o padrão de produção da comissão é 15%, mas os testes de dinheiro usam contas redondas de 10%; o padrão real é testado em `dec072-rules`.
   await app.get(ParametersService).update('comissao_padrao_pct', 10, 'testes de dinheiro usam 10%', { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }).catch(() => undefined);
-  return {
+  const context: TestContext = {
     app,
     http: withRandomIp(request(app.getHttpServer())),
     mail: mail.current!,
     db,
     pool,
     redis,
-    close: () => app.close(),
+    // BUG-047: parâmetro global do admin e tabela de frete que o arquivo mexeu voltam ao básico aqui, mesmo se um `expect` falhou antes do `restoreFees` do próprio teste
+    // (sem isso, a falha de um arquivo envenenava o seguinte: `sec155` A3 com frete zerado, desconto 500 em vez de 1.000).
+    close: async () => {
+      await restoreFeesIfTouched(context).catch(() => undefined);
+      await app.close();
+    },
   };
+  return context;
 }
 
 /**
@@ -121,11 +128,22 @@ export function totpAt(secretBase32: string, stepOffset = 0): string {
 }
 
 /** Lista as rotas HTTP registradas (método, caminho com placeholders e se são públicas). Base da matriz de RBAC. */
-export function listRoutes(app: NestExpressApplication): { method: string; path: string; isPublic: boolean }[] {
+export interface ListedRoute {
+  method: string;
+  path: string;
+  isPublic: boolean;
+  /** WB-355: permissão de admin declarada por `@AdminOnly` (handler ou classe) ou `admin-self` (`@AdminSelf`); `null` se a rota não declara nenhuma. */
+  adminPermission: string | null;
+  /** Rota de admin que um admin com o segundo fator pendente alcança (`@AllowPendingMfa`). */
+  allowPendingMfa: boolean;
+  operation: string;
+}
+
+export function listRoutes(app: NestExpressApplication): ListedRoute[] {
   const discovery = new DiscoveryService(app.get(ModulesContainer));
   const scanner = new MetadataScanner();
   const reflector = new Reflector();
-  const routes: { method: string; path: string; isPublic: boolean }[] = [];
+  const routes: ListedRoute[] = [];
   const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
   for (const wrapper of discovery.getControllers()) {
     const { instance, metatype } = wrapper;
@@ -143,6 +161,9 @@ export function listRoutes(app: NestExpressApplication): { method: string; path:
         method: methods[methodIndex] ?? 'GET',
         path,
         isPublic: reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC, [handler, metatype]) === true,
+        adminPermission: reflector.getAllAndOverride<string | undefined>(ADMIN_PERMISSION, [handler, metatype]) ?? (reflector.getAllAndOverride<boolean | undefined>(ADMIN_SELF, [handler, metatype]) ? 'admin-self' : null),
+        allowPendingMfa: reflector.getAllAndOverride<boolean | undefined>(ALLOW_PENDING_MFA, [handler, metatype]) === true,
+        operation: `${metatype.name}.${name}`,
       });
     }
   }

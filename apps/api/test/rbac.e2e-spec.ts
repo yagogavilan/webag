@@ -83,6 +83,10 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'payments:refunds:read': { method: 'get', path: '/v1/admin/payments/refund-queue' },
   'payments:refunds:retry': null,
   'payments:refunds:cover': null,
+  'store-catalog:write': null,
+  'store-history:export': null,
+  'view-as:open': null,
+  'analytics:read': null,
 };
 
 describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
@@ -122,6 +126,7 @@ describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {
         'GET /v1/browse/stores/:storeId/products',
         'GET /v1/browse/stores/:storeId/reviews',
         'GET /v1/categories',
+        'GET /v1/category-templates',
         'GET /v1/config/flags',
         'GET /v1/config/maintenance',
         'GET /v1/card-intents/:token',

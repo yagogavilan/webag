@@ -7,6 +7,9 @@ import { FinanceModule } from '../finance/index.js';
 import { IdentityModule } from '../identity/index.js';
 import { MediaModule } from '../media/index.js';
 import { PaymentsModule } from '../payments/index.js';
+import { AdminStoreEditController, StoreAdminChangesController } from './admin-store-edit.controller.js';
+import { AdminStoreEditService } from './admin-store-edit.service.js';
+import { AdminViewAsController } from './admin-view-as.controller.js';
 import { AdminStoresController } from './admin-stores.controller.js';
 import { AdminStoresService } from './admin-stores.service.js';
 import { AdminExposureController, StoreExposureController } from './exposure-limit.controllers.js';
@@ -20,7 +23,7 @@ import { TeamService } from './team.service.js';
 
 @Module({
   imports: [AdminModule, FinanceModule, IdentityModule, MediaModule, PaymentsModule],
-  controllers: [StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
+  controllers: [AdminViewAsController, AdminStoreEditController, StoreAdminChangesController, StoresController, CepController, StorePaymentController, StoreTeamController, AdminStoresController, StoreExposureController, AdminExposureController],
   providers: [
     DeliveryQuoteRegistry,
     StoresService,
@@ -28,6 +31,7 @@ import { TeamService } from './team.service.js';
     PaymentAccountService,
     TeamService,
     AdminStoresService,
+    AdminStoreEditService,
     ExposureLimitService,
     FakeGeocodingProvider,
     HttpGeocodingProvider,
@@ -44,6 +48,6 @@ import { TeamService } from './team.service.js';
       useFactory: (config: ConfigService<Env, true>, fake: FakePaymentOAuthProvider, mp: MercadoPagoOAuthProvider) => (config.get('PAYMENT_PROVIDER', { infer: true }) === 'mercadopago' ? mp : fake),
     },
   ],
-  exports: [StoresService, AdminStoresService, DeliveryQuoteRegistry, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
+  exports: [StoresService, AdminStoresService, AdminStoreEditService, DeliveryQuoteRegistry, ExposureLimitService, StoreSettingsService, TeamService, GEOCODING_PROVIDER],
 })
 export class StoresModule {}

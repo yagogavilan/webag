@@ -1,6 +1,6 @@
 'use client';
 
-import { Prohibit, ArrowUUpLeft } from '@phosphor-icons/react';
+import { Prohibit, ArrowUUpLeft, MagnifyingGlass } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/panel/page-header';
 import { useReauth } from '@/components/panel/reauth';
 import { ReasonDialog, UserMessageError } from '@/components/panel/reason-dialog';
 import { useSession } from '@/components/panel/session-context';
-import { Banner, Button, CheckboxField, ErrorState, NoAccessState, SkeletonRows, TextField, cx, useToast } from '@/components/ui';
+import { Banner, Button, ButtonLink, CheckboxField, ErrorState, MessageState, NoAccessState, SkeletonRows, TextField, cx, useToast } from '@/components/ui';
 import { OrderStatusBadge, ModeBadge } from '@/features/orders/status-badge';
 import { ACTOR_LABEL, ADMIN_ORDER_STATUS_LABEL, ORDER_TERMINAL, PAYMENT_LABEL, adminOpsApi, adminOpsKeys, type AdminOrderDetail } from '@/lib/api/admin-ops';
 import { ApiError } from '@/lib/api/errors';
@@ -67,7 +67,16 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
   const back = <BackLink href="/admin/pedidos">Voltar aos pedidos</BackLink>;
   if (query.isPending) return <SkeletonRows rows={4} height={110} label="Carregando o pedido" />;
   if (query.isError && !query.data) {
-    if (query.error instanceof ApiError && query.error.status === 404) return <div className={s.page}>{back}<p className="wb-text-body" role="alert" data-testid={T('not-found')}>Não encontramos esse pedido.</p></div>;
+    if (query.error instanceof ApiError && query.error.status === 404) {
+      return (
+        <div className={s.page}>
+          {back}
+          <MessageState icon={MagnifyingGlass} title="Não encontramos esse pedido" text="Confira o número e busque de novo." testId={T('not-found')} role="alert">
+            <ButtonLink href={asRoute('/admin/lojas')}>Voltar para as lojas</ButtonLink>
+          </MessageState>
+        </div>
+      );
+    }
     return <ErrorState offline={offline} onRetry={() => void query.refetch()} testId={T('detail-error')} />;
   }
   const order = query.data;
@@ -87,6 +96,12 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
     <div className={s.page}>
       {back}
       <PageHeader title={`Pedido #${order.number}`} description={`${order.store.name}${order.store.city ? ` · ${order.store.city}` : ''}`} action={<span className={s.actions}><OrderStatusBadge status={order.status} label={ADMIN_ORDER_STATUS_LABEL[order.status]} testId={T('status')} /><ModeBadge mode={order.mode} /></span>} />
+      {/* WB-352 C14: a nota só aparece com o dado vindo agora do servidor (a abertura gravou a auditoria antes dele); do cache, não promete registro novo. */}
+      {query.isFetchedAfterMount && !query.isRefetchError ? (
+        <Banner tone="info" testId={T('protected-note')}>
+          <strong>Dados do cliente protegidos.</strong> Mostramos só uma parte do nome, do e-mail e do celular. Esta abertura ficou registrada com o seu nome.
+        </Banner>
+      ) : null}
       {order.disputedAt ? <Banner tone="danger" testId={T('disputed')}>O pagamento foi contestado pelo provedor (chargeback) em {formatFullDateTime(order.disputedAt)}. Não dá para estornar por aqui.</Banner> : null}
       {order.notReceivedAt ? <Banner tone="warning" testId={T('not-received')}>O cliente avisou que não recebeu o pedido em {formatFullDateTime(order.notReceivedAt)}.</Banner> : null}
       {order.status === 'cancelled' && order.cancelReason ? <Banner tone="info" testId={T('cancel-info')}>Cancelado {order.cancelledBy ? `por ${ACTOR_LABEL[order.cancelledBy].toLowerCase()}` : ''}{order.cancelledAt ? ` em ${formatFullDateTime(order.cancelledAt)}` : ''}. Motivo: {order.cancelReason}</Banner> : null}
@@ -126,6 +141,7 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
             {order.deliveredAt ? <><dt>Entregue em</dt><dd>{formatFullDateTime(order.deliveredAt)}</dd></> : null}
             {order.couponCode ? <><dt>Cupom</dt><dd>{order.couponCode}</dd></> : null}
           </dl>
+          <p className={cx('wb-text-caption', s.muted)} data-testid={T('contact-help')}>Para falar com o cliente, use o canal da Webag: suporte Webag ou o operador de entrega. Não peça nem copie o contato completo.</p>
         </section>
 
         <section className={s.block} aria-labelledby="od-del" data-testid={T('delivery')}>
@@ -138,7 +154,7 @@ export function AdminOrderDetailPage({ id }: { id: string }) {
           ) : (
             <p className={cx('wb-text-body', s.muted)}>O cliente retira na loja.</p>
           )}
-          <p className={cx('wb-text-caption', s.muted)}>O endereço completo não aparece aqui. Só o bairro, a cidade e o estado.</p>
+          <p className={cx('wb-text-caption', s.muted)}>Rua, número e complemento não aparecem aqui.</p>
           {order.delivery?.logistics && canView('logistica') ? <Link href={asRoute('/admin/logistica')} className={cx('wb-text-body-strong', s.titleLink)} data-testid={T('see-logistics')}>Ver na Logística</Link> : null}
         </section>
 

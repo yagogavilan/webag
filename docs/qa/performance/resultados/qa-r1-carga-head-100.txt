@@ -1,0 +1,33 @@
+
+== head-100: 100 VUs, 60 s medidos, 3248 req, 54 req/s, erros 0.00% | jornadas 545, pedidos 23, falhas 0
+CPU% (100 = 1 vCPU): API 32.6 (pico 47.5), PG 26.4 (pico 39.0), Redis 1.0, gerador 6.3, máquina 17.5% | RAM máx: API 328 MB, PG 1138 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/cart                                       418     7.0     16.2     29.7     42.6    0.0     1830     799
+GET /v1/browse/stores/{id}/products                417     7.0      7.3     15.9     29.4    0.0    10149    1702
+GET /v1/browse/stores/{id}                         417     7.0      9.0     21.4     44.1    0.0     1142     658
+GET /v1/browse/products/{id}                       417     7.0      9.0     18.0     29.8    0.0     1708     706
+GET /v1/home                                       417     7.0      2.7     25.6     42.9    0.0    29410    4853
+PUT /v1/cart/items/{variantId}                     413     6.9     20.9     40.4     51.9    0.0     1887     823
+GET /v1/search/suggestions                         203     3.4     18.0     44.6     87.5    0.0      819     438
+GET /v1/search/products                            203     3.4     18.9     31.4     55.4    0.0    16423    2038
+GET /v1/me/addresses                               132     2.2      3.1      7.6     11.6    0.0      423     308
+GET /v1/search/stores                               71     1.2      4.7     10.4     42.8    0.0     4009     768
+GET /v1/browse/stores/{id}/products (pág. 2)        57     0.9      7.3     13.6     43.6    0.0    10584    1790
+GET /v1/orders/{id}                                 41     0.7      8.0     18.1     91.9    0.0     2370    1084
+POST /v1/orders                                     14     0.2     34.5     91.4     91.4    0.0     2369    1080
+GET /v1/orders/{id}/payment                         14     0.2      4.0      8.8      8.8    0.0      390     304
+GET /v1/orders                                      14     0.2      4.6     23.9     23.9    0.0      990     490
+
+Top consultas por tempo total (pg_stat_statements):
+    3810 ms      271x  média   14.06  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    3370 ms      247x  média   13.64  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+     979 ms     1113x  média    0.88  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+     823 ms  1184007x  média    0.00  SELECT lower(public.unaccent($2, $1))
+     278 ms        2x  média  138.89  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+     245 ms      404x  média    0.61  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     147 ms     2203x  média    0.07  select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null
+     145 ms      253x  média    0.57  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     106 ms     1400x  média    0.08  select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a
+      99 ms      389x  média    0.25  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+      99 ms        6x  média   16.47  select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl
+      86 ms      224x  média    0.38  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid

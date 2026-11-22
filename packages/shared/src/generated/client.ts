@@ -11,8 +11,13 @@
  * A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
+ * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas legadas de edição do admin (`editAdminStore`, `PATCH /v1/admin/stores/{storeId}`, e `editAdminStoreSettings`, `PUT /v1/admin/stores/{storeId}/settings/{section}`) foram REMOVIDAS na R1.1, contrato e código no mesmo commit (exceção consciente à regra de não remover; nenhum consumidor: o web nunca as chamou). Hoje o admin edita dados e configuração só por `editAdminStoreProfile` e `editAdminStoreConfig`, com motivo, versão e auditoria.
+ * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
+ * Permissões do admin (WB-355): TODA operação `/v1/admin/*` declara `x-admin-permission` (chave da tabela única `permissions.ts`; `admin-self` = qualquer perfil de admin, só nas rotas do próprio TOTP). Rota nova sem a chave falha no CI; o teste de matriz percorre todas as rotas reais com os 4 perfis, um lojista e um cliente.
+ * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
+ * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
  *
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import { apiFetch } from '../http/api-fetch.js';
 export type HealthIndicatorStatus = typeof HealthIndicatorStatus[keyof typeof HealthIndicatorStatus];
@@ -114,7 +119,7 @@ export const TokenPairTokenType = {
 export interface TokenPair {
   /** JWT HS256 de 15 min */
   accessToken: string;
-  /** Token opaco de 256 bits */
+  /** Token opaco de 256 bits, rotativo */
   refreshToken: string;
   /** Segundos de validade do access token */
   expiresIn: number;
@@ -436,7 +441,7 @@ export interface PendingAdminInvitation {
   name: string;
   email: string;
   profile: AdminProfile;
-  /** Link de reativação (redefinição de acesso) */
+  /** Link de reativação (redefinição de acesso), não convite novo */
   reactivation: boolean;
   expired: boolean;
   /** @nullable */
@@ -952,7 +957,7 @@ export interface AdminAlertKind {
   label: string;
   area: AdminAlertArea;
   severity: AdminAlertSeverity;
-  /** O que fazer */
+  /** O que fazer, em uma frase */
   hint: string;
 }
 
@@ -2335,6 +2340,11 @@ export interface StoreSettings {
 
 export interface Store {
   id: string;
+  /**
+     * v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo
+     * @minimum 1
+     */
+  version?: number;
   /** Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo */
   live?: boolean;
   status: StoreStatus;
@@ -2718,6 +2728,18 @@ export interface AcceptStoreInvitationResponse {
   storeId: string;
 }
 
+/**
+ * v1.1 R1: `store` = comissão própria desta loja
+ */
+export type AdminStoreListItemCommissionSource = typeof AdminStoreListItemCommissionSource[keyof typeof AdminStoreListItemCommissionSource];
+
+
+export const AdminStoreListItemCommissionSource = {
+  store: 'store',
+  category: 'category',
+  default: 'default',
+} as const;
+
 export interface AdminStoreListItem {
   id: string;
   /** @nullable */
@@ -2730,6 +2752,16 @@ export interface AdminStoreListItem {
   submittedAt?: string | null;
   overdue: boolean;
   holderMismatch: boolean;
+  /** v1.1 R1: produtos ativos (0 = "Nenhum", a loja a ativar) */
+  activeProducts?: number;
+  /** v1.1 R1: pedidos pagos nos últimos 30 dias */
+  orders30d?: number;
+  /** v1.1 R1: GMV dos últimos 30 dias, em centavos (0 = "Sem pedidos") */
+  sales30dCents?: number;
+  /** v1.1 R1: comissão efetiva (RN-10) */
+  commissionPct?: number;
+  /** v1.1 R1: `store` = comissão própria desta loja */
+  commissionSource?: AdminStoreListItemCommissionSource;
 }
 
 export type AdminStoreDetailOwner = {
@@ -2818,15 +2850,6 @@ export interface CorrectionRequest {
   items: CorrectionRequestItemsItem[];
 }
 
-export interface AdminStorePatchRequest {
-  /**
-     * @minLength 5
-     * @maxLength 500
-     */
-  reason: string;
-  profile?: UpdateStoreProfileRequest;
-}
-
 export interface ReleaseAccountRequest {
   /**
      * @minLength 10
@@ -2848,7 +2871,7 @@ export interface ProductVariant {
      */
   priceCents: number | null;
   /**
-     * Preço vigente hoje (com a promoção
+     * Preço vigente hoje (com a promoção, se ativa)
      * @nullable
      */
   effectivePriceCents: number | null;
@@ -2858,7 +2881,7 @@ export interface ProductVariant {
      */
   originalPriceCents: number | null;
   /**
-     * Percentual exibido
+     * Percentual exibido, arredondado para baixo; abaixo de 1% não aparece
      * @nullable
      */
   discountPercent: number | null;
@@ -2926,6 +2949,38 @@ export type ProductImagesItem = {
   urls: ProductImagesItemUrls;
 };
 
+/**
+ * Por onde o cadastro nasceu (WB-379): câmera, duplicar, colar texto, planilha ou formulário completo
+ */
+export type ProductVia = typeof ProductVia[keyof typeof ProductVia];
+
+
+export const ProductVia = {
+  camera: 'camera',
+  duplicate: 'duplicate',
+  paste: 'paste',
+  spreadsheet: 'spreadsheet',
+  form: 'form',
+} as const;
+
+/**
+ * O que falta para publicar (`PRODUCT_INCOMPLETE`). `description` só quando a categoria tem `descriptionRequired`
+ */
+export type ProductMissingField = typeof ProductMissingField[keyof typeof ProductMissingField];
+
+
+export const ProductMissingField = {
+  name: 'name',
+  price: 'price',
+  photo: 'photo',
+  category: 'category',
+  stock: 'stock',
+  description: 'description',
+} as const;
+
+/**
+ * Rascunho sem nome digitado tem `name: ""` (v1.1 R1, RN-Q2); só publica com nome de 2 a 80 caracteres.
+ */
 export interface Product {
   id: string;
   /** @maxLength 80 */
@@ -2951,7 +3006,7 @@ export interface Product {
   /** Separado do status do lojista; só o admin altera */
   moderationStatus: ProductModerationStatus;
   /**
-     * Motivo
+     * Motivo, só quando pausado ou removido pela moderação
      * @nullable
      */
   moderationReason: string | null;
@@ -2971,6 +3026,19 @@ export interface Product {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+     * v1.1 R1: sobe a cada alteração do produto. Vai em `If-Match` (lojista) ou `expectedVersion` (admin). Campo novo, opcional para o app antigo
+     * @minimum 1
+     */
+  version?: number;
+  via?: ProductVia;
+  /**
+     * v1.1 R1: só em rascunho; 30 dias sem alteração (RN-Q2)
+     * @nullable
+     */
+  draftExpiresAt?: string | null;
+  /** v1.1 R1: o que falta para publicar (vazio fora de rascunho) */
+  missing?: ProductMissingField[];
 }
 
 export type ProductSummaryStatus = typeof ProductSummaryStatus[keyof typeof ProductSummaryStatus];
@@ -3016,6 +3084,11 @@ export interface ProductSummary {
   soldOut: boolean;
   variantCount: number;
   updatedAt: string;
+  /**
+     * v1.1 R1 (opcional para o app antigo)
+     * @minimum 1
+     */
+  version?: number;
 }
 
 export interface ProductPage {
@@ -3162,6 +3235,12 @@ export type BulkRequestAction = {
   value: number;
 };
 
+export interface ExpectedVersion {
+  productId: string;
+  /** @minimum 1 */
+  version: number;
+}
+
 export interface BulkRequest {
   /**
      * @minItems 1
@@ -3169,8 +3248,24 @@ export interface BulkRequest {
      */
   productIds: string[];
   dryRun?: boolean;
+  /** v1.1 R1 (WB-377 C3): confirma reajuste acima de `reajuste_max_pct` em algum item. Sem isto, 422 `BULK_NEEDS_CONFIRMATION` (nada é aplicado) */
+  confirmLargeChange?: boolean;
+  /**
+     * v1.1 R1 (B2): `version` de cada item, como veio em `preview[].version`. Obrigatória no servidor em `price_adjust` sem `dryRun` (cobre todos os `productIds`); opcional nas demais ações
+     * @maxItems 200
+     */
+  expectedVersions?: ExpectedVersion[];
   action: BulkRequestAction;
 }
+
+export type BulkVersionConflictProblem = Problem & {
+  conflicts?: {
+  productId: string;
+  name: string;
+  /** @minimum 1 */
+  currentVersion: number;
+}[];
+};
 
 export type BulkResultBlockedItem = {
   productId: string;
@@ -3178,10 +3273,47 @@ export type BulkResultBlockedItem = {
   reason: string;
 };
 
+export interface BulkPreviewItem {
+  productId: string;
+  name: string;
+  /**
+     * Versão do produto na prévia; volta em `expectedVersions` ao aplicar
+     * @minimum 1
+     */
+  version: number;
+  fromCents: number;
+  toCents: number;
+  /** Positivo ou negativo, 1 casa */
+  changePct: number;
+  /**
+     * "Você recebe" do preço novo
+     * @nullable
+     */
+  youReceiveCents: number | null;
+  /** Acima de `reajuste_max_pct` (pede a caixa "Conferi os valores novos") */
+  exceedsLimit: boolean;
+}
+
 export interface BulkResult {
   dryRun: boolean;
   willChange: number;
   changed: number;
+  /** v1.1 R1: só em reajuste de preço (preço antigo, novo e "Você recebe" por item; a mesma contagem do botão "Selecionar os N") */
+  preview?: BulkPreviewItem[];
+  /** v1.1 R1: algum item passa de `reajuste_max_pct` (a tela mostra a caixa "Conferi os valores novos") */
+  requiresConfirmation?: boolean;
+  /** v1.1 R1 (DEC-126): `reajuste_max_pct` vigente, só na prévia (`dryRun`) de `price_adjust`; a tela o usa para marcar o item (`exceedsLimit`) e escrever "acima de N%" sem ler o parâmetro por outra rota */
+  limitPct?: number;
+  /**
+     * v1.1 R1: lote gravado (nulo em `dryRun`); base de `undoBulkBatch`
+     * @nullable
+     */
+  batchId?: string | null;
+  /**
+     * v1.1 R1: 10 min depois da aplicação, só em reajuste de preço
+     * @nullable
+     */
+  undoUntil?: string | null;
   blocked: BulkResultBlockedItem[];
 }
 
@@ -3190,6 +3322,11 @@ export type ImportResultErrorsItem = {
   line: number;
   message: string;
 };
+
+/**
+ * v1.1 R1: palpite do sistema, ex.: { name: 1, price: 3, stock: 4 }; falta uma obrigatória = ausente da chave
+ */
+export type ImportResultSuggestedMapping = {[key: string]: number};
 
 export interface ImportResult {
   totalLines: number;
@@ -3203,6 +3340,15 @@ export interface ImportResult {
   created: number;
   updated: number;
   skipped: number;
+  /** v1.1 R1: cabeçalho lido (texto puro) */
+  headers?: string[];
+  /** v1.1 R1: palpite do sistema, ex.: { name: 1, price: 3, stock: 4 }; falta uma obrigatória = ausente da chave */
+  suggestedMapping?: ImportResultSuggestedMapping;
+  /**
+     * v1.1 R1: 3 primeiras linhas para o seletor "Qual coluna é cada coisa?"
+     * @maxItems 3
+     */
+  sampleRows?: string[][];
 }
 
 export type AdminProductStatus = typeof AdminProductStatus[keyof typeof AdminProductStatus];
@@ -3302,7 +3448,7 @@ export interface ModerationTerm {
   /** Palavra normalizada, ou id da categoria */
   value: string;
   /**
-     * Nome da categoria
+     * Nome da categoria, ou a própria palavra
      * @nullable
      */
   label?: string | null;
@@ -3348,7 +3494,7 @@ export interface Address {
   id: string;
   /** @nullable */
   label: AddressLabel;
-  /** 8 dígitos */
+  /** 8 dígitos, sem hífen */
   cep: string;
   street: string;
   /** "S/N" quando não há número */
@@ -3759,7 +3905,7 @@ export interface StoreDelivery {
   /** Entrega na posição consultada (dentro do raio e de uma faixa) */
   available: boolean;
   /**
-     * Taxa para a posição
+     * Taxa para a posição, antes de "grátis acima de X"
      * @nullable
      */
   feeCents: number | null;
@@ -4238,9 +4384,9 @@ export interface CartWarning {
   code: CartWarningCode;
   /** Texto pt-BR sugerido */
   message: string;
-  /** Só em `PRICE_CHANGED` */
+  /** Só em `PRICE_CHANGED`, preço que o cliente viu */
   fromCents?: number;
-  /** Só em `PRICE_CHANGED` */
+  /** Só em `PRICE_CHANGED`, preço vigente */
   toCents?: number;
   /** Só em `QUANTITY_EXCEEDS_STOCK` */
   requestedQuantity?: number;
@@ -4411,7 +4557,7 @@ export interface CartCheckout {
   blockers: CartCheckoutBlockersItem[];
   /** @nullable */
   opensAt: string | null;
-  /** Teto por pedido da loja nova */
+  /** Teto por pedido da loja nova, quando o limite está ativo (WB-225) */
   newStoreMaxOrder?: Money;
 }
 
@@ -7035,6 +7181,1649 @@ export interface StoreReviewPage {
 }
 
 /**
+ * Largura em px para URL pública WebP; nulo sem foto
+ * @nullable
+ */
+export type ProductDraftSummaryCover = {[key: string]: string} | null;
+
+export interface ProductDraftSummary {
+  id: string;
+  /**
+     * Vazio ("") enquanto o lojista não digitou
+     * @maxLength 80
+     */
+  name: string;
+  /** @nullable */
+  basePriceCents: number | null;
+  /**
+     * Largura em px para URL pública WebP; nulo sem foto
+     * @nullable
+     */
+  cover: ProductDraftSummaryCover;
+  missing: ProductMissingField[];
+  updatedAt: string;
+  /** 30 dias após a última alteração (RN-Q2) */
+  expiresAt: string;
+  /**
+     * Dias inteiros até vencer; 3 ou menos mostra "Será apagado em N dias"
+     * @minimum 0
+     */
+  expiresInDays: number;
+  /** @minimum 1 */
+  version: number;
+  via: ProductVia;
+}
+
+export interface ProductDraftPage {
+  data: ProductDraftSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+  /**
+     * Total de rascunhos da loja (não só desta página)
+     * @minimum 0
+     */
+  count: number;
+  limit: number;
+}
+
+export type CatalogQuickStartLimits = {
+  variantsMax: number;
+  /** Confirmação inline de preço e reajuste acima deste percentual (nos dois sentidos) */
+  reajusteMaxPct: number;
+};
+
+export interface CatalogQuickStart {
+  /**
+     * A última categoria usada na loja; sem histórico, a mais frequente; sem produtos, nulo
+     * @nullable
+     */
+  suggestedCategoryId: string | null;
+  /** @minimum 0 */
+  draftCount: number;
+  draftLimit: number;
+  /** Para "Continuar: Camiseta básica preta" */
+  latestDraft: ProductDraftSummary | null;
+  /**
+     * Produtos ativos sem descrição ("X produtos sem descrição"; só lembrete, não bloqueia)
+     * @minimum 0
+     */
+  withoutDescriptionCount: number;
+  limits: CatalogQuickStartLimits;
+}
+
+export interface QuickPublishRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minimum 1
+     * @maximum 9999999
+     */
+  basePriceCents: number;
+  /**
+     * Omitida: vale a do rascunho; sem categoria nenhuma, 422 `PRODUCT_INCOMPLETE`
+     * @nullable
+     */
+  categoryId?: string | null;
+  /**
+     * Obrigatória só nas categorias com `descriptionRequired` (422 `DESCRIPTION_REQUIRED`)
+     * @maxLength 1000
+     * @nullable
+     */
+  description?: string | null;
+  /**
+     * Estoque da variação padrão
+     * @minimum 0
+     * @maximum 99999
+     */
+  stock?: number;
+  /**
+     * Uploads `product_image` concluídos da mesma loja; o primeiro é a capa
+     * @minItems 1
+     * @maxItems 8
+     */
+  imageIds: string[];
+}
+
+export interface CreateProductDraftRequest {
+  via: ProductVia;
+  /**
+     * Opcional; "" ou ausente = ainda sem nome
+     * @maxLength 80
+     */
+  name?: string;
+  /** @nullable */
+  categoryId?: string | null;
+  /**
+     * Centavos, de 1 a 9999999 (422 fora da faixa)
+     * @nullable
+     */
+  basePriceCents?: number | null;
+}
+
+export type DraftBatchVariantAttributes = {[key: string]: string};
+
+export interface DraftBatchVariant {
+  attributes: DraftBatchVariantAttributes;
+  /**
+     * @minimum 0
+     * @maximum 99999
+     */
+  stock?: number;
+  /**
+     * Preço próprio quando difere do produto (linhas juntadas com preços diferentes)
+     * @nullable
+     */
+  priceCents?: number | null;
+}
+
+export interface DraftBatchItem {
+  /**
+     * Referência do app (ex.: número da linha) para casar a resposta; não é persistida
+     * @minLength 1
+     * @maxLength 40
+     */
+  clientRef: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * Nulo = "Falta o preço" (vira rascunho mesmo assim)
+     * @nullable
+     */
+  basePriceCents?: number | null;
+  /**
+     * Estoque quando não há `variants`
+     * @minimum 0
+     * @maximum 99999
+     */
+  quantity?: number;
+  /**
+     * Nomes dos atributos de `variants` (ex.: Tamanho)
+     * @maxItems 3
+     * @items.maxLength 30
+     */
+  variantAttributes?: string[];
+  /** @maxItems 100 */
+  variants?: DraftBatchVariant[];
+  /** @nullable */
+  categoryId?: string | null;
+}
+
+export type CreateProductDraftsBatchRequestVia = typeof CreateProductDraftsBatchRequestVia[keyof typeof CreateProductDraftsBatchRequestVia];
+
+
+export const CreateProductDraftsBatchRequestVia = {
+  paste: 'paste',
+  spreadsheet: 'spreadsheet',
+} as const;
+
+export interface CreateProductDraftsBatchRequest {
+  via: CreateProductDraftsBatchRequestVia;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  items: DraftBatchItem[];
+}
+
+export type CreateProductDraftsBatchResultCreatedItem = {
+  clientRef: string;
+  productId: string;
+  /** Ex.: ["photo"] na etapa de fotos */
+  missing: ProductMissingField[];
+};
+
+export type CreateProductDraftsBatchResultRejectedItemCode = typeof CreateProductDraftsBatchResultRejectedItemCode[keyof typeof CreateProductDraftsBatchResultRejectedItemCode];
+
+
+export const CreateProductDraftsBatchResultRejectedItemCode = {
+  NAME_REQUIRED: 'NAME_REQUIRED',
+  NAME_TOO_LONG: 'NAME_TOO_LONG',
+  PRICE_OUT_OF_RANGE: 'PRICE_OUT_OF_RANGE',
+  QUANTITY_OUT_OF_RANGE: 'QUANTITY_OUT_OF_RANGE',
+  VARIANTS_INVALID: 'VARIANTS_INVALID',
+  CATEGORY_FORBIDDEN: 'CATEGORY_FORBIDDEN',
+} as const;
+
+export type CreateProductDraftsBatchResultRejectedItem = {
+  clientRef: string;
+  code: CreateProductDraftsBatchResultRejectedItemCode;
+  message: string;
+};
+
+export interface CreateProductDraftsBatchResult {
+  created: CreateProductDraftsBatchResultCreatedItem[];
+  rejected: CreateProductDraftsBatchResultRejectedItem[];
+}
+
+export interface CategoryTemplateAttribute {
+  /**
+     * @minLength 1
+     * @maxLength 30
+     */
+  name: string;
+  /**
+     * SUGESTÕES: nenhum vem marcado (evita estoque falso)
+     * @maxItems 30
+     * @items.maxLength 40
+     */
+  values: string[];
+}
+
+export interface CategoryTemplate {
+  categoryId: string;
+  attributes: CategoryTemplateAttribute[];
+  /** Moda e calçado: lembrar a tabela de medidas (WB-246) */
+  sizeChartHint: boolean;
+  /** Íntimos e higiene: sugerir "Não aceita troca por tamanho ou cor" (WB-244); só sugestão */
+  noVoluntaryExchangeHint: boolean;
+  /** RN-Q1 / DEC-106: a descrição é obrigatória ao publicar, nas duas vias */
+  descriptionRequired: boolean;
+  descriptionMinChars: number;
+}
+
+export interface CategoryTemplateList {
+  /** @maxItems 100 */
+  data: CategoryTemplate[];
+  /** @nullable */
+  nextCursor: null;
+}
+
+export interface SetCategoryTemplateRequest {
+  /** @maxItems 12 */
+  attributes: CategoryTemplateAttribute[];
+  sizeChartHint: boolean;
+  noVoluntaryExchangeHint: boolean;
+  descriptionRequired: boolean;
+  /**
+     * @minimum 1
+     * @maximum 200
+     */
+  descriptionMinChars?: number;
+}
+
+export type ProductTableRowStatus = typeof ProductTableRowStatus[keyof typeof ProductTableRowStatus];
+
+
+export const ProductTableRowStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export type ProductTableRowModerationStatus = typeof ProductTableRowModerationStatus[keyof typeof ProductTableRowModerationStatus];
+
+
+export const ProductTableRowModerationStatus = {
+  ok: 'ok',
+  review: 'review',
+  paused: 'paused',
+  removed: 'removed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProductTableRowCover = {[key: string]: string} | null;
+
+export interface ProductTableRow {
+  id: string;
+  name: string;
+  status: ProductTableRowStatus;
+  moderationStatus: ProductTableRowModerationStatus;
+  /** @nullable */
+  cover: ProductTableRowCover;
+  /** @nullable */
+  basePriceCents: number | null;
+  /**
+     * "Você recebe cerca de" (DEC-035) sobre o preço base. Nulo para membro sem `catalog` (a lista só mostra a comissão a quem gerencia o catálogo). Sempre nulo com `X-View-As` (VA-14)
+     * @nullable
+     */
+  youReceiveCents: number | null;
+  /** Soma de (estoque - reservado) das variações ativas */
+  available: number;
+  /** Soma reservada em pedidos ("2 reservadas em pedidos") */
+  reserved: number;
+  variantCount: number;
+  /**
+     * Preenchido quando há UMA variação: o estoque se edita na linha (`adjustVariantStock`)
+     * @nullable
+     */
+  singleVariantId: string | null;
+  /**
+     * Para `If-Match` na edição em linha
+     * @minimum 1
+     */
+  version: number;
+  updatedAt: string;
+}
+
+export interface ProductTablePage {
+  data: ProductTableRow[];
+  /** @nullable */
+  nextCursor: string | null;
+  /**
+     * Contagem exata do filtro (botão "Selecionar os 12 da busca")
+     * @minimum 0
+     */
+  matchingCount: number;
+}
+
+export type BulkBatchKind = typeof BulkBatchKind[keyof typeof BulkBatchKind];
+
+
+export const BulkBatchKind = {
+  price_adjust: 'price_adjust',
+  pause: 'pause',
+  resume: 'resume',
+  move_section: 'move_section',
+} as const;
+
+export type BulkBatchSource = typeof BulkBatchSource[keyof typeof BulkBatchSource];
+
+
+export const BulkBatchSource = {
+  merchant: 'merchant',
+  admin: 'admin',
+} as const;
+
+export interface BulkBatch {
+  id: string;
+  kind: BulkBatchKind;
+  itemsCount: number;
+  source: BulkBatchSource;
+  /** Nome do membro da loja; "Webag" quando `source: admin` (nunca o nome da pessoa) */
+  actorName: string;
+  at: string;
+  /**
+     * Só reajuste de preço; 10 min depois de `at`
+     * @nullable
+     */
+  undoUntil: string | null;
+  undone: boolean;
+}
+
+export interface BulkBatchPage {
+  data: BulkBatch[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+/**
+ * Editado depois do reajuste: não é sobrescrito
+ */
+export type BulkUndoResultSkippedItemReason = typeof BulkUndoResultSkippedItemReason[keyof typeof BulkUndoResultSkippedItemReason];
+
+
+export const BulkUndoResultSkippedItemReason = {
+  CHANGED_AFTER: 'CHANGED_AFTER',
+} as const;
+
+export type BulkUndoResultSkippedItem = {
+  productId: string;
+  name: string;
+  /** Editado depois do reajuste: não é sobrescrito */
+  reason: BulkUndoResultSkippedItemReason;
+};
+
+export interface BulkUndoResult {
+  batchId: string;
+  /** Verdadeiro quando o lote já tinha sido desfeito: a repetição (resposta perdida em 3G) devolve o mesmo resultado, sem erro */
+  alreadyUndone: boolean;
+  reverted: number;
+  skipped: BulkUndoResultSkippedItem[];
+}
+
+/**
+ * @nullable
+ */
+export type StoreAdminChangeBefore = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type StoreAdminChangeAfter = { [key: string]: unknown } | null;
+
+export type StoreAdminChangeActor = typeof StoreAdminChangeActor[keyof typeof StoreAdminChangeActor];
+
+
+export const StoreAdminChangeActor = {
+  Webag: 'Webag',
+} as const;
+
+/**
+ * `access` = abertura e encerramento de "Ver como o lojista". Filtros da tela: Tudo, Preço, Estoque, Horário, Acesso
+ */
+export type StoreHistoryType = typeof StoreHistoryType[keyof typeof StoreHistoryType];
+
+
+export const StoreHistoryType = {
+  price: 'price',
+  stock: 'stock',
+  catalog: 'catalog',
+  hours: 'hours',
+  holidays: 'holidays',
+  delivery: 'delivery',
+  pickup: 'pickup',
+  exchange_policy: 'exchange_policy',
+  pause: 'pause',
+  status: 'status',
+  profile: 'profile',
+  commission: 'commission',
+  access: 'access',
+  bulk: 'bulk',
+  restore: 'restore',
+  other: 'other',
+} as const;
+
+export interface StoreAdminChange {
+  id: number;
+  at: string;
+  type: StoreHistoryType;
+  summary: string;
+  /**
+     * Nome do produto ou da área (horário, pausa); sem dado de cliente
+     * @nullable
+     */
+  target: string | null;
+  reasonLabel: string;
+  /** @nullable */
+  before: StoreAdminChangeBefore;
+  /** @nullable */
+  after: StoreAdminChangeAfter;
+  actor: StoreAdminChangeActor;
+}
+
+export interface StoreAdminChangePage {
+  data: StoreAdminChange[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type ProductCreationMetricsGroupBy = typeof ProductCreationMetricsGroupBy[keyof typeof ProductCreationMetricsGroupBy];
+
+
+export const ProductCreationMetricsGroupBy = {
+  via: 'via',
+  store: 'store',
+} as const;
+
+export type ProductCreationMetricsRowsItem = {
+  /** Valor de `via` ou id da loja */
+  key: string;
+  label: string;
+  /** Cadastros contínuos publicados no período */
+  n: number;
+  /** Publicados depois do limite de sessão contínua; fora da mediana */
+  interrupted: number;
+  /** n < minSample */
+  insufficient: boolean;
+  /** @nullable */
+  medianSeconds: number | null;
+  /** @nullable */
+  p90Seconds: number | null;
+};
+
+export interface ProductCreationMetrics {
+  days: number;
+  groupBy: ProductCreationMetricsGroupBy;
+  minSample: number;
+  computedAt: string;
+  rows: ProductCreationMetricsRowsItem[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+/**
+ * Catálogo de motivos (PRD admin, WB-351 C7). Edição geral: `requested_by_merchant` ("Solicitado pelo lojista"), `error_fix` ("Correção de erro"), `moderation`, `operational_decision`, `other`.
+ * **Preço** só aceita `requested_by_merchant`, `obvious_price_error` ("Erro evidente"), `legal_or_inspection_order` ("Ordem de fiscalização ou do jurídico") e `agreed_campaign` ("Campanha acordada").
+ */
+export type AdminReasonCode = typeof AdminReasonCode[keyof typeof AdminReasonCode];
+
+
+export const AdminReasonCode = {
+  requested_by_merchant: 'requested_by_merchant',
+  error_fix: 'error_fix',
+  moderation: 'moderation',
+  operational_decision: 'operational_decision',
+  other: 'other',
+  obvious_price_error: 'obvious_price_error',
+  legal_or_inspection_order: 'legal_or_inspection_order',
+  agreed_campaign: 'agreed_campaign',
+} as const;
+
+export interface AdminReason {
+  code: AdminReasonCode;
+  /**
+     * Obrigatório com `requested_by_merchant` (canal e data, ex.: "WhatsApp, 24/11") e com `other`. Texto puro
+     * @maxLength 200
+     */
+  note?: string;
+}
+
+/**
+ * `now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa)
+ */
+export type AdminEditResultMerchantNotified = typeof AdminEditResultMerchantNotified[keyof typeof AdminEditResultMerchantNotified];
+
+
+export const AdminEditResultMerchantNotified = {
+  now: 'now',
+  digest: 'digest',
+  aggregate: 'aggregate',
+} as const;
+
+export interface AdminEditResult {
+  product: Product;
+  /** Linhas gravadas no `audit_log` (o "Desfazer" do toast usa a 1ª em `restoreAdminStoreHistoryEntry`) */
+  auditEntryIds: number[];
+  /** `now` (pausa, status, horário), `digest` (resumo de 10 min) ou `aggregate` (ação em massa) */
+  merchantNotified: AdminEditResultMerchantNotified;
+}
+
+export type AdminStoreEditResultMerchantNotified = typeof AdminStoreEditResultMerchantNotified[keyof typeof AdminStoreEditResultMerchantNotified];
+
+
+export const AdminStoreEditResultMerchantNotified = {
+  now: 'now',
+  digest: 'digest',
+  aggregate: 'aggregate',
+} as const;
+
+export interface AdminStoreEditResult {
+  /**
+     * Nova versão da loja
+     * @minimum 1
+     */
+  storeVersion: number;
+  auditEntryId: number;
+  merchantNotified: AdminStoreEditResultMerchantNotified;
+}
+
+export type AdminStoreHistoryEntryTargetType = typeof AdminStoreHistoryEntryTargetType[keyof typeof AdminStoreHistoryEntryTargetType];
+
+
+export const AdminStoreHistoryEntryTargetType = {
+  store: 'store',
+  product: 'product',
+  variant: 'variant',
+  config: 'config',
+} as const;
+
+export type AdminStoreHistoryEntryTarget = {
+  type: AdminStoreHistoryEntryTargetType;
+  /** @nullable */
+  id: string | null;
+  /**
+     * Nome do produto ou da seção; sem dado de cliente
+     * @nullable
+     */
+  label: string | null;
+};
+
+export type AdminStoreHistoryEntryActorKind = typeof AdminStoreHistoryEntryActorKind[keyof typeof AdminStoreHistoryEntryActorKind];
+
+
+export const AdminStoreHistoryEntryActorKind = {
+  admin: 'admin',
+  merchant: 'merchant',
+  system: 'system',
+} as const;
+
+export type AdminStoreHistoryEntryActor = {
+  kind: AdminStoreHistoryEntryActorKind;
+  /**
+     * Nome do admin ou do membro (o lojista só vê "Webag" em `listStoreAdminChanges`)
+     * @nullable
+     */
+  name: string | null;
+};
+
+/**
+ * @nullable
+ */
+export type AdminStoreHistoryEntryBefore = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type AdminStoreHistoryEntryAfter = { [key: string]: unknown } | null;
+
+export interface AdminStoreHistoryEntry {
+  /** Id da linha do `audit_log` (append-only) */
+  id: number;
+  at: string;
+  type: StoreHistoryType;
+  target: AdminStoreHistoryEntryTarget;
+  actor: AdminStoreHistoryEntryActor;
+  summary: string;
+  /** @nullable */
+  before: AdminStoreHistoryEntryBefore;
+  /** @nullable */
+  after: AdminStoreHistoryEntryAfter;
+  reason: AdminReason | null;
+  /** Preço e estoque com valor anterior conhecido e ainda não restaurados */
+  restorable: boolean;
+  /** @nullable */
+  restoredByEntryId: number | null;
+}
+
+export interface AdminStoreHistoryPage {
+  data: AdminStoreHistoryEntry[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface RestoreHistoryEntryRequest {
+  reason: AdminReason;
+  /** Restaurar mesmo com o valor atual diferente do que a linha deixou (C2) */
+  confirmOverride?: boolean;
+  confirmLargeChange?: boolean;
+}
+
+export type AdminStoreOverviewStoreStatus = typeof AdminStoreOverviewStoreStatus[keyof typeof AdminStoreOverviewStoreStatus];
+
+
+export const AdminStoreOverviewStoreStatus = {
+  draft: 'draft',
+  in_review: 'in_review',
+  correction_requested: 'correction_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  suspended: 'suspended',
+  closed: 'closed',
+} as const;
+
+export type AdminStoreOverviewStore = {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  status: AdminStoreOverviewStoreStatus;
+  /** @nullable */
+  city: string | null;
+  /** @nullable */
+  ownerName: string | null;
+  /**
+     * Valor de `expectedVersion` das edições da loja
+     * @minimum 1
+     */
+  version: number;
+  live: boolean;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  whatsapp: string | null;
+  /** @nullable */
+  description: string | null;
+};
+
+export type AdminStoreOverviewOperationPauseBy = typeof AdminStoreOverviewOperationPauseBy[keyof typeof AdminStoreOverviewOperationPauseBy];
+
+
+export const AdminStoreOverviewOperationPauseBy = {
+  merchant: 'merchant',
+  admin: 'admin',
+} as const;
+
+export type AdminStoreOverviewOperationPause = {
+  /**
+     * Nulo = até reabrir
+     * @nullable
+     */
+  until: string | null;
+  by: AdminStoreOverviewOperationPauseBy;
+  /** @nullable */
+  reasonLabel: string | null;
+} | null;
+
+export type AdminStoreOverviewOperation = {
+  openNow: boolean;
+  /** @nullable */
+  closesAt: string | null;
+  pause: AdminStoreOverviewOperationPause;
+};
+
+export type AdminStoreOverviewCommissionSource = typeof AdminStoreOverviewCommissionSource[keyof typeof AdminStoreOverviewCommissionSource];
+
+
+export const AdminStoreOverviewCommissionSource = {
+  store: 'store',
+  category: 'category',
+  default: 'default',
+} as const;
+
+export type AdminStoreOverviewCommission = {
+  pct: number;
+  source: AdminStoreOverviewCommissionSource;
+  sourceLabel: string;
+};
+
+export type AdminStoreOverviewIndicatorsCancellations = {
+  count: number;
+  /**
+     * Nulo com menos de 20 pedidos (DEC-108: poucos dados)
+     * @nullable
+     */
+  pct: number | null;
+};
+
+export type AdminStoreOverviewIndicators = {
+  /** Sem pedidos nos últimos 30 dias */
+  empty: boolean;
+  activeProducts: number;
+  orders: number;
+  gmv: Money;
+  cancellations: AdminStoreOverviewIndicatorsCancellations;
+};
+
+export type AdminStoreOverviewRecentOrdersItem = {
+  id: string;
+  status: string;
+  total: Money;
+  createdAt: string;
+};
+
+export interface AdminStoreOverview {
+  store: AdminStoreOverviewStore;
+  operation: AdminStoreOverviewOperation;
+  commission: AdminStoreOverviewCommission;
+  indicators: AdminStoreOverviewIndicators;
+  /** @maxItems 5 */
+  recentOrders: AdminStoreOverviewRecentOrdersItem[];
+}
+
+/**
+ * Lista FECHADA de campos editáveis pelo admin (C-ADM-03). Qualquer outro campo é recusado
+ */
+export interface AdminStoreProfileChanges {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name?: string;
+  /** @maxLength 300 */
+  description?: string;
+  phone?: string;
+  whatsapp?: string;
+}
+
+export interface AdminStoreProfileEditRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  changes: AdminStoreProfileChanges;
+}
+
+export interface AdminStoreConfigEditRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  data: HoursRequest | HolidaysRequest | DeliveryRequest | PickupRequest | ExchangePolicyRequest;
+}
+
+export type AdminPauseStoreRequestKind = typeof AdminPauseStoreRequestKind[keyof typeof AdminPauseStoreRequestKind];
+
+
+export const AdminPauseStoreRequestKind = {
+  '30m': '30m',
+  '1h': '1h',
+  '2h': '2h',
+  end_of_day: 'end_of_day',
+  until_resume: 'until_resume',
+} as const;
+
+export interface AdminPauseStoreRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  kind: AdminPauseStoreRequestKind;
+}
+
+export interface AdminResumeStoreRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+/**
+ * Suporte ao lojista por telefone, investigar um problema, conferir o cadastro, outro (com `note`)
+ */
+export type ViewAsReasonCode = typeof ViewAsReasonCode[keyof typeof ViewAsReasonCode];
+
+
+export const ViewAsReasonCode = {
+  merchant_support: 'merchant_support',
+  investigate_issue: 'investigate_issue',
+  check_registration: 'check_registration',
+  other: 'other',
+} as const;
+
+export type OpenViewAsRequestReason = {
+  code: ViewAsReasonCode;
+  /** @maxLength 200 */
+  note?: string;
+};
+
+export interface OpenViewAsRequest {
+  reason: OpenViewAsRequestReason;
+}
+
+export type ViewAsSessionReason = {
+  code: ViewAsReasonCode;
+  note?: string;
+};
+
+export interface ViewAsSession {
+  id: string;
+  /**
+     * Credencial `vas_` mostrada UMA vez; vai no cabeçalho `X-View-As`, somada ao Bearer do admin, nas rotas `x-view-as`. Não vai em `Authorization`, URL nem corpo, e não é logada
+     * @pattern ^vas_[A-Za-z0-9_-]{43}$
+     */
+  token: string;
+  storeId: string;
+  /** @nullable */
+  storeName: string | null;
+  /** No máximo 30 min, ou o fim da sessão do admin, o que vier antes */
+  expiresAt: string;
+  reason: ViewAsSessionReason;
+}
+
+export type StoreViewAsStatus = typeof StoreViewAsStatus[keyof typeof StoreViewAsStatus];
+
+
+export const StoreViewAsStatus = {
+  draft: 'draft',
+  in_review: 'in_review',
+  correction_requested: 'correction_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  suspended: 'suspended',
+  closed: 'closed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type StoreViewAsLogo = {[key: string]: string} | null;
+
+/**
+ * @nullable
+ */
+export type StoreViewAsCover = {[key: string]: string} | null;
+
+export type StoreViewAsReviewItemsItem = {
+  item: string;
+  reason: string;
+};
+
+export type StoreViewAsAddress = {
+  /** @nullable */
+  neighborhood: string | null;
+  /** @nullable */
+  city: string | null;
+  /** @nullable */
+  state: string | null;
+} | null;
+
+/**
+ * Resposta de `getStore` com `X-View-As` (apresentador `view_as`, threat model §14.3): sem CPF/CNPJ, razão social, comissão, tarifa, conta de recebimento, `settings` embutido nem papel. Lista fechada: campo novo só entra com parecer do Security. A rota devolve este corpo, e não `Store`, quando o cabeçalho está presente
+ */
+export interface StoreViewAs {
+  id: string;
+  /**
+     * v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo
+     * @minimum 1
+     */
+  version?: number;
+  /** Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo */
+  live?: boolean;
+  status: StoreViewAsStatus;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
+  mainCategoryId?: string | null;
+  extraCategoryIds: string[];
+  /** @nullable */
+  logo?: StoreViewAsLogo;
+  /** @nullable */
+  cover?: StoreViewAsCover;
+  pendingReview: boolean;
+  reviewItems: StoreViewAsReviewItemsItem[];
+  /** @nullable */
+  submittedAt?: string | null;
+  /** @nullable */
+  decisionReason?: string | null;
+  createdAt: string;
+  address?: StoreViewAsAddress;
+}
+
+export type StoreSettingsViewAsHoursItem = {
+  weekday: number;
+  intervals: Interval[];
+};
+
+export type StoreSettingsViewAsHolidaysItem = {
+  date: string;
+  /** @nullable */
+  label?: string | null;
+};
+
+export type StoreSettingsViewAsPause = {
+  active: boolean;
+  /** @nullable */
+  until: string | null;
+  indefinitely: boolean;
+};
+
+export type StoreSettingsViewAsDeliveryFeeManagedBy = typeof StoreSettingsViewAsDeliveryFeeManagedBy[keyof typeof StoreSettingsViewAsDeliveryFeeManagedBy];
+
+
+export const StoreSettingsViewAsDeliveryFeeManagedBy = {
+  webag: 'webag',
+} as const;
+
+export type StoreSettingsViewAsDeliveryTiersItem = {
+  fromKm: number;
+  toKm: number;
+  feeCents: number;
+};
+
+/**
+ * Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.
+ */
+export type StoreSettingsViewAsDelivery = {
+  /** DEC-053: preparo em uso (o da loja ou o padrão do admin) */
+  prepMinutes?: number;
+  prepMinutesIsDefault?: boolean;
+  acceptsDelivery: boolean;
+  feeManagedBy?: StoreSettingsViewAsDeliveryFeeManagedBy;
+  radiusKm: number;
+  feeMode: string;
+  feeFixedCents: number;
+  tiers: StoreSettingsViewAsDeliveryTiersItem[];
+  minOrderCents: number;
+  freeAboveCents: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+};
+
+export type StoreSettingsViewAsPickup = {
+  enabled: boolean;
+  useStoreAddress: boolean;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  instructions?: string | null;
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+};
+
+export type StoreSettingsViewAsExchangePolicyLegalFloor = {
+  withdrawalDays: number;
+  defectDays: number;
+  /** BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável). */
+  defectDurableDays?: number;
+};
+
+export type StoreSettingsViewAsExchangePolicy = {
+  voluntaryDays: number;
+  collectionFeeCents: number;
+  version: number;
+  /** BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2). */
+  defaultVoluntaryDays?: number;
+  legalFloor: StoreSettingsViewAsExchangePolicyLegalFloor;
+};
+
+/**
+ * Resposta de `getStoreSettings` com `X-View-As`: horários, pausa, entrega, retirada, política de troca e limiar de estoque; sem `notifications` nem qualquer destino de contato (e-mail ou telefone)
+ */
+export interface StoreSettingsViewAs {
+  isOpenNow: boolean;
+  hours: StoreSettingsViewAsHoursItem[];
+  holidays: StoreSettingsViewAsHolidaysItem[];
+  pause: StoreSettingsViewAsPause;
+  /** Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag. */
+  delivery: StoreSettingsViewAsDelivery;
+  pickup: StoreSettingsViewAsPickup;
+  exchangePolicy: StoreSettingsViewAsExchangePolicy;
+  lowStockThreshold: number;
+}
+
+export type StoreOrderViewAsMode = typeof StoreOrderViewAsMode[keyof typeof StoreOrderViewAsMode];
+
+
+export const StoreOrderViewAsMode = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+} as const;
+
+/**
+ * Só o primeiro nome, mesmo em pedido ativo (SEC-207)
+ */
+export type StoreOrderViewAsCustomer = {
+  firstName: string;
+};
+
+export type StoreOrderViewAsItemsItemAttributes = {[key: string]: string};
+
+export type StoreOrderViewAsItemsItem = {
+  name: string;
+  attributes: StoreOrderViewAsItemsItemAttributes;
+  image: ImageUrls;
+  quantity: number;
+  unitPrice: Money | null;
+  lineTotal: Money | null;
+};
+
+/**
+ * Só o bairro; sem rua, número, complemento, CEP, coordenadas nem observação
+ */
+export type StoreOrderViewAsDelivery = {
+  /** @nullable */
+  neighborhood: string | null;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  /** DEC-053: faixa gravada no pedido; a espera do PIX não conta (reancora no pagamento) e só fica mais cedo com o motoboy a caminho. Nulo em pedido anterior à regra. */
+  eta?: EtaRange | null;
+} | null;
+
+export type StoreOrderViewAsPickup = {
+  prepMinMinutes: number;
+  prepMaxMinutes: number;
+} | null;
+
+export type StoreOrderViewAsValues = {
+  subtotal: Money;
+  delivery: Money;
+  storeDiscount: Money;
+  total: Money;
+} | null;
+
+export type StoreOrderViewAsTimelineItemActor = typeof StoreOrderViewAsTimelineItemActor[keyof typeof StoreOrderViewAsTimelineItemActor];
+
+
+export const StoreOrderViewAsTimelineItemActor = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type StoreOrderViewAsTimelineItem = {
+  status: OrderStatus;
+  at: string;
+  actor: StoreOrderViewAsTimelineItemActor;
+};
+
+export type StoreOrderViewAsCancellationBy = typeof StoreOrderViewAsCancellationBy[keyof typeof StoreOrderViewAsCancellationBy];
+
+
+export const StoreOrderViewAsCancellationBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type StoreOrderViewAsCancellation = {
+  by: StoreOrderViewAsCancellationBy;
+  at: string;
+} | null;
+
+/**
+ * Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto.
+ */
+export type StoreOrderViewAsLogistics = {
+  status?: DeliveryStatus;
+  /** @nullable */
+  courierFirstName?: string | null;
+  volumes?: number;
+} | null;
+
+/**
+ * Resposta de `getStoreOrder` com `X-View-As` (SEC-207): só primeiro nome e bairro, também em pedido ativo; sem sobrenome, telefone, e-mail, CPF, rua, número, complemento, CEP, coordenadas, observação do cliente, código de entrega, `cancelRequest`, comissão nem líquido. Em `listStoreOrders` a única diferença é `allowedActions` vazio (o resumo já só traz o primeiro nome)
+ */
+export interface StoreOrderViewAs {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  mode: StoreOrderViewAsMode;
+  createdAt: string;
+  /** @nullable */
+  paidAt: string | null;
+  /** @nullable */
+  acceptedAt: string | null;
+  /** @nullable */
+  acceptDeadlineAt: string | null;
+  /**
+     * W.8 / DEC-064 (c): "Marque pronto até HH:MM" = pagamento aprovado + preparo da loja (o preparo gravado no pedido; na retirada, o fim da janela de preparo informada ao cliente `[HIPÓTESE]`). Só em `received`, `accepted` e `in_preparation`; nulo depois do "pronto", sem pagamento ou em pedido anterior à DEC-053. Campo novo opcional.
+     * @nullable
+     */
+  readyByAt?: string | null;
+  /** Só o primeiro nome, mesmo em pedido ativo (SEC-207) */
+  customer: StoreOrderViewAsCustomer;
+  items: StoreOrderViewAsItemsItem[];
+  /** Só o bairro; sem rua, número, complemento, CEP, coordenadas nem observação */
+  delivery: StoreOrderViewAsDelivery;
+  pickup: StoreOrderViewAsPickup;
+  values: StoreOrderViewAsValues;
+  /** @nullable */
+  couponCode: string | null;
+  /** SEC-209: SEM `reason` (o motivo do cancelamento é texto livre do cliente, `order_events.reason`); só estado, hora e ator */
+  timeline: StoreOrderViewAsTimelineItem[];
+  cancellation: StoreOrderViewAsCancellation;
+  /** Estado da corrida e o primeiro nome do motoboy (sem telefone). Nulo na retirada ou antes do pronto. */
+  logistics?: StoreOrderViewAsLogistics;
+  /**
+     * Sempre vazio: o visualizador não age
+     * @maxItems 0
+     */
+  allowedActions: StoreOrderAction[];
+}
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsReasonCode = typeof ExchangeViewAsReasonCode[keyof typeof ExchangeViewAsReasonCode] | null;
+
+
+export const ExchangeViewAsReasonCode = {
+  size: 'size',
+  color: 'color',
+} as const;
+
+export type ExchangeViewAsMethod = typeof ExchangeViewAsMethod[keyof typeof ExchangeViewAsMethod];
+
+
+export const ExchangeViewAsMethod = {
+  pickup_at_home: 'pickup_at_home',
+  drop_at_store: 'drop_at_store',
+} as const;
+
+export type ExchangeViewAsResolution = typeof ExchangeViewAsResolution[keyof typeof ExchangeViewAsResolution];
+
+
+export const ExchangeViewAsResolution = {
+  replace: 'replace',
+  refund: 'refund',
+} as const;
+
+export type ExchangeViewAsItemAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsItem = {
+  orderItemId?: string;
+  name?: string;
+  attributes?: ExchangeViewAsItemAttributes;
+  image?: ImageUrls;
+  unitPrice?: Money;
+} | null;
+
+export type ExchangeViewAsNewVariantAttributes = {[key: string]: string};
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsNewVariant = {
+  variantId?: string;
+  attributes?: ExchangeViewAsNewVariantAttributes;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ExchangeViewAsDecidedBy = typeof ExchangeViewAsDecidedBy[keyof typeof ExchangeViewAsDecidedBy] | null;
+
+
+export const ExchangeViewAsDecidedBy = {
+  customer: 'customer',
+  store: 'store',
+  system: 'system',
+  admin: 'admin',
+} as const;
+
+export type ExchangeViewAsTimelineItem = {
+  /** @nullable */
+  from?: string | null;
+  to?: string;
+  actor?: string;
+  at?: string;
+};
+
+export type ExchangeViewAsRunsItemKind = typeof ExchangeViewAsRunsItemKind[keyof typeof ExchangeViewAsRunsItemKind];
+
+
+export const ExchangeViewAsRunsItemKind = {
+  exchange_pickup: 'exchange_pickup',
+  exchange_return: 'exchange_return',
+} as const;
+
+export type ExchangeViewAsRunsItem = {
+  id?: string;
+  kind?: ExchangeViewAsRunsItemKind;
+  status?: string;
+};
+
+/**
+ * Resposta de `getStoreExchange` com `X-View-As`: motivo (código), status, prazos e itens; sem texto livre nem fotos do cliente, sem dados de reembolso, sem a justificativa digitada
+ */
+export interface ExchangeViewAs {
+  id: string;
+  /** Protocolo (TR-XXXXX). */
+  number: string;
+  orderId: string;
+  storeId?: string;
+  orderNumber: string;
+  status: ExchangeStatus;
+  type: ExchangeType;
+  /** @nullable */
+  reasonCode?: ExchangeViewAsReasonCode;
+  method: ExchangeViewAsMethod;
+  resolution: ExchangeViewAsResolution;
+  quantity: number;
+  /** @nullable */
+  item?: ExchangeViewAsItem;
+  /** @nullable */
+  newVariant?: ExchangeViewAsNewVariant;
+  fee: Money;
+  difference: Money;
+  totalDue: Money;
+  /** @nullable */
+  feeDueAt?: string | null;
+  feePaid?: boolean;
+  answerDeadlineAt: string;
+  windowEndsAt: string;
+  /** @nullable */
+  itemDueAt?: string | null;
+  autoApproved?: boolean;
+  /** @nullable */
+  decidedBy?: ExchangeViewAsDecidedBy;
+  /**
+     * Até quando o cliente pode contestar a recusa da loja (WB-176); nulo quando não cabe.
+     * @nullable
+     */
+  contestableUntil?: string | null;
+  contested?: boolean;
+  /** SEC-209: SEM `reason` (no evento `requested` é a descrição digitada pelo cliente, `exchanges.service`); só transição, ator e hora */
+  timeline?: ExchangeViewAsTimelineItem[];
+  runs?: ExchangeViewAsRunsItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExchangePageViewAs {
+  data: ExchangeViewAs[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface AdminCreateProductDraftRequest {
+  reason: AdminReason;
+  data: CreateProductDraftRequest;
+}
+
+export interface AdminProductEditRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  /** Confirma variação de preço acima de `admin_preco_variacao_max_pct` depois de ver o novo "Você recebe" */
+  confirmLargeChange?: boolean;
+  changes: UpdateProductRequest;
+}
+
+export interface AdminSetVariantsRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  confirmLargeChange?: boolean;
+  data: SetVariantsRequest;
+}
+
+export interface AdminStockAdjustRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  data: StockAdjustBody;
+}
+
+export interface AdminSetImagesRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  data: SetImagesRequest;
+}
+
+export type AdminProductStatusRequestStatus = typeof AdminProductStatusRequestStatus[keyof typeof AdminProductStatusRequestStatus];
+
+
+export const AdminProductStatusRequestStatus = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export interface AdminProductStatusRequest {
+  reason: AdminReason;
+  /** @minimum 1 */
+  expectedVersion: number;
+  status: AdminProductStatusRequestStatus;
+}
+
+export type AdminBulkProductsRequestAction = {
+  type: 'pause';
+} | {
+  type: 'resume';
+} | {
+  type: 'stock_set';
+  /**
+     * @minimum 0
+     * @maximum 99999
+     */
+  value: number;
+} | {
+  type: 'stock_adjust';
+  /**
+     * @minimum -99999
+     * @maximum 99999
+     */
+  value: number;
+};
+
+export interface AdminBulkProductsRequest {
+  reason: AdminReason;
+  /**
+     * @minItems 1
+     * @maxItems 200
+     */
+  productIds: string[];
+  dryRun?: boolean;
+  /**
+     * B2: `version` de cada item, como veio em `preview[].version`. Obrigatória no servidor sem `dryRun` (cobre todos os `productIds`)
+     * @maxItems 200
+     */
+  expectedVersions?: ExpectedVersion[];
+  action: AdminBulkProductsRequestAction;
+}
+
+export interface AdminBulkPreviewItem {
+  productId: string;
+  name: string;
+  /** @minimum 1 */
+  version: number;
+}
+
+/**
+ * Um único aviso agregado com o motivo
+ */
+export type AdminBulkResultMerchantNotified = typeof AdminBulkResultMerchantNotified[keyof typeof AdminBulkResultMerchantNotified];
+
+
+export const AdminBulkResultMerchantNotified = {
+  aggregate: 'aggregate',
+} as const;
+
+export type AdminBulkResultBlockedItemReason = typeof AdminBulkResultBlockedItemReason[keyof typeof AdminBulkResultBlockedItemReason];
+
+
+export const AdminBulkResultBlockedItemReason = {
+  STOCK_BELOW_RESERVED: 'STOCK_BELOW_RESERVED',
+  PRODUCT_MODERATED: 'PRODUCT_MODERATED',
+  NOT_ACTIVE: 'NOT_ACTIVE',
+} as const;
+
+export type AdminBulkResultBlockedItem = {
+  productId: string;
+  name: string;
+  reason: AdminBulkResultBlockedItemReason;
+};
+
+export interface AdminBulkResult {
+  dryRun: boolean;
+  willChange: number;
+  changed: number;
+  /** Uma por item alterado (C-ADM-07) */
+  auditEntries: number;
+  /** @nullable */
+  batchId: string | null;
+  /** Um único aviso agregado com o motivo */
+  merchantNotified: AdminBulkResultMerchantNotified;
+  /** B2: só em `dryRun`; traz a `version` de cada item para `expectedVersions` */
+  preview?: AdminBulkPreviewItem[];
+  blocked: AdminBulkResultBlockedItem[];
+}
+
+/**
+ * Presente só quando `code` = `PRODUCT_VERSION_CONFLICT`
+ */
+export type ProductVersionConflictProblemCurrent = {
+  version: number;
+  updatedAt: string;
+  /** @nullable */
+  basePriceCents?: number | null;
+};
+
+export type ProductVersionConflictProblem = Problem & {
+  /** Presente só quando `code` = `PRODUCT_VERSION_CONFLICT` */
+  current?: ProductVersionConflictProblemCurrent;
+};
+
+export type DraftLimitProblem = Problem & {
+  /** Parâmetro `rascunhos_max_por_loja` */
+  limit?: number;
+  /** @minimum 0 */
+  draftCount?: number;
+  /**
+     * Vagas que restam (limit - draftCount, nunca negativo)
+     * @minimum 0
+     */
+  slotsAvailable?: number;
+};
+
+export type PriceChangeConfirmationProblem = Problem & ({
+  fromCents?: number;
+  toCents?: number;
+  changePct?: number;
+  /** @nullable */
+  youReceiveCents?: number | null;
+});
+
+/**
+ * De onde veio o toque (RN-A6). `?o=<canal>` do link da loja cai em `external_link` genérico (WB-368 cortada)
+ */
+export type AnalyticsOrigin = typeof AnalyticsOrigin[keyof typeof AnalyticsOrigin];
+
+
+export const AnalyticsOrigin = {
+  banner: 'banner',
+  home: 'home',
+  search: 'search',
+  category: 'category',
+  favorites: 'favorites',
+  external_link: 'external_link',
+  push: 'push',
+} as const;
+
+export type AppSessionStartedEventName = typeof AppSessionStartedEventName[keyof typeof AppSessionStartedEventName];
+
+
+export const AppSessionStartedEventName = {
+  app_session_started: 'app_session_started',
+} as const;
+
+export type AppSessionStartedEventPlatform = typeof AppSessionStartedEventPlatform[keyof typeof AppSessionStartedEventPlatform];
+
+
+export const AppSessionStartedEventPlatform = {
+  ios: 'ios',
+  android: 'android',
+} as const;
+
+export interface AppSessionStartedEvent {
+  name: AppSessionStartedEventName;
+  eventId: string;
+  sessionId: string;
+  occurredAt: string;
+  platform: AppSessionStartedEventPlatform;
+  /** @pattern ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ */
+  appVersion: string;
+  /** @nullable */
+  cityId: string | null;
+}
+
+export type StoreViewedEventName = typeof StoreViewedEventName[keyof typeof StoreViewedEventName];
+
+
+export const StoreViewedEventName = {
+  store_viewed: 'store_viewed',
+} as const;
+
+export interface StoreViewedEvent {
+  name: StoreViewedEventName;
+  eventId: string;
+  sessionId: string;
+  occurredAt: string;
+  storeId: string;
+  origin: AnalyticsOrigin;
+}
+
+export type ProductViewedEventName = typeof ProductViewedEventName[keyof typeof ProductViewedEventName];
+
+
+export const ProductViewedEventName = {
+  product_viewed: 'product_viewed',
+} as const;
+
+export interface ProductViewedEvent {
+  name: ProductViewedEventName;
+  eventId: string;
+  sessionId: string;
+  occurredAt: string;
+  storeId: string;
+  productId: string;
+  origin: AnalyticsOrigin;
+}
+
+export type ItemAddedEventName = typeof ItemAddedEventName[keyof typeof ItemAddedEventName];
+
+
+export const ItemAddedEventName = {
+  item_added: 'item_added',
+} as const;
+
+export interface ItemAddedEvent {
+  name: ItemAddedEventName;
+  eventId: string;
+  sessionId: string;
+  occurredAt: string;
+  storeId: string;
+  productId: string;
+}
+
+export type AnalyticsEvent = AppSessionStartedEvent | StoreViewedEvent | ProductViewedEvent | ItemAddedEvent;
+
+export interface AnalyticsEventsRequest {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  events: AnalyticsEvent[];
+}
+
+export interface AnalyticsIngestResult {
+  accepted: number;
+  duplicates: number;
+  /** Loja ou produto inexistente ou coleta desligada (`unknown_store`, `flag_off`). Limite de taxa NÃO descarta: responde 429 */
+  discarded: number;
+}
+
+/**
+ * Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente
+ */
+export interface AnalyticsCell {
+  suppressed: boolean;
+  /** @minimum 5 */
+  n?: number;
+}
+
+export interface AnalyticsAccessRow {
+  /**
+     * Id da loja, do produto ou da origem; nulo na linha "Outras"
+     * @nullable
+     */
+  key: string | null;
+  /** Nome, origem ou "Outras" / "Menos de 5" */
+  label: string;
+  isOther: boolean;
+  visits: AnalyticsCell;
+  productOpens: AnalyticsCell;
+  bagAdds: AnalyticsCell;
+}
+
+export type AnalyticsAccessReportPeriod = {
+  from: string;
+  /** Ontem (America/Sao_Paulo) */
+  to: string;
+};
+
+export type AnalyticsAccessReportGroupBy = typeof AnalyticsAccessReportGroupBy[keyof typeof AnalyticsAccessReportGroupBy];
+
+
+export const AnalyticsAccessReportGroupBy = {
+  store: 'store',
+  product: 'product',
+  origin: 'origin',
+} as const;
+
+export type AnalyticsAccessReportTotals = {
+  visits: number;
+  productOpens: number;
+  bagAdds: number;
+};
+
+/**
+ * Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento
+ */
+export type AnalyticsAccessReportDiscards = {
+  /** @minimum 0 */
+  rate_ip: number;
+  /** @minimum 0 */
+  rate_session: number;
+  /** @minimum 0 */
+  unknown_store: number;
+  /** @minimum 0 */
+  flag_off: number;
+};
+
+export interface AnalyticsAccessReport {
+  period: AnalyticsAccessReportPeriod;
+  groupBy: AnalyticsAccessReportGroupBy;
+  /** `atualizado_em` */
+  generatedAt: string;
+  /** `em_cache` */
+  cached: boolean;
+  /** Verdadeiro quando houve supressão: os totais vêm arredondados a múltiplo de 5 ("cerca de") */
+  approximateTotals: boolean;
+  totals: AnalyticsAccessReportTotals;
+  rows: AnalyticsAccessRow[];
+  /** @nullable */
+  nextCursor: string | null;
+  /** Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento */
+  discards?: AnalyticsAccessReportDiscards;
+}
+
+/**
  * Entrada inválida (campo desconhecido, formato ou tamanho). `errors[]` lista os campos.
  */
 export type ValidationErrorResponse = Problem;
@@ -7045,7 +8834,7 @@ export type ValidationErrorResponse = Problem;
 export type UnauthorizedResponse = Problem;
 
 /**
- * Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`)
+ * Sem permissão (ou `REAUTH_REQUIRED`, `MFA_REQUIRED`, `EMAIL_VERIFICATION_REQUIRED`; com `X-View-As`: `VIEW_AS_READ_ONLY` para método, rota fora da lista ou cabeçalho vazio ou repetido; `VIEW_AS_EXPIRED` para credencial malformada, vencida, encerrada ou de outra loja, admin ou sessão)
  */
 export type ForbiddenResponse = Problem;
 
@@ -7073,6 +8862,31 @@ export type UnprocessableResponse = Problem;
  * Limite de tentativas. Header `Retry-After` em segundos.
  */
 export type TooManyRequestsResponse = Problem;
+
+/**
+ * Indisponibilidade momentânea sob saturação (pool do banco esgotado ou consulta cancelada por tempo, BUG-035): `code` `SERVICE_UNAVAILABLE`, `Retry-After` em segundos, sem pilha nem SQL. O app tenta de novo depois do prazo. Não é erro do pedido
+ */
+export type ServiceUnavailableResponse = Problem;
+
+/**
+ * Corpo acima do limite da rota (`code` `PAYLOAD_TOO_LARGE`)
+ */
+export type PayloadTooLargeResponse = Problem;
+
+/**
+ * `PRODUCT_VERSION_CONFLICT`: o produto mudou depois da versão informada ("O lojista alterou este produto agora"); traz a versão atual em `current` (só neste `code`). Também cobre as demais regras de conflito da rota (`STOCK_BELOW_RESERVED`, `STORE_NOT_APPROVED`, `OPEN_ORDERS`, `IDEMPOTENCY_IN_PROGRESS`), que mantêm o corpo antigo do `Problem` (sem `current`); por isso `current` é opcional no schema (tech-lead I1)
+ */
+export type ProductVersionConflictResponse = ProductVersionConflictProblem;
+
+/**
+ * 409 das ações em massa: `BULK_VERSION_CONFLICT` (algum item mudou depois da prévia: `conflicts` com a versão atual; nada é aplicado), além de `STORE_NOT_APPROVED` e `IDEMPOTENCY_IN_PROGRESS` com o corpo antigo do `Problem`
+ */
+export type BulkVersionConflictResponse = BulkVersionConflictProblem;
+
+/**
+ * 422 do lote de rascunhos: validação (`VALIDATION_FAILED`) ou `DRAFT_LIMIT_REACHED` com `limit`, `draftCount` e `slotsAvailable` (`DraftLimitProblem`)
+ */
+export type DraftLimitUnprocessableResponse = DraftLimitProblem;
 
 /**
  * Cursor opaco devolvido em `nextCursor`
@@ -7106,6 +8920,21 @@ export type LngParameter = number;
  * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
  */
 export type LimitParameter = number;
+
+/**
+ * Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`
+ */
+export type IdempotencyKeyParameter = string;
+
+/**
+ * Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400
+ */
+export type IdempotencyKeyRequiredParameter = string;
+
+/**
+ * Opcional. `version` do produto que o app tem, como entity-tag entre aspas (RFC 9110): `If-Match: "7"`; o mesmo valor vem no cabeçalho `ETag` de `getProduct` e `getAdminStoreProduct`. Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir, mas a versão sobe (compatível com o app 1.0). Valor fora do formato: 400 `VALIDATION_FAILED`
+ */
+export type IfMatchVersionParameter = string;
 
 export type ListAuditLogParams = {
   actorId?: string;
@@ -7891,8 +9720,17 @@ export type ListStoreActivity200 = {
 };
 
 export type ListAdminStoresParams = {
-  /** Padrão: in_review */
+  /** Padrão: in_review. `all` = todas (v1.1 R1) */
   status?: ListAdminStoresStatus;
+  /**
+   * v1.1 R1: nome da loja ou cidade (até 80 caracteres)
+   * @maxLength 80
+   */
+  q?: string;
+  /** v1.1 R1: só lojas aprovadas sem produto ativo */
+  noActiveProduct?: ListAdminStoresNoActiveProduct;
+  /** v1.1 R1: só lojas com comissão própria */
+  ownCommission?: ListAdminStoresOwnCommission;
   /**
    * Cursor opaco devolvido em `nextCursor`
    * @maxLength 200
@@ -7917,6 +9755,21 @@ export const ListAdminStoresStatus = {
   rejected: 'rejected',
   suspended: 'suspended',
   closed: 'closed',
+  all: 'all',
+} as const;
+
+export type ListAdminStoresNoActiveProduct = typeof ListAdminStoresNoActiveProduct[keyof typeof ListAdminStoresNoActiveProduct];
+
+
+export const ListAdminStoresNoActiveProduct = {
+  true: 'true',
+} as const;
+
+export type ListAdminStoresOwnCommission = typeof ListAdminStoresOwnCommission[keyof typeof ListAdminStoresOwnCommission];
+
+
+export const ListAdminStoresOwnCommission = {
+  true: 'true',
 } as const;
 
 export type ListAdminStores200 = {
@@ -7924,11 +9777,6 @@ export type ListAdminStores200 = {
   /** @nullable */
   nextCursor: string | null;
 };
-
-/**
- * Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
- */
-export type EditAdminStoreSettingsBody = { [key: string]: unknown };
 
 export type ListProductsParams = {
   status?: ListProductsStatus;
@@ -7969,6 +9817,30 @@ export const ListProductsLowStock = {
 export type ImportProductsParams = {
   mode?: ImportProductsMode;
   onExisting?: ImportProductsOnExisting;
+  /**
+   * v1.1 R1: coluna do nome (1 a 50)
+   * @minimum 1
+   * @maximum 50
+   */
+  nameColumn?: number;
+  /**
+   * v1.1 R1: coluna do preço
+   * @minimum 1
+   * @maximum 50
+   */
+  priceColumn?: number;
+  /**
+   * v1.1 R1: coluna do estoque
+   * @minimum 1
+   * @maximum 50
+   */
+  stockColumn?: number;
+  /**
+   * v1.1 R1: coluna do tamanho (opcional)
+   * @minimum 1
+   * @maximum 50
+   */
+  sizeColumn?: number;
 };
 
 export type ImportProductsMode = typeof ImportProductsMode[keyof typeof ImportProductsMode];
@@ -9143,6 +11015,197 @@ export type ReplyToReview200 = {
   storeReply: string;
   storeRepliedAt: string;
 };
+
+export type ListProductDraftsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListProductTableParams = {
+  /** @maxLength 80 */
+  q?: string;
+  status?: ListProductTableStatus;
+  sectionId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListProductTableStatus = typeof ListProductTableStatus[keyof typeof ListProductTableStatus];
+
+
+export const ListProductTableStatus = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export type ListBulkBatchesParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListStoreAdminChangesParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type GetProductCreationMetricsParams = {
+  days?: GetProductCreationMetricsDays;
+  groupBy?: GetProductCreationMetricsGroupBy;
+  storeId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type GetProductCreationMetricsDays = typeof GetProductCreationMetricsDays[keyof typeof GetProductCreationMetricsDays];
+
+
+export const GetProductCreationMetricsDays = {
+  NUMBER_7: 7,
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+} as const;
+
+export type GetProductCreationMetricsGroupBy = typeof GetProductCreationMetricsGroupBy[keyof typeof GetProductCreationMetricsGroupBy];
+
+
+export const GetProductCreationMetricsGroupBy = {
+  via: 'via',
+  store: 'store',
+} as const;
+
+export type ListAdminStoreHistoryParams = {
+  type?: StoreHistoryType;
+  actorAdminId?: string;
+  from?: string;
+  to?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ExportAdminStoreHistoryParams = {
+  type?: StoreHistoryType;
+  actorAdminId?: string;
+  from?: string;
+  to?: string;
+};
+
+export type ListAdminStoreProductsParams = {
+  /** @maxLength 80 */
+  q?: string;
+  status?: ListAdminStoreProductsStatus;
+  sectionId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListAdminStoreProductsStatus = typeof ListAdminStoreProductsStatus[keyof typeof ListAdminStoreProductsStatus];
+
+
+export const ListAdminStoreProductsStatus = {
+  active: 'active',
+  paused: 'paused',
+  draft: 'draft',
+} as const;
+
+export type GetAdminAnalyticsAccessParams = {
+  days?: GetAdminAnalyticsAccessDays;
+  groupBy: GetAdminAnalyticsAccessGroupBy;
+  cityId?: string;
+  /** Obrigatório com `groupBy=product` ou `origin`: a quebra é sempre de UMA loja */
+  storeId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type GetAdminAnalyticsAccessDays = typeof GetAdminAnalyticsAccessDays[keyof typeof GetAdminAnalyticsAccessDays];
+
+
+export const GetAdminAnalyticsAccessDays = {
+  NUMBER_7: 7,
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+} as const;
+
+export type GetAdminAnalyticsAccessGroupBy = typeof GetAdminAnalyticsAccessGroupBy[keyof typeof GetAdminAnalyticsAccessGroupBy];
+
+
+export const GetAdminAnalyticsAccessGroupBy = {
+  store: 'store',
+  product: 'product',
+  origin: 'origin',
+} as const;
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -15204,7 +17267,7 @@ export const getGetAdminOrderUrl = (orderId: string,) => {
 }
 
 /**
- * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`.
+ * Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`. **Auditoria (WB-352 C14, DEC-121):** cada abertura da ficha grava `audit_log` (`admin.order.view`: admin, pedido, loja, hora; sem o conteúdo exibido), no máximo 1 linha por (admin, pedido) a cada 10 min para a recarga da tela não inflar a trilha [HIPÓTESE]; a linha é gravada antes de o dado ser devolvido, e a falha de gravação derruba a resposta (500, sem dado). É o único caminho de dado de cliente para o suporte; não há "Revelar" dado completo na v1.1. Esta rota não aceita `X-View-As` (403 `VIEW_AS_READ_ONLY`). Resposta `Cache-Control: private, no-store`.
  * @summary Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)
  */
 export const getAdminOrder = async (orderId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminOrderResponse> => {
@@ -15691,7 +17754,7 @@ export const getCreateUploadUrl = () => {
 }
 
 /**
- * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído.
+ * A chave do objeto é gerada pelo servidor; a policy fixa `Content-Type` e `content-length-range` (até `upload_max_mb`, 5 MB). Logo e capa: JPG/PNG/WebP; documento de loja também PDF. Exige membro da loja com a permissão da finalidade (documento, logo e capa: `settings`; foto de produto: `catalog`); quem não é da loja recebe 404. `banner` (imagem 2:1 da home): sem `storeId`, só admin com `banners:write` e MFA concluído. **v1.1 R1:** admin com `store-catalog:write` (super admin e operação) também pede `product_image` com o `storeId` da loja que está ajustando (WB-353 C8); o upload fica de dono = admin e o envio é auditado. Foto de produto aceita só JPEG, PNG ou WebP (sem SVG e sem HEIC; o app converte no aparelho), até 5 MB e 40 MP, sem animação, assinatura dos bytes conferida (C-CAD-01).
  * @summary Pedir um upload (POST pré-assinado)
  */
 export const createUpload = async (uploadCreateRequest: UploadCreateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createUploadResponse> => {
@@ -15755,7 +17818,7 @@ export const getCompleteUploadUrl = (id: string,) => {
 }
 
 /**
- * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
+ * Confere dono, tamanho e magic bytes; mede a imagem (máx. 40 MP); recusa SVG, HTML e GIF animado; gera variantes WebP 160/400/800/1600 sem EXIF/GPS no bucket público (logo, capa, produto). **v1.1 R1 (SEC-195, C-CAD-02):** nenhum objeto da foto de produto, variantes OU original, mantém EXIF/GPS (o original é substituído pela versão recodificada sem metadados, ou apagado depois das variantes). Documento fica só no bucket privado. Idempotente: repetir devolve o resultado. 422 `UPLOAD_REJECTED` com o motivo (o objeto é apagado).
  * @summary Concluir o upload (valida e processa)
  */
 export const completeUpload = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<completeUploadResponse> => {
@@ -15943,15 +18006,25 @@ export type getStoreResponse401 = {
   status: 401
 }
 
+export type getStoreResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
 export type getStoreResponse404 = {
   data: NotFoundResponse
   status: 404
 }
 
+export type getStoreResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreResponseSuccess = (getStoreResponse200) & {
   headers: Headers;
 };
-export type getStoreResponseError = (getStoreResponse401 | getStoreResponse404) & {
+export type getStoreResponseError = (getStoreResponse401 | getStoreResponse403 | getStoreResponse404 | getStoreResponse429) & {
   headers: Headers;
 };
 
@@ -16314,10 +18387,15 @@ export type getStoreSettingsResponse404 = {
   status: 404
 }
 
+export type getStoreSettingsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreSettingsResponseSuccess = (getStoreSettingsResponse200) & {
   headers: Headers;
 };
-export type getStoreSettingsResponseError = (getStoreSettingsResponse401 | getStoreSettingsResponse403 | getStoreSettingsResponse404) & {
+export type getStoreSettingsResponseError = (getStoreSettingsResponse401 | getStoreSettingsResponse403 | getStoreSettingsResponse404 | getStoreSettingsResponse429) & {
   headers: Headers;
 };
 
@@ -17755,7 +19833,7 @@ export const getListAdminStoresUrl = (params?: ListAdminStoresParams,) => {
 }
 
 /**
- * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida".
+ * Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em "correção pedida". **v1.1 R1 (WB-350):** `status=all`, busca `q` por nome ou cidade e os atalhos `noActiveProduct` (loja aprovada sem produto ativo: a loja a ativar) e `ownCommission`; os itens ganham `activeProducts`, `orders30d`, `sales30dCents`, `commissionPct` e `commissionSource` (campos novos, opcionais). Páginas de até 50 (a tela pede 25 ou 50; 100 não cabe no limite de 3G).
  * @summary Fila de lojas
  */
 export const listAdminStores = async (params?: ListAdminStoresParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminStoresResponse> => {
@@ -17820,76 +19898,6 @@ export const getAdminStore = async (storeId: string, options?: Parameters<typeof
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type editAdminStoreResponse200 = {
-  data: Store
-  status: 200
-}
-
-export type editAdminStoreResponse400 = {
-  data: ValidationErrorResponse
-  status: 400
-}
-
-export type editAdminStoreResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type editAdminStoreResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type editAdminStoreResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type editAdminStoreResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type editAdminStoreResponse422 = {
-  data: UnprocessableResponse
-  status: 422
-}
-
-export type editAdminStoreResponseSuccess = (editAdminStoreResponse200) & {
-  headers: Headers;
-};
-export type editAdminStoreResponseError = (editAdminStoreResponse400 | editAdminStoreResponse401 | editAdminStoreResponse403 | editAdminStoreResponse404 | editAdminStoreResponse409 | editAdminStoreResponse422) & {
-  headers: Headers;
-};
-
-export type editAdminStoreResponse = (editAdminStoreResponseSuccess | editAdminStoreResponseError)
-
-export const getEditAdminStoreUrl = (storeId: string,) => {
-
-
-
-
-  return `/v1/admin/stores/${storeId}`
-}
-
-/**
- * Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
- * @summary Editar dados da loja
- */
-export const editAdminStore = async (storeId: string,
-    adminStorePatchRequest: AdminStorePatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreResponse> => {
-
-  return apiFetch<editAdminStoreResponse>(getEditAdminStoreUrl(storeId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
-    body: JSON.stringify(adminStorePatchRequest)
   }
 );}
 
@@ -18275,73 +20283,6 @@ export const suspendStore = async (storeId: string,
 
 
 
-export type editAdminStoreSettingsResponse204 = {
-  data: void
-  status: 204
-}
-
-export type editAdminStoreSettingsResponse400 = {
-  data: ValidationErrorResponse
-  status: 400
-}
-
-export type editAdminStoreSettingsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type editAdminStoreSettingsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type editAdminStoreSettingsResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type editAdminStoreSettingsResponse422 = {
-  data: UnprocessableResponse
-  status: 422
-}
-
-export type editAdminStoreSettingsResponseSuccess = (editAdminStoreSettingsResponse204) & {
-  headers: Headers;
-};
-export type editAdminStoreSettingsResponseError = (editAdminStoreSettingsResponse400 | editAdminStoreSettingsResponse401 | editAdminStoreSettingsResponse403 | editAdminStoreSettingsResponse404 | editAdminStoreSettingsResponse422) & {
-  headers: Headers;
-};
-
-export type editAdminStoreSettingsResponse = (editAdminStoreSettingsResponseSuccess | editAdminStoreSettingsResponseError)
-
-export const getEditAdminStoreSettingsUrl = (storeId: string,
-    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',) => {
-
-
-
-
-  return `/v1/admin/stores/${storeId}/settings/${section}`
-}
-
-/**
- * Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
- * @summary Editar configuração da loja (admin)
- */
-export const editAdminStoreSettings = async (storeId: string,
-    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',
-    editAdminStoreSettingsBody: EditAdminStoreSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreSettingsResponse> => {
-
-  return apiFetch<editAdminStoreSettingsResponse>(getEditAdminStoreSettingsUrl(storeId,section),
-  {
-    ...options,
-    method: 'PUT',
-    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
-    body: JSON.stringify(editAdminStoreSettingsBody)
-  }
-);}
-
-
-
 export type releaseStorePaymentAccountResponse204 = {
   data: void
   status: 204
@@ -18499,10 +20440,15 @@ export type listProductsResponse404 = {
   status: 404
 }
 
+export type listProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listProductsResponseSuccess = (listProductsResponse200) & {
   headers: Headers;
 };
-export type listProductsResponseError = (listProductsResponse400 | listProductsResponse401 | listProductsResponse403 | listProductsResponse404) & {
+export type listProductsResponseError = (listProductsResponse400 | listProductsResponse401 | listProductsResponse403 | listProductsResponse404 | listProductsResponse429) & {
   headers: Headers;
 };
 
@@ -18600,7 +20546,7 @@ export const getCreateProductUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. **v1.1 R1:** também `DRAFT_LIMIT_REACHED` (100 rascunhos por loja, parâmetro `rascunhos_max_por_loja`, DEC-118; vale para todo caminho que cria rascunho, e a contagem é serializada por loja). O cadastro rápido usa `createProductDraft`.
  * @summary Criar produto (rascunho)
  */
 export const createProduct = async (storeId: string,
@@ -18737,19 +20683,19 @@ export const getImportProductsUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula; até 1 MB e 500 linhas). `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Corpo `text/csv` (UTF-8, vírgula ou ponto e vírgula) **ou, na v1.1 R1 (WB-376 C6, C9, C-CAD-05), `.xlsx`**; até 1 MB e **1.000 linhas** (`import_max_linhas` sobe de 500 para 1.000; 1.001 linhas ou arquivo maior: 422 `IMPORT_FILE_INVALID` e nada é criado). **SEC-213 (a importação é edição de catálogo):** `mode=commit` com `onExisting=update` que muda preço ou estoque sobe `products.version` UMA vez por produto alterado (uma prévia de reajuste aberta antes vira 409 `BULK_VERSION_CONFLICT`) e grava antes/depois no histórico da loja (`product.price`, `product.stock_adjust`, com `store_id`), na mesma transação; produto que a planilha deixa igual não é tocado. Produtos NOVOS contam no teto de rascunhos (`rascunhos_max_por_loja`, DEC-118): acima dele, 422 `DRAFT_LIMIT_REACHED` e nada é criado nem atualizado (tudo ou nada). Com `Idempotency-Key` (só no `commit`), a chave, o efeito e a resposta são gravados NA MESMA transação, com escopo por loja e usuário: repetir devolve a mesma resposta sem duplicar; corpo diferente com a mesma chave: 422 `IDEMPOTENCY_KEY_REUSED`; erro (teto, planilha) libera a chave. Planilha: lê VALORES e nunca avalia fórmula; limite de descompressão (bomba de zip recusada); macros e vínculos externos ignorados; fórmula e HTML em texto saem literais e escapados em qualquer CSV (C-CAD-04). **Mapeamento de colunas:** `nameColumn`, `priceColumn`, `stockColumn` e `sizeColumn` (índice da coluna, a partir de 1) quando o cabeçalho não bate com o modelo; no `preview` a resposta traz `headers`, `suggestedMapping` e as 3 primeiras linhas em `sampleRows`. `commit` cria rascunhos (via `spreadsheet`), sem foto: a etapa de fotos vem depois (RN-Q8). Aceita `Idempotency-Key`: repetir o `commit` não duplica. `mode=preview` valida e devolve o resumo com linha e motivo de cada erro; `mode=commit` cria só as válidas, como rascunho. Mesmo código (SKU) já existente: `onExisting=skip` ignora, `update` atualiza preço e estoque. Sem coluna de foto (WB-065 C6). Cabeçalho errado ou arquivo grande: 422 `IMPORT_FILE_INVALID` e nada é criado.
  * @summary Importar produtos por planilha (CSV)
  */
 export const importProducts = async (storeId: string,
-    importProductsBody: string,
+    importProductsBody: string | Blob,
     params?: ImportProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<importProductsResponse> => {
 
   return apiFetch<importProductsResponse>(getImportProductsUrl(storeId,params),
   {
     ...options,
-    method: 'POST',
-    headers: getHeaders({ 'Content-Type': 'text/csv' }, options?.headers),
-    body: JSON.stringify(importProductsBody)
+    method: 'POST'
+    ,
+    body: importProductsBody
   }
 );}
 
@@ -18781,7 +20727,7 @@ export type bulkProductsResponse404 = {
 }
 
 export type bulkProductsResponse409 = {
-  data: ConflictResponse
+  data: BulkVersionConflictResponse
   status: 409
 }
 
@@ -18808,7 +20754,7 @@ export const getBulkProductsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`).
  * @summary Ação em massa
  */
 export const bulkProducts = async (storeId: string,
@@ -18845,10 +20791,15 @@ export type getProductResponse404 = {
   status: 404
 }
 
+export type getProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getProductResponseSuccess = (getProductResponse200) & {
   headers: Headers;
 };
-export type getProductResponseError = (getProductResponse401 | getProductResponse403 | getProductResponse404) & {
+export type getProductResponseError = (getProductResponse401 | getProductResponse403 | getProductResponse404 | getProductResponse429) & {
   headers: Headers;
 };
 
@@ -18907,7 +20858,7 @@ export type updateProductResponse404 = {
 }
 
 export type updateProductResponse409 = {
-  data: ConflictResponse
+  data: ProductVersionConflictResponse
   status: 409
 }
 
@@ -18935,7 +20886,7 @@ export const getUpdateProductUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Promoção é do produto (data e hora; o fim vale até o último milissegundo do minuto informado). 422 `PROMOTION_INVALID` (promocional >= normal ou fim antes do início). Baixar o preço normal abaixo ou igual à promoção também é 422. **v1.1 R1:** `If-Match` com a `version` (409 `PRODUCT_VERSION_CONFLICT`); `description` pode ser limpa em rascunho; categoria com `descriptionRequired` (modelo da categoria) exige descrição de no mínimo `descriptionMinChars` ao publicar (422 `DESCRIPTION_REQUIRED`), nas duas vias. Preço do lojista não pede confirmação do servidor: a confirmação inline acima de `reajuste_max_pct` é da tela (WB-377 C8).
  * @summary Editar produto e promoção
  */
 export const updateProduct = async (storeId: string,
@@ -19040,7 +20991,7 @@ export type setProductVariantsResponse404 = {
 }
 
 export type setProductVariantsResponse409 = {
-  data: ConflictResponse
+  data: ProductVersionConflictResponse
   status: 409
 }
 
@@ -19068,7 +21019,7 @@ export const getSetProductVariantsUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 3 atributos e `variacoes_max` (100) combinações; estoque de 0 a 99.999; SKU único na loja. Variação existente vai por `id`; a que sumiu da lista é desativada. 409 `STOCK_BELOW_RESERVED` ("X unidades estão reservadas em pedidos"). 422 `VARIANTS_INVALID` (combinação repetida, atributos demais) e `SKU_IN_USE`. **v1.1 R1 (grade, WB-374):** a tabela tamanho x cor é gerada NO APP e salva aqui (até `variacoes_max`, 100); remover combinação com unidades reservadas é 409 `STOCK_BELOW_RESERVED` ("X unidades reservadas"); preço por combinação em `priceCents`. `If-Match` com a `version` do produto (409 `PRODUCT_VERSION_CONFLICT`).
  * @summary Definir variações e estoque
  */
 export const setProductVariants = async (storeId: string,
@@ -19112,7 +21063,7 @@ export type adjustVariantStockResponse404 = {
 }
 
 export type adjustVariantStockResponse409 = {
-  data: ConflictResponse
+  data: ProductVersionConflictResponse
   status: 409
 }
 
@@ -19141,7 +21092,7 @@ export const getAdjustVariantStockUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). `{ delta }` ou `{ set }`, sob lock da variação: dois +1 simultâneos dão +2. Não deixa o estoque abaixo do reservado (409 `STOCK_BELOW_RESERVED`) nem fora de 0..99.999 (422). Estoque baixo (disponível <= limite da loja) avisa o dono por e-mail 1 vez e rearma quando sobe acima do limite. **v1.1 R1:** `If-Match` com a `version` do produto (edição em linha da tabela: "Este produto foi alterado agora"). **SEC-218 (idempotência transacional):** com `Idempotency-Key`, a chave, o ajuste, a subida de `version`, a auditoria e a resposta guardada são gravados NA MESMA transação; `{ delta }` repetido com a mesma chave e o mesmo corpo devolve a mesma resposta e soma UMA vez (nem depois de queda do servidor, nem depois de 120 s); corpo diferente com a mesma chave: 422 `IDEMPOTENCY_KEY_REUSED`; erro (409 `STOCK_BELOW_RESERVED`, 409 `PRODUCT_VERSION_CONFLICT`) desfaz tudo e libera a chave, então a repetição reavalia. A chave vale por loja e por usuário. Sem a chave (app 1.0) o ajuste continua funcionando, sem proteção contra repetição.
  * @summary Ajuste rápido de estoque
  */
 export const adjustVariantStock = async (storeId: string,
@@ -19186,7 +21137,7 @@ export type setProductImagesResponse404 = {
 }
 
 export type setProductImagesResponse409 = {
-  data: ConflictResponse
+  data: ProductVersionConflictResponse
   status: 409
 }
 
@@ -19214,7 +21165,7 @@ export const getSetProductImagesUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Até 8 fotos (422 `TOO_MANY_IMAGES`), cada uma um upload `product_image` concluído da mesma loja (`/uploads`). As variantes WebP redimensionadas vêm em `urls`. **v1.1 R1:** `If-Match` com a `version` do produto; o envio das fotos é em segundo plano e o produto não publica enquanto a capa não terminar de subir (o app espera; o servidor recusa publicar sem foto concluída: 422 `PRODUCT_INCOMPLETE`).
  * @summary Definir fotos (ordem = posição; a 1ª é a capa)
  */
 export const setProductImages = async (storeId: string,
@@ -19253,7 +21204,7 @@ export type publishProductResponse404 = {
 }
 
 export type publishProductResponse409 = {
-  data: ConflictResponse
+  data: ProductVersionConflictResponse
   status: 409
 }
 
@@ -19281,7 +21232,7 @@ export const getPublishProductUrl = (storeId: string,
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Lista TODOS os campos que faltam num único 422 `PRODUCT_INCOMPLETE` (nome, categoria, preço, 1 foto, 1 variação). Palavra suspeita não bloqueia: o produto entra em `moderationStatus: review`. 403 `PRODUCT_MODERATED` se a moderação pausou ou removeu. **v1.1 R1:** categoria com `descriptionRequired` e descrição vazia ou menor que `descriptionMinChars`: 422 `DESCRIPTION_REQUIRED` (no campo `description`); `If-Match` com a `version`; grava `product_create_published` com `duration_s` e `via` (WB-379) e, se o produto vier de rascunho aberto em 2 aparelhos, 409 `PRODUCT_VERSION_CONFLICT`. Nada digitado se perde em nenhum erro.
  * @summary Publicar produto
  */
 export const publishProduct = async (storeId: string,
@@ -19293,6 +21244,83 @@ export const publishProduct = async (storeId: string,
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type quickPublishProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type quickPublishProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type quickPublishProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type quickPublishProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type quickPublishProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type quickPublishProductResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type quickPublishProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type quickPublishProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type quickPublishProductResponseSuccess = (quickPublishProductResponse200) & {
+  headers: Headers;
+};
+export type quickPublishProductResponseError = (quickPublishProductResponse400 | quickPublishProductResponse401 | quickPublishProductResponse403 | quickPublishProductResponse404 | quickPublishProductResponse409 | quickPublishProductResponse422 | quickPublishProductResponse429) & {
+  headers: Headers;
+};
+
+export type quickPublishProductResponse = (quickPublishProductResponseSuccess | quickPublishProductResponseError)
+
+export const getQuickPublishProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/quick-publish`
+}
+
+/**
+ * O "publicar em 2 campos" é UMA transação (tech-lead I11, decisão do CEO): grava nome, preço, categoria, descrição (se a categoria exige), as fotos já enviadas, a variação padrão com `stock` (1 se omitido) e publica. Sem isto o caminho mínimo eram 7 a 8 chamadas em série (`updateProduct`, `setProductVariants`, `setProductImages`, `publishProduct`...), inviável em 3G com RTT de 0,4 a 1 s para a meta de 60 s; agora, depois da foto, é 1 chamada (os 3 passos de upload correm em segundo plano enquanto o lojista digita). Serve ao produto SEM grade: rascunho que já tem variações com atributos é 422 `QUICK_PUBLISH_NOT_APPLICABLE` e segue por `setProductVariants` e `publishProduct`. **Tudo ou nada:** qualquer erro desfaz a transação e nada digitado se perde no app. As regras são as de `publishProduct` e `updateProduct`, sem exceção (moderação, `PRODUCT_INCOMPLETE` com a lista do que falta, `DESCRIPTION_REQUIRED`, `CATEGORY_FORBIDDEN`, `PRICE_OUT_OF_RANGE`, `PRODUCT_MODERATED`). `If-Match` com a `version` do rascunho (409 `PRODUCT_VERSION_CONFLICT`); `Idempotency-Key` obrigatória (toque duplo ou repetição por 3G publica uma vez só: mesma chave e mesmo corpo devolvem o mesmo produto). Grava `product_create_published` com `duration_s` e `via` (WB-379). Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. A versão sobe uma vez (a transação é UMA edição de catálogo). **Foto ainda em processamento (R6 b):** `imageIds` cuja conclusão do upload ainda não terminou (original recodificado e variantes) = 422 `UPLOAD_NOT_READY` com `imageIds` pendentes em `errors`; é transitório: o app espera (poucos segundos) e repete com a MESMA `Idempotency-Key`, sem mostrar erro (nada foi gravado). **SEC-214 (só rascunho):** produto que já está `active` ou `paused` é 409 `QUICK_PUBLISH_NOT_APPLICABLE` e nada é gravado (edite pela ficha: `updateProduct`, `setProductImages`, `adjustVariantStock`); promoção que o rascunho já tem precisa continuar válida com o preço novo (422 `PROMOTION_INVALID`); `stock` menor que o reservado é 409 `STOCK_BELOW_RESERVED`. **Resposta perdida (R6 a):** repetir depois de o servidor ter publicado devolve 409 `QUICK_PUBLISH_NOT_APPLICABLE` (produto já ativo) ou 409 `PRODUCT_VERSION_CONFLICT` (a versão subiu) quando a chave não tem mais resposta guardada; o app, ao receber 409 nesta rota, reconsulta o produto (`getProduct`) e trata `status = active` com os mesmos dados como SUCESSO. **Medição (R6 c):** `duration_s` conta da criação do rascunho; a mediana da meta de 60 s usa só o cadastro contínuo (E-8, D11).
+ * @summary Publicar o rascunho com nome e preço, numa chamada só (WB-370 C3, R-36)
+ */
+export const quickPublishProduct = async (storeId: string,
+    productId: string,
+    quickPublishRequest: QuickPublishRequest, options?: Parameters<typeof apiFetch>[1]): Promise<quickPublishProductResponse> => {
+
+  return apiFetch<quickPublishProductResponse>(getQuickPublishProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(quickPublishRequest)
   }
 );}
 
@@ -19450,10 +21478,15 @@ export type listSectionsResponse404 = {
   status: 404
 }
 
+export type listSectionsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listSectionsResponseSuccess = (listSectionsResponse200) & {
   headers: Headers;
 };
-export type listSectionsResponseError = (listSectionsResponse401 | listSectionsResponse403 | listSectionsResponse404) & {
+export type listSectionsResponseError = (listSectionsResponse401 | listSectionsResponse403 | listSectionsResponse404 | listSectionsResponse429) & {
   headers: Headers;
 };
 
@@ -22166,10 +24199,15 @@ export type listStoreOrdersResponse404 = {
   status: 404
 }
 
+export type listStoreOrdersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreOrdersResponseSuccess = (listStoreOrdersResponse200) & {
   headers: Headers;
 };
-export type listStoreOrdersResponseError = (listStoreOrdersResponse400 | listStoreOrdersResponse401 | listStoreOrdersResponse403 | listStoreOrdersResponse404) & {
+export type listStoreOrdersResponseError = (listStoreOrdersResponse400 | listStoreOrdersResponse401 | listStoreOrdersResponse403 | listStoreOrdersResponse404 | listStoreOrdersResponse429) & {
   headers: Headers;
 };
 
@@ -22229,10 +24267,15 @@ export type countStoreOrdersResponse404 = {
   status: 404
 }
 
+export type countStoreOrdersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type countStoreOrdersResponseSuccess = (countStoreOrdersResponse200) & {
   headers: Headers;
 };
-export type countStoreOrdersResponseError = (countStoreOrdersResponse401 | countStoreOrdersResponse403 | countStoreOrdersResponse404) & {
+export type countStoreOrdersResponseError = (countStoreOrdersResponse401 | countStoreOrdersResponse403 | countStoreOrdersResponse404 | countStoreOrdersResponse429) & {
   headers: Headers;
 };
 
@@ -22283,10 +24326,15 @@ export type getStoreOrderResponse404 = {
   status: 404
 }
 
+export type getStoreOrderResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreOrderResponseSuccess = (getStoreOrderResponse200) & {
   headers: Headers;
 };
-export type getStoreOrderResponseError = (getStoreOrderResponse401 | getStoreOrderResponse403 | getStoreOrderResponse404) & {
+export type getStoreOrderResponseError = (getStoreOrderResponse401 | getStoreOrderResponse403 | getStoreOrderResponse404 | getStoreOrderResponse429) & {
   headers: Headers;
 };
 
@@ -23767,10 +25815,15 @@ export type listStoreExchangesResponse404 = {
   status: 404
 }
 
+export type listStoreExchangesResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreExchangesResponseSuccess = (listStoreExchangesResponse200) & {
   headers: Headers;
 };
-export type listStoreExchangesResponseError = (listStoreExchangesResponse401 | listStoreExchangesResponse403 | listStoreExchangesResponse404) & {
+export type listStoreExchangesResponseError = (listStoreExchangesResponse401 | listStoreExchangesResponse403 | listStoreExchangesResponse404 | listStoreExchangesResponse429) & {
   headers: Headers;
 };
 
@@ -23830,10 +25883,15 @@ export type getStoreExchangeResponse404 = {
   status: 404
 }
 
+export type getStoreExchangeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreExchangeResponseSuccess = (getStoreExchangeResponse200) & {
   headers: Headers;
 };
-export type getStoreExchangeResponseError = (getStoreExchangeResponse401 | getStoreExchangeResponse403 | getStoreExchangeResponse404) & {
+export type getStoreExchangeResponseError = (getStoreExchangeResponse401 | getStoreExchangeResponse403 | getStoreExchangeResponse404 | getStoreExchangeResponse429) & {
   headers: Headers;
 };
 
@@ -25023,7 +27081,7 @@ export const getRequestDataExportUrl = () => {
 }
 
 /**
- * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`).
+ * Assíncrono: 202 e a varredura monta o arquivo (JSON) em segundo plano; o e-mail avisa quando ficar pronto (sem link nem dado). Exige e-mail confirmado (403 `EMAIL_VERIFICATION_REQUIRED`, SEC-008) e a senha (403 `INVALID_PASSWORD`, no limite do login). 409 `EXPORT_IN_PROGRESS`; 429 `EXPORT_DAILY_LIMIT` (1 por dia, com `Retry-After`). **v1.1 R1 (WB-369 C1, SEC-194):** o arquivo ganha `notices.measurement` com o texto "A medição de uso não está ligada à sua conta e fica guardada por até 90 dias; por isso não entra neste arquivo" (nunca "anônima"); a coleta não tem coluna ligada a `users`, então nada dela entra no arquivo nem precisa ser apagado na exclusão da conta.
  * @summary Pedir a exportação dos meus dados (senha)
  */
 export const requestDataExport = async (dataExportRequest: DataExportRequest, options?: Parameters<typeof apiFetch>[1]): Promise<requestDataExportResponse> => {
@@ -26042,10 +28100,15 @@ export type getStoreReviewsSummaryResponse404 = {
   status: 404
 }
 
+export type getStoreReviewsSummaryResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type getStoreReviewsSummaryResponseSuccess = (getStoreReviewsSummaryResponse200) & {
   headers: Headers;
 };
-export type getStoreReviewsSummaryResponseError = (getStoreReviewsSummaryResponse401 | getStoreReviewsSummaryResponse403 | getStoreReviewsSummaryResponse404) & {
+export type getStoreReviewsSummaryResponseError = (getStoreReviewsSummaryResponse401 | getStoreReviewsSummaryResponse403 | getStoreReviewsSummaryResponse404 | getStoreReviewsSummaryResponse429) & {
   headers: Headers;
 };
 
@@ -28756,10 +30819,15 @@ export type listStoreReviewsResponse404 = {
   status: 404
 }
 
+export type listStoreReviewsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
 export type listStoreReviewsResponseSuccess = (listStoreReviewsResponse200) & {
   headers: Headers;
 };
-export type listStoreReviewsResponseError = (listStoreReviewsResponse400 | listStoreReviewsResponse401 | listStoreReviewsResponse403 | listStoreReviewsResponse404) & {
+export type listStoreReviewsResponseError = (listStoreReviewsResponse400 | listStoreReviewsResponse401 | listStoreReviewsResponse403 | listStoreReviewsResponse404 | listStoreReviewsResponse429) & {
   headers: Headers;
 };
 
@@ -28914,6 +30982,2327 @@ export const deleteReviewReply = async (storeId: string,
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getCatalogQuickStartResponse200 = {
+  data: CatalogQuickStart
+  status: 200
+}
+
+export type getCatalogQuickStartResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCatalogQuickStartResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getCatalogQuickStartResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getCatalogQuickStartResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type getCatalogQuickStartResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type getCatalogQuickStartResponseSuccess = (getCatalogQuickStartResponse200) & {
+  headers: Headers;
+};
+export type getCatalogQuickStartResponseError = (getCatalogQuickStartResponse401 | getCatalogQuickStartResponse403 | getCatalogQuickStartResponse404 | getCatalogQuickStartResponse409 | getCatalogQuickStartResponse503) & {
+  headers: Headers;
+};
+
+export type getCatalogQuickStartResponse = (getCatalogQuickStartResponseSuccess | getCatalogQuickStartResponseError)
+
+export const getGetCatalogQuickStartUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/catalog/quick-start`
+}
+
+/**
+ * Uma chamada só para a tela de Produtos e o "Novo produto" (3G): categoria sugerida (a última usada pela loja ou a mais frequente), rascunho mais recente ("Continuar de onde parei"), contagem e limite de rascunhos, quantos produtos ativos estão sem descrição e os limites que o app usa na tela (`variacoes_max`, `reajuste_max_pct`). Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Sem dado de cliente.
+ * @summary Dados de partida da tela Produtos (WB-370, WB-371, RN-Q1)
+ */
+export const getCatalogQuickStart = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getCatalogQuickStartResponse> => {
+
+  return apiFetch<getCatalogQuickStartResponse>(getGetCatalogQuickStartUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listProductDraftsResponse200 = {
+  data: ProductDraftPage
+  status: 200
+}
+
+export type listProductDraftsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listProductDraftsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listProductDraftsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listProductDraftsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listProductDraftsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type listProductDraftsResponseSuccess = (listProductDraftsResponse200) & {
+  headers: Headers;
+};
+export type listProductDraftsResponseError = (listProductDraftsResponse400 | listProductDraftsResponse401 | listProductDraftsResponse403 | listProductDraftsResponse404 | listProductDraftsResponse409) & {
+  headers: Headers;
+};
+
+export type listProductDraftsResponse = (listProductDraftsResponseSuccess | listProductDraftsResponseError)
+
+export const getListProductDraftsUrl = (storeId: string,
+    params?: ListProductDraftsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/product-drafts?${stringifiedParams}` : `/v1/stores/${storeId}/product-drafts`
+}
+
+/**
+ * Aba "Rascunhos (n)" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (100, parâmetro `rascunhos_max_por_loja`) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Rascunhos da loja (WB-371)
+ */
+export const listProductDrafts = async (storeId: string,
+    params?: ListProductDraftsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listProductDraftsResponse> => {
+
+  return apiFetch<listProductDraftsResponse>(getListProductDraftsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createProductDraftResponse201 = {
+  data: Product
+  status: 201
+}
+
+export type createProductDraftResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createProductDraftResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createProductDraftResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createProductDraftResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createProductDraftResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createProductDraftResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createProductDraftResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createProductDraftResponseSuccess = (createProductDraftResponse201) & {
+  headers: Headers;
+};
+export type createProductDraftResponseError = (createProductDraftResponse400 | createProductDraftResponse401 | createProductDraftResponse403 | createProductDraftResponse404 | createProductDraftResponse409 | createProductDraftResponse422 | createProductDraftResponse429) & {
+  headers: Headers;
+};
+
+export type createProductDraftResponse = (createProductDraftResponseSuccess | createProductDraftResponseError)
+
+export const getCreateProductDraftUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/product-drafts`
+}
+
+/**
+ * O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: ""` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` ("Limite de 100 rascunhos", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` ("Esse tipo de produto não é permitido no Webag"; a tela mostra o link para os Termos do Lojista e "Escolher outra categoria"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos.
+ * @summary Abrir um rascunho ao tocar em "Novo produto" (WB-370 C1, WB-371, RN-Q2)
+ */
+export const createProductDraft = async (storeId: string,
+    createProductDraftRequest: CreateProductDraftRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createProductDraftResponse> => {
+
+  return apiFetch<createProductDraftResponse>(getCreateProductDraftUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createProductDraftRequest)
+  }
+);}
+
+
+
+export type createProductDraftsBatchResponse201 = {
+  data: CreateProductDraftsBatchResult
+  status: 201
+}
+
+export type createProductDraftsBatchResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createProductDraftsBatchResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createProductDraftsBatchResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createProductDraftsBatchResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createProductDraftsBatchResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createProductDraftsBatchResponse422 = {
+  data: DraftLimitUnprocessableResponse
+  status: 422
+}
+
+export type createProductDraftsBatchResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createProductDraftsBatchResponseSuccess = (createProductDraftsBatchResponse201) & {
+  headers: Headers;
+};
+export type createProductDraftsBatchResponseError = (createProductDraftsBatchResponse400 | createProductDraftsBatchResponse401 | createProductDraftsBatchResponse403 | createProductDraftsBatchResponse404 | createProductDraftsBatchResponse409 | createProductDraftsBatchResponse422 | createProductDraftsBatchResponse429) & {
+  headers: Headers;
+};
+
+export type createProductDraftsBatchResponse = (createProductDraftsBatchResponseSuccess | createProductDraftsBatchResponseError)
+
+export const getCreateProductDraftsBatchUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/product-drafts/batch`
+}
+
+/**
+ * Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o "Juntar 3 linhas em 1 produto" (preço por variação quando diferem). **Atômico quanto ao limite (DEC-118):** o lote vai até 100 itens e o teto de rascunhos da loja é 100 (`rascunhos_max_por_loja`; o teto nunca fica abaixo do lote). Se `rascunhos atuais + itens` passar do teto, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` (vagas que restam), `draftCount` e `limit` (`DraftLimitProblem`); a tela oferece "criar os N que cabem" reenviando só os N primeiros com outra `Idempotency-Key`. A contagem e a inserção ocorrem sob lock da loja (`SELECT ... FOR UPDATE` em `stores`), então requisições simultâneas não passam do teto. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE].
+ * @summary Criar rascunhos a partir da lista colada (WB-376 C4, RN-Q8)
+ */
+export const createProductDraftsBatch = async (storeId: string,
+    createProductDraftsBatchRequest: CreateProductDraftsBatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createProductDraftsBatchResponse> => {
+
+  return apiFetch<createProductDraftsBatchResponse>(getCreateProductDraftsBatchUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createProductDraftsBatchRequest)
+  }
+);}
+
+
+
+export type duplicateProductResponse201 = {
+  data: Product
+  status: 201
+}
+
+export type duplicateProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type duplicateProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type duplicateProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type duplicateProductResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type duplicateProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type duplicateProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type duplicateProductResponseSuccess = (duplicateProductResponse201) & {
+  headers: Headers;
+};
+export type duplicateProductResponseError = (duplicateProductResponse401 | duplicateProductResponse403 | duplicateProductResponse404 | duplicateProductResponse409 | duplicateProductResponse422 | duplicateProductResponse429) & {
+  headers: Headers;
+};
+
+export type duplicateProductResponse = (duplicateProductResponseSuccess | duplicateProductResponseError)
+
+export const getDuplicateProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/duplicate`
+}
+
+/**
+ * Cria um RASCUNHO com nome "<nome> (cópia)", mesma categoria, descrição, preço, atributos e variações; NÃO copia fotos, SKU, estoque (começa em 1 por variação, ou 0 em grade) nem promoção (C1, C3). A cópia é um produto novo e passa pela moderação ao publicar (C4). **SEC-215:** a cópia NÃO herda o texto interno da moderação, mas herda o bloqueio: duplicar produto REMOVIDO ou PAUSADO pela moderação gera a cópia com `moderationStatus: paused` (e `moderationReason` genérico), que não publica por `publishProduct` nem por `quickPublishProduct` (403 `PRODUCT_MODERATED`) até o admin liberar (`moderateProduct` com `restore`); produto em revisão gera cópia em revisão; produto normal gera cópia sem estado. A cópia grava `duplicatedFrom` e um evento de moderação na fila do admin. Grava no histórico "duplicado de <id>" (C5). **Posse conferida:** produto de outra loja é 404 igual a inexistente (C6, C-CAD-10). Duplicar a variação (C2) é edição da tabela de variações no app, salva por `setProductVariants`; não tem rota. `Idempotency-Key` obrigatória. 422 `DRAFT_LIMIT_REACHED`. Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Duplicar produto (WB-372, RN-Q4)
+ */
+export const duplicateProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<duplicateProductResponse> => {
+
+  return apiFetch<duplicateProductResponse>(getDuplicateProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listCategoryTemplatesResponse200 = {
+  data: CategoryTemplateList
+  status: 200
+}
+
+export type listCategoryTemplatesResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listCategoryTemplatesResponseSuccess = (listCategoryTemplatesResponse200) & {
+  headers: Headers;
+};
+export type listCategoryTemplatesResponseError = (listCategoryTemplatesResponse429) & {
+  headers: Headers;
+};
+
+export type listCategoryTemplatesResponse = (listCategoryTemplatesResponseSuccess | listCategoryTemplatesResponseError)
+
+export const getListCategoryTemplatesUrl = () => {
+
+
+
+
+  return `/v1/category-templates`
+}
+
+/**
+ * Público e sem dado pessoal (como `/v1/categories`; ETag/304). Para cada categoria com modelo: atributos e valores sugeridos (tamanhos P a GG; 34 a 44 em calçado), avisos (`sizeChartHint` = tabela de medidas; `noVoluntaryExchangeHint` = sugerir "sem troca voluntária" em íntimos e higiene) e `descriptionRequired` com `descriptionMinChars` (RN-Q1, DEC-106: Cosméticos e Eletrônicos, 20 caracteres). O modelo SÓ SUGERE; a única exigência que ele carrega é `descriptionRequired`, validada no servidor nas duas vias (rápida e formulário completo): 422 `DESCRIPTION_REQUIRED` ao publicar. Categoria sem modelo não aparece (C5). Limitada ao total de categorias ativas (no máximo 100 itens, sem paginação; `nextCursor` sempre nulo, como em `listCategories`).
+ * @summary Modelos por categoria (WB-375, RN-Q6)
+ */
+export const listCategoryTemplates = async ( options?: Parameters<typeof apiFetch>[1]): Promise<listCategoryTemplatesResponse> => {
+
+  return apiFetch<listCategoryTemplatesResponse>(getListCategoryTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setCategoryTemplateResponse200 = {
+  data: CategoryTemplate
+  status: 200
+}
+
+export type setCategoryTemplateResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setCategoryTemplateResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setCategoryTemplateResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setCategoryTemplateResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setCategoryTemplateResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setCategoryTemplateResponseSuccess = (setCategoryTemplateResponse200) & {
+  headers: Headers;
+};
+export type setCategoryTemplateResponseError = (setCategoryTemplateResponse400 | setCategoryTemplateResponse401 | setCategoryTemplateResponse403 | setCategoryTemplateResponse404 | setCategoryTemplateResponse422) & {
+  headers: Headers;
+};
+
+export type setCategoryTemplateResponse = (setCategoryTemplateResponseSuccess | setCategoryTemplateResponseError)
+
+export const getSetCategoryTemplateUrl = (categoryId: string,) => {
+
+
+
+
+  return `/v1/admin/category-templates/${categoryId}`
+}
+
+/**
+ * Permissão de admin: `categories:write` (super admin e operação). Substitui o modelo da categoria (os 8 modelos iniciais vêm do seed). Alterar `descriptionRequired` vale na hora para novas publicações (produtos já ativos não são afetados). Auditado (antes/depois). Texto puro; até 12 atributos e 30 valores por atributo.
+ * @summary Editar o modelo de uma categoria (Could, RN-Q6)
+ */
+export const setCategoryTemplate = async (categoryId: string,
+    setCategoryTemplateRequest: SetCategoryTemplateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setCategoryTemplateResponse> => {
+
+  return apiFetch<setCategoryTemplateResponse>(getSetCategoryTemplateUrl(categoryId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setCategoryTemplateRequest)
+  }
+);}
+
+
+
+export type listProductTableResponse200 = {
+  data: ProductTablePage
+  status: 200
+}
+
+export type listProductTableResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listProductTableResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listProductTableResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listProductTableResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listProductTableResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type listProductTableResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listProductTableResponseSuccess = (listProductTableResponse200) & {
+  headers: Headers;
+};
+export type listProductTableResponseError = (listProductTableResponse400 | listProductTableResponse401 | listProductTableResponse403 | listProductTableResponse404 | listProductTableResponse409 | listProductTableResponse429) & {
+  headers: Headers;
+};
+
+export type listProductTableResponse = (listProductTableResponseSuccess | listProductTableResponseError)
+
+export const getListProductTableUrl = (storeId: string,
+    params?: ListProductTableParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/products/table?${stringifiedParams}` : `/v1/stores/${storeId}/products/table`
+}
+
+/**
+ * Lista enxuta para a tela "Preços e estoque": por produto, preço, "Você recebe" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: "Selecionar os 12 da busca"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito "Este produto foi alterado agora". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table`, `/products/bulk`, `/products/bulk-batches` e `/products/bulk/{batchId}/undo` antes de `/products/{productId}`; teste e2e chama cada segmento estático e prova que não cai em `{productId}` (A2).
+ * @summary Tabela de preço e estoque (WB-377, edição em massa)
+ */
+export const listProductTable = async (storeId: string,
+    params?: ListProductTableParams, options?: Parameters<typeof apiFetch>[1]): Promise<listProductTableResponse> => {
+
+  return apiFetch<listProductTableResponse>(getListProductTableUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type undoBulkBatchResponse200 = {
+  data: BulkUndoResult
+  status: 200
+}
+
+export type undoBulkBatchResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type undoBulkBatchResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type undoBulkBatchResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type undoBulkBatchResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type undoBulkBatchResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type undoBulkBatchResponseSuccess = (undoBulkBatchResponse200) & {
+  headers: Headers;
+};
+export type undoBulkBatchResponseError = (undoBulkBatchResponse401 | undoBulkBatchResponse403 | undoBulkBatchResponse404 | undoBulkBatchResponse409 | undoBulkBatchResponse410) & {
+  headers: Headers;
+};
+
+export type undoBulkBatchResponse = (undoBulkBatchResponseSuccess | undoBulkBatchResponseError)
+
+export const getUndoBulkBatchUrl = (storeId: string,
+    batchId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/bulk/${batchId}/undo`
+}
+
+/**
+ * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Repetir para o mesmo lote já desfeito devolve 200 com o mesmo resultado e `alreadyUndone: true` (a resposta pode ter se perdido em 3G; não é erro). Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * @summary Desfazer um reajuste em massa por até 10 minutos (WB-377 C4)
+ */
+export const undoBulkBatch = async (storeId: string,
+    batchId: string, options?: Parameters<typeof apiFetch>[1]): Promise<undoBulkBatchResponse> => {
+
+  return apiFetch<undoBulkBatchResponse>(getUndoBulkBatchUrl(storeId,batchId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listBulkBatchesResponse200 = {
+  data: BulkBatchPage
+  status: 200
+}
+
+export type listBulkBatchesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listBulkBatchesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listBulkBatchesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listBulkBatchesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listBulkBatchesResponseSuccess = (listBulkBatchesResponse200) & {
+  headers: Headers;
+};
+export type listBulkBatchesResponseError = (listBulkBatchesResponse400 | listBulkBatchesResponse401 | listBulkBatchesResponse403 | listBulkBatchesResponse404) & {
+  headers: Headers;
+};
+
+export type listBulkBatchesResponse = (listBulkBatchesResponseSuccess | listBulkBatchesResponseError)
+
+export const getListBulkBatchesUrl = (storeId: string,
+    params?: ListBulkBatchesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/products/bulk-batches?${stringifiedParams}` : `/v1/stores/${storeId}/products/bulk-batches`
+}
+
+/**
+ * Cada ação em massa (reajuste, pausar, reativar, mover de seção) registra quem, quando e quantos itens (`itemsCount`); inclui as feitas pela Webag (`source: admin`, autor "Webag", sem nome de pessoa). Mais recentes primeiro; cursor. Permissão da loja: `catalog`; não-membro 404.
+ * @summary Histórico das ações em massa da loja (WB-377 C7)
+ */
+export const listBulkBatches = async (storeId: string,
+    params?: ListBulkBatchesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listBulkBatchesResponse> => {
+
+  return apiFetch<listBulkBatchesResponse>(getListBulkBatchesUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listStoreAdminChangesResponse200 = {
+  data: StoreAdminChangePage
+  status: 200
+}
+
+export type listStoreAdminChangesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listStoreAdminChangesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreAdminChangesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreAdminChangesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreAdminChangesResponseSuccess = (listStoreAdminChangesResponse200) & {
+  headers: Headers;
+};
+export type listStoreAdminChangesResponseError = (listStoreAdminChangesResponse400 | listStoreAdminChangesResponse401 | listStoreAdminChangesResponse403 | listStoreAdminChangesResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreAdminChangesResponse = (listStoreAdminChangesResponseSuccess | listStoreAdminChangesResponseError)
+
+export const getListStoreAdminChangesUrl = (storeId: string,
+    params?: ListStoreAdminChangesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/admin-changes?${stringifiedParams}` : `/v1/stores/${storeId}/admin-changes`
+}
+
+/**
+ * O lojista vê no próprio painel uma linha por alteração feita pelo admin em preço, estoque, catálogo, status, horário e pausa, com antes/depois e o motivo em texto; o autor é sempre "Webag" (nunca o nome da pessoa, J27). Ação em massa aparece como UMA linha agregada. Mais recentes primeiro; cursor. Permissão da loja: dono, ou funcionário com `catalog`; os demais 404 (SEC-020). Não traz dado de cliente.
+ * @summary O que a Webag alterou na minha loja (WB-353 C1, C11)
+ */
+export const listStoreAdminChanges = async (storeId: string,
+    params?: ListStoreAdminChangesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreAdminChangesResponse> => {
+
+  return apiFetch<listStoreAdminChangesResponse>(getListStoreAdminChangesUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getProductCreationMetricsResponse200 = {
+  data: ProductCreationMetrics
+  status: 200
+}
+
+export type getProductCreationMetricsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getProductCreationMetricsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getProductCreationMetricsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getProductCreationMetricsResponseSuccess = (getProductCreationMetricsResponse200) & {
+  headers: Headers;
+};
+export type getProductCreationMetricsResponseError = (getProductCreationMetricsResponse400 | getProductCreationMetricsResponse401 | getProductCreationMetricsResponse403) & {
+  headers: Headers;
+};
+
+export type getProductCreationMetricsResponse = (getProductCreationMetricsResponseSuccess | getProductCreationMetricsResponseError)
+
+export const getGetProductCreationMetricsUrl = (params?: GetProductCreationMetricsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/metrics/product-creation?${stringifiedParams}` : `/v1/admin/metrics/product-creation`
+}
+
+/**
+ * Permissão de admin: `reports:operations` (super admin, operação e financeiro; suporte 403). Mede a meta de 60 s (HIP-Q1) a partir de `product_create_started` (abrir "Novo produto"), `photo_captured` (1ª foto anexada) e `product_create_published`, agrupado por `via` (camera, duplicate, paste, spreadsheet, form) ou por loja. **Só conta cadastro contínuo:** publicação até `cadastro_sessao_max_min` (15 min [HIPÓTESE]) depois do início; o resto vem em `interrupted` e fica fora da mediana. Grupo com menos de 5 cadastros devolve `insufficient: true` e nenhum percentil. Sem texto, nome ou preço de produto.
+ * @summary Tempo de cadastro de produto, mediana e p90 (WB-379 C2)
+ */
+export const getProductCreationMetrics = async (params?: GetProductCreationMetricsParams, options?: Parameters<typeof apiFetch>[1]): Promise<getProductCreationMetricsResponse> => {
+
+  return apiFetch<getProductCreationMetricsResponse>(getGetProductCreationMetricsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminStoreOverviewResponse200 = {
+  data: AdminStoreOverview
+  status: 200
+}
+
+export type getAdminStoreOverviewResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreOverviewResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreOverviewResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreOverviewResponseSuccess = (getAdminStoreOverviewResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreOverviewResponseError = (getAdminStoreOverviewResponse401 | getAdminStoreOverviewResponse403 | getAdminStoreOverviewResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreOverviewResponse = (getAdminStoreOverviewResponseSuccess | getAdminStoreOverviewResponseError)
+
+export const getGetAdminStoreOverviewUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/overview`
+}
+
+/**
+ * Permissão `stores:read` (os 4 perfis; suporte vê sem botões de edição, C2 é da tela e a API já recusa a escrita). Uma chamada para a aba Resumo: dados não fiscais, situação, operação agora (aberta, pausada por quem e até quando), comissão efetiva com a ORIGEM (loja, categoria ou padrão: "categoria Calçados: 12%", RN-10), indicadores dos últimos 30 dias (produtos ativos, pedidos, GMV, cancelamentos com %), 5 pedidos recentes (sem dado do cliente). `version` da loja é o valor para `expectedVersion` das edições. Loja sem pedido: `indicators.empty: true` ("Sem pedidos nos últimos 30 dias"). Documento, razão social e conta de recebimento NÃO vêm aqui (C4).
+ * @summary Ficha 360 da loja (WB-350 C1, C3)
+ */
+export const getAdminStoreOverview = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreOverviewResponse> => {
+
+  return apiFetch<getAdminStoreOverviewResponse>(getGetAdminStoreOverviewUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminStoreSettingsResponse200 = {
+  data: StoreSettingsViewAs
+  status: 200
+}
+
+export type getAdminStoreSettingsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreSettingsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreSettingsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreSettingsResponseSuccess = (getAdminStoreSettingsResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreSettingsResponseError = (getAdminStoreSettingsResponse401 | getAdminStoreSettingsResponse403 | getAdminStoreSettingsResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreSettingsResponse = (getAdminStoreSettingsResponseSuccess | getAdminStoreSettingsResponseError)
+
+export const getGetAdminStoreSettingsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/settings`
+}
+
+/**
+ * Permissão `stores:read` (os 4 perfis; suporte lê sem botões de edição, a escrita segue em `config/{section}`). Leitura dos horários, feriados, pausa, entrega, retirada, política de troca e limiar de estoque, no MESMO schema seguro da visão "Ver como" (`StoreSettingsViewAs`): sem `notifications` nem qualquer e-mail ou telefone, sem documento, razão social ou conta de recebimento. Existe porque `config/{section}` SUBSTITUI o conjunto inteiro da seção e o editor precisa do valor atual (`getStoreSettings` é do membro da loja ou da visão). Sem auditoria de leitura: não há dado pessoal na resposta (a ficha 360 também não audita). Para o `expectedVersion` use `version` de `getAdminStoreOverview`. Loja inexistente ou id inválido: 404.
+ * @summary Configuração operacional da loja para o admin (WB-351; DEC-131)
+ */
+export const getAdminStoreSettings = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreSettingsResponse> => {
+
+  return apiFetch<getAdminStoreSettingsResponse>(getGetAdminStoreSettingsUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAdminStoreHistoryResponse200 = {
+  data: AdminStoreHistoryPage
+  status: 200
+}
+
+export type listAdminStoreHistoryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminStoreHistoryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminStoreHistoryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminStoreHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listAdminStoreHistoryResponseSuccess = (listAdminStoreHistoryResponse200) & {
+  headers: Headers;
+};
+export type listAdminStoreHistoryResponseError = (listAdminStoreHistoryResponse400 | listAdminStoreHistoryResponse401 | listAdminStoreHistoryResponse403 | listAdminStoreHistoryResponse404) & {
+  headers: Headers;
+};
+
+export type listAdminStoreHistoryResponse = (listAdminStoreHistoryResponseSuccess | listAdminStoreHistoryResponseError)
+
+export const getListAdminStoreHistoryUrl = (storeId: string,
+    params?: ListAdminStoreHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/stores/${storeId}/history?${stringifiedParams}` : `/v1/admin/stores/${storeId}/history`
+}
+
+/**
+ * Permissão `stores:read` (os 4 perfis veem). Trilha por loja sobre o `audit_log` append-only: alterações do admin, do lojista e do sistema, cada linha com antes, depois e motivo. Filtros: `type`, `actorAdminId`, `from`/`to` (data, America/Sao_Paulo, máximo 400 dias). `restorable` é verdadeiro só para preço e estoque com valor anterior conhecido. Visita de "Ver como" aparece com `type: access` (abertura e encerramento; as telas navegadas não são gravadas). Mais recentes primeiro; cursor. Sem dado pessoal de cliente.
+ * @summary Histórico de alterações da loja (WB-350 C4, WB-354)
+ */
+export const listAdminStoreHistory = async (storeId: string,
+    params?: ListAdminStoreHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminStoreHistoryResponse> => {
+
+  return apiFetch<listAdminStoreHistoryResponse>(getListAdminStoreHistoryUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportAdminStoreHistoryResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportAdminStoreHistoryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type exportAdminStoreHistoryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportAdminStoreHistoryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportAdminStoreHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type exportAdminStoreHistoryResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type exportAdminStoreHistoryResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportAdminStoreHistoryResponseSuccess = (exportAdminStoreHistoryResponse200) & {
+  headers: Headers;
+};
+export type exportAdminStoreHistoryResponseError = (exportAdminStoreHistoryResponse400 | exportAdminStoreHistoryResponse401 | exportAdminStoreHistoryResponse403 | exportAdminStoreHistoryResponse404 | exportAdminStoreHistoryResponse422 | exportAdminStoreHistoryResponse429) & {
+  headers: Headers;
+};
+
+export type exportAdminStoreHistoryResponse = (exportAdminStoreHistoryResponseSuccess | exportAdminStoreHistoryResponseError)
+
+export const getExportAdminStoreHistoryUrl = (storeId: string,
+    params?: ExportAdminStoreHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/stores/${storeId}/history.csv?${stringifiedParams}` : `/v1/admin/stores/${storeId}/history.csv`
+}
+
+/**
+ * Permissão PRÓPRIA `store-history:export` (super admin, operação e financeiro; suporte 403). Mesmos filtros de `listAdminStoreHistory`. CSV UTF-8 com cabeçalho, no máximo 10.000 linhas (mais que isso: 422 `EXPORT_TOO_LARGE`, reduza o período), SEM dado pessoal (`audit_log.before/after` pode carregar dado de membro: o CSV sai de uma LISTA DE CAMPOS por tipo de alteração, nunca do JSON bruto; tech-lead A10), com proteção de fórmula (helper do SEC-156: célula iniciada por `=`, `+`, `-` ou `@` sai escapada). Cada exportação grava uma linha de auditoria (quem, filtros, linhas). Limite de 10 por hora por admin (429 com `Retry-After`) [HIPÓTESE]. Resposta `Cache-Control: private, no-store`.
+ * @summary Exportar o histórico da loja em CSV (WB-354 C3, C-ADM-09)
+ */
+export const exportAdminStoreHistory = async (storeId: string,
+    params?: ExportAdminStoreHistoryParams, options?: Parameters<typeof apiFetch>[1]): Promise<exportAdminStoreHistoryResponse> => {
+
+  return apiFetch<exportAdminStoreHistoryResponse>(getExportAdminStoreHistoryUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type restoreAdminStoreHistoryEntryResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type restoreAdminStoreHistoryEntryResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type restoreAdminStoreHistoryEntryResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type restoreAdminStoreHistoryEntryResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type restoreAdminStoreHistoryEntryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type restoreAdminStoreHistoryEntryResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type restoreAdminStoreHistoryEntryResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type restoreAdminStoreHistoryEntryResponseSuccess = (restoreAdminStoreHistoryEntryResponse200) & {
+  headers: Headers;
+};
+export type restoreAdminStoreHistoryEntryResponseError = (restoreAdminStoreHistoryEntryResponse400 | restoreAdminStoreHistoryEntryResponse401 | restoreAdminStoreHistoryEntryResponse403 | restoreAdminStoreHistoryEntryResponse404 | restoreAdminStoreHistoryEntryResponse409 | restoreAdminStoreHistoryEntryResponse422) & {
+  headers: Headers;
+};
+
+export type restoreAdminStoreHistoryEntryResponse = (restoreAdminStoreHistoryEntryResponseSuccess | restoreAdminStoreHistoryEntryResponseError)
+
+export const getRestoreAdminStoreHistoryEntryUrl = (storeId: string,
+    entryId: number,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/history/${entryId}/restore`
+}
+
+/**
+ * Permissão `stores:write` (super admin e operação). **Nada é apagado:** grava um NOVO registro (`type` do original, `restores: <entryId>`) e a contagem do `audit_log` só cresce (C5); o lojista é avisado (C1). Se o valor atual já não é o que a linha original deixou (outra pessoa mudou depois), responde 409 `RESTORE_VALUE_CHANGED` com o valor atual e só restaura com `confirmOverride: true` (C2). Restaurar preço obedece às regras do admin: motivo de preço, `confirmLargeChange` acima de `admin_preco_variacao_max_pct` e **redução acima de 50% só super admin** (403 `SUPER_ADMIN_REQUIRED`). Linha já restaurada: 409 `ENTRY_ALREADY_RESTORED`; linha não restaurável: 422 `ENTRY_NOT_RESTORABLE`. Também é o "Desfazer" de 8 s do toast (a resposta de toda edição traz `auditEntryId`). Sem `Idempotency-Key`: restaurar a mesma linha duas vezes é 409.
+ * @summary Restaurar preço ou estoque anterior (WB-354 C1, C2, C5, C-ADM-08)
+ */
+export const restoreAdminStoreHistoryEntry = async (storeId: string,
+    entryId: number,
+    restoreHistoryEntryRequest: RestoreHistoryEntryRequest, options?: Parameters<typeof apiFetch>[1]): Promise<restoreAdminStoreHistoryEntryResponse> => {
+
+  return apiFetch<restoreAdminStoreHistoryEntryResponse>(getRestoreAdminStoreHistoryEntryUrl(storeId,entryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(restoreHistoryEntryRequest)
+  }
+);}
+
+
+
+export type editAdminStoreProfileResponse200 = {
+  data: AdminStoreEditResult
+  status: 200
+}
+
+export type editAdminStoreProfileResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type editAdminStoreProfileResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type editAdminStoreProfileResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type editAdminStoreProfileResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type editAdminStoreProfileResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type editAdminStoreProfileResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type editAdminStoreProfileResponseSuccess = (editAdminStoreProfileResponse200) & {
+  headers: Headers;
+};
+export type editAdminStoreProfileResponseError = (editAdminStoreProfileResponse400 | editAdminStoreProfileResponse401 | editAdminStoreProfileResponse403 | editAdminStoreProfileResponse404 | editAdminStoreProfileResponse409 | editAdminStoreProfileResponse422) & {
+  headers: Headers;
+};
+
+export type editAdminStoreProfileResponse = (editAdminStoreProfileResponseSuccess | editAdminStoreProfileResponseError)
+
+export const getEditAdminStoreProfileUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/profile`
+}
+
+/**
+ * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substituiu `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), removida na R1.1 por aceitar razão social e endereço sem motivo (ADR-018 D6); a rota antiga agora responde 404. Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Valor igual ao atual: 422 `NO_CHANGE` (nada é gravado, a versão não sobe e o lojista não é avisado). Texto com caractere nulo (`\u0000`) em qualquer rota: 422 `INVALID_TEXT`. Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * @summary Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
+ */
+export const editAdminStoreProfile = async (storeId: string,
+    adminStoreProfileEditRequest: AdminStoreProfileEditRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreProfileResponse> => {
+
+  return apiFetch<editAdminStoreProfileResponse>(getEditAdminStoreProfileUrl(storeId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminStoreProfileEditRequest)
+  }
+);}
+
+
+
+export type editAdminStoreConfigResponse200 = {
+  data: AdminStoreEditResult
+  status: 200
+}
+
+export type editAdminStoreConfigResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type editAdminStoreConfigResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type editAdminStoreConfigResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type editAdminStoreConfigResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type editAdminStoreConfigResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type editAdminStoreConfigResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type editAdminStoreConfigResponseSuccess = (editAdminStoreConfigResponse200) & {
+  headers: Headers;
+};
+export type editAdminStoreConfigResponseError = (editAdminStoreConfigResponse400 | editAdminStoreConfigResponse401 | editAdminStoreConfigResponse403 | editAdminStoreConfigResponse404 | editAdminStoreConfigResponse409 | editAdminStoreConfigResponse422) & {
+  headers: Headers;
+};
+
+export type editAdminStoreConfigResponse = (editAdminStoreConfigResponseSuccess | editAdminStoreConfigResponseError)
+
+export const getEditAdminStoreConfigUrl = (storeId: string,
+    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/config/${section}`
+}
+
+/**
+ * Permissão `stores:write` (super admin e operação). Substituiu `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), removida na R1.1 por não receber motivo nem versão (ADR-018 D6); a rota antiga agora responde 404. `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Dados iguais aos atuais: 422 `NO_CHANGE` (nada é gravado). Antes/depois e motivo no `audit_log`.
+ * @summary Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
+ */
+export const editAdminStoreConfig = async (storeId: string,
+    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',
+    adminStoreConfigEditRequest: AdminStoreConfigEditRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreConfigResponse> => {
+
+  return apiFetch<editAdminStoreConfigResponse>(getEditAdminStoreConfigUrl(storeId,section),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminStoreConfigEditRequest)
+  }
+);}
+
+
+
+export type pauseStoreAsAdminResponse200 = {
+  data: AdminStoreEditResult
+  status: 200
+}
+
+export type pauseStoreAsAdminResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type pauseStoreAsAdminResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type pauseStoreAsAdminResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type pauseStoreAsAdminResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type pauseStoreAsAdminResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type pauseStoreAsAdminResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type pauseStoreAsAdminResponseSuccess = (pauseStoreAsAdminResponse200) & {
+  headers: Headers;
+};
+export type pauseStoreAsAdminResponseError = (pauseStoreAsAdminResponse400 | pauseStoreAsAdminResponse401 | pauseStoreAsAdminResponse403 | pauseStoreAsAdminResponse404 | pauseStoreAsAdminResponse409 | pauseStoreAsAdminResponse422) & {
+  headers: Headers;
+};
+
+export type pauseStoreAsAdminResponse = (pauseStoreAsAdminResponseSuccess | pauseStoreAsAdminResponseError)
+
+export const getPauseStoreAsAdminUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/pause`
+}
+
+/**
+ * Permissão `stores:write` (super admin e operação; suporte NÃO pausa, RN-13). A loja fecha para novos pedidos na hora (pedidos em aberto seguem) e reabre sozinha ao fim do prazo (`kind`, como `pauseStore`). Motivo do catálogo obrigatório; `expectedVersion` da loja. Aviso ao lojista na hora (painel e e-mail) e `audit_log` com autor, antes, depois e motivo. A vitrine em cache é invalidada em até 5 s (DEC-113).
+ * @summary Pausar a loja pelo admin (WB-351 C1)
+ */
+export const pauseStoreAsAdmin = async (storeId: string,
+    adminPauseStoreRequest: AdminPauseStoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<pauseStoreAsAdminResponse> => {
+
+  return apiFetch<pauseStoreAsAdminResponse>(getPauseStoreAsAdminUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminPauseStoreRequest)
+  }
+);}
+
+
+
+export type resumeStoreAsAdminResponse200 = {
+  data: AdminStoreEditResult
+  status: 200
+}
+
+export type resumeStoreAsAdminResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type resumeStoreAsAdminResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type resumeStoreAsAdminResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resumeStoreAsAdminResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resumeStoreAsAdminResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type resumeStoreAsAdminResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type resumeStoreAsAdminResponseSuccess = (resumeStoreAsAdminResponse200) & {
+  headers: Headers;
+};
+export type resumeStoreAsAdminResponseError = (resumeStoreAsAdminResponse400 | resumeStoreAsAdminResponse401 | resumeStoreAsAdminResponse403 | resumeStoreAsAdminResponse404 | resumeStoreAsAdminResponse409 | resumeStoreAsAdminResponse422) & {
+  headers: Headers;
+};
+
+export type resumeStoreAsAdminResponse = (resumeStoreAsAdminResponseSuccess | resumeStoreAsAdminResponseError)
+
+export const getResumeStoreAsAdminUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/resume`
+}
+
+/**
+ * Permissão `stores:write`. Encerra a pausa (do lojista ou do admin) com motivo obrigatório e `expectedVersion`; aviso ao lojista na hora; auditado. Sem pausa ativa: 409 `STORE_NOT_PAUSED`. Mudança de situação da loja (suspender, reativar) continua nas rotas `suspendStore` e `reactivateStore` (`stores:decide`, transições da RN-16, motivo de 5 a 500 caracteres; WB-351 C5).
+ * @summary Reabrir a loja pausada pelo admin ("Reabrir agora")
+ */
+export const resumeStoreAsAdmin = async (storeId: string,
+    adminResumeStoreRequest: AdminResumeStoreRequest, options?: Parameters<typeof apiFetch>[1]): Promise<resumeStoreAsAdminResponse> => {
+
+  return apiFetch<resumeStoreAsAdminResponse>(getResumeStoreAsAdminUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminResumeStoreRequest)
+  }
+);}
+
+
+
+export type openViewAsResponse201 = {
+  data: ViewAsSession
+  status: 201
+}
+
+export type openViewAsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type openViewAsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type openViewAsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type openViewAsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type openViewAsResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type openViewAsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type openViewAsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type openViewAsResponseSuccess = (openViewAsResponse201) & {
+  headers: Headers;
+};
+export type openViewAsResponseError = (openViewAsResponse400 | openViewAsResponse401 | openViewAsResponse403 | openViewAsResponse404 | openViewAsResponse409 | openViewAsResponse422 | openViewAsResponse429) & {
+  headers: Headers;
+};
+
+export type openViewAsResponse = (openViewAsResponseSuccess | openViewAsResponseError)
+
+export const getOpenViewAsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/view-as`
+}
+
+/**
+ * Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve a CREDENCIAL `vas_...`, mostrada uma só vez e guardada só como SHA-256, que o cliente envia no cabeçalho `X-View-As` JUNTO com o Bearer do admin (esquema `viewAsAuth`) nas 13 rotas de leitura `x-view-as: true`. Nível fixo "visualizador" (threat model §14), mesmo que o admin seja membro ou dono da loja. Validade `expiresAt` = o menor entre 30 min e o fim da sessão do admin, **sem renovação** (para continuar, abre outra, com novo motivo). **Uma visão ativa por admin:** abrir outra encerra a anterior (`replaced`). **Auditoria:** `view_as.open` (admin, sessão, loja, motivo, `expiresAt`) é gravada NA MESMA TRANSAÇÃO da credencial e antes de ela ser devolvida; se a gravação falhar, 500 sem credencial e sem linha órfã. Sem motivo: 422 `REASON_REQUIRED`. Limite de 10 aberturas por hora por admin (429) e alerta à operação acima de 20 lojas distintas por dia [HIPÓTESE]. 409 `VIEW_AS_OPEN_CONFLICT`: duas aberturas simultâneas do mesmo admin (a restrição de uma visão ativa por admin decide a corrida); repetir. Rota de admin: não aceita `X-View-As`. Resposta `Cache-Control: private, no-store`.
+ * @summary Abrir "Ver como o lojista" (somente leitura) (WB-352)
+ */
+export const openViewAs = async (storeId: string,
+    openViewAsRequest: OpenViewAsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<openViewAsResponse> => {
+
+  return apiFetch<openViewAsResponse>(getOpenViewAsUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(openViewAsRequest)
+  }
+);}
+
+
+
+export type endViewAsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type endViewAsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type endViewAsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type endViewAsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type endViewAsResponseSuccess = (endViewAsResponse204) & {
+  headers: Headers;
+};
+export type endViewAsResponseError = (endViewAsResponse401 | endViewAsResponse403 | endViewAsResponse404) & {
+  headers: Headers;
+};
+
+export type endViewAsResponse = (endViewAsResponseSuccess | endViewAsResponseError)
+
+export const getEndViewAsUrl = (viewAsId: string,) => {
+
+
+
+
+  return `/v1/admin/view-as/${viewAsId}/end`
+}
+
+/**
+ * Permissão `view-as:open`. Só o admin que abriu (outro admin: 404). Invalida a credencial na hora e grava `view_as.close` com a causa (`ended`) e o total de leituras por operação. Idempotente: encerrar de novo devolve 204 sem gravar de novo. Outras causas de encerramento, gravadas pelo servidor: `expired` (sweep de 10 min, com `at` = `expiresAt`), `replaced`, `session_ended` (logout, revogação, inatividade, MFA pendente), `permission_lost` e `abuse` (20 negações na mesma visão).
+ * @summary Encerrar "Ver como o lojista" ("Sair da visualização")
+ */
+export const endViewAs = async (viewAsId: string, options?: Parameters<typeof apiFetch>[1]): Promise<endViewAsResponse> => {
+
+  return apiFetch<endViewAsResponse>(getEndViewAsUrl(viewAsId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listAdminStoreProductsResponse200 = {
+  data: ProductTablePage
+  status: 200
+}
+
+export type listAdminStoreProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listAdminStoreProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listAdminStoreProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listAdminStoreProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listAdminStoreProductsResponseSuccess = (listAdminStoreProductsResponse200) & {
+  headers: Headers;
+};
+export type listAdminStoreProductsResponseError = (listAdminStoreProductsResponse400 | listAdminStoreProductsResponse401 | listAdminStoreProductsResponse403 | listAdminStoreProductsResponse404) & {
+  headers: Headers;
+};
+
+export type listAdminStoreProductsResponse = (listAdminStoreProductsResponseSuccess | listAdminStoreProductsResponseError)
+
+export const getListAdminStoreProductsUrl = (storeId: string,
+    params?: ListAdminStoreProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/stores/${storeId}/products?${stringifiedParams}` : `/v1/admin/stores/${storeId}/products`
+}
+
+/**
+ * Permissão `stores:read` (os 4 perfis leem; só super admin e operação escrevem). Mesma linha de `listProductTable` (preço, "Você recebe", estoque disponível e reservado, `version`) com `youReceiveCents` visível. Filtros `q`, `status` (`active`, `paused`, `draft`), `sectionId`; cursor; `matchingCount` exato.
+ * @summary Catálogo da loja na ficha (aba Catálogo)
+ */
+export const listAdminStoreProducts = async (storeId: string,
+    params?: ListAdminStoreProductsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listAdminStoreProductsResponse> => {
+
+  return apiFetch<listAdminStoreProductsResponse>(getListAdminStoreProductsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createAdminProductDraftResponse201 = {
+  data: AdminEditResult
+  status: 201
+}
+
+export type createAdminProductDraftResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createAdminProductDraftResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createAdminProductDraftResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createAdminProductDraftResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createAdminProductDraftResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createAdminProductDraftResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createAdminProductDraftResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createAdminProductDraftResponseSuccess = (createAdminProductDraftResponse201) & {
+  headers: Headers;
+};
+export type createAdminProductDraftResponseError = (createAdminProductDraftResponse400 | createAdminProductDraftResponse401 | createAdminProductDraftResponse403 | createAdminProductDraftResponse404 | createAdminProductDraftResponse409 | createAdminProductDraftResponse422 | createAdminProductDraftResponse429) & {
+  headers: Headers;
+};
+
+export type createAdminProductDraftResponse = (createAdminProductDraftResponseSuccess | createAdminProductDraftResponseError)
+
+export const getCreateAdminProductDraftUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/product-drafts`
+}
+
+/**
+ * Permissão `store-catalog:write` (super admin e operação). Cria um rascunho na loja com o autor (admin) gravado; o produto só nasce `active` com foto, nome e preço (publicação por `setAdminProductStatus`) e a moderação (WB-107) vale igual. Motivo do catálogo obrigatório; `Idempotency-Key` obrigatória; 422 `DRAFT_LIMIT_REACHED` (os 100 rascunhos são da LOJA, contados juntos). Fotos: o admin envia por `/v1/uploads` com `storeId` da loja (autorização de admin com `store-catalog:write`; o upload fica auditado). Aviso ao lojista agregado (C11).
+ * @summary Criar produto pela loja (o admin usa o mesmo cadastro rápido, WB-353 C8)
+ */
+export const createAdminProductDraft = async (storeId: string,
+    adminCreateProductDraftRequest: AdminCreateProductDraftRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createAdminProductDraftResponse> => {
+
+  return apiFetch<createAdminProductDraftResponse>(getCreateAdminProductDraftUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminCreateProductDraftRequest)
+  }
+);}
+
+
+
+export type getAdminStoreProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type getAdminStoreProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreProductResponseSuccess = (getAdminStoreProductResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreProductResponseError = (getAdminStoreProductResponse401 | getAdminStoreProductResponse403 | getAdminStoreProductResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreProductResponse = (getAdminStoreProductResponseSuccess | getAdminStoreProductResponseError)
+
+export const getGetAdminStoreProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}`
+}
+
+/**
+ * Permissão `stores:read`. Devolve o `Product` com `version` (o valor de `expectedVersion` das edições). Produto de outra loja: 404.
+ * @summary Detalhe do produto da loja (admin)
+ */
+export const getAdminStoreProduct = async (storeId: string,
+    productId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreProductResponse> => {
+
+  return apiFetch<getAdminStoreProductResponse>(getGetAdminStoreProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type editAdminStoreProductResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type editAdminStoreProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type editAdminStoreProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type editAdminStoreProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type editAdminStoreProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type editAdminStoreProductResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type editAdminStoreProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type editAdminStoreProductResponseSuccess = (editAdminStoreProductResponse200) & {
+  headers: Headers;
+};
+export type editAdminStoreProductResponseError = (editAdminStoreProductResponse400 | editAdminStoreProductResponse401 | editAdminStoreProductResponse403 | editAdminStoreProductResponse404 | editAdminStoreProductResponse409 | editAdminStoreProductResponse422) & {
+  headers: Headers;
+};
+
+export type editAdminStoreProductResponse = (editAdminStoreProductResponseSuccess | editAdminStoreProductResponseError)
+
+export const getEditAdminStoreProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}`
+}
+
+/**
+ * Permissão `store-catalog:write` (super admin e operação). `changes` é o corpo de `updateProduct`. **Preço (`basePriceCents`, promoção):** só aceita os motivos `requested_by_merchant`, `obvious_price_error`, `legal_or_inspection_order` e `agreed_campaign` (outro: 422 `PRICE_REASON_NOT_ALLOWED`, C2) e, a cada edição, o motivo da sessão não basta: o corpo traz o motivo escolhido (DEC-108). Variação acima de `admin_preco_variacao_max_pct` (30) sem `confirmLargeChange: true`: 422 `PRICE_CHANGE_NEEDS_CONFIRMATION` com `fromCents`, `toCents`, `changePct` e `youReceiveCents` do valor novo (C3). **Redução acima de 50% só super admin:** operação recebe 403 `SUPER_ADMIN_REQUIRED` (C9, D-04, vale também para a soma de edições em 24 h [HIPÓTESE: Security confirma]). **Concorrência (C5):** `expectedVersion` do produto; diferente = 409 `PRODUCT_VERSION_CONFLICT` ("O lojista alterou este produto agora"), nada é sobrescrito. 422 `DESCRIPTION_REQUIRED`, `PRICE_OUT_OF_RANGE`, `PROMOTION_INVALID`. O lojista é avisado (painel; e-mail-resumo a cada 10 min, até 20 itens e "+N") e o `audit_log` guarda autor, antes, depois e motivo. Compra desse produto por conta ligada a admin ou a membro da loja em até 24 h gera alerta à operação (C10, C-ADM-04). Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * @summary Editar produto e PREÇO pela loja (WB-353 C1 a C3, C5, C9)
+ */
+export const editAdminStoreProduct = async (storeId: string,
+    productId: string,
+    adminProductEditRequest: AdminProductEditRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreProductResponse> => {
+
+  return apiFetch<editAdminStoreProductResponse>(getEditAdminStoreProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminProductEditRequest)
+  }
+);}
+
+
+
+export type setAdminStoreProductVariantsResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type setAdminStoreProductVariantsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setAdminStoreProductVariantsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setAdminStoreProductVariantsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setAdminStoreProductVariantsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setAdminStoreProductVariantsResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type setAdminStoreProductVariantsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setAdminStoreProductVariantsResponseSuccess = (setAdminStoreProductVariantsResponse200) & {
+  headers: Headers;
+};
+export type setAdminStoreProductVariantsResponseError = (setAdminStoreProductVariantsResponse400 | setAdminStoreProductVariantsResponse401 | setAdminStoreProductVariantsResponse403 | setAdminStoreProductVariantsResponse404 | setAdminStoreProductVariantsResponse409 | setAdminStoreProductVariantsResponse422) & {
+  headers: Headers;
+};
+
+export type setAdminStoreProductVariantsResponse = (setAdminStoreProductVariantsResponseSuccess | setAdminStoreProductVariantsResponseError)
+
+export const getSetAdminStoreProductVariantsUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}/variants`
+}
+
+/**
+ * Permissão `store-catalog:write`. `data` é o corpo de `setProductVariants` (até `variacoes_max`, estoque 0 a 99.999, SKU único na loja). **Estoque nunca abaixo do reservado** (409 `STOCK_BELOW_RESERVED`, RN-06, C4). Preço por variação segue as regras de preço de `editAdminStoreProduct` (motivos permitidos, `confirmLargeChange`, redução acima de 50% só super admin). `expectedVersion` do produto (409 `PRODUCT_VERSION_CONFLICT`). Uma linha de auditoria por variação alterada.
+ * @summary Definir variações e estoque pela loja
+ */
+export const setAdminStoreProductVariants = async (storeId: string,
+    productId: string,
+    adminSetVariantsRequest: AdminSetVariantsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setAdminStoreProductVariantsResponse> => {
+
+  return apiFetch<setAdminStoreProductVariantsResponse>(getSetAdminStoreProductVariantsUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminSetVariantsRequest)
+  }
+);}
+
+
+
+export type adjustAdminStoreVariantStockResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type adjustAdminStoreVariantStockResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type adjustAdminStoreVariantStockResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type adjustAdminStoreVariantStockResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type adjustAdminStoreVariantStockResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type adjustAdminStoreVariantStockResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type adjustAdminStoreVariantStockResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type adjustAdminStoreVariantStockResponseSuccess = (adjustAdminStoreVariantStockResponse200) & {
+  headers: Headers;
+};
+export type adjustAdminStoreVariantStockResponseError = (adjustAdminStoreVariantStockResponse400 | adjustAdminStoreVariantStockResponse401 | adjustAdminStoreVariantStockResponse403 | adjustAdminStoreVariantStockResponse404 | adjustAdminStoreVariantStockResponse409 | adjustAdminStoreVariantStockResponse422) & {
+  headers: Headers;
+};
+
+export type adjustAdminStoreVariantStockResponse = (adjustAdminStoreVariantStockResponseSuccess | adjustAdminStoreVariantStockResponseError)
+
+export const getAdjustAdminStoreVariantStockUrl = (storeId: string,
+    productId: string,
+    variantId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}/variants/${variantId}/stock`
+}
+
+/**
+ * Permissão `store-catalog:write`. `data` é `{ delta }` ou `{ set }` (como `adjustVariantStock`), sob lock da variação; estoque abaixo do reservado é 409 `STOCK_BELOW_RESERVED` ("Estoque menor que o reservado (3). Use 3 ou mais.") e fora de 0..99.999 é 422. `expectedVersion` do produto. Auditado com antes/depois; o aviso ao lojista entra no resumo de 10 min.
+ * @summary Ajustar o estoque de uma variação pela loja (WB-353 C4)
+ */
+export const adjustAdminStoreVariantStock = async (storeId: string,
+    productId: string,
+    variantId: string,
+    adminStockAdjustRequest: AdminStockAdjustRequest, options?: Parameters<typeof apiFetch>[1]): Promise<adjustAdminStoreVariantStockResponse> => {
+
+  return apiFetch<adjustAdminStoreVariantStockResponse>(getAdjustAdminStoreVariantStockUrl(storeId,productId,variantId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminStockAdjustRequest)
+  }
+);}
+
+
+
+export type setAdminStoreProductImagesResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type setAdminStoreProductImagesResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setAdminStoreProductImagesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setAdminStoreProductImagesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setAdminStoreProductImagesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setAdminStoreProductImagesResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type setAdminStoreProductImagesResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setAdminStoreProductImagesResponseSuccess = (setAdminStoreProductImagesResponse200) & {
+  headers: Headers;
+};
+export type setAdminStoreProductImagesResponseError = (setAdminStoreProductImagesResponse400 | setAdminStoreProductImagesResponse401 | setAdminStoreProductImagesResponse403 | setAdminStoreProductImagesResponse404 | setAdminStoreProductImagesResponse409 | setAdminStoreProductImagesResponse422) & {
+  headers: Headers;
+};
+
+export type setAdminStoreProductImagesResponse = (setAdminStoreProductImagesResponseSuccess | setAdminStoreProductImagesResponseError)
+
+export const getSetAdminStoreProductImagesUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}/images`
+}
+
+/**
+ * Permissão `store-catalog:write`. `data` é o corpo de `setProductImages` (até 8; cada foto é um upload `product_image` concluído DA MESMA LOJA). `expectedVersion` do produto. Auditado.
+ * @summary Definir fotos do produto pela loja
+ */
+export const setAdminStoreProductImages = async (storeId: string,
+    productId: string,
+    adminSetImagesRequest: AdminSetImagesRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setAdminStoreProductImagesResponse> => {
+
+  return apiFetch<setAdminStoreProductImagesResponse>(getSetAdminStoreProductImagesUrl(storeId,productId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminSetImagesRequest)
+  }
+);}
+
+
+
+export type setAdminStoreProductStatusResponse200 = {
+  data: AdminEditResult
+  status: 200
+}
+
+export type setAdminStoreProductStatusResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type setAdminStoreProductStatusResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type setAdminStoreProductStatusResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type setAdminStoreProductStatusResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type setAdminStoreProductStatusResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type setAdminStoreProductStatusResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type setAdminStoreProductStatusResponseSuccess = (setAdminStoreProductStatusResponse200) & {
+  headers: Headers;
+};
+export type setAdminStoreProductStatusResponseError = (setAdminStoreProductStatusResponse400 | setAdminStoreProductStatusResponse401 | setAdminStoreProductStatusResponse403 | setAdminStoreProductStatusResponse404 | setAdminStoreProductStatusResponse409 | setAdminStoreProductStatusResponse422) & {
+  headers: Headers;
+};
+
+export type setAdminStoreProductStatusResponse = (setAdminStoreProductStatusResponseSuccess | setAdminStoreProductStatusResponseError)
+
+export const getSetAdminStoreProductStatusUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/${productId}/status`
+}
+
+/**
+ * Permissão `store-catalog:write`. `status: active` publica (o produto só nasce ativo com foto, nome e preço: 422 `PRODUCT_INCOMPLETE` lista o que falta; palavra suspeita não bloqueia e vai a `moderationStatus: review`; categoria com `descriptionRequired` sem descrição: 422 `DESCRIPTION_REQUIRED`); `paused` tira da vitrine. Produto pausado ou removido pela moderação: 403 `PRODUCT_MODERATED` (o admin de loja não reabre o que a moderação pausou; isso é `products:moderate`). `expectedVersion` do produto. Auditado; a vitrine em cache é invalidada em até 5 s ao pausar (DEC-113).
+ * @summary Publicar, pausar ou reativar o produto pela loja
+ */
+export const setAdminStoreProductStatus = async (storeId: string,
+    productId: string,
+    adminProductStatusRequest: AdminProductStatusRequest, options?: Parameters<typeof apiFetch>[1]): Promise<setAdminStoreProductStatusResponse> => {
+
+  return apiFetch<setAdminStoreProductStatusResponse>(getSetAdminStoreProductStatusUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminProductStatusRequest)
+  }
+);}
+
+
+
+export type bulkAdminStoreProductsResponse200 = {
+  data: AdminBulkResult
+  status: 200
+}
+
+export type bulkAdminStoreProductsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type bulkAdminStoreProductsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type bulkAdminStoreProductsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type bulkAdminStoreProductsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type bulkAdminStoreProductsResponse409 = {
+  data: BulkVersionConflictResponse
+  status: 409
+}
+
+export type bulkAdminStoreProductsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type bulkAdminStoreProductsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type bulkAdminStoreProductsResponseSuccess = (bulkAdminStoreProductsResponse200) & {
+  headers: Headers;
+};
+export type bulkAdminStoreProductsResponseError = (bulkAdminStoreProductsResponse400 | bulkAdminStoreProductsResponse401 | bulkAdminStoreProductsResponse403 | bulkAdminStoreProductsResponse404 | bulkAdminStoreProductsResponse409 | bulkAdminStoreProductsResponse422 | bulkAdminStoreProductsResponse429) & {
+  headers: Headers;
+};
+
+export type bulkAdminStoreProductsResponse = (bulkAdminStoreProductsResponseSuccess | bulkAdminStoreProductsResponseError)
+
+export const getBulkAdminStoreProductsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/products/bulk`
+}
+
+/**
+ * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
+ * @summary Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
+ */
+export const bulkAdminStoreProducts = async (storeId: string,
+    adminBulkProductsRequest: AdminBulkProductsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<bulkAdminStoreProductsResponse> => {
+
+  return apiFetch<bulkAdminStoreProductsResponse>(getBulkAdminStoreProductsUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adminBulkProductsRequest)
+  }
+);}
+
+
+
+export type ingestAnalyticsEventsResponse202 = {
+  data: AnalyticsIngestResult
+  status: 202
+}
+
+export type ingestAnalyticsEventsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type ingestAnalyticsEventsResponse413 = {
+  data: PayloadTooLargeResponse
+  status: 413
+}
+
+export type ingestAnalyticsEventsResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type ingestAnalyticsEventsResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type ingestAnalyticsEventsResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type ingestAnalyticsEventsResponseSuccess = (ingestAnalyticsEventsResponse202) & {
+  headers: Headers;
+};
+export type ingestAnalyticsEventsResponseError = (ingestAnalyticsEventsResponse400 | ingestAnalyticsEventsResponse413 | ingestAnalyticsEventsResponse422 | ingestAnalyticsEventsResponse429 | ingestAnalyticsEventsResponse503) & {
+  headers: Headers;
+};
+
+export type ingestAnalyticsEventsResponse = (ingestAnalyticsEventsResponseSuccess | ingestAnalyticsEventsResponseError)
+
+export const getIngestAnalyticsEventsUrl = () => {
+
+
+
+
+  return `/v1/analytics/events`
+}
+
+/**
+ * **Rota PÚBLICA e sem identidade de propósito (C-ANA-01):** o app NÃO envia `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; **nenhum log grava IP, user-agent, cabeçalhos nem `session_id` desta rota** (tech-lead I5): o `pino-http` a ignora no log de acesso e o serializer do caminho não inclui `remoteAddress` nem cabeçalhos, então 413, 422 e 429 viram CONTADOR (não linha); o nginx tem `access_log off` e nenhum `limit_req` nessa `location` (o limite é da API); o Sentry descarta o evento da rota. O `session_id` só trafega no corpo e não vai a log, pedido nem usuário. **Vida do `sessionId` (obrigação do app, threat model §15.5 c):** UUID novo a CADA abertura do app (processo novo) e também depois de 30 min sem uso; nunca igual ao id do aparelho ou da instalação, nunca guardado em disco entre aberturas nem entre dias. Sem isso ele vira identificador de aparelho (afeta o Data Safety e a SEC-194). Ao receber 429 o app mantém a fila local com tamanho limitado (R7 c). Corpo em lote: até 100 eventos e 64 KB (acima: 413 `PAYLOAD_TOO_LARGE` ou 422), Zod estrito (campo fora do esquema, texto livre ou `user_id`: 422 `VALIDATION_FAILED` e a rejeição é CONTADA, C6; o lote inteiro é recusado). Idempotente por `eventId` (reenvio do lote não duplica, C5). Resposta SEMPRE 202 quando válido, com `accepted`, `duplicates` e `discarded` (evento com `storeId` ou `productId` inexistente é descartado e contado; com a flag `coleta_eventos` desligada TUDO é descartado em silêncio: o app não distingue). Limites (C-ANA-03, tech-lead I6): o controle real é por **sessão pseudônima**: 60 requisições por minuto por `sessionId` (chave Redis = HMAC do `sessionId`, validade de até 120 s; `sessionId` e IP em claro nunca); acima, 429 com `Retry-After` e o app mantém a fila no aparelho (nada é perdido em silêncio). O IP é só trava anti-inundação com teto alto, porque a rede móvel da região fica atrás de CGNAT (SEC-200, R-38): 600 requisições por minuto e 300 sessões novas por hora por IP (chave Redis = HMAC do IP, nunca o IP em claro: contador por minuto com validade de até 120 s e contador de sessões novas com validade de no máximo 1 h; o segredo do HMAC é uma variável de ambiente PRÓPRIA da coleta, obrigatória no boot e diferente do `AUTH_HMAC_KEY`, threat model §15.5 e R7 a) `[HIPÓTESE: parâmetros `analytics_ip_req_min` e `analytics_sessoes_novas_ip_hora`; o Security confirma os números]`, também com 429, nunca descarte silencioso com 202. Os descartes e recusas são contados por motivo (`rate_ip`, `rate_session`, `unknown_store`, `flag_off`) e aparecem em `getAdminAnalyticsAccess` (`discards`). Validação de `storeId` e `productId` do lote com UMA consulta `= ANY(:ids)` (ou cache curto de ids existentes), nunca 1 por evento (A5). `occurredAt` é do aparelho e o servidor o limita a [-24 h, +5 min] e o grava truncado ao minuto. O `order_paid` NÃO vem por aqui: o servidor o grava ao confirmar o pagamento, com hora cheia e sem `order_id`, `user_id` nem valor (SEC-194). O app não envia com conta de lojista ou admin logada nem com o opt-out ligado (C-ANA-08): decisão do app.
+ * @summary Enviar eventos de navegação, sem identificar a conta (WB-361)
+ */
+export const ingestAnalyticsEvents = async (analyticsEventsRequest: AnalyticsEventsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ingestAnalyticsEventsResponse> => {
+
+  return apiFetch<ingestAnalyticsEventsResponse>(getIngestAnalyticsEventsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(analyticsEventsRequest)
+  }
+);}
+
+
+
+export type getAdminAnalyticsAccessResponse200 = {
+  data: AnalyticsAccessReport
+  status: 200
+}
+
+export type getAdminAnalyticsAccessResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getAdminAnalyticsAccessResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminAnalyticsAccessResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminAnalyticsAccessResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type getAdminAnalyticsAccessResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type getAdminAnalyticsAccessResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getAdminAnalyticsAccessResponseSuccess = (getAdminAnalyticsAccessResponse200) & {
+  headers: Headers;
+};
+export type getAdminAnalyticsAccessResponseError = (getAdminAnalyticsAccessResponse400 | getAdminAnalyticsAccessResponse401 | getAdminAnalyticsAccessResponse403 | getAdminAnalyticsAccessResponse409 | getAdminAnalyticsAccessResponse422 | getAdminAnalyticsAccessResponse429) & {
+  headers: Headers;
+};
+
+export type getAdminAnalyticsAccessResponse = (getAdminAnalyticsAccessResponseSuccess | getAdminAnalyticsAccessResponseError)
+
+export const getGetAdminAnalyticsAccessUrl = (params: GetAdminAnalyticsAccessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/analytics/access?${stringifiedParams}` : `/v1/admin/analytics/access`
+}
+
+/**
+ * Permissão `analytics:read` (super admin, operação e financeiro; **suporte 403**, WB-362 C6). Lê SÓ o agregado diário (nunca o bruto: nenhuma API nem tela lê o bruto e o papel do admin não tem leitura nessa tabela, C-ANA-04). Períodos fechados terminando ontem: 7, 30 ou 90 dias (o admin pode 90; o lojista só 7 e 30, R5). **Supressão no servidor (C-ANA-05, RN-A2):** célula com menos de 5 sessões NUNCA traz valor nem `n` (`suppressed: true`); todas as células suprimidas viram UMA linha "Outras" (`isOther: true`); se "Outras" nascer de uma só célula, absorve a menor visível; se ainda ficar < 5, a linha mostra "menos de 5" e **nenhum total da resposta é exato**: os totais vêm arredondados a múltiplo de 5 com `approximate: true` ("cerca de"). Total menos as partes publicadas nunca revela a célula suprimida (teste). Vendas e pedidos do banco ficam FORA desta resposta (seguem exatos em outro lugar). Flag `coleta_eventos` desligada: 409 `FEATURE_DISABLED` (staging: ligada). `generatedAt` e `cached` (cache de 5 min por parâmetros normalizados, com a permissão checada ANTES de ler o cache). Consulta com tempo limite de 5 s, 30 por minuto por admin.
+ * @summary Acessos agregados por loja, produto ou origem (WB-363 C3, C6 a C8; base da WB-362)
+ */
+export const getAdminAnalyticsAccess = async (params: GetAdminAnalyticsAccessParams, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsAccessResponse> => {
+
+  return apiFetch<getAdminAnalyticsAccessResponse>(getGetAdminAnalyticsAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

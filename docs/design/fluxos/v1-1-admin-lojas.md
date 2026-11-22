@@ -41,16 +41,27 @@ flowchart TD
 ```mermaid
 flowchart TD
   F[Ficha] --> BT[Ver como o lojista] --> PR{Perfil}
-  PR -->|Qualquer um dos 4| MO[Dialogo: motivo obrigatorio]
+  PR -->|Qualquer um dos 4| MO[Dialogo: motivo obrigatorio<br/>30 min, sem renovacao]
   MO -->|Cancelar| F
-  MO -->|Abrir visualizacao| LG[audit_log: quem, loja, quando, motivo]
-  LG --> VW[Telas do lojista com faixa fixa<br/>Visualizacao do admin - Somente leitura]
-  VW --> PD[Pedidos: dado do cliente como o lojista ve RN-14]
-  VW --> AC[Acoes de escrita: etiqueta so o lojista, sem botao]
-  VW -->|Requisicao direta de escrita| E403[Servidor recusa 403]
+  MO -->|Sem motivo 422| MO
+  MO -->|Muitas aberturas 429| MO
+  MO -->|Abrir visualizacao| LG[audit_log gravado ANTES do dado<br/>fecha a visao anterior do mesmo admin]
+  LG --> VW[Telas do lojista com banner fixo<br/>Visualizando como loja - somente leitura - tempo restante]
+  VW --> PD[Pedidos e trocas: primeiro nome e bairro,<br/>sem telefone, endereco nem texto do cliente]
+  VW --> AC[Acoes de escrita e menus fora da lista:<br/>etiqueta So o lojista, sem botao]
+  VW -->|Precisa falar com o cliente| FP[Ficha do pedido no admin, outra aba]
+  VW -->|Requisicao direta de escrita ou rota fora da lista| E403[Servidor recusa 403]
   VW -->|Sessao do admin expira| EX[Visao fecha, vai ao login]
   VW -->|Sair da visualizacao| F
-  VW -->|30 min| REN[Pede novo motivo - proposta, Security decide]
+  VW -->|Faltam 5 min e 1 min| AV[Aviso unico no banner]
+  VW -->|30 min completos| FIM[A visualizacao terminou: nenhum dado na tela]
+  VW -->|Admin abre outra visao| FIM
+  FIM -->|Abrir de novo| MO
+  FIM -->|Voltar| F
+  FP --> FP1{orders:read?}
+  FP1 -->|Nao| FP2[403: sem acesso a essa area]
+  FP1 -->|Sim| FP3[audit_log: quem, pedido, quando] --> FP4[Nome abreviado, e-mail e celular parciais,<br/>bairro e cidade, itens, pagamento, linha do tempo]
+  FP4 -->|Cliente nao atende| CN[Canal da Webag: suporte ou operador de entrega.<br/>Sem Revelar na v1.1]
 ```
 
 ## 3. Permissões na tela (o que aparece)

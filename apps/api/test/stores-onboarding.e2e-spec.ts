@@ -543,12 +543,9 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
         // reativar volta; aprovar suspensa direto é inválido (RN-16)
         if (action === 'approve') await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(409);
       }
-      await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(support.accessToken)).send({ reason: 'ajuste', profile: { description: 'x' } }).expect(403);
-      const edited = await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).send({ reason: 'Correção de descrição a pedido', profile: { description: 'Descrição ajustada pelo admin' } }).expect(200);
-      expect(edited.body.description).toBe('Descrição ajustada pelo admin');
-      const [edit] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, store.id), eq(auditLog.action, 'store.update')));
-      expect(edit?.after).toMatchObject({ description: 'Descrição ajustada pelo admin' });
-      expect(edit?.before).toBeDefined();
+      // I12 / ADR-018 D6: as duas rotas legadas de edição do admin (sem motivo nem versão) foram removidas; a edição vive em `/profile` e `/config/:section`.
+      await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).send({ reason: 'Correção de descrição a pedido', profile: { description: 'Descrição ajustada pelo admin' } }).expect(404);
+      await ctx.http.put(`/v1/admin/stores/${store.id}/settings/hours`).set(bearer(ops.accessToken)).send({ days: [] }).expect(404);
       await ctx.http.post(`/v1/admin/stores/${store.id}/reactivate`).set(bearer(ops.accessToken)).send({}).expect(200);
       await ctx.http.put(`/v1/stores/${store.id}/hours`).set(bearer(m.accessToken)).send({ days: [{ weekday: 1, intervals: [{ start: '08:00', end: '18:00' }] }] }).expect(204);
     });
@@ -560,8 +557,14 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
       await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(200);
       const res = await ctx.http.patch(`/v1/stores/${store.id}/profile`).set(bearer(m.accessToken)).send({ name: 'Nome Novo', description: 'Descrição vale na hora' }).expect(200);
       expect(res.body).toMatchObject({ name: 'Nome Antigo', pendingReview: true, description: 'Descrição vale na hora' });
+      const versionBefore = (await ctx.http.get(`/v1/admin/stores/${store.id}/overview`).set(bearer(ops.accessToken)).expect(200)).body.store.version as number;
       const approved = await ctx.http.post(`/v1/admin/stores/${store.id}/data-review/approve`).set(bearer(ops.accessToken)).send({ reason: 'Nome conferido' }).expect(200);
       expect(approved.body.name).toBe('Nome Novo');
+      // I5 (ADR-018 D2): aprovar a pendência muda `stores.name`, então sobe a versão; quem estava com a ficha na versão antiga recebe 409 e não sobrescreve.
+      const versionAfter = (await ctx.http.get(`/v1/admin/stores/${store.id}/overview`).set(bearer(ops.accessToken)).expect(200)).body.store.version as number;
+      expect(versionAfter).toBe(versionBefore + 1);
+      const stale = await ctx.http.patch(`/v1/admin/stores/${store.id}/profile`).set(bearer(ops.accessToken)).send({ reason: { code: 'requested_by_merchant', note: 'ajuste' }, expectedVersion: versionBefore, changes: { description: 'Edição com a ficha velha' } }).expect(409);
+      expect(stale.body.code).toBe('STORE_VERSION_CONFLICT');
       await ctx.http.post(`/v1/admin/stores/${store.id}/data-review/approve`).set(bearer(ops.accessToken)).send({ reason: 'Nome conferido' }).expect(409);
     });
 

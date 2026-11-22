@@ -31,4 +31,12 @@ describe('Sentry (DT-039)', () => {
     expect(out.request?.headers).toEqual({ Accept: 'application/json' });
     expect(out.request?.url).toContain('q=pao');
   });
+
+  it('VA-24: a credencial da visão "Ver como" (X-View-As) nunca sai no evento', () => {
+    const token = `vas_${'A'.repeat(43)}`;
+    const event = { request: { url: 'https://api.webag.com.br/v1/stores/1', headers: { 'X-View-As': token, 'x-view-as': token, Accept: 'application/json' } } } as unknown as ErrorEvent;
+    const out = scrubEvent(event);
+    expect(JSON.stringify(out)).not.toContain('vas_');
+    expect(out.request?.headers).toEqual({ Accept: 'application/json' });
+  });
 });

@@ -7,6 +7,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { maskCoordinates, maskTokenPaths } from './platform/logging/mask.js';
 import { HealthModule } from './health/health.module.js';
 import { APP_FILTER } from '@nestjs/core';
+import { LOG_REDACT_PATHS } from './platform/logging/redact.js';
 import { AdminModule } from './modules/admin/index.js';
 import { BackofficeModule } from './modules/backoffice/index.js';
 import { IdentityModule } from './modules/identity/index.js';
@@ -72,16 +73,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
             },
           },
           // Nunca logar credenciais (skill padroes-backend).
-          redact: {
-            paths: [
-              'req.headers.authorization',
-              'req.headers.cookie',
-              'req.headers["x-webag-bff-secret"]',
-              'res.headers["set-cookie"]',
-              'req.body',
-            ],
-            censor: '[redacted]',
-          },
+          redact: { paths: [...LOG_REDACT_PATHS], censor: '[redacted]' },
           autoLogging: {
             ignore: (req) => req.url?.startsWith('/health') ?? false,
           },

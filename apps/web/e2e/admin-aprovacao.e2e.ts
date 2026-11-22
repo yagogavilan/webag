@@ -8,7 +8,7 @@ test.describe('Aprovar loja (admin)', () => {
     // Super admin: é o único perfil que lê a auditoria (a operação decide do mesmo jeito).
     await login(page, 'admin@webag.local');
     await page.getByTestId('nav-lojas').click();
-    await expect(page.getByRole('heading', { name: 'Fila de aprovação', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Lojas', level: 1 })).toBeVisible();
     await expect(page.getByTestId(`admin.fila.row-${first.id}`)).toBeVisible();
 
     await page.getByTestId(`admin.fila.row-${first.id}-open`).click();

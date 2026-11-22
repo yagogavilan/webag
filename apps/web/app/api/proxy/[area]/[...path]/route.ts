@@ -6,6 +6,7 @@ import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { refreshSession } from '@/server/refresh';
 import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/upstream';
+import { clearedViewAsCookie } from '@/server/view-as';
 
 /**
  * Proxy da API para o navegador (BFF). Põe o Bearer a partir do cookie HttpOnly, renova uma vez em 401 e só
@@ -14,12 +15,14 @@ import { callApi, clientHints, parseJson, type UpstreamResult } from '@/server/u
 const ALLOWED: Record<SessionArea, RegExp> = {
   admin: /^(admin\/.+|me(\/.*)?|realtime\/tickets|uploads(\/[0-9a-f-]{36}\/complete)?|auth\/(reauth|logout-all|password\/(forgot|reset(\/complete)?))|legal\/[a-z_]+)$/,
   lojista:
-    /^(me(\/.*)?|realtime\/tickets|help|auth\/(reauth|logout-all|account-deletion\/cancel|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/(flags|maintenance)|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
+    /^(me(\/.*)?|realtime\/tickets|help|auth\/(reauth|logout-all|account-deletion\/cancel|password\/(forgot|reset)|email\/(verify|resend|correct))|legal\/[a-z_]+|regions|categories|config\/(flags|maintenance)|category-templates|waitlist|cep\/\d{8}|uploads(\/[0-9a-f-]{36}(\/complete)?)?|stores(\/[A-Za-z0-9_-]{1,40}){0,6})$/,
 };
 /** Importação de produtos: o corpo é a planilha (`text/csv`, até 1 MB na API; aqui um pouco mais para a API dar o erro certo). */
 const CSV_IMPORT = /^stores\/[0-9a-f-]{36}\/products\/import$/;
 const CSV_MAX_CHARS = 1_200_000;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,80}$/;
+/** `If-Match` do catálogo: só a versão inteira, com ou sem aspas (`"7"`). Qualquer outra coisa não passa. */
+const IF_MATCH = /^"?(\d{1,9})"?$/;
 /** Rotas cuja resposta traz tokens novos (a API revoga a sessão anterior): viram cookie e saem do corpo. */
 const ROTATES_TOKENS = new Set(['me/password', 'auth/password/reset']);
 /** Rotas que encerram a sessão atual. */
@@ -41,6 +44,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   if (isCsv && Number(request.headers.get('content-length') ?? 0) > CSV_MAX_CHARS * 2) return problem(413, 'PAYLOAD_TOO_LARGE', 'Arquivo grande demais', 'A planilha passa do limite de 1 MB.');
   const sentKey = request.headers.get('idempotency-key');
   const idempotencyKey = sentKey && IDEMPOTENCY_KEY.test(sentKey) && request.method === 'POST' ? sentKey : undefined;
+  const sentMatch = IF_MATCH.exec(request.headers.get('if-match') ?? '')?.[1];
+  const ifMatch = sentMatch && request.method !== 'GET' && request.method !== 'HEAD' ? `"${sentMatch}"` : undefined;
   let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
   const completesReset = area === 'admin' && joined === 'auth/password/reset/complete';
   if (completesReset) {
@@ -57,7 +62,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   const refresh = request.cookies.get(names.refresh)?.value ?? null;
   let renewed: TokenPair | null = null;
 
-  const send = () => callApi(`/v1/${joined}`, { method: request.method, accessToken: access, body, hints, query, ...(isCsv ? { contentType: 'text/csv; charset=utf-8' } : {}), ...(idempotencyKey ? { idempotencyKey } : {}) });
+  const send = () => callApi(`/v1/${joined}`, { method: request.method, accessToken: access, body, hints, query, ...(isCsv ? { contentType: 'text/csv; charset=utf-8' } : {}), ...(idempotencyKey ? { idempotencyKey } : {}), ...(ifMatch ? { ifMatch } : {}) });
   const renew = async (): Promise<boolean> => {
     if (!refresh) return false;
     renewed = await refreshSession(refresh, hints);
@@ -96,8 +101,16 @@ async function handle(request: NextRequest, context: { params: Promise<{ area: s
   const response = respond(result);
   if (completesReset && result.status < 400) writeCookies(response.cookies, [clearedPendingCookie('reset')]);
   if (renewed) writeCookies(response.cookies, sessionCookies(area, renewed));
-  if (result.status === 401 && !renewed && refresh) writeCookies(response.cookies, clearedCookies(area));
-  if (result.status < 400 && ENDS_SESSION.has(joined)) writeCookies(response.cookies, clearedCookies(area));
+  // A visão "Ver como" morre junto com a sessão do admin (ADR-018 D8): o cookie dela sai quando a sessão sai.
+  const dropView = (): void => (area === 'admin' ? writeCookies(response.cookies, [clearedViewAsCookie()]) : undefined);
+  if (result.status === 401 && !renewed && refresh) {
+    writeCookies(response.cookies, clearedCookies(area));
+    dropView();
+  }
+  if (result.status < 400 && ENDS_SESSION.has(joined)) {
+    writeCookies(response.cookies, clearedCookies(area));
+    dropView();
+  }
   // Redefinir senha só abre sessão para o lojista; o admin sempre passa pelo 2º fator (SEC-095).
   if (result.status < 400 && ROTATES_TOKENS.has(joined) && (joined !== 'auth/password/reset' || area === 'lojista')) {
     const tokens = parseJson<{ tokens?: TokenPair }>(result.text)?.tokens;

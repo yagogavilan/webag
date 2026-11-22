@@ -8,6 +8,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -46,6 +47,13 @@ export const neighborhoods = pgTable(
   (t) => [uniqueIndex('neighborhoods_city_name_uq').on(t.cityId, sql`lower(${t.name})`)],
 );
 
+/** Modelo de categoria (WB-375): só sugestões e avisos; a única exigência (`descriptionRequired`) vive em coluna própria. */
+export interface CategoryTemplateJson {
+  attributes: { name: string; values: string[] }[];
+  sizeChartHint: boolean;
+  noVoluntaryExchangeHint: boolean;
+}
+
 /** WB-106: 2 níveis (categoria > subcategoria). */
 export const categories = pgTable(
   'categories',
@@ -56,6 +64,11 @@ export const categories = pgTable(
     icon: varchar({ length: 40 }).notNull(),
     position: integer().notNull().default(0),
     active: boolean().notNull().default(true),
+    /** WB-375 / ADR-018 D13: modelo da categoria (atributos e valores sugeridos, avisos). Só sugere; nada é obrigatório além de `descriptionRequired`. */
+    template: jsonb().$type<CategoryTemplateJson>(),
+    /** RN-Q1 / DEC-106: a descrição é obrigatória ao publicar, nas duas vias (rápida e formulário completo). */
+    descriptionRequired: boolean().notNull().default(false),
+    descriptionMinChars: smallint().notNull().default(20),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -162,8 +175,11 @@ export const auditLog = pgTable(
     userAgent: text(),
     requestId: text(),
     reason: text(),
+    /** v1.1 R1 (D9): loja a que a ação se refere (histórico por loja, ficha 360). Nulo nas linhas anteriores à R1: o gatilho append-only impede o backfill. Sem FK de propósito. */
+    storeId: uuid(),
   },
   (t) => [
+    index('audit_log_store_at_idx').on(t.storeId, t.at.desc(), t.id.desc()),
     index('audit_log_at_idx').on(t.at),
     index('audit_log_actor_idx').on(t.actorId, t.at),
     index('audit_log_target_idx').on(t.targetType, t.targetId, t.at),

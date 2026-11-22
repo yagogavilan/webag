@@ -79,11 +79,15 @@ describe('detalhe do pedido e intervenção (B5, WB-108 C2, WB-109)', () => {
     expect(await screen.findByTestId('admin.pedidos.email')).toHaveTextContent('m***@gmail.com');
     expect(screen.getByTestId('admin.pedidos.phone')).toHaveTextContent('(11) *****-1234');
     expect(screen.getByTestId('admin.pedidos.delivery')).toHaveTextContent('Centro, Francisco Morato, SP');
-    expect(screen.getByTestId('admin.pedidos.delivery')).toHaveTextContent('endereço completo não aparece');
+    expect(screen.getByTestId('admin.pedidos.delivery')).toHaveTextContent('Rua, número e complemento não aparecem aqui.');
     expect(screen.getByTestId('admin.pedidos.total')).toHaveTextContent('R$ 59,90');
     expect(screen.getByTestId('admin.pedidos.values')).not.toHaveTextContent('Comissão da Webag');
     expect(screen.getByTestId('admin.pedidos.split-hidden')).toHaveTextContent('do financeiro e do super admin');
     expect(screen.getByTestId('admin.pedidos.timeline')).toHaveTextContent('Sistema');
+    // WB-352 C14: nota de proteção (a abertura foi registrada antes do dado) e orientação de contato, sem "Revelar".
+    expect(screen.getByTestId('admin.pedidos.protected-note')).toHaveTextContent('Esta abertura ficou registrada com o seu nome.');
+    expect(screen.getByTestId('admin.pedidos.contact-help')).toHaveTextContent('use o canal da Webag');
+    expect(screen.queryByRole('button', { name: /revelar/i })).not.toBeInTheDocument();
   });
 
   it('SEC-184: comissão e líquido só aparecem ao financeiro e ao super admin, e somem se a API mandar nulo', async () => {
@@ -211,6 +215,7 @@ describe('detalhe do pedido e intervenção (B5, WB-108 C2, WB-109)', () => {
     expect(await screen.findByTestId('admin.pedidos.disputed')).toHaveTextContent('chargeback');
     first.unmount();
     renderPanel(<AdminOrderDetailPage id="zz" />, 'finance');
-    expect(await screen.findByTestId('admin.pedidos.not-found')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin.pedidos.not-found')).toHaveTextContent('Confira o número e busque de novo.');
+    expect(screen.getByRole('link', { name: 'Voltar para as lojas' })).toHaveAttribute('href', '/admin/lojas');
   });
 });

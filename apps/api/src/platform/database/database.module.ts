@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import type { Env } from '../config/env.js';
+import { assertSafeDatabaseRole, NODE_ENV_AT_LOAD } from './db-role-guard.js';
 import * as schema from './schema.js';
 
 export const PG_POOL = Symbol('PG_POOL');
@@ -89,6 +90,16 @@ class PgPoolLifecycle implements OnApplicationBootstrap, OnApplicationShutdown {
    * descarte esse parâmetro o limite volta a 0,6 e a busca por erro de digitação muda SEM erro nenhum: confere e avisa no boot (A6).
    */
   async onApplicationBootstrap(): Promise<void> {
+    // D-06 (ADR-018 D19 item 1): ANTES de a API aceitar tráfego (`app.listen` vem depois do bootstrap). Em produção, ou com NODE_ENV ausente, papel de banco
+    // superusuário, dono do `audit_log` ou membro de `webag_migrator` derruba o boot (o erro propaga; `main.ts` sai com código 1). Fora de produção só avisa.
+    // Falha ao CONSULTAR o papel também derruba em produção: não dá para provar que é seguro.
+    const role = await assertSafeDatabaseRole(this.pool, NODE_ENV_AT_LOAD).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'UnsafeDatabaseRoleError') throw error;
+      if (NODE_ENV_AT_LOAD === 'production' || NODE_ENV_AT_LOAD === undefined) throw error;
+      this.logger.warn(`não foi possível conferir o papel do banco: ${(error as Error).message}`);
+      return null;
+    });
+    if (role && role.violations.length > 0) this.logger.warn(`D-06: o papel "${role.user}" tem poder demais (${role.violations.join(', ')}); em produção a API recusaria subir. Use webag_app (docs/deploy/guia-deploy.md, seção 15).`);
     try {
       const { rows } = await this.pool.query<{ threshold: string; statement_timeout: string; idle: string }>(
         `select current_setting('pg_trgm.word_similarity_threshold', true) as threshold, current_setting('statement_timeout') as statement_timeout, current_setting('idle_in_transaction_session_timeout') as idle`,

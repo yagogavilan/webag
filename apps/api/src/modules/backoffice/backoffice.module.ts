@@ -6,6 +6,8 @@ import { AccountsController } from './accounts.controller.js';
 import { AccountsService } from './accounts.service.js';
 import { AlertsController } from './alerts.controller.js';
 import { AlertsService } from './alerts.service.js';
+import { StoreOverviewController } from './store-overview.controller.js';
+import { StoreOverviewService } from './store-overview.service.js';
 
 /**
  * DEC-073 (B3 e B4): telas de operação do admin que cruzam módulos (alertas, usuários). Ninguém importa este módulo (sem ciclo): ele só lê as tabelas
@@ -13,7 +15,7 @@ import { AlertsService } from './alerts.service.js';
  */
 @Module({
   imports: [AdminModule, IdentityModule, StoresModule],
-  controllers: [AlertsController, AccountsController],
-  providers: [AlertsService, AccountsService],
+  controllers: [AlertsController, AccountsController, StoreOverviewController],
+  providers: [AlertsService, AccountsService, StoreOverviewService],
 })
 export class BackofficeModule {}

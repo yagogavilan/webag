@@ -85,7 +85,7 @@ html.limpo .proto{display:none}
 .btn.lime{background:var(--acento);color:var(--noite)}.btn.wht{background:#fff;color:var(--noite)}
 .btn.bad{background:#fff;color:var(--bad);box-shadow:inset 0 0 0 2px var(--bad)}.btn.badf{background:var(--bad)}
 .btn.lg{min-height:56px;font-size:16px}.btn.block{width:100%}.btn.sm{min-height:44px;padding:0 14px;border-radius:14px;font-size:14px}
-.btn.xl{min-height:72px;width:100%;font-size:20px;line-height:24px;border-radius:20px;background:var(--noite);color:#fff}.btn.xl .i{color:var(--acento)}
+.btn.xl{min-height:72px;width:100%;font-size:20px;line-height:24px;border-radius:20px;background:var(--noite);color:#fff}.btn.xl .i{color:var(--acento)}.btn.xl.lime .i,.btn.xl.wht .i{color:var(--noite)}
 .btn[disabled],.btn[aria-disabled=true]{background:var(--n2);color:var(--n6);box-shadow:none;cursor:not-allowed}.btn.xl[disabled] .i{color:var(--n6)}
 .lnk{display:inline-flex;align-items:center;gap:6px;min-height:44px;font:700 15px/20px var(--fu);color:var(--r7);text-decoration:underline;text-underline-offset:3px}
 .tag{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 9px;border-radius:9px;font:700 13px/18px var(--fu);background:var(--n1);color:var(--n7)}
@@ -175,7 +175,8 @@ button.pin{pointer-events:auto;cursor:pointer;background:none}
 @media(max-width:1099px){.disp[data-aba=mapa] .col-l{display:none}.disp:not([data-aba=mapa]) .col-r{display:none}.tabs a.onlym.onlym{display:flex}}
 .tabs a.onlym{display:none}
 .fr{padding:12px 0;border-bottom:1px solid var(--n2)}.fr.over,[data-drop].over{outline:3px dashed var(--acao)}
-.ctafix{position:sticky;bottom:60px;z-index:30;margin-top:12px;background:#fff;border-radius:20px;box-shadow:0 0 0 1px var(--n3);padding:12px}
+.ctafix{position:static;margin-top:16px;background:#fff;border-radius:20px;box-shadow:0 0 0 1px var(--n3);padding:12px}
+@media(max-width:1023px){.fila-col{display:flex;flex-direction:column}.fila-col>.ctafix{order:3}.fila-col>.fila-rota{order:2}.ctafix{position:sticky;bottom:calc(66px + env(safe-area-inset-bottom));z-index:30;box-shadow:0 0 0 1px var(--n3),0 -8px 16px -8px rgba(28,23,33,.18)}}
 /* faixa de saída (lojista) */
 .sbn{position:sticky;top:0;z-index:58;background:var(--noite);color:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:10px;border-bottom:5px solid var(--acento)}
 .sbn.forte{background:var(--bad);border-bottom-color:#fff}.sbn .chk{color:#fff}.sbn .chk input{accent-color:var(--acento)}
@@ -413,7 +414,7 @@ function filaHtml(){const ids=filaIds(),sel=IDS.filter(i=>S.sel[i]&&ids.includes
  const lista=ids.length?`<ul>${rows}</ul>${dp?`<p class="help">No computador, você também pode arrastar um pedido até o cartão do motoboy.</p>`:''}`:empty('Nenhum pedido pronto agora','Quando uma loja marcar “Pronto para coleta”, o pedido aparece aqui.');
  const bar=ids.length&&dp?`<div class="ctafix" aria-live="polite"><div class="row sb"><b>${sel.length} ${sel.length===1?'selecionado':'selecionados'} · ${vol} de 4 volumes</b></div>${sel.length&&msg?`<p class="err">${ic('alert',16)}<span>${msg}</span></p>`:''}<button class="btn lg block" style="margin-top:8px" data-a="gerar" ${!sel.length||msg?'aria-disabled="true"':''}>${ic('route',22)}Gerar rota${sel.length?' com '+sel.length+(sel.length>1?' pedidos':' pedido'):''}</button>${!sel.length?'<p class="help">Marque os pedidos que vão juntos.</p>':''}</div>`:'';
  const rota=emRota.length?`<h3 class="h3" style="margin:20px 0 8px">Em rota</h3><ul>${emRota.map(i=>`<li class="lrow"><div class="grow"><b>#${i} ${PD[i].c}</b><div class="cap mut">${PD[i].b} · ${MB[S.r.mot]}</div></div>${tag(pst(i)==='saiu'?'ok':'info','route',STL[pst(i)])}</li>`).join('')}</ul>${dp?`<button class="btn sec sm" data-a="reatrib">${ic('undo',18)}Reatribuir rota</button>`:''}`:'';
- return `<h2 class="h2" style="margin-bottom:8px">Fila de coleta</h2>${lista}${bar}${rota}`}
+ return `<h2 class="h2" style="margin-bottom:8px">Fila de coleta</h2><div class="fila-col"><div>${lista}</div>${bar}<div class="fila-rota">${rota}</div></div>`}
 function planHtml(){const pl=S.plan,T=times(pl.ord,pl.mot),dp=can('desp');const g=mkPts(pl.ord);
  const gl=(p)=>{const lat=(-23.274-p.y*0.00007).toFixed(5),lng=(-46.754+p.x*0.00009).toFixed(5);return lat+','+lng};
  const stops=pl.ord.map(sxy),gm=`https://www.google.com/maps/dir/?api=1&destination=${gl(stops[stops.length-1])}&travelmode=driving${stops.length>1?'&waypoints='+encodeURIComponent(stops.slice(0,-1).map(gl).join('|')):''}`;

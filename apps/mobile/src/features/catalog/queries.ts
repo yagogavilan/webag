@@ -38,17 +38,27 @@ export type HomeMode = 'delivery' | 'pickup';
 /** A escolha Entrega | Retirada persiste entre as aberturas (WB-036). */
 export const modeStore = createPersistedStore<HomeMode>('webag.mode.v1', 'delivery', (raw) => (raw === 'pickup' ? 'pickup' : 'delivery'));
 
+/**
+ * Quanto tempo cada leitura pública vale sem perguntar ao servidor (DEC-117, BUG-033).
+ * - `moderated` (loja, produto, vitrine da loja): a retirada por moderação/suspensão precisa aparecer na tela em até 5 s (DEC-113).
+ *   Dentro desse prazo o app não pede nada; depois, ao abrir/voltar à tela ou ao app, revalida em silêncio (o servidor responde
+ *   do cache ou 304 com ETag, barato) e troca o dado sem skeleton.
+ * - `list` (home, banners, avaliações): 60 s por desempenho.
+ * - `search`: 30 s, o mesmo `max-age` que a API manda na busca.
+ */
+export const STALE_TIME = { moderated: 5_000, list: 60_000, search: 30_000 } as const;
+
 const roundPoint = (n: number): number => Math.round(n * 10_000) / 10_000;
 
 // Opções das leituras da abertura: as MESMAS para o hook da tela e para o prefetch (mesma chave = uma só requisição, sem duplicar).
-const homeOptions = (point: DeliveryPoint | null, mode: HomeMode) => ({
+export const homeOptions = (point: DeliveryPoint | null, mode: HomeMode) => ({
   queryKey: ['home', point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null, mode] as const,
   queryFn: ({ signal }: { signal: AbortSignal }) => fetchHome({ lat: point?.lat ?? 0, lng: point?.lng ?? 0, mode }, signal),
-  staleTime: 60_000,
+  staleTime: STALE_TIME.list,
 });
 const categoriesOptions = { queryKey: ['categories'] as const, queryFn: fetchCategories, staleTime: 10 * 60_000 };
 const regionsOptions = { queryKey: ['regions'] as const, queryFn: fetchRegions, staleTime: 10 * 60_000 };
-const bannersOptions = (cityId: string | undefined) => ({ queryKey: ['banners', cityId ?? null] as const, queryFn: () => fetchBanners(cityId), staleTime: 60_000 });
+const bannersOptions = (cityId: string | undefined) => ({ queryKey: ['banners', cityId ?? null] as const, queryFn: () => fetchBanners(cityId), staleTime: STALE_TIME.list });
 
 export function useHomeQuery(point: DeliveryPoint | null, mode: HomeMode) {
   return useQuery({ ...homeOptions(point, mode), enabled: point !== null });
@@ -112,21 +122,21 @@ export function useCategoryNames(): { names: ReadonlyMap<string, string>; tree: 
 // ---- Loja e produto ----
 
 // Mesmas opções para a tela e para o prefetch no toque (mesma chave: o que o prefetch trouxe a tela encontra pronto, sem repetir).
-const storeOptions = (storeId: string | undefined, point: Pick<DeliveryPoint, 'lat' | 'lng'> | null) => ({
+export const storeOptions = (storeId: string | undefined, point: Pick<DeliveryPoint, 'lat' | 'lng'> | null) => ({
   queryKey: ['store', storeId, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null] as const,
   queryFn: () => fetchStore(storeId ?? '', point ? { lat: point.lat, lng: point.lng } : undefined),
-  staleTime: 60_000,
+  staleTime: STALE_TIME.moderated,
 });
 
-const storeProductsOptions = (storeId: string | undefined, sectionId: string | null) => ({
+export const storeProductsOptions = (storeId: string | undefined, sectionId: string | null) => ({
   queryKey: ['store-products', storeId, sectionId] as const,
   queryFn: ({ pageParam }: { pageParam: string }) => fetchStoreProducts(storeId ?? '', { limit: 20, ...(sectionId ? { sectionId } : {}), ...(pageParam ? { cursor: pageParam } : {}) }),
   initialPageParam: '' as string,
   getNextPageParam: (last: { nextCursor: string | null }) => last.nextCursor ?? undefined,
-  staleTime: 60_000,
+  staleTime: STALE_TIME.moderated,
 });
 
-const productOptions = (productId: string | undefined) => ({ queryKey: ['product', productId] as const, queryFn: () => fetchProduct(productId ?? ''), staleTime: 30_000 });
+export const productOptions = (productId: string | undefined) => ({ queryKey: ['product', productId] as const, queryFn: () => fetchProduct(productId ?? ''), staleTime: STALE_TIME.moderated });
 
 export function useStoreQuery(storeId: string | undefined, point: DeliveryPoint | null) {
   return useQuery({ ...storeOptions(storeId, point), enabled: Boolean(storeId) });
@@ -171,7 +181,7 @@ export function useReviewsQuery(kind: 'store' | 'product', id: string | undefine
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: Boolean(id),
-    staleTime: 60_000,
+    staleTime: STALE_TIME.list,
   });
 }
 
@@ -184,7 +194,7 @@ export function useProductResults(point: DeliveryPoint | null, q: string | undef
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: enabled && point !== null,
-    staleTime: 60_000,
+    staleTime: STALE_TIME.search,
   });
 }
 
@@ -195,6 +205,6 @@ export function useStoreResults(point: DeliveryPoint | null, q: string | undefin
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: enabled && point !== null,
-    staleTime: 60_000,
+    staleTime: STALE_TIME.search,
   });
 }

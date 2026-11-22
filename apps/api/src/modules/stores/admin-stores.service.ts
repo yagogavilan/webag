@@ -109,13 +109,13 @@ export class AdminStoresService {
     reason?: string,
   ): Promise<{ store: Store; before: Store }> {
     const result = await this.db.transaction(async (tx) => {
-      const [before] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('update');
+      const [before] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('no key update');
       if (!before) throw errors.notFound('Loja não encontrada.');
       if (before.status !== from || !canTransitionStore(before.status, to, 'admin')) return { kind: 'invalid' as const, current: before };
       const extra = await work(tx, before);
       const [after] = await tx
         .update(stores)
-        .set({ status: to, decidedAt: new Date(), decidedBy: admin.userId, decisionReason: reason ?? null, updatedAt: new Date(), ...extra })
+        .set({ status: to, decidedAt: new Date(), decidedBy: admin.userId, decisionReason: reason ?? null, version: sql`${stores.version} + 1`, updatedAt: new Date(), ...extra })
         .where(eq(stores.id, storeId))
         .returning();
       if (!after) throw new Error('Falha ao atualizar a loja');
@@ -221,11 +221,11 @@ export class AdminStoresService {
   /** Alteração de nome/documento pendente (R-23): aprova ou descarta; a loja continuou vendendo com os dados antigos. */
   async decideDataReview(storeId: string, approve: boolean, reason: string, ctx: RequestContext): Promise<Store> {
     return this.db.transaction(async (tx) => {
-      const [before] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('update');
+      const [before] = await tx.select().from(stores).where(eq(stores.id, storeId)).for('no key update');
       if (!before?.pendingChanges) throw errors.conflict('NO_PENDING_CHANGES', 'Não há alteração pendente');
       const [after] = await tx
         .update(stores)
-        .set({ ...(approve ? { name: before.pendingChanges.name ?? before.name } : {}), pendingChanges: null, updatedAt: new Date() })
+        .set({ ...(approve ? { name: before.pendingChanges.name ?? before.name } : {}), pendingChanges: null, version: sql`${stores.version} + 1`, updatedAt: new Date() })
         .where(eq(stores.id, storeId))
         .returning();
       if (!after) throw new Error('Falha ao decidir a alteração');

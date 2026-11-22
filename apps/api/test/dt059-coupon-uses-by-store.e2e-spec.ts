@@ -18,7 +18,7 @@ describe('Cupom da plataforma: usos por loja (DT-059)', () => {
     const ops = await createAdmin(ctx, 'operations');
     const support = await createAdmin(ctx, 'support');
     const buyer = await createCustomer(ctx);
-    const [storeA, storeB] = [await shopWith(ctx, [{ name: 'A', priceCents: 3_000, stock: 5 }]), await shopWith(ctx, [{ name: 'B', priceCents: 3_000, stock: 5 }])];
+    const [storeA, storeB] = [await shopWith(ctx, [{ name: 'Item A', priceCents: 3_000, stock: 5 }]), await shopWith(ctx, [{ name: 'Item B', priceCents: 3_000, stock: 5 }])];
     const coupon = await makeCoupon(ctx, { kind: 'fixed', value: 500, maxUses: 100 });
     const orderOf = async (storeId: string) =>
       (await ctx.db.insert(orders).values({ userId: buyer.userId, storeId, number: `WB-${randomUUID().slice(0, 6).toUpperCase()}`, status: 'delivered', mode: 'pickup', pickup: { address: 'Rua A, 1', instructions: null, prepMinMinutes: 10, prepMaxMinutes: 20 }, cartRevision: 1, etaMinMinutes: 30, etaMaxMinutes: 60, commissionCents: 0, applicationFeeCents: 0, finance: {}, subtotalCents: 3_000, deliveryFeeCents: 0, serviceFeeCents: 0, discountCents: 500, totalCents: 2_500, paymentMethod: 'pix' }).returning())[0]!;

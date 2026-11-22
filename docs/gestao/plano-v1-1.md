@@ -22,13 +22,13 @@ Esforço em UT (O / M / P / PERT). Premissas: P1 contrato e migrações = 15% do
 | Release | Histórias (WB) | O / M / P | PERT | Depende do fundador / jurídico / aparelho real |
 |---|---|---|---|---|
 | **W0** Base limpa (antes de tudo) | bugs, revisão diferencial, DoR | 6 / 9 / 14 | 9,3 | Disco (I-05); autorizar cortes (D-A a D-C) |
-| **R1** Cadastro rápido, admin de lojas, coleta em staging | 18: 350 a 355, 360, 361, 363, 369, 370 a 372, 374 a 377, 379 | 24 / 31 / 42 | 31,7 | Fundador testa cadastro com cronômetro no próprio celular; 5 pessoas do perfil para a meta de 60 s; J27 (edição de preço pelo admin) e J24 (coleta) só para ligar |
+| **R1** Cadastro rápido, admin de lojas, coleta em staging | 18: 350 a 355, 360, 361, 363, 369, 370 a 372, 374 a 377, 379 | **REESTIMADA 2026-11-22: ~40 a 44 UT total** (era 24 / 31 / 42); backend 16,5 a 19 (§10) | ~42 `[HIPÓTESE]` (era 31,7) | Fundador testa cadastro com cronômetro no próprio celular; 5 pessoas do perfil para a meta de 60 s; J27 (edição de preço pelo admin) e J24 (coleta) só para ligar |
 | **R2** Cupons, painéis prontos, acessos | 16: 340 a 349, 356, 357, 362, 367, 373 | 28 / 36 / 50 | 37,0 | F2 (orçamento R$ 0), F4 (custo previsto do motoboy por faixa); J22, J23, J27 para ligar; 5 entrevistas de lojistas (porta falsa) |
 | **R3** Rota, OK da loja, notificações, construtor | 9: 380 a 382, 390, 391, 396, 397, 358, 359 | 18 / 24 / 34 | 24,7 | Spike do extrato Protomaps (L5); Web Push só valida em aparelho real; F12 sem parecer: `saida_automatica` off |
 | **R4** App do motoboy e rastreio | 13: 383 a 389, 392 a 395, 398, 399 | 30 / 40 / 58 | 41,3 | **Aparelho Android real** (GPS em 2º plano, bateria); J8 e J26 para ligar; SEC-193 e SEC-198 antes |
 | **R5** Análises pagas e IA | 5: 364, 365, 366, 368, 378 | 8 / 12 / 18 | 12,3 | Preço e teste do módulo (F5/F6); 8 semanas de dado real (não existe local); J24, J25 |
 | **Final** Revisão geral, bugs e relatório visual | todas as telas | 8 / 12 / 18 | 12,3 | Aparelho real do fundador para "visto em aparelho: sim/não" |
-| **Total** | 61 histórias | 122 / 164 / 234 | **168,3** | Em janelas de calendário: PERT / 2 ≈ **84** `[HIPÓTESE]` |
+| **Total** | 61 histórias | 122 / 164 / 234 (R1 já reestimada em §10) | **168,3 original; ~177 a 181 com a R1 nova** | Em janelas de calendário: PERT / 2 ≈ **84** `[HIPÓTESE]` |
 
 Conta de realismo: 168 UT com ~2 UT por janela são ~84 janelas de 5 h. É grande. O fundador pediu TUDO (DEC-102) e tudo cabe só se o limite de uso não for o gargalo; a ordem de corte já aprovada (DEC-100: R5, construtor, R4, 346/348/354/365, 380; piso nunca) é o que sai primeiro. Recomendação de cortes extras em §8.
 
@@ -46,16 +46,22 @@ Regra de ordem em toda release: **contrato OpenAPI (backend-dev) → revisão do
 
 Caminho da W0: commit (W0.1) → revisões (W0.2) → QA (W0.3). A R1 não começa o código com a base suja (alvo móvel, lição da Onda 8).
 
-### R1: Cadastro rápido, admin de lojas, coleta em staging (G2 cobre: PRD, specs 1 a 4, TM)
+**Estado em 2026-11-22: W0 CONCLUÍDA** (PR 1, `d0a25b1`, DEC-115 a DEC-117; pareceres em `arquitetura/reviews/`, `seguranca/revisoes/` e `qa/performance/` com data 2026-11-22). Resta de W0: reteste de BUG-031/032, BUG-033 (mobile-dev, em andamento), disco (I-05). **Caminho crítico atual:** liberar disco (I-05) + contrato OpenAPI da R1 e estimativas (backend-dev, em andamento) → revisão do contrato (TL) → R1.1. O contrato é o próximo marco; sem ele a R1 não inicia. O restante da R1 e as ondas seguintes não mudam. SEC-200 (R-38) não trava a construção, só o deploy; SEC-205 e DT-085 só com 2ª réplica. Os 168 UT não incluem DT-085/086 e BUG-034/035 (R-40): serão estimados em `estimativas-v1-1-r1.md` e saem do buffer de 25 UT.
 
-| Onda | Slot 1 | Slot 2 | Slot 3 |
-|---|---|---|---|
-| R1.1 | backend-dev: contrato OpenAPI R1 + migrações (rascunho, grade, modelos, auditoria de loja, eventos, agregados) | tech-lead: revisa o contrato; ADR de rascunho | product-designer: R3/R4 (continua) |
-| R1.2 | backend-dev: admin de lojas (350, 351, 353, 355; piso 352/355 primeiro), depois cadastro (370 a 372, 374, 375) | mobile-dev: web admin (350 a 355) depois do contrato | security-engineer: C-ADM e C-CAD sobre o código entregue |
-| R1.3 | backend-dev: coleta e agregação (361, 363, 369), colar/importar/massa (376, 377), tempos (379) | mobile-dev: cadastro rápido (370 a 372, 374 a 377, 379) e aviso/opt-out no app (360) | qa-engineer: testes e2e e Playwright dos fluxos |
-| R1.4 | tech-lead: review final | security-engineer: parecer C-GEN, C-ANA em staging | qa-engineer: regressão, usabilidade, G4 local; PO aceita |
+### R1: Cadastro rápido, admin de lojas, coleta em staging (reestimada em 2026-11-22; conta em §10)
 
-Caminho crítico R1: contrato → rascunho/mídia (SEC-195) → cadastro rápido no web → **teste dos 60 s** → G4 local. Admin de lojas corre em paralelo (folga: 1 onda). Épicos: E-ADM (350 a 355), E-CAD (370 a 379), E-COL (360, 361, 363, 369).
+Contrato aprovado (DEC-123). Backend-dev é um slot só: **a cadeia serial do backend é o caminho crítico**; mobile-dev (web) e revisões correm em paralelo. UT = backend-dev, salvo indicação.
+
+| Onda | Backend-dev (UT, piso a realista) | Paralelo | Saída | Corte (ordem §10) |
+|---|---|---|---|---|
+| **R1.0** Sessão com Docker (~0,3, sem feature) | base e2e 912 verde 3x (superusuário e `TEST_DB_AS_APP=1`), `db-roles.e2e-spec.ts` (`REQUIRE_DB_ROLES=1`), migrar do zero sem superusuário, `db:seed` como `webag_app`, `compose config`, ensaio da restauração 8.4 | Sem Docker, em paralelo: PR de remoção das 2 rotas legadas + WB-355; partes puras da WB-352; escrever migrações 0058 a 0060; regras puras de 351/353; parser local A6 (mobile-dev, +0,4) | Base verde; Security valida D-06. Nada da R1.1 é "pronto" antes | Piso (D-06) |
+| **R1.1** Admin de lojas, piso (~6) | WB-355 0,5; WB-352 1,5 a 2,0 (VA-01 a VA-26, SEC-209 corrigida antes do merge); WB-350 0,5; WB-351 0,8; D-06 0,8 a 1,0; I4 (5 escritas) 0,25; GEN 0,3; migrações 0058 a 0060 | mobile-dev: web admin 350 a 355, "ver como" com tipos `...ViewAs`; Security revisa o PR da WB-352 na hora | AO-01..05, DB-01..05, VA verdes no CI com Docker; revisão diferencial do Security | Piso: não corta |
+| **R1.2** Cadastro rápido (~3,4) | R6 resolvido antes; WB-370 (+I11 `quickPublishProduct`) 1,0; 371 0,6; 372 0,3; 374 0,2; 375 0,5; 379 0,4; migrações 0061 a 0063 | mobile-dev: cadastro rápido no web e app; fundador + 5 pessoas do perfil para o teste de 60 s | Teste de 60 s (R-36); SEC-195 | Piso; só sai o PUT de modelo da 375 (-0,2) |
+| **R1.3** Catálogo pelo admin e massa (~5,5 a 6) | D18 (`runInTransaction`) 0,3 abre a onda; WB-377 (+B2) 1,0; WB-353 2,0; WB-354 ~0,3 (sem D-06); WB-376 (plano B CSV padrão) 1,1; I4 de `bulkProducts` 0,15; migração 0064 | mobile-dev: web da WB-377 com `Idempotency-Key` (R5: exigência liga junto), tabela de preços, massa do admin | BK-01..08 verdes; revisão diferencial da D18 | CSV/restaurar do WB-354 (-0,3), xlsx no servidor (-0,3), massa do admin (-0,5) |
+| **R1.4** Coleta em staging (~2,8) | 360, 361, 363, 369, nginx e varredura de log (R7), migração 0065 | mobile-dev: aviso e opt-out (360) | Só staging; flags `false` | Inteira para a R2 (-2,8) |
+| **Fecho** | tech-lead review final, Security (C-GEN, C-ANA em staging), QA regressão e G4 local; PO aceita | | SEC-206 e SEC-208 "Corrigido" (TM §15.7) | |
+
+Caminho crítico R1: R1.0 (Docker) -> R1.1 (WB-352 e D-06) -> R1.2 -> teste dos 60 s (fundador) -> R1.3 -> G4 local. Admin de lojas deixa de ter "folga de 1 onda": o piso (352, 355, D-06) vem primeiro e o cadastro rápido vem logo depois. R1.3 e R1.4 podem trocar se o fundador quiser dado de coleta antes (TL); recomendação: manter R1.4 por último, porque é a primeira da fila de corte. Épicos: E-ADM (350 a 355), E-CAD (370 a 379), E-COL (360, 361, 363, 369).
 
 ### R2: Cupons, painéis prontos, acessos
 
@@ -219,3 +225,70 @@ Buffer (fora das estimativas, no fim, com nome): **25 UT** (15% de 168) `[HIPÓT
 | D-C | Aceitar cortes extras de §8 | PO, CEO | WB-358/359, 373, 397, 368 |
 | D-D | Liberar espaço em disco antes da W0 (I-05) | CEO, fundador | Já; sem isso nada commita |
 | D-E | Backend-dev commita o desempenho pendente e a revisão diferencial é pré-requisito do merge | CEO | Sim |
+
+## 10. Reestimativa da R1 após o contrato (2026-11-22; DEC-118 a DEC-123)
+
+Fontes: `estimativas-v1-1-r1.md` (backend-dev, PERT 13,8, §7 com os deltas), apêndice de re-revisão em `arquitetura/reviews/contrato-v1-1-r1-2026-11-22.md` ("Estimativa revisada"), `seguranca/threat-model-v1-1.md` §14, §15.6 e §15.7. UT = a do §1 (`[HIPÓTESE]`, não calibrada).
+
+### 10.1 A conta
+| Linha | UT | Origem |
+|---|---|---|
+| Backend PERT original | 13,8 | backend-dev |
+| Deltas do §7 (WB-352 +0,5, D-06 +0,8 a 1,0, WB-353 +0,4, I4 +0,4, I5 +0,15, B2 +0,2, I11 +0,3, I3 +0,1, I8 -0,4, I7 -0,5) | +2,05 | tech-lead conferiu: **15,85 = piso** |
+| D18 (+0,3), D19(1) e `REVOKE` por migração (+0,1), D20(a) (+0,1), 24+ testes VA/AO/BK/DB dentro da WB-352 (+0,3 a 0,5) | +0,8 a 1,0 | tech-lead |
+| **Backend realista** | **16,5 a 17** | TL |
+| Com 15% de retrabalho (houve 1 rodada de correção do contrato) | **~19** | TL, `[HIPÓTESE]` |
+| Plano original reservava ao backend | 9 a 10 | `[HIPÓTESE]` do backend-dev sobre o §2 |
+| **Lacuna** | **7 a 9** | |
+| Mobile-dev (web e app) | 14,3 no plano + 0,4 (parser A6) = **14,7 mínimo** | **Sem estimativa independente do mobile-dev até hoje** (R-46): "ver como" com tipos próprios, tabela de preços e massa com chave de idempotência ainda não foram estimados |
+| Revisões TL + SEC + QA (25% no plano = 8) | ~9 a 10 `[HIPÓTESE]` | cresce com revisão diferencial da WB-352, D18 e D-06 |
+| **R1 total** | **~40 a 44** (plano: 31,7) | **+8 a +12** |
+
+Absorver +8 a +12 no buffer de 25 UT queimaria 1/3 a 1/2 dele antes de a R2 começar. **Recomendação: subir a linha de base da R1 e do total (168 para ~177 a 181) e deixar o buffer de 25 UT intacto**; DT-085, DT-086, BUG-034, BUG-035 (~1,4 a 2,0) continuam saindo do buffer (R-40).
+
+### 10.2 Buffer, compromisso e o que cabe
+- Buffer nomeado da R1: **15% = ~2,5 UT de backend**, no fim, já incluído na ponta alta (~19). Só para imprevisto; nunca para escopo novo.
+- Compromisso firme (sem R1.4 e sem os itens 1 a 4 da ordem de corte): backend ~13,5 a 15 UT. Isso é o que cabe sem depender de sorte.
+- Backend na cadeia: 0,3 + 6 + 3,4 + 5,75 + 2,8 = ~18,3 UT, consistente com a faixa 16,5 a 19.
+- Throughput ~2 UT por janela de calendário `[HIPÓTESE]`: ~20 a 22 janelas para a R1 inteira; mas como o backend é um slot, o calendário mínimo é ~17 a 19 janelas de backend serial, mais a cauda de revisão e QA.
+
+### 10.3 Ordem de corte aprovada (DEC-123) e piso
+Piso que **não corta**: WB-352, WB-355, D-06, R1.2. Se o realizado passar da faixa, corta nesta ordem (economia M, backend):
+| # | Corte | UT | Custo do corte |
+|---|---|---|---|
+| 1 | CSV e "restaurar" do WB-354 | 0,2 a 0,4 | Histórico fica só para leitura |
+| 2 | PUT de modelo pelo admin (WB-375, Could) | 0,2 | Modelos mudam só por migração |
+| 3 | `.xlsx` no servidor (WB-376): só CSV no navegador | 0,3 | Menos código no servidor |
+| 4 | Massa do admin (`bulkAdminStoreProducts`, WB-353) | 0,5 | Admin edita item a item; leva parte da D18 |
+| 5 | R1.4 inteira (coleta) para a R2 | ~2,8 | Sem dado de uso antes da R2; só staging mesmo |
+Soma 1 a 5: ~4,1 UT. Fecha só metade da lacuna: a outra metade é aceitar a R1 maior. **Não cortar** `price_adjust` do lojista pela metade: entra com D18 completo ou sai inteiro (TL).
+**Gatilhos** (decididos pelo PM, relatados ao CEO no mesmo dia): fim da R1.1 acima de 7,5 UT (1,25x de 6) = cortes 1 a 3 na hora; acima de 9 = cortes 4 e 5 também; R1.0 sem base verde 3x = nada da R1.1 vira "pronto" e o status vai a VERMELHO.
+
+### 10.4 Rodadas de agentes e sessão com Docker
+- **Rodadas** (1 UT = 1 janela de um agente): R1 inteira ~40 a 44; só backend ~16,5 a 19; só até o piso e R1.2 (R1.0 a R1.2): backend ~9,7 e total ~22 a 24. Cada onda ainda gasta rodadas de revisão (TL, Security, QA), já contadas nas ~9 a 10.
+- **Exige sessão com Docker** (a sandbox não tem; R-41): R1.0 inteira; toda migração (0058 a 0065) e e2e; VA, AO, BK e DB no CI "com Docker, não só local" (TM §15.7 item 2); concorrência de I2/I3 e D18; prova da D-06; ensaio de restauração. **Não exige Docker** (já pode rodar): remoção das 2 rotas legadas e WB-355 em PR rascunho, partes puras da WB-352, escrita (sem rodar) das migrações, regras puras da 351/353, parser A6. Disco: 683 MB livres de 252 GB em 2026-11-22 (I-05); imagens do compose não cabem, então a R1.0 depende de liberar disco ou de rodar na máquina do fundador.
+
+### 10.5 Gates de segurança da R1 (G4 local)
+SEC-206 (Alta, Ver como: desenho fechado, código pendente), SEC-207 (Média, máscara de cliente), SEC-208 (Média, idempotência na mesma transação da D18), SEC-209 (Média, `timeline` e "estrito" aninhado; devolvida ao backend-dev, bloqueia o **merge** da WB-352). Para fechar: VA-01..26, AO-01..05, BK-01..08, DB-01..05 verdes no CI com Docker, `x-view-as` no redact do pino e do Sentry, revisão diferencial da WB-352, D18 e D19 (TM §15.7). SEC-194 segue aberta até J24 e não bloqueia o G4 em staging.
+
+## 11. Re-baseline curto (2026-11-22, após DEC-133): o que resta e a carga do fundador
+
+R1.1 e R1.2 (back-end e web do cadastro rápido) estão **construídas e em QA final**; merge só depois do reteste 2 (BUG-042 e CI verde). Estado, bugs e condições de deploy: `board.md` (v1.1). UT realizadas **não medidas** pelo PM até hoje (indisponível); o backend-dev informa as UT gastas na R1.1 e na R1.2 para checar os gatilhos de 7,5 e 9 UT da §10.3 e recalibrar. Escopo que entrou depois da planning (SEC-213/214/215/218, `limitPct`, GET de configuração do admin, SEC-221, C15 da WB-352, `adjustVariantStock`): ~+0,5 a 1,0 UT, absorvido na linha de base da R1 (40 a 44); **se a R1.1+R1.2 passou de 9,4 UT, algo da ordem de corte sai da R1.3** (CEO decide). Total e buffer (25 UT) intactos `[HIPÓTESE]`.
+
+Horas do fundador são `[HIPÓTESE]` mínimas (ele não confirmou disponibilidade); o gargalo é a agenda, não o agente.
+
+| Etapa | Falta (UT, PERT `[HIPÓTESE]`) | Depende de | Carga do fundador | Ordem de corte / observação |
+|---|---|---|---|---|
+| **R1 fecho do QA** (agora) | ~0,5 (reteste 2, merge) | CI verde (R-49), BUG-042 | ~0,3 h: conferir a aba Actions no HEAD final; decidir SEC-200 (aceitar ou corrigir) | Merge não exige o fundador (docs/código; sem deploy) |
+| **R1.0** com Docker | 0,3 | D-16, disco (I-05) | 1 a 2 h: sessão na máquina com Docker (ou liberar disco) | Sem ela, D-06 e PG18 ficam "não provados"; bloqueia deploy, não o merge |
+| **Teste de aparelho e 60 s** (R1.2) | n/a (agentes) | C-07, D-14 | **~4 a 5 h**: roteiro §12.11 (~1,5 h) + 5 pessoas do perfil cronometradas (~3 h, incluindo recrutar). Única parte da R1 que depende de gente de fora | Sem isso a meta de 60 s e HIP-Q2 seguem `[HIPÓTESE]` |
+| **R1.3** | ~6,5 a 7 (inclui DT-095 1,1 e itens que entraram) | merge da R1.1/R1.2; D18 | ~0,5 h: decisões pontuais | Cortes 1 a 4 da §10.3; planilha e "juntar" já cortados (DEC-132) |
+| **R1.4** coleta (staging) | ~2,8 | R1.3 | ~0 (só staging, flags `false`) | Primeira da fila de corte; J24 só para ligar |
+| **R1.5** fecho da R1 | ~1,5 a 2 | SEC-206/208 "Corrigido", CI verde | ~1,5 h: RC local (`pnpm iphone`, Docker Desktop) | G4 local; G5 fora |
+| **R2** cupons e painéis | ~37 | contrato R2; F2 (R$ 0 por padrão), F4 | ~6 h: F2/F4 e J22/J23/J27 ao advogado (~1 h); 5 entrevistas da porta falsa (~3 h); RC (~1,5 h) | Cortes DEC-100; 373 e 346/348 primeiro |
+| **R3** rota, OK da loja, notificações | ~24,7 | ADR mapa (spike L5), SEC-196 | ~2 h: aprovar spike (~0,3 h), Web Push em aparelho (~0,5 h), RC (~1 h) | Construtor 358/359 e 380 antes; 397 só com aparelho |
+| **R5** análises e IA `fake` | ~12,3 | R1.4 (coleta em seed), R2 | ~1,5 h: F5/F6 (preço do módulo, ~0,5 h), RC (~1 h) | Fecha "pronta, desligada e testada com seed"; antes da R4 (D-B) |
+| **R4** app do motoboy | ~41,3 | R3 (391/390), SEC-193 e SEC-198, ADR courier | ~4 h: Android real e APK (~2 a 3 h), RC; J8/J26 só para ligar | Sem Android real: "RC com ressalva: emulador" (R-34); candidata a sair |
+| **Onda final** | ~12,3 | HEAD congelado | ~2,5 h: aparelho real e leitura do relatório visual | "Visto em aparelho: sim/não" só o fundador muda |
+
+Soma de horas do fundador (mínimo, sem imprevisto): ~25 a 27 h em ~9 janelas de agenda; a mais pesada e mais cedo é a de **aparelho + 60 s + Docker (~6 a 7 h em 2 janelas)**, que precisa ser pedida já. Caminho crítico: reteste 2 -> merge -> (R1.0 e teste de aparelho em paralelo) -> R1.3 -> R1.5 -> R2. Folga da R1: nenhuma no piso; a R1.4 é a folga (corta inteira). R2 em diante não mudou.

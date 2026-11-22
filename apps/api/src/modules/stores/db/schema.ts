@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  bigserial,
   boolean,
   date,
   index,
@@ -80,6 +82,8 @@ export const stores = pgTable(
     exposureLimitSetAt: timestamp({ withTimezone: true }),
     /** 3 remoções de produto em 30 dias (WB-107 C4). */
     suspensionReviewFlaggedAt: timestamp({ withTimezone: true }),
+    /** v1.1 R1 (D2, WB-351 C6): versão otimista; sobe a cada alteração de dados, configuração, pausa ou status feita pelo lojista ou pelo admin. */
+    version: integer().notNull().default(1),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -244,6 +248,47 @@ export const storeStatusHistory = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('store_status_history_store_idx').on(t.storeId, t.createdAt)],
+);
+
+/**
+ * v1.1 R1 (D10, WB-351 C1/C11): alterações do admin que o lojista vê no próprio painel, autor sempre "Webag" (sem nome de pessoa).
+ * `audit_id` liga à linha do `audit_log` (sem FK: a trilha é append-only e não pode travar a loja).
+ */
+export const storeAdminChanges = pgTable(
+  'store_admin_changes',
+  {
+    id: bigserial({ mode: 'number' }).primaryKey(),
+    storeId: uuid()
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    auditId: bigint({ mode: 'number' }),
+    type: text().notNull(),
+    /** Nome do que mudou ("Horário", "Pausa"); nunca dado de cliente. */
+    target: text(),
+    summary: text().notNull(),
+    reasonLabel: text().notNull(),
+    before: jsonb().$type<Record<string, unknown> | null>(),
+    after: jsonb().$type<Record<string, unknown> | null>(),
+    at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('store_admin_changes_store_at_idx').on(t.storeId, t.at)],
+);
+
+/** Alterações ainda sem e-mail-resumo (um e-mail por loja a cada 10 min, até 20 itens e "+N"). Usada a partir da R1.3 (preço e estoque pelo admin). */
+export const storeChangeDigest = pgTable(
+  'store_change_digest',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    storeId: uuid()
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    changeId: bigint({ mode: 'number' })
+      .notNull()
+      .references(() => storeAdminChanges.id, { onDelete: 'cascade' }),
+    sentAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('store_change_digest_pending_idx').on(t.storeId, t.createdAt).where(sql`${t.sentAt} is null`)],
 );
 
 /** Registro de atividade da loja ("quem fez o quê", WB-075 C5/C8). Sem dado do cliente. */

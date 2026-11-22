@@ -1,7 +1,8 @@
 'use client';
 
-import { DotsThree } from '@phosphor-icons/react';
+import { CaretDown, DotsThree } from '@phosphor-icons/react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Spinner } from './button';
 import { cx } from './cx';
 import s from './ui.module.css';
 
@@ -12,8 +13,12 @@ export interface MenuAction {
   testId?: string;
 }
 
-/** Menu de ações por linha (DotsThree). Setas navegam, Esc fecha e devolve o foco. */
-export function ActionMenu({ label, actions, testId }: { label: string; actions: MenuAction[]; testId?: string }) {
+/**
+ * Menu de ações por linha (DotsThree). Setas navegam, Esc fecha e devolve o foco.
+ * `text`: gatilho com rótulo visível (botão secundário "Mais") em vez do ícone. `align="start"`: abre para a direita do gatilho
+ * (gatilho no meio da linha, onde abrir para a esquerda sairia da tela). `busy`: ação em andamento (spinner, gatilho inerte).
+ */
+export function ActionMenu({ label, actions, testId, text, align = 'end', busy = false }: { label: string; actions: MenuAction[]; testId?: string; text?: string; align?: 'start' | 'end'; busy?: boolean }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -38,15 +43,27 @@ export function ActionMenu({ label, actions, testId }: { label: string; actions:
 
   return (
     <span className={s.menuWrap} ref={wrap}>
-      <button ref={trigger} type="button" className={s.iconButton} aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => setOpen((v) => !v)} data-testid={testId}>
-        <DotsThree size={24} weight="bold" aria-hidden="true" />
+      <button
+        ref={trigger}
+        type="button"
+        className={text ? cx(s.button, s.secondary) : s.iconButton}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        aria-busy={busy || undefined}
+        disabled={busy}
+        onClick={() => setOpen((v) => !v)}
+        data-testid={testId}
+      >
+        {busy ? <Spinner /> : text ? <>{text}<CaretDown size={16} weight="bold" aria-hidden="true" /></> : <DotsThree size={24} weight="bold" aria-hidden="true" />}
       </button>
       {open ? (
         <div
           id={menuId}
           role="menu"
           aria-label={label}
-          className={s.menu}
+          className={cx(s.menu, align === 'start' && s.menuStart)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               setOpen(false);

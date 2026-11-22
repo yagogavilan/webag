@@ -6,6 +6,9 @@ import { mediaAssets } from '../../media/db/schema.js';
 import { stores } from '../../stores/db/schema.js';
 
 export const PRODUCT_STATUSES = ['draft', 'active', 'paused', 'archived'] as const;
+/** Por onde o cadastro nasceu (WB-379, ADR-018 D1): câmera, duplicar, colar texto, planilha ou formulário completo. */
+export const PRODUCT_VIAS = ['camera', 'duplicate', 'paste', 'spreadsheet', 'form'] as const;
+export type ProductVia = (typeof PRODUCT_VIAS)[number];
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 /** Status de moderação SEPARADO do status do lojista; só o admin altera (R-12d). `review` = sinalizado, não bloqueado. */
 export const MODERATION_STATUSES = ['ok', 'review', 'paused', 'removed'] as const;
@@ -56,15 +59,29 @@ export const products = pgTable(
     idempotencyKey: varchar({ length: 80 }),
     publishedAt: timestamp({ withTimezone: true }),
     archivedAt: timestamp({ withTimezone: true }),
+    /** ADR-018 D2: sobe 1 a cada EDIÇÃO de catálogo (lojista ou admin), por um único helper do serviço; reserva, venda e devolução de estoque (só `product_variants`) nunca a mexem. */
+    version: integer().notNull().default(1),
+    /** ADR-018 D1: origem do cadastro (nulo nos produtos anteriores à v1.1). */
+    via: text({ enum: PRODUCT_VIAS }),
+    /** Rascunho aberto por admin em nome da loja (autoria visível, WB-353). */
+    createdByAdminId: uuid().references(() => users.id),
+    /** RN-Q4: produto de origem da cópia ("duplicado de <id>"); sem FK para não prender a exclusão do rascunho de origem. */
+    duplicatedFrom: uuid(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('products_store_idx').on(t.storeId, t.status),
+    /** Teto de rascunhos por loja e vencimento de 30 dias sem alteração (RN-Q2). */
+    index('products_store_drafts_idx').on(t.storeId, t.updatedAt).where(sql`${t.status} = 'draft'`),
     index('products_moderation_idx').on(t.moderationStatus, t.createdAt),
     uniqueIndex('products_idempotency_uq').on(t.storeId, t.idempotencyKey).where(sql`${t.idempotencyKey} is not null`),
     // Preço e estoque nunca fora da faixa, nem por bug de aplicação (RN-05).
     check('products_price_range', sql`${t.basePriceCents} is null or (${t.basePriceCents} between 1 and 9999999)`),
+    // ADR-018 D1 / I9: rascunho aceita nome vazio ("Novo produto" abre antes da câmera); fora de rascunho o nome tem 2 a 80 caracteres.
+    check('products_name_len', sql`${t.status} = 'draft' or char_length(${t.name}) between 2 and 80`),
+    check('products_version_positive', sql`${t.version} >= 1`),
+    check('products_via_valid', sql`${t.via} is null or ${t.via} in ('camera', 'duplicate', 'paste', 'spreadsheet', 'form')`),
   ],
 );
 
@@ -132,14 +149,15 @@ export const moderationTerms = pgTable(
   (t) => [uniqueIndex('moderation_terms_uq').on(t.kind, t.value)],
 );
 
-/** Histórico de moderação (append-only na prática): base da regra "3 remoções em 30 dias". */
+/**
+ * Histórico de moderação (append-only na prática): base da regra "3 remoções em 30 dias". BUG-042: `product_id` é anulável com `ON DELETE SET NULL`: apagar um
+ * rascunho (a rota de excluir ou o vencimento de 30 dias) não pode falhar por causa do evento, e a remoção já contada para a loja continua contando (`store_id`).
+ */
 export const productModerationEvents = pgTable(
   'product_moderation_events',
   {
     id: uuid().primaryKey().default(sql`gen_random_uuid()`),
-    productId: uuid()
-      .notNull()
-      .references(() => products.id),
+    productId: uuid().references(() => products.id, { onDelete: 'set null' }),
     storeId: uuid()
       .notNull()
       .references(() => stores.id),
@@ -148,5 +166,38 @@ export const productModerationEvents = pgTable(
     actorId: uuid().references(() => users.id),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('product_moderation_events_store_idx').on(t.storeId, t.action, t.createdAt)],
+  (t) => [
+    index('product_moderation_events_store_idx').on(t.storeId, t.action, t.createdAt),
+    // FK sem índice faria cada rascunho apagado varrer a tabela (SET NULL procura as filhas por `product_id`).
+    index('product_moderation_events_product_idx').on(t.productId),
+  ],
+);
+
+/**
+ * WB-379 / ADR-018 D11: medição do cadastro, 1 linha por produto criado pelo cadastro rápido. Só tempos, `via` e contagens (sem nome,
+ * descrição nem preço). `started_at` = criação do rascunho; a mediana só usa o cadastro CONTÍNUO (publicado até `cadastro_sessao_max_min`).
+ * O produto apagado (rascunho vencido) leva a linha junto (cascata): a medição de quem nunca publicou não interessa.
+ */
+export const productCreationMetrics = pgTable(
+  'product_creation_metrics',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    storeId: uuid()
+      .notNull()
+      .references(() => stores.id),
+    productId: uuid()
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    via: text({ enum: PRODUCT_VIAS }).notNull(),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    firstPhotoAt: timestamp({ withTimezone: true }),
+    publishedAt: timestamp({ withTimezone: true }),
+    photosCount: smallint(),
+    variationsCount: smallint(),
+  },
+  (t) => [
+    uniqueIndex('product_creation_metrics_product_uq').on(t.productId),
+    index('product_creation_metrics_published_idx').on(t.publishedAt).where(sql`${t.publishedAt} is not null`),
+    index('product_creation_metrics_store_idx').on(t.storeId, t.publishedAt),
+  ],
 );

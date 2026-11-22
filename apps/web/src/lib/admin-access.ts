@@ -10,7 +10,8 @@ const ALL_PROFILES: readonly AdminProfile[] = ['super_admin', 'operations', 'fin
 
 const VIEW: Record<AdminSection, readonly AdminProfile[]> = {
   inicio: ALL_PROFILES,
-  lojas: ['super_admin', 'operations', 'support'],
+  // WB-355 / v1.1 R1: os 4 perfis veem a ficha, o histórico e o "Ver como" (stores:read, view-as:open); editar é de super admin e operação.
+  lojas: ['super_admin', 'operations', 'finance', 'support'],
   logistica: ['super_admin', 'operations', 'finance', 'support'],
   estornos: ['super_admin', 'finance'],
   frete: ['super_admin', 'operations', 'finance'],

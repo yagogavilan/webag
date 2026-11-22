@@ -1,7 +1,45 @@
+import { readFileSync } from 'node:fs';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { runMigrations } from '../src/platform/database/migrate.js';
-import { TEST_ENV } from './test-env.js';
+import { TEST_ENV, TEST_ROLES } from './test-env.js';
+
+const ROLES_GRANTS_SQL = new URL('../../../infra/postgres/40-roles-grants.sql', import.meta.url);
+
+/**
+ * D-06: garante os papéis `webag_migrator` e `webag_app` no cluster (idempotente e tolerante a execuções simultâneas). Exige superusuário;
+ * sem ele devolve `false` e o setup segue como antes (migra com o usuário do teste), e `db-roles.e2e-spec.ts` pula (ou falha, com REQUIRE_DB_ROLES=1).
+ */
+async function ensureRoles(admin: pg.Client): Promise<boolean> {
+  try {
+    for (const { user, password } of [TEST_ROLES.migrator, TEST_ROLES.app]) {
+      if (!/^[a-z_]+$/.test(user) || !/^[A-Za-z0-9_]+$/.test(password)) throw new Error('papel ou senha de teste inválidos (só letras, números e _)');
+      await admin.query(
+        `DO $do$ BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user}') THEN
+             CREATE ROLE ${user} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '${password}';
+           END IF;
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END $do$`,
+      );
+    }
+    return true;
+  } catch (error) {
+    console.warn(`[e2e] papéis webag_migrator/webag_app indisponíveis (${error instanceof Error ? error.message : String(error)}): migrando como o usuário do teste; o D-06 não será provado`);
+    return false;
+  }
+}
+
+/** Extensões, posse do banco e acesso, com o MESMO arquivo que a infra usa em produção (`infra/postgres/40-roles-grants.sql`). */
+async function provisionDatabaseRoles(databaseUrl: string): Promise<void> {
+  const db = new pg.Client({ connectionString: databaseUrl });
+  await db.connect();
+  try {
+    await db.query(readFileSync(ROLES_GRANTS_SQL, 'utf8'));
+  } finally {
+    await db.end();
+  }
+}
 
 /** Recria o banco de teste, aplica as migrações do zero (prova que `migrate` funciona) e limpa o Redis de teste. */
 export default async function setup(): Promise<() => Promise<void>> {
@@ -16,13 +54,19 @@ export default async function setup(): Promise<() => Promise<void>> {
 
   const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
+  let rolesReady: boolean;
   try {
+    rolesReady = await ensureRoles(admin);
+    // SEC-212: no CI (REQUIRE_DB_ROLES=1) sem os papéis a execução inteira falha já aqui, antes de qualquer teste de papel ser "verde" por estar pulado.
+    if (!rolesReady && process.env.REQUIRE_DB_ROLES === '1') throw new Error('REQUIRE_DB_ROLES=1, mas os papéis webag_migrator e webag_app não puderam ser criados (o usuário do teste precisa ser superusuário)');
     await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
     await admin.query(`CREATE DATABASE "${dbName}"`);
   } finally {
     await admin.end();
   }
-  await runMigrations(testUrl);
+  // Com os papéis: o banco é do `webag_migrator`, que roda as migrações (como o job `migrate` em produção) e dá os privilégios ao `webag_app`.
+  if (rolesReady) await provisionDatabaseRoles(testUrl);
+  await runMigrations(rolesReady ? TEST_ENV.migratorDatabaseUrl : testUrl);
 
   const redis = new Redis(redisUrl);
   await redis.flushdb();

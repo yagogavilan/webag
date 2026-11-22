@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from '@nestjs/common';
 import { z } from 'zod';
-import { Ctx, CurrentPrincipal, Public, RequireReauth, Roles, StorePermission, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { Ctx, CurrentPrincipal, CurrentViewAs, Public, RequireReauth, Roles, StorePermission, ViewAs, type Principal, type RequestContext, type ViewAsContext } from '../../platform/auth/decorators.js';
 import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
@@ -46,8 +46,11 @@ type In<T extends z.ZodType> = z.infer<T>;
 export async function presentStore(
   services: { stores: StoresService; media: MediaService; db: Db },
   store: Store,
-  viewer: 'owner' | 'staff' | 'admin',
+  viewer: 'owner' | 'staff' | 'admin' | 'view_as',
 ) {
+  // WB-352 (§14.3): apresentador `view_as` por LISTA PERMITIDA (campo novo na loja não aparece aqui sem parecer do Security). Sem CPF/CNPJ, razão social,
+  // comissão, tarifa, conta de recebimento, `settings` embutido nem endereço além de bairro, cidade e UF.
+  if (viewer === 'view_as') return presentStoreViewAs(services, store);
   const [extra, logo, cover, open, commission, providerFee, live] = await Promise.all([
     services.stores.extraCategoryIds(store.id),
     store.logoAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : Promise.resolve([]),
@@ -61,6 +64,7 @@ export async function presentStore(
   ]);
   return {
     id: store.id,
+    version: store.version,
     status: store.status,
     /** Z.1 / DEC-072f: "no ar" = aprovada + produto ativo + conta de recebimento conectada. O painel do dia do lojista usa este campo (não deduz). */
     live,
@@ -93,6 +97,36 @@ export async function presentStore(
   };
 }
 
+async function presentStoreViewAs(services: { stores: StoresService; media: MediaService; db: Db }, store: Store) {
+  const [extra, logo, cover, open, live] = await Promise.all([
+    services.stores.extraCategoryIds(store.id),
+    store.logoAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.logoAssetId)) : Promise.resolve([]),
+    store.coverAssetId ? services.db.select().from(mediaAssets).where(eq(mediaAssets.id, store.coverAssetId)) : Promise.resolve([]),
+    services.stores.openReviewItems(store.id),
+    services.stores.isLive(store),
+  ]);
+  return {
+    id: store.id,
+    version: store.version,
+    live,
+    status: store.status,
+    name: store.name,
+    description: store.description,
+    phone: store.phone,
+    whatsapp: store.whatsapp,
+    mainCategoryId: store.mainCategoryId,
+    extraCategoryIds: extra,
+    logo: services.media.publicVariants(logo[0] ?? null),
+    cover: services.media.publicVariants(cover[0] ?? null),
+    pendingReview: store.pendingChanges !== null,
+    reviewItems: open.map((item) => ({ item: item.item, reason: item.reason })),
+    submittedAt: store.submittedAt?.toISOString() ?? null,
+    decisionReason: store.status === 'rejected' || store.status === 'suspended' ? (store.decisionReason ?? store.suspensionReason) : null,
+    createdAt: store.createdAt.toISOString(),
+    address: store.addressCep ? { neighborhood: store.addressNeighborhood, city: store.addressCityName, state: store.addressState } : null,
+  };
+}
+
 @Controller('v1')
 export class StoresController {
   constructor(
@@ -102,7 +136,7 @@ export class StoresController {
     @Inject(DRIZZLE) private readonly db: Db,
   ) {}
 
-  private present(store: Store, viewer: 'owner' | 'staff' | 'admin' = 'owner') {
+  private present(store: Store, viewer: 'owner' | 'staff' | 'admin' | 'view_as' = 'owner') {
     return presentStore({ stores: this.stores, media: this.media, db: this.db }, store, viewer);
   }
 
@@ -126,10 +160,12 @@ export class StoresController {
     return { data: await Promise.all(mine.map(async (store) => ({ ...(await this.present(store, store.role === 'owner' ? 'owner' : 'staff')), role: store.role }))), nextCursor: null };
   }
 
+  @ViewAs('getStore')
   @StorePermission('member')
   @Get('stores/:storeId')
-  async get(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string) {
+  async get(@CurrentPrincipal() principal: Principal, @CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string) {
     const store = await this.stores.getStore(uuidParam(storeId));
+    if (view) return this.present(store, 'view_as'); // a visão decide por `req.viewAs`, nunca por `principal.userId`
     const isOwner = store.ownerUserId === principal.userId;
     return { ...(await this.present(store, isOwner ? 'owner' : 'staff')), ...(isOwner ? { settings: await this.settings.present(store) } : {}) };
   }
@@ -179,10 +215,13 @@ export class StoresController {
 
   // ------------------------------------------------------------ configuração
 
+  @ViewAs('getStoreSettings')
   @StorePermission('settings')
   @Get('stores/:storeId/settings')
-  async getSettings(@Param('storeId') storeId: string) {
-    return this.settings.present(await this.stores.getStore(uuidParam(storeId)));
+  async getSettings(@CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string) {
+    const store = await this.stores.getStore(uuidParam(storeId));
+    // §14.3: na visão some qualquer destino de contato/notificação; o resto é lista permitida explícita.
+    return view ? this.settings.presentOperator(store) : this.settings.present(store);
   }
 
   @StorePermission('settings')

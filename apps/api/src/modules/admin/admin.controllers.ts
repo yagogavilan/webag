@@ -9,6 +9,7 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { AuditService, type AuditRow } from './audit.service.js';
 import { CATEGORY_ICONS } from './categories.icons.js';
 import { CategoriesService } from './categories.service.js';
+import { categoryTemplateSchema } from './admin.schemas.js';
 import { LEGAL_DOCUMENT_TYPES, type LegalDocumentType } from './db/schema.js';
 import { FeatureFlagsService } from './feature-flags.service.js';
 import { LegalService } from './legal.service.js';
@@ -138,6 +139,20 @@ export class CategoriesController {
   @Header('Cache-Control', 'public, max-age=60')
   async publicTree() {
     return { data: await this.categories.tree(true), nextCursor: null };
+  }
+
+  /** WB-375: público e sem dado pessoal, como `/categories` (ETag/304 pelo Express, cache curto). Categoria sem modelo não aparece. */
+  @Public()
+  @Get('category-templates')
+  @Header('Cache-Control', 'public, max-age=60')
+  async templates() {
+    return { data: await this.categories.templates(), nextCursor: null };
+  }
+
+  @AdminOnly('categories:write')
+  @Put('admin/category-templates/:categoryId')
+  setTemplate(@Param('categoryId') categoryId: string, @Body(new ZodPipe(categoryTemplateSchema)) body: z.infer<typeof categoryTemplateSchema>, @Ctx() ctx: RequestContext) {
+    return this.categories.setTemplate(id(categoryId), body, ctx);
   }
 
   @AdminOnly('categories:read')

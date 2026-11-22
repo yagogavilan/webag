@@ -865,6 +865,28 @@ route('GET', '/v1/stores/:id/products', {}, (req, res, ctx) => {
   const page = rows.slice(offset, offset + limit);
   json(res, 200, { data: page.map(summary), nextCursor: offset + limit < rows.length ? String(offset + limit) : null });
 });
+// Cadastro rápido (WB-370/371): rascunhos da loja e ponto de partida da lista. Mesma forma do contrato (ProductDraftPage, CatalogQuickStart).
+const MISSING_ORDER = (p) => [!p.name.trim() && 'name', p.basePriceCents == null && 'price', p.images.length === 0 && 'photo', !p.categoryId && 'category'].filter(Boolean);
+const draftSummary = (p) => ({
+  id: p.id, name: p.name, basePriceCents: p.basePriceCents, cover: p.images[0] ? imageUrls(p.images[0]) : null, missing: MISSING_ORDER(p), updatedAt: p.updatedAt,
+  expiresAt: new Date(Date.parse(p.updatedAt) + 30 * 86_400_000).toISOString(), expiresInDays: 30, version: 1, via: 'spreadsheet',
+});
+const storeDrafts = (storeId) => storeProducts(storeId).filter((p) => p.status === 'draft').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.seq - a.seq);
+route('GET', '/v1/stores/:id/product-drafts', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const rows = storeDrafts(s.id);
+  const limit = Number(ctx.query.get('limit') ?? 25);
+  const offset = Number(ctx.query.get('cursor') ?? 0);
+  json(res, 200, { data: rows.slice(offset, offset + limit).map(draftSummary), nextCursor: offset + limit < rows.length ? String(offset + limit) : null, count: rows.length, limit: 100 });
+});
+route('GET', '/v1/stores/:id/catalog/quick-start', {}, (req, res, ctx) => {
+  const s = mustCatalog(res, ctx);
+  if (!s) return;
+  const drafts = storeDrafts(s.id);
+  const withoutDescription = storeProducts(s.id).filter((p) => p.status === 'active' && !p.description).length;
+  json(res, 200, { suggestedCategoryId: null, draftCount: drafts.length, draftLimit: 100, latestDraft: drafts[0] ? draftSummary(drafts[0]) : null, withoutDescriptionCount: withoutDescription, limits: { variantsMax: 100, reajusteMaxPct: 30 } });
+});
 route('POST', '/v1/stores/:id/products', {}, (req, res, ctx) => {
   const s = mustCatalog(res, ctx);
   if (!s) return;

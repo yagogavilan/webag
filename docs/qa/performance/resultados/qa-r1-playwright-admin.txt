@@ -1,0 +1,10 @@
+  1) e2e/admin-aprovacao.e2e.ts:6:3 › Aprovar loja (admin) › abre a mais antiga, confere os documentos, confere os 6 itens e aprova 
+    Error: expect(locator).toBeVisible() failed
+[WebServer] ⨯ Error: Attempted to call isStoreTab() from the server but isStoreTab is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Compo
+  2) e2e/admin-aprovacao.e2e.ts:45:3 › Aprovar loja (admin) › SEC-188: o servidor não tem a abertura dos documentos (409 DOCUMENTS_NOT_REVIEWED): mostra qual falta, foca o documento e aprova depo
+    Error: expect(locator).toBeVisible() failed
+[WebServer] ⨯ Error: Attempted to call isStoreTab() from the server but isStoreTab is on the client. It's not possible to invoke a client function from the server, it can only be rendered as a Compo
+  3) e2e/admin-aprovacao.e2e.ts:83:3 › Aprovar loja (admin) › pedir correção exige o texto e leva o motivo por item; recusar exige motivo 
+  3 failed
+  3 skipped
+  62 passed (2.7m)

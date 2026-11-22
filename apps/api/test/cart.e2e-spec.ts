@@ -237,7 +237,7 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
     it('recusas com `code` específico e a sacola intacta: inexistente, vencido, mínimo, esgotado, já usado, outra loja, e-mail', async () => {
       const origin = isolatedPoint();
       const { variants, store } = await shop(origin, {}, [{ name: 'Item', priceCents: 5_000 }]);
-      const other = await shop(origin, { name: 'Outra' }, [{ name: 'X', priceCents: 1_000 }]);
+      const other = await shop(origin, { name: 'Outra' }, [{ name: 'Item X', priceCents: 1_000 }]);
       const user = await createCustomer(ctx);
       const unverified = await registerUser(ctx);
       await put(user, variants[0]!, { quantity: 1 }).expect(200);
@@ -285,7 +285,7 @@ describe('Sacola no servidor (ADR-010, WB-020, WB-021, WB-022, DEC-006, DEC-022)
 
     it('tirar itens abaixo do mínimo do cupom o deixa "não aplicado" na leitura, sem perder o código', async () => {
       const origin = isolatedPoint();
-      const { variants, store } = await shop(origin, {}, [{ name: 'A', priceCents: 6_000 }, { name: 'B', priceCents: 6_000 }]);
+      const { variants, store } = await shop(origin, {}, [{ name: 'Item A', priceCents: 6_000 }, { name: 'Item B', priceCents: 6_000 }]);
       const user = await createCustomer(ctx);
       await put(user, variants[0]!, { quantity: 1 }).expect(200);
       await put(user, variants[1]!, { quantity: 1 }).expect(200);

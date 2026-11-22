@@ -73,7 +73,7 @@ describe('Contrato do pedido: estorno (WB-259) e horário mudou (WB-261)', () =>
 
     it('só a dona vê o estorno: outra conta recebe 404', async () => {
       const { orderId } = await paidOrder();
-      const stranger = (await customerAt(ctx, (await shopWith(ctx, [{ name: 'X', priceCents: 1_000 }])).origin)).user;
+      const stranger = (await customerAt(ctx, (await shopWith(ctx, [{ name: 'Item X', priceCents: 1_000 }])).origin)).user;
       await ctx.http.get(`/v1/orders/${orderId}`).set(bearer(stranger.accessToken)).expect(404);
     });
   });

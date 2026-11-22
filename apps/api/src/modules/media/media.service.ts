@@ -16,6 +16,8 @@ export type MediaAsset = typeof mediaAssets.$inferSelect;
 
 const IMAGE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 const UPLOAD_WINDOW_SECONDS = 900;
+/** Lado maior do original recodificado da foto de produto (RN-Q3: 1.600 px). */
+const ORIGINAL_MAX_WIDTH = 1600;
 /** PRD de trocas: foto de até 5 MB. */
 const EXCHANGE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -131,17 +133,28 @@ export class MediaService {
         await this.storage.putObject('private', asset.objectKey, clean, 'image/webp');
         return this.ready(asset, 'image/webp', clean.length, info, null);
       }
+      // SEC-195 (C-CAD-02, ADR-018 D5): a foto de PRODUTO vem de câmera de celular (EXIF com GPS). O ORIGINAL guardado (bucket privado) também é substituído pela versão
+      // recodificada em WebP sem metadados, como na foto de troca, e as variantes saem DELA (uma decodificação só). Nenhum objeto do storage mantém a tag.
+      let source = body;
+      let contentType: DetectedType = detected;
+      let storedBytes = body.length;
+      if (asset.purpose === 'product_image') {
+        source = await renderVariant(body, ORIGINAL_MAX_WIDTH);
+        await this.storage.putObject('private', asset.objectKey, source, 'image/webp');
+        contentType = 'image/webp';
+        storedBytes = source.length;
+      }
       let variants: Record<string, string> | null = null;
       if (PUBLIC_PURPOSES.includes(asset.purpose)) {
         variants = {};
         const widths = VARIANT_WIDTHS.filter((width) => width <= Math.max(info.width, VARIANT_WIDTHS[0]));
-        for (const [width, rendered] of await renderVariants(body, widths.length > 0 ? widths : [VARIANT_WIDTHS[0]])) {
+        for (const [width, rendered] of await renderVariants(source, widths.length > 0 ? widths : [VARIANT_WIDTHS[0]])) {
           const key = `media/${asset.id}/${width}.webp`;
           await this.storage.putObject('public', key, rendered, 'image/webp');
           variants[String(width)] = key;
         }
       }
-      return this.ready(asset, detected, body.length, info, variants);
+      return this.ready(asset, contentType, storedBytes, info, variants);
     } catch (error) {
       if (error instanceof ImageRejected) return this.reject(asset, error.message);
       throw error;

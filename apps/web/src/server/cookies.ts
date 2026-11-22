@@ -23,13 +23,14 @@ export interface TokenPair {
   expiresIn: number;
 }
 
-interface CookieSpec {
+export interface CookieSpec {
   name: string;
   value: string;
   httpOnly: true;
   secure: boolean;
   sameSite: 'lax' | 'strict';
-  path: '/';
+  /** `/` nos cookies de sessão; a credencial de "Ver como" também (`__Host-`, SEC-219; ver `view-as.ts`). */
+  path: string;
   maxAge: number;
 }
 

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@ne
 import type { z } from 'zod';
 import {
   AdminOnly,
+  AdminSelf,
   AllowPendingMfa,
   Ctx,
   CurrentPrincipal,
@@ -78,6 +79,7 @@ export class AdminUsersController {
 }
 
 /** Configuração do próprio TOTP: única área que um admin sem segundo fator concluído alcança (WB-222 C3). */
+@AdminSelf()
 @Controller('v1/admin/totp')
 export class AdminTotpController {
   constructor(private readonly totp: TotpService) {}

@@ -25,4 +25,8 @@ async function bootstrap(): Promise<void> {
   await app.listen(config.get('API_PORT', { infer: true }), '0.0.0.0');
 }
 
-void bootstrap();
+// D-06: falha de boot (papel de banco inseguro, env inválida, banco fora) sai com código diferente de zero e mensagem clara, sem derrubar por "unhandled rejection".
+bootstrap().catch((error: unknown) => {
+  console.error(`[boot] a API não subiu: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+});

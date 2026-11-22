@@ -97,6 +97,14 @@ export const ADMIN_PERMISSIONS = {
   'payments:refunds:read': [SUPER, FIN],
   'payments:refunds:retry': [SUPER, FIN],
   'payments:refunds:cover': [SUPER],
+  /** WB-355 / C-ADM-01 (v1.1 R1): escrever no catálogo de uma loja (rascunho, edição, pausa, estoque), com motivo e versão; operação e super admin. */
+  'store-catalog:write': [SUPER, OPS],
+  /** WB-354: exportar o histórico de alterações da loja (CSV); inclui antes/depois, por isso sem o suporte. */
+  'store-history:export': [SUPER, OPS, FIN],
+  /** WB-352: abrir o "Ver como o lojista" (somente leitura, com motivo e auditoria); os 4 perfis, que já veem lojas. */
+  'view-as:open': [SUPER, OPS, FIN, SUP],
+  /** WB-363/362: acessos agregados (coleta de navegação); suporte não vê. */
+  'analytics:read': [SUPER, OPS, FIN],
 } as const satisfies Record<string, readonly AdminProfile[]>;
 
 export type AdminPermission = keyof typeof ADMIN_PERMISSIONS;

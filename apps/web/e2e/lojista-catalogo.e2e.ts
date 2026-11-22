@@ -10,7 +10,8 @@ test.describe('Catálogo (lojista)', () => {
     await loginLojista(page, merchant.email, merchant.password);
     await page.goto('/lojista/produtos');
     await expect(page.getByText('Sua vitrine está vazia')).toBeVisible();
-    await page.getByTestId(T('produtos', 'add')).click();
+    // "Novo produto" agora abre o cadastro rápido (WB-370); este fluxo cobre o formulário completo, que segue em /novo/completo.
+    await page.goto('/lojista/produtos/novo/completo');
 
     // Publicar vazio: o resumo lista o que falta e nada é enviado
     await page.getByTestId(T('produto', 'submit')).click();

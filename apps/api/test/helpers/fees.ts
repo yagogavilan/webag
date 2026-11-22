@@ -4,15 +4,20 @@ import { ParametersService } from '../../src/modules/admin/index.js';
 import { deliveryFeeTables } from '../../src/platform/database/schema.js';
 import type { TestContext } from './app.js';
 
+/** Contextos que mudaram parâmetro ou tabela de frete e ainda não restauraram (ver `close` em `app.ts`). */
+const touched = new WeakSet<TestContext>();
+
 const system = { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null };
 
 /** Parâmetro global do admin (DEC-036b), pelo serviço (invalida o cache). Os arquivos de teste rodam em série: restaure no `afterAll`. */
 export async function useParam(ctx: TestContext, key: string, value: number | string): Promise<void> {
+  touched.add(ctx);
   await ctx.app.get(ParametersService).update(key, value, 'ajuste de teste', system);
 }
 
 /** Grava uma versão nova da tabela do escopo padrão com as faixas dadas (distâncias em m; a última deve terminar em `raio_max_km`). */
 export async function useFeeTable(ctx: TestContext, tiers: { fromM: number; toM: number; feeCents: number; exchangeFeeCents?: number; expectedCostCents?: number; etaMinutes?: number }[], scope: { scopeType?: 'default' | 'city' | 'neighborhood'; scopeId?: string | null } = {}): Promise<void> {
+  touched.add(ctx);
   const scopeType = scope.scopeType ?? 'default';
   const key = scopeType === 'default' ? 'default' : scope.scopeId!;
   const [latest] = await ctx.db.select({ version: deliveryFeeTables.version }).from(deliveryFeeTables).where(eq(deliveryFeeTables.scopeKey, key)).orderBy(desc(deliveryFeeTables.version)).limit(1);
@@ -42,4 +47,10 @@ export async function restoreFees(ctx: TestContext): Promise<void> {
   for (const [key, value] of Object.entries(ETA_DEFAULTS)) await useParam(ctx, key, value);
   for (const [key, value] of Object.entries(LATE_DEFAULTS)) await useParam(ctx, key, value);
   await useFeeTable(ctx, [{ fromM: 0, toM: 15_000, feeCents: 500 }]);
+  touched.delete(ctx);
+}
+
+/** Chamado no `close` do contexto: restaura só se o arquivo mexeu e não restaurou. */
+export async function restoreFeesIfTouched(ctx: TestContext): Promise<void> {
+  if (touched.has(ctx)) await restoreFees(ctx);
 }

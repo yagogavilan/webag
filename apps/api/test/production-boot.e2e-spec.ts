@@ -2,8 +2,27 @@ import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
+import pg from 'pg';
 import { vi } from 'vitest';
 import { TEST_ENV } from './test-env.js';
+
+/**
+ * D-06: em produção a API recusa subir com papel de banco superusuário/dono. O banco de teste é acessado, aqui, como `webag_app` (criado pelo global-setup
+ * quando o usuário do teste é superusuário); sem o papel (ambiente sem superusuário) cai para a URL do teste.
+ */
+async function productionDatabaseUrl(): Promise<string> {
+  const probe = new pg.Client({ connectionString: TEST_ENV.appDatabaseUrl });
+  try {
+    await probe.connect();
+    await probe.end();
+    return TEST_ENV.appDatabaseUrl;
+  } catch {
+    return TEST_ENV.databaseUrl;
+  }
+}
+const PROD_DATABASE_URL = await productionDatabaseUrl();
+// SEC-212: com REQUIRE_DB_ROLES=1 (CI) o caso D-06 abaixo não pode ser pulado em silêncio: sem o papel `webag_app` o arquivo inteiro falha.
+if (PROD_DATABASE_URL === TEST_ENV.databaseUrl && process.env.REQUIRE_DB_ROLES === '1') throw new Error('REQUIRE_DB_ROLES=1, mas o papel webag_app não conecta ao banco de teste: o caso D-06 do production-boot seria pulado');
 
 /**
  * SEC-036 / SEC-080: em produção o módulo /v1/dev/* nem é registrado (404, não 403), o provedor fake não sobe e
@@ -13,7 +32,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
   const saved = { ...process.env };
   const productionEnv = {
     NODE_ENV: 'production',
-    DATABASE_URL: TEST_ENV.databaseUrl,
+    DATABASE_URL: PROD_DATABASE_URL,
     REDIS_URL: TEST_ENV.redisUrl,
     JWT_ACCESS_SECRET: 'a-very-long-random-production-secret-0123456789',
     AUTH_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210',
@@ -58,6 +77,24 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     await app.init();
     return app;
   };
+
+  it.skipIf(PROD_DATABASE_URL === TEST_ENV.databaseUrl)('D-06 (DB-01): em produção, com o papel de banco superusuário (ou dono) a API NÃO sobe, e com NODE_ENV ausente também não', async () => {
+    await expect(boot({ ...productionEnv, DATABASE_URL: TEST_ENV.databaseUrl })).rejects.toThrow(/D-06.*SUPERUSU/s);
+    await expect(boot({ ...productionEnv, DATABASE_URL: TEST_ENV.migratorDatabaseUrl })).rejects.toThrow(/D-06/);
+    // NODE_ENV ausente conta como produção para esta checagem (threat model §15.3-4): o env do app cai em `development`, mas o papel inseguro ainda é recusado
+    vi.resetModules();
+    Object.assign(process.env, { ...productionEnv, DATABASE_URL: TEST_ENV.databaseUrl });
+    delete process.env.NODE_ENV;
+    const { AppModule } = await import('../src/app.module.js');
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
+    await expect(app.init()).rejects.toThrow(/D-06/);
+    await app.close().catch(() => undefined);
+    // o papel da API sobe (e é o que os demais testes deste arquivo usam)
+    const ok = await boot(productionEnv);
+    await request(ok.getHttpServer()).get('/health').expect(200);
+    await ok.close();
+  });
 
   it('/v1/dev/payments/* não existe em produção: 404 (nem 401, nem 403)', async () => {
     const app = await boot(productionEnv);

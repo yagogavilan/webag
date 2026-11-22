@@ -116,23 +116,25 @@ Pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 1
 
 ---
 
-## v1.1 (R1 a R5): estado em 2026-11-22
+## v1.1 (R1 a R5): estado em 2026-11-22 (contrato R1 aprovado, R1 reestimada)
 
-Cor: **AMARELO**. Planejado, nada construído. Detalhe: `gestao/plano-v1-1.md`; tarefas: `gestao/board.md` (seção v1.1).
+Cor: **AMARELO** (era AMARELO). Motivo: G2 da R1 aprovado e R1.1 liberada (DEC-123), sem veto; mas a R1 custa ~40 a 44 UT contra 31,7 do plano, disco a 99% (683 MB) e sem Docker travam a R1.0, e SEC-206 a 209 estão abertos como gates. Vira VERMELHO se não houver máquina com Docker e disco para a R1.0 na próxima sessão. Vira VERDE quando a base e2e estiver verde 3x e a R1.1 dentro de 7,5 UT.
 
-| | Itens |
-|---|---|
-| Pronto | Pesquisa, 6 PRDs e backlog WB-340 a 399 (DEC-088 a 102); telas R1 e R2 com protótipo (`design/telas/v1-1-indice.md`, notas 3 a 4, sem teste com usuário); threat model e decisões D-01 a D-06 (DEC-103); revisão de segurança do desempenho do app; plano e board da v1.1 |
-| Em andamento | Telas R3 e R4 (designer); trabalho de desempenho da API na árvore **sem commit** (R-29) |
-| Bloqueado | **Disco a 99%** (I-05): sem espaço, commit e `pnpm` falham |
-| A fazer, em ordem | W0 (commit e revisão do desempenho, bugs BUG-029 a 032, SEC-186/189/195, DoR do PO) -> R1 -> R2 -> R3 -> R4 (após SEC-193 e SEC-198) -> R5 -> relatório visual |
-| Esforço | 168 UT, faixa 122 a 234 `[HIPÓTESE]`; sem datas |
-| Flags desligadas em produção até parecer | cupom (J22, J23, J27), coleta e Análises (J24), app do motoboy e rastreio (J8, J26), IA real (J25) |
+**Delta:** contrato OpenAPI da R1 e estimativas aceitos (V0-11); DEC-118 a 123; plano e board reestimados. Novos: R-41 a R-46, D-16.
+
+- **A conta (fonte: `gestao/plano-v1-1.md` §10):** backend 16,5 a 19 UT (piso 15,85) contra 9 a 10 do plano; R1 total ~40 a 44 UT (`[HIPÓTESE]`; o mobile-dev ainda não estimou). Rodadas de agentes: ~40 a 44 na R1; ~17 a 19 janelas de backend em série (caminho crítico).
+- **Piso que não corta:** WB-352, WB-355, D-06, R1.2. **Ordem de corte (DEC-123):** CSV/restaurar do WB-354, PUT de modelo, xlsx no servidor, massa do admin, R1.4 inteira (~4,1 UT juntos: fecha só metade da lacuna).
+- **Precisa de sessão com Docker:** R1.0 (e2e 3x, `db-roles`, restauração), toda migração 0058 a 0065, VA/AO/BK/DB no CI, D-06. Sem Docker já anda: remoção das 2 rotas legadas e WB-355, partes puras da WB-352, escrita das migrações.
+- **Bloqueado:** R1.0 | falta Docker e disco | CEO/fundador | próxima sessão | atrasa toda a R1.1 (sem folga).
+- **Caminho crítico:** R1.0 -> R1.1 (WB-352 e D-06) -> R1.2 -> teste de 60 s -> R1.3 -> G4 local; folga zero, sem datas (UT).
+- **Top riscos:** R-41 (sem Docker), R-45 (estouro da R1), R-42 a R-44 (SEC-206 a 209 bloqueiam G4/merge); também R-38 (SEC-200), R-32 (jurídico), R-46 (sem estimativa do mobile-dev).
+
+Decisões do CEO (em lote): (1) aprovar nova linha de base da R1 (~40 a 44 UT, total ~177 a 181) sem gastar o buffer de 25 UT (recomendado); (2) aprovar os gatilhos de corte: R1.1 acima de 7,5 UT corta 1 a 3, acima de 9 corta também 4 e 5; (3) mandar o mobile-dev estimar a R1 antes da R1.2; (4) escolher onde roda a R1.0 (máquina do fundador com Docker Desktop ou liberar disco aqui); (5) manter R1.4 por último (recomendado) ou trocá-la com a R1.3.
 
 Depende do fundador (por urgência):
-1. **Liberar espaço em disco** do ambiente (I-05).
-2. Decidir as D-A a D-E do `plano-v1-1.md` §9 (via CEO): 2ª instância do mobile-dev em pasta separada, ordem R4/R5, cortes extras, revisão antes do merge.
-3. **Levar J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
-4. **Aparelho Android** e forma de gerar o APK (R4): sem ele o app do motoboy só passa em emulador.
-5. Em cada release: 1 sessão para rodar local (`pnpm iphone`, Docker Desktop) e testar; **5 pessoas do perfil** para a meta de cadastro em 60 s; 5 lojistas para a porta falsa.
-6. Orçamento de cupom (hoje R$ 0), cotação de motoboys (custo previsto) e preço do módulo Análises, quando chegar a hora.
+1. **Liberar disco** (I-05) e **uma máquina com Docker** para a R1.0 (D-16).
+2. **Aceitar ou mandar corrigir SEC-200** antes de qualquer deploy (DEC-115).
+3. **5 pessoas do perfil** para o teste de 60 s da R1.2 (D-14).
+4. **Tornar o repositório privado** e decidir a **tag `v1.0.0`** (D-15, D-08).
+5. **Levar J8 e J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
+6. Decisões F2, F5, F8, F10/F16 e cotação de motoboys (D-13); aparelho Android e APK (R4, D-11).

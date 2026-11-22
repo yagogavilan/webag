@@ -3,9 +3,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
-import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
+import { DRIZZLE, type Db, type DbOrTx, type Tx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
-import { AuditService, FeatureFlagsService, ParametersService } from '../admin/index.js';
+import { asHistoryObject, AuditService, FeatureFlagsService, ParametersService, sanitizeForAudit } from '../admin/index.js';
 import { storeActivity, storeDeliveryTiers, storeHolidays, storeHours, storeSettings, type stores } from './db/schema.js';
 import type { Tier } from './domain/delivery.js';
 import { isOpenNow, pauseUntil, validateDayIntervals, type Interval, type PauseKind, type WeeklyHours } from './domain/hours.js';
@@ -17,6 +17,15 @@ type Store = typeof stores.$inferSelect;
 export interface Actor {
   userId: string;
   kind: 'merchant' | 'admin';
+  /** Admin (WB-351): motivo do catálogo já codificado (`codigo` ou `codigo|nota`), gravado na linha de auditoria. */
+  reason?: string;
+}
+
+/** Referência da linha de auditoria gravada (id e antes/depois sem segredos), para o feed do lojista e o `auditEntryId`. `id` 0 = ação do lojista (vai ao `store_activity`). */
+export interface AuditRef {
+  id: number;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
 }
 
 const toMin = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
@@ -43,13 +52,38 @@ export class StoreSettingsService {
     if (store.status === 'rejected') throw errors.conflict('STORE_NOT_EDITABLE', 'Loja recusada. Fale com o suporte.');
   }
 
-  /** Merchant: log da loja (quem, quando, antes/depois); admin: auditoria com antes/depois (WB-104 C3). */
-  private async record(tx: DbOrTx, store: Store, actor: Actor, ctx: RequestContext, action: string, before: unknown, after: unknown): Promise<void> {
+  /** Merchant: log da loja (quem, quando, antes/depois); admin: auditoria com antes/depois, motivo e `store_id` (WB-104 C3, WB-351). */
+  private async record(tx: DbOrTx, store: Store, actor: Actor, ctx: RequestContext, action: string, before: unknown, after: unknown): Promise<AuditRef> {
+    const ref: AuditRef = { id: 0, before: asHistoryObject(sanitizeForAudit(before)), after: asHistoryObject(sanitizeForAudit(after)) };
     if (actor.kind === 'admin') {
-      await this.audit.record(tx, ctx, { action: `store.${action}`, targetType: 'store', targetId: store.id, before: before as Record<string, unknown>, after: after as Record<string, unknown> });
+      ref.id = await this.audit.record(tx, ctx, { action: `store.${action}`, targetType: 'store', targetId: store.id, storeId: store.id, before: before as Record<string, unknown>, after: after as Record<string, unknown>, ...(actor.reason ? { reason: actor.reason } : {}) });
     } else {
       await tx.insert(storeActivity).values({ storeId: store.id, actorId: actor.userId, action: `store.${action}`, details: { before, after } as Record<string, unknown> });
+      // BUG-037: a ficha 360 lê o `audit_log`; o lojista entra com autor `merchant` e antes/depois (`store_activity` segue sendo o log do painel do lojista).
+      // Preferências pessoais do lojista (aviso por e-mail, limite de estoque baixo) não são "alteração da loja": ficam só no log dele.
+      if (action !== 'notifications' && action !== 'low_stock_threshold') {
+        ref.id = await this.audit.record(tx, ctx, { action: `store.${action}`, targetType: 'store', targetId: store.id, storeId: store.id, before: before as Record<string, unknown>, after: after as Record<string, unknown> });
+      }
     }
+    return ref;
+  }
+
+  /**
+   * Transação da alteração. O admin (WB-351) passa a dele (`exec`), com a loja já travada e a versão conferida; o lojista abre a própria e sobe a
+   * `version` da loja PRIMEIRO (loja, depois configuração: a mesma ordem de locks do admin, sem ciclo). Assim o admin que editava em paralelo recebe 409.
+   */
+  private run<T>(actor: Actor, storeId: string, exec: Tx | undefined, fn: (tx: Tx) => Promise<T>): Promise<T> {
+    if (exec) return fn(exec);
+    return this.db.transaction(async (tx) => {
+      if (actor.kind === 'merchant') await this.stores.bumpVersion(tx, storeId);
+      return fn(tx);
+    });
+  }
+
+  /** Há pausa em vigor (por tempo ou indefinida)? Lida sob a transação do chamador. */
+  async isPaused(storeId: string, exec: DbOrTx = this.db, now = new Date()): Promise<boolean> {
+    const [row] = await exec.select({ until: storeSettings.pausedUntil, indefinitely: storeSettings.pausedIndefinitely }).from(storeSettings).where(eq(storeSettings.storeId, storeId));
+    return Boolean(row && (row.indefinitely || (row.until?.getTime() ?? 0) > now.getTime()));
   }
 
   // ------------------------------------------------------------------ leitura
@@ -127,9 +161,18 @@ export class StoreSettingsService {
     };
   }
 
+  /**
+   * Visão segura da configuração (lista permitida explícita): a do "Ver como" (§14.3) e a do admin (`GET /v1/admin/stores/:id/settings`).
+   * Sem `notifications` nem qualquer destino de contato; campo novo em `present()` NÃO sai aqui até alguém incluí-lo de propósito.
+   */
+  async presentOperator(store: Store, now = new Date()) {
+    const { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold } = await this.present(store, now);
+    return { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold };
+  }
+
   // ------------------------------------------------------------------ horários
 
-  async setHours(store: Store, days: { weekday: number; intervals: { start: string; end: string }[] }[], actor: Actor, ctx: RequestContext): Promise<void> {
+  async setHours(store: Store, days: { weekday: number; intervals: { start: string; end: string }[] }[], actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
     const fieldErrors: { field: string; message: string }[] = [];
     const rows: { weekday: number; startMin: number; endMin: number }[] = [];
@@ -143,46 +186,49 @@ export class StoreSettingsService {
       for (const i of intervals) rows.push({ weekday: day.weekday, ...i });
     });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_HOURS', 'Horários inválidos', { errors: fieldErrors });
-    await this.db.transaction(async (tx) => {
+    return this.run(actor, store.id, exec, async (tx) => {
       // I5: dois salvamentos simultâneos se enfileiram na linha de configuração (mesmo padrão de setDelivery).
       await tx.select({ id: storeSettings.storeId }).from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       const before = await this.weeklyHours(store.id, tx);
       await tx.delete(storeHours).where(eq(storeHours.storeId, store.id));
       if (rows.length > 0) await tx.insert(storeHours).values(rows.map((r) => ({ storeId: store.id, ...r })));
-      await this.record(tx, store, actor, ctx, 'hours', before, rows);
+      // BUG-044: antes e depois na MESMA forma (o que ficou gravado, por dia); com `rows` (lista plana) o "mesmo horário" nunca batia com o antes (objeto por dia).
+      return this.record(tx, store, actor, ctx, 'hours', before, await this.weeklyHours(store.id, tx));
     });
   }
 
-  async setHolidays(store: Store, holidays: { date: string; label?: string }[], actor: Actor, ctx: RequestContext): Promise<void> {
+  async setHolidays(store: Store, holidays: { date: string; label?: string }[], actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
     if (new Set(holidays.map((h) => h.date)).size !== holidays.length) throw errors.validation([{ field: 'holidays', message: 'Data repetida.' }]);
-    await this.db.transaction(async (tx) => {
+    return this.run(actor, store.id, exec, async (tx) => {
       await tx.select({ id: storeSettings.storeId }).from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       const before = await this.holidays(store.id, tx);
       await tx.delete(storeHolidays).where(eq(storeHolidays.storeId, store.id));
       if (holidays.length > 0) await tx.insert(storeHolidays).values(holidays.map((h) => ({ storeId: store.id, day: h.date, label: h.label ?? null })));
-      await this.record(tx, store, actor, ctx, 'holidays', before, holidays);
+      return this.record(tx, store, actor, ctx, 'holidays', before, holidays);
     });
   }
 
   /** WB-056 C3/C4: a loja vira "Fechada" na hora e reabre sozinha ao fim do prazo (cálculo na leitura, sem job). */
-  async pause(store: Store, kind: PauseKind, actor: Actor, ctx: RequestContext, now = new Date()): Promise<void> {
+  async pause(store: Store, kind: PauseKind, actor: Actor, ctx: RequestContext, now = new Date(), exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
     const next = pauseUntil(kind, now);
-    await this.db.transaction(async (tx) => {
+    const ref = await this.run(actor, store.id, exec, async (tx) => {
       await tx.update(storeSettings).set({ pausedUntil: next.pausedUntil, pausedIndefinitely: next.pausedIndefinitely, updatedAt: now }).where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'pause', null, { kind, until: next.pausedUntil?.toISOString() ?? null });
+      return this.record(tx, store, actor, ctx, 'pause', null, { kind, until: next.pausedUntil?.toISOString() ?? null });
     });
-    await this.storefront.storeChanged(store.id); // DEC-113: "Fechada" na vitrine em até 5 s
+    if (!exec) await this.storefront.storeChanged(store.id); // DEC-113: "Fechada" na vitrine em até 5 s (com `exec`, quem chama invalida depois do commit)
+    return ref;
   }
 
-  async resume(store: Store, actor: Actor, ctx: RequestContext): Promise<void> {
+  async resume(store: Store, actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
-    await this.db.transaction(async (tx) => {
+    const ref = await this.run(actor, store.id, exec, async (tx) => {
       await tx.update(storeSettings).set({ pausedUntil: null, pausedIndefinitely: false, updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'resume', null, null);
+      return this.record(tx, store, actor, ctx, 'resume', null, null);
     });
-    await this.storefront.storeChanged(store.id);
+    if (!exec) await this.storefront.storeChanged(store.id);
+    return ref;
   }
 
   // ------------------------------------------------------------------- entrega
@@ -191,7 +237,7 @@ export class StoreSettingsService {
    * DEC-036: o lojista escolhe só "entrega pela Webag" e/ou "retirada" e o tempo de preparo; taxa, faixas, raio, mínimo e
    * entrega grátis são do admin (campos antigos são aceitos e ignorados, para o app publicado não quebrar).
    */
-  async setDelivery(store: Store, input: DeliveryInput, actor: Actor, ctx: RequestContext): Promise<void> {
+  async setDelivery(store: Store, input: DeliveryInput, actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
     const settings = await this.stores.getSettings(store.id);
     const fieldErrors: { field: string; message: string }[] = [];
@@ -206,12 +252,12 @@ export class StoreSettingsService {
     if (!input.acceptsDelivery && !settings.pickupEnabled) fieldErrors.push({ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_DELIVERY', 'Configuração de entrega inválida', { errors: fieldErrors });
 
-    await this.db.transaction(async (tx) => {
+    return this.run(actor, store.id, exec, async (tx) => {
       // Trava a linha: duas abas desligando entrega e retirada ao mesmo tempo deixam pelo menos uma ativa.
       const [locked] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!input.acceptsDelivery && !locked?.pickupEnabled) throw errors.unprocessable('INVALID_DELIVERY', 'Configuração de entrega inválida', { errors: [{ field: 'acceptsDelivery', message: 'Ative a retirada para desligar a entrega.' }] });
       await tx.update(storeSettings).set({ acceptsDelivery: input.acceptsDelivery, ...(input.prepMinutes !== undefined ? { prepMinutes: input.prepMinutes } : {}), updatedAt: new Date() }).where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'delivery', { acceptsDelivery: settings.acceptsDelivery, prepMinutes: settings.prepMinutes }, { acceptsDelivery: input.acceptsDelivery, prepMinutes: input.prepMinutes === undefined ? settings.prepMinutes : input.prepMinutes });
+      return this.record(tx, store, actor, ctx, 'delivery', { acceptsDelivery: settings.acceptsDelivery, prepMinutes: settings.prepMinutes }, { acceptsDelivery: input.acceptsDelivery, prepMinutes: input.prepMinutes === undefined ? settings.prepMinutes : input.prepMinutes });
     });
   }
 
@@ -220,32 +266,42 @@ export class StoreSettingsService {
     input: { enabled: boolean; useStoreAddress: boolean; address?: string; instructions?: string; prepMinMinutes: number; prepMaxMinutes: number },
     actor: Actor,
     ctx: RequestContext,
-  ): Promise<void> {
+    exec?: Tx,
+  ): Promise<AuditRef> {
     this.assertEditable(store, actor);
     if (input.prepMinMinutes >= input.prepMaxMinutes) throw errors.unprocessable('INVALID_PICKUP', 'Tempo de preparo inválido', { errors: [{ field: 'prepMaxMinutes', message: 'O tempo máximo precisa ser maior que o mínimo.' }] });
     if (input.enabled && !(await this.flags.isEnabled('retirada'))) throw errors.conflict('PICKUP_DISABLED', 'Retirada indisponível no momento');
     if (!input.useStoreAddress && !input.address) throw errors.unprocessable('INVALID_PICKUP', 'Informe o endereço de retirada', { errors: [{ field: 'address', message: 'Informe o endereço de retirada.' }] });
-    await this.db.transaction(async (tx) => {
+    return this.run(actor, store.id, exec, async (tx) => {
       const [locked] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!input.enabled && !locked?.acceptsDelivery) throw errors.unprocessable('INVALID_PICKUP', 'Configuração inválida', { errors: [{ field: 'enabled', message: 'Ative a entrega para desligar a retirada.' }] });
+      const next = {
+        pickupEnabled: input.enabled,
+        pickupUseStoreAddress: input.useStoreAddress,
+        pickupAddress: input.useStoreAddress ? null : (input.address ?? null),
+        pickupInstructions: input.instructions ?? null,
+        pickupPrepMinMinutes: input.prepMinMinutes,
+        pickupPrepMaxMinutes: input.prepMaxMinutes,
+      };
       await tx
         .update(storeSettings)
-        .set({
-          pickupEnabled: input.enabled,
-          pickupUseStoreAddress: input.useStoreAddress,
-          pickupAddress: input.useStoreAddress ? null : (input.address ?? null),
-          pickupInstructions: input.instructions ?? null,
-          pickupPrepMinMinutes: input.prepMinMinutes,
-          pickupPrepMaxMinutes: input.prepMaxMinutes,
-          updatedAt: new Date(),
-        })
+        .set({ ...next, updatedAt: new Date() })
         .where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'pickup', { enabled: locked?.pickupEnabled }, { enabled: input.enabled });
+      // BUG-044: antes e depois com TODOS os campos editáveis (o "nada mudou" do admin sai daqui): só `enabled` deixava preparo, endereço e instruções passarem por "sem mudança".
+      const summary = (v: { pickupEnabled: boolean; pickupUseStoreAddress: boolean; pickupAddress: string | null; pickupInstructions: string | null; pickupPrepMinMinutes: number | null; pickupPrepMaxMinutes: number | null } | undefined) => ({
+        enabled: v?.pickupEnabled,
+        useStoreAddress: v?.pickupUseStoreAddress,
+        address: v?.pickupAddress ?? null,
+        instructions: v?.pickupInstructions ?? null,
+        prepMinMinutes: v?.pickupPrepMinMinutes,
+        prepMaxMinutes: v?.pickupPrepMaxMinutes,
+      });
+      return this.record(tx, store, actor, ctx, 'pickup', summary(locked), summary(next));
     });
   }
 
   /** WB-059: só a troca VOLUNTÁRIA é configurável; arrependimento e defeito são piso legal fixo (DEC-011). */
-  async setExchangePolicy(store: Store, input: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }, actor: Actor, ctx: RequestContext): Promise<void> {
+  async setExchangePolicy(store: Store, input: { voluntaryDays: number; collectionFeeCents: number; confirmDefault?: boolean }, actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {
     this.assertEditable(store, actor);
     // DEC-037: o prazo da troca por tamanho/cor é da loja DENTRO do mínimo e máximo do admin; a taxa de coleta é da tabela do
     // admin por região (a loja não define): o campo antigo é aceito e ignorado.
@@ -254,7 +310,7 @@ export class StoreSettingsService {
     if (input.voluntaryDays !== 0 && (input.voluntaryDays < minDays || input.voluntaryDays > maxDays)) fieldErrors.push({ field: 'voluntaryDays', message: `O prazo vai de ${minDays} a ${maxDays} dias (ou 0 para não aceitar).` });
     if (input.voluntaryDays > 0 && !(await this.flags.isEnabled('trocas_voluntarias'))) fieldErrors.push({ field: 'voluntaryDays', message: 'Trocas voluntárias estão desligadas no momento.' });
     if (fieldErrors.length > 0) throw errors.unprocessable('INVALID_EXCHANGE_POLICY', 'Política de trocas inválida', { errors: fieldErrors });
-    await this.db.transaction(async (tx) => {
+    return this.run(actor, store.id, exec, async (tx) => {
       const [before] = await tx.select().from(storeSettings).where(eq(storeSettings.storeId, store.id)).for('update');
       if (!before) throw errors.notFound('Loja não encontrada.');
       const days = input.voluntaryDays === 0 ? 0 : input.voluntaryDays;
@@ -264,7 +320,7 @@ export class StoreSettingsService {
         .update(storeSettings)
         .set({ voluntaryExchangeDays: days, collectionFeeCents: collection, exchangePolicyVersion: changed ? before.exchangePolicyVersion + 1 : before.exchangePolicyVersion, updatedAt: new Date() })
         .where(eq(storeSettings.storeId, store.id));
-      await this.record(tx, store, actor, ctx, 'exchange_policy', { days: before.voluntaryExchangeDays, collection: before.collectionFeeCents }, { days, collection });
+      return this.record(tx, store, actor, ctx, 'exchange_policy', { days: before.voluntaryExchangeDays, collection: before.collectionFeeCents }, { days, collection });
     });
   }
 

@@ -1,3 +1,6 @@
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import {
   paymentAccounts,
@@ -18,13 +21,30 @@ export interface TestPoint {
 }
 
 const CELLS = 110 * 300;
-let cell = Math.floor(Math.random() * CELLS);
+let slotBase: number | null = null;
+let used = 0;
+
+/**
+ * BUG-047: cada arquivo de teste recebe uma FAIXA PRÓPRIA de células (índice do arquivo na lista ordenada de `*.e2e-spec.ts`), em vez de começar numa célula aleatória:
+ * dois arquivos no mesmo banco nunca dividem célula, então "produtos Item" de outro arquivo não entram numa lista exata (antes a colisão era possível, ~2% por execução).
+ */
+function claimSlot(): number {
+  const testDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const files = readdirSync(testDir).filter((f) => f.endsWith('.e2e-spec.ts')).sort();
+  const current = (expect.getState().testPath ?? '').split(path.sep).pop() ?? '';
+  const index = files.indexOf(current);
+  if (index === -1) return Math.floor(Math.random() * CELLS); // fora de um arquivo conhecido (script avulso): recua para o aleatório
+  return index * Math.floor(CELLS / files.length);
+}
+
 /**
  * Centro isolado por teste: cada chamada devolve uma célula de 0,5 grau (~55 km) diferente, acima do raio máximo (50 km
- * de parâmetro; 15 km padrão). Os arquivos de teste compartilham o banco e começam em células aleatórias distintas.
+ * de parâmetro; 15 km padrão). Cada arquivo de teste usa a sua faixa de células (ver `claimSlot`).
  */
 export function isolatedPoint(): TestPoint {
-  cell = (cell + 7919) % CELLS;
+  slotBase ??= claimSlot();
+  used += 1;
+  const cell = (slotBase + used) % CELLS;
   return { lat: -5 - (cell % 110) * 0.5, lng: -20 - Math.floor(cell / 110) * 0.5 };
 }
 

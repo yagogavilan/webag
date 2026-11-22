@@ -4,6 +4,7 @@ import { csrfProblem } from '@/server/csrf';
 import { areaAllowedOnHost } from '@/server/hosts';
 import { problem } from '@/server/http';
 import { refreshSession } from '@/server/refresh';
+import { clearedViewAsCookie } from '@/server/view-as';
 import { callApi, clientHints } from '@/server/upstream';
 
 /** Revoga a sessão na API e apaga os cookies. Sempre limpa os cookies, mesmo se a API estiver fora. */
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ar
   if (token) await callApi('/v1/auth/logout', { method: 'POST', accessToken: token, hints });
 
   const response = new NextResponse(null, { status: 204, headers: { 'cache-control': 'no-store' } });
-  writeCookies(response.cookies, area === 'admin' ? [...clearedCookies(area), clearedPendingCookie('mfa'), clearedPendingCookie('reset')] : clearedCookies(area));
+  // A visão "Ver como" cai com a sessão do admin (ADR-018 D8): o cookie dela sai junto.
+  writeCookies(response.cookies, area === 'admin' ? [...clearedCookies(area), clearedPendingCookie('mfa'), clearedPendingCookie('reset'), clearedViewAsCookie()] : clearedCookies(area));
   return response;
 }

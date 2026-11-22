@@ -1,0 +1,34 @@
+
+== head-300b: 300 VUs, 60 s medidos, 9616 req, 160 req/s, erros 0.00% | jornadas 1591, pedidos 74, falhas 0
+CPU% (100 = 1 vCPU): API 75.2 (pico 97.5), PG 70.0 (pico 92.5), Redis 1.8, gerador 10.5, máquina 40.4% | RAM máx: API 414 MB, PG 2077 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+GET /v1/browse/products/{id}                      1246    20.8     12.6      110      304    0.0     1736     704
+PUT /v1/cart/items/{variantId}                    1234    20.6     32.4      262      872    0.0     1874     803
+GET /v1/browse/stores/{id}/products               1231    20.5      6.4     41.1      142    0.0    10323    1782
+GET /v1/browse/stores/{id}                        1231    20.5     11.0     93.9      350    0.0     1137     649
+GET /v1/cart                                      1212    20.2     21.5      199      780    0.0     1820     801
+GET /v1/home                                      1203    20.1      7.3     69.2      232    0.0    29361    4880
+GET /v1/search/suggestions                         614    10.2     21.4     99.4      202    0.0      796     421
+GET /v1/search/products                            613    10.2     22.1     67.4      123    0.0    16416    2026
+GET /v1/me/addresses                               354     5.9      4.2     27.3     48.7    0.0      424     308
+GET /v1/browse/stores/{id}/products (pág. 2)       201     3.4      8.0     41.9      105    0.0    10559    1780
+GET /v1/search/stores                              191     3.2      5.3     33.2     62.2    0.0     3472     758
+GET /v1/orders/{id}                                139     2.3     12.0     82.9      406    0.0     2366    1066
+POST /v1/orders                                     51     0.8     60.8      374      543    0.0     2357    1074
+GET /v1/orders/{id}/payment                         51     0.8      5.7     33.3     63.0    0.0      390     303
+GET /v1/orders                                      45     0.8     10.1     38.5      175    0.0      908     456
+
+Top consultas por tempo total (pg_stat_statements):
+   11286 ms      838x  média   13.47  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    9875 ms      742x  média   13.31  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    2893 ms     3256x  média    0.89  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+    2439 ms  3468052x  média    0.00  SELECT lower(public.unaccent($2, $1))
+     481 ms      836x  média    0.58  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     372 ms      746x  média    0.50  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     250 ms        2x  média  124.81  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+     237 ms      682x  média    0.35  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     234 ms     1591x  média    0.15  insert into "cart_items" ("id", "cart_id", "variant_id", "product_id", "quantity", "seen_price_cents", "created_at") values (default, $1, $2, $3, $4, $5, defaul
+     232 ms     4113x  média    0.06  select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a
+     225 ms     6438x  média    0.03  select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null
+     207 ms      682x  média    0.30  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."
+exit=0

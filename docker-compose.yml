@@ -22,12 +22,19 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-webag}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webag_dev_only}
       POSTGRES_DB: ${POSTGRES_DB:-webag}
+      # D-06 (ADR-018): papéis webag_migrator e webag_app, criados na 1ª inicialização do volume. Em desenvolvimento a DATABASE_URL do
+      # .env continua sendo o superusuário; os papéis valem para o teste de D-06 (test/db-roles.e2e-spec.ts) e para ensaiar o deploy.
+      WEBAG_MIGRATOR_PASSWORD: ${WEBAG_MIGRATOR_PASSWORD:-webag_migrator_dev_only}
+      WEBAG_APP_PASSWORD: ${WEBAG_APP_PASSWORD:-webag_app_dev_only}
       TZ: UTC
     ports:
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
       - postgres-data:/var/lib/postgresql
+      # D-06: só rodam em volume NOVO; volume antigo: guia de deploy ("Papéis do banco")
+      - ./infra/postgres/30-roles-create.sh:/docker-entrypoint-initdb.d/30-roles-create.sh:ro
+      - ./infra/postgres/40-roles-grants.sql:/docker-entrypoint-initdb.d/40-roles-grants.sql:ro
     healthcheck:
       # -h 127.0.0.1 (TCP): no 1º boot o servidor temporário de inicialização só escuta no socket local; sem -h o healthcheck
       # dava "saudável" cedo demais e a migração do `pnpm run setup` podia falhar ("Failed query: CREATE SCHEMA").

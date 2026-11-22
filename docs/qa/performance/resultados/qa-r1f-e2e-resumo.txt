@@ -1,0 +1,47 @@
+# e2e completo da API, commit 4d25e5f, REQUIRE_DB_ROLES=1, PostgreSQL 16.15 + Redis (cada execucao ~9 min)
+
+## execucao #1
+exit=0 secs=578
+ Test Files  124 passed (124)
+   Start at  16:35:48
+   Duration  578.18s (transform 5.06s, setup 0ms, import 170.08s, tests 393.41s, environment 13ms)
+      Tests  1093 passed (1093)
+
+## execucao #2
+exit=0 secs=574
+ Test Files  125 passed (125)
+   Start at  16:48:20
+   Duration  573.55s (transform 5.59s, setup 0ms, import 169.16s, tests 390.00s, environment 9ms)
+      Tests  1121 passed | 5 expected fail (1126)
+
+## execucao #3
+exit=1 secs=530
+ Test Files  1 failed | 124 passed (125)
+   Start at  16:57:54
+   Duration  529.90s (transform 4.53s, setup 0ms, import 158.32s, tests 358.41s, environment 9ms)
+      Tests  1 failed | 1120 passed | 5 expected fail (1126)
+ FAIL  test/r12-drafts.e2e-spec.ts > Cadastro rápido: rascunho, publicar em 2 campos, duplicar, lote e medição > WB-371: rascunho, teto de 100, vencimento e conflito de versão > C3: aos 27 dias avisa (expiresInDays = 3); aos 3
+
+## execucao #4
+exit=0 secs=500
+ Test Files  125 passed (125)
+   Start at  17:40:22
+   Duration  498.93s (transform 4.33s, setup 0ms, import 151.58s, tests 334.66s, environment 8ms)
+      Tests  1121 passed | 5 expected fail (1126)
+
+## execucao #5
+exit=1 secs=498
+ Test Files  2 failed | 123 passed (125)
+   Start at  17:48:41
+   Duration  497.58s (transform 3.96s, setup 0ms, import 150.48s, tests 334.47s, environment 8ms)
+      Tests  2 failed | 1119 passed | 5 expected fail (1126)
+ FAIL  test/search.e2e-spec.ts > Busca de produtos e lojas com filtros (WB-013, WB-014) > filtros combinam em E: categoria (inclui filhas), preço, distância, entrega grátis, avaliação e aceita troca
+ FAIL  test/sec155-first-purchase.e2e-spec.ts > Cupom de primeira compra (SEC-155) > A3: quem já tem pedido pago não usa o cupom; quem nunca comprou usa e o 2º pedido nasce sem desconto
+
+## execucao #6
+exit=1 secs=501
+ Test Files  1 failed | 124 passed (125)
+   Start at  17:58:48
+   Duration  500.73s (transform 4.27s, setup 0ms, import 151.92s, tests 335.74s, environment 9ms)
+      Tests  1 failed | 1120 passed | 5 expected fail (1126)
+ FAIL  test/logistics.e2e-spec.ts > Logística da Webag: motoboys e corridas (WB-230 a WB-239) > estados, código de entrega e falhas (WB-233, WB-234) > fluxo completo com linha do tempo e auditoria; transição inválida é 409; 

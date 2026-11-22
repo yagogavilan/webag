@@ -1,0 +1,20 @@
+# Carga 300 VUs: p95 em ms por rota. head = 4d25e5f; base = 2e88880 (antes da R1). Ordem das rodadas: head-a, base-a, head-b, base-b, head-c, base-c, head-d, base-d, head-e. Mesma maquina, mesmo template de banco seed-large, API compilada NODE_ENV=test, 60 s medidos, rampa de 20 s.
+| rota | head a..e | mediana head | base a..d | mediana base | dif mediana |
+| GET /v1/home | [86, 69, 32, 35, 43] | 43 | [47, 53, 47, 46] | 47.0 | -9% |
+| GET /v1/browse/stores/{id}/products | [31, 41, 18, 20, 24] | 24 | [27, 27, 29, 22] | 27.0 | -11% |
+| GET /v1/browse/products/{id} | [86, 110, 39, 38, 49] | 49 | [55, 58, 63, 50] | 56.5 | -13% |
+| PUT /v1/cart/items/{variantId} | [164, 262, 90, 85, 94] | 94 | [139, 138, 131, 112] | 134.5 | -30% |
+| GET /v1/cart | [179, 199, 72, 73, 85] | 85 | [106, 104, 107, 84] | 105.0 | -19% |
+| GET /v1/search/products | [63, 67, 41, 46, 44] | 46 | [59, 58, 53, 50] | 55.5 | -17% |
+| POST /v1/orders | [302, 374, 157, 148, 144] | 157 | [181, 210, 157, 137] | 169.0 | -7% |
+
+head-300a: 160.2 req/s, erros 0.000%, CPU API 78%, PG 74% (100% = 1 vCPU)
+head-300b: 160.3 req/s, erros 0.000%, CPU API 75%, PG 70% (100% = 1 vCPU)
+head-300c: 161.1 req/s, erros 0.000%, CPU API 67%, PG 68% (100% = 1 vCPU)
+head-300d: 160.2 req/s, erros 0.000%, CPU API 68%, PG 65% (100% = 1 vCPU)
+head-300e: 161.8 req/s, erros 0.000%, CPU API 69%, PG 67% (100% = 1 vCPU)
+base-300a: 161.3 req/s, erros 0.010%, CPU API 75%, PG 71% (100% = 1 vCPU)
+base-300b: 160.8 req/s, erros 0.000%, CPU API 73%, PG 72% (100% = 1 vCPU)
+base-300c: 160.1 req/s, erros 0.000%, CPU API 73%, PG 69% (100% = 1 vCPU)
+base-300d: 160.6 req/s, erros 0.000%, CPU API 69%, PG 66% (100% = 1 vCPU)
+head-100: 54.5 req/s, erros 0.031%, CPU API 31%, PG 26% (100% = 1 vCPU)
