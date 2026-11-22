@@ -11,6 +11,9 @@ import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 
 const PASSWORD = 'senha-de-teste-do-seed-1';
 
+// BUG-047: o gerador de número do pedido (`WB-` + 5 caracteres de 2-9 e A-Z sem O/I/L) pode produzir `WB-DM788`, igual ao padrão do seed (`WB-DM` + 3 dígitos); o seed pula número que
+// já existe e o teste lia um pedido comum (comissão de 10% do teste) como se fosse do seed (~2% por execução). Os números do seed abaixo de 100 levam zero à esquerda, e o gerador
+// nunca produz 0, então `WB-DM0nn` só pode ser do seed.
 describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   let ctx: TestContext;
   beforeAll(async () => {
@@ -26,7 +29,7 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   afterAll(() => ctx.close());
 
   it('cria pedidos em vários estados sem duplicar, com a conta da RN-10 e o ledger fechado', async () => {
-    const rows = await ctx.db.select().from(orders).where(sql`${orders.number} ~ '^WB-DM[0-9]{3}$'`);
+    const rows = await ctx.db.select().from(orders).where(sql`${orders.number} ~ '^WB-DM0[0-9]{2}$'`);
     expect(rows.length).toBeGreaterThanOrEqual(10);
     expect(new Set(rows.map((r) => r.number)).size).toBe(rows.length);
     expect(new Set(rows.map((r) => r.status))).toEqual(new Set(['awaiting_payment', 'received', 'accepted', 'in_preparation', 'ready_for_collection', 'out_for_delivery', 'delivered', 'cancelled', 'refused']));
@@ -39,7 +42,7 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   });
 
   it('o painel da loja e o financeiro leem os pedidos de demonstração; em produção o seed se recusa', async () => {
-    const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), sql`${orders.number} ~ '^WB-DM[0-9]{3}$'`));
+    const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), sql`${orders.number} ~ '^WB-DM0[0-9]{2}$'`));
     expect(sample).toBeDefined();
     // O DONO (o funcionário do seed não tem a permissão de financeiro); sem filtro, a linha devolvida dependia da ordem física da tabela.
     const [owner] = await ctx.db.select({ email: users.email }).from(storeMembers).innerJoin(users, eq(users.id, storeMembers.userId)).where(and(eq(storeMembers.storeId, sample!.storeId), eq(storeMembers.role, 'owner')));
