@@ -38,7 +38,7 @@ Travas: nenhuma peça tem pagamento, prazo, superlativo, regional como mensagem,
 |---|---|---|---|
 | Post 2 | 3,8 | Voltou a cena concreta ("Voltando do trabalho.", 56 px, sem hora): identificação 4 para 4,5, ideia 4 para 4,5. Subtítulo "Peça sem sair do lugar." fecha a ideia | 3,98 |
 | Post 3 | 3,9 | Chip do cartão "Agora" para "Outro bairro": o cartão passa a provar a promessa do título ("além da sua rua"); identificação 4 para 4,5. Adesivo retirado (era a colisão com o título) | 3,98 |
-| Post 0 | 3,95 | **Sem reescrita que eu consiga justificar**: as duas alavancas que sobram são ativos que não tenho (foto real; usuário). Testei trocar as ilustrações por um cartão de loja do app (40% da área, regra 4): custaria o título de 148 px para 112 px e o cartão não leria em miniatura; a nota fica igual (gancho cai, prova sobe). Mantive o título grande | 3,95 |
+| Post 0 | 3,95 | **Sem reescrita que eu consiga justificar**: as duas alavancas que sobram são ativos que não tenho (foto real; usuário). Avaliei (no papel, não renderizei) trocar as ilustrações por um cartão de loja do app (40% da área, regra 4): custaria o título de 148 px para 112 px e o cartão não leria em miniatura; a nota fica igual (gancho cai, prova sobe). Mantive o título grande | 3,95 |
 | Vídeo do cliente | 3,95 | Nada a reescrever no roteiro: o limitante é prova real (clipes) e a dependência do J8 | 3,95 |
 
 Se a estrategista medir 3,9 em post 0 e vídeo do cliente, a ação certa é ativo real (foto/clipe), não mais texto.
@@ -62,7 +62,7 @@ Se a estrategista medir 3,9 em post 0 e vídeo do cliente, a ação certa é ati
 |---|---|---|---|---|---|
 | 1 Sem pagamento como argumento | ok | ok | ok | ok | ok |
 | 2 Uma ideia | A loja agora entrega | A conversa que custou vendas | Pedir sem sair do lugar | Venda além da sua rua | Uma por vídeo |
-| 3 Título >= 110 px e <= 10 palavras | 148 px, 7 palavras | 110 px (pergunta) e 108 px (resposta), 5 palavras | 112 px, 6 palavras | 140 px, 6 palavras | 150 a 230 px |
+| 3 Título >= 110 px e <= 10 palavras | 148 px, 7 palavras | 110 px (pergunta) e 108 px (resposta), 6 palavras | 112 px, 6 palavras | 140 px, 6 palavras | 150 a 230 px |
 | 4 Tela >= 40% e UI >= 24 px | **Desvio consciente**: sem tela; par de ilustrações | **Desvio consciente**: a peça é a conversa, não o produto | Cartão 936x~620 = 40%; UI 44 px | Cartão 936x~580 = 37%; UI 42 px | Cartões 912x~650; UI 46 a 50 px |
 | 5 Voz humana | ok | frase literal do lojista (reencenada) | ok | ok | ok |
 | 6 Sem emoji, degradê, mascote, IA | ok | ok | ok | ok | ok (nenhum rosto, nenhuma foto) |

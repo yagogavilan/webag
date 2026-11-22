@@ -125,47 +125,48 @@ Regra de leitura: nada aqui é fato de produto até alguém fechar o item. `[HIP
 
 ---
 
-# Pendências do Instagram e do vídeo de 15 s (v2, refeita em 2026-11-22)
+# Pendências do Instagram e dos vídeos de 15 s (v2.1, refeita em 2026-11-22)
 
-Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-story.html`, `src/social.css`. Textos: `instagram-legendas.md`, `video-roteiro.md`, `revisao-social-v2.md`. Autor: product-designer. `[HIPÓTESE]` = não validado. Os itens da v1 (2026-11-20) foram substituídos por esta lista.
+Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-lojista.html`, `src/video-cliente.html` (motor `src/video-engine.js`, estilos `src/video.css`, `src/social.css`). `src/video-story.html` virou stub de 1 s (apagar). Textos: `instagram-legendas.md`, `video-roteiro.md`, `revisao-social-v2.md`. Autor: product-designer. `[HIPÓTESE]` = não validado. A lista da v2 foi substituída por esta: **nenhuma peça usa mais captura de tela** (todas as telas são cartões desenhados e rotulados "Tela ilustrativa."), então C1 a C3, K2 a K6 e I3 a I6 da v2 deixaram de bloquear.
 
 ## I. Técnico (bloqueia o primeiro render)
 
 | # | Item | O que fazer |
 |---|---|---|
-| I1 | **Clipes do app ainda não existem** (`src/clips/` ausente em 2026-11-22). O vídeo espera `painel-pedido-novo`, `app-loja`, `app-sacola`, `app-acompanhar` (`.mp4`, e `.webm` de reserva). Sem eles o `<video>` mostra a captura estática e o render sai com nota 3 (`revisao-social-v2.md`) | Mobile-dev grava conforme `video-roteiro.md` §5 (viewport vertical 390x844, 30 fps, pedido "agora", loja de moda, sem prazo). Depois rodar `window.__clipInfo()` no console, ajustar `inn` na tabela `SEG` do `video-story.html` e conferir o `README` dos clipes (eu assumi vertical 390x844) |
-| I2 | **O render deve aguardar a Promise de `setTime(t)`** (vídeo) e `window.__ready`. `setTime` agora devolve Promise que resolve após o `seeked` de cada `<video>` ativo + 2 quadros de pintura (teto 3 s). Chromium do Playwright costuma vir **sem H.264**: se os clipes não tocarem, gravar também `.webm` (já há `<source>` de reserva) ou usar Chrome instalado | CEO/dev do pipeline |
-| I3 | **O servidor do render só serve `src/`** (`scripts/marketing-render.mjs`, `startServer`: caminho fora de `src` dá 403/404). Dependem de fora de `src/`: as `@font-face` (`../../design/...`) e duas telas (`docs/telas/06-app-sacola.png` poster do vídeo; `docs/telas/20-lojista-pedidos-novos-mobile.png` no post 2 e poster do vídeo) | Opção A: servir `docs/` como raiz. Opção B: `cp docs/telas/{06-app-sacola,20-lojista-pedidos-novos-mobile}.png docs/marketing/src/assets-social/` e trocar os 3 `src` (post 2, 2 posters no `CLIPS`); fontes para `src/assets-social/fonts/` |
-| I4 | Usadas em `src/assets-social/` (existem): `01-app-inicio.png` (post 0), `11-app-acompanhamento.png` (post 1, poster do vídeo), `04-app-loja.png` (poster). `09-app-pix.png` **não é mais usada** (PIX saiu das peças) | Pode remover do kit |
-| I5 | **Não renderizei.** Larguras com 0,50 em/caractere; linhas de risco em `revisao-social-v2.md` §5 | Devolva o quadro que estourar; ajusto o `font-size` |
-| I6 | Capturas em `deviceScaleFactor: 1` (390x844) ampliadas 2,3 a 2,5x (posts) e 2,77x (vídeo): texto da tela fica macio. Seed com "Banana prata" e "Mercadinho Boa Compra" | Regerar `docs/telas/` com `deviceScaleFactor: 2` e loja de moda/casa de demonstração (pendências C1 a C3). Os recortes são proporcionais: nenhum HTML muda |
+| I1 | **Clipes e capturas limpos ainda não existem** (`src/clips/` e `src/capturas/` ausentes em 2026-11-22). Sem eles, as peças saem com cartões desenhados (prova no máximo 3,5; `revisao-social-v2.md` §2) | Mobile-dev: capturas 2x e clipes verticais 390x844, 30 fps, de loja de moda/casa neutra, valores redondos, sem código de pedido, sem "Pago no app", sem idade do pedido, sem "Som desligado", sem horário. Nomes e o que mostrar em `video-roteiro.md` §5. Depois eu reenquadro a cena (o cartão é largo; o clipe é vertical) e preencho `clips` no fim do HTML |
+| I2 | **O pipeline precisa renderizar os dois vídeos.** `scripts/marketing-render.mjs` tem `STORY = { file: 'video-story' }`: trocar por uma lista `[video-lojista, video-cliente]` (saídas `video-lojista-15s.mp4`, `video-cliente-15s.mp4`, capas `--capa 3`). O contrato é o mesmo (`window.__duration`, `__fps`, `setTime(t)` com Promise). O render serve `docs/` inteira (confirmado), então fontes e `assets/` resolvem. Depois apagar `src/video-story.html` (stub) e os arquivos antigos de `saida/` e do zip de 2026-11-20 (parecer §1) | CEO/dev do pipeline |
+| I3 | Chromium do Playwright costuma vir **sem H.264**. Só importa se houver clipes (`.webm` de reserva já previsto no motor). Sem clipes, o vídeo não pede nenhum arquivo de mídia | CEO/dev do pipeline |
+| I4 | `src/assets-social/` (01, 04, 09, 11) **não é mais referenciado** por nenhuma peça | Pode apagar |
+| I5 | **Não renderizei.** Larguras com 0,53 em/caractere; linhas de maior risco em `revisao-social-v2.md` §4 | Devolva o quadro que estourar; ajusto o `font-size` |
 
 ## II. Depende do fundador
 
 | # | Item | Onde aparece |
 |---|---|---|
-| IF1 | **Usuário (handle) do Instagram** e **link da bio** (site/WhatsApp). `config.json` tem `@webag` como valor provisório; as peças não mostram o handle de propósito (o CTA é "Siga esta página") | Bio, perfil |
-| IF2 | **Trilha do vídeo**: escolher na biblioteca de áudio do Instagram (ver `video-roteiro.md` §6: 120 BPM, instrumental, batida seca, começar na batida 1). Conferir se a conta comercial acessa o catálogo `[HIPÓTESE]` | Vídeo |
-| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda a cena 10 do vídeo e o post 3 | Vídeo, post 3 |
-| IF4 | Aprovar a **promessa** "Aquela loja que você gosta agora entrega." (post 0, bio, cenas 8 e 9 do vídeo). Substitui a assinatura "Escolha no app. Receba em casa." da v1 | Perfil, post 0, vídeo |
-| IF5 | Aprovar **"Tem loja? Venda além da sua rua."** e decidir o que dizer sobre custo ("comissão só quando vende", "sem mensalidade", percentual): a legenda do post 2 **não** afirma nada até a decisão (`direcao-criativa.md` §3) | Post 2, bio |
-| IF6 | **Fotos reais** (fachada de loja da região, mão com sacola, motoboy) e 5 a 10 s de vídeo vertical do celular: eliminam o ar de demonstração. As peças têm espaço e funcionam sem | Posts 0 e 1, vídeo |
-| IF7 | Autorizar a publicação do perfil e dos 4 posts (peça externa; ver IJ1) e **como guardar o contato do lojista** que chamar no direct (finalidade, consentimento, LGPD) | Todas, post 2 |
+| IF1 | **Usuário (handle) do Instagram** e **link da bio** (WhatsApp do fundador via `wa.me`, grátis). Sem isso o CTA "Chame no direct" não mostra para quem (CTA fica em 3,5 nos posts). Quando chegar: entra no campo de link da bio e na linha 3 da bio (`instagram-legendas.md` §1) | Bio, perfil, posts 1 e 3, vídeo do lojista |
+| IF2 | **Trilha dos vídeos**: escolher na biblioteca de áudio do Instagram (ver `video-roteiro.md` §6: 120 BPM, instrumental, batida seca, começar na batida 1). Conferir se a conta comercial acessa o catálogo `[HIPÓTESE]` | Vídeos |
+| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda o fecho dos vídeos | Vídeos |
+| IF4 | Aprovar a **promessa** "Aquela loja que você adora. Não entrega. Agora entrega." (post 0, bio, vídeo do cliente) | Perfil, post 0, vídeo do cliente |
+| IF5 | Aprovar **"Tem loja? Venda além da sua rua."** e decidir o que dizer sobre custo ("comissão só quando vende", "sem mensalidade", percentual): as legendas **não** afirmam nada até a decisão (`direcao-criativa.md` §3) | Post 3, bio |
+| IF6 | **Foto real** (mão com sacola, mesa com o celular no app) e **gravação de 10 a 15 s do próprio celular** do fundador (ele como cliente e como loja, ou falando ao lojista): é o que mais sobe a nota (autenticidade e prova; `revisao-social-v2.md` §2). Foto de fachada ou rosto de terceiros só com autorização por escrito | Posts 0 e 1, vídeos |
+| IF7 | Autorizar a publicação do perfil, dos 4 posts e dos 2 vídeos (peça externa; ver IJ1) e **como guardar o contato do lojista** que chamar no direct (finalidade, consentimento, LGPD) | Todas, post 3 |
+| IF8 | Se o fundador ouviu a frase de um lojista ("Só retirando, tá?" ou outra) nas visitas, mandar a frase **literal**: troca a reencenação do post 1 e da cena 1 do vídeo do lojista | Post 1, vídeo do lojista |
 
 ## III. Depende do jurídico
 
 | # | Item | Risco |
 |---|---|---|
-| IJ1 | "Agora entrega", "a loja passa aí", "O motoboy leva." e "Saiu para entrega" prometem entrega pelo Webag (J1 acima: parecer sobre motoboys, DEC-039 J8). **Nenhuma peça externa sai antes do parecer e do G5** (`posicionamento.md` §4). Plano B sem entrega: retirada na loja ("Aquela loja que você gosta agora tem pedido pelo app"); me peça a versão | Alto |
-| IJ2 | O vídeo usa a loja de demonstração (cenas 2 e 3): se mostrar "20% off" ou "Retire grátis", é oferta divulgada (J2). O aviso "Telas do app em teste." está nas cenas 1 a 7 | Médio |
-| IJ3 | O cartão de acompanhamento mostra faixa de horário; no post 1 os recortes a escondem e no vídeo a faixa da cena 7 a cobre (mesma dúvida do C8) | Baixo |
+| IJ1 | **Marcado `[J8]` (parecer sobre motoboys, DEC-039): post 0** ("Agora entrega"), **post 2** ("A caminho", "Entregue", "da loja até você"), **vídeo do cliente** (promessa e "A caminho"), **cena 6 do vídeo do lojista** ("O Webag leva."), **bio A e C** ("agora entrega"), legenda do post 1 (só a linha opcional). **Não dependem de J8: post 1, post 3, vídeo do lojista sem a cena 6, bio B.** Nenhuma peça externa marcada sai antes do parecer e do G5 (`posicionamento.md` §4). Plano B sem entrega: retirada na loja ("pedindo pelo app", bio B); me peça a versão | Alto |
+| IJ2 | Os cartões desenhados mostram produtos e preços fictícios (vaso R$ 80, almofada R$ 50, camiseta R$ 60, boné R$ 40) e a loja fictícia "Casa Lar", sempre com "Tela ilustrativa.". Preço em imagem de divulgação pode ser lido como oferta (J2): por isso são valores redondos de exemplo e rotulados. Conferir que não existe loja real com o nome "Casa Lar" na região | Baixo |
+| IJ3 | "A caminho" e "Entregue" no cartão de acompanhamento sem faixa de horário (nenhuma peça mostra prazo) | Baixo |
 
 ## IV. Observações de produto/design
 
 | # | Item |
 |---|---|
-| IP1 | Capturas usadas: 01 (só o banner "Entrega pelo Webag", sem "Lojas perto de você" nem categorias), 11 (cartão e linha do tempo, sem horário), 20-mobile (cartão do pedido novo, com a idade coberta) e, como poster do vídeo, 04 e 06. Não usei 03 e 05 (degradê de placeholder) nem 09 (PIX) |
+| IP1 | Nenhuma captura de `docs/telas/` é usada. Os cartões (`.ui` em `social.css`) imitam o painel (pedido novo), a loja no app e a linha do tempo, **sem copiar o desenho real**: se o app mudar, as peças não desatualizam, mas também **não são prova do app real**. Quando houver captura limpa, o cartão sai (ver I1) |
 | IP2 | A foto de perfil tem o símbolo 25% maior que a v1 (880 px) e o desenho ~26 px acima do centro geométrico da caixa (centro ótico). O ícone do app usa outro ponto de centro (ver IP2 da v1: ~46 px mais baixo em 1024); vale o dev do ícone rever |
 | IP3 | O "em breve" sem data por 3 semanas desgasta. Recomendo decidir a data (ou parar a série no post 3 e silenciar) |
-| IP4 | **Texto do push de abertura** ("Abrimos. Aquela loja que você gosta agora entrega.") aparece desenhado no post 3: PO define o texto final. Também confirmar o caminho do "sininho" no Instagram (post 3, legenda) |
-| IP5 | Painel: o recorte do post 2 mostra o rótulo "Pago no app" dentro do cartão real. É fato da tela, não argumento; se o fundador quiser zero menção, cubro o chip (1 linha no HTML) |
+| IP4 | O CTA "Siga e ative o sininho." (post 0, vídeo do cliente) é do **sininho do Instagram**. O push do app sumiu das peças (era a incoerência do post 3 antigo). Confirmar o caminho do sininho na conta antes de publicar `[HIPÓTESE]` |
+| IP5 | Termos novos para o glossário (`design/glossario-ux.md`, dono do UX): "Pedido enviado", "Loja separando", "A caminho", "Entregue" (linha do tempo do cliente) e "Aceitar pedido", "Pedido aceito", "Outro bairro" (painel). São de **marketing**; o texto final do app é do PO/mobile-dev |
+| IP6 | Lojista, vídeo e post: o chip "Outro bairro" é um recurso de **ilustração** (o painel real hoje não mostra a origem do pedido). Se o fundador não quiser sugerir esse recurso, trocar por "Novo" (1 palavra no HTML) |
