@@ -27,6 +27,7 @@ import { closedLabel, formatRating, ratingA11y } from '../../../src/features/cat
 import { logoFallback, productFallback } from '../../../src/features/catalog/image';
 import { Price } from '../../../src/features/catalog/Price';
 import { coverColor } from '../../../src/features/catalog/StoreRow';
+import { useRevalidateOnFocus } from '../../../src/features/catalog/revalidate';
 import { useProductQuery, useReviewsQuery, useStoreQuery, useDeliveryPoint } from '../../../src/features/catalog/queries';
 import { ReviewItem } from '../../../src/features/catalog/ReviewItem';
 import { buildGroups, findVariant, missingAttributes, selectOption, shownPrice, variantLabel, type Selection } from '../../../src/features/catalog/variants';
@@ -55,6 +56,7 @@ export default function ProductScreen() {
   const query = useProductQuery(id);
   const product = query.data;
   const store = useStoreQuery(product?.store.id, point);
+  useRevalidateOnFocus([['product', id], ['store', product?.store.id]]);
   const reviews = useReviewsQuery('product', id);
   const favorite = useFavorite('product', id, product?.name ?? '');
   useApplyPendingFavorite(favorite.applyPending, Boolean(product));

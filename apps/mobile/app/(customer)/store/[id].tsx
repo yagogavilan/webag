@@ -27,6 +27,7 @@ import { Text } from '../../../src/components/Text';
 import { useToast } from '../../../src/components/Toast';
 import { closedLabel, closesAtToday, formatDistance, formatEta, formatFee, formatRating, ratingA11y } from '../../../src/features/catalog/format';
 import { fromBrowseItem, ProductTile } from '../../../src/features/catalog/ProductTile';
+import { useRevalidateOnFocus } from '../../../src/features/catalog/revalidate';
 import { modeStore, useDeliveryPoint, usePrefetchCatalog, useStoreProductsQuery, useStoreQuery } from '../../../src/features/catalog/queries';
 import { AboutStoreSheet, ExchangePolicySheet } from '../../../src/features/catalog/StoreSheets';
 import { useCartView } from '../../../src/features/cart/hooks';
@@ -57,6 +58,7 @@ export default function StoreScreen() {
   const prefetch = usePrefetchCatalog();
   const [sectionId, setSectionId] = useState<string | null>(null);
   const products = useStoreProductsQuery(id, sectionId);
+  useRevalidateOnFocus([['store', id], ['store-products', id]]);
   const { view: cart } = useCartView();
   const [sheet, setSheet] = useState<'exchange' | 'about' | null>(null);
   const favorite = useFavorite('store', id, store.data?.name ?? '');
