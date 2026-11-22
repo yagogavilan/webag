@@ -913,15 +913,16 @@ Escopo: `git diff origin/main...b1e8dd4` (commits `779ee06`, `b0083a5`, `f27123f
 
 ### 19.3 Achados novos
 
-#### SEC-223 | Severidade: Baixa | Status: Aberto (parte pré-existente da R1.2; o desfazer repete) | Dono: backend-dev
+#### SEC-223 | Severidade: Baixa | Status: Corrigido em 2026-11-22 (aguarda reteste do security-engineer; teste e2e `r13-bulk-batches` "SEC-223") | Dono: backend-dev
 - **Onde:** `apps/api/src/modules/catalog/catalog.service.ts:993` (reajuste em massa) e `:1066` (desfazer): `auditProduct(... CATALOG_AUDIT.price ...)` grava só `basePriceCents` e `version`; as variações com preço próprio mudam em `:991` e `:1065` sem antes/depois na trilha.
 - **Problema:** em produto com grade de preço por variação, o `audit_log` (append-only, fonte da verdade) não mostra o preço de cada variação antes e depois do reajuste nem do desfazer. Só `product_bulk_batch_items.variants` guarda isso, e essa tabela é mutável pelo `webag_app` e some no `down` da 0063. Contraria WB-377 C7 ("antes e depois de cada produto").
 - **Cenário:** funcionário com `catalog` aplica −40% e o lojista contesta o preço de uma variação vendida barato; a ficha 360 e o histórico mostram só o preço base, e a prova da variação depende de uma tabela que o próprio processo da API pode alterar. Repúdio e disputa sem trilha; sem ganho direto para terceiro.
 - **Correção recomendada:** no `before`/`after` das duas chamadas, incluir `variants: [{ id, priceCents }]` das variações com preço próprio (o mesmo formato de `variantsAudit` usado por `setVariants`).
 - **Como verificar:** e2e: reajuste e desfazer em produto com 2 variações de preço próprio = linha `product.price` com os preços das 2 variações antes e depois.
+- **Correção aplicada (2026-11-22):** `catalog.service.ts` (`bulkProducts` e `undoBulkBatch`) grava `variants: [{ id, priceCents }]` em `before` e `after` da linha `product.price`, só das variações com preço próprio; o e2e cobre reajuste e desfazer com 2 variações de preço próprio e 1 sem preço (que não entra).
 
 ### 19.4 Observações (sem SEC)
-1. **Testes a acrescentar:** (a) `X-View-As` com Bearer de admin em `POST /v1/admin/stores/{id}/products/bulk` = 403 `VIEW_AS_READ_ONLY` (o guard cobre; o VA-03 só lista outras rotas); (b) mesma `Idempotency-Key` por **outro admin** na mesma loja não colide (o escopo já inclui o admin; BK-06 não cobre o admin).
+1. **Testes a acrescentar (feitos em 2026-11-22, `r13-admin-bulk.e2e-spec.ts`, bloco "visão do lojista e chave de outro admin"):** (a) `X-View-As` com Bearer de admin em `POST /v1/admin/stores/{id}/products/bulk` = 403 `VIEW_AS_READ_ONLY` (o guard cobre; o VA-03 só lista outras rotas); (b) mesma `Idempotency-Key` por **outro admin** na mesma loja não colide (o escopo já inclui o admin; BK-06 não cobre o admin).
 2. **Retenção de `product_bulk_batches`:** `retain` sem prazo, como o `audit_log` (SEC-217) e `admin_view_sessions` (§16.4 item 4). Entra no mesmo prazo e expurgo da SEC-217; não piora a SEC-217 de forma relevante (só o id do autor).
 3. **Variante da SEC-200:** o teto de 120 por hora da rota do admin é por IP; admins atrás do mesmo IP do escritório dividem o teto. O limite que importa (10/h por admin) já é por usuário; não piora a SEC-200 do cliente.
 4. **Nome do autor no histórico:** quem tem `catalog` vê o nome dos colegas que agiram em massa (a lista da equipe exige `team`). É o que o C7 pede; o PO confirma se basta o primeiro nome.

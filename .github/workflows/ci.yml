@@ -138,8 +138,10 @@ jobs:
       - name: Instalar dependências do web
         run: pnpm install --frozen-lockfile --filter "@webag/web..."
 
+      # Sem `turbo`: com `--filter` a raiz do workspace não entra na instalação e o `turbo` (devDependency da raiz) pode não existir.
+      # É o mesmo caminho do `apps/web/Dockerfile` (provado no job `checks`); `^...` = só as dependências do web, em ordem topológica.
       - name: Build de shared e tokens
-        run: pnpm turbo run build --filter="@webag/web^..."
+        run: pnpm --filter "@webag/web^..." run build
 
       # Cache do compilador do Next entre execuções; a chave muda com o código do web, e o restore-keys reaproveita o anterior.
       - uses: actions/cache@v4

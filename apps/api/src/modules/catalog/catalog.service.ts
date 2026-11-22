@@ -886,7 +886,8 @@ export class CatalogService {
   ): Promise<BulkResult> {
     this.assertWritable(store);
     const ids = [...new Set(input.productIds.map((id) => id.toLowerCase()))].sort();
-    if (ids.length > MAX_BULK) throw errors.validation([{ field: 'productIds', message: `No máximo ${MAX_BULK} produtos por vez.` }]);
+    // A3 (review R1.3): o schema aceita mais que o teto só para o servidor responder 422 `BULK_TOO_LARGE`, como a rota do admin (mesmo status e código).
+    if (ids.length > MAX_BULK) throw errors.unprocessable('BULK_TOO_LARGE', 'Seleção grande demais', { errors: [{ field: 'productIds', message: `No máximo ${MAX_BULK} produtos por vez.` }] });
     const action = input.action;
     let adjust: PriceAdjust | null = null;
     if (action.type === 'price_adjust') {
@@ -990,7 +991,16 @@ export class CatalogService {
         appliedVersions.set(change.product.id, updated.version);
         for (const variant of change.variantPrices ?? []) await tx.update(productVariants).set({ priceCents: variant.priceCents, updatedAt: new Date() }).where(eq(productVariants.id, variant.id));
         if (action.type === 'price_adjust') {
-          await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.price, change.product.id, { basePriceCents: change.product.basePriceCents, version: change.product.version }, { basePriceCents: updated.basePriceCents, version: updated.version });
+          // SEC-223: o preço de cada variação com preço próprio, antes e depois, na trilha append-only (a tabela do lote é mutável).
+          await this.auditProduct(
+            tx,
+            actor,
+            store.id,
+            CATALOG_AUDIT.price,
+            change.product.id,
+            { basePriceCents: change.product.basePriceCents, ...variantPricesAudit(change.previousVariantPrices), version: change.product.version },
+            { basePriceCents: updated.basePriceCents, ...variantPricesAudit(change.variantPrices), version: updated.version },
+          );
         }
       }
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.bulk', { action: action.type, productIds: changes.map((c) => c.product.id), requested: ids.length });
@@ -1063,11 +1073,20 @@ export class CatalogService {
         }
         const edited = await this.editProduct(tx, product.id, { basePriceCents: item.previousPriceCents });
         for (const variant of item.variants) await tx.update(productVariants).set({ priceCents: variant.previousPriceCents, updatedAt: new Date() }).where(eq(productVariants.id, variant.id));
-        await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.price, product.id, { basePriceCents: product.basePriceCents, version: product.version }, { basePriceCents: edited.basePriceCents, version: edited.version });
+        await this.auditProduct(
+          tx,
+          actor,
+          store.id,
+          CATALOG_AUDIT.price,
+          product.id,
+          { basePriceCents: product.basePriceCents, ...variantPricesAudit(item.variants.map((v) => ({ id: v.id, priceCents: v.appliedPriceCents }))), version: product.version },
+          { basePriceCents: edited.basePriceCents, ...variantPricesAudit(item.variants.map((v) => ({ id: v.id, priceCents: v.previousPriceCents }))), version: edited.version },
+        );
         revertedIds.push(product.id);
       }
       const result = { reverted: revertedIds.length, skipped };
-      await this.batches.markUndone(tx, batch.id, actor.userId, result);
+      // A5: se nada foi revertido (tudo editado depois, ou apagado) o lote NÃO vira "desfeito": a lista não promete o que não aconteceu. A repetição recalcula o mesmo `skipped`.
+      if (revertedIds.length > 0) await this.batches.markUndone(tx, batch.id, actor.userId, result);
       await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.bulkUndo, store.id, { batchId: batch.id, kind: batch.kind }, { reverted: result.reverted, skipped: skipped.length }, 'store');
       return { alreadyUndone: false as const, result, revertedIds };
     });
@@ -1222,6 +1241,9 @@ export class CatalogService {
 }
 
 /** Antes/depois das variações no `audit_log`: só o que o histórico precisa (sem texto livre além dos atributos que o lojista escolheu). */
+/** SEC-223: `variants: [{ id, priceCents }]` só das variações com preço próprio (vazio = o campo nem entra, como antes). */
+const variantPricesAudit = (list: { id: string; priceCents: number }[] | undefined): { variants?: { id: string; priceCents: number }[] } => (list && list.length > 0 ? { variants: list.map((v) => ({ id: v.id, priceCents: v.priceCents })) } : {});
+
 const variantsAudit = (list: Variant[]) => list.map((v) => ({ id: v.id, attributes: v.attributes, sku: v.sku, priceCents: v.priceCents, stock: v.stock }));
 
 export const reservedError = (reserved: number): AppError =>

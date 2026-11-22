@@ -11,7 +11,7 @@ import { BulkBatchesService } from './bulk-batches.service.js';
 import { CatalogService } from './catalog.service.js';
 import { productVariants, products } from './db/schema.js';
 import { planItem, type AdminBlockReason, type AdminBulkAction, type ItemPlan } from './domain/admin-bulk.js';
-import { available } from './domain/stock.js';
+import { available, lowStockTransition } from './domain/stock.js';
 
 /** Teto de itens por ação (WB-353 C6) e de ações EXECUTADAS por admin por hora (C-ADM-07). */
 export const ADMIN_BULK_MAX_ITEMS = 200;
@@ -190,7 +190,8 @@ export class AdminCatalogService {
         const variant = (variants.get(row.id) ?? [])[0];
         if (!variant) throw errors.notFound('Variação não encontrada.');
         // Re-arma o aviso de estoque baixo se o estoque novo ficou acima do limite; o aviso em si é o agregado (nunca um e-mail por produto).
-        const rearm = available(plan.to, variant.reserved) > lowStockThreshold && !variant.lowStockArmed ? { lowStockArmed: true } : {};
+        // `lowStockTransition` é a regra única (a mesma do lojista). Aqui só o REARME vale: o admin nunca desarma (o aviso de estoque baixo é do fluxo de venda) nem envia aviso por produto.
+        const rearm = !variant.lowStockArmed && lowStockTransition(available(plan.to, variant.reserved), lowStockThreshold, variant.lowStockArmed).armed ? { lowStockArmed: true } : {};
         await tx.update(productVariants).set({ stock: plan.to, updatedAt: new Date(), ...rearm }).where(eq(productVariants.id, variant.id));
         const edited = await this.catalog.editProduct(tx, row.id, {});
         await this.audit.record(tx, ctx, { action: 'product.stock_adjust', targetType: 'variant', targetId: variant.id, storeId: store.id, reason: encoded, before: { productId: row.id, stock: plan.from, reserved: variant.reserved, version: row.version }, after: { productId: row.id, stock: plan.to, reserved: variant.reserved, version: edited.version } });

@@ -63,10 +63,11 @@ export const listProductsSchema = z.strictObject({
   limit: limitQuery,
 });
 
+/** Mais que o teto de 200 só para o servidor responder 422 `BULK_TOO_LARGE` (e não 400), igual à rota do admin (A3, review R1.3). */
 export const bulkSchema = z.strictObject({
-  productIds: z.array(z.uuid()).min(1).max(200),
+  productIds: z.array(z.uuid()).min(1).max(1000),
   /** B2 (D17): `version` de cada item, como veio em `preview[].version`. Obrigatória em `price_adjust` sem `dryRun` (o controller confere a cobertura de todos os `productIds`). */
-  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(200).optional(),
+  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(1000).optional(),
   /** WB-377 C3: confirma reajuste acima de `reajuste_max_pct` em algum item. */
   confirmLargeChange: z.boolean().default(false),
   action: z.discriminatedUnion('type', [

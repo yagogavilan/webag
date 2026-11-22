@@ -113,6 +113,37 @@ describe('Ação em massa do admin no catálogo da loja (WB-353 C6, C11, C-ADM-0
     });
   });
 
+  describe('visão do lojista e chave de outro admin (SEC §19.4 obs. 1)', () => {
+    it('com `X-View-As` (visão válida) a rota de massa do admin = 403 VIEW_AS_READ_ONLY, prévia e execução, e nada é aplicado nem gravado', async () => {
+      const ps = [await product()];
+      const view = (await ctx.http.post(`/v1/admin/stores/${storeId}/view-as`).set(as(ops)).send({ reason: { code: 'merchant_support' } }).expect(201)).body as { token: string };
+      const lots = (await batches()).length;
+      const key = `va-${uniqueTag(10)}`;
+      for (const over of [{ dryRun: true }, { expectedVersions: await versionsOf(ps) }]) {
+        const res = await send(ops, body(ps, { type: 'pause' }, over), key).set('X-View-As', view.token);
+        expect([res.status, res.body.code], JSON.stringify(over)).toEqual([403, 'VIEW_AS_READ_ONLY']);
+      }
+      expect((await row(ps[0]!.id)).status).toBe('active');
+      expect((await batches()).length).toBe(lots);
+      expect(await ctx.db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, key))).toHaveLength(0);
+    });
+
+    it('a MESMA `Idempotency-Key` usada por OUTRO admin não colide: cada um executa o seu (o escopo inclui o admin) e a repetição de cada um devolve a própria resposta', async () => {
+      const ps = [await product(10), await product(10)];
+      const key = `shared-${uniqueTag(10)}`;
+      const [first, second] = [await createAdmin(ctx, 'operations'), await createAdmin(ctx, 'operations')]; // admins próprios: o limite de 10/h do `ops` é consumido pelo resto do arquivo
+      const a = await run(ps, { type: 'stock_adjust', value: 1 }, key, first).expect(200);
+      const b = await run(ps, { type: 'stock_adjust', value: 1 }, key, second).expect(200); // outro admin, mesma chave, mesmo corpo: executa de novo (não devolve a resposta do primeiro)
+      expect(b.body.batchId).not.toBe(a.body.batchId);
+      expect((await stockOf(ps[0]!.variantId)).stock).toBe(12);
+      const again = await send(first, body(ps, { type: 'stock_adjust', value: 1 }, { expectedVersions: ps.map((p) => ({ productId: p.id, version: p.version })) }), key).expect(200);
+      expect(again.body).toEqual(a.body);
+      expect((await stockOf(ps[0]!.variantId)).stock).toBe(12); // a repetição do primeiro não soma de novo
+      const scopes = (await ctx.db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, key))).map((r) => r.scope).sort();
+      expect(scopes).toEqual([`admin-bulk:${storeId}:${first.userId}`, `admin-bulk:${storeId}:${second.userId}`].sort());
+    });
+  });
+
   describe('prévia (dryRun)', () => {
     it('devolve a versão de TODOS os itens e o que seria bloqueado, sem gravar nada, sem exigir chave e sem consumir o limite de 10 por hora', async () => {
       const a = await product(10);
@@ -209,6 +240,18 @@ describe('Ação em massa do admin no catálogo da loja (WB-353 C6, C11, C-ADM-0
       expect(below.body).toMatchObject({ changed: 0, batchId: null, merchantNotified: 'none' });
       expect(below.body.blocked[0].reason).toBe('STOCK_BELOW_RESERVED');
       expect((await stockOf(ok.variantId)).stock).toBe(1);
+    });
+
+    it('A2: o estoque novo acima do limite REARMA o aviso de estoque baixo da variação; abaixo do limite não desarma (a regra é `lowStockTransition`)', async () => {
+      const p = await product(10);
+      const admin = await createAdmin(ctx, 'operations'); // admin próprio: o limite de 10/h do `ops` é consumido pelo resto do arquivo
+      await ctx.db.update(productVariants).set({ lowStockArmed: false }).where(eq(productVariants.id, p.variantId));
+      await run([p], { type: 'stock_set', value: 1 }, undefined, admin).expect(200); // baixo: continua desarmado
+      expect((await stockOf(p.variantId)).lowStockArmed).toBe(false);
+      await run([p], { type: 'stock_set', value: 500 }, undefined, admin).expect(200); // acima do limite: rearma
+      expect((await stockOf(p.variantId)).lowStockArmed).toBe(true);
+      await run([p], { type: 'stock_set', value: 1 }, undefined, admin).expect(200); // armado e baixo: o admin não desarma
+      expect((await stockOf(p.variantId)).lowStockArmed).toBe(true);
     });
 
     it('produto de OUTRA loja ou inexistente = 404 para o pedido todo (nada aplicado); loja não aprovada = 409', async () => {

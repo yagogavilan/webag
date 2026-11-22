@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, like } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { CatalogService } from '../src/modules/catalog/index.js';
@@ -106,6 +107,16 @@ describe('Lotes de ação em massa do lojista: batchId, histórico e desfazer (W
     });
   });
 
+  describe('teto de 200 itens (A3 do tech-lead)', () => {
+    it('mais de 200 itens = 422 BULK_TOO_LARGE, o mesmo status e código da rota do admin; nada é feito', async () => {
+      const many = Array.from({ length: 201 }, () => randomUUID());
+      for (const dryRun of [true, false]) {
+        const res = await apply({ productIds: many, action: { type: 'pause' }, dryRun }, null).expect(422);
+        expect(res.body.code).toBe('BULK_TOO_LARGE');
+      }
+    });
+  });
+
   describe('listBulkBatches (WB-377 C7)', () => {
     it('lista do mais recente ao mais antigo, com quem, quando, quantos itens e undone; só da própria loja; cursor percorre sem repetir; rota estática não cai em {productId}', async () => {
       const lojista = await createMerchant(ctx);
@@ -128,8 +139,13 @@ describe('Lotes de ação em massa do lojista: batchId, histórico e desfazer (W
       expect(all.at(-1)).toMatchObject({ kind: 'price_adjust', itemsCount: 2, source: 'merchant', undone: false });
       expect(all.at(-1)!.actorName).toBe('Maria Teste');
       expect(all[0]).toMatchObject({ kind: 'resume', undoUntil: null });
-      await undo(ids[0]!, lojista, id).expect(200);
-      expect(((await list('', lojista, id).expect(200)).body.data as { id: string; undone: boolean }[]).find((b) => b.id === ids[0])!.undone).toBe(true);
+      // A5: o 1º lote já não reverte nada (pausar e reativar subiram a versão dos itens): continua sem `undone`; um lote novo, revertido de fato, vira `undone`.
+      expect((await undo(ids[0]!, lojista, id).expect(200)).body).toMatchObject({ reverted: 0 });
+      const fresh = await apply(body([await priced(10_000, lojista, id)]), `ls2-${uniqueTag(8)}`, lojista, id).expect(200);
+      await undo(fresh.body.batchId as string, lojista, id).expect(200);
+      const after = (await list('', lojista, id).expect(200)).body.data as { id: string; undone: boolean }[];
+      expect(after.find((b) => b.id === fresh.body.batchId)!.undone).toBe(true);
+      expect(after.find((b) => b.id === ids[0])!.undone).toBe(false);
     });
 
     it('não-membro = 404, sem token = 401, funcionário sem `catalog` = 403, limite inválido = 400', async () => {
@@ -169,6 +185,42 @@ describe('Lotes de ação em massa do lojista: batchId, histórico e desfazer (W
       expect(lot.undoneAt).not.toBeNull();
       expect(lot.undoneBy).toBe(owner.userId);
       void variants;
+    });
+
+    it('SEC-223: reajuste e desfazer gravam no `audit_log` o preço ANTES e DEPOIS de cada variação com preço próprio (com `store_id`); variação sem preço próprio não entra', async () => {
+      const p = await priced(10_000);
+      const put = await ctx.http.put(path(`/${p.id}/variants`)).set(as(owner)).send({ attributes: ['Tamanho'], variants: [{ attributes: { Tamanho: 'P' }, stock: 3, priceCents: 9_000 }, { attributes: { Tamanho: 'M' }, stock: 3, priceCents: 12_000 }, { attributes: { Tamanho: 'G' }, stock: 3 }] }).expect(200);
+      const ids = (put.body.variants as { id: string; attributes: { Tamanho: string } }[]).reduce<Record<string, string>>((acc, v) => ({ ...acc, [v.attributes.Tamanho]: v.id }), {});
+      const fresh = (await ctx.http.get(path(`/${p.id}`)).set(as(owner)).expect(200)).body as { version: number };
+      const applied = await apply(body([{ id: p.id, version: fresh.version }])).expect(200);
+      const priceRows = async () => (await ctx.db.select().from(auditLog).where(and(eq(auditLog.storeId, storeId), eq(auditLog.action, 'product.price'), eq(auditLog.targetId, p.id)))).sort((a, b) => a.id - b.id);
+      const byId = (list: unknown) => Object.fromEntries((list as { id: string; priceCents: number }[]).map((v) => [v.id, v.priceCents]));
+
+      const [reajuste] = await priceRows();
+      expect(reajuste).toMatchObject({ storeId, actorId: owner.userId, before: { basePriceCents: 10_000 }, after: { basePriceCents: 11_000 } });
+      expect(byId((reajuste!.before as { variants: unknown }).variants)).toEqual({ [ids.P!]: 9_000, [ids.M!]: 12_000 });
+      expect(byId((reajuste!.after as { variants: unknown }).variants)).toEqual({ [ids.P!]: 9_900, [ids.M!]: 13_200 });
+
+      await undo(applied.body.batchId as string).expect(200);
+      const desfazer = (await priceRows()).at(-1)!;
+      expect(desfazer).toMatchObject({ storeId, actorId: owner.userId, before: { basePriceCents: 11_000 }, after: { basePriceCents: 10_000 } });
+      expect(byId((desfazer.before as { variants: unknown }).variants)).toEqual({ [ids.P!]: 9_900, [ids.M!]: 13_200 });
+      expect(byId((desfazer.after as { variants: unknown }).variants)).toEqual({ [ids.P!]: 9_000, [ids.M!]: 12_000 });
+    });
+
+    it('A5: desfazer em que NENHUM item foi revertido (todos editados depois) não marca o lote como desfeito; o resultado é o mesmo na repetição e nada é sobrescrito', async () => {
+      const ps = [await priced(10_000), await priced(20_000)];
+      const applied = await apply(body(ps)).expect(200);
+      for (const p of ps) await ctx.http.patch(path(`/${p.id}`)).set(as(owner)).send({ basePriceCents: 15_000 }).expect(200);
+      const first = await undo(applied.body.batchId as string).expect(200);
+      expect(first.body).toMatchObject({ alreadyUndone: false, reverted: 0 });
+      expect(first.body.skipped).toHaveLength(2);
+      const lot = (await batchRows()).find((l) => l.id === applied.body.batchId)!;
+      expect(lot.undoneAt).toBeNull();
+      expect(lot.undoneBy).toBeNull();
+      const again = await undo(applied.body.batchId as string).expect(200);
+      expect(again.body).toEqual(first.body);
+      expect((await row(ps[0]!.id)).basePriceCents).toBe(15_000);
     });
 
     it('BK-08: item editado DEPOIS do reajuste não é sobrescrito (`skipped` CHANGED_AFTER); os demais voltam; o desfazer é parcial e atômico', async () => {
