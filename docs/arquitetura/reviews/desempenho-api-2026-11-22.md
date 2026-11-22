@@ -5,6 +5,8 @@ Escopo: `cfdc83b` (cache da descoberta, que a base do pedido já continha e é o
 
 ## Parecer: REPROVADO (1 bloqueante, correção pequena; o resto é aprovável com os ajustes abaixo)
 
+> **Atualização 2026-11-22:** após as correções do backend-dev (`8d861f9`, `f8e85b1`, `eb9b936`, `d4f1968`, `25b9931`) o parecer passou a **APROVADO COM RESSALVAS**. Ver o apêndice "Re-revisão" ao final. O texto abaixo é o parecer original, mantido como registro.
+
 O ganho é real e bem medido (home p95 9,4 s -> 37 ms; 1.000 usuários realistas de 22,8% de erro para 0%), o desenho do cache é correto (catálogo sem posição em memória, filtro por posição/área sempre por consulta, só dado público), o webhook está certo e o contrato não mudou. O que reprova é um efeito colateral do novo padrão `idle_in_transaction_session_timeout=30s`: derruba o processo da API na conciliação de pagamentos. Corrigido o B1, o parecer passa a APROVADO COM AJUSTES sem nova rodada de design.
 
 ## Bloqueante
@@ -83,3 +85,90 @@ Dívida registrada: DT-082, DT-083, DT-084 (`docs/arquitetura/divida-tecnica.md`
 | Suíte e2e completa (108 arquivos) | não executada por mim | motivo: o relatório do autor registra 2 execuções verdes (874 testes); rodei o subconjunto que toca auth/cache/webhook. Todos os e2e rodam com os caches em memória **desligados** (I1) |
 | Build | não executado | disco do ambiente quase cheio |
 | `docker compose config` / PostgreSQL 18 | não executado | sem Docker; o YAML foi lido com `yaml.safe_load` |
+
+---
+
+# Apêndice: Re-revisão (2026-11-22, branch no commit `25b9931`)
+
+Revisor: tech-lead. Escopo: `8d861f9` (B1) e `git diff 2103c50..HEAD -- apps/api infra docs/deploy docs/qa` (4 commits). Li o código e os testes; não confiei no relato do dev.
+
+## Parecer: APROVADO COM RESSALVAS (pode ir ao `main`; deploy e G4 dependem de 2 itens abaixo)
+
+B1 corrigido e provado; I1 a I5 e A1 a A10 fechados com evidência; sem regressão nova encontrada. **I6 não está fechado, e o relato do dev ("aguarda o PO") está desatualizado:** o PO respondeu e o CEO validou a DEC-113 (`docs/decisoes.md`), que torna **obrigatória a invalidação em até 5 s** para moderação, loja suspensa e afins. O código não faz isso (nenhum `clear()`/invalidação existe; o e2e novo documenta a defasagem de 40 a 90 s). Isso não bloqueia o merge (nada foi publicado; merge no `main` não é deploy), mas **bloqueia deploy/G4**: ver "Bloqueios restantes".
+
+## B1 / SEC-199: RESOLVIDO
+
+| Verificação | Evidência |
+|---|---|
+| Processo não cai por erro de conexão | `database.module.ts:127-130`: `pool.on('error')` (conexão ociosa) e `pool.on('connect', c => c.on('error'))` (conexão emprestada, onde o pool remove o seu listener). Só loga `warn`, sem dado sensível. e2e `db-idle-timeout`: `idle_in_transaction_session_timeout=1s`, transação esquecida 1,6 s e `pg_terminate_backend` em conexão ociosa; `process.on('uncaughtException')` vazio e o pool se recompõe |
+| Conciliação sem transação ociosa | `payments.service.ts:810`: `locks.tryRun('webag:payments:reconcile', ...)`; `SessionLockService` (`database.module.ts:38-70`) usa `pg_try_advisory_lock` de sessão em conexão dedicada, `idle` (não `idle in transaction`); o trabalho usa o pool em transações curtas |
+| Cobrança de troca | `exchanges.service.ts:566`: mesma trava; 409 `EXCHANGE_PAYMENT_IN_PROGRESS` preservado quando `acquired: false` |
+| Liberação em erro | `finally` (`:57-68`): remove o listener, `pg_advisory_unlock` antes de devolver a conexão; se o unlock falha ou a conexão quebrou, `release(true)` destrói a conexão (o PostgreSQL solta a trava ao fechar). Cobre `work` que lança. e2e: ao final `pg_locks` advisory concedidos = 0 e a conciliação seguinte roda |
+| Queda do processo no meio | Trava de sessão morre com a conexão no servidor; nada fica preso em tabela. `lost()` (`payments.service.ts:841`) interrompe o laço entre candidatos se a conexão da trava cair (a próxima rodada retoma; o `sync` é idempotente) |
+| Exclusão mútua | Mesmo `hashtext(chave)` de antes; o e2e prova 2ª chamada concorrente com `skipped: true` enquanto a 1ª dura 3,6 s (3x o timeout de 1 s) |
+| Padrão do timeout | `env.ts:80`: 60 s (> 8 s x 3 do MP; é rede de proteção). `env.ts:224`: `DB_STATEMENT_TIMEOUT_MS=0` recusado em produção (SEC-203), com caso em `env.spec.ts:108` |
+| Refresh OAuth (`payment-account.service.ts:169-175`) | Continua com 1 transação aberta durante 1 chamada ao MP, mas com `timeout: 8_000, maxRetries: 0` (linha 128): no máximo 8 s parado, contra 60 s. O listener do pool impede a queda do processo mesmo se estourar. Aceito como DT-085 (ver abaixo) |
+| Pool esgotado por conexões dedicadas | A conciliação segura 1 conexão por minutos (antes também: o `lockTx` ocupava 1) e `payOnce` 1 por troca em pagamento (antes idem). Cada um ainda precisa de outras do pool para o trabalho. Sem piora; com `DB_POOL_MAX=10` há folga, e a espera máxima por conexão é 3 s (`connectionTimeoutMillis`), então esgotar degrada com erro rápido, sem travar. Verificar na carga do QA com troca concorrente (ajuste A-R2) |
+
+## Importante (I1 a I6)
+
+| # | Estado | Evidência |
+|---|---|---|
+| I1 | FECHADO | `test/discovery-cache.e2e-spec.ts` (266 linhas) sobe com TTL 15/60/10 e relógio avançado por `vi.setSystemTime`: (a) duas áreas com cache quente, cada home vê só o seu; loja nova só após 15 s e oferta nova após 60 s; distância por posição nunca em cache; (b) preço alterado: página antiga, sacola e pedido com o preço novo (2 x 1500); (c) estoque zero, moderação, loja suspensa/pausada: página defasada e sacola/pedido bloqueiam na hora (`OUT_OF_STOCK`, `STORE_UNAVAILABLE`, `STORE_CLOSED`); erro não é guardado. Passou (4 arquivos, 29 testes) |
+| I2 | FECHADO | `payments.e2e-spec.ts:277-322`: o teste fixa o relógio da API 1 ms antes do valor gravado (`now() - 1 s + 500 µs`); com `new Date()` a condição dava falso, com `now()` do banco dá 1. Segundo teste: 3 `processDue()` simultâneos consultam o provedor 1 vez (`SKIP LOCKED` + marcação de 60 s). Passou |
+| I3 | FECHADO | `cache-control.e2e-spec.ts`: sacola, endereços, `/v1/me`, pedidos em `private, no-store` (inclui 401 e 404); rota pública mantém `public, max-age=30` e o 404 dela vira `private, no-store`; 304 com `If-None-Match` preservado. Achado extra do dev e correto: `problem.filter.ts:68` força `no-store` em todo erro (o `@Header` sobrevivia ao 404), e `:31` no ramo de `/health` |
+| I4 | FECHADO | `principal.e2e-spec.ts` (151 linhas): bloqueado e excluído dão 401 e `load()` null; sessão revogada, de outro dono, inexistente e `absolute_expires_at` vencido; 2 papéis, 0 papéis, datas tipadas; admin inativo perde o perfil e a rota dá 403, reativar volta; `MFA_REQUIRED`; reenrolamento; `SESSION_IDLE` só para admin. Cada caso confere pelo guard real e pelo `load()` |
+| I5 | FECHADO | `docker-compose.prod.yml`: `shm_size: 256mb`. YAML lido; `docker compose config` não executado (sem Docker) |
+| I6 | ABERTO, mudou de natureza | O guia (§14.6) e o relatório (§12) agora trazem a soma real e correta, conferida contra o código: loja nova 45 s, loja suspensa 30 s, ofertas e mais vendidos 90 s, páginas 40 s (10 s + `max-age` 30 s), sacola e pedido 0 s; nenhum proxy do repositório faz `proxy_cache`. O que falta é a **invalidação exigida pela DEC-113** (dono: backend-dev). Ver "Bloqueios restantes" |
+
+## Ajustes (A1 a A10)
+
+| # | Estado | Evidência |
+|---|---|---|
+| A1 | FECHADO | `browse.service.ts:40-44` `offsetOf` (inteiro >= 0) na chave e na consulta; teste: cursor "com ruído" e simples dão 1 consulta, negativo vira 0 sem 500 |
+| A2 | FECHADO | `local-cache.ts`: stale-if-error por até 4x o TTL, recuo de 1 s, `AppError` nunca mascarado; 3 testes unitários (serve antigo e recua, 404 não mascarado, velho demais propaga). A chave é só id/modo/offset/limite e o valor servido é o da MESMA chave: não há mistura entre clientes ou áreas. Efeito a registrar: com o banco fora, uma retirada pode durar até 4x o TTL (160 s nas páginas); já dito no guia |
+| A3 | ACEITO | SQL cru com cobertura de caracterização (I4). Renomear coluna agora quebra teste, não só produção |
+| A4 | FECHADO | `loadStoreBase`/`loadProductBase` guardam só campos usados e `documentMasked`; teste varre as entradas do cache e não acha o documento completo. O diretório (`store-feed`) já seleciona colunas explícitas, sem documento |
+| A5 | FECHADO | `env.example`, `env.prod.example` e compose repassam `DB_*`, TTLs, `HTTP_*`, `LATENCY_*`, `NODE_OPTIONS` (antes definir no `.env` não chegava ao contêiner) |
+| A6 | FECHADO | `onApplicationBootstrap` loga `db.session_settings` e avisa se o limite do `pg_trgm` não for 0,5; e2e confere `0.5` e `30s` na conexão. O aviso em si não tem teste (nit) |
+| A7 | FECHADO | `max_wal_size` (`PG_MAX_WAL_SIZE`, 2GB), `NODE_OPTIONS` com `API_MAX_OLD_SPACE_MB`, `log_parameter_max_length=0` (SEC-202). Sem `mem_limit`: documentado como dependente do servidor |
+| A8 | FECHADO | Middleware só instalado com intervalo > 0; `percentile` nearest-rank com testes (p50=50, p95=95, p99=99). O log `http.latency` real continua para o QA (no e2e o intervalo é 0) |
+| A9 | FECHADO | `processDue` usa `now() + interval '60 seconds'` e `make_interval(secs => ...)`; o caminho de retentativa (`attempts: 1`, `lastError`) passa no e2e |
+| A10 | FECHADO | `cache.service.spec.ts` com Redis falso: single-flight (1 cálculo, 1 gravação para 50 requisições), erro propaga e esvazia o `inflight`, falha aberta com Redis fora, `bump` |
+
+## Regressões procuradas
+- Vazamento de conexão: nenhum (liberação em `finally`, destruição quando quebra; `pg_locks` = 0 no e2e).
+- Chave de cache com dado pessoal: nenhuma (ids, modo, offset, limite). Valor cacheado sem CPF/CNPJ completo (A4).
+- Stale-if-error cruzando cliente ou área: não, a chave é a mesma da leitura normal e nada depende de quem pede.
+- Contrato: `git diff 2103c50..HEAD -- docs/arquitetura/api packages/shared` não tocado; só cabeçalho `Cache-Control` em erro.
+- Ajuste A-R1 (nit): em `SessionLockService.tryRun`, se a consulta `pg_try_advisory_lock` lançar sem o evento `error` ter chegado, `release(false)` devolve ao pool uma conexão possivelmente quebrada. Destruir a conexão quando a própria tentativa de pegar a trava falha. Dono: backend-dev, na próxima passagem pelo arquivo.
+- Ajuste A-R2: não há teste do `lost()` (matar a conexão da trava no meio da conciliação com `pg_terminate_backend` e conferir que o laço para e o processo vive) nem de `payOnce` concorrente (409). O caminho é simples, mas é a segunda metade do SEC-199. Dono: backend-dev; pode ir com a história da invalidação.
+
+## Bloqueios restantes (o que sobrou)
+
+| Item | Severidade | Dono | Bloqueia o merge? | Bloqueia deploy/G4? |
+|---|---|---|---|---|
+| SEC-201 / I6: invalidação em até 5 s ao moderar, suspender, reprovar ou desativar (DEC-113), com e2e em TTL > 0 (o `discovery-cache` hoje afirma a defasagem de moderação e suspensão, e precisa inverter para <= 5 s). Desenho mínimo: `clear()` dos `LocalTtlCache` e `cache.bump('home'|'feed')` expostos por `discovery/index.ts` e chamados nos fluxos de moderação/suspensão; vale para 1 réplica (DT-082 cobre a 2ª) | Importante (decisão tomada e não implementada) | backend-dev; PM encaixa a história (~0,5 dia, estimativa do próprio relatório) | **Não** (nada publicado; o merge no `main` não é deploy) | **Sim**: sem isso o deploy contraria a DEC-113. Saída provisória aceitável só com decisão registrada: subir com `FEED_DIRECTORY_TTL_SECONDS=0`, `HOME_SECTIONS_TTL_SECONDS=0`, `BROWSE_CACHE_TTL_SECONDS=0` (perde o ganho de desempenho). Registrado como DT-087 |
+| SEC-200: CGNAT, `limit_conn 50` por IP também em `/socket.io`, limites da API só por IP | Média, preexistente (não nasce deste diff) | backend-dev (nginx e `rate-limit.guard`), PM e tech-lead medem no piloto | Não | Não, desde que o piloto meça 429 por rota. Antes do G5, corrigir o texto do guia §14.5 (ainda cita só `limit_req`). Registrado como DT-086 |
+| I6, parte de texto | Resolvida (guia e relatório com a soma real) | | | |
+| DT-085 (PgBouncer, trava de sessão; refresh OAuth) | Baixa | backend-dev | Não: não há PgBouncer, 1 réplica; gatilho "antes de PgBouncer ou 2ª réplica" é mensurável | Não |
+| Veto do Security (DEC-105) | | security-engineer | O parecer técnico de B1 está dado; **só o Security levanta o veto**, ao repetir a revisão no que mudou (SEC-199, 202, 203 corrigidos; 201 e 200 abertos) | |
+| QA | | qa-engineer | DEC-105 exige e2e completo 2x verde e confirmação do QA: eu não rodei a suíte completa | |
+
+## O que o QA deve checar (complemento)
+- Suíte completa 2x (os 11 arquivos que rodei dão verde, abaixo); conferir `http.latency` em log real; troca concorrente com o pool em 10; reiniciar o Postgres com a API no ar e confirmar `warn` sem queda.
+- Depois da história de invalidação: moderação/suspensão somem em <= 5 s da home, das páginas e das ofertas.
+
+## Verificado (2026-11-22, commit `25b9931`, PostgreSQL 16.15 + Redis locais; `docker compose config` e PostgreSQL 18 sem Docker)
+| Item | Comando | Resultado |
+|---|---|---|
+| Tipos | `pnpm typecheck` (apps/api) | exit 0 |
+| Lint | `pnpm lint` (apps/api) | exit 0 |
+| Unitários | `pnpm test:unit` | 49 arquivos, 353 testes verdes |
+| E2E novos (B1, I1, I3, I4) | `vitest run --config vitest.config.e2e.ts` `db-idle-timeout`, `cache-control`, `discovery-cache`, `principal` | 4 arquivos, 29 testes verdes |
+| E2E pagamentos e seeds (I2, seeds determinísticos) | `payments`, `seed-onda3`, `seed-orders` | 3 arquivos, 34 testes verdes |
+| E2E vizinhos (troca com a nova trava, busca, auth) | `exchanges`, `dt049-ledger-exchange`, `search`, `auth` | 4 arquivos, 50 testes verdes |
+| Teste de B1 falha sem a correção | não executado | exigiria reverter código de produto; a queda sem a correção foi reproduzida na 1ª revisão com `pg.Pool` e pelo Security |
+| Suíte e2e completa 2x, build, `generate:check`, `docker compose config` | não executados | a suíte completa é do QA (DEC-105); build: disco quase cheio (708 MB livres); contrato não foi tocado; sem Docker |
+
+Dívida registrada: DT-086 (SEC-200) e DT-087 (invalidação DEC-113) em `docs/arquitetura/divida-tecnica.md`; DT-085 já existia.
