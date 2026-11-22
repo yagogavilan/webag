@@ -163,11 +163,29 @@ function startServer() {
         res.writeHead(404).end('nao encontrado');
         return;
       }
-      res.writeHead(200, {
-        'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-        'Cache-Control': 'no-store',
-      });
-      res.end(readFileSync(file));
+      const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
+      const body = readFileSync(file);
+      // Range (206): o Chromium precisa dele para dar seek em <video> (peca com clipes de tela em src/clips)
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+        if (start > end || start >= body.length) {
+          res.writeHead(416, { 'Content-Range': `bytes */${body.length}` }).end();
+          return;
+        }
+        res.writeHead(206, {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${body.length}`,
+          'Content-Length': end - start + 1,
+        });
+        res.end(body.subarray(start, end + 1));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' });
+      res.end(body);
     } catch {
       res.writeHead(400).end('requisicao invalida');
     }
@@ -490,8 +508,16 @@ async function renderVideo(browser, origin) {
         `${label}: a pagina tem overflow (${geo.sw}x${geo.sh}) alem do palco ${STORY.w}x${STORY.h}`,
       );
 
+    // setTime pode ser sincrono ou devolver Promise/thenable (ex.: <video>: currentTime + await 'seeked'). Aguarda a promessa e, nesse caso,
+    // dois rAF para o quadro decodificado ser pintado antes do screenshot. Sincrono: comportamento antigo (sem rAF extra).
     const shot = async (t) => {
-      await page.evaluate((time) => window.setTime(time), t);
+      await page.evaluate(async (time) => {
+        const ret = window.setTime(time);
+        if (ret && typeof ret.then === 'function') {
+          await ret;
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        }
+      }, t);
       return page.screenshot({ type: 'png', animations: 'allow', caret: 'initial' });
     };
 
