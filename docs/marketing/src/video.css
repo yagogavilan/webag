@@ -26,6 +26,16 @@ html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; 
 .vslot { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
 .vslot video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; background: var(--noite); }
 
+/* v2.2: JANELA de clipe real. Cada HTML posiciona .win (left/top/width/height) e recorta o clipe com `#slotN video { width; height; left; top }`
+   (px do palco = px do clipe x escala; ver o comentário de cada HTML). object-fit: fill porque width/height já respeitam a proporção do clipe.
+   --sh: cor da sombra dura. --bd: moldura interna que esconde 1 a 2 px de borda do recorte (só no painel). .strip: faixa branca que cobre
+   a ponta do botão "Recusar", que no painel real vaza para fora do alerta (ver revisao-social-v2.md). */
+.win { position: absolute; overflow: hidden; border-radius: 34px; background: var(--papel); box-shadow: 14px 14px 0 var(--sh, var(--noite)); }
+.win .vslot video { object-fit: fill; background: none; }
+.win::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 6px var(--bd, transparent); pointer-events: none; }
+.win .strip { position: absolute; left: 0; top: 0; bottom: 0; width: 33px; background: #FFFFFF; }
+.win .acc { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 56px; background: var(--lima); color: var(--noite); font-family: var(--display); font-weight: 800; font-size: 150px; line-height: 0.92; letter-spacing: -0.045em; white-space: nowrap; }
+
 /* fecho */
 .cta-box { position: absolute; left: 84px; width: 912px; background: var(--lima); color: var(--noite); border-radius: 28px; padding: 52px 56px 60px; }
 .cta-box p { font-family: var(--display); font-weight: 800; line-height: 0.92; letter-spacing: -0.045em; white-space: nowrap; }
