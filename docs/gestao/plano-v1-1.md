@@ -270,3 +270,25 @@ Soma 1 a 5: ~4,1 UT. Fecha só metade da lacuna: a outra metade é aceitar a R1 
 
 ### 10.5 Gates de segurança da R1 (G4 local)
 SEC-206 (Alta, Ver como: desenho fechado, código pendente), SEC-207 (Média, máscara de cliente), SEC-208 (Média, idempotência na mesma transação da D18), SEC-209 (Média, `timeline` e "estrito" aninhado; devolvida ao backend-dev, bloqueia o **merge** da WB-352). Para fechar: VA-01..26, AO-01..05, BK-01..08, DB-01..05 verdes no CI com Docker, `x-view-as` no redact do pino e do Sentry, revisão diferencial da WB-352, D18 e D19 (TM §15.7). SEC-194 segue aberta até J24 e não bloqueia o G4 em staging.
+
+## 11. Re-baseline curto (2026-11-22, após DEC-133): o que resta e a carga do fundador
+
+R1.1 e R1.2 (back-end e web do cadastro rápido) estão **construídas e em QA final**; merge só depois do reteste 2 (BUG-042 e CI verde). Estado, bugs e condições de deploy: `board.md` (v1.1). UT realizadas **não medidas** pelo PM até hoje (indisponível); o backend-dev informa as UT gastas na R1.1 e na R1.2 para checar os gatilhos de 7,5 e 9 UT da §10.3 e recalibrar. Escopo que entrou depois da planning (SEC-213/214/215/218, `limitPct`, GET de configuração do admin, SEC-221, C15 da WB-352, `adjustVariantStock`): ~+0,5 a 1,0 UT, absorvido na linha de base da R1 (40 a 44); **se a R1.1+R1.2 passou de 9,4 UT, algo da ordem de corte sai da R1.3** (CEO decide). Total e buffer (25 UT) intactos `[HIPÓTESE]`.
+
+Horas do fundador são `[HIPÓTESE]` mínimas (ele não confirmou disponibilidade); o gargalo é a agenda, não o agente.
+
+| Etapa | Falta (UT, PERT `[HIPÓTESE]`) | Depende de | Carga do fundador | Ordem de corte / observação |
+|---|---|---|---|---|
+| **R1 fecho do QA** (agora) | ~0,5 (reteste 2, merge) | CI verde (R-49), BUG-042 | ~0,3 h: conferir a aba Actions no HEAD final; decidir SEC-200 (aceitar ou corrigir) | Merge não exige o fundador (docs/código; sem deploy) |
+| **R1.0** com Docker | 0,3 | D-16, disco (I-05) | 1 a 2 h: sessão na máquina com Docker (ou liberar disco) | Sem ela, D-06 e PG18 ficam "não provados"; bloqueia deploy, não o merge |
+| **Teste de aparelho e 60 s** (R1.2) | n/a (agentes) | C-07, D-14 | **~4 a 5 h**: roteiro §12.11 (~1,5 h) + 5 pessoas do perfil cronometradas (~3 h, incluindo recrutar). Única parte da R1 que depende de gente de fora | Sem isso a meta de 60 s e HIP-Q2 seguem `[HIPÓTESE]` |
+| **R1.3** | ~6,5 a 7 (inclui DT-095 1,1 e itens que entraram) | merge da R1.1/R1.2; D18 | ~0,5 h: decisões pontuais | Cortes 1 a 4 da §10.3; planilha e "juntar" já cortados (DEC-132) |
+| **R1.4** coleta (staging) | ~2,8 | R1.3 | ~0 (só staging, flags `false`) | Primeira da fila de corte; J24 só para ligar |
+| **R1.5** fecho da R1 | ~1,5 a 2 | SEC-206/208 "Corrigido", CI verde | ~1,5 h: RC local (`pnpm iphone`, Docker Desktop) | G4 local; G5 fora |
+| **R2** cupons e painéis | ~37 | contrato R2; F2 (R$ 0 por padrão), F4 | ~6 h: F2/F4 e J22/J23/J27 ao advogado (~1 h); 5 entrevistas da porta falsa (~3 h); RC (~1,5 h) | Cortes DEC-100; 373 e 346/348 primeiro |
+| **R3** rota, OK da loja, notificações | ~24,7 | ADR mapa (spike L5), SEC-196 | ~2 h: aprovar spike (~0,3 h), Web Push em aparelho (~0,5 h), RC (~1 h) | Construtor 358/359 e 380 antes; 397 só com aparelho |
+| **R5** análises e IA `fake` | ~12,3 | R1.4 (coleta em seed), R2 | ~1,5 h: F5/F6 (preço do módulo, ~0,5 h), RC (~1 h) | Fecha "pronta, desligada e testada com seed"; antes da R4 (D-B) |
+| **R4** app do motoboy | ~41,3 | R3 (391/390), SEC-193 e SEC-198, ADR courier | ~4 h: Android real e APK (~2 a 3 h), RC; J8/J26 só para ligar | Sem Android real: "RC com ressalva: emulador" (R-34); candidata a sair |
+| **Onda final** | ~12,3 | HEAD congelado | ~2,5 h: aparelho real e leitura do relatório visual | "Visto em aparelho: sim/não" só o fundador muda |
+
+Soma de horas do fundador (mínimo, sem imprevisto): ~25 a 27 h em ~9 janelas de agenda; a mais pesada e mais cedo é a de **aparelho + 60 s + Docker (~6 a 7 h em 2 janelas)**, que precisa ser pedida já. Caminho crítico: reteste 2 -> merge -> (R1.0 e teste de aparelho em paralelo) -> R1.3 -> R1.5 -> R2. Folga da R1: nenhuma no piso; a R1.4 é a folga (corta inteira). R2 em diante não mudou.
