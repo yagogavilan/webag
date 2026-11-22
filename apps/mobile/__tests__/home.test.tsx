@@ -151,6 +151,17 @@ describe('Início (D5)', () => {
     expect(screen.queryByTestId('home.category-cat-casa')).toBeNull();
   });
 
+  it('região sem loja: o aviso não é remontado quando os banners chegam depois (chave estável da linha)', async () => {
+    // Regressão da intermitência no CI: a ordem de chegada das 3 leituras varia com a carga da máquina. Aqui o Início chega primeiro e
+    // os banners depois; com chave por índice a linha do aviso era remontada e o elemento achado saía da árvore antes do expect.
+    mockHome.mockResolvedValue(homeData({ empty: true, nearbyStores: [], offers: [], availableCategoryIds: [] }));
+    mockBanners.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ data: [banner()], nextCursor: null }), 150)));
+    await renderScreen(<CustomerHome />);
+    const title = await screen.findByText('Ainda não há lojas aqui.');
+    expect(await screen.findByTestId('home.banner-b1')).toBeOnTheScreen();
+    expect(title).toBeOnTheScreen();
+  });
+
   it('cidade escolhida sem ponto no mapa pede o CEP', async () => {
     await addressStore.clearAll();
     await addressStore.hydrate();

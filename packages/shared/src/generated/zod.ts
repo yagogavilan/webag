@@ -6286,7 +6286,7 @@ export const ImportProductsResponse = zod.object({
 
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`).
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` (toda ação em massa que alterou algo vira um lote, para o histórico `listBulkBatches`) e, só em reajuste de preço, `undoUntil` (10 min; `undoBulkBatch`); ação que não alterou nenhum item (tudo já como pedido) devolve `batchId` nulo e não grava lote. Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`). **Teto de 200 itens (A3, review R1.3):** 201 ou mais é 422 `BULK_TOO_LARGE`, o mesmo status e código de `bulkAdminStoreProducts` (antes era 400 de validação; o `maxItems: 200` do schema é o limite que o app respeita, e nenhum cliente publicado envia mais). **Auditoria (SEC-223):** o reajuste grava em `product.price` o preço antes e depois de cada variação com preço próprio (`variants: [{ id, priceCents }]`).
  * @summary Ação em massa
  */
 export const BulkProductsParams = zod.object({
@@ -6675,8 +6675,9 @@ export const AdjustVariantStockBody = zod.union([zod.object({
   "set": zod.int()
 })])
 
-export const adjustVariantStockResponseStockMin = 0;
-export const adjustVariantStockResponseStockMax = 99999;
+export const adjustVariantStockResponseOneStockMin = 0;
+export const adjustVariantStockResponseOneStockMax = 99999;
+
 
 
 
@@ -6688,12 +6689,14 @@ export const AdjustVariantStockResponse = zod.object({
   "effectivePriceCents": zod.int().nullable().describe('Preço vigente hoje (com a promoção, se ativa)'),
   "originalPriceCents": zod.int().nullable().describe('Preço "de" quando há promoção ativa'),
   "discountPercent": zod.int().nullable().describe('Percentual exibido, arredondado para baixo; abaixo de 1% não aparece'),
-  "stock": zod.int().min(adjustVariantStockResponseStockMin).max(adjustVariantStockResponseStockMax),
+  "stock": zod.int().min(adjustVariantStockResponseOneStockMin).max(adjustVariantStockResponseOneStockMax),
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
   "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
-})
+}).and(zod.object({
+  "productVersion": zod.int().min(1).describe('Versão do produto depois do ajuste (o ajuste manual de estoque é edição de catálogo e sobe 1); o `If-Match` da próxima escrita')
+})).describe('v1.1 R1 (DEC-132): a variação como sempre, mais a versão do produto depois do ajuste. Campo aditivo: cliente antigo ignora `productVersion`')
 
 
 /**
@@ -16015,7 +16018,7 @@ export const ListProductTableResponse = zod.object({
 
 
 /**
- * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Repetir para o mesmo lote já desfeito devolve 200 com o mesmo resultado e `alreadyUndone: true` (a resposta pode ter se perdido em 3G; não é erro). Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Repetir para o mesmo lote já desfeito devolve 200 com o mesmo resultado e `alreadyUndone: true`, mesmo depois dos 10 minutos (a resposta pode ter se perdido em 3G; não é erro). **Ordem das checagens:** lote de outra loja ou inexistente: 404; já desfeito: 200 `alreadyUndone`; janela vencida: 410 `UNDO_WINDOW_EXPIRED`; lote que não é reajuste de preço (pausar, reativar, mover, estoque): 409 `BATCH_NOT_UNDOABLE` (só o reajuste de preço se desfaz). O item revertido sobe `version` +1 e grava antes/depois no histórico (`product.price`, com `store_id`, e o preço de cada variação com preço próprio em `variants`); o lote desfeito segue na lista com `undone: true`. **Desfazer que não reverteu nada** (`reverted: 0`, todos os itens editados depois ou apagados) NÃO marca o lote como desfeito (`undone` continua `false` e o botão segue até o fim da janela); repetir devolve o mesmo resultado, sem efeito. Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
  * @summary Desfazer um reajuste em massa por até 10 minutos (WB-377 C4)
  */
 export const UndoBulkBatchParams = zod.object({
@@ -16036,7 +16039,7 @@ export const UndoBulkBatchResponse = zod.object({
 
 
 /**
- * Cada ação em massa (reajuste, pausar, reativar, mover de seção) registra quem, quando e quantos itens (`itemsCount`); inclui as feitas pela Webag (`source: admin`, autor "Webag", sem nome de pessoa). Mais recentes primeiro; cursor. Permissão da loja: `catalog`; não-membro 404.
+ * Cada ação em massa (reajuste, pausar, reativar, mover de seção) registra quem, quando e quantos itens (`itemsCount`); inclui as feitas pela Webag (`source: admin`, autor "Webag", sem nome de pessoa). Mais recentes primeiro; cursor. Só entra lote que alterou algo. Permissão da loja: `catalog`; não-membro 404.
  * @summary Histórico das ações em massa da loja (WB-377 C7)
  */
 export const ListBulkBatchesParams = zod.object({
@@ -16058,7 +16061,7 @@ export const ListBulkBatchesQueryParams = zod.object({
 export const ListBulkBatchesResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.uuid(),
-  "kind": zod.enum(['price_adjust', 'pause', 'resume', 'move_section']),
+  "kind": zod.enum(['price_adjust', 'pause', 'resume', 'move_section', 'stock_set', 'stock_adjust']).describe('`stock_set` e `stock_adjust` só vêm de lote da Webag (`source: admin`)'),
   "itemsCount": zod.int(),
   "source": zod.enum(['merchant', 'admin']),
   "actorName": zod.string().describe('Nome do membro da loja; "Webag" quando `source: admin` (nunca o nome da pessoa)'),
@@ -17427,7 +17430,7 @@ export const SetAdminStoreProductStatusResponse = zod.object({
 
 
 /**
- * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
+ * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Itens bloqueados não derrubam o lote:** os que não passam (`blocked`) ficam de fora e o resto é aplicado; a lista `blocked` vai na resposta da prévia e da execução. **Estoque em massa (`stock_set` e `stock_adjust`) vale só para produto de UMA variação ativa**; produto com grade é `MULTIPLE_VARIANTS` (sem adivinhar o que `estoque 10` significa para P, M e G): nesta versão quem edita a variação é o lojista; o admin só passa a poder editá-la quando a rota de estoque por variação do WB-353 for entregue (hoje `x-planned`). `pause` em produto já pausado e `resume` em produto já ativo não são alteração (não contam em `willChange` nem geram linha). Lote que não altera nenhum item não consome o limite de 10 por hora, não grava lote e devolve `batchId` nulo. O motivo vale o do catálogo `AdminReason` (flag `admin_edita_catalogo_sem_pedido` desligada: só `requested_by_merchant`; 422 `REASON_NOT_ALLOWED`). A resposta de uma execução repetida com a mesma chave devolve o mesmo corpo e NÃO conta de novo no limite de 10. **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). **SEC-208 (mesma transação):** a conferência de `expectedVersions`, o `version = version + 1` de cada item, o lote e a resposta da chave (`batchId`) são gravados NA MESMA transação do efeito; repetir o mesmo corpo depois de aplicado devolve o mesmo `batchId` ou 409, nunca reaplica (ADR-018 D17; tarefa da R1.1). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
  * @summary Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
  */
 export const BulkAdminStoreProductsParams = zod.object({
@@ -17491,7 +17494,7 @@ export const BulkAdminStoreProductsResponse = zod.object({
   "changed": zod.int(),
   "auditEntries": zod.int().describe('Uma por item alterado (C-ADM-07)'),
   "batchId": zod.uuid().nullable(),
-  "merchantNotified": zod.enum(['aggregate']).describe('Um único aviso agregado com o motivo'),
+  "merchantNotified": zod.enum(['aggregate', 'none']).describe('Um único aviso agregado com o motivo (`aggregate`: uma linha no painel do lojista e um e-mail); `none` quando nada mudou (prévia ou lote sem alteração): nenhum aviso'),
   "preview": zod.array(zod.object({
   "productId": zod.uuid(),
   "name": zod.string(),
@@ -17500,7 +17503,7 @@ export const BulkAdminStoreProductsResponse = zod.object({
   "blocked": zod.array(zod.object({
   "productId": zod.uuid(),
   "name": zod.string(),
-  "reason": zod.enum(['STOCK_BELOW_RESERVED', 'PRODUCT_MODERATED', 'NOT_ACTIVE'])
+  "reason": zod.enum(['STOCK_BELOW_RESERVED', 'PRODUCT_MODERATED', 'NOT_ACTIVE', 'MULTIPLE_VARIANTS']).describe('`NOT_ACTIVE`: produto em rascunho ou arquivado, ou sem variação ativa (fora da vitrine; nada a pausar, reativar nem ajustar). `PRODUCT_MODERATED`: reativar produto que a moderação pausou ou removeu. `MULTIPLE_VARIANTS`: o estoque em massa só vale para produto de UMA variação; com grade (tamanho x cor) o lojista edita a variação; o admin só poderá quando a rota de estoque por variação do WB-353 (hoje `x-planned`) for entregue. `STOCK_BELOW_RESERVED`: o estoque novo ficaria abaixo do reservado (RN-06) ou fora de 0 a 99.999')
 }))
 })
 

@@ -317,7 +317,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect((await row(cheap)).version, 'versão subiu sem o preço mudar').toBe(v.version);
     });
 
-    it('entrada hostil: valor float em reais, 1e21, 0 e percentual com 3 casas = 400/422, nunca 500; 201 ids = 400; id repetido é deduplicado', async () => {
+    it('entrada hostil: valor float em reais, 1e21, 0 e percentual com 3 casas = 400/422, nunca 500; 201 ids = 422 BULK_TOO_LARGE (A3, igual ao admin); id repetido é deduplicado', async () => {
       const { merchant, id } = await freshStore();
       const p = await activeProduct(merchant, id, 5000);
       const ok = async (action: Record<string, unknown>) => (await preview(id, [p], action, merchant)).status;
@@ -328,7 +328,8 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(await ok({ type: 'price_adjust', mode: 'percent', value: 501 })).toBe(400);
       expect(await ok({ type: 'price_adjust', mode: 'percent', value: 0 })).toBeLessThan(500);
       const many = Array.from({ length: 201 }, () => randomUUID());
-      expect((await preview(id, many, { type: 'pause' }, merchant)).status).toBe(400);
+      const tooLarge = await preview(id, many, { type: 'pause' }, merchant);
+      expect([tooLarge.status, tooLarge.body.code]).toEqual([422, 'BULK_TOO_LARGE']);
       const dup = await preview(id, [p, p, p], { type: 'price_adjust', mode: 'percent', value: 10 }, merchant).expect(200);
       expect(dup.body.preview).toHaveLength(1);
     });

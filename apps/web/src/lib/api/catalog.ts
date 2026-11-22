@@ -1,4 +1,4 @@
-import type { BulkPreviewItem, BulkRequest, BulkResult, CatalogQuickStart, CategoryTemplate, CategoryTemplateList, CreateProductDraftRequest, CreateProductDraftsBatchRequest, CreateProductDraftsBatchResult, ImportResult, Product, ProductDraftPage, ProductDraftSummary, ProductPage, ProductSummary, ProductTablePage, ProductTableRow, QuickPublishRequest, Section, SectionList, SetVariantsRequest, StockAdjustBody, UpdateProductRequest } from '@webag/shared';
+import type { BulkPreviewItem, BulkRequest, BulkResult, BulkUndoResult, CatalogQuickStart, CategoryTemplate, CategoryTemplateList, CreateProductDraftRequest, CreateProductDraftsBatchRequest, CreateProductDraftsBatchResult, ImportResult, Product, ProductDraftPage, ProductDraftSummary, ProductPage, ProductSummary, ProductTablePage, ProductTableRow, QuickPublishRequest, Section, SectionList, SetVariantsRequest, StockAdjustBody, StockAdjustResult, UpdateProductRequest } from '@webag/shared';
 import { apiRequest } from './client';
 import { ApiError } from './errors';
 import { saveErrorMessage } from './messages';
@@ -7,7 +7,7 @@ import { saveErrorMessage } from './messages';
  * Catálogo do lojista (Onda 2B, WB-060 a 066). Os tipos vêm do cliente gerado em `@webag/shared` (openapi.yaml); a chamada
  * passa pelo BFF (`/api/proxy/lojista/...`), que guarda o token no cookie HttpOnly, como o resto do painel.
  */
-export type { BulkPreviewItem, BulkResult, CatalogQuickStart, CategoryTemplate, CreateProductDraftsBatchResult, ImportResult, Product, ProductDraftPage, ProductDraftSummary, ProductSummary, ProductTablePage, ProductTableRow, QuickPublishRequest, Section };
+export type { BulkPreviewItem, BulkResult, BulkUndoResult, CatalogQuickStart, CategoryTemplate, CreateProductDraftsBatchResult, ImportResult, Product, ProductDraftPage, ProductDraftSummary, ProductSummary, ProductTablePage, ProductTableRow, QuickPublishRequest, Section };
 export type ProductStatus = ProductSummary['status'];
 export type ModerationStatus = ProductSummary['moderationStatus'];
 export type ProductVariantView = Product['variants'][number];
@@ -49,7 +49,7 @@ export const catalogApi = {
   archive: (storeId: string, productId: string) => apiRequest<void>(L, `${base(storeId)}/products/${productId}`, { method: 'DELETE' }),
   setVariants: (storeId: string, productId: string, body: SetVariantsRequest) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/variants`, { method: 'PUT', body }),
   adjustStock: (storeId: string, productId: string, variantId: string, body: StockAdjustBody, ifMatch?: number) =>
-    apiRequest<ProductVariantView>(L, `${base(storeId)}/products/${productId}/variants/${variantId}/stock`, { method: 'POST', body, ...(ifMatch !== undefined ? { ifMatch } : {}) }),
+    apiRequest<StockAdjustResult>(L, `${base(storeId)}/products/${productId}/variants/${variantId}/stock`, { method: 'POST', body, ...(ifMatch !== undefined ? { ifMatch } : {}) }),
   setImages: (storeId: string, productId: string, imageIds: string[]) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/images`, { method: 'PUT', body: { imageIds } }),
   publish: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/publish`, { method: 'POST' }),
   pause: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/pause`, { method: 'POST' }),
@@ -60,6 +60,8 @@ export const catalogApi = {
    */
   bulk: (storeId: string, body: BulkRequest, idempotencyKey?: string) =>
     apiRequest<BulkResult>(L, `${base(storeId)}/products/bulk`, { method: 'POST', body, ...(idempotencyKey ? { idempotencyKey } : {}) }),
+  /** Desfaz um reajuste por até 10 min (`undoUntil`). Idempotente no servidor (repetir devolve `alreadyUndone`): a tela pode tentar de novo sem risco. */
+  undoBulk: (storeId: string, batchId: string) => apiRequest<BulkUndoResult>(L, `${base(storeId)}/products/bulk/${batchId}/undo`, { method: 'POST' }),
   /** Cadastro rápido (R1.2, ADR-018). Toda escrita leva `Idempotency-Key` estável por intenção; `quickPublish` e `update` levam `If-Match`. */
   quickStart: (storeId: string) => apiRequest<CatalogQuickStart>(L, `${base(storeId)}/catalog/quick-start`),
   drafts: (storeId: string, cursor?: string, limit = 25) => apiRequest<ProductDraftPage>(L, `${base(storeId)}/product-drafts`, { query: { cursor, limit } }),
@@ -129,6 +131,8 @@ export function catalogErrorMessage(error: unknown, fallback = 'Não foi possív
       return bulkConflictMessage(error);
     case 'BULK_NEEDS_CONFIRMATION':
       return 'Algum preço muda muito. Confira os valores novos, marque "Conferi os valores novos" e aplique de novo. Nada foi alterado.';
+    case 'UNDO_WINDOW_EXPIRED':
+      return 'O prazo de 10 minutos para desfazer acabou. Os preços ficam como estão; edite na tabela se precisar.';
     case 'IDEMPOTENCY_IN_PROGRESS':
       return 'Esta ação ainda está sendo aplicada. Espere alguns segundos e toque em tentar de novo. Nada será aplicado duas vezes.';
     case 'IDEMPOTENCY_KEY_REUSED':

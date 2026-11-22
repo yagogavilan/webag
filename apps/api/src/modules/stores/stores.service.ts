@@ -435,6 +435,14 @@ export class StoresService {
     return this.db.select().from(storeReviewItems).where(and(eq(storeReviewItems.storeId, storeId), isNull(storeReviewItems.resolvedAt)));
   }
 
+  /** Nome de exibição de usuários (autor de lote de ação em massa no histórico da loja). Só nomes; nunca e-mail nem telefone. */
+  async userNames(userIds: string[]): Promise<Map<string, string>> {
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) return new Map();
+    const rows = await this.db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, ids));
+    return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
   async ownerEmail(store: Store): Promise<{ email: string; name: string }> {
     const [row] = await this.db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, store.ownerUserId));
     return row ?? { email: '', name: '' };

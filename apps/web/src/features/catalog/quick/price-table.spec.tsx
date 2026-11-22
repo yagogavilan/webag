@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,7 +28,7 @@ function setup(extra: Handler[] = []) {
     (url) => (url.pathname === `${P}/catalog/quick-start` ? json({ suggestedCategoryId: null, draftCount: 0, draftLimit: 100, latestDraft: null, withoutDescriptionCount: 0, limits: { variantsMax: 100, reajusteMaxPct: 30 } }) : undefined),
     (url, init) => (url.pathname === `${P}/products/p1` && init.method === 'PATCH' ? (patch ? patch() : json({ id: 'p1', version: 5 })) : undefined),
     (url, init) => (url.pathname === `${P}/products/p1` && (init.method ?? 'GET') === 'GET' ? json({ id: 'p1', version: 6 }) : undefined),
-    (url, init) => (url.pathname === `${P}/products/p1/variants/v1/stock` && init.method === 'POST' ? json({ id: 'v1', stock: 7 }) : undefined),
+    (url, init) => (url.pathname === `${P}/products/p1/variants/v1/stock` && init.method === 'POST' ? json({ id: 'v1', stock: 7, productVersion: 5 }) : undefined),
     ...storeHandlers(fakeStore({ status: 'approved', step: 4 })),
   );
 }
@@ -79,6 +79,8 @@ describe('Preços e estoque (WB-377)', () => {
     const call = callsTo(calls, '/variants/v1/stock', 'POST')[0];
     expect(JSON.parse(String(call?.init.body))).toEqual({ set: 20 });
     expect(header(call, 'if-match')).toBe('"4"');
+    // DEC-132: a versão nova vem na resposta do ajuste; nenhum GET do produto para descobri-la.
+    expect(calls.some((c) => c.url.pathname === `${P}/products/p1` && (c.init.method ?? 'GET') === 'GET')).toBe(false);
   });
 
   it('C5: estoque abaixo do reservado mostra o motivo na linha', async () => {
@@ -162,5 +164,131 @@ describe('Preços e estoque (WB-377)', () => {
     vi.stubGlobal('fetch', mockFetch((url) => (url.pathname === `${P}/products/table` ? json({ code: 'X', title: 'x', status: 500 }, 500) : undefined), ...storeHandlers(fakeStore({ status: 'approved', step: 4 }))).impl);
     renderLojista(<PriceTablePage />);
     expect(await screen.findByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
+  });
+
+  describe('reajuste em massa e desfazer (WB-377 C2 a C4, C9)', () => {
+    const preview = (version = 4) => ({ dryRun: true, willChange: 1, changed: 0, blocked: [], preview: [{ productId: 'p1', name: 'Camiseta básica', version, fromCents: 4990, toCents: 5489, changePct: 10, youReceiveCents: 4611, exceedsLimit: false }], requiresConfirmation: false, limitPct: 30, batchId: null, undoUntil: null });
+    const soon = () => new Date(Date.now() + 9 * 60_000 + 41_000).toISOString();
+    let undoCalls: number;
+    let undoResponse: () => Response;
+    const bulkHandlers = (): Handler[] => [
+      (url, init) => {
+        if (url.pathname !== `${P}/products/bulk` || init.method !== 'POST') return undefined;
+        const body = JSON.parse(String(init.body)) as { dryRun?: boolean };
+        return body.dryRun ? json(preview()) : json({ dryRun: false, willChange: 1, changed: 1, blocked: [], batchId: 'b1', undoUntil: soon() });
+      },
+      (url, init) => {
+        if (url.pathname !== `${P}/products/bulk/b1/undo` || init.method !== 'POST') return undefined;
+        undoCalls += 1;
+        return undoResponse();
+      },
+    ];
+    beforeEach(() => {
+      undoCalls = 0;
+      undoResponse = () => json({ batchId: 'b1', alreadyUndone: false, reverted: 1, skipped: [] });
+    });
+
+    async function applyReajust() {
+      renderLojista(<PriceTablePage />);
+      await userEvent.click(await screen.findByLabelText('Selecionar Camiseta básica'));
+      expect(screen.getByRole('region', { name: 'Ações em massa' })).toHaveTextContent('1 selecionado');
+      expect(screen.queryByRole('button', { name: 'Mover de seção' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByTestId('lojista.produtos.bulk-price'));
+      await userEvent.type(screen.getByTestId('lojista.produtos.bulk-value'), '10');
+      await waitFor(() => expect(screen.getByTestId('lojista.produtos.bulk-preview')).toHaveTextContent('R$ 49,90 → R$ 54,89'), { timeout: 3000 });
+      await userEvent.click(screen.getByTestId('lojista.produtos.bulk-confirm'));
+    }
+
+    it('selecionar todos marca a lista e a barra mostra a contagem; a pausa também fica na barra', async () => {
+      rows = [row(), row({ id: 'p2', name: 'Boné' })];
+      vi.stubGlobal('fetch', setup().impl);
+      renderLojista(<PriceTablePage />);
+      await userEvent.click(await screen.findByLabelText('Selecionar todos os 2 da lista'));
+      expect(screen.getByRole('region', { name: 'Ações em massa' })).toHaveTextContent('2 selecionados');
+      expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Selecionar Boné')).toBeChecked();
+    });
+
+    it('A6: trocar a busca limpa a seleção (a barra some e o reajuste não alcança itens fora da tela)', async () => {
+      rows = [row(), row({ id: 'p2', name: 'Boné' })];
+      const { impl, calls } = setup();
+      vi.stubGlobal('fetch', impl);
+      renderLojista(<PriceTablePage />);
+      await userEvent.click(await screen.findByLabelText('Selecionar todos os 2 da lista'));
+      expect(screen.getByRole('region', { name: 'Ações em massa' })).toHaveTextContent('2 selecionados');
+      rows = [row({ id: 'p2', name: 'Boné' })];
+      fireEvent.change(screen.getByTestId('lojista.precos.search'), { target: { value: 'bon' } });
+      await screen.findByLabelText('Selecionar os 1 da busca', undefined, { timeout: 3000 });
+      expect(screen.queryByLabelText('Selecionar Camiseta básica')).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Ações em massa' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Selecionar Boné')).not.toBeChecked();
+      expect(screen.getByLabelText('Selecionar os 1 da busca')).not.toBeChecked();
+      expect(callsTo(calls, '/products/bulk', 'POST')).toHaveLength(0);
+    });
+
+    it('funcionário sem preço em massa (não é o dono) só vê "Pausar"', async () => {
+      vi.stubGlobal('fetch', mockFetch((url) => (url.pathname === `${P}/products/table` ? json({ data: rows, nextCursor: null, matchingCount: 1 }) : undefined), ...storeHandlers(fakeStore({ status: 'approved', step: 4, role: 'staff', permissions: ['catalog'] }))).impl);
+      renderLojista(<PriceTablePage />);
+      await userEvent.click(await screen.findByLabelText('Selecionar Camiseta básica'));
+      expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument();
+      expect(screen.queryByTestId('lojista.produtos.bulk-price')).not.toBeInTheDocument();
+    });
+
+    it('aplicado: avisa "Dá para desfazer por m:ss" sem região viva no contador e anuncia só 5:00, 1:00 e fim', async () => {
+      vi.stubGlobal('fetch', setup(bulkHandlers()).impl);
+      await applyReajust();
+      const notice = await screen.findByTestId('lojista.precos.undo');
+      expect(notice).toHaveTextContent('Preços reajustados em 1 produto. Dá para desfazer por 9:');
+      expect(screen.getByTestId('lojista.precos.undo-clock').closest('[role="status"]')).toBeNull();
+      expect(screen.getByTestId('lojista.precos.undo-live')).toBeEmptyDOMElement();
+      expect(screen.getByRole('button', { name: 'Desfazer' })).toBeEnabled();
+    });
+
+    it('Desfazer devolve os preços, avisa e a linha volta ao valor anterior', async () => {
+      vi.stubGlobal('fetch', setup(bulkHandlers()).impl);
+      await applyReajust();
+      rows = [row({ basePriceCents: 4990 })];
+      await userEvent.click(await screen.findByRole('button', { name: 'Desfazer' }));
+      expect(await screen.findByTestId('lojista.precos.undo-done')).toHaveTextContent('Preços voltaram ao valor anterior.');
+      expect(undoCalls).toBe(1);
+      expect(screen.queryByRole('button', { name: 'Desfazer' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('lojista.precos.price-p1')).toHaveValue('49,90');
+    });
+
+    it('desfazer parcial nomeia o produto editado depois e não promete que tudo voltou', async () => {
+      undoResponse = () => json({ batchId: 'b1', alreadyUndone: false, reverted: 0, skipped: [{ productId: 'p1', name: 'Camiseta básica', reason: 'CHANGED_AFTER' }] });
+      vi.stubGlobal('fetch', setup(bulkHandlers()).impl);
+      await applyReajust();
+      await userEvent.click(await screen.findByRole('button', { name: 'Desfazer' }));
+      const done = await screen.findByTestId('lojista.precos.undo-done');
+      expect(done).toHaveTextContent('Nenhum preço voltou');
+      expect(done).toHaveTextContent('Camiseta básica');
+      expect(done).not.toHaveTextContent('Preços voltaram ao valor anterior.');
+    });
+
+    it('sem internet no meio do desfazer: nada foi desfeito, o botão fica para tentar de novo (repetir é seguro)', async () => {
+      let fail = true;
+      undoResponse = () => {
+        if (fail) throw new TypeError('Failed to fetch');
+        return json({ batchId: 'b1', alreadyUndone: true, reverted: 1, skipped: [] });
+      };
+      vi.stubGlobal('fetch', setup(bulkHandlers()).impl);
+      await applyReajust();
+      await userEvent.click(await screen.findByRole('button', { name: 'Desfazer' }));
+      expect(await screen.findByTestId('lojista.precos.undo-error')).toHaveTextContent('Nada foi desfeito');
+      fail = false;
+      await userEvent.click(screen.getByRole('button', { name: 'Desfazer' }));
+      expect(await screen.findByTestId('lojista.precos.undo-done')).toHaveTextContent('Preços voltaram ao valor anterior.');
+      expect(undoCalls).toBe(2);
+    });
+
+    it('prazo vencido no servidor (410): o botão some e o texto explica', async () => {
+      undoResponse = () => json({ code: 'UNDO_WINDOW_EXPIRED', title: 'x', status: 410 }, 410);
+      vi.stubGlobal('fetch', setup(bulkHandlers()).impl);
+      await applyReajust();
+      await userEvent.click(await screen.findByRole('button', { name: 'Desfazer' }));
+      expect(await screen.findByTestId('lojista.precos.undo-expired')).toHaveTextContent('O prazo para desfazer acabou.');
+      expect(screen.queryByRole('button', { name: 'Desfazer' })).not.toBeInTheDocument();
+    });
   });
 });

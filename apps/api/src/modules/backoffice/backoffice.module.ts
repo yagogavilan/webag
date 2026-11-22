@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AdminModule } from '../admin/index.js';
+import { CatalogModule } from '../catalog/index.js';
 import { IdentityModule } from '../identity/index.js';
+import { OrdersModule } from '../orders/index.js';
 import { StoresModule } from '../stores/index.js';
 import { AccountsController } from './accounts.controller.js';
 import { AccountsService } from './accounts.service.js';
@@ -14,7 +16,7 @@ import { StoreOverviewService } from './store-overview.service.js';
  * dos outros pelo schema e age por serviços públicos (sessões, suspensão de loja, auditoria). Pedidos no admin (B5) ficam no módulo `orders`.
  */
 @Module({
-  imports: [AdminModule, IdentityModule, StoresModule],
+  imports: [AdminModule, CatalogModule, IdentityModule, OrdersModule, StoresModule],
   controllers: [AlertsController, AccountsController, StoreOverviewController],
   providers: [AlertsService, AccountsService, StoreOverviewService],
 })

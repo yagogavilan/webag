@@ -9,7 +9,7 @@ import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { IdempotencyService, parseIdempotencyKey } from '../idempotency/index.js';
 import { PrincipalService } from '../identity/index.js';
 import { StoresService, uuidParam } from '../stores/index.js';
-import { adminProductsQuerySchema, bulkSchema, createDraftSchema, createProductSchema, draftsBatchSchema, draftsQuerySchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, productMetricsQuerySchema, quickPublishSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, tableQuerySchema, updateProductSchema } from './catalog.schemas.js';
+import { adminProductsQuerySchema, bulkBatchesQuerySchema, bulkSchema, createDraftSchema, createProductSchema, draftsBatchSchema, draftsQuerySchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, productMetricsQuerySchema, quickPublishSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, tableQuerySchema, updateProductSchema } from './catalog.schemas.js';
 import { CatalogService, type Variant } from './catalog.service.js';
 import { etag, parseIfMatch } from './domain/version.js';
 import { ProductDraftsService } from './drafts.service.js';
@@ -219,6 +219,21 @@ export class CatalogController {
     return result;
   }
 
+  /** WB-377 C7. Declarada ANTES de `products/:productId` (A2: segmento estático não pode cair no parâmetro). */
+  @StorePermission('catalog')
+  @Get('products/bulk-batches')
+  async bulkBatches(@Param('storeId') storeId: string, @Query(new ZodPipe(bulkBatchesQuerySchema)) query: In<typeof bulkBatchesQuerySchema>) {
+    return this.catalog.listBulkBatches((await this.store(storeId)).id, query);
+  }
+
+  /** WB-377 C4 / BK-08: desfazer o reajuste em até 10 min (repetir devolve `alreadyUndone`). Também antes de `products/:productId`. */
+  @StorePermission('catalog')
+  @HttpCode(200)
+  @Post('products/bulk/:batchId/undo')
+  async undoBulk(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Param('batchId') batchId: string) {
+    return this.catalog.undoBulkBatch(await this.store(storeId), this.actor(principal, ctx), uuidParam(batchId));
+  }
+
   @ViewAs('getProduct')
   @StorePermission('catalog')
   @Get('products/:productId')
@@ -264,6 +279,7 @@ export class CatalogController {
     @Param('productId') productId: string,
     @Param('variantId') variantId: string,
     @Body(new ZodPipe(stockAdjustSchema)) body: In<typeof stockAdjustSchema>,
+    @Res({ passthrough: true }) res: Response,
     @Headers('idempotency-key') idempotencyKey?: string,
     @Headers('if-match') ifMatch?: string,
   ) {
@@ -272,7 +288,11 @@ export class CatalogController {
     const version = parseIfMatch(ifMatch);
     const actor = this.actor(principal, ctx);
     const key = parseIdempotencyKey(idempotencyKey);
-    if (!key) return this.catalog.adjustStock(store, actor, ids.productId, ids.variantId, body, version);
+    const withEtag = <T extends { productVersion: number } | null | undefined>(view: T): T => {
+      if (view && typeof view.productVersion === 'number') res.setHeader('ETag', etag(view.productVersion)); // resposta guardada antes da R1.3 (24 h) não tem o campo
+      return view;
+    };
+    if (!key) return withEtag(await this.catalog.adjustStock(store, actor, ids.productId, ids.variantId, body, version));
     // SEC-218: ajuste relativo (`delta`) repetido não pode somar duas vezes. Chave, efeito e resposta no mesmo commit; o escopo leva loja e ator.
     this.catalog.assertWritable(store);
     const context = await this.catalog.presentContext(store);
@@ -283,7 +303,7 @@ export class CatalogController {
       return result.view ?? null;
     });
     if (done.changed) await this.catalog.afterStockAdjust(store, ids.productId, done.changed);
-    return view;
+    return withEtag(view);
   }
 
   @StorePermission('catalog')

@@ -63,10 +63,11 @@ export const listProductsSchema = z.strictObject({
   limit: limitQuery,
 });
 
+/** Mais que o teto de 200 só para o servidor responder 422 `BULK_TOO_LARGE` (e não 400), igual à rota do admin (A3, review R1.3). */
 export const bulkSchema = z.strictObject({
-  productIds: z.array(z.uuid()).min(1).max(200),
+  productIds: z.array(z.uuid()).min(1).max(1000),
   /** B2 (D17): `version` de cada item, como veio em `preview[].version`. Obrigatória em `price_adjust` sem `dryRun` (o controller confere a cobertura de todos os `productIds`). */
-  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(200).optional(),
+  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(1000).optional(),
   /** WB-377 C3: confirma reajuste acima de `reajuste_max_pct` em algum item. */
   confirmLargeChange: z.boolean().default(false),
   action: z.discriminatedUnion('type', [
@@ -157,6 +158,8 @@ export const quickPublishSchema = z.strictObject({
 
 export const draftsQuerySchema = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 
+export const bulkBatchesQuerySchema = draftsQuerySchema;
+
 export const tableQuerySchema = z.strictObject({
   q: z.string().trim().max(80).optional(),
   status: z.enum(['active', 'paused']).optional(),
@@ -171,4 +174,21 @@ export const productMetricsQuerySchema = z.strictObject({
   storeId: z.uuid().optional(),
   cursor: z.string().max(200).optional(),
   limit: limitQuery,
+});
+
+/**
+ * `bulkAdminStoreProducts` (WB-353 C6, D7): sem reajuste de PREÇO (o admin não tem prévia por item de dinheiro de terceiros na R1). O corpo aceita mais itens que o teto
+ * (200) só para o servidor responder 422 `BULK_TOO_LARGE` (e não 400); o motivo é validado por `validateAdminReason` (422 `REASON_REQUIRED`/`REASON_NOT_ALLOWED`).
+ */
+export const adminBulkSchema = z.strictObject({
+  reason: z.strictObject({ code: z.string().max(40).optional(), note: z.string().max(400).optional() }).optional(),
+  productIds: z.array(z.uuid()).min(1).max(1000),
+  dryRun: z.boolean().default(false),
+  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(1000).optional(),
+  action: z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('pause') }),
+    z.strictObject({ type: z.literal('resume') }),
+    z.strictObject({ type: z.literal('stock_set'), value: z.number().int().min(0).max(99_999) }),
+    z.strictObject({ type: z.literal('stock_adjust'), value: z.number().int().min(-99_999).max(99_999) }),
+  ]),
 });

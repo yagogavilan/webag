@@ -6,13 +6,13 @@ import { runMigrations } from '../src/platform/database/migrate.js';
 import { TEST_ENV } from './test-env.js';
 
 /**
- * I3 (review R1.1) / regra 5 do modelo de dados: os scripts `drizzle/down/0058..0062.sql` funcionam. Num banco descartável: aplica do zero (como o job `migrate`),
- * insere dados, reverte 0062, 0061, 0060, 0059 e 0058 (nessa ordem, cada uma numa transação, como `psql -1`), confere que a estrutura saiu e que as linhas das
+ * I3 (review R1.1) / regra 5 do modelo de dados: os scripts `drizzle/down/0058..0063.sql` funcionam. Num banco descartável: aplica do zero (como o job `migrate`),
+ * insere dados, reverte 0063, 0062, 0061, 0060, 0059 e 0058 (nessa ordem, cada uma numa transação, como `psql -1`), confere que a estrutura saiu e que as linhas das
  * tabelas que sobrevivem continuam, e reaplica tudo (o registro do Drizzle foi apagado pelo próprio script). Com os papéis, roda como `webag_migrator`.
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GRANTS_SQL = path.resolve(ROOT, '../../infra/postgres/40-roles-grants.sql');
-const DOWNS = ['0062', '0061', '0060', '0059', '0058'];
+const DOWNS = ['0063', '0062', '0061', '0060', '0059', '0058'];
 const scratch = `${(process.env.TEST_DB_NAME ?? 'webag_test').replace(/_test$/, '')}_down_test`;
 
 const urlFor = (base: string): string => {
@@ -31,7 +31,7 @@ async function withClient<T>(url: string, fn: (c: pg.Client) => Promise<T>): Pro
   }
 }
 
-describe('reversão das migrações 0058 a 0062 (I3)', () => {
+describe('reversão das migrações 0058 a 0063 (I3)', () => {
   let rolesReady = false;
   const runnerUrl = () => (rolesReady ? urlFor(TEST_ENV.migratorDatabaseUrl) : urlFor(TEST_ENV.adminDatabaseUrl));
 
@@ -55,8 +55,8 @@ describe('reversão das migrações 0058 a 0062 (I3)', () => {
       .query<{ k: string }>(
         `SELECT 'col:' || table_name || '.' || column_name AS k FROM information_schema.columns
           WHERE (table_name, column_name) IN (('stores','version'),('audit_log','store_id'),('products','version'),('products','via'),('products','created_by_admin_id'),('products','duplicated_from'),('categories','template'),('categories','description_required'),('categories','description_min_chars'))
-         UNION ALL SELECT 'table:' || table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('admin_view_sessions','store_admin_changes','store_change_digest','product_creation_metrics')
-         UNION ALL SELECT 'index:' || indexname FROM pg_indexes WHERE indexname IN ('audit_log_store_at_idx','products_store_drafts_idx','product_moderation_events_product_idx')
+         UNION ALL SELECT 'table:' || table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('admin_view_sessions','store_admin_changes','store_change_digest','product_creation_metrics','product_bulk_batches','product_bulk_batch_items')
+         UNION ALL SELECT 'index:' || indexname FROM pg_indexes WHERE indexname IN ('audit_log_store_at_idx','products_store_drafts_idx','product_moderation_events_product_idx','product_bulk_batches_store_idx','product_bulk_batch_items_product_idx')
          UNION ALL SELECT 'check:' || conname FROM pg_constraint WHERE conname IN ('products_name_len','products_version_positive','products_via_valid')
          ORDER BY 1`,
       )
@@ -69,11 +69,11 @@ describe('reversão das migrações 0058 a 0062 (I3)', () => {
       .then((r) => r.rows[0]);
   const journalRows = (c: pg.Client) => c.query<{ n: number }>(`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`).then((r) => r.rows[0]!.n);
 
-  it('aplica do zero, reverte 0062 a 0058 sem perder as linhas que sobrevivem e reaplica', async () => {
+  it('aplica do zero, reverte 0063 a 0058 sem perder as linhas que sobrevivem e reaplica', async () => {
     const url = runnerUrl();
     await withClient(url, async (c) => {
       const full = await structure(c);
-      expect(full).toHaveLength(9 + 4 + 3 + 3);
+      expect(full).toHaveLength(9 + 6 + 5 + 3);
       const totalJournal = await journalRows(c);
 
       // Dados "de produção": usuário, loja (versão), produto (rascunho), linha de auditoria com store_id.
@@ -89,8 +89,12 @@ describe('reversão das migrações 0058 a 0062 (I3)', () => {
       await c.query(`INSERT INTO products (store_id, name, status) VALUES ($1, '', 'draft')`, [storeId]);
       await c.query(`INSERT INTO audit_log (action, store_id) VALUES ('down.test', $1)`, [storeId]);
       await c.query(`INSERT INTO store_admin_changes (store_id, type, summary, reason_label) VALUES ($1, 'profile', 's', 'r')`, [storeId]);
+      // 0063: lote de ação em massa (some com a reversão; o `audit_log` e os produtos ficam).
+      const batchId = (await c.query<{ id: string }>(`INSERT INTO product_bulk_batches (store_id, kind, source, actor_user_id, items_count, undo_until) VALUES ($1, 'price_adjust', 'merchant', $2, 1, now()) RETURNING id`, [storeId, userId])).rows[0]!.id;
+      const liveProduct = (await c.query<{ id: string }>(`INSERT INTO products (store_id, name, status, base_price_cents) VALUES ($1, 'Produto do lote', 'active', 1000) RETURNING id`, [storeId])).rows[0]!.id;
+      await c.query(`INSERT INTO product_bulk_batch_items (batch_id, product_id, previous_version, applied_version, previous_price_cents, applied_price_cents) VALUES ($1, $2, 1, 2, 1000, 1100)`, [batchId, liveProduct]);
       const before = await counts(c);
-      expect(before).toEqual({ u: 1, s: 1, a: 1, p: 1 });
+      expect(before).toEqual({ u: 1, s: 1, a: 1, p: 2 });
 
       for (const n of DOWNS) {
         await c.query('BEGIN');
@@ -121,8 +125,8 @@ describe('reversão das migrações 0058 a 0062 (I3)', () => {
     // Reaplica: o migrator volta a achar as quatro pendentes (e a 0061 deixa o CHECK como NOT VALID, com aviso, por causa do legado).
     await runMigrations(url);
     await withClient(url, async (c) => {
-      expect(await structure(c)).toHaveLength(9 + 4 + 3 + 3);
-      expect(await counts(c)).toEqual({ u: 1, s: 1, a: 1, p: 2 });
+      expect(await structure(c)).toHaveLength(9 + 6 + 5 + 3);
+      expect(await counts(c)).toEqual({ u: 1, s: 1, a: 1, p: 3 });
       expect((await c.query(`SELECT convalidated FROM pg_constraint WHERE conname = 'products_name_len'`)).rows[0].convalidated).toBe(false);
       // Saneado o legado, o VALIDATE passa (o passo do guia de deploy §16).
       await c.query(`UPDATE products SET name = 'Produto legado' WHERE name = 'A'`);

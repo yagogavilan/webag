@@ -14,16 +14,22 @@ import s from './catalog.module.css';
 
 const T = (id: string) => ltid('produtos', id);
 
-type Mode = 'pause' | 'resume' | 'move' | 'price';
+export type BulkMode = 'pause' | 'resume' | 'move' | 'price';
+type Mode = BulkMode;
+/** O que a barra precisa de cada produto selecionado (a lista e a tabela de preços entregam formatos diferentes). */
+export type BulkSelectable = Pick<ProductSummary, 'id' | 'basePriceCents'>;
 export const BULK_MAX = 200;
 
 interface Props {
   storeId: string;
-  selected: ProductSummary[];
+  selected: BulkSelectable[];
   /** Preço em massa só do dono (onda-2 K6, hipótese Z-4). */
   canChangePrice: boolean;
+  /** Ações oferecidas (padrão: todas). A tabela de preços usa só reajuste e pausa (design `v1-1-edicao-em-massa.md` §1). */
+  actions?: readonly BulkMode[];
   onClear: () => void;
-  onDone: (changedIds: string[]) => void;
+  /** `result` só vem do reajuste de preço (traz `batchId` e `undoUntil` para o "Desfazer"). */
+  onDone: (changedIds: string[], result?: BulkResult) => void;
 }
 
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
@@ -39,27 +45,28 @@ function useDebounced<T>(value: T, ms = 400): T {
 }
 
 /** Ação em massa (K6): barra com a seleção e as folhas de confirmação, sempre com verbo + contagem no botão. */
-export function BulkBar({ storeId, selected, canChangePrice, onClear, onDone }: Props) {
+export function BulkBar({ storeId, selected, canChangePrice, actions = ['pause', 'resume', 'move', 'price'], onClear, onDone }: Props) {
   const [mode, setMode] = useState<Mode | null>(null);
   const count = selected.length;
+  const offers = (mode: Mode) => actions.includes(mode);
   return (
     <>
       <div className={s.bulkBar} role="region" aria-label="Ações em massa" data-testid={T('bulk-bar')}>
         <span className={cx('wb-text-body-strong', s.bulkCount)} role="status">
           {plural(count, 'selecionado', 'selecionados')}
         </span>
-        <Button variant="secondary" size="sm" onClick={() => setMode('pause')} data-testid={T('bulk-pause')}>Pausar</Button>
-        <Button variant="secondary" size="sm" onClick={() => setMode('resume')} data-testid={T('bulk-resume')}>Reativar</Button>
-        <Button variant="secondary" size="sm" onClick={() => setMode('move')} data-testid={T('bulk-move')}>Mover de seção</Button>
-        {canChangePrice ? <Button variant="secondary" size="sm" onClick={() => setMode('price')} data-testid={T('bulk-price')}>Mudar preço</Button> : null}
+        {offers('pause') ? <Button variant="secondary" size="sm" onClick={() => setMode('pause')} data-testid={T('bulk-pause')}>Pausar</Button> : null}
+        {offers('resume') ? <Button variant="secondary" size="sm" onClick={() => setMode('resume')} data-testid={T('bulk-resume')}>Reativar</Button> : null}
+        {offers('move') ? <Button variant="secondary" size="sm" onClick={() => setMode('move')} data-testid={T('bulk-move')}>Mover de seção</Button> : null}
+        {canChangePrice && offers('price') ? <Button variant="secondary" size="sm" onClick={() => setMode('price')} data-testid={T('bulk-price')}>Mudar preço</Button> : null}
         <Button variant="text" size="sm" onClick={onClear} data-testid={T('bulk-cancel')}>Cancelar seleção</Button>
       </div>
-      {mode ? <BulkDialog mode={mode} storeId={storeId} selected={selected} onClose={() => setMode(null)} onDone={(ids) => { setMode(null); onDone(ids); }} /> : null}
+      {mode ? <BulkDialog mode={mode} storeId={storeId} selected={selected} onClose={() => setMode(null)} onDone={(ids, result) => { setMode(null); onDone(ids, result); }} /> : null}
     </>
   );
 }
 
-function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; storeId: string; selected: ProductSummary[]; onClose: () => void; onDone: (ids: string[]) => void }) {
+function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; storeId: string; selected: BulkSelectable[]; onClose: () => void; onDone: (ids: string[], result?: BulkResult) => void }) {
   const client = useQueryClient();
   const toast = useToast();
   const online = useOnline();
@@ -135,7 +142,7 @@ function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; 
         return;
       }
       toast.show(`${plural(result.changed, 'produto atualizado', 'produtos atualizados')}.`);
-      onDone(affected);
+      onDone(affected, result);
     } catch (caught) {
       setError(catalogErrorMessage(caught, 'Não foi possível salvar. Tentar de novo.'));
       // Prévia velha (alguém editou, ou pede confirmação): nada foi aplicado; refaz a prévia e deixa a mensagem na tela.

@@ -14,5 +14,5 @@ export { evaluateExposureLimit, type ExposureLimit } from './exposure-limit.js';
 export { DeliveryQuoteRegistry, type DeliveryQuoter, type DeliveryQuoteSummary } from './delivery-quote.registry.js';
 export { businessDeadline, isOverdue } from './domain/business-days.js';
 export { AdminStoresService } from './admin-stores.service.js';
-export { AdminStoreEditService } from './admin-store-edit.service.js';
-export { ADMIN_REASON_CODES } from './domain/admin-reason.js';
+export { AdminStoreEditService, ADMIN_EDIT_FLAG, labelOf as adminReasonLabel } from './admin-store-edit.service.js';
+export { ADMIN_REASON_CODES, validateAdminReason, type AdminReason } from './domain/admin-reason.js';

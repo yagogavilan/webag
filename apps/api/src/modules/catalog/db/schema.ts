@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, jsonb, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { categories } from '../../admin/db/schema.js';
 import { users } from '../../identity/db/schema.js';
 import { mediaAssets } from '../../media/db/schema.js';
@@ -199,5 +199,67 @@ export const productCreationMetrics = pgTable(
     uniqueIndex('product_creation_metrics_product_uq').on(t.productId),
     index('product_creation_metrics_published_idx').on(t.publishedAt).where(sql`${t.publishedAt} is not null`),
     index('product_creation_metrics_store_idx').on(t.storeId, t.publishedAt),
+  ],
+);
+
+export const BULK_KINDS = ['price_adjust', 'pause', 'resume', 'move_section', 'stock_set', 'stock_adjust'] as const;
+export type BulkKind = (typeof BULK_KINDS)[number];
+export const BULK_SOURCES = ['merchant', 'admin'] as const;
+export type BulkSource = (typeof BULK_SOURCES)[number];
+
+/**
+ * Lote de ação em massa no catálogo (WB-377 C4/C7, WB-353 C6; ADR-018 D17/D18). 1 linha por ação que ALTEROU algo: histórico (`listBulkBatches`) e base do
+ * desfazer de 10 min do reajuste de preço. Sem dado de cliente nem texto livre. NÃO é append-only: o desfazer marca `undone_at`.
+ */
+export const productBulkBatches = pgTable(
+  'product_bulk_batches',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    storeId: uuid()
+      .notNull()
+      .references(() => stores.id),
+    kind: text({ enum: BULK_KINDS }).notNull(),
+    source: text({ enum: BULK_SOURCES }).notNull(),
+    /** Membro da loja (`merchant`) ou admin (`admin`, mostrado ao lojista só como "Webag"). */
+    actorUserId: uuid().references(() => users.id),
+    /** Quantos produtos mudaram de fato (não os pedidos). */
+    itemsCount: integer().notNull(),
+    /** O que foi pedido (modo e valor do reajuste, seção, estoque); código do motivo do admin. Nunca texto livre. */
+    params: jsonb().$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** Só reajuste de preço: 10 min depois da aplicação. */
+    undoUntil: timestamp({ withTimezone: true }),
+    undoneAt: timestamp({ withTimezone: true }),
+    undoneBy: uuid().references(() => users.id),
+    /** Resultado do desfazer, guardado para a repetição (3G) devolver o mesmo corpo: `{ reverted, skipped: [{ productId, name, reason }] }`. */
+    undoResult: jsonb().$type<{ reverted: number; skipped: { productId: string; name: string; reason: string }[] }>(),
+  },
+  (t) => [
+    index('product_bulk_batches_store_idx').on(t.storeId, t.createdAt.desc(), t.id.desc()),
+    check('product_bulk_batches_items_positive', sql`${t.itemsCount} >= 1`),
+    check('product_bulk_batches_undo_only_price', sql`${t.undoUntil} is null or ${t.kind} = 'price_adjust'`),
+  ],
+);
+
+/** Itens do reajuste de preço (só `price_adjust`): o que era e o que ficou, e a versão depois do reajuste (se mudou depois, o desfazer não sobrescreve: `CHANGED_AFTER`). */
+export const productBulkBatchItems = pgTable(
+  'product_bulk_batch_items',
+  {
+    batchId: uuid()
+      .notNull()
+      .references(() => productBulkBatches.id, { onDelete: 'cascade' }),
+    productId: uuid()
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    previousVersion: integer().notNull(),
+    appliedVersion: integer().notNull(),
+    previousPriceCents: integer().notNull(),
+    appliedPriceCents: integer().notNull(),
+    /** Preço por variação, quando a variação tinha preço próprio: `[{ id, previousPriceCents, appliedPriceCents }]`. */
+    variants: jsonb().$type<{ id: string; previousPriceCents: number; appliedPriceCents: number }[]>().notNull().default(sql`'[]'::jsonb`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.batchId, t.productId] }),
+    index('product_bulk_batch_items_product_idx').on(t.productId),
   ],
 );

@@ -171,8 +171,16 @@ export class AdminStoreEditService {
     return { storeVersion: outcome.version, auditEntryId: outcome.applied.auditId, merchantNotified: 'now' };
   }
 
-  /** E-mail na hora (horário, pausa, status e dados avisam na hora, WB-351 C1). Falha de envio não desfaz a alteração (o feed do painel já tem a linha). */
-  private async notifyOwner(store: Store, summary: string, reasonLabel: string): Promise<void> {
+  /**
+   * WB-353 C11: uma linha no feed do painel do lojista (autor sempre "Webag"), gravada NA transação do efeito de quem chama (catálogo em massa do admin).
+   * A edição da própria loja (`run`) grava a sua por dentro; esta é a porta para outros módulos, sem tocar na tabela.
+   */
+  async recordFeed(tx: Tx, input: { storeId: string; auditId: number; type: StoreHistoryType; target: string | null; summary: string; reasonLabel: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }): Promise<void> {
+    await tx.insert(storeAdminChanges).values({ storeId: input.storeId, auditId: input.auditId, type: input.type, target: input.target, summary: input.summary, reasonLabel: input.reasonLabel, before: input.before, after: input.after });
+  }
+
+  /** E-mail na hora (horário, pausa, status e dados avisam na hora, WB-351 C1; ação em massa: 1 aviso agregado, WB-353 C11). Falha de envio não desfaz a alteração (o feed do painel já tem a linha). */
+  async notifyOwner(store: Store, summary: string, reasonLabel: string): Promise<void> {
     try {
       const [owner] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, store.ownerUserId));
       if (!owner) return;
