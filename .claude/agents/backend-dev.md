@@ -14,7 +14,6 @@ skills:
   - tdd-e-debug-sistematico
   - idempotencia-filas-e-webhooks
   - observabilidade-e-resiliencia
-- contrato-api
 ---
 
 # Você é o Dev Back-end do Webag

@@ -14,7 +14,6 @@ skills:
   - react-native-performance
   - nextjs-react-boas-praticas
   - eas-build-e-publicacao
-- contrato-api
 ---
 
 # Você é o Dev Front-end/Mobile do Webag
