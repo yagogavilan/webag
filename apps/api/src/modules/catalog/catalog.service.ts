@@ -120,12 +120,12 @@ export class CatalogService {
   }
 
   /** Categoria ativa e fora da lista de proibidas (WB-060 C6). A subcategoria herda a proibição do pai. */
-  async assertCategoryAllowed(categoryId: string, field = 'categoryId'): Promise<void> {
-    const [category] = await this.db.select().from(categories).where(eq(categories.id, categoryId));
+  async assertCategoryAllowed(categoryId: string, field = 'categoryId', executor: DbOrTx = this.db): Promise<void> {
+    const [category] = await executor.select().from(categories).where(eq(categories.id, categoryId));
     if (!category?.active) {
       throw errors.unprocessable('CATEGORY_INACTIVE', 'Categoria indisponível', { errors: [{ field, message: 'Escolha uma categoria ativa.' }] });
     }
-    if (await this.isCategoryForbidden(category.id, category.parentId)) {
+    if (await this.isCategoryForbidden(category.id, category.parentId, executor)) {
       throw errors.unprocessable('CATEGORY_FORBIDDEN', 'Tipo de produto não permitido', {
         detail: 'Esse tipo de produto não é permitido no Webag',
         errors: [{ field, message: 'Esse tipo de produto não é permitido no Webag' }],
@@ -133,9 +133,9 @@ export class CatalogService {
     }
   }
 
-  async isCategoryForbidden(categoryId: string, parentId: string | null): Promise<boolean> {
+  async isCategoryForbidden(categoryId: string, parentId: string | null, executor: DbOrTx = this.db): Promise<boolean> {
     const ids = [categoryId, ...(parentId ? [parentId] : [])];
-    const rows = await this.db.select({ id: moderationTerms.id }).from(moderationTerms).where(and(eq(moderationTerms.kind, 'forbidden_category'), inArray(moderationTerms.value, ids)));
+    const rows = await executor.select({ id: moderationTerms.id }).from(moderationTerms).where(and(eq(moderationTerms.kind, 'forbidden_category'), inArray(moderationTerms.value, ids)));
     return rows.length > 0;
   }
 
@@ -237,10 +237,14 @@ export class CatalogService {
     }
   }
 
+  /** Parâmetro `rascunhos_max_por_loja`, lido ANTES da transação (uma consulta fora da transação, sem segurar uma 2ª conexão do pool dentro dela). */
+  draftLimit(): Promise<number> {
+    return this.params.getNumber('rascunhos_max_por_loja');
+  }
+
   /** Teto de rascunhos da loja (DEC-118, I3): chamar DENTRO da transação que insere, depois de `lockForCatalogWrite`. 422 `DRAFT_LIMIT_REACHED` com as vagas que restam. */
-  async assertDraftCapacity(tx: Tx, storeId: string, adding: number): Promise<number> {
+  async assertDraftCapacity(tx: Tx, storeId: string, adding: number, limit: number): Promise<number> {
     await this.stores.lockForCatalogWrite(tx, storeId);
-    const limit = await this.params.getNumber('rascunhos_max_por_loja');
     const [row] = await tx.select({ total: sql<number>`count(*)::int` }).from(products).where(and(eq(products.storeId, storeId), eq(products.status, 'draft')));
     const draftCount = row?.total ?? 0;
     if (draftCount + adding > limit) {
@@ -311,7 +315,16 @@ export class CatalogService {
     return result;
   }
 
-  async present(store: Store, product: Product, executor: DbOrTx = this.db) {
+  /**
+   * Parâmetros que `present` lê. Quem apresenta DENTRO de uma transação (resposta guardada da idempotência) calcula antes e passa, para não segurar uma 2ª
+   * conexão do pool com a 1ª presa na transação (com o pool cheio, N requisições se esperariam umas às outras).
+   */
+  async presentContext(store: Store): Promise<{ threshold: number; validityDays: number }> {
+    const [threshold, validityDays] = await Promise.all([this.storeSettings.lowStockThresholdFor(store.id), this.params.getNumber('rascunho_validade_dias')]);
+    return { threshold, validityDays };
+  }
+
+  async present(store: Store, product: Product, executor: DbOrTx = this.db, context?: { threshold: number; validityDays: number }) {
     const now = new Date();
     const [variants, images, threshold, validityDays] = await Promise.all([
       this.variantsOf(product.id, executor),
@@ -321,8 +334,8 @@ export class CatalogService {
         .innerJoin(mediaAssets, eq(mediaAssets.id, productImages.assetId))
         .where(eq(productImages.productId, product.id))
         .orderBy(asc(productImages.position)),
-      this.storeSettings.lowStockThresholdFor(store.id),
-      product.status === 'draft' ? this.params.getNumber('rascunho_validade_dias') : Promise.resolve(0),
+      context ? Promise.resolve(context.threshold) : this.storeSettings.lowStockThresholdFor(store.id),
+      context ? Promise.resolve(context.validityDays) : product.status === 'draft' ? this.params.getNumber('rascunho_validade_dias') : Promise.resolve(0),
     ]);
     const views = variants.map((variant) => this.presentVariant(variant, product, threshold, now));
     return {
@@ -427,9 +440,10 @@ export class CatalogService {
       const [existing] = await this.db.select().from(products).where(and(eq(products.storeId, store.id), eq(products.idempotencyKey, idempotencyKey)));
       if (existing) return this.present(store, existing);
     }
+    const draftLimit = await this.draftLimit();
     try {
       const created = await this.db.transaction(async (tx) => {
-        await this.assertDraftCapacity(tx, store.id, 1); // DEC-118: o teto vale também aqui (createProduct nasce como rascunho)
+        await this.assertDraftCapacity(tx, store.id, 1, draftLimit); // DEC-118: o teto vale também aqui (createProduct nasce como rascunho)
         const [row] = await tx
           .insert(products)
           .values({ storeId: store.id, name: input.name, description: input.description ?? null, categoryId: input.categoryId ?? null, sectionId: input.sectionId ?? null, basePriceCents: input.basePriceCents ?? null, idempotencyKey, via: 'form' })
@@ -701,7 +715,7 @@ export class CatalogService {
         if (issues.length === 1 && issues[0]!.field === 'description') throw errors.unprocessable('DESCRIPTION_REQUIRED', 'Descrição obrigatória', { detail: `Nesta categoria a descrição é obrigatória (mínimo de ${rule!.minChars} caracteres).`, errors: issues });
         throw errors.unprocessable('PRODUCT_INCOMPLETE', 'Produto incompleto', { errors: issues });
       }
-      if (product.categoryId) await this.assertCategoryAllowed(product.categoryId);
+      if (product.categoryId) await this.assertCategoryAllowed(product.categoryId, 'categoryId', tx);
       const row = await this.editProduct(tx, productId, { status: 'active', publishedAt: product.publishedAt ?? new Date() });
       await this.flagIfSuspect(tx, row, [product.name, product.description ?? '']);
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_publish', { productId });

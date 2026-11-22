@@ -9257,7 +9257,6 @@ paths:
     get:
       tags: [categories]
       operationId: listCategoryTemplates
-      x-planned: v1.1 R1
       summary: Modelos por categoria (WB-375, RN-Q6)
       description: "Público e sem dado pessoal (como `/v1/categories`; ETag/304). Para cada categoria com modelo: atributos e valores sugeridos (tamanhos P a GG; 34 a 44 em calçado), avisos (`sizeChartHint` = tabela de medidas; `noVoluntaryExchangeHint` = sugerir \"sem troca voluntária\" em íntimos e higiene) e `descriptionRequired` com `descriptionMinChars` (RN-Q1, DEC-106: Cosméticos e Eletrônicos, 20 caracteres). O modelo SÓ SUGERE; a única exigência que ele carrega é `descriptionRequired`, validada no servidor nas duas vias (rápida e formulário completo): 422 `DESCRIPTION_REQUIRED` ao publicar. Categoria sem modelo não aparece (C5). Limitada ao total de categorias ativas (no máximo 100 itens, sem paginação; `nextCursor` sempre nulo, como em `listCategories`)."
       security: []
@@ -9272,7 +9271,6 @@ paths:
     put:
       tags: [categories]
       operationId: setCategoryTemplate
-      x-planned: v1.1 R1
       x-admin-permission: 'categories:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar o modelo de uma categoria (Could, RN-Q6)

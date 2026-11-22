@@ -165,14 +165,6 @@ export const tableQuerySchema = z.strictObject({
   limit: limitQuery,
 });
 
-export const categoryTemplateSchema = z.strictObject({
-  attributes: z.array(z.strictObject({ name: z.string().trim().min(1).max(30), values: z.array(z.string().trim().min(1).max(40)).max(30) })).max(12),
-  sizeChartHint: z.boolean(),
-  noVoluntaryExchangeHint: z.boolean(),
-  descriptionRequired: z.boolean(),
-  descriptionMinChars: z.number().int().min(1).max(200).default(20),
-});
-
 export const productMetricsQuerySchema = z.strictObject({
   days: z.enum(['7', '30', '90']).default('30').transform((v) => Number(v) as 7 | 30 | 90),
   groupBy: z.enum(['via', 'store']).default('via'),

@@ -9,6 +9,8 @@ import { StoresModule } from '../stores/index.js';
 import { AdminModerationController, AdminProductMetricsController, CatalogController } from './catalog.controllers.js';
 import { CatalogService, ProductOrdersPort } from './catalog.service.js';
 import { ProductDraftsService } from './drafts.service.js';
+import { DisabledExternalEanLookup, ExternalEanLookup } from './adapters/ean.js';
+import { FakeProductVisionProvider, ProductVisionProvider } from './adapters/vision.js';
 import { ProductMetricsService } from './product-metrics.service.js';
 import { ProductTableService } from './product-table.service.js';
 import { InventoryService } from './inventory.service.js';
@@ -37,7 +39,11 @@ class SqlOpenOrders extends ProductOrdersPort {
 @Module({
   imports: [AdminModule, IdentityModule, MediaModule, StoresModule],
   controllers: [CatalogController, AdminModerationController, AdminProductMetricsController],
-  providers: [CatalogService, ProductDraftsService, ProductTableService, ProductMetricsService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: SqlOpenOrders }],
+  providers: [CatalogService, ProductDraftsService, ProductTableService, ProductMetricsService, InventoryService, ModerationService, { provide: ProductOrdersPort, useClass: SqlOpenOrders },
+    // F8/F9 (flags `ia_visao_real` e `ean_base_externa` desligadas): só os adaptadores que não saem para a rede.
+    { provide: ProductVisionProvider, useClass: FakeProductVisionProvider },
+    { provide: ExternalEanLookup, useClass: DisabledExternalEanLookup },
+  ],
   exports: [CatalogService, InventoryService, ModerationService, ProductOrdersPort],
 })
 export class CatalogModule {}

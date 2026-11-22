@@ -1,7 +1,7 @@
 /**
  * Texto puro do cadastro rápido (C-CAD-04, WB-376 C8): o que o lojista digita ou cola nunca é interpretado como fórmula, HTML ou comando.
  * O servidor NÃO "escapa" o texto ao gravar (a tela mostra literal; o React e o CSV escapam na saída): remove o que não deveria existir num
- * nome de produto (caracteres de controle, marcas invisíveis de direção do texto) e normaliza o espaço. Funções puras, testadas por tabela.
+ * nome de produto (caracteres de controle, marcas invisíveis de direção do texto) e normaliza o espaço. Funções puras, testadas por tabela. A saída em CSV usa o `csvCell` único de `platform/http/csv.ts` (SEC-156), que já neutraliza `=`, `+`, `-`, `@`.
  */
 // Controle (C0, DEL, C1) e marcas invisíveis: zero-width (200B-200F), direção (202A-202E, 2066-2069), BOM (FEFF), separadores de linha/parágrafo (2028/2029).
 const hex = (n: number): string => `\\u{${n.toString(16)}}`;
@@ -26,14 +26,4 @@ export function cleanMultiline(raw: string): string {
     .replace(/[ ]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-/**
- * Célula de CSV segura contra injeção de fórmula (C-CAD-04): valor que começa com `=`, `+`, `-`, `@` (ou tab/CR) ganha um apóstrofo na frente e
- * aspas dobradas, como pede a OWASP. Toda saída CSV do catálogo passa por aqui.
- */
-export function csvCell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? '' : String(value);
-  const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return /[",\n\r;]/.test(guarded) || guarded !== text ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }

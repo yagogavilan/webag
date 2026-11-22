@@ -205,8 +205,9 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
     if (input.categoryId) await this.catalog.assertCategoryAllowed(input.categoryId);
     const name = cleanLine(input.name ?? '');
     if ([...name].length > 80) throw errors.validation([{ field: 'name', message: 'O nome vai até 80 caracteres.' }]);
+    const [limit, context] = await Promise.all([this.catalog.draftLimit(), this.catalog.presentContext(store)]);
     return this.idempotency.runInTransaction(this.scope('draft', store, actor), idempotencyKey, input, async (tx) => {
-      await this.catalog.assertDraftCapacity(tx, store.id, 1);
+      await this.catalog.assertDraftCapacity(tx, store.id, 1, limit);
       const [row] = await tx
         .insert(products)
         .values({ storeId: store.id, name, categoryId: input.categoryId ?? null, basePriceCents: input.basePriceCents ?? null, status: 'draft', via: input.via })
@@ -214,7 +215,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       if (!row) throw new Error('Falha ao criar rascunho');
       await this.catalog.startMetrics(tx, store.id, [row.id], input.via);
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.draft_create', { productId: row.id, via: input.via });
-      return this.catalog.present(store, row, tx);
+      return this.catalog.present(store, row, tx, context);
     });
   }
 
@@ -273,8 +274,9 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
     const maxVariants = await this.params.getNumber('variacoes_max');
     const forbiddenCache = new Map<string, Promise<boolean>>();
     const checked = await Promise.all(input.items.map((item) => this.checkBatchItem(item, forbiddenCache, maxVariants)));
+    const limit = await this.catalog.draftLimit();
     const result = await this.idempotency.runInTransaction(this.scope('draft-batch', store, actor), idempotencyKey, input, async (tx) => {
-      await this.catalog.assertDraftCapacity(tx, store.id, input.items.length);
+      await this.catalog.assertDraftCapacity(tx, store.id, input.items.length, limit);
       const valid = checked.flatMap((outcome, index) => ('ok' in outcome ? [{ item: input.items[index]!, data: outcome.ok }] : []));
       const rejected = checked.flatMap((outcome, index) => ('reject' in outcome ? [{ clientRef: input.items[index]!.clientRef, code: outcome.reject.code, message: outcome.reject.message }] : []));
       if (valid.length === 0) return { created: [], rejected };
@@ -305,10 +307,11 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
   /** WB-372 / RN-Q4: duplica como RASCUNHO. Não copia foto, SKU, código de barras, estoque (1 por variação, ou 0 em grade) nem promoção; a cópia nasce sem moderação herdada. */
   async duplicate(store: Store, actor: CatalogActor, productId: string, idempotencyKey: string) {
     this.catalog.assertWritable(store);
+    const [limit, context] = await Promise.all([this.catalog.draftLimit(), this.catalog.presentContext(store)]);
     const result = await this.idempotency.runInTransaction(this.scope('duplicate', store, actor), idempotencyKey, { productId }, async (tx) => {
       // C6 (C-CAD-10): a posse do produto de ORIGEM é conferida (outra loja = inexistente = 404), antes de qualquer coisa ser criada.
       const source = await this.catalog.requireProduct(store.id, productId, tx);
-      await this.catalog.assertDraftCapacity(tx, store.id, 1);
+      await this.catalog.assertDraftCapacity(tx, store.id, 1, limit);
       const sourceVariants = await this.catalog.variantsOf(source.id, tx);
       const grid = source.variantAttributes.length > 0;
       const [row] = await tx
@@ -337,7 +340,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_duplicate', { productId: row.id, duplicatedFrom: source.id });
       // C5: o histórico registra "duplicado de <id>" (nome da cópia, sem a foto nem o estoque).
       await this.catalog.auditProduct(tx, actor, store.id, CATALOG_AUDIT.duplicate, row.id, null, { duplicatedFrom: source.id, name: row.name, variants: copies.length });
-      return this.catalog.present(store, row, tx);
+      return this.catalog.present(store, row, tx, context);
     });
     this.logger.log({ event: 'product_duplicated', storeId: store.id });
     return result;
@@ -378,6 +381,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
     if (input.imageIds.length > maxImages) throw errors.unprocessable('TOO_MANY_IMAGES', 'Fotos demais', { errors: [{ field: 'imageIds', message: `No máximo ${maxImages} fotos por produto.` }] });
     this.catalog.checkPrice(input.basePriceCents, 'basePriceCents');
     await this.requireUploadsReady(store.id, input.imageIds);
+    const context = await this.catalog.presentContext(store);
 
     const published: { event: { via: string; durationS: number } | null } = { event: null };
     const outcome = await this.idempotency.runInTransaction(this.scope('quick-publish', store, actor), idempotencyKey, { productId, ifMatch, ...input }, async (tx) => {
@@ -395,7 +399,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       if ([...name].length < 2) throw errors.unprocessable('PRODUCT_INCOMPLETE', 'Produto incompleto', { errors: [{ field: 'name', message: 'Informe o nome (2 a 80 caracteres).' }] });
       const categoryId = input.categoryId ?? product.categoryId;
       if (!categoryId) throw errors.unprocessable('PRODUCT_INCOMPLETE', 'Produto incompleto', { errors: [{ field: 'categoryId', message: 'Escolha a categoria.' }] });
-      await this.catalog.assertCategoryAllowed(categoryId);
+      await this.catalog.assertCategoryAllowed(categoryId, 'categoryId', tx);
       const description = input.description !== undefined ? (input.description === null ? null : cleanMultiline(input.description)) : product.description;
       await this.catalog.assertDescription(categoryId, description, tx);
 
@@ -411,7 +415,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       // WB-379: `photo_captured` e `product_create_published` (só tempos e contagens, sem texto do produto).
       await this.catalog.markFirstPhoto(tx, productId);
       published.event = await this.catalog.markPublished(tx, productId, input.imageIds.length, 1);
-      return this.catalog.present(store, edited, tx);
+      return this.catalog.present(store, edited, tx, context);
     });
     this.catalog.logPublished(store.id, published.event, input.imageIds.length, 1);
     await this.storefront.productsChanged(store.id, [productId]);

@@ -1,4 +1,5 @@
-import { cleanLine, cleanMultiline, csvCell } from './text.js';
+import { csvCell } from '../../../platform/http/csv.js';
+import { cleanLine, cleanMultiline } from './text.js';
 
 const chr = (code: number): string => String.fromCharCode(code);
 
@@ -20,17 +21,10 @@ describe('texto puro do cadastro (C-CAD-04)', () => {
     expect(cleanMultiline('Linha 1\r\nLinha\u0000 2\n\n\n\nLinha 3\t\t fim')).toBe('Linha 1\nLinha 2\n\nLinha 3 fim');
   });
 
-  it.each([
-    ['=1+1', `"'=1+1"`],
-    ['+55 11', `"'+55 11"`],
-    ['-2', `"'-2"`],
-    ['@SUM(A1)', `"'@SUM(A1)"`],
-    ['Camiseta', 'Camiseta'],
-    ['a,b', '"a,b"'],
-    ['diz "oi"', '"diz ""oi"""'],
-    [null, ''],
-    [49.9, '49.9'],
-  ])('csvCell(%j) = %j', (input, expected) => {
-    expect(csvCell(input)).toBe(expected);
+  it('C8: o que o lojista cola sai neutralizado em QUALQUER CSV (o `csvCell` único da plataforma, SEC-156)', () => {
+    expect(csvCell('=HYPERLINK("http://x")')).toBe(`"'=HYPERLINK(""http://x"")"`);
+    expect(csvCell('+55 11')).toBe("'+55 11");
+    expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)");
+    expect(csvCell('-2')).toBe("'-2");
   });
 });

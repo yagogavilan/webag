@@ -9,3 +9,4 @@ export { LEGAL_DOCUMENT_TYPES, type LegalDocumentType } from './db/schema.js';
 export { RegionsService } from './regions.service.js';
 export { MaintenanceService, type MaintenanceView } from './maintenance.service.js';
 export { ALERT_AREAS, ALERT_KINDS, ALERT_SEVERITIES, alertKindInfo, alertKindsVisibleTo, canSeeAlertKind, type AlertArea, type AlertSeverity } from './alert-catalog.js';
+export { INITIAL_CATEGORY_TEMPLATES, initialTemplateFor } from './category-templates.js';

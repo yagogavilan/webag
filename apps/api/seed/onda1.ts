@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { desc, eq } from 'drizzle-orm';
 import { PasswordService } from '../src/modules/identity/password.service.js';
+import { initialTemplateFor } from '../src/modules/admin/category-templates.js';
 import { FEATURE_FLAG_DEFINITIONS } from '../src/modules/admin/feature-flags.definitions.js';
 import { fillCompanyVariables, forbiddenLegalVariables, resolveCompanyValues } from '../src/modules/admin/legal-variables.js';
 import { PARAMETER_DEFINITIONS } from '../src/modules/admin/parameters.definitions.js';
@@ -107,6 +108,19 @@ export async function seedOnda1(db: Db, options: SeedOptions = {}): Promise<void
     }
   }
   log(`${CATEGORIES.length} categorias`);
+
+  // Modelos por categoria (WB-375, RN-Q6): só onde ainda não há modelo (o que o admin editou não é sobrescrito).
+  const everyCategory = await db.select().from(categories);
+  const nameById = new Map(everyCategory.map((c) => [c.id, c.name]));
+  let templated = 0;
+  for (const category of everyCategory) {
+    if (category.template !== null) continue;
+    const initial = initialTemplateFor(category.parentId ? (nameById.get(category.parentId) ?? null) : null, category.name);
+    if (!initial) continue;
+    await db.update(categories).set({ template: initial.template, descriptionRequired: initial.descriptionRequired, descriptionMinChars: 20 }).where(eq(categories.id, category.id));
+    templated += 1;
+  }
+  log(`${templated} modelos de categoria`);
 
   // Textos legais: tipo sem versão ganha a v1 com o texto completo; tipo cuja última versão ainda é a minuta técnica antiga, ou que ainda traz
   // variável de empresa sem valor escrito (seed anterior ao SEC-187), ganha a versão seguinte (a anterior continua no histórico, imutável).
