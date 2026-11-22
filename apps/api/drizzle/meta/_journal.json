@@ -428,6 +428,13 @@
       "when": 1795353050981,
       "tag": "0060_r1_admin_edit_support",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795355095828,
+      "tag": "0061_r1_catalog_version",
+      "breakpoints": true
     }
   ]
 }

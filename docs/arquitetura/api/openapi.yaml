@@ -4971,7 +4971,6 @@ paths:
     post:
       tags: [catalog]
       operationId: quickPublishProduct
-      x-planned: v1.1 R1
       summary: Publicar o rascunho com nome e preço, numa chamada só (WB-370 C3, R-36)
       description: "O \"publicar em 2 campos\" é UMA transação (tech-lead I11, decisão do CEO): grava nome, preço, categoria, descrição (se a categoria exige), as fotos já enviadas, a variação padrão com `stock` (1 se omitido) e publica. Sem isto o caminho mínimo eram 7 a 8 chamadas em série (`updateProduct`, `setProductVariants`, `setProductImages`, `publishProduct`...), inviável em 3G com RTT de 0,4 a 1 s para a meta de 60 s; agora, depois da foto, é 1 chamada (os 3 passos de upload correm em segundo plano enquanto o lojista digita). Serve ao produto SEM grade: rascunho que já tem variações com atributos é 422 `QUICK_PUBLISH_NOT_APPLICABLE` e segue por `setProductVariants` e `publishProduct`. **Tudo ou nada:** qualquer erro desfaz a transação e nada digitado se perde no app. As regras são as de `publishProduct` e `updateProduct`, sem exceção (moderação, `PRODUCT_INCOMPLETE` com a lista do que falta, `DESCRIPTION_REQUIRED`, `CATEGORY_FORBIDDEN`, `PRICE_OUT_OF_RANGE`, `PRODUCT_MODERATED`). `If-Match` com a `version` do rascunho (409 `PRODUCT_VERSION_CONFLICT`); `Idempotency-Key` obrigatória (toque duplo ou repetição por 3G publica uma vez só: mesma chave e mesmo corpo devolvem o mesmo produto). Grava `product_create_published` com `duration_s` e `via` (WB-379). Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. A versão sobe uma vez (a transação é UMA edição de catálogo). **Foto ainda em processamento (R6 b):** `imageIds` cuja conclusão do upload ainda não terminou (original recodificado e variantes) = 422 `UPLOAD_NOT_READY` com `imageIds` pendentes em `errors`; é transitório: o app espera (poucos segundos) e repete com a MESMA `Idempotency-Key`, sem mostrar erro (nada foi gravado). **Resposta perdida (R6 a):** repetir depois de o servidor ter publicado devolve 409 `PRODUCT_VERSION_CONFLICT` (a versão subiu) quando a chave não tem mais resposta guardada; o app, ao receber 409 nesta rota, reconsulta o produto (`getProduct`) e trata `status = active` com os mesmos dados como SUCESSO. **Medição (R6 c):** `duration_s` conta da criação do rascunho; a mediana da meta de 60 s usa só o cadastro contínuo (E-8, D11)."
       parameters:
@@ -9135,7 +9134,6 @@ paths:
     get:
       tags: [catalog]
       operationId: getCatalogQuickStart
-      x-planned: v1.1 R1
       summary: Dados de partida da tela Produtos (WB-370, WB-371, RN-Q1)
       description: "Uma chamada só para a tela de Produtos e o \"Novo produto\" (3G): categoria sugerida (a última usada pela loja ou a mais frequente), rascunho mais recente (\"Continuar de onde parei\"), contagem e limite de rascunhos, quantos produtos ativos estão sem descrição e os limites que o app usa na tela (`variacoes_max`, `reajuste_max_pct`). Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Sem dado de cliente."
       parameters:
@@ -9162,7 +9160,6 @@ paths:
     get:
       tags: [catalog]
       operationId: listProductDrafts
-      x-planned: v1.1 R1
       summary: Rascunhos da loja (WB-371)
       description: "Aba \"Rascunhos (n)\" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (100, parâmetro `rascunhos_max_por_loja`) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`."
       parameters:
@@ -9183,7 +9180,6 @@ paths:
     post:
       tags: [catalog]
       operationId: createProductDraft
-      x-planned: v1.1 R1
       summary: Abrir um rascunho ao tocar em "Novo produto" (WB-370 C1, WB-371, RN-Q2)
       description: "O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: \"\"` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` (\"Limite de 100 rascunhos\", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` (\"Esse tipo de produto não é permitido no Webag\"; a tela mostra o link para os Termos do Lojista e \"Escolher outra categoria\"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos."
       parameters:
@@ -9212,7 +9208,6 @@ paths:
     post:
       tags: [catalog]
       operationId: createProductDraftsBatch
-      x-planned: v1.1 R1
       summary: Criar rascunhos a partir da lista colada (WB-376 C4, RN-Q8)
       description: "Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o \"Juntar 3 linhas em 1 produto\" (preço por variação quando diferem). **Atômico quanto ao limite (DEC-118):** o lote vai até 100 itens e o teto de rascunhos da loja é 100 (`rascunhos_max_por_loja`; o teto nunca fica abaixo do lote). Se `rascunhos atuais + itens` passar do teto, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` (vagas que restam), `draftCount` e `limit` (`DraftLimitProblem`); a tela oferece \"criar os N que cabem\" reenviando só os N primeiros com outra `Idempotency-Key`. A contagem e a inserção ocorrem sob lock da loja (`SELECT ... FOR UPDATE` em `stores`), então requisições simultâneas não passam do teto. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE]."
       parameters:
@@ -9240,7 +9235,6 @@ paths:
     post:
       tags: [catalog]
       operationId: duplicateProduct
-      x-planned: v1.1 R1
       summary: Duplicar produto (WB-372, RN-Q4)
       description: "Cria um RASCUNHO com nome \"<nome> (cópia)\", mesma categoria, descrição, preço, atributos e variações; NÃO copia fotos, SKU, estoque (começa em 1 por variação, ou 0 em grade) nem promoção (C1, C3). A cópia é um produto novo e passa pela moderação ao publicar (C4: duplicar produto arquivado ou pausado pela moderação nunca herda o estado). Grava no histórico \"duplicado de <id>\" (C5). **Posse conferida:** produto de outra loja é 404 igual a inexistente (C6, C-CAD-10). Duplicar a variação (C2) é edição da tabela de variações no app, salva por `setProductVariants`; não tem rota. `Idempotency-Key` obrigatória. 422 `DRAFT_LIMIT_REACHED`. Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`."
       parameters:
@@ -9305,7 +9299,6 @@ paths:
     get:
       tags: [catalog]
       operationId: listProductTable
-      x-planned: v1.1 R1
       x-view-as: true
       security:
         - bearerAuth: []
@@ -9398,7 +9391,6 @@ paths:
     get:
       tags: [reports]
       operationId: getProductCreationMetrics
-      x-planned: v1.1 R1
       x-admin-permission: 'reports:operations'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Tempo de cadastro de produto, mediana e p90 (WB-379 C2)

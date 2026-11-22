@@ -67,9 +67,9 @@ describe('Troca e financeiro da loja: dinheiro (R.4, I4, I6, I12)', () => {
 
   it('I4: desconto de item com centavos quebrados é rateado exato (a soma dos reembolsos dos itens = itens - desconto)', async () => {
     const shop: Shop = await shopWith(ctx, [
-      { name: 'A', priceCents: 3_333, stock: 9 },
-      { name: 'B', priceCents: 3_334, stock: 9 },
-      { name: 'C', priceCents: 3_333, stock: 9 },
+      { name: 'Item A', priceCents: 3_333, stock: 9 },
+      { name: 'Item B', priceCents: 3_334, stock: 9 },
+      { name: 'Item C', priceCents: 3_333, stock: 9 },
     ]);
     const buyer = await customerAt(ctx, shop.origin);
     for (const v of shop.variants) await addToCart(ctx, buyer.user, v, 1).expect(200);

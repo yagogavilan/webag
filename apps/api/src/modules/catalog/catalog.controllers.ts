@@ -1,14 +1,21 @@
-import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import type { z } from 'zod';
-import { AdminOnly, Ctx, CurrentPrincipal, StorePermission, ViewAs, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
-import { errors } from '../../platform/http/app-error.js';
+import { AdminOnly, Ctx, CurrentPrincipal, CurrentViewAs, StorePermission, ViewAs, type Principal, type RequestContext, type ViewAsContext } from '../../platform/auth/decorators.js';
+import { memberHasStorePermission } from '../../platform/auth/permissions.js';
+import { AppError, errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { IdempotencyService, parseIdempotencyKey } from '../idempotency/index.js';
+import { PrincipalService } from '../identity/index.js';
 import { StoresService, uuidParam } from '../stores/index.js';
-import { adminProductsQuerySchema, bulkSchema, createProductSchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, updateProductSchema } from './catalog.schemas.js';
+import { adminProductsQuerySchema, bulkSchema, createDraftSchema, createProductSchema, draftsBatchSchema, draftsQuerySchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, productMetricsQuerySchema, quickPublishSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, tableQuerySchema, updateProductSchema } from './catalog.schemas.js';
 import { CatalogService } from './catalog.service.js';
+import { etag, parseIfMatch } from './domain/version.js';
+import { ProductDraftsService } from './drafts.service.js';
 import { ModerationService } from './moderation.service.js';
+import { ProductMetricsService } from './product-metrics.service.js';
+import { ProductTableService } from './product-table.service.js';
 
 type In<T extends z.ZodType> = z.infer<T>;
 
@@ -17,13 +24,114 @@ type In<T extends z.ZodType> = z.infer<T>;
 export class CatalogController {
   constructor(
     private readonly catalog: CatalogService,
+    private readonly drafts: ProductDraftsService,
+    private readonly table: ProductTableService,
     private readonly stores: StoresService,
+    private readonly principals: PrincipalService,
     private readonly idempotency: IdempotencyService,
   ) {}
 
   private store(storeId: string) {
     return this.stores.getStore(uuidParam(storeId));
   }
+
+  private actor(principal: Principal, ctx: RequestContext) {
+    return { userId: principal.userId, ctx };
+  }
+
+  /** Escrita que o cliente repete em 3G: a chave é OBRIGATÓRIA (400 sem ela). */
+  private requiredKey(raw: string | undefined): string {
+    return parseIdempotencyKey(raw, true)!;
+  }
+
+  // ------------------------------------------------- cadastro rápido (v1.1 R1.2)
+
+  @StorePermission('catalog')
+  @Get('catalog/quick-start')
+  async quickStart(@Param('storeId') storeId: string) {
+    return this.drafts.quickStart(await this.store(storeId));
+  }
+
+  @StorePermission('catalog')
+  @Get('product-drafts')
+  async listDrafts(@Param('storeId') storeId: string, @Query(new ZodPipe(draftsQuerySchema)) query: In<typeof draftsQuerySchema>) {
+    return this.drafts.list(await this.store(storeId), query);
+  }
+
+  @StorePermission('catalog')
+  @RateLimit({ name: 'product-draft-create', limit: 240, windowSeconds: 3600 })
+  @Post('product-drafts')
+  async createDraft(
+    @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
+    @Param('storeId') storeId: string,
+    @Body(new ZodPipe(createDraftSchema)) body: In<typeof createDraftSchema>,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.drafts.createDraft(await this.store(storeId), this.actor(principal, ctx), body, this.requiredKey(idempotencyKey));
+  }
+
+  @StorePermission('catalog')
+  @Post('product-drafts/batch')
+  async createDraftsBatch(
+    @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
+    @Param('storeId') storeId: string,
+    @Body(new ZodPipe(draftsBatchSchema)) body: In<typeof draftsBatchSchema>,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.drafts.createBatch(await this.store(storeId), this.actor(principal, ctx), body, this.requiredKey(idempotencyKey));
+  }
+
+  /** `products/table` ANTES de `products/:productId` (A2): senão "table" cairia em `{productId}` e viraria 404. */
+  @ViewAs('listProductTable')
+  @StorePermission('member')
+  @Get('products/table')
+  async productTable(
+    @CurrentPrincipal() principal: Principal,
+    @CurrentViewAs() viewAs: ViewAsContext | null,
+    @Param('storeId') storeId: string,
+    @Query(new ZodPipe(tableQuerySchema)) query: In<typeof tableQuerySchema>,
+  ) {
+    // Qualquer membro lê; a comissão só vai a quem gerencia o catálogo e nunca na "Ver como".
+    const store = await this.store(storeId);
+    const member = viewAs ? null : await this.principals.storeMembership(principal.userId, store.id);
+    const includeReceive = member !== null && memberHasStorePermission(member, 'catalog');
+    return this.table.list(store, query, includeReceive);
+  }
+
+  @StorePermission('catalog')
+  @Post('products/:productId/duplicate')
+  async duplicate(
+    @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
+    @Param('storeId') storeId: string,
+    @Param('productId') productId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.drafts.duplicate(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), this.requiredKey(idempotencyKey));
+  }
+
+  @StorePermission('catalog')
+  @HttpCode(200)
+  @Post('products/:productId/quick-publish')
+  async quickPublish(
+    @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
+    @Res({ passthrough: true }) res: Response,
+    @Param('storeId') storeId: string,
+    @Param('productId') productId: string,
+    @Body(new ZodPipe(quickPublishSchema)) body: In<typeof quickPublishSchema>,
+    @Headers('if-match') ifMatch?: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const version = parseIfMatch(ifMatch);
+    const product = await this.drafts.quickPublish(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), body, version, this.requiredKey(idempotencyKey));
+    res.setHeader('ETag', etag(product.version));
+    return product;
+  }
+
+  // ------------------------------------------------------------------ produtos
 
   @ViewAs('listProducts')
   @StorePermission('catalog')
@@ -37,12 +145,13 @@ export class CatalogController {
   @Post('products')
   async create(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Body(new ZodPipe(createProductSchema)) body: In<typeof createProductSchema>,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (idempotencyKey !== undefined && !/^[A-Za-z0-9_-]{8,80}$/.test(idempotencyKey)) throw errors.validation([{ field: 'Idempotency-Key', message: 'Use de 8 a 80 caracteres (letras, números, - e _).' }]);
-    return this.catalog.create(await this.store(storeId), { userId: principal.userId }, body, idempotencyKey ?? null);
+    return this.catalog.create(await this.store(storeId), this.actor(principal, ctx), body, idempotencyKey ?? null);
   }
 
   @StorePermission('catalog')
@@ -60,6 +169,7 @@ export class CatalogController {
   @Post('products/import')
   async importCsv(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Query(new ZodPipe(importQuerySchema)) query: In<typeof importQuerySchema>,
     @Body() body: unknown,
@@ -67,52 +177,74 @@ export class CatalogController {
   ) {
     if (typeof body !== 'string') throw errors.validation([{ field: 'file', message: 'Envie o arquivo CSV com Content-Type text/csv.' }]);
     const store = await this.store(storeId);
-    const run = () => this.catalog.importCsv(store, { userId: principal.userId }, body, query.mode, query.onExisting);
+    const run = () => this.catalog.importCsv(store, this.actor(principal, ctx), body, query.mode, query.onExisting);
     // I9: só o commit muda dados; a prévia não precisa de chave.
     if (query.mode !== 'commit') return run();
     return this.idempotency.run(`import:${store.id}`, parseIdempotencyKey(idempotencyKey), { csv: body, ...query }, run);
   }
 
+  /**
+   * Ação em massa. `price_adjust` SEM `dryRun` (B2, D17, SEC-208): `Idempotency-Key` e `expectedVersions` de TODOS os itens são exigidos aqui no servidor e a execução
+   * é `runInTransaction` (chave, versões, efeito e resposta no mesmo commit). As demais ações são estados absolutos (repetir é seguro) e seguem como antes.
+   */
   @StorePermission('catalog')
   @HttpCode(200)
   @Post('products/bulk')
   async bulk(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Body(new ZodPipe(bulkSchema)) body: In<typeof bulkSchema>,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const store = await this.store(storeId);
-    return this.idempotency.run(`bulk:${store.id}`, parseIdempotencyKey(idempotencyKey), body, () => this.catalog.bulk(store, { userId: principal.userId }, body));
+    const actor = this.actor(principal, ctx);
+    const key = parseIdempotencyKey(idempotencyKey);
+    if (body.action.type !== 'price_adjust' || body.dryRun) {
+      return this.idempotency.run(`bulk:${store.id}`, key, body, () => this.catalog.bulk(store, actor, body));
+    }
+    if (!key) throw new AppError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Chave de idempotência obrigatória', { detail: 'O reajuste de preço em massa exige o header Idempotency-Key (gerado uma vez por clique em "Aplicar").' });
+    const covered = new Set((body.expectedVersions ?? []).map((e) => e.productId.toLowerCase()));
+    const missing = [...new Set(body.productIds.map((id) => id.toLowerCase()))].filter((id) => !covered.has(id));
+    if (missing.length > 0) throw new AppError(400, 'EXPECTED_VERSIONS_REQUIRED', 'Versões dos produtos obrigatórias', { detail: 'Envie `expectedVersions` com a versão de cada produto, como veio na prévia.', errors: missing.map((id) => ({ field: 'expectedVersions', message: id })) });
+    const result = await this.idempotency.runInTransaction(`bulk:${store.id}:${principal.userId}`, key, body, (tx) => this.catalog.bulk(store, actor, body, tx));
+    if (result.changed > 0) await this.catalog.afterBulk(store, body.productIds);
+    return result;
   }
 
   @ViewAs('getProduct')
   @StorePermission('catalog')
   @Get('products/:productId')
-  async get(@Param('storeId') storeId: string, @Param('productId') productId: string) {
-    return this.catalog.get(await this.store(storeId), uuidParam(productId));
+  async get(@Res({ passthrough: true }) res: Response, @Param('storeId') storeId: string, @Param('productId') productId: string) {
+    const product = await this.catalog.get(await this.store(storeId), uuidParam(productId));
+    res.setHeader('ETag', etag(product.version));
+    return product;
   }
 
   @StorePermission('catalog')
   @Patch('products/:productId')
   async update(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
     @Body(new ZodPipe(updateProductSchema)) body: In<typeof updateProductSchema>,
+    @Headers('if-match') ifMatch?: string,
   ) {
-    return this.catalog.update(await this.store(storeId), { userId: principal.userId }, uuidParam(productId), body);
+    return this.catalog.update(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), body, parseIfMatch(ifMatch));
   }
 
   @StorePermission('catalog')
   @Put('products/:productId/variants')
   async setVariants(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
     @Body(new ZodPipe(setVariantsSchema)) body: In<typeof setVariantsSchema>,
+    @Headers('if-match') ifMatch?: string,
   ) {
-    return this.catalog.setVariants(await this.store(storeId), { userId: principal.userId }, uuidParam(productId), body);
+    return this.catalog.setVariants(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), body, parseIfMatch(ifMatch));
   }
 
   @StorePermission('catalog')
@@ -120,16 +252,19 @@ export class CatalogController {
   @Post('products/:productId/variants/:variantId/stock')
   async stock(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
     @Param('variantId') variantId: string,
     @Body(new ZodPipe(stockAdjustSchema)) body: In<typeof stockAdjustSchema>,
     @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('if-match') ifMatch?: string,
   ) {
     const store = await this.store(storeId);
     const ids = { productId: uuidParam(productId), variantId: uuidParam(variantId) };
-    return this.idempotency.run(`stock:${store.id}`, parseIdempotencyKey(idempotencyKey), { ...ids, ...body }, () =>
-      this.catalog.adjustStock(store, { userId: principal.userId }, ids.productId, ids.variantId, body),
+    const version = parseIfMatch(ifMatch);
+    return this.idempotency.run(`stock:${store.id}`, parseIdempotencyKey(idempotencyKey), { ...ids, ...body, ifMatch: version }, () =>
+      this.catalog.adjustStock(store, this.actor(principal, ctx), ids.productId, ids.variantId, body, version),
     );
   }
 
@@ -137,39 +272,47 @@ export class CatalogController {
   @Put('products/:productId/images')
   async setImages(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Param('storeId') storeId: string,
     @Param('productId') productId: string,
     @Body(new ZodPipe(setImagesSchema)) body: In<typeof setImagesSchema>,
+    @Headers('if-match') ifMatch?: string,
   ) {
-    return this.catalog.setImages(await this.store(storeId), { userId: principal.userId }, uuidParam(productId), body.imageIds);
+    return this.catalog.setImages(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), body.imageIds, parseIfMatch(ifMatch));
   }
 
   @StorePermission('catalog')
   @HttpCode(200)
   @Post('products/:productId/publish')
-  async publish(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string, @Param('productId') productId: string) {
-    return this.catalog.publish(await this.store(storeId), { userId: principal.userId }, uuidParam(productId));
+  async publish(
+    @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
+    @Param('storeId') storeId: string,
+    @Param('productId') productId: string,
+    @Headers('if-match') ifMatch?: string,
+  ) {
+    return this.catalog.publish(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId), parseIfMatch(ifMatch));
   }
 
   @StorePermission('catalog')
   @HttpCode(200)
   @Post('products/:productId/pause')
-  async pause(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string, @Param('productId') productId: string) {
-    return this.catalog.pause(await this.store(storeId), { userId: principal.userId }, uuidParam(productId));
+  async pause(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Param('productId') productId: string) {
+    return this.catalog.pause(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId));
   }
 
   @StorePermission('catalog')
   @HttpCode(200)
   @Post('products/:productId/resume')
-  async resume(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string, @Param('productId') productId: string) {
-    return this.catalog.resume(await this.store(storeId), { userId: principal.userId }, uuidParam(productId));
+  async resume(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Param('productId') productId: string) {
+    return this.catalog.resume(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId));
   }
 
   @StorePermission('catalog')
   @HttpCode(204)
   @Delete('products/:productId')
-  async archive(@CurrentPrincipal() principal: Principal, @Param('storeId') storeId: string, @Param('productId') productId: string): Promise<void> {
-    await this.catalog.archive(await this.store(storeId), { userId: principal.userId }, uuidParam(productId));
+  async archive(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Param('productId') productId: string): Promise<void> {
+    await this.catalog.archive(await this.store(storeId), this.actor(principal, ctx), uuidParam(productId));
   }
 
   // ------------------------------------------------------------------- seções
@@ -248,5 +391,17 @@ export class AdminModerationController {
   @Delete('moderation/terms/:termId')
   async removeTerm(@Param('termId') termId: string, @Ctx() ctx: RequestContext): Promise<void> {
     await this.moderation.removeTerm(uuidParam(termId), ctx);
+  }
+}
+
+/** WB-379 C2: tempo de cadastro de produto (mediana e p90 por `via` ou loja, mínimo de 5). Super admin, operação e financeiro (`reports:operations`). */
+@Controller('v1/admin')
+export class AdminProductMetricsController {
+  constructor(private readonly metrics: ProductMetricsService) {}
+
+  @AdminOnly('reports:operations')
+  @Get('metrics/product-creation')
+  report(@Query(new ZodPipe(productMetricsQuerySchema)) query: In<typeof productMetricsQuerySchema>) {
+    return this.metrics.report(query);
   }
 }

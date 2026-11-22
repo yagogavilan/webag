@@ -429,6 +429,15 @@ export class StoresService {
     return row ?? { email: '', name: '' };
   }
 
+  /**
+   * ADR-018 D1 (I3): serializa quem CONTA e INSERE rascunhos da loja (`createProduct`, `createProductDraft`, lote, `duplicateProduct`): sem este lock, 5 requisições
+   * simultâneas passam do teto. `FOR NO KEY UPDATE` basta (as inserções de produto, que travam a loja em `FOR KEY SHARE`, não esperam) e dura só a transação do chamador.
+   */
+  async lockForCatalogWrite(tx: Tx, storeId: string): Promise<void> {
+    const rows = await tx.select({ id: stores.id }).from(stores).where(eq(stores.id, storeId)).for('no key update');
+    if (rows.length === 0) throw errors.notFound('Loja não encontrada.');
+  }
+
   /** Registro de atividade da loja (quem fez o quê), usado pelo catálogo. Sem dado do cliente. */
   async logActivity(executor: DbOrTx, storeId: string, actorId: string | null, action: string, details: Record<string, unknown>): Promise<void> {
     await executor.insert(storeActivity).values({ storeId, actorId, action, details });

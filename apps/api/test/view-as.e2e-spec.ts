@@ -207,7 +207,7 @@ describe('Ver como o lojista (WB-352)', () => {
       view = await openOk(superAdmin, shop.store.id);
     });
 
-    it('VA-26 e Cache-Control: a resposta REAL das 12 rotas existentes cabe no schema da visão (ou no normal) com additionalProperties: false em todos os níveis', async () => {
+    it('VA-26 e Cache-Control: a resposta REAL das rotas existentes cabe no schema da visão (ou no normal) com additionalProperties: false em todos os níveis', async () => {
       const marked = new Map(viewAsOperations().map((o) => [o.operationId, o]));
       for (const [operationId, path] of READS(shop.store.id)) {
         const res = await viewGet(superAdmin, path, view.token);
@@ -495,7 +495,7 @@ describe('Ver como o lojista (WB-352)', () => {
       const real = listViewAsHandlers(ctx.app.get(ModulesContainer)).map((h) => h.operationId).sort();
       const documented = viewAsOperations().filter((o) => !o.planned).map((o) => o.operationId).sort();
       expect(real).toEqual(documented);
-      expect(real).toHaveLength(12);
+      expect(real).toHaveLength(13);
       const good = await createTestApp({ controllers: [GoodViewAsController] });
       await good.close();
       await expect(createTestApp({ controllers: [BadViewAsController] })).rejects.toThrow(/@ViewAs exige @Get e @StorePermission.*BadViewAsController\.bad/);

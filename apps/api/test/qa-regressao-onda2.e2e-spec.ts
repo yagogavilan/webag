@@ -165,7 +165,9 @@ describe('Regressão QA da Onda 2 (achados I1 a I9 da revisão do tech-lead)', (
     it('BUG-004: reajuste de preço em massa por percentual repetido com a mesma chave aplica uma vez só', async () => {
       const { id } = await activeProduct();
       const key = `preco-${uniqueTag(8)}`;
-      const body = { productIds: [id], action: { type: 'price_adjust', mode: 'percent', value: 10 } };
+      // v1.1 R1 (B2, D17): o reajuste sem `dryRun` exige a `version` de cada item (vinda da prévia); a repetição com a mesma chave devolve a resposta guardada.
+      const version = (await ctx.db.select({ version: products.version }).from(products).where(eq(products.id, id)))[0]!.version;
+      const body = { productIds: [id], expectedVersions: [{ productId: id, version }], action: { type: 'price_adjust', mode: 'percent', value: 10 } };
       await ctx.http.post(products_('/bulk')).set(as(owner)).set('Idempotency-Key', key).send(body).expect(200);
       await ctx.http.post(products_('/bulk')).set(as(owner)).set('Idempotency-Key', key).send(body).expect(200);
       const [row] = await ctx.db.select().from(products).where(eq(products.id, id));

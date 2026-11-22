@@ -65,6 +65,10 @@ export const listProductsSchema = z.strictObject({
 
 export const bulkSchema = z.strictObject({
   productIds: z.array(z.uuid()).min(1).max(200),
+  /** B2 (D17): `version` de cada item, como veio em `preview[].version`. Obrigatória em `price_adjust` sem `dryRun` (o controller confere a cobertura de todos os `productIds`). */
+  expectedVersions: z.array(z.strictObject({ productId: z.uuid(), version: z.number().int().min(1) })).max(200).optional(),
+  /** WB-377 C3: confirma reajuste acima de `reajuste_max_pct` em algum item. */
+  confirmLargeChange: z.boolean().default(false),
   action: z.discriminatedUnion('type', [
     z.strictObject({ type: z.literal('pause') }),
     z.strictObject({ type: z.literal('resume') }),
@@ -101,4 +105,78 @@ export const moderateSchema = z.strictObject({
 export const moderationTermSchema = z.strictObject({
   kind: z.enum(['forbidden_category', 'suspect_word']),
   value: z.string().trim().min(1).max(80),
+});
+
+// ------------------------------------------------------------------ v1.1 R1.2 (ADR-018)
+
+const via = z.enum(['camera', 'duplicate', 'paste', 'spreadsheet', 'form']);
+
+/** `If-Match` e `Idempotency-Key` vão em cabeçalho; o corpo só leva o que o contrato lista. */
+export const createDraftSchema = z.strictObject({
+  via,
+  /** Opcional: "" ou ausente = ainda sem nome. O texto passa por `cleanLine` no serviço (C-CAD-04). */
+  name: z.string().max(80).optional(),
+  categoryId: z.uuid().nullable().optional(),
+  basePriceCents: money.nullable().optional(),
+});
+
+const draftVariantSchema = z.strictObject({
+  attributes: z.record(attributeName, z.string().max(40)),
+  stock: z.number().int().min(0).max(99_999).default(1),
+  priceCents: money.nullable().optional(),
+});
+
+/**
+ * Item do lote colado (WB-376). A leitura do texto é LOCAL, no aparelho (D3); aqui só chegam itens já revisados. O nome aceita até 200 caracteres para o servidor
+ * devolver `NAME_TOO_LONG` NA LINHA (o contrato diz 80: o servidor é mais permissivo na borda, nunca mais restritivo), e a faixa de preço e de estoque
+ * também é por linha (`rejected`), para uma linha ruim não derrubar as 99 boas.
+ */
+const draftBatchItemSchema = z.strictObject({
+  clientRef: z.string().min(1).max(40),
+  name: z.string().max(200),
+  basePriceCents: z.number().int().nullable().optional(),
+  quantity: z.number().int().optional(),
+  variantAttributes: z.array(attributeName).max(3).optional(),
+  variants: z.array(draftVariantSchema).max(100).optional(),
+  categoryId: z.uuid().nullable().optional(),
+});
+
+export const draftsBatchSchema = z.strictObject({
+  via: z.enum(['paste', 'spreadsheet']),
+  items: z.array(draftBatchItemSchema).min(1).max(100),
+});
+
+export const quickPublishSchema = z.strictObject({
+  name: z.string().min(2).max(80),
+  basePriceCents: money,
+  categoryId: z.uuid().nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
+  stock: z.number().int().min(0).max(99_999).default(1),
+  imageIds: z.array(z.uuid()).min(1).max(8),
+});
+
+export const draftsQuerySchema = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
+
+export const tableQuerySchema = z.strictObject({
+  q: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'paused']).optional(),
+  sectionId: z.uuid().optional(),
+  cursor: z.string().max(200).optional(),
+  limit: limitQuery,
+});
+
+export const categoryTemplateSchema = z.strictObject({
+  attributes: z.array(z.strictObject({ name: z.string().trim().min(1).max(30), values: z.array(z.string().trim().min(1).max(40)).max(30) })).max(12),
+  sizeChartHint: z.boolean(),
+  noVoluntaryExchangeHint: z.boolean(),
+  descriptionRequired: z.boolean(),
+  descriptionMinChars: z.number().int().min(1).max(200).default(20),
+});
+
+export const productMetricsQuerySchema = z.strictObject({
+  days: z.enum(['7', '30', '90']).default('30').transform((v) => Number(v) as 7 | 30 | 90),
+  groupBy: z.enum(['via', 'store']).default('via'),
+  storeId: z.uuid().optional(),
+  cursor: z.string().max(200).optional(),
+  limit: limitQuery,
 });
