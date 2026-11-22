@@ -116,23 +116,25 @@ Pesos por onda definidos por mim pelo esforço relativo (O0 5, O1 8, O2 10, O3 1
 
 ---
 
-## v1.1 (R1 a R5): estado em 2026-11-22
+## v1.1 (R1 a R5): estado em 2026-11-22 (após o merge do desempenho no `main`)
 
-Cor: **AMARELO**. Planejado, nada construído. Detalhe: `gestao/plano-v1-1.md`; tarefas: `gestao/board.md` (seção v1.1).
+Cor: **AMARELO** (era AMARELO). Motivo: base limpa e sem veto, mas disco a 99% (719 MB) bloqueia a R1, o contrato da R1 ainda não saiu e SEC-200 bloqueia deploy. Vira VERDE quando: disco liberado, contrato revisado. Vira VERMELHO se: o disco não for liberado até 2026-11-23 (I-05).
 
-| | Itens |
+**Delta:** W0 concluída (V0-02 a V0-04, V0-09): desempenho da API no `main` (PR 1, `d0a25b1`, DEC-117); veto da DEC-105 levantado (DEC-115); R-29 fechado. Cache do cliente 30 s -> 5 s (DEC-116). Novos: R-38 a R-40, I-06, D-15.
+
+| Meta | Evidência |
 |---|---|
-| Pronto | Pesquisa, 6 PRDs e backlog WB-340 a 399 (DEC-088 a 102); telas R1 e R2 com protótipo (`design/telas/v1-1-indice.md`, notas 3 a 4, sem teste com usuário); threat model e decisões D-01 a D-06 (DEC-103); revisão de segurança do desempenho do app; plano e board da v1.1 |
-| Em andamento | Telas R3 e R4 (designer); trabalho de desempenho da API na árvore **sem commit** (R-29) |
-| Bloqueado | **Disco a 99%** (I-05): sem espaço, commit e `pnpm` falham |
-| A fazer, em ordem | W0 (commit e revisão do desempenho, bugs BUG-029 a 032, SEC-186/189/195, DoR do PO) -> R1 -> R2 -> R3 -> R4 (após SEC-193 e SEC-198) -> R5 -> relatório visual |
-| Esforço | 168 UT, faixa 122 a 234 `[HIPÓTESE]`; sem datas |
-| Flags desligadas em produção até parecer | cupom (J22, J23, J27), coleta e Análises (J24), app do motoboy e rastreio (J8, J26), IA real (J25) |
+| W0: 4 de 5 tarefas aceitas (V0-02, 03, 04, 09 com ressalvas); V0-05 em revisão; V0-01 bloqueada | `gestao/board.md`; pareceres TL, Security e QA de 2026-11-22; e2e 3x verde, 912 testes |
+
+- **Em andamento:** backend-dev: contrato OpenAPI da R1 e estimativas (`gestao/estimativas-v1-1-r1.md`); mobile-dev: BUG-033.
+- **Bloqueado:** disco (I-05) | CEO/fundador | até 2026-11-23 | impede commit e `pnpm` na R1.
+- **Caminho crítico:** disco + contrato R1 -> revisão do TL -> R1.1. Folga: sem datas (UT, 168 com faixa 122 a 234 `[HIPÓTESE]`); o contrato é o próximo marco.
+- **Top riscos:** R-38 SEC-200 (bloqueia deploy até G4 ou aceite do fundador); R-32 jurídico (J8, J22 a J27); R-30 limite de uso. Também: R-39 staging (PostgreSQL 18, `compose config`, 2 réplicas `[HIPÓTESE]`); SEC-205 antes da 2ª réplica; DT-085/086; BUG-033 (Média), 034 e 035 (Baixas).
 
 Depende do fundador (por urgência):
-1. **Liberar espaço em disco** do ambiente (I-05).
-2. Decidir as D-A a D-E do `plano-v1-1.md` §9 (via CEO): 2ª instância do mobile-dev em pasta separada, ordem R4/R5, cortes extras, revisão antes do merge.
-3. **Levar J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
-4. **Aparelho Android** e forma de gerar o APK (R4): sem ele o app do motoboy só passa em emulador.
-5. Em cada release: 1 sessão para rodar local (`pnpm iphone`, Docker Desktop) e testar; **5 pessoas do perfil** para a meta de cadastro em 60 s; 5 lojistas para a porta falsa.
-6. Orçamento de cupom (hoje R$ 0), cotação de motoboys (custo previsto) e preço do módulo Análises, quando chegar a hora.
+1. **Liberar disco** (I-05).
+2. **Aceitar ou mandar corrigir SEC-200** antes de qualquer deploy (DEC-115).
+3. **Tornar o repositório privado** e decidir a **tag `v1.0.0`** (D-15, D-08).
+4. **Levar J8 e J22 a J27 ao advogado**, em lote (J22 já trava o piloto do v1.0).
+5. Decisões F2 (cupom), F5 (preço do módulo), F8, F10/F16 e cotação de motoboys (D-13).
+6. **Aparelho Android** e forma de gerar o APK (R4, D-11); 1 sessão do fundador por release (D-14).

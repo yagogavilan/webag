@@ -46,6 +46,8 @@ Regra de ordem em toda release: **contrato OpenAPI (backend-dev) → revisão do
 
 Caminho da W0: commit (W0.1) → revisões (W0.2) → QA (W0.3). A R1 não começa o código com a base suja (alvo móvel, lição da Onda 8).
 
+**Estado em 2026-11-22: W0 CONCLUÍDA** (PR 1, `d0a25b1`, DEC-115 a DEC-117; pareceres em `arquitetura/reviews/`, `seguranca/revisoes/` e `qa/performance/` com data 2026-11-22). Resta de W0: reteste de BUG-031/032, BUG-033 (mobile-dev, em andamento), disco (I-05). **Caminho crítico atual:** liberar disco (I-05) + contrato OpenAPI da R1 e estimativas (backend-dev, em andamento) → revisão do contrato (TL) → R1.1. O contrato é o próximo marco; sem ele a R1 não inicia. O restante da R1 e as ondas seguintes não mudam. SEC-200 (R-38) não trava a construção, só o deploy; SEC-205 e DT-085 só com 2ª réplica. Os 168 UT não incluem DT-085/086 e BUG-034/035 (R-40): serão estimados em `estimativas-v1-1-r1.md` e saem do buffer de 25 UT.
+
 ### R1: Cadastro rápido, admin de lojas, coleta em staging (G2 cobre: PRD, specs 1 a 4, TM)
 
 | Onda | Slot 1 | Slot 2 | Slot 3 |
