@@ -96,10 +96,11 @@ export function QuickPhotos({ storeId, photos, onChange, online, productName, er
         const bucket = progressBucket(percent);
         if (bucket > 0 && lastBucket.current[key] !== bucket) {
           lastBucket.current[key] = bucket;
-          setAnnounce(bucket === 100 ? 'Foto enviada.' : `Enviando a foto… ${bucket}%`);
+          setAnnounce(`Enviando a foto… ${bucket}%`);
         }
       });
       patch(key, { status: 'ready', progress: 100, assetId: uploaded.assetId });
+      setAnnounce('Foto enviada.');
     } catch (caught) {
       patch(key, { status: 'error', error: failureText(caught) });
     }
@@ -124,7 +125,7 @@ export function QuickPhotos({ storeId, photos, onChange, online, productName, er
       return;
     }
     patch(key, { blob });
-    if (!navigator.onLine) return patch(key, { status: 'error', error: OFFLINE_PHOTO });
+    if (!online) return patch(key, { status: 'error', error: OFFLINE_PHOTO });
     await send(key, blob);
   }
 

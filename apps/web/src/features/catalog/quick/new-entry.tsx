@@ -38,7 +38,7 @@ export function NewProductEntry() {
   return <CatalogGate>{(store) => <Entry storeId={store.id} />}</CatalogGate>;
 }
 
-function Entry({ storeId }: { storeId: string }) {
+export function Entry({ storeId }: { storeId: string }) {
   const router = useRouter();
   const online = useOnline();
   const [tapped, setTapped] = useState(false);

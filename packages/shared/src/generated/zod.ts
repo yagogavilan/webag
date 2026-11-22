@@ -16211,6 +16211,77 @@ export const GetAdminStoreOverviewResponse = zod.object({
 
 
 /**
+ * Permissão `stores:read` (os 4 perfis; suporte lê sem botões de edição, a escrita segue em `config/{section}`). Leitura dos horários, feriados, pausa, entrega, retirada, política de troca e limiar de estoque, no MESMO schema seguro da visão "Ver como" (`StoreSettingsViewAs`): sem `notifications` nem qualquer e-mail ou telefone, sem documento, razão social ou conta de recebimento. Existe porque `config/{section}` SUBSTITUI o conjunto inteiro da seção e o editor precisa do valor atual (`getStoreSettings` é do membro da loja ou da visão). Sem auditoria de leitura: não há dado pessoal na resposta (a ficha 360 também não audita). Para o `expectedVersion` use `version` de `getAdminStoreOverview`. Loja inexistente ou id inválido: 404.
+ * @summary Configuração operacional da loja para o admin (WB-351; DEC-131)
+ */
+export const GetAdminStoreSettingsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const getAdminStoreSettingsResponseHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+export const getAdminStoreSettingsResponseHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
+
+
+export const GetAdminStoreSettingsResponse = zod.object({
+  "isOpenNow": zod.boolean(),
+  "hours": zod.array(zod.object({
+  "weekday": zod.int(),
+  "intervals": zod.array(zod.object({
+  "start": zod.string().regex(getAdminStoreSettingsResponseHoursItemIntervalsItemStartRegExp),
+  "end": zod.string().regex(getAdminStoreSettingsResponseHoursItemIntervalsItemEndRegExp)
+}))
+})),
+  "holidays": zod.array(zod.object({
+  "date": zod.string(),
+  "label": zod.string().nullish()
+})),
+  "pause": zod.object({
+  "active": zod.boolean(),
+  "until": zod.iso.datetime({"offset":true}).nullable(),
+  "indefinitely": zod.boolean()
+}),
+  "delivery": zod.object({
+  "prepMinutes": zod.int().optional().describe('DEC-053: preparo em uso (o da loja ou o padrão do admin)'),
+  "prepMinutesIsDefault": zod.boolean().optional(),
+  "acceptsDelivery": zod.boolean(),
+  "feeManagedBy": zod.enum(['webag']).optional(),
+  "radiusKm": zod.number(),
+  "feeMode": zod.string(),
+  "feeFixedCents": zod.int(),
+  "tiers": zod.array(zod.object({
+  "fromKm": zod.number(),
+  "toKm": zod.number(),
+  "feeCents": zod.int()
+})),
+  "minOrderCents": zod.int(),
+  "freeAboveCents": zod.int(),
+  "etaMinMinutes": zod.int(),
+  "etaMaxMinutes": zod.int()
+}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
+  "pickup": zod.object({
+  "enabled": zod.boolean(),
+  "useStoreAddress": zod.boolean(),
+  "address": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "prepMinMinutes": zod.int(),
+  "prepMaxMinutes": zod.int()
+}),
+  "exchangePolicy": zod.object({
+  "voluntaryDays": zod.int(),
+  "collectionFeeCents": zod.int(),
+  "version": zod.int(),
+  "defaultVoluntaryDays": zod.int().optional().describe('BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2).'),
+  "legalFloor": zod.object({
+  "withdrawalDays": zod.int(),
+  "defectDays": zod.int(),
+  "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
+})
+}),
+  "lowStockThreshold": zod.int()
+}).describe('Resposta de `getStoreSettings` com `X-View-As`: horários, pausa, entrega, retirada, política de troca e limiar de estoque; sem `notifications` nem qualquer destino de contato (e-mail ou telefone)')
+
+
+/**
  * Permissão `stores:read` (os 4 perfis veem). Trilha por loja sobre o `audit_log` append-only: alterações do admin, do lojista e do sistema, cada linha com antes, depois e motivo. Filtros: `type`, `actorAdminId`, `from`/`to` (data, America/Sao_Paulo, máximo 400 dias). `restorable` é verdadeiro só para preço e estoque com valor anterior conhecido. Visita de "Ver como" aparece com `type: access` (abertura e encerramento; as telas navegadas não são gravadas). Mais recentes primeiro; cursor. Sem dado pessoal de cliente.
  * @summary Histórico de alterações da loja (WB-350 C4, WB-354)
  */

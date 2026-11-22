@@ -198,7 +198,8 @@ export function useQuickPublisher(init: Init) {
       return;
     }
     setOfflineTap(false);
-    const ready = now.photos.filter((p) => p.status === 'ready').length;
+    // Foto que ainda sobe conta: o "Publicar" espera por ela (C6), não diz que falta.
+    const ready = now.photos.filter((p) => p.status === 'ready' || p.status === 'uploading').length;
     const errors = validateQuick(now.values, { ...now.context, photos: ready, gradeRows: now.grade.rows.length });
     if (now.photos.some((p) => p.status === 'error') && !errors.photo) errors.photo = 'Uma foto não foi enviada. Toque em "Enviar de novo" ou remova.';
     const first = firstErrorField(errors);

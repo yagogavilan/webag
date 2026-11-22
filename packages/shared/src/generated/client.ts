@@ -31851,6 +31851,60 @@ export const getAdminStoreOverview = async (storeId: string, options?: Parameter
 
 
 
+export type getAdminStoreSettingsResponse200 = {
+  data: StoreSettingsViewAs
+  status: 200
+}
+
+export type getAdminStoreSettingsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminStoreSettingsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminStoreSettingsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAdminStoreSettingsResponseSuccess = (getAdminStoreSettingsResponse200) & {
+  headers: Headers;
+};
+export type getAdminStoreSettingsResponseError = (getAdminStoreSettingsResponse401 | getAdminStoreSettingsResponse403 | getAdminStoreSettingsResponse404) & {
+  headers: Headers;
+};
+
+export type getAdminStoreSettingsResponse = (getAdminStoreSettingsResponseSuccess | getAdminStoreSettingsResponseError)
+
+export const getGetAdminStoreSettingsUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/admin/stores/${storeId}/settings`
+}
+
+/**
+ * Permissão `stores:read` (os 4 perfis; suporte lê sem botões de edição, a escrita segue em `config/{section}`). Leitura dos horários, feriados, pausa, entrega, retirada, política de troca e limiar de estoque, no MESMO schema seguro da visão "Ver como" (`StoreSettingsViewAs`): sem `notifications` nem qualquer e-mail ou telefone, sem documento, razão social ou conta de recebimento. Existe porque `config/{section}` SUBSTITUI o conjunto inteiro da seção e o editor precisa do valor atual (`getStoreSettings` é do membro da loja ou da visão). Sem auditoria de leitura: não há dado pessoal na resposta (a ficha 360 também não audita). Para o `expectedVersion` use `version` de `getAdminStoreOverview`. Loja inexistente ou id inválido: 404.
+ * @summary Configuração operacional da loja para o admin (WB-351; DEC-131)
+ */
+export const getAdminStoreSettings = async (storeId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminStoreSettingsResponse> => {
+
+  return apiFetch<getAdminStoreSettingsResponse>(getGetAdminStoreSettingsUrl(storeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listAdminStoreHistoryResponse200 = {
   data: AdminStoreHistoryPage
   status: 200

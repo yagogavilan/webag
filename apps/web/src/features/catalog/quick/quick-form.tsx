@@ -37,7 +37,8 @@ export function QuickProductPage({ productId, autoCamera }: { productId: string;
 }
 
 function QuickLoader({ storeId, productId, autoCamera }: { storeId: string; productId: string; autoCamera: boolean }) {
-  const product = useQuery({ queryKey: [...catalogKeys.product(storeId, productId), 'quick'], queryFn: () => catalogApi.get(storeId, productId), gcTime: 0, staleTime: 0 });
+  const product = useQuery({ // Fora de `catalogKeys.all`: publicar invalida o catálogo, e esta consulta não pode trocar a tela "Publicado" por "já está publicado".
+    queryKey: ['lojista', 'quick-draft', storeId, productId], queryFn: () => catalogApi.get(storeId, productId), gcTime: 0, staleTime: 0 });
   const start = useQuery({ queryKey: catalogKeys.quickStart(storeId), queryFn: () => catalogApi.quickStart(storeId), staleTime: 60_000 });
   const templates = useQuery({ queryKey: catalogKeys.templates, queryFn: () => catalogApi.templates(), staleTime: 5 * 60_000 });
   const categories = useQuery({ queryKey: ['lojista', 'categories'], queryFn: () => apiRequest<CategoryTree>('lojista', 'categories'), staleTime: 5 * 60_000 });
@@ -275,6 +276,8 @@ export function QuickForm({ storeId, product, quickStart, templates, categories,
 
   const { phase, busy } = publisher;
   const waitingPhoto = phase.kind === 'waiting_upload' || phase.kind === 'waiting_server';
+  // Espera pela foto no aparelho não trava os campos (dá para corrigir o nome); durante a chamada ao servidor, sim.
+  const locked = phase.kind === 'publishing' || phase.kind === 'waiting_server';
   const uploading = photos.find((p) => p.status === 'uploading');
   const gradeCount = grade.rows.length;
   const stockTotal = grade.rows.reduce((sum, row) => sum + row.stock, 0);
@@ -290,7 +293,7 @@ export function QuickForm({ storeId, product, quickStart, templates, categories,
         </Banner>
       ) : null}
 
-      <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0, display: 'grid', gap: 'var(--wb-space-4)' }}>
+      <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0, minWidth: 0, display: 'grid', gap: 'var(--wb-space-4)' }}>
         <QuickPhotos
           storeId={storeId}
           photos={photos}
@@ -394,7 +397,7 @@ export function QuickForm({ storeId, product, quickStart, templates, categories,
       </fieldset>
 
       <Accordion title="Tem tamanhos ou cores?" open={gradeOpen} onToggle={() => setGradeOpen((v) => !v)} testId={T('grade-toggle')}>
-        <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+        <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
           <QuickGrade template={template} variantsMax={variantsMax} state={grade} onChange={(next) => { setGrade(next); setGradeError(undefined); }} error={gradeError} />
         </fieldset>
       </Accordion>
@@ -407,7 +410,7 @@ export function QuickForm({ storeId, product, quickStart, templates, categories,
           maxLength={1000}
           error={errors.description}
           hint={descriptionRequired ? descriptionMessage(descriptionMin) : 'Material, medidas, cuidados. Ajuda o cliente a decidir.'}
-          disabled={busy}
+          disabled={locked}
           onChange={(event) => setField('description', event.target.value, 'description')}
           data-testid={T('description')}
         />
