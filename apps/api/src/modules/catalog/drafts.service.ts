@@ -10,11 +10,12 @@ import { IdempotencyService } from '../idempotency/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { StoresService, type Store } from '../stores/index.js';
 import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
-import { CATALOG_AUDIT, CatalogService, type CatalogActor, type Product } from './catalog.service.js';
-import { productImages, products, productVariants, type ProductVia } from './db/schema.js';
+import { CATALOG_AUDIT, CatalogService, reservedError, stockRange, type CatalogActor, type Product } from './catalog.service.js';
+import { productImages, productModerationEvents, products, productVariants, type ProductVia } from './db/schema.js';
 import { copyName, draftExpiresAt, draftExpiresInDays, missingFields, type MissingField } from './domain/draft.js';
 import { cleanLine, cleanMultiline } from './domain/text.js';
-import { MAX_PRICE_CENTS, MIN_PRICE_CENTS } from './domain/price.js';
+import { MAX_PRICE_CENTS, MIN_PRICE_CENTS, validatePromotion } from './domain/price.js';
+import { applyAdjust } from './domain/stock.js';
 import { attributesKey, validateVariantSet } from './domain/variants.js';
 
 const SWEEP_MS = 10 * 60_000;
@@ -304,7 +305,7 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
     return result;
   }
 
-  /** WB-372 / RN-Q4: duplica como RASCUNHO. Não copia foto, SKU, código de barras, estoque (1 por variação, ou 0 em grade) nem promoção; a cópia nasce sem moderação herdada. */
+  /** WB-372 / RN-Q4: duplica como RASCUNHO. Não copia foto, SKU, código de barras, estoque (1 por variação, ou 0 em grade) nem promoção; a cópia nasce sem o texto da moderação, mas herda o bloqueio (SEC-215). */
   async duplicate(store: Store, actor: CatalogActor, productId: string, idempotencyKey: string) {
     this.catalog.assertWritable(store);
     const [limit, context] = await Promise.all([this.catalog.draftLimit(), this.catalog.presentContext(store)]);
@@ -314,6 +315,9 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       await this.catalog.assertDraftCapacity(tx, store.id, 1, limit);
       const sourceVariants = await this.catalog.variantsOf(source.id, tx);
       const grid = source.variantAttributes.length > 0;
+      // SEC-215: a cópia NÃO herda o texto interno, mas herda a moderação: copiar produto removido/pausado pelo admin nasce pausado (não publica até o admin liberar,
+      // `PRODUCT_MODERATED`), e produto em revisão gera cópia em revisão. Sem isto, duplicar e publicar devolve o item removido à vitrine em 2 chamadas.
+      const inherited: 'paused' | 'review' | null = source.moderationStatus === 'removed' || source.moderationStatus === 'paused' ? 'paused' : source.moderationStatus === 'review' ? 'review' : null;
       const [row] = await tx
         .insert(products)
         .values({
@@ -329,9 +333,11 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
           status: 'draft',
           via: 'duplicate',
           duplicatedFrom: source.id,
+          ...(inherited ? { moderationStatus: inherited, moderationReason: inherited === 'paused' ? 'Cópia de um produto que passou pela moderação do Webag. Aguarde a análise ou fale com o suporte.' : `Cópia de produto em revisão (origem ${source.id})`, moderatedAt: new Date() } : {}),
         })
         .returning();
       if (!row) throw new Error('Falha ao duplicar produto');
+      if (inherited) await tx.insert(productModerationEvents).values({ productId: row.id, storeId: store.id, action: inherited === 'paused' ? 'pause' : 'flag', reason: `Cópia de produto ${source.moderationStatus} (origem ${source.id})`, actorId: null });
       const copies = sourceVariants.length > 0 ? sourceVariants : [];
       if (copies.length > 0) {
         await tx.insert(productVariants).values(copies.map((v) => ({ productId: row.id, storeId: store.id, attributes: v.attributes, attributesKey: v.attributesKey, priceCents: v.priceCents, sku: null, stock: grid ? 0 : 1 })));
@@ -391,6 +397,9 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
         throw new AppError(403, 'PRODUCT_MODERATED', 'Produto sob moderação', { detail: `Esse produto foi ${product.moderationStatus === 'removed' ? 'removido' : 'pausado'} pela moderação do Webag. Fale com o suporte para contestar.` });
       }
       if (product.status === 'archived') throw errors.conflict('PRODUCT_ARCHIVED', 'Produto arquivado', 'Produto arquivado não volta à vitrine.');
+      // SEC-214: o "publicar em 2 campos" é só do RASCUNHO. Produto já publicado (ativo ou pausado) é editado pelas rotas normais, com as regras delas;
+      // aqui uma repetição tardia (chave vencida, sem If-Match) reverteria o que o lojista editou depois. O app trata este 409 como sucesso se o produto já está `active` (R6 a).
+      if (product.status !== 'draft') throw errors.conflict('QUICK_PUBLISH_NOT_APPLICABLE', 'Produto já publicado', 'Este produto já foi publicado. Edite-o pela ficha do produto.');
       const current = await this.catalog.variantsOf(productId, tx);
       if (product.variantAttributes.length > 0 || current.some((v) => Object.keys(v.attributes).length > 0)) {
         throw errors.unprocessable('QUICK_PUBLISH_NOT_APPLICABLE', 'Use a grade de variações', { detail: 'Este produto tem variações. Salve as variações e publique pelo formulário completo.' });
@@ -402,11 +411,18 @@ export class ProductDraftsService implements OnApplicationBootstrap, OnApplicati
       await this.catalog.assertCategoryAllowed(categoryId, 'categoryId', tx);
       const description = input.description !== undefined ? (input.description === null ? null : cleanMultiline(input.description)) : product.description;
       await this.catalog.assertDescription(categoryId, description, tx);
+      // SEC-214: as regras do `updateProduct`/`adjustStock`, sem exceção. Promoção que o rascunho já tem precisa continuar válida com o preço novo (senão o CHECK do banco devolveria 500).
+      const promoProblem = validatePromotion(input.basePriceCents, { promoPriceCents: product.promoPriceCents, promoStartsAt: product.promoStartsAt, promoEndsAt: product.promoEndsAt });
+      if (promoProblem) throw errors.unprocessable('PROMOTION_INVALID', 'Promoção inválida', { detail: promoProblem, errors: [{ field: 'basePriceCents', message: promoProblem }] });
+      const base = current.find((v) => Object.keys(v.attributes).length === 0);
+      if (base) {
+        const next = applyAdjust(base.stock, base.reserved, { set: input.stock });
+        if ('error' in next) throw next.error === 'below_reserved' ? reservedError(base.reserved) : stockRange();
+      }
 
       const edited = await this.catalog.editProduct(tx, productId, { name, basePriceCents: input.basePriceCents, categoryId, description: description === '' ? null : description, variantAttributes: [], status: 'active', publishedAt: product.publishedAt ?? new Date() });
       await tx.delete(productImages).where(eq(productImages.productId, productId));
       await tx.insert(productImages).values(input.imageIds.map((assetId, position) => ({ productId, assetId, position })));
-      const base = current.find((v) => Object.keys(v.attributes).length === 0);
       if (base) await tx.update(productVariants).set({ stock: input.stock, active: true, updatedAt: new Date() }).where(eq(productVariants.id, base.id));
       else await tx.insert(productVariants).values({ productId, storeId: store.id, attributes: {}, attributesKey: attributesKey({}), stock: input.stock });
       await this.catalog.flagIfSuspect(tx, edited, [edited.name, edited.description ?? '']);

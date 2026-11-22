@@ -355,11 +355,12 @@ describe('Cadastro rápido: rascunho, publicar em 2 campos, duplicar, lote e med
       expect((await duplicate(plain.id).expect(201)).body.variants[0]).toMatchObject({ stock: 1 });
     });
 
-    it('C4: duplicar produto ARQUIVADO ou pausado pela moderação gera cópia nova, sem herdar o estado; C6 (C-CAD-10): produto de outra loja = 404 igual a inexistente; sem a chave = 400', async () => {
+    it('C4: duplicar produto ARQUIVADO ou pausado pela moderação gera cópia nova, sem o texto interno da moderação mas COM o bloqueio (SEC-215: nasce pausada até o admin liberar); C6 (C-CAD-10): produto de outra loja = 404 igual a inexistente; sem a chave = 400', async () => {
       const src = (await ctx.http.post(`${base()}/products`).set(as(owner)).send({ name: 'Moderado', categoryId, basePriceCents: 2000 }).expect(201)).body as { id: string };
       await ctx.db.update(products).set({ moderationStatus: 'paused', moderationReason: 'x', status: 'archived' }).where(eq(products.id, src.id));
       const copy = (await duplicate(src.id).expect(201)).body;
-      expect(copy).toMatchObject({ status: 'draft', moderationStatus: 'ok' });
+      expect(copy).toMatchObject({ status: 'draft', moderationStatus: 'paused' });
+      expect(copy.moderationReason).not.toBe('x');
       const foreign = (await ctx.http.post(`${base(otherStoreId)}/products`).set(as(other)).send({ name: 'Do vizinho' }).expect(201)).body as { id: string };
       const refused = await duplicate(foreign.id).expect(404);
       const missing = await duplicate('3f2b8c1e-5d44-4a0b-9d7a-0a6f1f9b2c11').expect(404);

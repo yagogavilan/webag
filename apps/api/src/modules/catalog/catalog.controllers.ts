@@ -10,7 +10,7 @@ import { IdempotencyService, parseIdempotencyKey } from '../idempotency/index.js
 import { PrincipalService } from '../identity/index.js';
 import { StoresService, uuidParam } from '../stores/index.js';
 import { adminProductsQuerySchema, bulkSchema, createDraftSchema, createProductSchema, draftsBatchSchema, draftsQuerySchema, importQuerySchema, listProductsSchema, moderateSchema, moderationTermSchema, productMetricsQuerySchema, quickPublishSchema, sectionOrderSchema, sectionSchema, setImagesSchema, setVariantsSchema, stockAdjustSchema, tableQuerySchema, updateProductSchema } from './catalog.schemas.js';
-import { CatalogService } from './catalog.service.js';
+import { CatalogService, type Variant } from './catalog.service.js';
 import { etag, parseIfMatch } from './domain/version.js';
 import { ProductDraftsService } from './drafts.service.js';
 import { ModerationService } from './moderation.service.js';
@@ -177,10 +177,17 @@ export class CatalogController {
   ) {
     if (typeof body !== 'string') throw errors.validation([{ field: 'file', message: 'Envie o arquivo CSV com Content-Type text/csv.' }]);
     const store = await this.store(storeId);
-    const run = () => this.catalog.importCsv(store, this.actor(principal, ctx), body, query.mode, query.onExisting);
+    const actor = this.actor(principal, ctx);
+    // A leitura da planilha (categorias, parâmetros, teto) acontece ANTES de qualquer transação (DT-094).
+    const prepared = await this.catalog.prepareImport(store, body);
     // I9: só o commit muda dados; a prévia não precisa de chave.
-    if (query.mode !== 'commit') return run();
-    return this.idempotency.run(`import:${store.id}`, parseIdempotencyKey(idempotencyKey), { csv: body, ...query }, run);
+    if (query.mode !== 'commit') return this.catalog.importPreview(store, prepared);
+    const key = parseIdempotencyKey(idempotencyKey);
+    if (!key) return this.catalog.commitImport(store, actor, prepared, query.onExisting);
+    // SEC-213: chave, efeito e resposta no mesmo commit; o escopo leva loja e ator. Erro (teto, versão) desfaz tudo e libera a chave.
+    const result = await this.idempotency.runInTransaction(`import:${store.id}:${principal.userId}`, key, { csv: body, ...query }, (tx) => this.catalog.commitImport(store, actor, prepared, query.onExisting, tx));
+    await this.catalog.afterImport(store, result);
+    return result;
   }
 
   /**
@@ -263,9 +270,20 @@ export class CatalogController {
     const store = await this.store(storeId);
     const ids = { productId: uuidParam(productId), variantId: uuidParam(variantId) };
     const version = parseIfMatch(ifMatch);
-    return this.idempotency.run(`stock:${store.id}`, parseIdempotencyKey(idempotencyKey), { ...ids, ...body, ifMatch: version }, () =>
-      this.catalog.adjustStock(store, this.actor(principal, ctx), ids.productId, ids.variantId, body, version),
-    );
+    const actor = this.actor(principal, ctx);
+    const key = parseIdempotencyKey(idempotencyKey);
+    if (!key) return this.catalog.adjustStock(store, actor, ids.productId, ids.variantId, body, version);
+    // SEC-218: ajuste relativo (`delta`) repetido não pode somar duas vezes. Chave, efeito e resposta no mesmo commit; o escopo leva loja e ator.
+    this.catalog.assertWritable(store);
+    const context = await this.catalog.presentContext(store);
+    const done: { changed: { variant: Variant; available: number } | null } = { changed: null };
+    const view = await this.idempotency.runInTransaction(`stock:${store.id}:${principal.userId}`, key, { ...ids, ...body, ifMatch: version }, async (tx) => {
+      const result = await this.catalog.adjustStockIn(tx, store, actor, ids.productId, ids.variantId, body, version, context);
+      done.changed = result.changed;
+      return result.view ?? null;
+    });
+    if (done.changed) await this.catalog.afterStockAdjust(store, ids.productId, done.changed);
+    return view;
   }
 
   @StorePermission('catalog')

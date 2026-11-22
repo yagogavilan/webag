@@ -25,6 +25,13 @@ import { attributesKey, validateVariantSet, type Attributes } from './domain/var
 
 export type Product = typeof products.$inferSelect;
 export type Variant = typeof productVariants.$inferSelect;
+type ImportPlan = Exclude<ReturnType<typeof planImport>, { fileError: string }>;
+
+/** Planilha já lida e validada (sem transação aberta): `commitImport` só grava. */
+export interface PreparedImport {
+  plan: ImportPlan;
+  draftLimit: number;
+}
 
 /** Pedidos em andamento de um produto (WB-060 C5). A Onda 4 troca esta implementação pela consulta real. */
 export abstract class ProductOrdersPort {
@@ -71,6 +78,8 @@ export interface BulkResult {
   blocked: { productId: string; name: string; reason: string }[];
   preview?: BulkPreviewItem[];
   requiresConfirmation?: boolean;
+  /** Só na prévia (`dryRun`) de `price_adjust`: o `reajuste_max_pct` que a tela usa para marcar o item e pedir a confirmação (DEC-126). */
+  limitPct?: number;
   batchId?: string | null;
   undoUntil?: string | null;
 }
@@ -639,31 +648,42 @@ export class CatalogService {
     }
   }
 
-  /** Ajuste rápido (+/-/definir). `FOR UPDATE` na variação: dois "+1" simultâneos dão +2, nunca +1 silencioso (O2-EST-03). */
+  /**
+   * Ajuste rápido (+/-/definir). `FOR UPDATE` na variação: dois "+1" simultâneos dão +2, nunca +1 silencioso (O2-EST-03). Só grava pela transação recebida
+   * (SEC-218: a escrita relativa roda dentro de `IdempotencyService.runInTransaction`); o que sai depois do commit fica em `afterStockAdjust`.
+   */
+  async adjustStockIn(tx: Tx, store: Store, actor: CatalogActor, productId: string, variantId: string, adjust: StockAdjust, ifMatch: number | null, context: { threshold: number; validityDays: number }) {
+    const product = await this.requireProduct(store.id, productId, tx, true);
+    this.assertVersion(product, ifMatch);
+    const [variant] = await tx
+      .select()
+      .from(productVariants)
+      .where(and(eq(productVariants.id, variantId), eq(productVariants.productId, productId), eq(productVariants.active, true)))
+      .for('update');
+    if (!variant) throw errors.notFound('Variação não encontrada.');
+    const next = applyAdjust(variant.stock, variant.reserved, adjust);
+    if ('error' in next) throw next.error === 'below_reserved' ? reservedError(variant.reserved) : stockRange();
+    await tx.update(productVariants).set({ stock: next.stock, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
+    const edited = await this.editProduct(tx, productId, {}); // ajuste MANUAL é edição de catálogo: a versão sobe (a venda e a reserva não passam por aqui)
+    await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.stock_adjust', { productId, variantId, from: variant.stock, to: next.stock });
+    await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.stock, variantId, { productId, stock: variant.stock, reserved: variant.reserved, version: product.version }, { productId, stock: next.stock, reserved: variant.reserved, version: edited.version }, 'product');
+    const view = (await this.present(store, edited, tx, context)).variants.find((v) => v.id === variantId);
+    return { view, changed: { variant, available: available(next.stock, variant.reserved) } };
+  }
+
+  /** Depois do commit do ajuste: vitrine (esgotar/repor; a venda não invalida, DEC-113) e alerta de estoque baixo. */
+  async afterStockAdjust(store: Store, productId: string, changed: { variant: Variant; available: number }): Promise<void> {
+    await this.storefront.productsChanged(store.id, [productId]);
+    await this.sendLowStock(store, [changed]);
+  }
+
+  /** Sem `Idempotency-Key` (app 1.0): uma transação própria. Com a chave, o controller usa `adjustStockIn` dentro de `runInTransaction`. */
   async adjustStock(store: Store, actor: CatalogActor, productId: string, variantId: string, adjust: StockAdjust, ifMatch: number | null = null) {
     this.assertWritable(store);
-    const result = await this.db.transaction(async (tx) => {
-      const product = await this.requireProduct(store.id, productId, tx, true);
-      this.assertVersion(product, ifMatch);
-      const [variant] = await tx
-        .select()
-        .from(productVariants)
-        .where(and(eq(productVariants.id, variantId), eq(productVariants.productId, productId), eq(productVariants.active, true)))
-        .for('update');
-      if (!variant) throw errors.notFound('Variação não encontrada.');
-      const next = applyAdjust(variant.stock, variant.reserved, adjust);
-      if ('error' in next) throw next.error === 'below_reserved' ? reservedError(variant.reserved) : stockRange();
-      await tx.update(productVariants).set({ stock: next.stock, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
-      const edited = await this.editProduct(tx, productId, {}); // ajuste MANUAL é edição de catálogo: a versão sobe (a venda e a reserva não passam por aqui)
-      await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.stock_adjust', { productId, variantId, from: variant.stock, to: next.stock });
-      await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.stock, variantId, { productId, stock: variant.stock, reserved: variant.reserved, version: product.version }, { productId, stock: next.stock, reserved: variant.reserved, version: edited.version }, 'product');
-      return { variant, stock: next.stock };
-    });
-    await this.storefront.productsChanged(store.id, [productId]); // ajuste do LOJISTA (esgotar/repor); a venda não invalida (DEC-113)
-    const changed = [{ variant: result.variant, available: available(result.stock, result.variant.reserved) }];
-    await this.sendLowStock(store, changed);
-    const product = await this.requireProduct(store.id, productId);
-    return (await this.present(store, product)).variants.find((v) => v.id === variantId);
+    const context = await this.presentContext(store);
+    const result = await this.db.transaction((tx) => this.adjustStockIn(tx, store, actor, productId, variantId, adjust, ifMatch, context));
+    await this.afterStockAdjust(store, productId, result.changed);
+    return result.view;
   }
 
   // ------------------------------------------------------------------- imagens
@@ -916,7 +936,7 @@ export class CatalogService {
       }
       const requiresConfirmation = preview.some((item) => item.exceedsLimit);
       const priceResult = action.type === 'price_adjust' ? { preview, requiresConfirmation, batchId: null, undoUntil: null } : {};
-      if (input.dryRun) return { dryRun: true, willChange: changes.length, changed: 0, blocked, ...priceResult };
+      if (input.dryRun) return { dryRun: true, willChange: changes.length, changed: 0, blocked, ...priceResult, ...(action.type === 'price_adjust' ? { limitPct } : {}) };
 
       // Versão da prévia (D17): qualquer item mudado depois dela cancela o lote inteiro. Antes de `blocked`: uma prévia velha não pode mascarar o conflito.
       if (expected.size > 0) {
@@ -985,83 +1005,128 @@ export class CatalogService {
   }
 
   /**
-   * WB-065: `preview` valida e resume ("X válidas, Y com erro", linha e motivo); `commit` cria só as válidas, como
-   * rascunho. Mesmo código (SKU) já existente na loja: `skip` ignora e avisa; `update` atualiza preço e estoque.
+   * WB-065: `preview` valida e resume ("X válidas, Y com erro", linha e motivo); `commit` cria só as válidas, como rascunho. Mesmo código (SKU) já
+   * existente na loja: `skip` ignora e avisa; `update` atualiza preço e estoque.
+   *
+   * SEC-213: a importação é EDIÇÃO de catálogo. O que lê (categorias, parâmetros, teto) sai ANTES da transação em `prepareImport`; `commitImport` roda só
+   * com a transação recebida (cabe em `IdempotencyService.runInTransaction`, DT-094): trava a loja, relê os SKUs sob o lock, respeita o teto de rascunhos
+   * (DEC-118) e grava versão e antes/depois como `editProduct` + `auditProduct`.
    */
-  async importCsv(store: Store, actor: CatalogActor, csv: string, mode: 'preview' | 'commit', onExisting: 'skip' | 'update') {
+  async prepareImport(store: Store, csv: string): Promise<PreparedImport> {
     this.assertWritable(store);
-    const plan = planImport(csv, await this.importCategories(), await this.params.getNumber('variacoes_max'), await this.params.getNumber('import_max_linhas'));
+    const [categoryMap, variationsMax, maxLines, draftLimit] = await Promise.all([this.importCategories(), this.params.getNumber('variacoes_max'), this.params.getNumber('import_max_linhas'), this.draftLimit()]);
+    const plan = planImport(csv, categoryMap, variationsMax, maxLines);
     if ('fileError' in plan) throw errors.unprocessable('IMPORT_FILE_INVALID', 'Planilha inválida', { detail: plan.fileError, errors: [{ field: 'file', message: plan.fileError }] });
+    return { plan, draftLimit };
+  }
 
+  private async importExisting(executor: DbOrTx, storeId: string, plan: ImportPlan): Promise<Map<string, Variant>> {
     const skus = plan.products.flatMap((p) => p.variants.map((v) => v.sku?.toLowerCase()).filter((s): s is string => Boolean(s)));
-    const existing = skus.length > 0 ? await this.db.select().from(productVariants).where(and(eq(productVariants.storeId, store.id), eq(productVariants.active, true), inArray(sql`lower(${productVariants.sku})`, skus))) : [];
-    const existingBySku = new Map(existing.map((v) => [v.sku!.toLowerCase(), v]));
-    const alreadyExist = plan.products.filter((p) => p.variants.some((v) => v.sku && existingBySku.has(v.sku.toLowerCase())));
-    const summary = { totalLines: plan.totalLines, valid: plan.totalLines - plan.errors.length, invalid: plan.errors.length, errors: plan.errors, productsToCreate: plan.products.length - alreadyExist.length, alreadyExist: alreadyExist.length };
-    if (mode === 'preview') return { ...summary, committed: false, created: 0, updated: 0, skipped: 0 };
+    const existing = skus.length > 0 ? await executor.select().from(productVariants).where(and(eq(productVariants.storeId, storeId), eq(productVariants.active, true), inArray(sql`lower(${productVariants.sku})`, skus))) : [];
+    return new Map(existing.map((v) => [v.sku!.toLowerCase(), v]));
+  }
 
-    // I9: uma transação por arquivo (tudo ou nada); falha no meio não deixa importação parcial.
-    const counts = await this.db.transaction(async (tx) => {
+  private importSummary(plan: ImportPlan, existingBySku: Map<string, Variant>) {
+    const alreadyExist = plan.products.filter((p) => p.variants.some((v) => v.sku && existingBySku.has(v.sku.toLowerCase())));
+    return { totalLines: plan.totalLines, valid: plan.totalLines - plan.errors.length, invalid: plan.errors.length, errors: plan.errors, productsToCreate: plan.products.length - alreadyExist.length, alreadyExist: alreadyExist.length };
+  }
+
+  async importPreview(store: Store, prepared: PreparedImport) {
+    return { ...this.importSummary(prepared.plan, await this.importExisting(this.db, store.id, prepared.plan)), committed: false, created: 0, updated: 0, skipped: 0 };
+  }
+
+  /** `outer`: transação de quem chama (idempotência transacional); quem a passa invalida a vitrine depois do commit (`afterImport`). Sem ela, abre a própria. */
+  async commitImport(store: Store, actor: CatalogActor, prepared: PreparedImport, onExisting: 'skip' | 'update', outer?: Tx) {
+    const run = async (tx: Tx) => {
+      // I3 + SEC-213: o teto e os SKUs existentes são conferidos sob o lock da loja (duas importações simultâneas não passam do teto nem duplicam o mesmo código).
+      await this.stores.lockForCatalogWrite(tx, store.id);
+      const existingBySku = await this.importExisting(tx, store.id, prepared.plan);
+      const summary = this.importSummary(prepared.plan, existingBySku);
+      const hasMatch = (planned: ImportedProduct) => planned.variants.some((v) => v.sku && existingBySku.has(v.sku.toLowerCase()));
+      const adding = prepared.plan.products.filter((planned) => !hasMatch(planned)).length;
+      if (adding > 0) await this.assertDraftCapacity(tx, store.id, adding, prepared.draftLimit);
+      // I9: uma transação por arquivo (tudo ou nada); falha no meio não deixa importação parcial.
       let created = 0;
       let updated = 0;
       let skipped = 0;
-      for (const planned of plan.products) {
-        const matches = planned.variants.filter((v) => v.sku && existingBySku.has(v.sku.toLowerCase()));
-        if (matches.length > 0) {
+      for (const planned of prepared.plan.products) {
+        if (hasMatch(planned)) {
           if (onExisting === 'skip') {
             skipped += 1;
             continue;
           }
-          await this.updateFromImport(tx, store, planned, existingBySku);
+          await this.updateFromImport(tx, store, actor, planned, existingBySku);
           updated += 1;
         } else {
           await this.createFromImport(tx, store, planned);
           created += 1;
         }
       }
-      await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.import', { created, updated, skipped, errors: plan.errors.length });
-      return { created, updated, skipped };
-    });
-    if (counts.created + counts.updated > 0) await this.storefront.productsChanged(store.id, null);
-    return { ...summary, committed: true, ...counts };
+      await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.import', { created, updated, skipped, errors: prepared.plan.errors.length });
+      return { ...summary, committed: true as const, created, updated, skipped };
+    };
+    const result = outer ? await run(outer) : await this.db.transaction(run);
+    if (!outer) await this.afterImport(store, result);
+    return result;
   }
 
-  private async createFromImport(tx: DbOrTx, store: Store, planned: ImportedProduct): Promise<void> {
-    {
-      const [product] = await tx
-        .insert(products)
-        .values({
-          storeId: store.id,
-          name: planned.name,
-          description: planned.description,
-          categoryId: planned.categoryId,
-          basePriceCents: planned.basePriceCents,
-          promoPriceCents: planned.promoPriceCents,
-          promoStartsAt: planned.promoStartsAt,
-          promoEndsAt: planned.promoEndsAt,
-          variantAttributes: planned.attributeNames,
-        })
-        .returning();
-      if (!product) throw new Error('Falha ao importar produto');
-      await tx.insert(productVariants).values(planned.variants.map((v) => ({ productId: product.id, storeId: store.id, attributes: v.attributes, attributesKey: attributesKey(v.attributes), sku: v.sku, stock: v.stock })));
-    }
+  /** Depois do commit: a vitrine reflete preço e estoque novos em até 5 s (DEC-113). */
+  async afterImport(store: Store, result: { created: number; updated: number }): Promise<void> {
+    if (result.created + result.updated > 0) await this.storefront.productsChanged(store.id, null);
   }
 
-  private async updateFromImport(tx: DbOrTx, store: Store, planned: ImportedProduct, existingBySku: Map<string, Variant>): Promise<void> {
-    {
-      const productIds = new Set(planned.variants.map((v) => (v.sku ? existingBySku.get(v.sku.toLowerCase())?.productId : undefined)).filter((id): id is string => Boolean(id)));
-      for (const productId of productIds) {
-        const product = await this.requireProduct(store.id, productId, tx, true);
-        const promoOk = product.promoPriceCents === null || planned.basePriceCents > product.promoPriceCents;
-        await tx.update(products).set({ basePriceCents: promoOk ? planned.basePriceCents : product.basePriceCents, updatedAt: new Date() }).where(eq(products.id, productId));
-      }
+  async importCsv(store: Store, actor: CatalogActor, csv: string, mode: 'preview' | 'commit', onExisting: 'skip' | 'update') {
+    const prepared = await this.prepareImport(store, csv);
+    return mode === 'preview' ? this.importPreview(store, prepared) : this.commitImport(store, actor, prepared, onExisting);
+  }
+
+  private async createFromImport(tx: Tx, store: Store, planned: ImportedProduct): Promise<void> {
+    const [product] = await tx
+      .insert(products)
+      .values({
+        storeId: store.id,
+        name: planned.name,
+        description: planned.description,
+        categoryId: planned.categoryId,
+        basePriceCents: planned.basePriceCents,
+        promoPriceCents: planned.promoPriceCents,
+        promoStartsAt: planned.promoStartsAt,
+        promoEndsAt: planned.promoEndsAt,
+        variantAttributes: planned.attributeNames,
+      })
+      .returning();
+    if (!product) throw new Error('Falha ao importar produto');
+    await tx.insert(productVariants).values(planned.variants.map((v) => ({ productId: product.id, storeId: store.id, attributes: v.attributes, attributesKey: attributesKey(v.attributes), sku: v.sku, stock: v.stock })));
+  }
+
+  /**
+   * SEC-213: mudar preço ou estoque pela planilha é edição de catálogo: UMA subida de `version` por produto alterado e antes/depois no `audit_log`
+   * (`product.price`, `product.stock_adjust`), com `store_id`, na mesma transação. Produto que a planilha deixa igual não é tocado.
+   */
+  private async updateFromImport(tx: Tx, store: Store, actor: CatalogActor, planned: ImportedProduct, existingBySku: Map<string, Variant>): Promise<void> {
+    const productIds = [...new Set(planned.variants.map((v) => (v.sku ? existingBySku.get(v.sku.toLowerCase())?.productId : undefined)).filter((id): id is string => Boolean(id)))].sort();
+    for (const productId of productIds) {
+      const product = await this.requireProduct(store.id, productId, tx, true);
+      const promoOk = product.promoPriceCents === null || planned.basePriceCents > product.promoPriceCents;
+      const newPrice = promoOk ? planned.basePriceCents : product.basePriceCents;
+      const priceChanged = newPrice !== product.basePriceCents;
+      const stockChanges: { variant: Variant; from: number; to: number }[] = [];
       for (const wanted of planned.variants) {
         const old = wanted.sku ? existingBySku.get(wanted.sku.toLowerCase()) : undefined;
-        if (!old) continue;
+        if (!old || old.productId !== productId) continue;
         const [locked] = await tx.select().from(productVariants).where(eq(productVariants.id, old.id)).for('update');
         if (!locked) continue;
         const next = applyAdjust(locked.stock, locked.reserved, { set: wanted.stock });
-        if ('stock' in next) await tx.update(productVariants).set({ stock: next.stock, updatedAt: new Date() }).where(eq(productVariants.id, locked.id));
+        if ('stock' in next && next.stock !== locked.stock) {
+          await tx.update(productVariants).set({ stock: next.stock, updatedAt: new Date() }).where(eq(productVariants.id, locked.id));
+          stockChanges.push({ variant: locked, from: locked.stock, to: next.stock });
+        }
+      }
+      if (!priceChanged && stockChanges.length === 0) continue;
+      const edited = await this.editProduct(tx, productId, priceChanged ? { basePriceCents: newPrice } : {});
+      if (priceChanged) await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.price, productId, { basePriceCents: product.basePriceCents, version: product.version }, { basePriceCents: edited.basePriceCents, version: edited.version });
+      for (const change of stockChanges) {
+        await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.stock, change.variant.id, { productId, stock: change.from, reserved: change.variant.reserved, version: product.version }, { productId, stock: change.to, reserved: change.variant.reserved, version: edited.version });
       }
     }
   }
@@ -1070,9 +1135,9 @@ export class CatalogService {
 /** Antes/depois das variações no `audit_log`: só o que o histórico precisa (sem texto livre além dos atributos que o lojista escolheu). */
 const variantsAudit = (list: Variant[]) => list.map((v) => ({ id: v.id, attributes: v.attributes, sku: v.sku, priceCents: v.priceCents, stock: v.stock }));
 
-const reservedError = (reserved: number): AppError =>
+export const reservedError = (reserved: number): AppError =>
   errors.conflict('STOCK_BELOW_RESERVED', 'Estoque abaixo do reservado', `${reserved} ${reserved === 1 ? 'unidade está reservada' : 'unidades estão reservadas'} em pedidos.`);
-const stockRange = (): AppError => errors.unprocessable('STOCK_OUT_OF_RANGE', 'Estoque fora da faixa', { errors: [{ field: 'stock', message: 'Estoque: inteiro de 0 a 99.999.' }] });
+export const stockRange = (): AppError => errors.unprocessable('STOCK_OUT_OF_RANGE', 'Estoque fora da faixa', { errors: [{ field: 'stock', message: 'Estoque: inteiro de 0 a 99.999.' }] });
 const moderatedError = (status: string): AppError =>
   new AppError(403, 'PRODUCT_MODERATED', 'Produto sob moderação', {
     detail: `Esse produto foi ${status === 'removed' ? 'removido' : 'pausado'} pela moderação do Webag. Fale com o suporte para contestar.`,
