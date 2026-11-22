@@ -1,5 +1,5 @@
 import type { Category, CategoryNode } from '@webag/shared';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import {
   fetchBanners,
@@ -17,7 +17,7 @@ import { fetchRegions } from '../../api/auth-api';
 import { createPersistedStore } from '../../lib/persisted-store';
 import { findActiveCity } from '../address/regions';
 import { toProductParams, toStoreParams, type Filters, type ProductSort, type StoreSort } from '../search/filters';
-import { useCurrentAddress } from '../address/store';
+import { addressStore, useCurrentAddress } from '../address/store';
 
 /** Onde o cliente está para a busca por raio: o ponto do endereço atual. Sem ponto (cidade sem coordenada) a descoberta pede o CEP. */
 export interface DeliveryPoint {
@@ -40,21 +40,48 @@ export const modeStore = createPersistedStore<HomeMode>('webag.mode.v1', 'delive
 
 const roundPoint = (n: number): number => Math.round(n * 10_000) / 10_000;
 
+// Opções das leituras da abertura: as MESMAS para o hook da tela e para o prefetch (mesma chave = uma só requisição, sem duplicar).
+const homeOptions = (point: DeliveryPoint | null, mode: HomeMode) => ({
+  queryKey: ['home', point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null, mode] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }) => fetchHome({ lat: point?.lat ?? 0, lng: point?.lng ?? 0, mode }, signal),
+  staleTime: 60_000,
+});
+const categoriesOptions = { queryKey: ['categories'] as const, queryFn: fetchCategories, staleTime: 10 * 60_000 };
+const regionsOptions = { queryKey: ['regions'] as const, queryFn: fetchRegions, staleTime: 10 * 60_000 };
+const bannersOptions = (cityId: string | undefined) => ({ queryKey: ['banners', cityId ?? null] as const, queryFn: () => fetchBanners(cityId), staleTime: 60_000 });
+
 export function useHomeQuery(point: DeliveryPoint | null, mode: HomeMode) {
-  return useQuery({
-    queryKey: ['home', point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null, mode],
-    queryFn: ({ signal }) => fetchHome({ lat: point?.lat ?? 0, lng: point?.lng ?? 0, mode }, signal),
-    enabled: point !== null,
-    staleTime: 60_000,
-  });
+  return useQuery({ ...homeOptions(point, mode), enabled: point !== null });
 }
 
 export function useCategoriesQuery() {
-  return useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: 10 * 60_000 });
+  return useQuery(categoriesOptions);
 }
 
 export function useRegionsQuery() {
-  return useQuery({ queryKey: ['regions'], queryFn: fetchRegions, staleTime: 10 * 60_000 });
+  return useQuery(regionsOptions);
+}
+
+/**
+ * Começa a buscar o Início enquanto o app ainda carrega fontes e restaura a sessão (a tela só monta depois): sem isto a 1ª requisição
+ * só saía depois da 1ª renderização. Só catálogo público (home, categorias, regiões, banners); nada é gravado em disco. Sem endereço
+ * atual não faz nada (o visitante cai na escolha de cidade). Falha de rede é ignorada: a tela refaz a leitura com os 4 estados.
+ */
+export function prefetchStartup(client: QueryClient): void {
+  const state = addressStore.getState();
+  if (state.status !== 'ready') return;
+  const address = state.addresses.find((a) => a.id === state.currentId);
+  if (!address) return;
+  if (address.latitude !== null && address.longitude !== null) {
+    const point: DeliveryPoint = { lat: address.latitude, lng: address.longitude, approximate: address.precision === 'approx' };
+    void client.prefetchQuery(homeOptions(point, modeStore.get()));
+  }
+  void client.prefetchQuery(categoriesOptions);
+  void client.prefetchQuery(regionsOptions).then(() => {
+    const regions = client.getQueryData<Awaited<ReturnType<typeof fetchRegions>>>(regionsOptions.queryKey);
+    const cityId = regions ? findActiveCity(regions.data, address.city)?.id : undefined;
+    return client.prefetchQuery(bannersOptions(cityId));
+  });
 }
 
 /** Banners vigentes da cidade do endereço atual (sem cidade conhecida: os de todas as cidades). */
@@ -63,12 +90,7 @@ export function useBannersQuery() {
   const regions = useRegionsQuery();
   const cityId = address && regions.data ? findActiveCity(regions.data.data, address.city)?.id : undefined;
   const waitingForCity = address !== null && regions.isLoading;
-  return useQuery({
-    queryKey: ['banners', cityId ?? null],
-    queryFn: () => fetchBanners(cityId),
-    enabled: !waitingForCity,
-    staleTime: 60_000,
-  });
+  return useQuery({ ...bannersOptions(cityId), enabled: !waitingForCity });
 }
 
 /** Nome da categoria por id (a API de loja e produto manda só o id). Inclui subcategorias. */

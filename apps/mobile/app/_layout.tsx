@@ -1,13 +1,14 @@
 // Primeiro import: reservas de crypto.randomUUID/clipboard para o navegador em http na rede local (no app nativo não faz nada).
 import '../src/lib/web-insecure-context';
-import { BricolageGrotesque_600SemiBold, BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
-import {
-  Figtree_400Regular,
-  Figtree_600SemiBold,
-  Figtree_700Bold,
-  Figtree_800ExtraBold,
-  useFonts,
-} from '@expo-google-fonts/figtree';
+// Um import por peso (e não o barrel do pacote): o Metro empacota só os 7 arquivos de fonte usados, não as ~25 variações da família.
+import { BricolageGrotesque_600SemiBold } from '@expo-google-fonts/bricolage-grotesque/600SemiBold';
+import { BricolageGrotesque_700Bold } from '@expo-google-fonts/bricolage-grotesque/700Bold';
+import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque/800ExtraBold';
+import { Figtree_400Regular } from '@expo-google-fonts/figtree/400Regular';
+import { Figtree_600SemiBold } from '@expo-google-fonts/figtree/600SemiBold';
+import { Figtree_700Bold } from '@expo-google-fonts/figtree/700Bold';
+import { Figtree_800ExtraBold } from '@expo-google-fonts/figtree/800ExtraBold';
+import { useFonts } from 'expo-font';
 import { configureApiClient } from '@webag/shared';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
@@ -23,7 +24,7 @@ import { syncAddresses } from '../src/features/address/sync';
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { registerCartCleanup, useMergeGuestCart } from '../src/features/cart/hooks';
 import { cartActions, cartStore } from '../src/features/cart/store';
-import { modeStore } from '../src/features/catalog/queries';
+import { modeStore, prefetchStartup } from '../src/features/catalog/queries';
 import { usePushOpenHandler } from '../src/features/notifications/open';
 import { registerFavoritesCleanup } from '../src/features/favorites/hooks';
 import { searchHistoryStore } from '../src/features/search/history';
@@ -85,8 +86,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     void sessionStore.bootstrap();
-    void addressStore.hydrate();
-    void Promise.all([modeStore.hydrate(), cartStore.hydrate(), searchHistoryStore.hydrate()])
+    const addressReady = addressStore.hydrate();
+    const modeReady = modeStore.hydrate();
+    // Endereço e modo restaurados: já busca o Início (catálogo público) enquanto as fontes e a sessão ainda carregam.
+    void Promise.all([addressReady, modeReady]).then(() => prefetchStartup(queryClient));
+    void Promise.all([modeReady, cartStore.hydrate(), searchHistoryStore.hydrate()])
       .then(() => cartActions.expireIfStale())
       .then(setCartExpired)
       .finally(() => setLocalReady(true));
