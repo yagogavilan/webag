@@ -1,38 +1,45 @@
 ---
 name: padroes-backend
-description: Padrões de engenharia do back-end Webag (NestJS, PostgreSQL/PostGIS, Redis, Mercado Pago PIX, WebSocket, testes, CI). Use ao projetar ou implementar qualquer parte da API.
+description: Regras de projeto do back-end Webag (stack real, pastas, comandos, dados, pedidos, auth). Ponto de entrada; o detalhe de cada tema está nas skills especializadas citadas.
 ---
 
-# Arquitetura
-- **Monólito modular** NestJS em `apps/api/src/modules/<dominio>` (auth, users, stores, catalog, cart, orders, payments, delivery, notifications, admin). Módulos se falam por serviços/eventos internos, nunca acessando a tabela do outro diretamente.
-- Camadas por módulo: `controller` (HTTP, DTO) → `service` (regra de negócio) → `repository` (acesso a dados). Regra de negócio não fica no controller.
-- Configuração via `@nestjs/config` com validação de schema no boot; app não sobe com env inválida.
-- TypeScript `strict: true`. Sem `any` sem justificativa em comentário.
+# Stack real (ADR-001, ADR-007)
+NestJS 12 (ESM, Express) + TypeScript strict + **Drizzle ORM** (`drizzle-kit`) + PostgreSQL 18/PostGIS + Redis + Socket.IO + **Vitest 4** + Zod 4 (validação). Não há Prisma nem Jest na API. Onde o código ainda difere do ADR, vale `docs/arquitetura/divida-tecnica.md`: fila de webhook em Postgres, não BullMQ (DT-079); Zod local, não os schemas gerados (DT-078); UUID v4 hoje (DT-016). Gerenciador: **pnpm** (workspaces + Turborepo).
 
-# Dados
-- PostgreSQL + PostGIS. Localização em `geography(Point, 4326)`, índice GiST, busca com `ST_DWithin`.
-- ORM definido em ADR (proposta: Prisma; consultas geográficas via SQL tipado).
-- Migrations versionadas e reversíveis quando possível; seed para dev/staging.
-- Dinheiro em **centavos (integer)**. Datas em UTC (`timestamptz`); conversão para America/Sao_Paulo só na apresentação.
-- IDs públicos não sequenciais (UUID v7 ou similar). Soft delete onde houver exigência de histórico.
+# Pastas
+```
+apps/api/
+  src/modules/<modulo>/   # controller -> service -> repository; db/schema.ts; index.ts (API pública)
+  src/platform/           # config, database, http, auth, cache, redis, ratelimit, logging, observability, storage, mail
+  drizzle/                # migrations SQL geradas (versionadas)
+  seed/  test/            # seed dev/staging; testes e2e (*.e2e-spec.ts)
+packages/shared/          # tipos, Zod e hooks gerados do OpenAPI (Orval); não editar a mão
+docs/arquitetura/api/openapi.yaml   # contrato (fonte da verdade)
+```
 
-# Pedidos e pagamentos
-- Máquina de estados do pedido explícita e validada no servidor; toda transição gera registro de histórico (quem, quando, de/para).
-- Mercado Pago PIX: criar pagamento com `X-Idempotency-Key`; webhook valida assinatura (`x-signature`), consulta o pagamento na API do MP antes de confiar no payload, é idempotente por ID e processa via fila (BullMQ). Job de reconciliação para pagamentos pendentes.
-- Estorno e cancelamento com regras do PRD e trilha de auditoria.
-- Nunca tocar em dados de cartão.
+# Comandos (de `apps/api`, ou `pnpm --filter @webag/api <script>` da raiz)
+| Tarefa | Comando |
+|---|---|
+| Infra local (Postgres, Redis, RustFS, Mailpit) | `pnpm infra:up` |
+| Dev / build | `pnpm dev` / `pnpm build` |
+| Migration: gerar / aplicar / seed | `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:seed` |
+| Testes unit / e2e / ambos | `pnpm test:unit` / `pnpm test:e2e` / `pnpm test` |
+| Lint e tipos | `pnpm lint` / `pnpm typecheck` |
+| Regenerar cliente após mudar o contrato | `pnpm generate` (raiz; CI roda `generate:check`) |
 
-# Tempo real e filas
-- Socket.IO gateway autenticado (JWT no handshake), salas por pedido/loja; o cliente sempre consegue recuperar o estado via REST se perder eventos.
-- Redis: cache com TTL explícito, rate limit, filas BullMQ com retry exponencial e dead-letter.
+# Onde está o detalhe (não repetir aqui)
+- Módulos, DI, guards, Zod pipe, transação por CLS, eventos: `nestjs-arquitetura-modular`.
+- Índices, EXPLAIN, PostGIS, locks de estoque, migrations seguras: `postgres-postgis-performance`.
+- Idempotência, filas, webhook do Mercado Pago, razão append-only: `idempotencia-filas-e-webhooks`.
+- Logs, métricas, timeouts, retry, health: `observabilidade-e-resiliencia`.
+- TDD, Testcontainers, depuração: `tdd-e-debug-sistematico`; pirâmide: `piramide-e-estrategia-de-testes`.
+- Contrato, erros RFC 9457, checklist de endpoint: `contrato-api`.
 
-# Auth
-- Login por telefone + OTP (provedor em ADR) e/ou e-mail. Access token curto (≈15 min) + refresh token rotativo armazenado com hash e revogável.
-- Autorização por recurso em todo endpoint (o pedido pertence ao usuário? a loja pertence ao lojista?). Papéis: customer, merchant, admin.
-
-# Qualidade
-- Testes: Jest unitário para serviços/regras; e2e com supertest e banco real em container (Testcontainers ou docker compose).
-- Logs estruturados (pino) com `requestId`; nunca logar token, senha, CPF completo ou payload de pagamento. Sentry para erros.
-- Health checks (`/health`), graceful shutdown.
-- CI (GitHub Actions): install → lint → typecheck → test → build; bloqueia merge se falhar.
-- Docker para dev local (Postgres+PostGIS, Redis) via `docker compose`.
+# Regras de projeto (valem sempre)
+- Dinheiro em **centavos (integer)**; datas `timestamptz` UTC, conversão para America/Sao_Paulo só na apresentação; IDs públicos UUID (alvo v7 via `uuidv7()` do PG 18, ADR-007; hoje v4, DT-016).
+- Módulo só importa de outro via `<modulo>/index.ts`; nunca repositório ou tabela alheia (ADR-007; hoje checado no review, sem regra de lint: verificar).
+- Máquina de estados do pedido validada no servidor; toda transição grava histórico (quem, quando, de/para).
+- Autorização por recurso em todo endpoint; papéis `customer`, `merchant`, `admin`; sessão conforme ADR-003.
+- Pagamento só via Mercado Pago (ADR-002); nunca tocar em dados de cartão; nunca logar token, senha, CPF completo ou payload de pagamento.
+- Env validada por Zod no boot; segredos só em `.env` local (modelo `infra/env.example`), nunca commitados.
+- CI (GitHub Actions): install, `generate:check`, lint, typecheck, test, build; bloqueia merge se falhar.

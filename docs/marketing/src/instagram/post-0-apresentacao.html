@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 0, apresentação (1080 x 1350)</title>
+<title>Webag: post 0, apresentação (cliente) "Aquela loja que você adora. Não entrega. Agora entrega." (1080 x 1350), v2.3</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,56 +11,61 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+/* v2.3. Eixo vertical (px): título 140 px (5 linhas de 129) 132 a 776; par loja -> app 810 a 1110; legenda "Tela de exemplo" 1122 a 1154; CTA 60 px 1200 a 1270.
+   Larguras (0,53 em por caractere, Bricolage 800 a 140 px): "Aquela loja" 11 car = 816; "Não Agora" 9 car = 668; "entrega." 8 car = 594 + marca-texto. Todas <= 936.
+   O par: ilustração da fachada (300 px) -> seta (84) -> cartão "Saiu para entrega" (520 x 300), réplica do app com texto de 44 e 64 px ("Saiu para" 9 car x 0,5 x 64 = 288 + 28; a moto começa em x 344). */
+.p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 140px; }
+.p0 .par { position: absolute; left: 72px; top: 810px; width: 936px; height: 300px; display: flex; align-items: center; justify-content: space-between; }
+.p0 .tile { width: 300px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); box-shadow: 10px 10px 0 var(--noite); }
+.p0 .tile img { width: 100%; height: 100%; object-fit: cover; }
+.p0 .seta { width: 84px; height: 63px; }
+.p0 .mini { position: relative; width: 520px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); color: var(--branco); box-shadow: 10px 10px 0 var(--noite); }
+.p0 .mini .lb { position: absolute; left: 28px; top: 22px; font: 800 44px/1.2 var(--texto); color: var(--lima); white-space: nowrap; }
+.p0 .mini .tt { position: absolute; left: 28px; top: 78px; font: 800 64px/1 var(--texto); letter-spacing: -0.02em; white-space: nowrap; }
+.p0 .mini .tt span { display: block; }
+.p0 .mini .art { position: absolute; right: 6px; top: 62px; width: 170px; height: 160px; }
+.p0 .mini .art img { width: 100%; height: 100%; object-fit: contain; }
+.p0 .mini .bar { position: absolute; left: 28px; right: 28px; bottom: 26px; display: flex; gap: 10px; }
+.p0 .mini .bar i { flex: 1; height: 18px; border-radius: 9px; background: #443C4C; }
+.p0 .mini .bar i.on { background: var(--roxo); }
+.p0 .mini .bar i.cur { background: var(--lima); }
+.p0 .ex { position: absolute; right: 72px; top: 1122px; font: 700 32px/1 var(--texto); color: var(--branco); }
+.p0 .cta { top: 1200px; font-size: 60px; color: var(--branco); white-space: nowrap; }
 </style>
+<script src="../social-cfg.js" defer></script>
 </head>
 <body>
-<main class="post roxo p0" role="img" aria-label="Webag, em breve. Escolha no app. Receba em casa. Escolha a loja e o produto, pague com PIX ou cartão, acompanhe até a porta. Tela real do app ao lado.">
+<main class="post roxo p0" role="img" aria-label="Webag, em breve. Aquela loja que você adora. Não entrega. A palavra Não está riscada e no lugar vem Agora: Agora entrega. Embaixo, uma ilustração de loja de bairro, uma seta e uma tela de exemplo do app com o aviso Saiu para entrega, A caminho, e a moto com a sacola do Webag. Siga @webag.">
 
-  <svg class="sprite" aria-hidden="true" focusable="false">
-    <defs>
-      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-        <rect width="160" height="104" fill="#FFFFFF"/>
-        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-      </mask>
-      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
-        <rect x="24" y="34" width="23" height="14" rx="7"/>
-        <rect x="0" y="62" width="49" height="14" rx="7"/>
-        <rect x="18" y="90" width="34" height="14" rx="7"/>
-        <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
-        </g>
-      </symbol>
-      <!-- palavra "webag" em curvas (docs/design/logo/v4/webag-logo-branca-v4.svg) -->
-      <g id="g-word"><path d="M186.608 104.0 170.48 57.344H184.88L194.864 91.232L190.64 91.328L201.68 57.344H213.584L224.72 91.328L220.4 91.232L230.48000000000002 57.344H244.88L228.752 104.0H216.752L205.904 71.744H209.552L198.512 104.0Z"/><path d="M271.584 105.056Q264.0 105.056 258.096 101.936Q252.192 98.816 248.832 93.248Q245.472 87.68 245.472 80.672Q245.472 73.664 248.784 68.144Q252.096 62.624 257.76 59.456Q263.42400000000004 56.288 270.528 56.288Q277.44 56.288 282.72 59.263999999999996Q288.0 62.24 291.024 67.52Q294.048 72.8 294.048 79.616Q294.048 80.864 293.904 82.256Q293.76 83.648 293.37600000000003 85.47200000000001L253.15200000000002 85.568V75.488L287.136 75.392L280.8 79.616Q280.704 75.584 279.552 72.944Q278.40000000000003 70.304 276.144 68.912Q273.88800000000003 67.52 270.624 67.52Q267.168 67.52 264.624 69.104Q262.08000000000004 70.688 260.688 73.56800000000001Q259.296 76.44800000000001 259.296 80.576Q259.296 84.70400000000001 260.784 87.632Q262.272 90.56 265.00800000000004 92.144Q267.744 93.728 271.488 93.728Q274.944 93.728 277.728 92.52799999999999Q280.512 91.328 282.624 88.928L290.688 96.992Q287.232 101.024 282.336 103.03999999999999Q277.44 105.056 271.584 105.056Z"/><path d="M326.03200000000004 104.96Q321.32800000000003 104.96 317.39200000000005 102.99199999999999Q313.456 101.024 310.96000000000004 97.712Q308.464 94.4 308.08000000000004 90.272V70.592Q308.464 66.464 310.96000000000004 63.248Q313.456 60.032 317.39200000000005 58.208Q321.32800000000003 56.384 326.03200000000004 56.384Q332.656 56.384 337.79200000000003 59.552Q342.928 62.72 345.856 68.19200000000001Q348.784 73.664 348.784 80.672Q348.784 87.68 345.856 93.152Q342.928 98.624 337.79200000000003 101.792Q332.656 104.96 326.03200000000004 104.96ZM299.15200000000004 104.0V34.304H313.84000000000003V68.768L311.44 80.096L313.648 91.424V104.0ZM323.44 91.712Q326.512 91.712 328.86400000000003 90.27199999999999Q331.216 88.832 332.56 86.336Q333.904 83.84 333.904 80.672Q333.904 77.408 332.56 74.912Q331.216 72.416 328.86400000000003 71.024Q326.512 69.632 323.44 69.632Q320.368 69.632 317.968 71.024Q315.56800000000004 72.416 314.27200000000005 74.912Q312.976 77.408 312.976 80.672Q312.976 83.936 314.32000000000005 86.432Q315.66400000000004 88.928 318.016 90.32Q320.368 91.712 323.44 91.712Z"/><path d="M373.76000000000005 104.96Q367.32800000000003 104.96 362.288 101.792Q357.24800000000005 98.624 354.32000000000005 93.152Q351.392 87.68 351.392 80.672Q351.392 73.664 354.32000000000005 68.19200000000001Q357.24800000000005 62.72 362.288 59.552Q367.32800000000003 56.384 373.76000000000005 56.384Q378.464 56.384 382.256 58.208Q386.048 60.032 388.448 63.248Q390.848 66.464 391.136 70.592V90.752Q390.848 94.88 388.496 98.096Q386.144 101.312 382.304 103.136Q378.464 104.96 373.76000000000005 104.96ZM376.73600000000005 91.712Q381.44000000000005 91.712 384.32000000000005 88.59200000000001Q387.20000000000005 85.47200000000001 387.20000000000005 80.672Q387.20000000000005 77.408 385.904 74.912Q384.608 72.416 382.256 71.024Q379.904 69.632 376.832 69.632Q373.76000000000005 69.632 371.408 71.024Q369.05600000000004 72.416 367.66400000000004 74.912Q366.27200000000005 77.408 366.27200000000005 80.672Q366.27200000000005 83.84 367.61600000000004 86.336Q368.96000000000004 88.832 371.36 90.27199999999999Q373.76000000000005 91.712 376.73600000000005 91.712ZM386.624 104.0V91.424L388.832 80.096L386.624 68.768V57.344H401.024V104.0Z"/><path d="M429.168 124.928Q421.48800000000006 124.928 415.68000000000006 122.288Q409.872 119.648 406.512 114.848L415.536 105.824Q418.03200000000004 108.8 421.15200000000004 110.336Q424.27200000000005 111.872 428.68800000000005 111.872Q434.16 111.872 437.28000000000003 109.184Q440.40000000000003 106.496 440.40000000000003 101.6V89.696L442.896 79.52L440.68800000000005 69.344V57.344H455.088V101.216Q455.088 108.416 451.72800000000007 113.696Q448.36800000000005 118.976 442.51200000000006 121.952Q436.656 124.928 429.168 124.928ZM428.49600000000004 102.56Q422.064 102.56 417.072 99.488Q412.08000000000004 96.416 409.20000000000005 91.136Q406.32000000000005 85.856 406.32000000000005 79.424Q406.32000000000005 72.896 409.20000000000005 67.664Q412.08000000000004 62.432 417.072 59.408Q422.064 56.384 428.49600000000004 56.384Q433.29600000000005 56.384 437.0880000000001 58.16Q440.88000000000005 59.936 443.232 63.152Q445.584 66.368 445.872 70.592V88.352Q445.584 92.48 443.232 95.696Q440.88000000000005 98.912 437.0400000000001 100.736Q433.20000000000005 102.56 428.49600000000004 102.56ZM431.28000000000003 89.504Q434.35200000000003 89.504 436.60800000000006 88.16Q438.86400000000003 86.816 440.064 84.56Q441.264 82.304 441.264 79.424Q441.264 76.544 440.064 74.24000000000001Q438.86400000000003 71.936 436.60800000000006 70.592Q434.35200000000003 69.24799999999999 431.28000000000003 69.24799999999999Q428.30400000000003 69.24799999999999 426.0 70.592Q423.696 71.936 422.44800000000004 74.24000000000001Q421.20000000000005 76.544 421.20000000000005 79.424Q421.20000000000005 82.112 422.44800000000004 84.464Q423.696 86.816 425.952 88.16Q428.208 89.504 431.28000000000003 89.504Z"/></g>
-    </defs>
-  </svg>
-
-  <!-- 1. fundo roxo (classe .roxo). 2. painel noite com corte diagonal. 3. aparelho cruzando o corte. 4. título e lista -->
-  <div class="painel"></div>
-
-  <svg class="logo" viewBox="0 0 458 126" fill="currentColor" aria-hidden="true">
-    <use href="#s-sym" x="0" y="0" width="160" height="104"/>
-    <use href="#g-word"/>
-  </svg>
-  <div class="em-breve"><span class="sticker">Em breve</span></div>
+  <!-- Ideia: a MESMA frase vira. "Aquela loja que você adora. ~~Não~~ Agora entrega." A palavra que importa (entrega.) é a mesma nos dois estados e fica em lima.
+       v2.3: (1) CTA único em 60 px: "Siga" + o @ de src/config.json (provisório "@webag", IF1) em marca-texto lima: o destino é o que se vê; sem sininho, sem ícone de sino.
+       (2) a moto virou o cartão "Saiu para entrega" do app (réplica desenhada, sem horário, sem código), rotulado "Tela de exemplo": é a única prova de produto do post.
+       Depende do parecer J8 (pendencias.md IJ1): "Agora entrega", "Saiu para entrega". -->
+  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
+  <div class="emb">Em breve</div>
 
   <h1 class="d">
-    <span>Escolha</span>
-    <span>no app.</span>
-    <span>Receba</span>
-    <span><span class="mk"><span>em casa.</span></span></span>
+    <span>Aquela loja</span>
+    <span>que você</span>
+    <span>adora.</span>
+    <span><span class="no">Não<i class="strike"><b></b></i></span> <span class="ag">Agora</span></span>
+    <span><span class="mk"><span>entrega.</span></span></span>
   </h1>
 
-  <!-- captura real: docs/telas/01-app-inicio.png (390x844). Só o topo aparece; o aparelho sai pela base do post. -->
-  <div class="vp" aria-hidden="true"><div class="phone"><div class="tela"><img src="../assets-social/01-app-inicio.png" alt=""></div></div></div>
+  <div class="par" aria-hidden="true">
+    <div class="tile"><img src="../assets/fachada-loja.svg" alt=""></div>
+    <svg class="seta" viewBox="0 0 96 72"><path d="M8 36H76M52 10L82 36L52 62" fill="none" stroke="#D6FF4A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="mini">
+      <p class="lb">A caminho</p>
+      <p class="tt"><span>Saiu para</span><span>entrega</span></p>
+      <div class="art"><img src="../assets/etapa-a-caminho.svg" alt=""></div>
+      <div class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></div>
+    </div>
+  </div>
+  <p class="ex" aria-hidden="true">Tela de exemplo</p>
 
-  <ol class="lista">
-    <li><b>01</b><span>Escolha a loja<br>e o produto.</span></li>
-    <li><b>02</b><span>Pague com PIX<br>ou cartão.</span></li>
-    <li><b>03</b><span>Acompanhe<br>até a porta.</span></li>
-  </ol>
+  <p class="cta">Siga <span class="mk"><span data-handle data-fit="500">@webag</span></span></p>
 
 </main>
 </body>

@@ -8,8 +8,8 @@ Este arquivo é lido por TODOS os agentes do time. Ele define o projeto, a stack
 
 - **Fundador:** Yago (web developer, 10+ anos em Customer Success). É quem dá a visão, aprova gastos e decisões irreversíveis.
 - **Pontas do marketplace:** consumidor, lojista e administração (Webag). Entregador próprio vs. entrega do lojista é decisão em aberto (ver `docs/decisoes.md`).
-- **Plataformas:** app Android + iOS (consumidor e lojista), painel admin web, landing page.
-- **Histórico:** já existe um MVP front-end em HTML (landing, app cliente, painel do lojista, painel admin) e um plano de arquitetura back-end. O back-end ainda não foi iniciado.
+- **Plataformas:** app Android + iOS do cliente (Expo), painéis do lojista e do admin e site público em `apps/web` (Next.js), API NestJS (DEC-005).
+- **Histórico:** já existe um MVP front-end em HTML (landing, app cliente, painel do lojista, painel admin) e um plano de arquitetura back-end. O v1.0 está construído e aprovado no G4 (ver `docs/relatorio-final.md`); o G5 (lojas) depende do fundador.
 
 A visão detalhada fica em `docs/00-visao/brief.md`. Se ela estiver incompleta, o CEO entrevista o fundador antes de qualquer outra coisa.
 
@@ -26,19 +26,20 @@ Proposta inicial — só vira definitiva após aprovação no kickoff (`docs/arq
 | Tempo real | WebSocket gateway (Socket.IO) para status de pedido |
 | Pagamentos | Mercado Pago — PIX (e cartão via checkout do MP, nunca armazenando dados de cartão) |
 | Push | Expo Notifications (FCM/APNs) |
-| Admin web | React/Next.js (reaproveitando o MVP HTML como referência visual) |
+| Painéis web (lojista + admin) e site | Next.js em `apps/web` (lojista e admin são rotas; não existe `apps/admin`) |
 | Infra / CI | Docker, GitHub Actions, ambientes dev / staging / prod |
-| Observabilidade | Logs estruturados, Sentry (mobile + API) |
+| Observabilidade | Logs estruturados (pino); Sentry planejado (API e web; `@sentry/react-native` ainda não instalado no mobile) |
 
 ## 3. Estrutura do repositório
 
 ```
 apps/
-  mobile/        # app Expo (consumidor + lojista)
-  admin/         # painel admin web
+  mobile/        # app Expo (cliente)
+  web/           # Next.js: lojista, admin e site público
   api/           # NestJS
 packages/
   shared/        # tipos, schemas Zod, cliente da API gerado do OpenAPI
+  tokens/        # tokens de design (cores, tipografia)
 docs/
   00-visao/      # brief do fundador, visão, OKRs              (CEO)
   produto/       # pesquisa, personas, PRDs, backlog, roadmap  (PO)
@@ -66,6 +67,7 @@ docs/
 | QA | `qa-engineer` | Estratégia de testes, qualidade, aprovação de release |
 | Designer | `product-designer` | UX, UI, design system, specs de tela |
 | Cyber Security | `security-engineer` | Ameaças, revisão de segurança, LGPD, aprovação de release |
+| Estrategista de Conteúdo | `social-media-strategist` | Avaliar posts/vídeos/apresentações (atenção e ação), ganchos, calendário, recrutamento de lojistas pelas redes |
 
 ### Fluxo de uma funcionalidade
 1. **PO** escreve o PRD e as histórias com critérios de aceite.

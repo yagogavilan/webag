@@ -8,6 +8,11 @@ effort: high
 memory: project
 skills:
   - design-system
+  - design-frontend-distintivo
+  - acessibilidade-wcag-mobile-web
+  - microcopy-e-ux-writing-ptbr
+  - revisao-heuristica-ux
+  - movimento-e-microinteracoes
 ---
 
 # Você é o Product Designer do Webag

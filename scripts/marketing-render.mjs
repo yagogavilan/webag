@@ -23,7 +23,7 @@ const marketing = join(root, 'docs/marketing');
 const srcRoot = join(marketing, 'src');
 const docsRoot = join(root, 'docs'); // raiz do servidor: as pecas referenciam ../../telas e ../../design (fora de marketing/src)
 
-const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'tudo'];
+const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'video-lojista', 'video-cliente', 'tudo'];
 const DECKS = { lojista: 'apresentacao-lojista', cliente: 'apresentacao-cliente' };
 const SLIDE = { w: 1920, h: 1080 };
 const INSTAGRAM = [
@@ -33,7 +33,7 @@ const INSTAGRAM = [
   { name: 'post-2', w: 1080, h: 1350, roots: ['main.post'] },
   { name: 'post-3', w: 1080, h: 1350, roots: ['main.post'] },
 ];
-const STORY = { w: 1080, h: 1920, fps: 30, file: 'video-story' };
+const STORY = { w: 1080, h: 1920, fps: 30, file: 'video-lojista' };
 
 const log = (msg) => console.log(`[marketing] ${msg}`);
 const warnings = [];
@@ -163,11 +163,29 @@ function startServer() {
         res.writeHead(404).end('nao encontrado');
         return;
       }
-      res.writeHead(200, {
-        'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-        'Cache-Control': 'no-store',
-      });
-      res.end(readFileSync(file));
+      const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
+      const body = readFileSync(file);
+      // Range (206): o Chromium precisa dele para dar seek em <video> (peca com clipes de tela em src/clips)
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+        if (start > end || start >= body.length) {
+          res.writeHead(416, { 'Content-Range': `bytes */${body.length}` }).end();
+          return;
+        }
+        res.writeHead(206, {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${body.length}`,
+          'Content-Length': end - start + 1,
+        });
+        res.end(body.subarray(start, end + 1));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' });
+      res.end(body);
     } catch {
       res.writeHead(400).end('requisicao invalida');
     }
@@ -453,7 +471,7 @@ async function renderInstagram(browser, origin) {
 
 // ---------------------------------------------------------------- video (MP4)
 // Frames PNG (sem perda) por pipe para o ffmpeg: nada de 450 arquivos em disco. Silencio AAC por padrao: ver README (decisao).
-async function renderVideo(browser, origin) {
+async function renderVideoOne(browser, origin) {
   needFfmpeg();
   const file = join(srcDir, `${STORY.file}.html`);
   if (!existsSync(file)) return skipMissing(file);
@@ -490,8 +508,16 @@ async function renderVideo(browser, origin) {
         `${label}: a pagina tem overflow (${geo.sw}x${geo.sh}) alem do palco ${STORY.w}x${STORY.h}`,
       );
 
+    // setTime pode ser sincrono ou devolver Promise/thenable (ex.: <video>: currentTime + await 'seeked'). Aguarda a promessa e, nesse caso,
+    // dois rAF para o quadro decodificado ser pintado antes do screenshot. Sincrono: comportamento antigo (sem rAF extra).
     const shot = async (t) => {
-      await page.evaluate((time) => window.setTime(time), t);
+      await page.evaluate(async (time) => {
+        const ret = window.setTime(time);
+        if (ret && typeof ret.then === 'function') {
+          await ret;
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        }
+      }, t);
       return page.screenshot({ type: 'png', animations: 'allow', caret: 'initial' });
     };
 
@@ -664,6 +690,16 @@ function skipMissing(file) {
   return { peca: rel, pulado: true };
 }
 
+// Renderiza um video por publico (um HTML por video). Cada um e opcional em `tudo`.
+async function renderVideo(browser, origin, names = ['video-lojista', 'video-cliente']) {
+  const out = [];
+  for (const n of names) {
+    STORY.file = n;
+    out.push(...flat(await renderVideoOne(browser, origin)));
+  }
+  return out;
+}
+
 const flat = (r) => (Array.isArray(r) ? r : [r]);
 const jobs = [];
 if (target === 'lojista' || target === 'tudo')
@@ -672,6 +708,8 @@ if (target === 'cliente' || target === 'tudo')
   jobs.push(['cliente', (b, o) => renderDeck(b, o, 'cliente')]);
 if (target === 'instagram' || target === 'tudo') jobs.push(['instagram', renderInstagram]);
 if (target === 'video' || target === 'tudo') jobs.push(['video', renderVideo]);
+if (target === 'video-lojista') jobs.push(['video', (b, o) => renderVideo(b, o, ['video-lojista'])]);
+if (target === 'video-cliente') jobs.push(['video', (b, o) => renderVideo(b, o, ['video-cliente'])]);
 
 const started = Date.now();
 const results = [];

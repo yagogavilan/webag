@@ -1,6 +1,73 @@
-# Pendências das apresentações (lojista e cliente)
+# Pendências das apresentações v2 (lojista e cliente)
 
-Peças: `src/apresentacao-lojista.html` (14 slides) e `src/apresentacao-cliente.html` (10 slides). Autor: product-designer. Data: 2026-11-20.
+Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 de guia) e `src/apresentacao-cliente.html` (**5 slides na v2.1**; eram 8). Autor: product-designer. Data: 2026-11-22. Revisão por slide: `revisao-decks-v2.md`.
+**v2.1 (2026-11-22, aplica a avaliação da estrategista): ver "V2.4" no fim desta seção. Onde a tabela V2.1/V2.2 abaixo fala de slides do cliente, a numeração é a da v2 (s4 = "Ela está no app", s5 = acompanhamento, s6 e s7 cortados, s8 = contato; hoje s3, s4 e s5).**
+`[HIPÓTESE]` = não validado. As seções "v1" mais abaixo estão obsoletas (história); o que continua valendo foi trazido para cá.
+
+## V2.1 Confirmar antes de imprimir
+
+| # | Item | Onde | Ação |
+|---|---|---|---|
+| V1 | **"Sem mensalidade"** (adesivo). Só existe em DEC-008 (mensalidade rejeitada) e no posicionamento §5.2; não está no brief nem em regras de negócio | Lojista s5 | Fundador confirmar por escrito; senão apagar o `.tag` "Sem mensalidade" (uma linha no HTML) |
+| V2 | **Comissão de 15%** é exemplo `[HIPÓTESE]` (HIP-C01) e **tarifa de pagamento de até 4,98%** (HIP-C02, conferir contrato do Mercado Pago). Conta: 100 − 15 − 4,98 = 80,02, exibido como "cerca de R$ 80" e "até R$ 5". A tarifa aparece como desconto sem nomear método | Lojista s5 | Rótulo "exemplo ilustrativo; condições finais no cadastro" está no slide (24 px). Jurídico: J5 (pode ser lido como proposta) |
+| V3 | **"Cai na sua conta"** depende do split do Mercado Pago em produção (H4); no modo centralizado o texto muda | Lojista s5 | Confirmar o modelo antes de imprimir |
+| V4 | **"Aceite em até 10 minutos"** e "sem resposta, o pedido é cancelado" são `[HIPÓTESE]` (HIP-008, parâmetro editável no admin) | Lojista s12 | Confirmar o valor padrão |
+| V5 | **"O motoboy do Webag busca"/"Você separa. O Webag leva."/"Aquela loja agora entrega"**: parecer jurídico sobre motoboys (DEC-039, J8). Nenhuma peça externa sai antes do parecer e do G5 | Lojista s3 e s13; Cliente s1 a s3 | Aguardar jurídico. Plano B sem entrega: avisar o designer, as duas ideias centrais mudam |
+| V6 | "Peça a troca pelo app" (J2) e "O Webag não guarda os dados do seu cartão" (J3): redação a validar; sem prazo nem condição de troca | Cliente s6; Lojista s6 | Jurídico |
+| V7 | Documentos exigidos (CPF: RG ou CNH e comprovante; CNPJ/MEI: cartão CNPJ e documento do responsável) estão em revisão jurídica no PRD (J4) | Lojista s9 | Jurídico |
+| V8 | **Lista de abertura** ("Seu nome na lista de abertura", linhas para escrever à mão, "Usamos seu contato só para avisar da abertura"): não existe fluxo de lista de espera de lojista; o fundador anota. LGPD: finalidade, base legal e onde o papel/planilha fica (F7 da v1) | Lojista s7 | Fundador confirmar como guarda; ajustar a frase de 24 px se for diferente |
+| V9 | Contatos em `src/config.json` (WhatsApp, site, e-mail vazios; `@webag` e "Yago" assumidos). Vazio vira linha para escrever à mão; no s14 do lojista o WhatsApp vira `(__) _____-____` | Lojista s7 e s14; Cliente s8 | Fundador preencher |
+| V10 | "Pause com um toque", "Importe por planilha", "O painel avisa com som": existem no painel (capturas 21 e 20; som exige ativar no navegador) | Lojista s11 e s12 | Nada; só conferir se o texto "com som" cabe depois do primeiro acesso |
+| V11 | Categorias: o cliente não cita "beleza" nem lista categorias (a captura 01 mostra Mercado, Farmácia, Pet, Casa e construção). Não aparece nenhuma promessa de variedade além de "loja" | Cliente | Se o fundador quiser "moda, casa e mais" de volta, só entra com loja de moda ativa |
+
+## V2.2 Capturas (o que usei e o que está errado nelas)
+
+Fonte: `docs/telas/` (2026-11-20, 1x: 390x844 e 1440x900). **`docs/marketing/src/capturas/` ainda não existe**; usei `docs/telas` e deixei um único ponto de troca: `var CAP_BASE = "../../telas/"` no `<script>` do fim de cada HTML (mesmos nomes de arquivo). Se a captura nova tiver outro nome ou outro layout, ajustar os `data-cap` e recalibrar os `.patch` e `.ring`.
+
+| # | Observação | Efeito |
+|---|---|---|
+| K1 | **Resolução 1x ampliada 2x a 3x** (cartão do pedido 2,5x; botão "Pronto para coleta" 2,95x). Texto da UI fica macio, legível mas sem a nitidez de uma captura 2x | O CEO decide no primeiro render; com captura 2x o HTML não muda (o tamanho é em px do slide, não da imagem) |
+| K2 | Dados de seed com **alimento** (banana, pão, bolo de fubá, suco) nas capturas 20, 21 (e 25 vem de vendas de mercadinho) contradizem "bens de consumo, não comida" | Cobri o nome do produto no cartão do pedido (s4). Produtos (s11) e Financeiro (s14) mostram o seed. **Pedir ao mobile-dev capturas com loja de moda/casa** (peça de roupa, vaso, tênis) e valores redondos |
+| K3 | Loja do app (04) é "Farmácia Saúde Já" (perfume na capa), não uma loja "que você gosta"; o início (01) mostra "Francisco Mor…" e a faixa "Entrega pelo Webag" | Cliente s4 e s7. Mesma recomendação K2 |
+| K4 | Horário estimado de captura de madrugada ("03:06 – 03:31", "03:31 – 04:01") lê como prazo prometido (regra 7 da direção criativa) | Cobri com "Veja no app" (cliente s4 e s5). Remover os `.patch` quando a captura vier em horário comercial **e** o jurídico aceitar faixa de tempo em imagem |
+| K5 | Pedido novo da captura 20 mostra "há 19 min" e "Som desligado" (BFF sem tempo real no ambiente de captura) | Recortei só o cartão, cobri a idade com "Novo". "Pago no app" aparece pequeno no cartão (fato, não argumento) |
+| K6 | Captura 25 (financeiro) mostra "Vendas R$ 59,90" e "Você recebe R$ 50,90" de seed | Rotulado só pelo contexto; se imprimir, vale um selo "exemplo" ou captura com valores redondos |
+
+## V2.4 Mudanças da v2.1 e o que o fundador liga (2026-11-22)
+
+| # | O que mudou / o que fica pendente | Onde |
+|---|---|---|
+| V12 | **Flags em `src/config.json`** (`"flags": {"semMensalidade": false, "trocaNoPainel": false}`; o HTML tem o mesmo fallback embutido). Com `false` o PDF **não** mostra "Sem mensalidade" (lojista s5) nem "Troca? Organizada no painel" (lojista s6; no lugar entra "Como vejo o que ganhei? Extrato no painel."). **O fundador liga cada flag para `true` quando confirmar por escrito** (V1: mensalidade; a troca só quando o painel tratar troca, J2). Regerar o PDF depois | `config.json`; lojista s5 e s6 |
+| V13 | Cliente: **cortados** "Compre com tranquilidade" (troca + cartão), os cartões de lojas de aplicativos "Em breve" e toda menção a pagamento/cartão. V6 (J2, J3) deixa de valer para o cliente; vale só para a flag `trocaNoPainel` do lojista | Cliente |
+| V14 | Ganchos reordenados: lojista abre pelo WhatsApp ("Só retirando, tá?") e a capa "Venda além da sua rua." é o slide 2; cliente abre por "Aquela loja que você adora. Não entrega." e vira em "Agora ela entrega." (slide 2). **As frases que dependem do parecer jurídico J8/DEC-039 continuam e continuam bloqueando a impressão e o envio**: lojista s3 ("Você separa. O Webag leva.") e s13 ("O motoboy do Webag busca na loja"); cliente s2 ("Agora ela entrega.", "No app, até a sua porta.") e s4 ("Saiu para entrega", "Aviso a cada etapa."); o cartão do slide 3 do cliente mostra "Taxa de entrega R$ 8,00" (exemplo). A marcação não vai impressa: segurar a impressão até o parecer | Lojista s3, s13; cliente s2 a s4 |
+| V15 | **Cartões desenhados (rótulo "Exemplo")** no lugar das capturas com seed: lojista s4 (pedido novo), s11 (produtos), s13 (pronto para coleta), s14 (financeiro); cliente s3 (loja) e s4 (linha do tempo). Loja de moda e casa, valores redondos (R$ 59,00, R$ 129,00, R$ 188,00; financeiro R$ 1.000, comissão 15%, tarifa até R$ 50, recebe cerca de R$ 800, coerente com o slide 5). Sem código de pedido, sem horário, sem "Pago no app", sem comida, sem nota. **São réplicas do layout real, não capturas: quando o mobile-dev entregar `src/capturas/` em 2x (ainda não existe), trocar** (`CAP_BASE` no fim de cada HTML continua pronto; o histórico do git guarda os recortes e `.ring` calibrados). Só o slide 9 do lojista (cadastro, sem seed) ainda usa captura de `docs/telas` | Lojista s4, s9, s11, s13, s14; cliente s3, s4 |
+| V16 | CTA: lojista s7 e s14 com uma ação. **Com `whatsapp` preenchido**: "Mande “quero entrar” no WhatsApp." (s7) e "Pronto para começar? Mande “quero entrar” no WhatsApp:" + número (s14). **Sem número**: "Escreva ao lado. O Yago chama você." (s7), linhas para escrever à mão mantidas e `(__) _____-____` no s14. E-mail só aparece se preenchido. Cliente s5: ação única "Siga @webag no Instagram." (o handle é o provisório do config; IF1/V9: confirmar o usuário real antes de enviar); WhatsApp fica como linha à mão se vazio; site e e-mail só se preenchidos | Lojista s7, s14; cliente s5 |
+| V17 | Nova frase no s7 do lojista: **"Estou montando o Webag."** sob "Fale com o Yago" (responde "quem são vocês?"). É afirmação do próprio fundador: confirmar que ele concorda. Foto dele no slide continua opcional (IF6) | Lojista s7 |
+| V18 | Nenhum texto abaixo de 32 px agora (as notas legais de 24 px subiram para 32; a do exemplo de venda foi encurtada). "Cerca de 10 min" (cadastro, `[HIPÓTESE]`) e "10 minutos para aceitar" (V4) seguem | Todos |
+| V19 | **Não renderizado** (sem Bash). Riscos de quebra de linha para o primeiro render: lojista s6 (quadrante "O cliente / retira / na loja." a 104 px, 3 linhas), s7 (coluna da direita em fluxo, 2 linhas a 56 px em cada bloco), s13 (botão "Pronto para coleta" 40 px em 450 px), s14 (linhas do extrato a 36 px em 692 px); cliente s3 (nome a 48 px) e s4 ("Saiu para entrega" a 72 px, nowrap, em 741 px). Se estourar, devolver o quadro | Todos |
+
+## V2.5 Mudanças da v2.3 (2026-11-22, parecer v2.2)
+
+| # | O que mudou / o que fica pendente | Onde |
+|---|---|---|
+| V20 | **Lojista s6:** "Não quero entregar? Você escolhe: o cliente retira na loja." (antes "O cliente retira na loja." contradizia o s3). Modelo: o lojista escolhe entrega pelo Webag ou retirada. **J8 segue valendo para s3 e s13** (s13 agora diz "Entrega pelo Webag: o motoboy busca na loja."). A marcação não vai impressa: segurar a impressão até o parecer | Lojista s3, s6, s13 |
+| V21 | **Cliente: canal definido pelo CEO** = PDF recebido por WhatsApp/Instagram, lido no celular em 30 s (e mostrado pelo fundador a amigos e comerciantes). 5 slides, texto mínimo 56 px (corpo 64 px+). "Aviso a cada etapa" e "Falar com a loja" estão no PRD (WB-191, WB-029): **mobile-dev confirmar que estão no app antes de enviar** `[HIPÓTESE]`. "R$ 8,00" saiu; "taxa de entrega" fica só como frase, sem valor. J8 vale para s2 a s4 (plano B do parecer: sem J8 o deck vira s1 + s3 + s5, mas s3 cita entrega: reescrever) | Cliente |
+| V22 | **Proporção:** o pipeline fixa 1920x1080. No celular em pé a página encolhe a ~20% (56 px viram ~11 pt). O ideal é 4:5 (1080x1350), que dobra a leitura; exige mudar `scripts/marketing-render.mjs` (SLIDE, `@page`). Decisão do CEO | Cliente |
+| V23 | **CTA único.** Lojista s7 e s14: WhatsApp do `config.json` (com número: "Mande “quero entrar” no WhatsApp." + número grande; sem: linhas à mão + "Escreva ao lado. <nome> chama você."). Cliente s5: seguir no Instagram (o canal é digital, linha à mão não faz sentido; o @ é link tocável no PDF). **Provisórios, vindos só do `config.json`:** `nome` = "Yago" e `instagram` = "@webag" (V9: o fundador confirma ou troca). Saíram: Instagram e e-mail no s7, "Estou montando o Webag" (V17, afirmação não informada), "Fale com o Yago" fixo, "Outros contatos" do cliente | Lojista s7, s14; cliente s5 |
+| V24 | **Promessas sem confirmação fora do papel:** "Cerca de 10 min" do s6 saiu; "10 minutos para aceitar" e "Sem resposta, o pedido é cancelado" (s12, V4) só aparecem com `flags.prazoAceite = true` (padrão `false`; sem a flag: "Chegou? Aceite rápido."). Continuam rotulados como exemplo: 15% e tarifa de até 4,98% (V2, s5 e s14); "CPF ou MEI" (V7/J4) | Lojista s5, s6, s12 |
+| V25 | **Captura real do pedido não usada** (parecer pediu): `capturas/painel-pedido-aceitar.png` mostra código WB-6J5R8, nome e telefone de cliente, endereço e hora 22:19/22:39 (trava 5), e o texto útil sairia a ~15 px na página. Mantido o cartão desenhado ("Exemplo"). Para ter prova real: nova captura com loja e cliente neutros, só o cartão do pedido, em 2x | Lojista s4 |
+| V26 | **Não renderizado** (sem Bash). Riscos: lojista s6 (quadrante 2: "Você escolhe:" a 112 px em 780 px; "O cliente retira na loja." a 56 px, pode quebrar em 2 linhas), s7 (colunas novas), s12 (variante sem flag); cliente s1 ("Não entrega." a 260 px, ~1450 px de 1680), s2 (tile e logo à direita), s3 (nome da loja e linhas dos produtos a 52 px), s4 ("Saiu para entrega" a 80 px nowrap em ~712 px: o mais apertado), s5 (handle a 150 px; @ longo quebra em 2 linhas) | Todos |
+
+## V2.3 Foto real (opcional) e técnico
+
+- **Foto de fachada** no slide 1 do lojista: bloco diagonal da direita, `id="foto-slot"`. Instrução no comentário do topo do HTML. Sem foto, vale a ilustração `assets/fachada-loja.svg` (a mesma aparece no slide 2 do cliente). Foto de loja de terceiro exige autorização de imagem do dono.
+- Arquivos novos em `src/assets/`: `fachada-loja.svg`, `etapa-separando.svg`, `etapa-entregue.svg` (cópias do kit, fundo noite). `etapa-a-caminho.svg` já existia.
+- Render: sem Bash, **não renderizei**. Larguras de título foram calculadas com a métrica estimada da Bricolage 800 (~0,54 em por caractere, tracking -0,035 em) com folga de 8 a 20%. Maior risco de quebra de linha: lojista s3 ("O Webag" a 184 px, `nowrap`, termina em ~1840 px), s2 (frase final a 80 px, 1555 de 1680 px), cliente s6 (texto da direita a 80 px, 3 linhas). Se estourar, devolva o quadro que eu ajusto.
+- Contrato técnico mantido: `<meta name="marketing-slides">` (14 e 8), `data-ready` (agora também espera as capturas), `config.json` com fallback embutido, tudo que sangra fica em `.clip`/`.shot` (overflow:hidden). Não há texto abaixo de 32 px, exceto as notas de 24 px (exemplo de venda; lista de abertura).
+
+# v1 (obsoleto, só histórico). Pendências das apresentações de 2026-11-20
+
+Peças da v1: 14 e 10 slides, substituídas pela v2 acima. Autor: product-designer. Data: 2026-11-20.
 Regra de leitura: nada aqui é fato de produto até alguém fechar o item. `[HIPÓTESE]` = não validado.
 
 ## 1. Depende do fundador
@@ -70,44 +137,68 @@ Regra de leitura: nada aqui é fato de produto até alguém fechar o item. `[HIP
 
 ---
 
-# Pendências do Instagram e do vídeo de 15 s
+# Pendências do Instagram e dos vídeos de 15 s (v2.3, atualizada em 2026-11-22)
 
-Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-story.html`, `src/social.css`. Textos: `instagram-legendas.md`, `video-roteiro.md`. Autor: product-designer. Data: 2026-11-20. `[HIPÓTESE]` = não validado.
+Peças: `src/instagram/{perfil,post-0-apresentacao,post-1,post-2,post-3}.html`, `src/video-lojista.html`, `src/video-cliente.html` (motor `src/video-engine.js`, estilos `src/video.css`, `src/social.css`, contato `src/social-cfg.js`). Textos: `instagram-legendas.md`, `video-roteiro.md`, `revisao-social-v2.md` (§0.6 = v2.3). Autor: product-designer. `[HIPÓTESE]` = não validado.
+**v2.3:** as telas são capturas reais recortadas (post 3, vídeo do lojista, cenas 2 e 3 do vídeo do cliente) ou réplicas desenhadas do app (posts 0 e 2, cena 4 do cliente), todas rotuladas "Tela de exemplo", sem código, horário, contagem, "Pago no app" nem "Últimas unidades". Onde esta seção abaixo fala em "cartões desenhados .ui" ou "nenhuma captura", vale a v2.3.
+
+## J8 (parecer sobre motoboy, DEC-039): quais peças esperam o parecer (registro da trava 6)
+
+| Peça | Depende do J8? | O que depende | Sai antes do parecer? |
+|---|---|---|---|
+| Foto do perfil, bio B | Não | n/a | Sim (precisa só do @, IF1) |
+| **Post 1** (lojista) | **Não** | A linha "o pedido de quem mora longe chega no seu painel" não promete entrega (IP7: PO confirma). A linha opcional da legenda ("o Webag leva") **sim** | **Sim** |
+| **Post 3** (lojista) | **Não** (o chip "Entrega" saiu na v2.3) | n/a | **Sim** (precisa do @ e de IF5 respeitado) |
+| **Vídeo do lojista** | **Só a cena 6** ("O Webag leva.", 9,5 a 11,5 s) | Promessa de entrega | Só a versão **sem a cena 6** (ainda não existe: pedir ao designer) |
+| **Post 0** (cliente) | **Sim** | "Agora entrega.", cartão "Saiu para entrega" | Não |
+| **Post 2** (cliente) | **Sim** | "A caminho", "Saiu para entrega", "da loja até você" | Não |
+| **Vídeo do cliente** | **Sim** | Promessa de 1,6 s e "Saiu para entrega" (cena 4) | Não |
+| Bio A e C | **Sim** | "agora entrega" | Não |
+| Decks (lojista s3, s13; cliente s2 a s4) | Sim (ver V5 e V14, outro designer) | | Não |
+
+Plano B sem entrega (se o parecer for negativo): "Aquela loja que você adora. Agora no seu celular." (post 0 e vídeo do cliente), cartão do post 2 e da cena 4 passam a "Pedido aceito / Em separação". Me peça a versão.
 
 ## I. Técnico (bloqueia o primeiro render)
 
 | # | Item | O que fazer |
 |---|---|---|
-| I1 | **PNGs não copiados para `src/assets-social/`** (sem Bash). Os HTML já apontam para lá | `mkdir -p docs/marketing/src/assets-social && cp docs/telas/{01-app-inicio,04-app-loja,09-app-pix,11-app-acompanhamento}.png docs/marketing/src/assets-social/` |
-| I2 | **O servidor do render só serve `src/`** (`scripts/marketing-render.mjs`, `startServer`, linhas 152 a 163: caminho fora de `src` dá 403/404). As `@font-face` com `../../design/...` (as minhas e as do `base.css`) viram `/design/...` na URL e dão 404, o que o `openPage` trata como erro. Só funciona em `file://` | Opção A (1 linha de código): servir `docs/` como raiz e abrir `/marketing/src/...`. Opção B (sem mexer no script): copiar as fontes para `src/assets-social/fonts/` e trocar o caminho nas `@font-face` (6 arquivos). Preciso do CEO/dev do pipeline para escolher; eu ajusto o caminho em 5 minutos se for a B |
-| I3 | Fontes: **Bricolage está em `docs/design/recursos/fontes/`**, não em `docs/design/fonts/` (que só tem Figtree e Fredoka). Usei o caminho certo de cada uma | Só registro; mesmo achado do T2 acima |
-| I4 | Não rodei render. Larguras e quebras foram calculadas com a métrica estimada da Bricolage 800 (~0,55 em por caractere, com tracking -0,045 em). Pontos de maior risco: título do post 0 (156 px), "Vai abrir." do post 3 (196 px), "antes de" e "breve." do vídeo (224 px e 300 px), numerais de 640 px | Se algum estourar, reduzo o `font-size` da linha; me devolva o quadro |
-| I5 | Capturas estão em `deviceScaleFactor: 1` (390x844). No vídeo e no post 0 o aparelho amplia 1,06x e o texto da tela fica levemente macio | Regerar `docs/telas/` com `deviceScaleFactor: 2` (2x = 780x1688). Os HTML não mudam |
-| I6 | O pipeline mede `scrollHeight` da raiz: o aparelho do post 0 que sai pela base foi recortado numa caixa `.vp` para não contar como overflow | Nada |
+| I1 | **(v2.3) Capturas e clipes existem, mas trazem dado de demonstração.** Trava 5 tratada no design (recorte, bloco branco, réplica), não na origem: o alerta do painel mostra código e contagem; o app mostra "Chega entre 22:xx", horários repetidos e "Últimas 2 unidades"; o painel tem o botão "Recusar" cortado (bug). Capturas em 2x (1,4x de ampliação deixa o texto macio) | Mobile-dev: **recapturar em 3x**, em horário comercial, sem código visível no alerta, sem "Últimas unidades" na camiseta, com valores redondos; consertar o "Recusar" do alerta (BUG para o QA). Eu troco o arquivo e as coordenadas de recorte ficam nos comentários do HTML |
+| I2 | **O pipeline precisa renderizar os dois vídeos.** `scripts/marketing-render.mjs` tem `STORY = { file: 'video-story' }`: trocar por uma lista `[video-lojista, video-cliente]` (saídas `video-lojista-15s.mp4`, `video-cliente-15s.mp4`, capas `--capa 3`). O contrato é o mesmo (`window.__duration`, `__fps`, `setTime(t)` com Promise). O render serve `docs/` inteira (confirmado), então fontes e `assets/` resolvem. Depois apagar `src/video-story.html` (stub) e os arquivos antigos de `saida/` e do zip de 2026-11-20 (parecer §1) | CEO/dev do pipeline |
+| I3 | Chromium do Playwright costuma vir **sem H.264**. Só importa para o **vídeo do lojista** (usa `clips/painel-pedido-novo`; `.webm` de reserva já previsto no motor). O vídeo do cliente (v2.3) não pede arquivo de vídeo, só PNG de `capturas/` | CEO/dev do pipeline |
+| I4 | `src/assets-social/` (01, 04, 09, 11) **não é mais referenciado** por nenhuma peça | Pode apagar |
+| I5 | **Não renderizei.** Larguras com 0,53 em/caractere; linhas de maior risco em `revisao-social-v2.md` §4 | Devolva o quadro que estourar; ajusto o `font-size` |
 
 ## II. Depende do fundador
 
 | # | Item | Onde aparece |
 |---|---|---|
-| IF1 | **Usuário (handle) do Instagram** e **link da bio** (site/WhatsApp). `config.json` tem `@webag` como valor provisório; as peças não mostram o handle de propósito (o CTA é "Siga esta página") | Bio, perfil |
-| IF2 | **Trilha do vídeo**: escolher na biblioteca de áudio do Instagram (ver `video-roteiro.md` §6: 120 BPM, instrumental, batida seca, começar na batida 1). Conferir se a conta comercial acessa o catálogo `[HIPÓTESE]` | Vídeo |
-| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** O vídeo e os posts dizem só "Em breve". Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda a cena G | Vídeo, post 3 |
-| IF4 | Aprovar a **assinatura** "Escolha no app. Receba em casa." (C3 do PO) usada no post 0, na bio e na cena B do vídeo | Perfil, post 0, vídeo |
-| IF5 | Aprovar o **cartaz do post 1** (18h, 19h, 21h): é uma situação das personas, não validada `[HIPÓTESE]` | Post 1, cena A |
-| IF6 | Autorizar a publicação do perfil e dos 4 posts (peça externa; ver J1 abaixo) | Todas |
+| IF1 | **Usuário (handle) do Instagram** e **link da bio** (WhatsApp do fundador via `wa.me`, grátis). **(v2.3)** As artes já trazem o `@webag` em 60 px ou mais (posts 0 a 3, os dois vídeos), lido de `src/config.json` (campo `instagram`, **provisório**): **se o usuário real for outro, mude só o JSON e rode o render**. O link da bio ainda falta (`instagram-legendas.md` §1) | Bio, perfil, todas as peças |
+| IF2 | **Trilha dos vídeos**: escolher na biblioteca de áudio do Instagram (ver `video-roteiro.md` §6: 120 BPM, instrumental, batida seca, começar na batida 1). Conferir se a conta comercial acessa o catálogo `[HIPÓTESE]` | Vídeos |
+| IF3 | **Data de lançamento: não existe e nenhuma peça cita.** Se o fundador fixar a data, entra o adesivo de contagem do Stories e muda o fecho dos vídeos | Vídeos |
+| IF4 | Aprovar a **promessa** "Aquela loja que você adora. Não entrega. Agora entrega." (post 0, bio, vídeo do cliente) | Perfil, post 0, vídeo do cliente |
+| IF5 | Aprovar **"Tem loja? Venda além da sua rua."** e decidir o que dizer sobre custo ("comissão só quando vende", "sem mensalidade", percentual): as legendas **não** afirmam nada até a decisão (`direcao-criativa.md` §3) | Post 3, bio |
+| IF6 | **Foto real** (mão com sacola, mesa com o celular no app) e **gravação de 10 a 15 s do próprio celular** do fundador (ele como cliente e como loja, ou falando ao lojista): é o que mais sobe a nota (autenticidade e prova; `revisao-social-v2.md` §2). Foto de fachada ou rosto de terceiros só com autorização por escrito | Posts 0 e 1, vídeos |
+| IF7 | Autorizar a publicação do perfil, dos 4 posts e dos 2 vídeos (peça externa; ver IJ1) e **como guardar o contato do lojista** que chamar no direct (finalidade, consentimento, LGPD) | Todas, post 3 |
+| IF8 | Se o fundador ouviu a frase de um lojista ("Só retirando, tá?" ou outra) nas visitas, mandar a frase **literal**: troca a reencenação do post 1 e da cena 1 do vídeo do lojista | Post 1, vídeo do lojista |
 
 ## III. Depende do jurídico
 
 | # | Item | Risco |
 |---|---|---|
-| IJ1 | "Entrega pelo Webag", "receba em casa" e a tela com "entrega Webag" (J1 acima: parecer sobre motoboys, DEC-039 J8). **Nenhuma peça externa sai antes do parecer e do G5** (`posicionamento.md` §4). Plano B sem entrega: bio e cena B passam a "Escolha no app. Pague com PIX." e o post 0 troca o título; me peça a versão | Alto |
-| IJ2 | A tela da loja (captura 04) mostra "20% off", "Em oferta" e "Retire grátis". Oferta divulgada vincula (J2 acima). O rótulo "Telas do app em teste" está no vídeo (4 a 10 s) e no post 2. Se o PO preferir, troco a captura 04 por outra | Médio |
-| IJ3 | A captura 11 mostra faixa de horário ("Chega entre 03:06 – 03:31"); é o app como está, sem prazo na copy (mesma dúvida do C8 acima) | Baixo |
+| IJ1 | **Marcado `[J8]` (parecer sobre motoboys, DEC-039): post 0** ("Agora entrega", "Saiu para entrega"), **post 2** ("A caminho", "Saiu para entrega", "da loja até você"), **vídeo do cliente** (promessa e "A caminho"), **cena 6 do vídeo do lojista** ("O Webag leva."), **bio A e C** ("agora entrega"), legenda do post 1 (só a linha opcional). **Não dependem de J8: post 1, post 3 (o chip "Entrega" saiu), vídeo do lojista sem a cena 6, bio B.** Tabela por peça no topo desta seção. Nenhuma peça externa marcada sai antes do parecer e do G5 (`posicionamento.md` §4). Plano B sem entrega: retirada na loja ("pedindo pelo app", bio B); me peça a versão | Alto |
+| IJ2 | **(v2.3)** As telas mostram produtos e preços do banco de demonstração (camiseta básica algodão, bermuda de sarja, R$ 135,80 no pedido; camiseta R$ 49,90 e bermuda R$ 79,90 na vitrine do vídeo do cliente), sempre com "Tela de exemplo". Preço em imagem de divulgação pode ser lido como oferta (J2). Os nomes "Casa Lar" e "Moda Express Franco" não aparecem mais nas artes (a vitrine é recortada abaixo do nome da loja). Conferir se "Moda Express Franco" existe | Baixo |
+| IJ3 | "A caminho" e "Entregue" no cartão de acompanhamento sem faixa de horário (nenhuma peça mostra prazo) | Baixo |
 
 ## IV. Observações de produto/design
 
 | # | Item |
 |---|---|
-| IP1 | Usei as capturas 01 (só o topo, antes de "Lojas perto de você"), 04, 09 (com o código copia e cola coberto) e 11. Não usei 03, 05 e 06 (degradê de placeholder). A 01 mostra categorias (Mercado, Farmácia, Pet, Casa e construção): vale o F2 acima, só aparecem as que existirem no lançamento |
-| IP2 | A foto de perfil centraliza o conteúdo do símbolo no círculo. O ícone do app (`webag-icone-app-v4.src.svg`) usa o ponto (82; 54,5) como centro e acaba com o desenho ~46 px mais baixo em 1024; para o perfil corrigi, então os dois não são idênticos pixel a pixel. Vale o dev do ícone rever |
-| IP3 | O "em breve" sem data por 3 semanas desgasta. Recomendo decidir a data (ou parar a série no post 3 e silenciar) para não manter público esperando sem aviso |
+| IP1 | **(v2.3)** Usa `src/capturas/` e `src/clips/` (não mais `docs/telas/`). Réplicas desenhadas (`.stat` em `social.css`; posts 0 e 2, cena 4 do cliente) existem porque a captura do acompanhamento tem horário em toda etapa; usam a moto do app. **Não são captura**: se o app mudar o cartão, atualizar a réplica. Os cartões `.ui` da v2.1 não são mais usados |
+| IP2 | A foto de perfil tem o símbolo 25% maior que a v1 (880 px) e o desenho ~26 px acima do centro geométrico da caixa (centro ótico). O ícone do app usa outro ponto de centro (ver IP2 da v1: ~46 px mais baixo em 1024); vale o dev do ícone rever |
+| IP3 | O "em breve" sem data por 3 semanas desgasta. Recomendo decidir a data (ou parar a série no post 3 e silenciar) |
+| IP4 | **(v2.3) Resolvido:** o sininho saiu de todas as peças e legendas. CTA do cliente: "Siga @webag"; do lojista: "Chame no direct" (+ @) |
+| IP5 | Termos novos para o glossário (`design/glossario-ux.md`, dono do UX): "Pedido enviado", "Loja separando", "A caminho", "Entregue" (linha do tempo do cliente) e "Aceitar pedido", "Pedido aceito", "Outro bairro" (painel). São de **marketing**; o texto final do app é do PO/mobile-dev |
+| IP6 | Lojista, vídeo e post 3: o chip "Outro bairro" é **desenhado** por cima da captura real, no lugar do chip "Entrega" (o painel real hoje não mostra a origem do pedido). É o que dá o motivo do "além da sua rua". Se o fundador não quiser sugerir esse recurso, trocar por "Novo" (`.chipx` no HTML) |
+| IP7 | **Post 1:** a linha "No Webag, o pedido de quem mora longe chega no seu painel." foi escolhida no lugar de "O Webag entrega para você." para não criar J8 no único post livre. **PO confirmar** que "mora longe" não é lido como promessa de entrega. Se o CEO preferir a frase de entrega, o post 1 vira `[J8]` |
+| IP8 | **Sem render nesta rodada** (sem Bash). O CEO renderiza e confere `revisao-social-v2.md` §0.6.1, coluna "Conferir" (recorte do clipe do lojista, emendas do post 3, soco de escala do cliente). Notas v2.3 conservadoras: post 1 4,05; post 3 4,08; vídeo lojista 4,05; post 2 4,00; **vídeo cliente 3,93 e post 0 3,90 (abaixo de 4,0; falta frase real ou foto do fundador, IF6, IF8)** |
+| IP9 | **Versão do vídeo do lojista sem a cena 6** (plano B do J8) ainda não existe. Pedir ao designer se o CEO quiser postar o lojista antes do parecer |

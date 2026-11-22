@@ -1,106 +1,76 @@
-# Vídeo de 15 s para Stories: pesquisa, formato, roteiro e storyboard
+# Vídeos de 15 s para Stories (v2.3): um por público
 
-Autor: product-designer | Data: 2026-11-20 | Peça: `src/video-story.html` (1080x1920, 30 fps, 15 s, sem trilha) | Posts e legendas: `instagram-legendas.md`
-Regras que valem aqui: `produto/posicionamento.md` §5 a §7 (promessas permitidas, DEC-040), `design/direcao-v3.md` §4, `design/kit-marca-v3.md`.
+Autor: product-designer | Data: 2026-11-22 | Peças: `src/video-lojista.html` e `src/video-cliente.html` (1080x1920, 30 fps, 15 s) | Motor: `src/video-engine.js`; estilos: `src/video.css`, `src/social.css`; contato: `src/social-cfg.js` + `src/config.json` | Pareceres: `avaliacoes/2026-11-22-v2-2-video-*.md` | Legendas: `instagram-legendas.md` | Auto-crítica: `revisao-social-v2.md` §0.6
+Regras: `direcao-criativa.md` §2 e skills `roteiro-de-video-curto`, `ganchos-virais`. **Esta versão descreve o que existe no HTML hoje** (a v2.1 descrevia cartões desenhados e "Pediu.").
 
-## 1. Limite da pesquisa (leia primeiro)
+## 1. Ficha
 
-- Pesquisa feita por `WebSearch` em 2026-11-20. O `WebFetch` não resolveu nenhum domínio (rede restrita), então **só li resumos de busca, não as páginas nem os vídeos**. Nenhum vídeo foi assistido por mim.
-- A maior parte das fontes sobre "o que viraliza" é blog de agência ou de ferramenta, sem metodologia. Números dessas fontes ficam marcados `[HIPÓTESE]`. Só marco como fato o que tem registro datado e checável (campanha, métrica oficial).
-- Consequência: a escolha do formato abaixo é **decisão de design apoiada em padrões repetidos**, não em prova de causa. A prova é o próprio Instagram: ver "Skip Rate" do Stories/Reel depois de publicar (§7).
+| Campo | LOJISTA | CLIENTE |
+|---|---|---|
+| Público | Quem tem loja e vende no balcão/WhatsApp | Quem compra de loja que não entrega |
+| Ideia em 1 frase | "Venda além da sua rua." | "Aquela loja que você adora. Agora entrega." |
+| Ação única | Chamar no direct (`@webag`, de `config.json`) | Seguir `@webag` |
+| Gancho (1 s) | Balão "Tem no 38?" (100 px) no quadro 0; "Moro longe. Dá pra entregar?" em 0,35 s; "Só retirando, tá?" em lima em 0,85 s | **Quadro 0 já com as duas frases**: "Aquela loja que você adora. Não entrega." |
+| Virada / promessa | 3,0 s ("Venda além da sua rua.") | **1,6 s**: risco em "Não", "Agora" entra, soco de escala no título; seta e cartão "Saiu para entrega" em 1,9 s |
+| Prova em tela | Clipe real do painel, recortado e ampliado (k = 2,1, UI a 44 px), limpo: sem código, sem contagem, sem chip "Entrega"; cursor real toca "Aceitar" | Captura real da vitrine e do produto (estáticas, limpas) com toque e zoom; réplica do cartão de acompanhamento sem horário |
+| Selo | "Tela de exemplo" na janela | "Tela de exemplo" em cada cena de tela |
+| CTA entra | 12,5 s (2,5 s antes do fim) | 12,5 s (2,5 s antes do fim) |
+| Depende do J8 | Só a cena 6 ("O Webag leva.") | A promessa "Agora entrega." e "Saiu para entrega" / "A caminho" |
 
-## 2. Referências (8) e o que extrair de cada uma
+## 2. Storyboard do LOJISTA
 
-| # | Referência | Data | O que é | Extrair para o Webag | Não levar | Evidência |
-|---|---|---|---|---|---|---|
-| 1 | Duolingo, "Death of Duo". [Fast Company](https://www.fastcompany.com/91313082/duolingo-dead-duo-owl-social-media-campaign), [Meltwater](https://www.meltwater.com/en/blog/duolingo-dead-mascot-campaign), [PR Daily](https://www.prdaily.com/duolingo-shares-pr-secrets-of-viral-death-of-duo-campaign/) | fev/2025 | Teaser em série: uma ideia única, repetida em várias publicações, com começo e fim claros | **Uma ideia só por peça e sequência numerada** (nossa série "1 de 3"). Menções diárias de ~11 mil para ~59,9 mil nos 5 dias após o lançamento (Meltwater); 1,7 bilhão de impressões em 2 semanas (número da própria empresa, não auditado) | Mascote (vetado, DEC-042) e humor mórbido | Fato (campanha e dados de listening); causa do sucesso é opinião |
-| 2 | Nothing Phone (3), teaser "New dots". [Smartprix](https://smartprix.com/bytes/nothing-phone-3-teased-with-dot-matrix-display-launch-set-for-july-2025), [Android Central](https://www.androidcentral.com/phones/nothing-phones/nothing-drops-a-glyph-matrix-old-interface-out-teaser) | jun/2025 | Teaser curto que **não mostra o produto inteiro**: um motivo gráfico da marca (pontos) e uma frase de 3 palavras | **Um motivo próprio da marca como protagonista** (nossas 3 barras e a sacola do símbolo) e frase curta | Data no fecho ("Coming July 2025"): aqui é proibido (sem data) | Fato (tagline e data); a leitura do motivo é de imprensa |
-| 3 | The Browser Company (Arc), vídeos de lançamento. [Failory](https://newsletter.failory.com/p/lights-camera-arction), [Tella](https://www.tella.com/blog/the-browser-company-video) | 2022 a 2023 | Fundador falando para a webcam, tom de vlog, a **mesma mensagem repetida em várias formulações** | **Repetir a promessa central em formulações diferentes** (nosso "Escolha no app. Receba em casa." no meio e os 3 passos depois) | Rosto/fundador na tela (sem rosto sintético; sem rosto real na primeira rodada) | Comentário de imprensa; sem número de views |
-| 4 | Spotify Wrapped. [Alex Jiménez](https://alexjimenezdesign.substack.com/p/three-design-elements-that-made-spotify), [Figures & Figures](https://figuresandfigures.substack.com/p/how-spotify-wrapped-nails-data-storytelling) | 2018 a 2024 | Cartões 9:16, **tipo gigante, cor chapada, um número ou ideia por tela**; o ano de 2021 teria "falhado por fazer demais" | **Tipografia como herói, bloco de cor, um elemento por quadro** (nossos numerais 1, 2, 3 de 640 px e os títulos de 128 px) | Neon, gradiente, volume de efeitos; dados pessoais (não temos) | Comentário de design; formato 9:16 é fato |
-| 5 | Contagem regressiva do Instagram Stories. [Metricool](https://metricool.com/instagram-countdown/), [Later](https://later.com/blog/instagram-stories-countdown-sticker) | 2025 a 2026 | Guias dizem que **um teaser isolado rende pouco; vários posts com data e hora rendem mais**; o adesivo manda lembrete a quem toca | **Série repetida** (4 peças em 3 semanas) e **um CTA que vira aviso** | O adesivo de contagem: exige data, e não há data (regra do pedido). Substituto: "Siga e ative as notificações" | Blogs de ferramenta `[HIPÓTESE]` |
-| 6 | Reels/Stories para anúncio: som desligado, 9:16, zona segura. [Adobe, 2024-11-04](https://blog.adobe.com/en/publish/2024/11/04/unlock-potential-reels-best-practices-for-creative-success-using-adobe-creative-cloud), [WebsiteBuilderExpert, resumo das dicas da Meta](https://www.websitebuilderexpert.com/news/meta-updates-reels-ads-guide/) | 2024 a 2026 | Recomendação consistente: vertical nativo, legenda/texto grande para quem assiste sem som, nada importante nas faixas da interface | **Texto grande, tudo legível sem som, margens: topo 250 px e base 340 px**. Fontes de agência falam em 14% no topo e 35% na base (28% menos cliques fora da zona) `[HIPÓTESE]`; nosso vídeo usa y de 270 a 1575 | Percentuais exatos como regra; confira no Instagram com o guia de zona segura na hora de publicar | Recomendação consistente, números `[HIPÓTESE]` |
-| 7 | Métrica "Skip Rate" do Instagram. [WebsiteBuilderExpert](https://www.websitebuilderexpert.com/news/instagram-reel-retention-chart/), [Opus](https://www.opus.pro/blog/instagram-reels-hook-formulas) | ago/2025 | O Instagram passou a mostrar a % de quem sai **nos 3 primeiros segundos** e um gráfico de retenção | **Gancho dentro de 1,5 s e nada de logo ou abertura de marca antes dele** | Metas numéricas (60%, 80% de retenção): são de fornecedores `[HIPÓTESE]`; a afirmação "texto e movimento nos 2 primeiros segundos elevam a retenção em até 50%" também é de fornecedor `[HIPÓTESE]` | Existência da métrica: fato; benchmarks: `[HIPÓTESE]` |
-| 8 | Formato POV (situação em primeira pessoa). [Sendible](https://www.sendible.com/insights/what-does-pov-mean-social-media-marketing), [Brandwatch](https://brandwatch.com/social-media-glossary/pov-video) | 2025 | Põe quem assiste **dentro de uma situação reconhecível**; o rótulo "POV:" é convenção do TikTok e no Reels funciona melhor sem ele; só funciona se a situação for específica e real | **Abrir com uma situação específica, sem rótulo e sem rosto** ("A loja fechou antes de você chegar.") | O rótulo "POV:" e pessoa em cena | Blogs; o 17% de ganho citado em fontes secundárias não foi verificado `[HIPÓTESE]` |
+Cortes `[0, 3, 4.5, 6, 8, 9.5, 11.5, 15]` (múltiplos de 0,5 s; 120 BPM). Cada cena tem o título opaco no 1º quadro (só desloca poucos px).
 
-Apoio de estrutura (não contam entre as 8): guias de teaser repetem "tensão, escalada, revelação", teaser de 6 a 15 s e corte a cada 1 a 2 s `[HIPÓTESE]` ([forkoff](https://forkoff.xyz/answers/how-to-make-a-viral-startup-launch-video), [60fps.design](https://mockup.60fps.design/blog/app-launch-video), este último alerta que tela de abertura ou animação de logo gasta os únicos segundos garantidos).
+| Tempo | Cena | Quadro | Texto | Movimento |
+|---|---|---|---|---|
+| 0,0 a 3,0 | 1. Conversa (noite) | Balões | "Tem no 38?" (100 px) / "Moro longe. Dá pra entregar?" (76) / **"Só retirando, tá?"** (112, lima) | Balão 1 no quadro 0; 2 e 3 entram com escala |
+| 3,0 a 4,5 | 2. Promessa (lima) | Tipografia | **Venda / além da / sua rua.** (210 px) | "além da" salta |
+| 4,5 a 6,0 | 3. Pedido novo (roxo) | Clipe real do painel (1,07 a 2,57 s do clipe), janela 912 x 987: "R$ 135,80", "2 itens", chip desenhado "Outro bairro", camiseta e bermuda, botão "Aceitar" | **Chegou / pedido.** (140 px) | A janela sobe 90 px e vibra 0,2 s |
+| 6,0 a 8,0 | 4. Aceita (roxo) | Mesmo clipe (2,57 s em diante): o cursor real entra pela direita e aperta "Aceitar" (6,73 a 6,98 s) | **Aceita com / um toque.** (140 px) | Em 6,93 s o painel lima "Pedido aceito." cobre a janela |
+| 8,0 a 9,5 | 5. Você separa (lima) | Ilustração `etapa-separando` | **Você / separa.** (210 px) | A ilustração salta de 85% |
+| 9,5 a 11,5 | 6. O Webag leva (noite) `[J8]` | Ilustração `etapa-a-caminho` | **O Webag / leva.** (210 px, lima) | A moto entra da esquerda |
+| 11,5 a 15,0 | 7. CTA (roxo) | Logo branco | **Tem loja?** (180 px); em **12,5 s** bloco lima **Chame no / direct. / @webag** (150 e 84 px); "Cadastro de lojas em breve. Francisco Morato e região." (44 px) | CTA sobe 60 px; o @ salta em 13,0 s |
 
-**Padrão que se repete nas 8:** (1) uma ideia por peça; (2) a primeira imagem já é a mensagem; (3) texto grande e cor chapada; (4) revelação do produto real, não ilustração; (5) um único convite no fim. É o que o vídeo faz.
+Recorte do clipe (detalhe e contas em comentário no HTML): janela mostra x 689 a 1123 e y 360 a 830 do clipe 1920x1080. O código "Pedido WB-..." fica acima do recorte; o chip "Entrega" e a contagem "Responda em ..." ficam sob blocos brancos (o alerta é branco chapado).
 
-## 3. Formato escolhido: "situação em primeira pessoa + revelação da tela real"
+## 3. Storyboard do CLIENTE
 
-Estrutura: **situação (2 s) → marca (2 s) → 3 passos na tela real (3 x 2 s) → "Em breve" + um CTA (5 s)**.
+Cortes `[0, 3, 5.5, 8, 11.5, 15]`. **Nenhum clipe do app** (os clipes têm horário previsto, horários repetidos e "Últimas 2 unidades").
 
-| Por que este | Evidência/raciocínio |
-|---|---|
-| Gancho sem produto e sem rosto | O Webag não pode ter rosto sintético nem foto de estoque. Uma frase específica de 5 palavras identifica o público em menos de 1 s (ref. 8, 7) |
-| Funciona mudo | Tudo é texto de 128 a 300 px em cor chapada; o som só reforça o ritmo (ref. 4, 6) |
-| A prova é real | As telas são capturas do app de verdade dentro de moldura simples. É a resposta direta à exigência "não pode parecer de IA" |
-| Não precisa de data | O fecho é "Em breve." mais "Siga para saber quando abrir." (ref. 5, adaptado) |
-| Sequência com os posts | O vídeo mostra a mesma tríade dos posts (escolher, pagar, acompanhar) e repete a assinatura C3 do PO |
+| Tempo | Cena | Quadro | Texto | Movimento |
+|---|---|---|---|---|
+| 0,0 a 3,0 | 1. Gancho e virada (roxo) | Tipografia; fachada, seta e moto | "Aquela loja / que você / adora. / **Não** / entrega." **no quadro 0**; em 1,6 s o risco corta "Não" e entra **Agora** (150 px) | Aproximação lenta do título de 0 a 1,6 s; a fachada entra pela esquerda; em 1,6 s soco de escala (1,02 para 1,08 e volta); seta e moto em 1,9 s |
+| 3,0 a 5,5 | 2. Escolha (noite) | Captura real da vitrine (`app-loja-produtos.png`), janela 912 x 990, 1º produto (camiseta, R$ 49,90) e metade do 2º | **Escolha / na loja.** (130 px) + selo | Toque em 4,1 s; a imagem se aproxima do produto até o corte |
+| 5,5 a 8,0 | 3. Peça (roxo) | Captura real do produto (`app-produto.png`): arte, preço e nome, janela 796 x 960 | **Peça.** (190 px) + selo | Aviso "Adicionado à sacola" (46 px) sobe em 6,9 s |
+| 8,0 a 11,5 | 4. Acompanhe (noite) | Réplica do cartão de acompanhamento (912 x 809), UI a 44 px ou mais, sem horário | **Acompanhe / cada etapa.** (130 px) | Em 9,6 s: "Em separação" vira "Saiu para entrega" `[J8]`; destaque e marcadores descem; a barra enche |
+| 11,5 a 15,0 | 5. CTA (roxo) | Logo branco | **Em breve.** (180 px); em **12,5 s** bloco lima **Siga / @webag** (150 e 100 px); "Começamos por Francisco Morato e região." (44 px) | CTA sobe 60 px; o @ salta em 13,0 s |
 
-Descartados e por quê: **contagem regressiva** (exige data); **fundador falando** (sem rosto na 1ª rodada; o fundador pode gravar uma versão depois, ref. 3); **estilo Wrapped com dados** (não há dados de uso); **demo longa de 30 s** (a regra é 15 s e a retenção cai [HIPÓTESE]); **humor com mascote** (vetado).
+Nenhuma cena fica mais de 1,1 s sem movimento (a cena 4 tem a barra enchendo até 10,65 s; o CTA tem o salto do @).
 
-## 4. Regras de produção
+## 4. Contrato técnico (igual nos dois)
 
-| Item | Regra |
-|---|---|
-| Palco | 1080x1920, 30 fps, 15 s = 450 quadros. Determinístico: `window.setTime(t)` posiciona tudo; um timeline em JS puro |
-| Margem segura | Topo 250 px e base 340 px sem texto (interface do Instagram). Laterais 84 px. Texto de y=270 a y=1575 |
-| Tipografia | Bricolage Grotesque 800 (títulos, numerais), Figtree 600 a 800 (adesivos, aviso). Mínimo 32 px (aviso); títulos 128 a 300 px |
-| Cor | Roxo `#C02EF0`, noite `#1C1721`, lima `#D6FF4A`, branco. Sem gradiente, sem sombra com desfoque, sem emoji |
-| Contraste | Branco sobre roxo 4,29:1 (só texto >= 104 px, passa AA para texto grande); lima sobre noite 15,3:1; noite sobre lima 15,3:1; branco sobre noite 17,6:1. O aviso pequeno ("Telas do app em teste.") fica em caixa noite para dar 17,6:1 também sobre o roxo |
-| Movimento | Corte seco entre cenas, sem transição e **sem quadro vazio**: no quadro do corte numeral, título, logo e "Em breve." já estão opacos (só deslocam 8 px em 3 quadros). Aparelho entra de baixo (260 px) em 6 quadros (0,20 s), `out5`, opaco desde o 1º quadro. Fade só em elementos que entram depois do corte (2ª frase da cena B, adesivo, cartão do CTA). **Todo o conteúdo de cada cena de 2 s fica opaco até 0,40 s após o corte (>= 1,6 s legível antes do próximo corte).** Adesivo salta com `back` curto (sobressalto <= 20%). Nada flutua, nada em loop. Respiro só no hold final (12,75 a 15,00 s) |
-| Tela real | `docs/telas/04-app-loja.png`, `09-app-pix.png`, `11-app-acompanhamento.png`; moldura: retângulo arredondado noite, sem notch |
-| Sem trilha | O MP4 sai com silêncio. Trilha: ver §6 |
+`window.__duration = 15`, `window.__fps = 30`, `window.setTime(t)` devolve Promise. Sem CSS animation/transition, sem Date.now, sem Math.random: a imagem é função pura de `t`. `src/social-cfg.js` só troca o texto de `[data-handle]` (e reduz a fonte se o @ passar de `data-fit` px); não altera tempo nem movimento. O lojista usa clipes (`clips` no motor; `.webm` de reserva se o Chromium não tiver H.264, `pendencias.md` I3); o cliente não pede nenhum arquivo de vídeo. Régua de pré-visualização com `?preview`. Render: `pnpm marketing video-lojista` e `video-cliente`.
 
-## 5. Storyboard cena a cena
+## 5. Som
 
-Compasso: 2,0 s por cena a 120 BPM (4/4). Microeventos em múltiplos de 0,25 s. Para outra trilha, mude só o objeto `T` no topo do script do HTML.
+Trilha da biblioteca do Instagram (escolha do fundador, IF2): instrumental, sem vocal, 120 BPM (aceita 112 a 126), batida seca, começar na batida 1. Acentos em 0,0; em 3,0 (lojista) ou **1,6 (cliente, no soco da virada)**; no corte do CTA (12,5) e na batida final. Alerta de notificação em 4,5 s no lojista (opcional). Os dois são entendidos sem som.
 
-| Tempo | Cena | O que aparece | Texto na tela | Movimento | Transição | Som desejado |
-|---|---|---|---|---|---|---|
-| 0,00 a 2,00 | **A. Gancho** (fundo noite) | Cartaz tipográfico à esquerda, 5 linhas de 224 px. "fechou" sobre marca-texto lima inclinado | A loja / **fechou** / antes de / você / chegar. | Quadro 0 já mostra "A loja fechou". "antes de" em 0,10, "você" em 0,20, "chegar." em 0,30 (cada uma sobe 24 px em 0,10 s); frase completa e opaca em 0,36 s. Resto parado até 2,0 (1,6 s de leitura) | Entra seco, sem fade de abertura | Kick grave seco em 0,00. Três estalos secos (0,10, 0,20, 0,30; semicolcheias a 120 BPM seriam 0,125 / 0,25 / 0,375, mas atrasam a frase completa para 0,43 s) |
-| 2,00 a 4,00 | **B. Marca** (fundo roxo) | Logo branco (símbolo + "webag") de 800 px no centro, frase de 104 px abaixo | Escolha no app. / Receba **em casa.** | Corte seco para o roxo; logo inteiro e "Escolha no app." já em cena em 2,00. Barras partem de 40% e crescem em 2,00 / 2,03 / 2,07 (0,15 s); sacola de 80% a 100% em 2,00; palavra desliza 36 px em 2,00 a 2,13; linha 1 desloca 8 px em 0,10 s. Linha 2 em 2,25 (opaca em 2,32) | Corte seco de noite para roxo | Kick + clap fortes em 2,00 (maior acento do primeiro terço). Estalo em 2,25 |
-| 4,00 a 6,00 | **C. Passo 1** (noite) | Numeral "1" lima de 640 px à esquerda; título 128 px; aparelho à direita com a tela da loja; adesivo | **Escolha a loja.** Adesivo: "Tempo e taxa antes de pedir" | Em 4,00 numeral e título já opacos (deslocam 8 px em 0,10 s); aparelho sobe 260 px em 0,20 s (4,00 a 4,20), opaco desde 4,00; adesivo salta em 4,25 (opaco em 4,33) | Corte seco | Kick + clap em 4,00. Subida curta de ruído (<= 0,2 s) no aparelho. Click grave em 4,25 |
-| 6,00 a 8,00 | **D. Passo 2** (roxo) | Igual a C, com a tela do PIX (valor e contador) | **Pague com PIX.** Adesivo: "Confirma sozinho" | Mesmo padrão em 6,00 e 6,25 | Corte seco | Mesmo acento de C em 6,00 e 6,25 |
-| 8,00 a 10,00 | **E. Passo 3** (noite) | Igual a C, com a tela de acompanhamento (cartão noite com a faixa de horário) | **Acompanhe até a porta.** Adesivo: "Fale com a loja pelo WhatsApp" | Mesmo padrão em 8,00 e 8,25 | Corte seco | Mesmo acento de C em 8,00 e 8,25 |
-| 10,00 a 12,00 | **G1. Em breve** (roxo) | Logo branco pequeno no topo (y 300); "Em" e "breve." de 300 px, "breve." sobre marca-texto lima | Em / **breve.** | "Em" e "breve." já opacos em 10,00; "Em" desloca 8 px em 0,10 s; "breve." salta de 90% a 100% em 0,18 s | Corte seco | Acento mais forte do vídeo: kick + sub grave com cauda de ~0,5 s em 10,00 |
-| 12,00 a 15,00 | **G2. CTA único** (roxo) | Cartão noite de 912 px com a chamada; sublinhado lima desenha sob a segunda linha | Siga para saber / **quando abrir.** | Cartão sobe 60 px em 12,00 (0,22 s). Sublinhado cresce da esquerda em 12,45 (0,30 s). Parado de 12,75 a 15,00 para a leitura | Sem corte; o cartão entra sobre o fecho | Clap seco em 12,00 e um toque agudo em 12,45. Batida cai de volume (ou filtro passa-baixa) até o fim |
-| 4,00 a 10,00 | Camada fixa | Caixa noite pequena à esquerda (y 1462 a 1516, base alinhada ao aparelho; 404 px acima da borda inferior, fora da faixa da interface) | Telas do app em teste. | Estática | | |
+## 6. Aceite do pedido do CEO (v2.3)
 
-Primeiro quadro (miniatura/capa): cena A em 0,0 s tem 2 linhas; uma capa melhor é o quadro de 1,50 s (hook completo). Use `--capa 1.5` no render.
+| Critério | Lojista | Cliente |
+|---|---|---|
+| Gancho no 1º segundo | Balão no quadro 0 e mais dois até 0,85 s | **As duas frases no quadro 0**; movimento desde 0 s |
+| Promessa antes dos 4 s | 3,0 s | **1,6 s** |
+| Um CTA | "Chame no direct." + `@webag`, entra em 12,5 s | "Siga `@webag`", entra em 12,5 s |
+| Sem pagamento como argumento | Nenhuma cena | Nenhuma cena |
+| Sem prazo, data, superlativo | "Em breve", sem data | "Em breve", sem data |
+| Sem dado de demonstração visível | Sem código, contagem, chip "Entrega" | Sem horário, código, escassez, "Pago no app" |
+| UI >= 44 px | 44 a 46 px (k = 2,1) | 44 a 70 px |
+| Entendido sem som | Todo conteúdo é texto de 44 a 210 px | Idem |
 
-## 6. Direção de som (a trilha é escolhida pelo fundador)
+## 7. Medir e riscos
 
-| Item | Direção |
-|---|---|
-| Biblioteca | A do próprio Instagram (livre de direitos para o uso na plataforma). Contas comerciais costumam ter catálogo restrito; confirme na conta do Webag `[HIPÓTESE: não verificado]`. O README de `docs/marketing/` traz as alternativas e o cuidado com licença |
-| Tipo de batida | Instrumental, **sem vocal**, batida seca e curta: kick grave, estalo ou clap no 2 e no 4, chimbal fechado em colcheias. Hip hop instrumental, trap leve ou eletrônica mínima. Nada de pad longo, nada de épico, nada de ukulele/"feliz de comercial" |
-| Andamento | 120 BPM (aceita 112 a 126). Compasso de 2,0 s: cortes em 0, 2, 4, 6, 8, 10 e CTA em 12. A 100 BPM o compasso é 2,4 s; mude `T` no HTML |
-| Início | A faixa precisa **começar na batida 1** (corte o início da música no editor do Instagram); sem fade-in |
-| Acentos | Fortes em 0,00, 2,00 e 10,00; médios em 4,00, 6,00, 8,00 e 12,00; pequenos nos microeventos (0,10 / 0,20 / 0,30 / 2,25 / 4,25 / 6,25 / 8,25 / 12,45) |
-| Fim | A batida cai de volume entre 12,00 e 15,00 para não competir com a leitura; fade-out no último segundo |
-| Volume | Música baixa o bastante para o vídeo ainda ser entendido sem som (ele já é) |
-
-## 7. Como medir (hipótese a validar)
-
-Depois de publicar: ver no Instagram o **Skip Rate** e o gráfico de retenção. Meta de partida `[HIPÓTESE]`: Skip Rate abaixo de 70% e 50% de quem começa chegando em 10 s. Se o Skip Rate for alto, trocar só a cena A (o gancho) e manter o resto: A é a única que precisa ser reescrita (alternativas: "Saiu do trabalho às 19h. A loja fecha às 18h." ou "O presente é pra amanhã e já são 21h.").
-
-## 8. Aceite do pedido
-
-| Critério | Como o vídeo atende |
-|---|---|
-| Gancho nos primeiros 1,5 s | "A loja fechou" no quadro 0; frase completa em 0,36 s |
-| Entendido sem som | Todo conteúdo é texto grande; nenhuma informação depende de áudio |
-| Um único CTA | "Siga para saber quando abrir." É a única chamada; "Em breve." é informação, não ação |
-| Contraste AA | Ver §4; texto branco sobre roxo só em corpo >= 104 px |
-| Consistência com perfil e posts | Mesmas cores, Bricolage + Figtree, símbolo, marca-texto lima, adesivo, tríade escolher/pagar/acompanhar |
-| Sem data, sem prazo | Só "Em breve" |
-| Não parece IA | Telas reais, tipografia opinativa, grade rígida, cortes secos, movimento curto, sem rosto, mão, gradiente, brilho, partícula ou estoque |
-
-## 9. Riscos e pendências do vídeo
-
-- `[HIPÓTESE]` A situação do gancho (loja fecha antes de o cliente chegar) vem das personas, que não foram validadas (`produto/personas.md`). Testar com 5 moradores antes de impulsionar.
-- A cena B repete a assinatura C3 "Escolha no app. Receba em casa." e as telas mostram "entrega Webag": **"Entrega pelo Webag" depende do parecer jurídico** (DEC-039, `posicionamento.md` §4). Publicar só com o parecer, ou trocar a cena B por "Escolha no app. Pague com PIX." (uma linha no HTML).
-- As telas vêm do ambiente de demonstração (lojas e valores fictícios). Por isso o aviso "Telas do app em teste." de 4 a 10 s.
-- Recapturar `docs/telas/` com `deviceScaleFactor: 2` melhora a nitidez do aparelho no vídeo (hoje ampliado 1,06x; no post 0 também).
+Depois de publicar: skip rate nos 3 s, retenção em 10 s, seguidores por alcance (cliente); mensagens diretas e visitas ao perfil por alcance (lojista). Metas de partida são `[HIPÓTESE]`.
+- **J8**: vídeo do cliente e a cena 6 do lojista não saem antes do parecer e do G5. Plano B do lojista sem a cena 6: **a versão ainda não existe** (pedir ao designer; é um HTML a mais).
+- **Não renderizei** (sem Bash): ver `revisao-social-v2.md` §0.6 (o que o CEO deve conferir no primeiro render: recorte do clipe do lojista, blocos brancos, janela do cliente).
+- Os produtos e valores são do banco de demonstração; o selo "Tela de exemplo" está em todas as cenas de tela.

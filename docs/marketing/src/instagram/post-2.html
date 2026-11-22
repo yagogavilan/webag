@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 2, o que vem no app (1080 x 1350)</title>
+<title>Webag: post 2 (cliente) "Não deu pra passar na loja?" (1080 x 1350), v2.3 com réplica limpa do app</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,62 +11,59 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
-/* Os 3 aparelhos sobem para a direita seguindo o corte diagonal do painel (-8 graus): grade defasada de 47 px.
-   Borda do painel em x: y = 640 - 0,1407 * x. Topo do aparelho = borda no centro da coluna - 60 px (cruza o corte). */
-.p2 .i1 { left: 72px;  top: 551px; }
-.p2 .i2 { left: 405px; top: 504px; }
-.p2 .i3 { left: 738px; top: 457px; }
+
+/* v2.3: a captura real tinha horários ("22:13" x2), "Aguardando motoboy" e texto a 34 px. Agora é a RÉPLICA do cartão de acompanhamento do app (classe .stat em social.css),
+   com a mesma estrutura (bloco escuro com etapa, título, moto e barra; linha do tempo), a mesma ilustração do app (assets/etapa-a-caminho.svg), SEM horário, SEM código,
+   sem "Aguardando motoboy", e rotulada "Tela de exemplo". Todo texto de UI >= 44 px (etapa 44, título 88, linhas da linha do tempo 44).
+   Eixo vertical (px): eyebrow 128 a 192; título 204 a 410; cartão 432 a 1140 (360 do bloco escuro + 3 linhas de 101,2 + 44 de respiro = 708; sombra até 1152);
+   frase 1170 a 1227 ("Peça da loja, sem sair do lugar." 32 car x 0,46 x 52 = 765 de 936: responde à pergunta do título, que fala da loja); CTA 60 px 1231 a 1301; margem inferior 49. Larguras: "Saiu para" 9 car x 0,5 x 88 = 396 (+ moto de 250 à direita, cabe em 936); "Saiu para entrega" 44 px na linha do tempo = 17 car x 0,5 x 44 = 374. */
+.p2 .eyebrow { position: absolute; left: 72px; top: 128px; font: 800 56px/64px var(--texto); color: var(--lima); }
+.p2 h1 { position: absolute; left: 72px; top: 204px; font-size: 112px; }
+.p2 .stat { left: 72px; top: 432px; width: 936px; height: 708px; box-shadow: 12px 12px 0 var(--noite); }
+.p2 .stat .selo { right: 24px; bottom: 22px; }
+.p2 .fecho { position: absolute; left: 72px; top: 1170px; }
+.p2 .fecho .sub { font: 800 52px/57px var(--texto); color: var(--branco); }
+.p2 .fecho .cta { position: static; margin-top: 4px; font-size: 60px; color: var(--lima); white-space: nowrap; }
 </style>
+<script src="../social-cfg.js" defer></script>
 </head>
 <body>
-<main class="post papel p2" role="img" aria-label="Post 2 de 3. O que vem no app. 1: escolha a loja, na tela de uma loja. 2: pague com PIX, na tela do PIX. 3: acompanhe o pedido, na tela de acompanhamento. Telas do app em teste.">
+<main class="post roxo p2" role="img" aria-label="Voltando do trabalho. Não deu pra passar na loja? Tela de exemplo do app Webag com o acompanhamento de um pedido: Etapa 4 de 5, A caminho, Saiu para entrega, e a linha do tempo com Em separação, Saiu para entrega e Entregue. Peça da loja, sem sair do lugar. Siga @webag. Webag, em breve.">
 
-  <svg class="sprite" aria-hidden="true" focusable="false">
-    <defs>
-      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-        <rect width="160" height="104" fill="#FFFFFF"/>
-        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-      </mask>
-      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
-        <rect x="24" y="34" width="23" height="14" rx="7"/>
-        <rect x="0" y="62" width="49" height="14" rx="7"/>
-        <rect x="18" y="90" width="34" height="14" rx="7"/>
-        <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
-        </g>
-      </symbol>
-    </defs>
-  </svg>
+  <!-- Ideia: a pergunta na voz do cliente, sem hora; a resposta é pedir sem sair do lugar e acompanhar. Prova: réplica do cartão real do app, ampliada, sem dado de demonstração.
+       Depende do parecer J8 (pendencias.md IJ1): "A caminho" e "Saiu para entrega". CTA único em 60 px: "Siga" + @ de src/config.json (provisório). -->
+  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
+  <div class="emb">Em breve</div>
 
-  <div class="painel"></div>
+  <p class="eyebrow">Voltando do trabalho.</p>
+  <h1 class="d"><span>Não deu pra</span><span>passar na loja?</span></h1>
 
-  <div class="rail">
-    <svg class="sym" viewBox="0 0 160 104" aria-hidden="true"><use href="#s-sym" width="160" height="104"/></svg>
-    <div class="serie"><div class="segs" aria-hidden="true"><i class="seg on"></i><i class="seg on"></i><i class="seg"></i></div><span>2 de 3</span></div>
+  <div class="stat" aria-hidden="true">
+    <div class="top">
+      <p class="lb">Etapa 4 de 5 · A caminho</p>
+      <p class="tt"><span>Saiu para</span><span>entrega</span></p>
+      <div class="art"><img src="../assets/etapa-a-caminho.svg" alt=""></div>
+      <div class="bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></div>
+    </div>
+    <div class="tl">
+      <div class="track allk">
+        <div class="rows">
+          <div class="hl" style="top:101.2px"></div>
+          <ol>
+            <li class="done"><i><u class="ud"></u></i>Em separação</li>
+            <li><i><u class="un"></u></i>Saiu para entrega</li>
+            <li class="todo"><i></i>Entregue</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+    <div class="selo">Tela de exemplo</div>
   </div>
 
-  <h1 class="d">
-    <span>O que vem</span>
-    <span>no <span class="mk"><span>app.</span></span></span>
-  </h1>
-
-  <!-- capturas reais: docs/telas/04-app-loja.png, 09-app-pix.png, 11-app-acompanhamento.png (390x844, reduzidas a 64%: nítidas) -->
-  <div class="item i1">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/04-app-loja.png" alt=""></div></div>
-    <div class="rot"><b>1</b><span>Escolha<br>a loja</span></div>
+  <div class="fecho">
+    <p class="sub">Peça da loja, sem sair do lugar.</p>
+    <p class="cta">Siga <span data-handle data-fit="560">@webag</span></p>
   </div>
-  <div class="item i2">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/09-app-pix.png" alt=""><div class="cobre">Código copia e cola</div></div></div>
-    <div class="rot"><b>2</b><span>Pague com<br>PIX</span></div>
-  </div>
-  <div class="item i3">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/11-app-acompanhamento.png" alt=""></div></div>
-    <div class="rot"><b>3</b><span>Acompanhe<br>o pedido</span></div>
-  </div>
-
-  <p class="nota">Telas do app em teste.</p>
 
 </main>
 </body>

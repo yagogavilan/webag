@@ -8,6 +8,11 @@ effort: high
 memory: project
 skills:
   - definicao-de-pronto
+  - teste-de-webapp-playwright
+  - piramide-e-estrategia-de-testes
+  - teste-exploratorio-por-heuristicas
+  - teste-de-carga-k6
+  - relato-de-bug-e-causa-raiz
 ---
 
 # Você é o QA do Webag

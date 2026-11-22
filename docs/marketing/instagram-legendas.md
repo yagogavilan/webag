@@ -1,148 +1,158 @@
-# Instagram do Webag (pré-lançamento): bio, legendas, calendário e kit visual
+# Instagram do Webag (pré-lançamento), v2.3: bio, legendas e calendário
 
-Autor: product-designer | Data: 2026-11-20 | Peças: `src/instagram/*.html` e `src/video-story.html` | Vídeo: `video-roteiro.md`
-Regras: `produto/posicionamento.md` §5 a §7 (DEC-040): sem emoji (marca), sem prazo, sem "compre de quem é daqui", sem superlativo, sem "lojas perto de você". Região só como **escopo de lançamento**.
+Autor: product-designer | Data: 2026-11-22 | Substitui a v2.1 | Peças: `src/instagram/*.html`, `src/video-lojista.html`, `src/video-cliente.html` | Roteiros: `video-roteiro.md` | Auto-crítica: `revisao-social-v2.md` | Pareceres: `avaliacoes/2026-11-22-*.md`
+Regras (`direcao-criativa.md` §2, `produto/posicionamento.md` §7): sem emoji, sem prazo de entrega, sem superlativo, sem número inventado, sem PIX/cartão/pagamento como argumento, sem "compre de quem é daqui". Região só como escopo.
+Legenda: a 1ª linha é o gancho (aparece antes do "mais") e faz sentido sozinha. No máximo 2 hashtags, no fim. **CTA único em toda peça: seguir a página (cliente) ou chamar no direct (lojista). Sem "sininho".**
+**Marca `[J8]`** = depende do parecer jurídico sobre motoboy (DEC-039, `pendencias.md` IJ1). Nada marcado `[J8]` é postado antes do parecer e do G5.
+**O que as artes mostram (para legenda e alt text baterem):** as telas são **capturas reais recortadas e ampliadas** do painel (post 3, vídeo do lojista) e do app (vídeo do cliente, cenas 2 e 3), ou **réplicas desenhadas** do cartão do app (posts 0 e 2, vídeo do cliente, cena 4). Todas rotuladas "Tela de exemplo". Nenhuma mostra código de pedido, horário, contagem regressiva, "Pago no app", "Últimas unidades" nem comida. Os valores e produtos (R$ 135,80; camiseta e bermuda; camiseta R$ 49,90) vêm do banco de demonstração: são **exemplo**, e a legenda não os usa como oferta.
 
 ## 1. Perfil
 
 | Campo | Valor |
 |---|---|
-| Foto | `src/instagram/perfil.html` (1080x1080): símbolo branco sobre roxo `#C02EF0`, dentro do círculo seguro de 80% (raio 432 px; o ponto mais distante fica a ~360 px). Mesmo desenho do ícone do app, então o perfil e a loja de apps se reconhecem |
-| Nome (campo "Nome", pesquisável) | `Webag` |
-| Usuário | **Pendência do fundador** (ver `pendencias.md`). `config.json` traz `@webag` como valor provisório |
-| Categoria | "Compras e varejo" (ou a mais próxima que o Instagram oferecer) |
-| Link | **Pendência**: página do site quando houver domínio. Sem link, não colocar link falso |
+| Foto | `src/instagram/perfil.html` (1080x1080), sem alteração (parecer: 4,0, publicar) |
+| Nome | `Webag` |
+| Usuário e link | **Pendência do fundador** (IF1). O `@webag` nas artes é provisório e vem de `src/config.json` (campo `instagram`); o link da bio vai para o WhatsApp do fundador (`wa.me`, grátis). Sem link falso na bio |
+| Categoria | "Compras e varejo" (ou a mais próxima) |
 
-### Bio (100 caracteres, limite 150; 3 linhas, sem emoji)
+### Bio B (sem promessa de entrega; **pode sair antes do J8**)
 
 ```
-Escolha no app. Receba em casa.
+Aquela loja que você adora, pedindo pelo app.
 Em breve em Francisco Morato e região.
-Siga para saber quando abrir.
+Tem loja? Chame no direct.
 ```
 
-Por quê: linha 1 é a assinatura C3 do PO (`posicionamento.md` §6); linha 2 diz o escopo sem virar slogan regional e sem data; linha 3 é o CTA único. Não usa "marketplace" (jargão), "tudo" nem prazo.
-
-## 2. Legendas (4)
-
-Hashtags: no máximo 3 por legenda, só as regionais e a da marca, no fim. Nenhuma legenda promete prazo.
-
-### Post 0: apresentação (dia 0)
+### Bio A (recomendada depois do J8; 111 caracteres de 150; sem emoji) `[J8]`
 
 ```
-Este é o Webag.
-
-Um app para escolher a loja e o produto, pagar com PIX ou cartão e acompanhar o pedido até a porta. Também dá para retirar na loja.
-
-Estamos preparando o lançamento. Vamos começar por Francisco Morato, Franco da Rocha, Caieiras, Cajamar e arredores.
-
-Siga esta página para saber quando abrir.
-
-#Webag #FranciscoMorato #FrancoDaRocha
+Aquela loja que você adora agora entrega.
+Em breve em Francisco Morato e região.
+Tem loja? Chame no direct.
 ```
 
-Texto alternativo: "Cartaz roxo com o texto Escolha no app. Receba em casa. e o selo Em breve. Ao lado, a tela inicial real do app. Três itens: escolha a loja e o produto, pague com PIX ou cartão, acompanhe até a porta."
+Com link: ele entra no campo de link da bio (não no texto) e a linha 3 vira "Tem loja? Chame no direct ou no link."
 
-### Post 1: o problema (semana 1)
+### Bio C (teste A/B do parecer: lojista na linha 1) `[J8]`
 
 ```
-18h: a loja fecha.
-19h: você sai do trabalho.
-21h: você chega em casa.
-E o presente é pra amanhã.
+Tem loja? Chame no direct.
+Aquela loja que você adora agora entrega.
+Em breve em Francisco Morato e região.
+```
 
-Estamos preparando outro jeito de comprar: você escolhe a loja pelo app e recebe em casa.
+Teste: A contra C, por 2 semanas depois do post 3. Métrica: mensagens diretas de lojistas por visita ao perfil. Sem amostra antes disso `[HIPÓTESE]`.
 
-Siga esta página para saber quando abrir.
+## 2. Legendas (4 posts + 2 vídeos), na ordem cliente, lojista, cliente, lojista
+
+### Post 0, cliente, apresentação (dia 0). `[J8]` ("Agora entrega", "Saiu para entrega" na arte)
+
+```
+Aquela loja que você adora. Não entrega. Agora entrega.
+
+Estamos construindo o Webag: um app para pedir de lojas que hoje só vendem no balcão e acompanhar o pedido até a sua porta.
+
+Ainda não abriu. Siga a página e a gente avisa quando abrir. Começamos por Francisco Morato e região.
 
 #Webag #FranciscoMorato
 ```
 
-Texto alternativo: "Fundo escuro com três horários em lima: 18h, a loja fecha. 19h, você sai do trabalho. 21h, você chega em casa. Abaixo: E o presente é pra amanhã. Webag. Em breve."
+Texto alternativo: "Fundo roxo. Texto grande: Aquela loja que você adora. A palavra Não está riscada e ao lado aparece Agora: Agora entrega. Embaixo, uma ilustração de loja de bairro, uma seta e uma tela de exemplo do app com o aviso A caminho, Saiu para entrega, e a moto com a sacola do Webag. Legenda: Tela de exemplo. Siga @webag. Selo: Em breve."
+Mudanças v2.3: sai o sininho (na arte e na legenda); a arte mostra o cartão "Saiu para entrega" no lugar da moto solta.
 
-### Post 2: o que vem no app (semana 2)
-
-```
-O que vem no app:
-
-1. Escolha a loja e o produto.
-2. Pague com PIX ou cartão.
-3. Acompanhe o pedido até a porta e fale com a loja pelo WhatsApp.
-
-As telas são do app em teste e podem mudar até o lançamento.
-
-Siga esta página para saber quando abrir.
-
-#Webag #Cajamar
-```
-
-Texto alternativo: "Três telas reais do app em molduras de celular: a página de uma loja, o pagamento com PIX com contador, e o acompanhamento do pedido com a faixa de horário. Legenda: 1 escolha a loja, 2 pague com PIX, 3 acompanhe o pedido."
-
-### Post 3: convite (semana 3)
+### Post 1, lojista, a conversa (semana 1). Sem `[J8]`: **primeiro a sair**
 
 ```
-Vai abrir.
+Tem no 38? Moro longe. Dá pra entregar? Só retirando, tá?
 
-Para ficar sabendo primeiro:
-1. Siga esta página.
-2. Ative as notificações da página.
-3. Avisamos quando abrir.
+Quantas vendas essa frase já custou para a sua loja?
 
-Começamos por Francisco Morato e região.
+No Webag, o pedido de quem mora longe chega no seu painel. O cadastro de lojas abre em breve. Chame no direct para entrar na lista.
+```
+
+Texto alternativo: "Fundo noite. Conversa de mensagens. Cliente: Tem no 38? Moro longe. Dá pra entregar? Resposta da loja em lima: Só retirando, tá? Pergunta: Quantas vendas essa frase já custou? Abaixo: No Webag, o pedido de quem mora longe chega no seu painel. Chame no direct: @webag. Selo: Em breve."
+Mudança v2.3: a arte e a legenda ganham a linha de solução ("No Webag, o pedido de quem mora longe chega no seu painel."), sem prazo, sem preço e sem a palavra "entrega". O PO deve confirmar que "mora longe" não é lido como promessa de entrega (`pendencias.md` IP7).
+Linha opcional, só após o parecer: "Você separa e o Webag leva." `[J8]`
+Pendência do fundador: se ele ouviu essa frase (ou outra) nas visitas, trocar pela frase literal dele (IF8).
+
+### Post 2, cliente, a pergunta do dia (semana 2). `[J8]` ("A caminho", "Saiu para entrega" na arte)
+
+```
+Não deu pra passar na loja?
+
+Peça da loja, sem sair do lugar, e acompanhe cada etapa do pedido, da loja até você.
+
+Ainda não abriu. Siga a página que a gente avisa.
+
+#Webag
+```
+
+Texto alternativo: "Fundo roxo. Voltando do trabalho. Não deu pra passar na loja? Tela de exemplo do app: Etapa 4 de 5, A caminho, Saiu para entrega, com a moto do Webag e a barra de progresso; embaixo, a linha do tempo com Em separação concluída, Saiu para entrega em andamento e Entregue. Peça da loja, sem sair do lugar. Siga @webag. Selo: Em breve."
+Mudanças v2.3: a captura real (com horários e "Aguardando motoboy") virou réplica limpa do cartão do app, em tipo grande, com o selo "Tela de exemplo".
+
+### Post 3, lojista, recrutamento (semana 3). Sem `[J8]` (o chip "Entrega" saiu; nada promete entrega)
+
+```
+Tem loja? Venda além da sua rua.
+
+Quem passa na sua porta já conhece você. O Webag coloca a sua loja diante de quem mora mais longe: o pedido chega no painel e você aceita com um toque.
+
+O cadastro de lojas abre em breve. Chame no direct para entrar na lista.
 
 #Webag #FranciscoMorato
 ```
 
-Texto alternativo: "Cartaz roxo com o texto Vai abrir. Quer saber primeiro? e o símbolo da sacola Webag em branco. Três passos: siga esta página, ative as notificações, avisamos quando abrir. Selo: Em breve."
+Texto alternativo: "Fundo lima. Tem loja? Venda além da sua rua. Tela de exemplo do painel da loja no Webag: Pedido novo, R$ 135,80, 2 itens, etiqueta Outro bairro, 1 camiseta básica de algodão branca M e 1 bermuda de sarja 40, com o botão roxo Aceitar. Chame no direct: @webag. Selo: Cadastro em breve."
+Mudanças v2.3: o alt text antigo (R$ 60, boné, R$ 100) descrevia um cartão que não existe mais; este descreve a arte. A legenda diz "aceita com um toque" no lugar de "você separa" (o que a tela mostra).
+Pendência (IF5): não escrever "sem mensalidade" nem percentual de comissão até o fundador confirmar. Resposta padrão a "quanto custa?": "A comissão é só quando você vende. Mando os detalhes quando o cadastro abrir."
 
-### Legenda do vídeo (Stories; se for também Reel)
+### Vídeo do lojista (Stories; Reel opcional). Cenas 1 a 5 e 7 sem `[J8]`; a cena 6 ("O Webag leva.") é `[J8]`
 
 ```
-Escolha a loja. Pague com PIX. Acompanhe até a porta.
-Em breve. Siga para saber quando abrir.
+Tem no 38? Só retirando, tá?
+Venda além da sua rua. Chegou pedido. Aceita com um toque. Você separa. O Webag leva. [J8]
+Tem loja? Chame no direct: @webag.
 ```
 
-Sem hashtag no Stories. Sem adesivo de contagem regressiva (exige data) e sem adesivo de enquete: o CTA é um só.
+### Vídeo do cliente (Stories; Reel opcional). `[J8]`
 
-## 3. Calendário (3 semanas) e horário
+```
+Aquela loja que você adora. Não entrega. Agora entrega. Em breve.
+Escolha na loja. Peça. Acompanhe cada etapa.
+Siga @webag.
+```
 
-O lançamento não tem data, então o calendário é relativo ao "dia 0" (dia em que o perfil vai ao ar). Não escrever "em 3 semanas" em nenhuma peça: a série "1 de 3, 2 de 3, 3 de 3" numera as peças, não promete data.
+Sem hashtag no Stories. Sem adesivo de contagem (exige data) e sem enquete: o CTA é um só em cada vídeo.
 
-| Quando | Peça | Onde | Observação |
+## 3. Calendário (3 semanas)
+
+Sem data de lançamento, o calendário é relativo ao "dia 0". Nenhuma peça diz "em 3 semanas": a série numera, não promete. Ordem do feed: cliente, lojista, cliente, lojista (parecer: lojista é o gargalo; o vídeo do lojista abre os Stories).
+
+| Quando | Peça | Onde | Depende de |
 |---|---|---|---|
-| Dia 0 (segunda), 19h | Foto de perfil, bio e **post 0** | Feed | Fixar o post 0 no topo |
-| Dia 0, 19h30 | **Vídeo de 15 s** | Stories (e Reel, opcional) | Música da biblioteca do Instagram (`video-roteiro.md` §6) |
-| Semana 1, quarta, 19h | **Post 1** (o problema) | Feed | Compartilhar nos Stories no mesmo dia |
-| Semana 2, quarta, 19h | **Post 2** (o que vem no app) | Feed | Compartilhar nos Stories |
-| Semana 3, quarta, 19h | **Post 3** (convite) | Feed | Republicar o vídeo de 15 s nos Stories no mesmo dia |
-| Todos os dias | Responder comentários e mensagens em até 24 h | | Quem pergunta "quando abre?" recebe: "Ainda não temos data. Siga a página e ative as notificações que avisamos." |
+| Dia 0 (segunda), 19h | Foto, **bio B** e **post 1** (lojista: "Só retirando, tá?") | Feed | nada (só o @ confirmado, IF1) |
+| Dia 0, 19h30 | **Post 3** (lojista: "Tem loja? Venda além da sua rua.") ou o vídeo do lojista sem a cena 6 | Feed / Stories | nada; o vídeo precisa da versão sem a cena 6 (pedir ao designer) |
+| Depois do J8 | **Post 0**, **post 2**, **vídeo do cliente**, bio A | Feed / Stories | J8 |
+| Todos os dias | Responder comentário e mensagem em até 24 h | | |
 
-Horário sugerido: **dias úteis, 19h (Brasília)** `[HIPÓTESE]`.
+Se o J8 atrasar: o post 1, o post 3 e a foto saem sem esperar; o resto aguarda. Decisão do CEO. Esta ordem substitui a da v2.1 (cliente primeiro), porque o cliente depende do J8.
+Respostas padrão: "Quando abre?" -> "Ainda não temos data. Siga a página que avisamos." "Aceita minha loja?" -> "Anotei. Qual o nome da loja e o WhatsApp? O cadastro abre em breve." (guardar contato só com consentimento; finalidade: avisar a abertura; LGPD, IF7.)
+Horário: dias úteis, 19h (Brasília) `[HIPÓTESE]`; sem fonte brasileira medida. Depois do post 3, abrir Insights > "Seus seguidores mais ativos" e ajustar.
 
-| Fonte | O que diz | Limite |
-|---|---|---|
-| [Metricool, estudo de 2026 com 24 milhões de publicações](https://metricool.com/best-time-to-post-instagram/) (via busca, 2026-11-20) | Pico às 20h na maioria dos dias | Global, não é do Brasil |
-| [Buffer, 9,6 milhões de publicações](https://buffer.com/library/best-time-to-post-on-instagram) (via busca) | Quinta 9h, quarta 12h e quarta 18h | Global; fuso não informado |
-| [TimeToPost, Brasil](https://timetopost.co/best-time-to-post/instagram/brazil/) (via busca) | 9h a 11h em Brasília | A própria página diz ser base editorial, não dado medido |
-| Persona Carla (`produto/personas.md`) | Volta do trabalho à noite pela Linha 7, celular na mão | `[HIPÓTESE]`, não validada |
+## 4. Kit visual
 
-Raciocínio: nenhuma fonte é do Brasil com dados medidos. Fica 19h de quarta porque combina o início do pico global noturno com o horário em que o público do piloto provavelmente já saiu do trabalho. **Com 3 posts não há amostra para testar horário.** Depois do post 3, abrir Insights > "Seus seguidores mais ativos" e ajustar.
-
-## 4. Kit visual: o que foi decidido e por quê
-
-| Peça | Fundo | Ideia | Elemento real da marca | Por quê |
+| Peça | Público | Fundo | Ideia | Imagem dominante |
 |---|---|---|---|---|
-| Perfil | Roxo | Símbolo sozinho | Símbolo v4a branco | Igual ao ícone do app; legível em círculo de 110 px |
-| Post 0 | Roxo + painel noite | Apresenta o Webag em uma imagem | Tela real da Início no aparelho que sai pela base; marca-texto lima; adesivo "Em breve" | Cartaz com um herói (o título de 156 px) e a prova do produto real |
-| Post 1 | Noite | O problema, em horários | Numerais de 176 px; marca-texto não usado (lima no texto) | Cartaz de horários: reconhecível, sem rosto nem foto |
-| Post 2 | Papel + painel noite | O que vem no app | 3 telas reais, em degraus que seguem a diagonal de 8 graus | Mostra o produto; as 3 telas = escolher, pagar, acompanhar |
-| Post 3 | Roxo + painel noite | Convite e avisar | Símbolo grande cruzando o corte; 3 passos | O único CTA da série, sem data |
+| Perfil | ambos | Roxo | Símbolo grande | O símbolo |
+| Post 0 | cliente | Roxo | "Não" riscado, "Agora entrega." na mesma arte | Título de 140 px + loja para cartão "Saiu para entrega" (réplica) |
+| Post 1 | lojista | Noite | A conversa que custou vendas + o que o Webag faz | Balões; "Só retirando, tá?" em lima |
+| Post 2 | cliente | Roxo | Pedir sem sair do lugar | Réplica do cartão de acompanhamento (936 x 708), UI a 44 px ou mais |
+| Post 3 | lojista | Lima | Venda além da sua rua | Captura real do pedido novo, em 4 faixas, UI a 45 px; chip "Outro bairro" e botão desenhados |
 
-Ritmo da grade (3 colunas, mais novo primeiro): post 3 roxo, post 2 papel/noite, post 1 noite; post 0 roxo na linha seguinte. As cores se alternam e nenhuma peça repete a ideia da outra.
-Série: segmentos "1 de 3 / 2 de 3 / 3 de 3" no canto superior direito (as 3 barras do símbolo viram indicador, sempre com texto).
-Recorte do feed: o Instagram mostra os posts 4:5 em 3:4 na grade do perfil (corta cerca de 34 px de cada lado); todo conteúdo fica a 72 px das bordas.
-Contraste: branco sobre roxo (4,29:1) só em texto grande (>= 24 px, ou >= 19 px em negrito); texto pequeno fica sobre noite (17,6:1) ou papel; lima só sobre noite ou em bloco com texto noite (15,3:1).
+Grade (3 colunas, mais novo primeiro): cores alternam; composições diferentes (tipografia + par de ilustrações, balões, cartão de linha do tempo, captura de pedido).
+Recorte do feed: 4:5 vira 3:4 na grade (corta ~34 px de cada lado); todo conteúdo fica a 72 px das bordas.
+Contraste: branco sobre roxo 4,29:1 (só texto >= 24 px em negrito); noite sobre lima 15,3:1; lima sobre noite 15,3:1; lima sobre roxo ~3,9:1 (só texto >= 44 px em negrito: "Agora", "Siga @webag" no post 2).
 
 ## 5. Render
 
-`pnpm marketing instagram` e `pnpm marketing video` (ver `README.md`). As telas reais precisam estar em `src/assets-social/` (ver `pendencias.md`, item 1).
+`pnpm marketing instagram` (mesmos 5 nomes de arquivo). Vídeos: `pnpm marketing video-lojista` e `video-cliente` (o pipeline aceita os dois alvos). Os HTML leem `src/config.json` (campo `instagram`) por `src/social-cfg.js`; sem config vale `@webag`.

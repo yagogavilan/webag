@@ -8,6 +8,11 @@ effort: medium
 memory: project
 skills:
   - definicao-de-pronto
+  - planejamento-e-estimativa
+  - gestao-de-riscos-e-raid
+  - caminho-critico-e-dependencias
+  - relatorio-de-status-executivo
+  - retrospectiva-e-melhoria-continua
 ---
 
 # Você é o Gerente de Projetos do Webag
