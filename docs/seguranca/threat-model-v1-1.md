@@ -422,28 +422,28 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 - **Correção recomendada:** C-RT-01 a C-RT-03 (sala `track:{orderId}` só do dono, emissão filtrada pela próxima parada, saída da sala no fim).
 - **Como verificar:** teste de gateway: membro da loja inscrito em `order:{id}` não recebe nenhum evento de posição; inscrição em `track:{id}` recusada.
 
-### SEC-206 | Severidade: Alta (desenho, antes da implementação) | Status: Desenho fechado, código pendente (2026-11-22, §15: ADR-018 D8 e contrato conferidos sobre `395f34c`; fecha quando o código da WB-352 seguir a §14 e VA-01 a VA-26 passarem)
+### SEC-206 | Severidade: Alta (desenho, antes da implementação) | Status: Corrigido no código (2026-11-22, §16 sobre `553b533`: VA-01 a VA-26 verdes localmente); falta só o CI verde (SEC-212)
 - **Onde:** ADR-018 D8; `openapi.yaml` `securitySchemes.viewAsAuth` e `openViewAs` (credencial em `Authorization: Bearer`); `apps/api/src/modules/identity/auth.guard.ts:54-60` (só JWT) e `:99-100`, `:112-118` (`checkStore` por `principal.userId`); `apps/api/src/modules/stores/stores.controllers.ts:130-134` (não dono recebe `presentStore` `staff`, com `legalName`, telefone e endereço completo, `:44-80`); `apps/api/src/modules/orders/store-orders.controller.ts:48-51` (handler refaz a autorização por `storeMembership(p.userId)`).
 - **Problema:** o "Ver como" não tem nível de acesso próprio. Para passar pelo `checkStore` seria preciso um "membro virtual" ou trocar o `userId` pelo do dono; nos dois casos a visão herda o que o dono vê (CNPJ/CPF, razão social, configurações, financeiro) e os handlers que decidem por `principal.userId` passam a decidir errado.
 - **Cenário de ataque:** perfil suporte (os 4 perfis têm `view-as:open`) ou um admin com Bearer roubado abre a visão de qualquer loja e lê CPF e razão social do MEI e o endereço completo dos clientes de pedidos ativos, sem trilha por pedido; um handler sem opt-in explícito aceita POST com a credencial e grava em nome da loja.
 - **Correção recomendada:** §14 (cabeçalho `X-View-As` somado ao Bearer do admin, nível "visualizador" fixo, opt-in por rota, apresentador `view_as`).
 - **Como verificar:** VA-01 a VA-24 (§14.9) no e2e.
 
-### SEC-207 | Severidade: Média | Status: Desenho fechado (PRD WB-352 C2/C8 por DEC-120 e `StoreOrderViewAs`), com a lacuna da linha do tempo na SEC-209; código pendente (VA-12, VA-25)
+### SEC-207 | Severidade: Média | Status: Corrigido no código (2026-11-22, §16: VA-12, VA-25 verdes); variante pré-existente no admin de trocas aberta como SEC-211
 - **Onde:** `docs/produto/prd/v1-1-admin-e-paineis.md` WB-352 C2 e C8 (dado do cliente na visão "segue a RN-14": sem máscara em pedido ativo).
 - **Problema:** a visão do admin entrega nome completo, telefone e endereço dos clientes de todos os pedidos ativos da loja a qualquer perfil, sem registro por pedido. O admin já tem rotas próprias de pedido, com permissão e auditoria, para o caso real.
 - **Cenário:** um funcionário de suporte usa o "Ver como" de lojas diferentes para colher endereço e telefone de clientes (golpe do falso entregador, perseguição), com motivo genérico.
 - **Correção recomendada:** máscara estrita no apresentador `view_as` (§14.3): só primeiro nome e bairro, mesmo em pedido ativo. PO reescreve C2 e C8 (D-09).
 - **Como verificar:** VA-12 e VA-13.
 
-### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Desenho fechado (ADR-018 D17 e D18, §15.3), código pendente (BK-01 a BK-08)
+### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Desenho fechado (ADR-018 D17 e D18, §15.3), código pendente (BK-01 a BK-08; a R1.1 não toca a idempotência, §16)
 - **Onde:** `apps/api/src/modules/idempotency/idempotency.service.ts:85-86` (a resposta é gravada em comando separado, depois do efeito de `fn`) e `:74-77` (reivindicação sem resposta há mais de 120 s é apagada e a repetição executa de novo).
 - **Problema:** se o processo cai entre o commit de `fn` e a gravação da resposta, a repetição depois de 120 s reaplica o efeito. Para escrita com chave natural (pedido) há proteção própria; para reajuste relativo em massa (B2 do tech-lead) não há.
 - **Cenário:** deploy ou queda no meio de "+10% em 80 produtos"; o painel repete com a mesma chave após o timeout e o preço sobe 21%. Dinheiro do cliente e reputação da loja.
 - **Correção recomendada:** ver §14.11 (idempotência em massa). O contrato em revisão (backend-dev, B2) já acrescenta `expectedVersions` por item: se a conferência e o incremento de `version` ficarem na transação do lote, a repetição vira 409 e o lote deixa de depender do serviço (fica Baixa para ele); a fragilidade continua para qualquer escrita relativa futura sem versão.
 - **Como verificar:** e2e que faz a gravação da resposta falhar depois do commit do lote, avança o relógio 121 s e repete: nenhum preço muda de novo.
 
-### SEC-209 | Severidade: Média (desenho, antes da implementação) | Status: Aberto (contrato; devolvido ao backend-dev)
+### SEC-209 | Severidade: Média (desenho, antes da implementação) | Status: Corrigido (2026-11-22, §16: contrato e apresentadores sem `reason` na linha do tempo; VA-25 e VA-26 verdes)
 - **Onde:** `openapi.yaml` `StoreOrderViewAs.timeline` (usa `OrderTimelineEntry`, com `reason` texto livre) e `ExchangeViewAs.timeline[].reason`. Origem do texto: `apps/api/src/modules/orders/orders.service.ts:512` e `:596` (motivo de cancelamento do cliente, `CancelOrderRequest.reason`, até 200 caracteres, vai para `order_events.reason`); `apps/api/src/modules/exchanges/exchanges.service.ts:275` (a **descrição livre da troca digitada pelo cliente** vira o `reason` do evento `requested`) e `:807`.
 - **Problema:** os schemas da visão tiram o texto do cliente do topo (`cancellation` sem motivo, troca "sem texto livre") mas o devolvem pela linha do tempo. Contradiz a §14.3, a WB-352 C8 e a própria descrição dos dois schemas. Também: objetos aninhados (`items`, `logistics`, `item`, `newVariant`, `timeline`, `runs`) sem `additionalProperties: false`; "estrito" vale só no primeiro nível e o `contract-r1.spec.ts:180-188` confere só chaves do topo.
 - **Cenário:** suporte abre a visão de lojas com troca e lê "a calça não serviu, estou grávida, me liga no 11 9xxxx" sem trilha por pedido. Apresentador escrito pelo schema copia o `reason` e passa no teste.
@@ -653,3 +653,67 @@ Fora da R1.1, já fixados: WB-361/363 (coleta) com grep de log da API e do nginx
 3. `x-view-as` no `redact` do pino e no `beforeSend` do Sentry (VA-24) e varredura de log sem `vas_`.
 4. Revisão diferencial de segurança do código da WB-352, da D18 e da D19 (`revisao-diferencial-de-mudancas`) antes do G4: o desenho não prova o código.
 5. SEC-206 e SEC-208 só passam a "Corrigido" com os itens 2 e 4; SEC-194 segue aberta até D-02/J24 e não bloqueia o G4 em staging.
+
+## 16. Revisão do código R1.1 (2026-11-22, sobre `553b533`)
+
+Escopo: `git diff 379ff18~1..553b533 -- apps/api docs/arquitetura` (commits `dc6b3fa`, `7e4cfe6`, `553b533`; 67 arquivos, sem o `paste-parser`). Lidos por inteiro: `view-as.service.ts`, `view-as.guard.ts`, `view-as.boot-check.ts`, `auth.guard.ts`, `admin-view-as.controller.ts`, `admin-store-edit.service.ts` e controller, `admin-reason.ts`, `db-role-guard.ts`, `database.module.ts` (diff), `redact.ts`, `sentry.ts` (diff), migrações 0058 a 0060, os 4 apresentadores (`presentStoreViewAs`, `getSettings`, `store-orders.service.ts` `view_as`, `presentViewAs` de trocas), `store-overview.service.ts` (histórico), `admin-orders-read.service.ts` (AO). Skills: `revisao-diferencial-de-mudancas`, `analise-de-variantes`, `defaults-inseguros-e-armadilhas-de-api`.
+
+### 16.1 Testes executados (Postgres 16 e Redis locais, papéis `webag_app`/`webag_migrator` criados pelo global-setup)
+| Suíte | Resultado |
+|---|---|
+| `view-as`, `admin-store-360`, `admin-order-view-audit`, `db-role-boot`, `admin-permission-matrix`, `production-boot` (e2e) | 60/60 verdes; nenhum pulado (conferido com `--reporter=verbose`) |
+| `db-roles` (e2e, DB-02 a DB-04) | 18/18 verdes |
+| Unitários: `view-as.service`, `admin-reason`, `db-role-guard`, `redact`, `sentry`, `contract-r1`, `store-history`, `auth.guard.ws` | 141/141 verdes |
+| CI do GitHub | **Não rodou**: `553b533` sem check-run (ver SEC-212) |
+
+### 16.2 Verificações pedidas
+| Item | Resultado | Evidência |
+|---|---|---|
+| X-View-As de outra loja, outro admin, outra sessão, encerrada, vencida, substituída | Nega (403 `VIEW_AS_EXPIRED`) | `view-as.service.ts:156-162` (hash + `admin_user_id` + `admin_session_id` + `closed_at is null` + `expires_at > now()` + `:storeId` = loja da linha); VA-06 a VA-09, VA-20 |
+| MFA pendente, papel vazio, perfil desativado | Nega antes (AuthGuard `:78-82`) ou no passo 3 (`:154`, perfil lido do banco a cada requisição) | VA-10 |
+| Falha aberta no guard | Não encontrada. Passo de loja só ramifica com o cabeçalho (`auth.guard.ts:115`); toda rota sem `@ViewAs` nega; `ViewAsGuard` global depois do `AuthGuard` (`identity.module.ts`) cobre rota pública, de admin e sem `@StorePermission`; `@ViewAs` só no handler (de classe não vale = nega); boot recusa `@ViewAs` sem `@Get`/`@StorePermission` | VA-01 a VA-03, VA-16, VA-23 |
+| Principal | Continua o do admin; handlers com `@ViewAs` decidem por `req.viewAs` (`stores.controllers.ts:168`, `store-orders.controller.ts:59,75`, `exchanges.controllers.ts:138-146`) | VA-15 |
+| Campos proibidos nos 4 apresentadores | Ausentes; os 4 são lista permitida. Linha do tempo sem `reason` em pedido e troca (SEC-209 fechada) | VA-11 a VA-14, VA-25, VA-26 |
+| Log, auditoria, Sentry | `x-view-as` no `redact` do pino e no `beforeSend` (comparação em minúsculas); `view_as.read` sem corpo/query; auditoria sem dado de cliente; `sanitizeForAudit` não guarda credencial | VA-24, AO-05 |
+| Limites 10/h, 120/min, 20 negações | Implementados (`:90`, `:163`, `:192`). Abertura falha fechada; leitura e negação falham abertas sem Redis (SEC-210) | VA-18, VA-21 |
+| Auditoria | `view_as.open` na mesma transação da credencial (VA-19); `close` com causa e contagem; `denied` 1/min por (sessão, código); `admin.order.view` antes do dado, dedupe pela última linha, falha = 500 | AO-01 a AO-05 |
+| Edição pelo admin (WB-351) | Motivo validado no servidor, J27 nasce desligada (`feature-flags.definitions.ts`, `isEnabled` lança se a flag não existir), lista fechada de 4 campos (422 nos demais), versão conferida sob `FOR UPDATE` na mesma transação, auditoria com `store_id` e motivo, aviso ao dono; rotas legadas removidas (404) | `admin-store-edit.service.ts:84-167`; e2e WB-351 |
+| D-06 | Boot recusa superusuário, dono do `audit_log` e membro de `webag_migrator` em produção **e com `NODE_ENV` ausente** (lido no carregamento do módulo, antes do `ConfigModule`); falha ao consultar o papel também derruba; roda antes do `listen`; `main.ts` sai com código 1. `NODE_ENV=""` derruba pela validação Zod do env | `db-role-guard.ts:39-73`, `database.module.ts`; DB-01 |
+| Migrações | 0058 a 0060 só aditivas; `admin_view_sessions` guarda só o hash, índice parcial garante 1 visão aberta por admin | sem `DROP`/`UPDATE` de dado |
+| Regressões | Nenhum controle removido: `checkStore` intacto no caminho sem cabeçalho; as 2 rotas legadas de edição saíram junto com a permissão sem rota (matriz de 164 `x-admin-permission` nos dois sentidos) | `admin-permission-matrix` |
+
+### 16.3 Achados novos
+
+#### SEC-210 | Severidade: Baixa | Status: Aberto | Dono: backend-dev
+- **Onde:** `apps/api/src/modules/identity/view-as.service.ts:163` (`enforce(..., false)`: limite de leitura falha aberto) e `:179-181` (o portão `redis.set` vem antes do `recordStandalone`; erro do Redis cai no `.catch` de `:173` e a linha `view_as.denied` não é gravada; a contagem de 20 negações também para).
+- **Problema:** com o Redis fora, a visão fica sem o teto de 120 leituras/min, sem encerramento por abuso e sem trilha das negações.
+- **Cenário:** insider com a visão aberta lê páginas de pedidos e trocas sem limite durante até 30 min numa queda do Redis; as tentativas de mutação não deixam rastro. Impacto limitado: dado já mascarado, 1 loja por visão e a abertura continua falhando fechada.
+- **Correção:** `enforce(key, 120, 60)` (padrão `failClosed = true`; 503 na ferramenta interna é aceitável); em `recordDenied`, tratar erro do portão como "gravar" (`.catch(() => 'OK')`).
+- **Como verificar:** e2e com o Redis derrubado (ou `vi.spyOn` lançando): leitura da visão = 503 e existe linha `view_as.denied` após um POST com a visão.
+
+#### SEC-211 | Severidade: Média | Status: Aberto (pré-existente da v1.0, variante da SEC-207 e da D20) | Dono: backend-dev; PO confirma o uso
+- **Onde:** `apps/api/src/modules/exchanges/exchanges.controllers.ts:249-259` (`exchanges:read`, os 4 perfis); `exchanges.service.ts:1138` (lista usa a apresentação `store`, cuja base traz `description` em `:1055`) e `:1141-1145` (detalhe com fotos em URL assinada e `timeline[].reason`).
+- **Problema:** a lista de trocas do admin devolve o texto livre do cliente de todas as trocas, de todas as lojas, sem auditoria de leitura; o detalhe também não grava nada. É o mesmo dado que a SEC-209 tirou da visão, exposto por outro caminho e em lote.
+- **Cenário:** perfil suporte pagina `GET /v1/admin/exchange-requests` e colhe descrições com saúde, telefone ou endereço digitados pelos clientes, sem trilha.
+- **Correção:** lista sem `description` (só código do motivo); detalhe grava `admin.exchange.view` com o mesmo padrão de `auditOpen` dos pedidos (dedupe 10 min, falha = 500); fotos só no detalhe.
+- **Como verificar:** e2e análogo a AO-01 a AO-05 para trocas; isca no texto da troca ausente da lista do admin.
+
+#### SEC-212 | Severidade: Baixa | Status: Aberto | Dono: backend-dev
+- **Onde:** `.github/workflows/ci.yml:47-51` (sem `REQUIRE_DB_ROLES`); `apps/api/test/production-boot.e2e-spec.ts` (`it.skipIf` do caso D-06); `db-roles` e `db-role-boot` pulam se o global-setup não criar os papéis.
+- **Problema:** DB-01 a DB-04 podem ficar "verdes" no CI por estarem pulados; e o commit `553b533` não tem execução de CI registrada.
+- **Correção:** `REQUIRE_DB_ROLES: '1'` no `env` do job; no `production-boot`, falhar em vez de pular quando a variável estiver ligada.
+- **Como verificar:** CI do PR com os 3 arquivos listados como executados (não "skipped").
+
+### 16.4 Observações (sem SEC; para o tech-lead e o backend-dev)
+1. `admin-store-edit.service.ts:102`: `section in CONFIG_SECTIONS` aceita `constructor`/`toString` e vira 500 (TypeError). Usar `Object.hasOwn`. Só `stores:write`; robustez.
+2. 7 rotas da visão sem schema próprio (`listProducts`, `getProduct`, `listSections`, `listStoreOrders`, `countStoreOrders`, avaliações) herdam o apresentador do lojista: campo novo nele aparece na visão. VA-26 só reprova campo extra onde o schema é `additionalProperties: false`; a defesa é a isca. Mecanismo: exigir schema estrito em todos os níveis nas 13 rotas, ou lista permitida. **`listProductTable` (R1.2) entra com VA-14 real**, não herdado.
+3. Alerta de mais de 20 lojas/dia é só `logger.warn` (`view-as.service.ts:273`): precisa ir para um canal da operação antes do G5.
+4. `admin_view_sessions` está como `retain` sem prazo (`privacy-map.ts`): definir retenção e expurgo. A nota livre do motivo (200 caracteres) vai ao `audit_log` append-only: a tela deve pedir para não escrever dado de cliente.
+5. `store_admin_changes` não é append-only (`webag_app` tem UPDATE/DELETE pelos privilégios padrão). Aceito: a fonte de verdade é o `audit_log`.
+
+### 16.5 Parecer para o G4 da R1
+- **Nenhum achado Crítico ou Alto no código da R1.1.** SEC-206, SEC-207 e SEC-209 corrigidas no código; AO-01 a AO-05 e DB-01 a DB-04 verdes localmente.
+- **Bloqueia o G4 da R1 (condição de §15.7 item 2):** CI verde no PR com SEC-212 aplicada.
+- **Bloqueia o G4 da R1 quando a R1.2 entrar:** SEC-208 (BK-01 a BK-08), DB-05 e VA-14 do `listProductTable`.
+- **Pode ir como condição (corrigir na R1.2, antes do G5/produção):** SEC-210, SEC-211 e observações 3 e 4.
+- **Não validado:** BFF do web (`upstream.ts`, cookie da visão) e as telas; imagem Docker e `main.ts` subindo sem `NODE_ENV` (o teste importa o `AppModule`); log do nginx e evento real no Sentry; leitura linha a linha de todo o `view-as.e2e-spec.ts`; `pnpm audit` (sem dependência nova no diff). Não substitui pentest.
