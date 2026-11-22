@@ -11,7 +11,7 @@
  * A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
- * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
+ * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas legadas de edição do admin (`editAdminStore`, `PATCH /v1/admin/stores/{storeId}`, e `editAdminStoreSettings`, `PUT /v1/admin/stores/{storeId}/settings/{section}`) foram REMOVIDAS na R1.1, contrato e código no mesmo commit (exceção consciente à regra de não remover; nenhum consumidor: o web nunca as chamou). Hoje o admin edita dados e configuração só por `editAdminStoreProfile` e `editAdminStoreConfig`, com motivo, versão e auditoria.
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
  * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
@@ -2847,15 +2847,6 @@ export interface CorrectionRequest {
      * @maxItems 10
      */
   items: CorrectionRequestItemsItem[];
-}
-
-export interface AdminStorePatchRequest {
-  /**
-     * @minLength 5
-     * @maxLength 500
-     */
-  reason: string;
-  profile?: UpdateStoreProfileRequest;
 }
 
 export interface ReleaseAccountRequest {
@@ -9783,11 +9774,6 @@ export type ListAdminStores200 = {
   /** @nullable */
   nextCursor: string | null;
 };
-
-/**
- * Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
- */
-export type EditAdminStoreSettingsBody = { [key: string]: unknown };
 
 export type ListProductsParams = {
   status?: ListProductsStatus;
@@ -19914,77 +19900,6 @@ export const getAdminStore = async (storeId: string, options?: Parameters<typeof
 
 
 
-export type editAdminStoreResponse200 = {
-  data: Store
-  status: 200
-}
-
-export type editAdminStoreResponse400 = {
-  data: ValidationErrorResponse
-  status: 400
-}
-
-export type editAdminStoreResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type editAdminStoreResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type editAdminStoreResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type editAdminStoreResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type editAdminStoreResponse422 = {
-  data: UnprocessableResponse
-  status: 422
-}
-
-export type editAdminStoreResponseSuccess = (editAdminStoreResponse200) & {
-  headers: Headers;
-};
-export type editAdminStoreResponseError = (editAdminStoreResponse400 | editAdminStoreResponse401 | editAdminStoreResponse403 | editAdminStoreResponse404 | editAdminStoreResponse409 | editAdminStoreResponse422) & {
-  headers: Headers;
-};
-
-export type editAdminStoreResponse = (editAdminStoreResponseSuccess | editAdminStoreResponseError)
-
-export const getEditAdminStoreUrl = (storeId: string,) => {
-
-
-
-
-  return `/v1/admin/stores/${storeId}`
-}
-
-/**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; **sai no primeiro PR da R1.1, contrato e código juntos** (nenhuma tela as chama: `apps/web` não tem PATCH de loja; decisão do CEO, tech-lead I12). Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
- * @deprecated
- * @summary Editar dados da loja (substituída por `editAdminStoreProfile`)
- */
-export const editAdminStore = async (storeId: string,
-    adminStorePatchRequest: AdminStorePatchRequest, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreResponse> => {
-
-  return apiFetch<editAdminStoreResponse>(getEditAdminStoreUrl(storeId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
-    body: JSON.stringify(adminStorePatchRequest)
-  }
-);}
-
-
-
 export type accessStoreDocumentResponse200 = {
   data: DocumentAccessResponse
   status: 200
@@ -20360,74 +20275,6 @@ export const suspendStore = async (storeId: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(decisionReasonRequest)
-  }
-);}
-
-
-
-export type editAdminStoreSettingsResponse204 = {
-  data: void
-  status: 204
-}
-
-export type editAdminStoreSettingsResponse400 = {
-  data: ValidationErrorResponse
-  status: 400
-}
-
-export type editAdminStoreSettingsResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type editAdminStoreSettingsResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type editAdminStoreSettingsResponse404 = {
-  data: NotFoundResponse
-  status: 404
-}
-
-export type editAdminStoreSettingsResponse422 = {
-  data: UnprocessableResponse
-  status: 422
-}
-
-export type editAdminStoreSettingsResponseSuccess = (editAdminStoreSettingsResponse204) & {
-  headers: Headers;
-};
-export type editAdminStoreSettingsResponseError = (editAdminStoreSettingsResponse400 | editAdminStoreSettingsResponse401 | editAdminStoreSettingsResponse403 | editAdminStoreSettingsResponse404 | editAdminStoreSettingsResponse422) & {
-  headers: Headers;
-};
-
-export type editAdminStoreSettingsResponse = (editAdminStoreSettingsResponseSuccess | editAdminStoreSettingsResponseError)
-
-export const getEditAdminStoreSettingsUrl = (storeId: string,
-    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',) => {
-
-
-
-
-  return `/v1/admin/stores/${storeId}/settings/${section}`
-}
-
-/**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; **sai no primeiro PR da R1.1, contrato e código juntos** (sem consumidor; decisão do CEO, tech-lead I12). Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
- * @deprecated
- * @summary Editar configuração da loja (substituída por `editAdminStoreConfig`)
- */
-export const editAdminStoreSettings = async (storeId: string,
-    section: 'hours' | 'holidays' | 'delivery' | 'pickup' | 'exchange-policy',
-    editAdminStoreSettingsBody: EditAdminStoreSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<editAdminStoreSettingsResponse> => {
-
-  return apiFetch<editAdminStoreSettingsResponse>(getEditAdminStoreSettingsUrl(storeId,section),
-  {
-    ...options,
-    method: 'PUT',
-    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
-    body: JSON.stringify(editAdminStoreSettingsBody)
   }
 );}
 
@@ -32272,7 +32119,7 @@ export const getEditAdminStoreProfileUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substitui `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), que aceita razão social e endereço e fica `deprecated` (ver ADR-018). Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substituiu `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), removida na R1.1 por aceitar razão social e endereço sem motivo (ADR-018 D6); a rota antiga agora responde 404. Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
  * @summary Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
  */
 export const editAdminStoreProfile = async (storeId: string,
@@ -32343,7 +32190,7 @@ export const getEditAdminStoreConfigUrl = (storeId: string,
 }
 
 /**
- * Permissão `stores:write` (super admin e operação). Substitui `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), que NÃO recebe motivo nem versão e fica `deprecated` (ver ADR-018). `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`.
+ * Permissão `stores:write` (super admin e operação). Substituiu `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), removida na R1.1 por não receber motivo nem versão (ADR-018 D6); a rota antiga agora responde 404. `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`.
  * @summary Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
  */
 export const editAdminStoreConfig = async (storeId: string,

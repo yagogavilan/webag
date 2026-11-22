@@ -543,12 +543,9 @@ describe('Onda 2A: onboarding e aprovação de lojas', () => {
         // reativar volta; aprovar suspensa direto é inválido (RN-16)
         if (action === 'approve') await ctx.http.post(`/v1/admin/stores/${store.id}/approve`).set(bearer(ops.accessToken)).send({}).expect(409);
       }
-      await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(support.accessToken)).send({ reason: 'ajuste', profile: { description: 'x' } }).expect(403);
-      const edited = await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).send({ reason: 'Correção de descrição a pedido', profile: { description: 'Descrição ajustada pelo admin' } }).expect(200);
-      expect(edited.body.description).toBe('Descrição ajustada pelo admin');
-      const [edit] = await ctx.db.select().from(auditLog).where(and(eq(auditLog.targetId, store.id), eq(auditLog.action, 'store.update')));
-      expect(edit?.after).toMatchObject({ description: 'Descrição ajustada pelo admin' });
-      expect(edit?.before).toBeDefined();
+      // I12 / ADR-018 D6: as duas rotas legadas de edição do admin (sem motivo nem versão) foram removidas; a edição vive em `/profile` e `/config/:section`.
+      await ctx.http.patch(`/v1/admin/stores/${store.id}`).set(bearer(ops.accessToken)).send({ reason: 'Correção de descrição a pedido', profile: { description: 'Descrição ajustada pelo admin' } }).expect(404);
+      await ctx.http.put(`/v1/admin/stores/${store.id}/settings/hours`).set(bearer(ops.accessToken)).send({ days: [] }).expect(404);
       await ctx.http.post(`/v1/admin/stores/${store.id}/reactivate`).set(bearer(ops.accessToken)).send({}).expect(200);
       await ctx.http.put(`/v1/stores/${store.id}/hours`).set(bearer(m.accessToken)).send({ days: [{ weekday: 1, intervals: [{ start: '08:00', end: '18:00' }] }] }).expect(204);
     });

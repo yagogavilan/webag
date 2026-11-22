@@ -11,7 +11,7 @@
  * A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
- * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
+ * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas legadas de edição do admin (`editAdminStore`, `PATCH /v1/admin/stores/{storeId}`, e `editAdminStoreSettings`, `PUT /v1/admin/stores/{storeId}/settings/{section}`) foram REMOVIDAS na R1.1, contrato e código no mesmo commit (exceção consciente à regra de não remover; nenhum consumidor: o web nunca as chamou). Hoje o admin edita dados e configuração só por `editAdminStoreProfile` e `editAdminStoreConfig`, com motivo, versão e auditoria.
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
  * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
@@ -5253,176 +5253,6 @@ export const GetAdminStoreResponse = zod.object({
 
 
 /**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; **sai no primeiro PR da R1.1, contrato e código juntos** (nenhuma tela as chama: `apps/web` não tem PATCH de loja; decisão do CEO, tech-lead I12). Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
- * @deprecated
- * @summary Editar dados da loja (substituída por `editAdminStoreProfile`)
- */
-export const EditAdminStoreParams = zod.object({
-  "storeId": zod.uuid()
-})
-
-export const editAdminStoreBodyReasonMin = 5;
-export const editAdminStoreBodyReasonMax = 500;
-
-export const editAdminStoreBodyProfileNameMin = 2;
-export const editAdminStoreBodyProfileNameMax = 80;
-
-export const editAdminStoreBodyProfileExtraCategoryIdsMax = 2;
-
-export const editAdminStoreBodyProfileDescriptionMax = 300;
-
-export const editAdminStoreBodyProfileAddressCepRegExp = new RegExp('^\\d{5}-?\\d{3}$');
-export const editAdminStoreBodyProfileAddressNumberMax = 20;
-
-export const editAdminStoreBodyProfileAddressComplementMax = 80;
-
-export const editAdminStoreBodyProfileAddressStateMin = 2;
-export const editAdminStoreBodyProfileAddressStateMax = 2;
-
-
-
-export const EditAdminStoreBody = zod.object({
-  "reason": zod.string().min(editAdminStoreBodyReasonMin).max(editAdminStoreBodyReasonMax),
-  "profile": zod.object({
-  "name": zod.string().min(editAdminStoreBodyProfileNameMin).max(editAdminStoreBodyProfileNameMax).optional(),
-  "legalName": zod.string().optional(),
-  "fiscalResponsibilityAccepted": zod.boolean().optional(),
-  "mainCategoryId": zod.uuid().optional(),
-  "extraCategoryIds": zod.array(zod.uuid()).max(editAdminStoreBodyProfileExtraCategoryIdsMax).optional(),
-  "description": zod.string().max(editAdminStoreBodyProfileDescriptionMax).optional().describe('Até 300 caracteres Unicode'),
-  "phone": zod.string().optional(),
-  "whatsapp": zod.string().optional(),
-  "address": zod.object({
-  "cep": zod.string().regex(editAdminStoreBodyProfileAddressCepRegExp),
-  "number": zod.string().max(editAdminStoreBodyProfileAddressNumberMax),
-  "complement": zod.string().max(editAdminStoreBodyProfileAddressComplementMax).optional(),
-  "street": zod.string().optional(),
-  "neighborhood": zod.string().optional(),
-  "city": zod.string().optional(),
-  "state": zod.string().min(editAdminStoreBodyProfileAddressStateMin).max(editAdminStoreBodyProfileAddressStateMax).optional(),
-  "lat": zod.number().optional(),
-  "lng": zod.number().optional()
-}).optional(),
-  "logoAssetId": zod.uuid().nullish(),
-  "coverAssetId": zod.uuid().nullish()
-}).optional()
-})
-
-
-export const editAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
-export const editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp = new RegExp('^([01]\\d|2[0-3]):[0-5]\\d$');
-
-
-export const EditAdminStoreResponse = zod.object({
-  "id": zod.uuid(),
-  "version": zod.int().min(1).optional().describe('v1.1 R1: versão da loja, sobe a cada alteração de dados, horário, pausa ou status. Base do `expectedVersion` das edições do admin (WB-351 C6). Campo novo, opcional para o app antigo'),
-  "live": zod.boolean().optional().describe('Z.1 / DEC-072f: loja "no ar" = `status` approved + 1 ou mais produtos ativos (não removidos nem pausados) + conta de recebimento ativa. O painel do dia do lojista (vendas, ranking, avaliação) usa este campo em vez de deduzir. Campo novo, opcional para o app antigo'),
-  "status": zod.enum(['draft', 'in_review', 'correction_requested', 'approved', 'rejected', 'suspended', 'closed']),
-  "documentType": zod.enum(['cpf', 'cnpj']),
-  "document": zod.string().describe('Inteiro para dono e admin; mascarado para funcionário'),
-  "legalName": zod.string().nullish(),
-  "name": zod.string().nullish(),
-  "description": zod.string().nullish(),
-  "phone": zod.string().nullish(),
-  "whatsapp": zod.string().nullish(),
-  "mainCategoryId": zod.uuid().nullish(),
-  "extraCategoryIds": zod.array(zod.uuid()),
-  "address": zod.union([zod.object({
-  "cep": zod.string(),
-  "street": zod.string().nullish(),
-  "number": zod.string().nullable(),
-  "complement": zod.string().nullish(),
-  "neighborhood": zod.string().nullish(),
-  "city": zod.string().nullish(),
-  "state": zod.string().nullish(),
-  "lat": zod.number().nullish(),
-  "lng": zod.number().nullish()
-}),zod.null()]).optional(),
-  "logo": zod.record(zod.string(), zod.string()).nullish(),
-  "cover": zod.record(zod.string(), zod.string()).nullish(),
-  "pendingReview": zod.boolean(),
-  "reviewItems": zod.array(zod.object({
-  "item": zod.string(),
-  "reason": zod.string()
-})),
-  "submittedAt": zod.iso.datetime({"offset":true}).nullish(),
-  "decisionReason": zod.string().nullish(),
-  "createdAt": zod.iso.datetime({"offset":true}),
-  "commissionPct": zod.number().nullish().describe('Comissão efetiva da loja em % (loja > categoria > padrão; \'Você recebe\'). Nulo para funcionário (RN-13)'),
-  "commissionSource": zod.union([zod.literal('store'),zod.literal('category'),zod.literal('default'),zod.literal(null)]).nullish(),
-  "commissionCategories": zod.array(zod.object({
-  "categoryId": zod.uuid(),
-  "pct": zod.number()
-})).optional().describe('Quando a loja não tem taxa própria, as categorias com taxa em vigor (filho herda da mãe). Vazio para funcionário'),
-  "providerFeePct": zod.object({
-  "pix": zod.number(),
-  "card": zod.number()
-}).nullish().describe('Tarifa ESTIMADA do provedor de pagamento, em % do valor, por meio (parâmetros `taxa_provedor_pix_pct` e `taxa_provedor_cartao_pct`; WB-242 C1). O \'Você recebe\' é preço - comissão - tarifa, dito \'cerca de\'; quem paga a tarifa é o lojista e a real é a do extrato. Nulo para funcionário (RN-13)'),
-  "role": zod.string().optional().describe('Só em /stores/mine'),
-  "settings": zod.object({
-  "isOpenNow": zod.boolean(),
-  "hours": zod.array(zod.object({
-  "weekday": zod.int(),
-  "intervals": zod.array(zod.object({
-  "start": zod.string().regex(editAdminStoreResponseSettingsHoursItemIntervalsItemStartRegExp),
-  "end": zod.string().regex(editAdminStoreResponseSettingsHoursItemIntervalsItemEndRegExp)
-}))
-})),
-  "holidays": zod.array(zod.object({
-  "date": zod.string(),
-  "label": zod.string().nullish()
-})),
-  "pause": zod.object({
-  "active": zod.boolean(),
-  "until": zod.iso.datetime({"offset":true}).nullable(),
-  "indefinitely": zod.boolean()
-}),
-  "delivery": zod.object({
-  "prepMinutes": zod.int().optional().describe('DEC-053: preparo em uso (o da loja ou o padrão do admin)'),
-  "prepMinutesIsDefault": zod.boolean().optional(),
-  "acceptsDelivery": zod.boolean(),
-  "feeManagedBy": zod.enum(['webag']).optional(),
-  "radiusKm": zod.number(),
-  "feeMode": zod.string(),
-  "feeFixedCents": zod.int(),
-  "tiers": zod.array(zod.object({
-  "fromKm": zod.number(),
-  "toKm": zod.number(),
-  "feeCents": zod.int()
-})),
-  "minOrderCents": zod.int(),
-  "freeAboveCents": zod.int(),
-  "etaMinMinutes": zod.int(),
-  "etaMaxMinutes": zod.int()
-}).describe('Campos de taxa, raio, mínimo e entrega grátis são SOMENTE LEITURA e globais do admin (DEC-036); `feeManagedBy` = webag.'),
-  "pickup": zod.object({
-  "enabled": zod.boolean(),
-  "useStoreAddress": zod.boolean(),
-  "address": zod.string().nullish(),
-  "instructions": zod.string().nullish(),
-  "prepMinMinutes": zod.int(),
-  "prepMaxMinutes": zod.int()
-}),
-  "exchangePolicy": zod.object({
-  "voluntaryDays": zod.int(),
-  "collectionFeeCents": zod.int(),
-  "version": zod.int(),
-  "defaultVoluntaryDays": zod.int().optional().describe('BUG-017: `troca_voluntaria_dias_padrao`; o painel propõe este prazo ao religar a troca voluntária e a loja confirma (WB-059 C2).'),
-  "legalFloor": zod.object({
-  "withdrawalDays": zod.int(),
-  "defectDays": zod.int(),
-  "defectDurableDays": zod.int().optional().describe('BUG-017: `troca_defeito_duravel_dias` (piso legal fixo de 90 dias para produto durável).')
-})
-}),
-  "lowStockThreshold": zod.int(),
-  "notifications": zod.object({
-  "newOrderEmail": zod.boolean().describe('E-mail ao dono e à equipe (permissão `orders`) de pedido novo pago e do lembrete de aceite ("Aceite agora"), com o painel fechado. Sem dado do cliente e sem valor em R$')
-}).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
-}).optional()
-})
-
-
-/**
  * Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco. SEC-188: a abertura (por documento, por admin, com data) é o registro que a aprovação da loja exige (`approveStore`).
  * @summary Abrir documento (URL de 5 min, auditada)
  */
@@ -6082,23 +5912,6 @@ export const SuspendStoreResponse = zod.object({
 }).optional().describe('B2 / WB-192: preferência de e-mail da loja (padrão ligada). Campo novo, opcional para o app antigo')
 }).optional()
 })
-
-
-/**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; **sai no primeiro PR da R1.1, contrato e código juntos** (sem consumidor; decisão do CEO, tech-lead I12). Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
- * @deprecated
- * @summary Editar configuração da loja (substituída por `editAdminStoreConfig`)
- */
-export const EditAdminStoreSettingsParams = zod.object({
-  "storeId": zod.uuid(),
-  "section": zod.enum(['hours', 'holidays', 'delivery', 'pickup', 'exchange-policy'])
-})
-
-export const EditAdminStoreSettingsBody = zod.looseObject({
-
-}).describe('Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)')
-
-export const EditAdminStoreSettingsResponse = zod.void()
 
 
 /**
@@ -16559,7 +16372,7 @@ export const RestoreAdminStoreHistoryEntryResponse = zod.object({
 
 
 /**
- * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substitui `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), que aceita razão social e endereço e fica `deprecated` (ver ADR-018). Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
+ * Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substituiu `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), removida na R1.1 por aceitar razão social e endereço sem motivo (ADR-018 D6); a rota antiga agora responde 404. Motivo do catálogo obrigatório (`reason`; "Solicitado pelo lojista" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`.
  * @summary Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
  */
 export const EditAdminStoreProfileParams = zod.object({
@@ -16601,7 +16414,7 @@ export const EditAdminStoreProfileResponse = zod.object({
 
 
 /**
- * Permissão `stores:write` (super admin e operação). Substitui `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), que NÃO recebe motivo nem versão e fica `deprecated` (ver ADR-018). `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`.
+ * Permissão `stores:write` (super admin e operação). Substituiu `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), removida na R1.1 por não receber motivo nem versão (ADR-018 D6); a rota antiga agora responde 404. `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`.
  * @summary Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
  */
 export const EditAdminStoreConfigParams = zod.object({

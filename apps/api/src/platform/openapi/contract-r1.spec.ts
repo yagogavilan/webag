@@ -128,12 +128,12 @@ describe('contrato OpenAPI da v1.1 R1', () => {
       expect(Object.keys(changes.properties).sort()).toEqual(['description', 'name', 'phone', 'whatsapp']);
     });
 
-    it('as duas rotas antigas de edição do admin ficam deprecated até o primeiro PR da R1.1, que as remove (I12)', () => {
-      for (const id of ['editAdminStore', 'editAdminStoreSettings']) {
-        const found = all.find((o) => o.op.operationId === id)!;
-        expect(found.op.deprecated, id).toBe(true);
-        expect(String(found.op.description), id).toContain('primeiro PR da R1.1');
-      }
+    it('as duas rotas legadas de edição do admin foram removidas do contrato (I12, ADR-018 D6)', () => {
+      for (const id of ['editAdminStore', 'editAdminStoreSettings']) expect(all.find((o) => o.op.operationId === id), id).toBeUndefined();
+      expect(all.find((o) => o.key === 'PATCH /v1/admin/stores/{storeId}')).toBeUndefined();
+      expect(all.find((o) => o.key === 'PUT /v1/admin/stores/{storeId}/settings/{section}')).toBeUndefined();
+      expect(schemas.AdminStorePatchRequest).toBeUndefined();
+      expect(all.filter((o) => o.op.deprecated === true)).toEqual([]);
     });
   });
 

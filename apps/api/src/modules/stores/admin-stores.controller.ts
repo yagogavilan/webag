@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminOnly, Ctx, CurrentPrincipal, RequireReauth, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
 import { type Db, DRIZZLE } from '../../platform/database/database.module.js';
@@ -11,15 +11,9 @@ import { STORE_STATUSES } from './domain/state.js';
 import { PaymentAccountService } from './payment-account.service.js';
 import { StoreSettingsService } from './store-settings.service.js';
 import {
-  adminStorePatchSchema,
   correctionSchema,
   decisionReasonSchema,
-  deliverySchema,
   documentAccessSchema,
-  exchangePolicySchema,
-  holidaysSchema,
-  hoursSchema,
-  pickupSchema,
   releaseAccountSchema,
 } from './stores.schemas.js';
 import { presentStore, uuidParam } from './stores.controllers.js';
@@ -28,15 +22,8 @@ import { limitQuery } from '../../platform/http/pagination.js';
 
 type In<T extends z.ZodType> = z.infer<T>;
 const listQuery = z.strictObject({ status: z.enum(STORE_STATUSES).optional(), cursor: z.string().max(300).optional(), limit: limitQuery });
-const SECTION_SCHEMAS = {
-  hours: hoursSchema,
-  holidays: holidaysSchema,
-  delivery: deliverySchema,
-  pickup: pickupSchema,
-  'exchange-policy': exchangePolicySchema,
-} as const;
 
-/** Fila de aprovação, decisões e edição de lojas pelo admin (WB-103/104/218). Permissões na tabela única (SEC-021). */
+/** Fila de aprovação e decisões sobre lojas pelo admin (WB-103/104/218). A edição de dados e configuração é de `AdminStoreEditController` (R1.1, com motivo, versão e auditoria). Permissões na tabela única (SEC-021). */
 @Controller('v1/admin/stores')
 export class AdminStoresController {
   constructor(
@@ -115,31 +102,6 @@ export class AdminStoresController {
   @Post(':storeId/reactivate')
   async reactivate(@CurrentPrincipal() admin: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string) {
     return this.present(await this.admin.reactivate(uuidParam(storeId), admin, ctx));
-  }
-
-  /** WB-104 C3: editar dado da loja grava antes/depois na auditoria; suporte e financeiro não editam. */
-  @AdminOnly('stores:write')
-  @Patch(':storeId')
-  async patch(@CurrentPrincipal() admin: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Body(new ZodPipe(adminStorePatchSchema)) body: In<typeof adminStorePatchSchema>) {
-    const store = await this.stores.getStore(uuidParam(storeId));
-    const { store: updated } = await this.stores.updateProfile(store, body.profile ?? {}, { userId: admin.userId, kind: 'admin' }, ctx);
-    return this.present(updated);
-  }
-
-  @AdminOnly('stores:write')
-  @HttpCode(204)
-  @Put(':storeId/settings/:section')
-  async section(@CurrentPrincipal() admin: Principal, @Ctx() ctx: RequestContext, @Param('storeId') storeId: string, @Param('section') section: string, @Body() body: unknown): Promise<void> {
-    const schema = (SECTION_SCHEMAS as Record<string, z.ZodType>)[section];
-    if (!schema) throw errors.notFound('Seção desconhecida.');
-    const input = new ZodPipe(schema).transform(body) as never;
-    const store = await this.stores.getStore(uuidParam(storeId));
-    const actor = { userId: admin.userId, kind: 'admin' as const };
-    if (section === 'hours') await this.settings.setHours(store, (input as In<typeof hoursSchema>).days, actor, ctx);
-    else if (section === 'holidays') await this.settings.setHolidays(store, (input as In<typeof holidaysSchema>).holidays, actor, ctx);
-    else if (section === 'delivery') await this.settings.setDelivery(store, input, actor, ctx);
-    else if (section === 'pickup') await this.settings.setPickup(store, input, actor, ctx);
-    else await this.settings.setExchangePolicy(store, input, actor, ctx);
   }
 
   /** WB-103 C7 / SEC-047: liberar conta com titular divergente exige TOTP vigente, motivo e auditoria. */

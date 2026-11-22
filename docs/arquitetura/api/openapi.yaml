@@ -12,7 +12,7 @@ info:
     A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
     Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
     Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
-    Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
+    Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas legadas de edição do admin (`editAdminStore`, `PATCH /v1/admin/stores/{storeId}`, e `editAdminStoreSettings`, `PUT /v1/admin/stores/{storeId}/settings/{section}`) foram REMOVIDAS na R1.1, contrato e código no mesmo commit (exceção consciente à regra de não remover; nenhum consumidor: o web nunca as chamou). Hoje o admin edita dados e configuração só por `editAdminStoreProfile` e `editAdminStoreConfig`, com motivo, versão e auditoria.
     Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
     "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
     Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
@@ -4199,45 +4199,6 @@ paths:
           $ref: "#/components/responses/Forbidden"
         '404':
           $ref: "#/components/responses/NotFound"
-    patch:
-      tags:
-      - admin-stores
-      operationId: editAdminStore
-      deprecated: true
-      summary: Editar dados da loja (substituída por `editAdminStoreProfile`)
-      description: "**DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; **sai no primeiro PR da R1.1, contrato e código juntos** (nenhuma tela as chama: `apps/web` não tem PATCH de loja; decisão do CEO, tech-lead I12). Permissão `stores:write` (super e operação). Grava antes/depois na auditoria."
-      parameters:
-      - name: storeId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AdminStorePatchRequest"
-      responses:
-        '200':
-          description: Sucesso
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Store"
-        '400':
-          $ref: "#/components/responses/ValidationError"
-        '401':
-          $ref: "#/components/responses/Unauthorized"
-        '403':
-          $ref: "#/components/responses/Forbidden"
-        '404':
-          $ref: "#/components/responses/NotFound"
-        '409':
-          $ref: "#/components/responses/Conflict"
-        '422':
-          $ref: "#/components/responses/Unprocessable"
   /v1/admin/stores/{storeId}/documents/{documentId}/access:
     post:
       tags:
@@ -4450,52 +4411,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         '409':
           $ref: "#/components/responses/Conflict"
-  /v1/admin/stores/{storeId}/settings/{section}:
-    put:
-      tags:
-      - admin-stores
-      operationId: editAdminStoreSettings
-      deprecated: true
-      summary: Editar configuração da loja (substituída por `editAdminStoreConfig`)
-      description: "**DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; **sai no primeiro PR da R1.1, contrato e código juntos** (sem consumidor; decisão do CEO, tech-lead I12). Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria."
-      parameters:
-      - name: storeId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: section
-        in: path
-        required: true
-        schema:
-          type: string
-          enum:
-          - hours
-          - holidays
-          - delivery
-          - pickup
-          - exchange-policy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              description: Corpo da seção correspondente (HoursRequest, HolidaysRequest, DeliveryRequest, PickupRequest ou ExchangePolicyRequest)
-      responses:
-        '204':
-          description: Salvo
-        '400':
-          $ref: "#/components/responses/ValidationError"
-        '401':
-          $ref: "#/components/responses/Unauthorized"
-        '403':
-          $ref: "#/components/responses/Forbidden"
-        '404':
-          $ref: "#/components/responses/NotFound"
-        '422':
-          $ref: "#/components/responses/Unprocessable"
   /v1/admin/stores/{storeId}/payment-account/release:
     post:
       tags:
@@ -9474,7 +9389,7 @@ paths:
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
-      description: "Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substitui `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), que aceita razão social e endereço e fica `deprecated` (ver ADR-018). Motivo do catálogo obrigatório (`reason`; \"Solicitado pelo lojista\" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`."
+      description: "Permissão `stores:write` (super admin e operação; financeiro e suporte 403 e a tela nem mostra a ação, C3). **Lista fechada** de campos (C-ADM-03): nome de exibição, descrição, telefone e WhatsApp. `cnpj`, `cpf`, `legalName`, documentos, `mpAccountId`, `members`, endereço, `status` ou qualquer campo extra: 422 `FIELD_NOT_EDITABLE` (o DTO recusa campo fora da lista). Substituiu `editAdminStore` (`PATCH /v1/admin/stores/{storeId}`), removida na R1.1 por aceitar razão social e endereço sem motivo (ADR-018 D6); a rota antiga agora responde 404. Motivo do catálogo obrigatório (`reason`; \"Solicitado pelo lojista\" exige canal e data em `note`); texto de até 200 caracteres. **Concorrência (C6, C-ADM-05):** grava com `UPDATE ... WHERE version = :expectedVersion`; versão diferente = 409 `STORE_VERSION_CONFLICT` (o lojista alterou no meio) e nada é sobrescrito. Aviso ao lojista no painel e por e-mail na hora (horário, pausa e status avisam na hora; WB-351 C1). Antes/depois e motivo no `audit_log`. Flag `admin_edita_catalogo_sem_pedido` desligada (J27): só motivo `requested_by_merchant`."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
       requestBody:
@@ -9502,7 +9417,7 @@ paths:
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
-      description: "Permissão `stores:write` (super admin e operação). Substitui `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), que NÃO recebe motivo nem versão e fica `deprecated` (ver ADR-018). `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`."
+      description: "Permissão `stores:write` (super admin e operação). Substituiu `editAdminStoreSettings` (`PUT /v1/admin/stores/{storeId}/settings/{section}`), removida na R1.1 por não receber motivo nem versão (ADR-018 D6); a rota antiga agora responde 404. `section`: hours, holidays, delivery, pickup, exchange-policy; `data` é o corpo da rota equivalente do lojista (`HoursRequest`, `HolidaysRequest`, `DeliveryRequest`, `PickupRequest` ou `ExchangePolicyRequest`) e o servidor valida contra o schema da `section`. Motivo do catálogo obrigatório; `expectedVersion` da loja (409 `STORE_VERSION_CONFLICT`). Horário avisa o lojista na hora (painel e e-mail). Antes/depois e motivo no `audit_log`."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: section, in: path, required: true, schema: { type: string, enum: [hours, holidays, delivery, pickup, exchange-policy] } }
@@ -12654,18 +12569,6 @@ components:
                 maxLength: 500
           minItems: 1
           maxItems: 10
-    AdminStorePatchRequest:
-      type: object
-      additionalProperties: false
-      required:
-      - reason
-      properties:
-        reason:
-          type: string
-          minLength: 5
-          maxLength: 500
-        profile:
-          $ref: "#/components/schemas/UpdateStoreProfileRequest"
     ReleaseAccountRequest:
       type: object
       additionalProperties: false

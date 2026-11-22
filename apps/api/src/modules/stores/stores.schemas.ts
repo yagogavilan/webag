@@ -157,8 +157,4 @@ export const correctionSchema = z.strictObject({
     .max(10),
 });
 export const documentAccessSchema = z.strictObject({ reason: z.enum(['initial_review', 'doubt', 'report']) });
-export const adminStorePatchSchema = z.strictObject({
-  reason,
-  profile: profileSchema.optional(),
-});
 export const releaseAccountSchema = z.strictObject({ reason: z.string().trim().min(10, 'Informe o motivo (mínimo 10 caracteres).').max(500) });
