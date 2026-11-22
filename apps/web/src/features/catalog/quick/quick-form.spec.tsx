@@ -13,10 +13,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }
 
 // Recorte, compressão e envio usam canvas e XHR (coberto em quick-photos.spec): aqui a galeria só entrega fotos prontas ou em envio.
 vi.mock('./quick-photos', () => ({
-  QuickPhotos: ({ photos, onChange, error }: { photos: { key: string; status: string; progress: number }[]; onChange: (u: (c: never[]) => never[]) => void; error?: string }) => (
+  QuickPhotos: ({ photos, onChange, error, onAdded }: { photos: { key: string; status: string; progress: number }[]; onChange: (u: (c: never[]) => never[]) => void; error?: string; onAdded?: () => void }) => (
     <div>
       <span data-testid="photo-count">{photos.length}</span>
-      <button type="button" data-testid="lojista.rapido.camera" onClick={() => onChange((c) => [...c, { key: `k${c.length}`, assetId: `a${c.length}`, previewUrl: 'blob:x', status: 'ready', progress: 100 } as never])}>fake-photo</button>
+      <button type="button" data-testid="lojista.rapido.camera" onClick={() => { onChange((c) => [...c, { key: `k${c.length}`, assetId: `a${c.length}`, previewUrl: 'blob:x', status: 'ready', progress: 100 } as never]); onAdded?.(); }}>fake-photo</button>
       <button type="button" onClick={() => onChange((c) => [...c, { key: `u${c.length}`, previewUrl: 'blob:x', status: 'uploading', progress: 60 } as never])}>fake-uploading</button>
       <button type="button" onClick={() => onChange((c) => (c as { status: string }[]).map((p) => (p.status === 'uploading' ? { ...p, status: 'ready', progress: 100, assetId: 'a-up' } : p)) as never[])}>finish-upload</button>
       {error ? <span role="alert">{error}</span> : null}
@@ -170,6 +170,25 @@ describe('Cadastro rápido: publicar em 2 campos (WB-370)', () => {
       expect(call.url.pathname).not.toMatch(/analytics|events|metrics/);
     }
     expect(callsTo(calls, '/quick-publish')).toHaveLength(1);
+  });
+
+  it('C2: depois da foto o foco vai para o Nome', async () => {
+    vi.stubGlobal('fetch', setup().impl);
+    renderLojista(<QuickProductPage productId="p1" autoCamera={false} />);
+    await userEvent.click(await screen.findByText('fake-photo'));
+    await waitFor(() => expect(screen.getByTestId('lojista.rapido.name')).toHaveFocus());
+  });
+
+  it('teclado: "Próximo" leva do nome ao preço e do preço à quantidade, e o botão Publicar é alcançável por Tab', async () => {
+    vi.stubGlobal('fetch', setup().impl);
+    const user = userEvent.setup();
+    renderLojista(<QuickProductPage productId="p1" autoCamera={false} />);
+    await user.type(await screen.findByTestId('lojista.rapido.name'), 'Camiseta{Enter}');
+    expect(screen.getByTestId('lojista.rapido.price')).toHaveFocus();
+    expect(screen.getByTestId('lojista.rapido.price')).toHaveAttribute('inputmode', 'decimal');
+    await user.type(screen.getByTestId('lojista.rapido.price'), '4990{Enter}');
+    expect(screen.getByTestId('lojista.rapido.stock')).toHaveFocus();
+    expect(screen.getByTestId('lojista.rapido.stock')).toHaveAttribute('inputmode', 'numeric');
   });
 
   it('C4: a categoria vem sugerida pela última usada e dá para trocar', async () => {
