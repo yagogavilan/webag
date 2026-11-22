@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 1, "Não deu pra passar na loja?" (1080 x 1350), v2</title>
+<title>Webag: post 1 (lojista) "Só retirando, tá? Quantas vendas essa frase já custou?" (1080 x 1350), v2.1</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,30 +11,36 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+/* Larguras: balão cinza a 60 px (Figtree 600, ~0,5 em/car.): "Dá pra entregar?" 16 car = 480 + 84 de padding = 564.
+   Balão lima a 108 px (Bricolage 800, 0,53 em/car.): "Só retirando," 13 car = 744 + 99 = 843 (<= 936, ancorado à direita).
+   Pergunta a 110 px: "Quantas vendas" 14 car = 816; "essa frase" 10; "já custou?" 10 + marca-texto. */
+.p1 .b1 { left: 72px; top: 150px; font-size: 60px; }
+.p1 .b2 { left: 72px; top: 290px; font-size: 60px; }
+.p1 .b3 { right: 72px; top: 514px; font-size: 108px; }
+.p1 h1 { position: absolute; left: 72px; top: 850px; font-size: 110px; }
+.p1 .cta { top: 1200px; color: var(--branco); }
 </style>
 </head>
 <body>
-<main class="post roxo p1" role="img" aria-label="19h40, voltando do trabalho. Não deu pra passar na loja? A loja passa aí. Tela real do app: o pedido saiu para entrega, com a linha do tempo mostrando em separação, aguardando motoboy e saiu para entrega.">
+<main class="post noite p1" role="img" aria-label="Conversa de mensagens. Cliente: Tem no 38? Moro longe. Dá pra entregar? Resposta da loja, em destaque: Só retirando, tá? Pergunta ao lojista: Quantas vendas essa frase já custou? Tem loja? Chame no direct. Webag, em breve.">
 
-  <!-- Ideia: o momento específico (fim do dia, loja fechada) e a prova na tela real: a linha do tempo do pedido, enorme.
-       Título 116 px: "passar na loja?" = 15 x 0,5 x 116 = 870 px (cabe em 936). -->
+  <!-- Ideia: a frase que o lojista já disse (e perdeu venda). Cena do slide 2 da apresentação do lojista. Um público (quem tem loja), uma ação (chamar no direct).
+       Não promete entrega nem prazo: não depende do parecer J8. Sem tela do app, sem dado de seed. -->
   <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
   <div class="emb">Em breve</div>
 
-  <p class="eyebrow">19h40. Voltando do trabalho.</p>
-  <h1 class="d"><span>Não deu pra</span><span>passar na loja?</span></h1>
+  <div class="bub in b1">Tem no 38?</div>
+  <div class="bub in b2">Moro longe.<br>Dá pra entregar?</div>
+  <div class="bub out b3">Só retirando,<br>tá?</div>
 
-  <!-- captura real docs/telas/11-app-acompanhamento.png (390 x 844). Os dois recortes escondem o horário previsto (sem prazo).
-       A: topo do cartão noite, x 16..374, y 84..210 ("Etapa 4 de 5 · A caminho", "Saiu para entrega", moto). Escala 900/358 = 2,514: imagem 980,5; esq. -40,2; topo -211,2; caixa 900 x 317.
-       B: linha do tempo, x 8..382, y 554..752 (Em separação, Aguardando motoboy, Saiu para entrega, Entregue). Escala 900/374 = 2,406: imagem 938,5; esq. -19,3; topo -1332,9; caixa 900 x 476.
-       O "00:51" (hora do evento) fica coberto por um bloco da cor da tela: x 48..110, y 692..712 nativos. -->
-  <div class="shot a" aria-hidden="true"><img src="../assets-social/11-app-acompanhamento.png" alt="" style="width:980.5px;left:-40.2px;top:-211.2px"></div>
-  <div class="shot b" aria-hidden="true">
-    <img src="../assets-social/11-app-acompanhamento.png" alt="" style="width:938.5px;left:-19.3px;top:-1332.9px">
-    <div class="tapa" style="left:96px;top:330px;width:156px;height:52px;background:#FAF8FB"></div>
-  </div>
+  <h1 class="d">
+    <span>Quantas vendas</span>
+    <span>essa frase</span>
+    <span><span class="mk"><span>já custou?</span></span></span>
+  </h1>
 
-  <div class="sticker">A loja<br>passa aí.</div>
+  <p class="cta">Tem loja? Chame no direct.</p>
 
 </main>
 </body>

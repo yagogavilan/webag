@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 0, apresentação (1080 x 1350), v2</title>
+<title>Webag: post 0, apresentação (cliente) "Aquela loja que você adora. Não entrega. Agora entrega." (1080 x 1350), v2.1</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,26 +11,46 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+/* Larguras (0,53 em por caractere, Bricolage 800 a 148 px): "Aquela loja" 11 car = 863; "Não Agora" 9 car = 706; "entrega." 8 car = 627 + marca-texto. Todas <= 936. */
+.p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 148px; }
+/* a virada: loja que não entrega -> loja + moto. Duas ilustrações do kit (sem foto de terceiros, sem tela, sem botão) */
+.p0 .par { position: absolute; left: 72px; top: 868px; width: 936px; height: 300px; display: flex; align-items: center; justify-content: space-between; }
+.p0 .tile { width: 420px; height: 300px; border-radius: 30px; overflow: hidden; background: var(--noite); box-shadow: 10px 10px 0 var(--noite); }
+.p0 .tile img { width: 100%; height: 100%; object-fit: cover; }
+.p0 .tile.moto img { object-position: 50% 70%; }
+.p0 .seta { width: 96px; height: 72px; }
+.p0 .cta { top: 1212px; display: flex; align-items: center; gap: 22px; color: var(--lima); }
+.p0 .cta svg { width: 47px; height: 64px; flex: none; }
 </style>
 </head>
 <body>
-<main class="post roxo p0" role="img" aria-label="Webag, em breve. Aquela loja que você gosta agora entrega. A última palavra da frase é o banner real do app: Entrega pelo Webag.">
+<main class="post roxo p0" role="img" aria-label="Webag, em breve. Aquela loja que você adora. Não entrega. A palavra Não está riscada e no lugar vem Agora: Agora entrega. Ilustração: de uma loja de bairro para uma moto com a sacola do Webag. Siga e ative o sininho.">
 
-  <!-- Ideia: a frase termina na tela real. "Aquela loja que você gosta agora" + o banner do app "Entrega pelo Webag" no lugar do verbo.
-       Linhas de 160 px: a maior ("você gosta", 10 caracteres) tem ~800 px de 936 disponíveis. -->
+  <!-- Ideia: a MESMA frase vira. "Aquela loja que você adora. ~~Não~~ Agora entrega." A palavra que importa (entrega.) é a mesma nos dois estados e fica em lima.
+       Sem banner borrado, sem botão falso, sem captura de tela. A virada é lida em 1 s: o risco lima em "Não" e "Agora" ao lado.
+       CTA na arte: "Siga e ative o sininho." em 52 px (lima sobre roxo = 3,9:1, texto grande em negrito). -->
   <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
   <div class="emb">Em breve</div>
 
   <h1 class="d">
-    <span>Aquela</span>
-    <span>loja que</span>
-    <span>você gosta</span>
-    <span><span class="mk"><span>agora</span></span></span>
+    <span>Aquela loja</span>
+    <span>que você</span>
+    <span>adora.</span>
+    <span><span class="no">Não<i class="strike"><b></b></i></span> <span class="ag">Agora</span></span>
+    <span><span class="mk"><span>entrega.</span></span></span>
   </h1>
 
-  <!-- captura real docs/telas/01-app-inicio.png (390 x 844): recorte x 10..380, y 191..398 (só o banner e os pontos do carrossel).
-       Escala 936/370 = 2,5297: largura da imagem 986,6; esquerda -25,3; topo -483,2; caixa 936 x 524. Texto do banner ~40 px na peça final. -->
-  <div class="shot" aria-hidden="true"><img src="../assets-social/01-app-inicio.png" alt="" style="width:986.6px;left:-25.3px;top:-483.2px"></div>
+  <div class="par" aria-hidden="true">
+    <div class="tile"><img src="../assets/fachada-loja.svg" alt=""></div>
+    <svg class="seta" viewBox="0 0 96 72"><path d="M8 36H76M52 10L82 36L52 62" fill="none" stroke="#D6FF4A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="tile moto"><img src="../assets/etapa-a-caminho.svg" alt=""></div>
+  </div>
+
+  <p class="cta">
+    <svg viewBox="64 10 272 372" aria-hidden="true"><g fill="#D6FF4A"><path d="M200 44 C140 44 108 92 108 158 L108 232 C108 258 98 274 72 294 L72 312 L328 312 L328 294 C302 274 292 258 292 232 L292 158 C292 92 260 44 200 44 Z"/><circle cx="200" cy="32" r="18"/><path d="M154 326 L246 326 A46 46 0 0 1 154 326 Z"/></g></svg>
+    <span>Siga e ative o sininho.</span>
+  </p>
 
 </main>
 </body>

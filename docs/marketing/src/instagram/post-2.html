@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 2, lojista "Tem loja? Venda além da sua rua." (1080 x 1350), v2</title>
+<title>Webag: post 2 (cliente) "Não deu pra passar na loja?" (1080 x 1350), v2.1</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,28 +11,44 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+/* Título a 112 px (0,53 em/car.): "passar na loja?" 15 car = 890 (<= 936). Cartão a 46 px: 4 linhas de 2,3 em a 44 px = 405 px + cabeçalho + rótulo = ~620 px, de y=540 a ~1160 (sombra até ~1170). "Voltando do trabalho." (56 px, lima sobre roxo 3,9:1, texto grande) é a cena, sem hora.
+   Eixo vertical: eyebrow 128 a 192; título 204 a ~410; subtítulo 436 a ~500; cartão 540 a ~1160; CTA 1212 a ~1270. */
+.p2 .eyebrow { position: absolute; left: 72px; top: 128px; font: 800 56px/64px var(--texto); color: var(--lima); }
+.p2 h1 { position: absolute; left: 72px; top: 204px; font-size: 112px; }
+.p2 .sub { position: absolute; left: 72px; top: 436px; font: 800 60px/1.1 var(--texto); color: var(--branco); }
+.p2 .ui { left: 72px; top: 540px; width: 936px; font-size: 44px; }
+.p2 .cta { top: 1212px; font-size: 48px; }
 </style>
 </head>
 <body>
-<main class="post lima p2" role="img" aria-label="Tem loja? Venda além da sua rua. O motoboy leva. Tela real do painel da loja: pedido novo com os botões Aceitar pedido e Recusar. Cadastro de lojas em breve. Chame no direct para entrar na lista.">
+<main class="post roxo p2" role="img" aria-label="Voltando do trabalho. Não deu pra passar na loja? Peça sem sair do lugar. Tela ilustrativa do app com a linha do tempo de um pedido de 2 itens: pedido enviado, loja separando, a caminho, entregue. Siga para saber quando abrir. Webag, em breve.">
 
-  <!-- Ideia: para o lojista, a prova é o pedido chegando. A tela do painel é o herói; título de 140 px em 3 linhas
-       ("da sua rua." = 11 x 0,5 x 140 = 770 px). Fundo lima, cartão noite com sombra dura roxa. -->
-  <img class="logo" src="../assets/webag-logo.svg" alt="Webag">
-  <div class="emb">Cadastro em breve</div>
+  <!-- Ideia: a pergunta na voz do cliente, sem hora e sem comida; a resposta é pedir sem sair do lugar e acompanhar. Prova: cartão desenhado (linha do tempo),
+       não captura de seed. Item e preço não aparecem de propósito: a linha do tempo é a tela e lê a 360 px.
+       "A caminho" / "Entregue" dependem do parecer J8 (pendencias IJ1). -->
+  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
+  <div class="emb">Em breve</div>
 
-  <h1 class="d"><span>Tem loja?</span><span>Venda além</span><span>da sua rua.</span></h1>
-  <div class="sticker s-roxo">O motoboy<br>leva.</div>
+  <p class="eyebrow">Voltando do trabalho.</p>
+  <h1 class="d"><span>Não deu pra</span><span>passar na loja?</span></h1>
+  <p class="sub">Peça sem sair do lugar.</p>
 
-  <!-- captura real docs/telas/20-lojista-pedidos-novos-mobile.png (390 x 844): recorte x 16..374, y 313..595 (só o cartão do pedido novo).
-       Escala 860/358 = 2,402: imagem 936,8; esq. -38,4; topo -751,9; caixa 860 x 678 (40% da área do post). O texto da tela fica com ~38 px ("Aceitar pedido", "Recusar").
-       O bloco noite cobre "02:39" e "há 19 min" (x 228..362, y 366..390 nativos), porque a idade do pedido é dado de demonstração. -->
-  <div class="shot" aria-hidden="true">
-    <img src="../../../telas/20-lojista-pedidos-novos-mobile.png" alt="" style="width:936.8px;left:-38.4px;top:-751.9px">
-    <div class="tapa" style="left:509px;top:127px;width:322px;height:58px;background:#1C1721"></div>
+  <div class="ui light track" style="--sh:var(--noite)" aria-hidden="true">
+    <div class="ph"><b>Seu pedido</b><span class="chip">2 itens</span></div>
+    <div class="rows">
+      <div class="hl" style="top:2.3em"></div>
+      <ol>
+        <li class="done"><i><u class="ud"></u></i>Pedido enviado</li>
+        <li class="now"><i><u class="un"></u></i>Loja separando</li>
+        <li class="todo"><i></i>A caminho</li>
+        <li class="todo"><i></i>Entregue</li>
+      </ol>
+    </div>
+    <p class="cp">Tela ilustrativa.</p>
   </div>
 
-  <p class="cta">Chame no direct para entrar na lista.</p>
+  <p class="cta">Siga para saber quando abrir.</p>
 
 </main>
 </body>

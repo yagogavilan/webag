@@ -1,73 +1,77 @@
-# Revisão crítica do kit social v2 (perfil, 4 posts, vídeo de 15 s)
+# Revisão crítica do kit social v2.1 (perfil, 4 posts, 2 vídeos de 15 s)
 
-Autor: product-designer | Data: 2026-11-22 | Critério (`direcao-criativa.md` §5): primeiro "pararia o dedo?", depois marca e render.
-**Limite:** não tenho Bash e **não renderizei nada**. As notas abaixo são julgamento de design sobre a composição que escrevi, não teste com público. Nota 1 a 5: 5 = para o dedo de quem não conhece a marca; 4 = para o dedo de quem é o público; 3 = informa, não segura; 1 a 2 = ignorado. Regra do pedido: nota < 4 volta para a prancheta.
+Autor: product-designer | Data: 2026-11-22 | Rubrica: `.claude/skills/avaliar-post` (pesos: gancho 25, ideia 15, identificação 15, prova 15, miniatura 10, CTA 10, autenticidade 10) | Parecer de origem: `avaliacoes/2026-11-22-resumo.md`
+**Limite (leia primeiro):** não tenho Bash e **não renderizei nada**. A v2 foi reprovada porque eu julguei o layout que escrevi. Desta vez as notas abaixo são **conservadoras e mostram a conta**; a margem de erro é de ±0,3 e só o render e a estrategista confirmam. Onde o critério depende de ativo que não existe (captura limpa, clipe, usuário do Instagram, foto real) eu **limito a nota** em vez de supor que ele vai chegar.
 
-## 1. O que a pessoa sente em 1 segundo e nota
+## 1. O que mudou por peça (resposta ao parecer)
 
-| Peça | O que a pessoa lê e sente em 1 s | Nota | Por que não é 5 | Refeita? |
-|---|---|---|---|---|
-| **Perfil** | "A sacola roxa" (reconhecimento, não interesse). A 40 px a silhueta (3 barras + sacola) ainda lê; os dois olhais somem (aceitável) | 4 | Identidade é igual ao ícone do app por escolha. Símbolo de 880 px (era 704): barra do meio com ~2,9 px a 40 px | v1 3, refeita com escala 5,5 |
-| **Post 0** "Aquela loja que você gosta agora **entrega**" | Roxo, palavras grandes, uma lima ("agora"), e embaixo o banner lima do app com a sacola e "Entrega pelo Webag" completando a frase. Sente: "ah, agora entrega" + curiosidade pela loja | 4 | A frase é promessa, não cena; o banner é tela de app genérica. Funciona pela frase terminar dentro da tela real | Não |
-| **Post 1** "Não deu pra passar na loja?" | Pergunta que a pessoa já fez hoje, "19h40, voltando do trabalho", e a prova: cartão noite "Saiu para entrega" + linha do tempo enorme com adesivo "A loja passa aí." Sente: "é isso mesmo" | 4 | O cliente é a persona P1 `[HIPÓTESE]`, não validada; a tela é um acompanhamento, não uma compra | Não |
-| **Post 2** "Tem loja? Venda além da sua rua." | Fundo lima (destoa do feed), pergunta direta ao dono de loja, cartão noite com "Aceitar pedido" em lima e "O motoboy leva." Sente (lojista): "tenho loja, isso é pra mim" | 4 | Para quem não tem loja é invisível, o que é o objetivo. "O motoboy leva" depende do parecer jurídico (J1) | Não |
-| **Post 3** "Ativa o sininho." | Noite, título lima gigante, e um aviso de celular com "Abrimos. Aquela loja que você gosta agora entrega." Sente: curiosidade ("quero receber isso") e uma ação de 1 toque | 4 | É convite: segura menos que os outros. O aviso é desenho nosso, rotulado "Assim vai chegar quando abrir" | **Sim:** a 1ª versão (sino lima de 620 px + 'A gente avisa quando abrir.') tirou **3**: era só um ícone e um pedido, sem prova nem tensão. Troquei a imagem dominante pelo aviso |
-| **Vídeo** "Um pedido, dois lados" | Quadro 0: a tela do painel vibra, faixa lima "Pedido novo." Sente: "chegou pedido?" (lojista), curiosidade (cliente). Em 1,5 s: "Do outro lado:" | 4 com os clipes; **3 se o render usar só os posters** | O gancho é lido primeiro pelo lojista; o cliente entende no corte 2. Depende de clipes que não existiam em 2026-11-22 | Conceito escolhido entre 3 (`video-roteiro.md` §3); o gancho tem plano B (§8) |
+| Peça | Parecer v2 | Feedback específico | O que fiz |
+|---|---|---|---|
+| Post 0 | 2,8 refazer | Frase terminava em "agora"; destaque na palavra errada; banner borrado e botão falso; sem CTA | Mesma arte vira: "Aquela loja que você adora. ~~Não~~ Agora entrega." ("Não" riscado em lima, "Agora" ao lado, "entrega." em marca-texto lima nos dois estados). Sem banner nem botão: par de ilustrações loja para moto. CTA "Siga e ative o sininho." 52 px na arte |
+| Post 1 (era post 2) | 3,3 (trava 5) | Cartão com WB-DM002, banana, "Pago no app"; adesivo colidindo; recrutar com a conversa | Agora é o post 1 do lojista: a conversa "Tem no 38? / Moro longe. Dá pra entregar? / Só retirando, tá?" + "Quantas vendas essa frase já custou?". Sem tela, sem seed, sem promessa de entrega |
+| Post 2 (era post 1) | 3,6 | Sem CTA; prova repetida e borrada; adesivo ambíguo; "19h40" pequeno | Cena mantida ("Voltando do trabalho. Não deu pra passar na loja?", sem hora); um cartão desenhado de linha do tempo (sem seed, sem horário, sem comida); CTA 48 px; adesivo saiu |
+| Post 3 | 2,8 refazer | Pede antes de dar; dois sininhos | Convite descartado. Vira o post de recrutamento: "Tem loja? Venda além da sua rua." com cartão de pedido de loja de moda, valores redondos, chip "Outro bairro", **sem adesivo**, CTA "Chame no direct para entrar na lista." 52 px |
+| Perfil | 4,0 | Bio sem caminho do lojista | Foto igual; bio A/B/C em `instagram-legendas.md` §1 com "Tem loja? Chame no direct" |
+| Vídeo | 3,3 | Dois públicos; promessa no 10º s; corte do "+"; sino | Dois vídeos, um por público, promessa em 3,0 s (lojista) e 2,3 s (cliente), sem corte do "+" nem "Do outro lado:" |
 
-Nenhuma nota ficou abaixo de 4 depois da refeita do post 3. Isso **não** significa que está aprovado: o teste real é o Skip Rate do vídeo e o alcance do post 2 entre lojistas (a medir, `video-roteiro.md` §8).
+## 2. Nota por peça (conta à vista)
 
-## 2. O que mudou da v1 (e por que a v1 falhou)
+Cada linha: critérios na ordem gancho, ideia, identificação, prova, miniatura, CTA, autenticidade. Média ponderada.
 
-| v1 | v2 |
-|---|---|
-| "Escolha no app. Receba em casa." com lista 01/02/03 (catálogo de função) | Cada post é uma situação ou um alvo: a pessoa sem o produto (post 1), o dono da loja (post 2), quem quer ser avisado (post 3); a promessa (post 0) termina dentro da tela |
-| Celulares de 270 a 440 px com texto de ~10 px | Recortes de tela de 820 a 900 px de largura; texto da UI com 36 a 41 px na peça final; sem moldura de aparelho (a tela é o herói) |
-| "Pague com PIX ou cartão" como item e como adesivo | Nenhum post, legenda ou cena de vídeo cita pagamento. Resta só "Pago no app" como rótulo dentro do cartão real do painel (post 2) |
-| 4 peças com o mesmo esqueleto (rail, título, painel noite, itens) | 4 composições: tipografia + banner (0), duas telas empilhadas (1), cartão sobre lima com sombra roxa (2), aviso de celular + sino (3) |
-| Vídeo de slides de 2 s com captura estática | Clipes reais do app em sangria total, cortes de 1,0 a 2,0 s em 120 BPM, vibração e punch-in |
-| Só cliente | Um dos 4 posts recruta lojista e o vídeo mostra o painel (cortes 1, 5 e 6) |
+| Peça | G | I | Id | P | M | C | A | Nota | Leitura |
+|---|---|---|---|---|---|---|---|---|---|
+| Post 0 (cliente) | 4 | 5 | 4 | 3 | 4 | 4 | 3,5 | **3,95** | No limite. Reescrita não resolve sozinha: falta prova real (ver §3) |
+| Post 1 (lojista, conversa) | 4 | 5 | 4,5 | 3 | 4,5 | 3,5 | 3,5 | **4,03** | Passa. Mais forte do kit na identificação |
+| Post 2 (cliente, pergunta) | 4 | 4,5 | 4,5 | 3,5 | 4 | 3,5 | 3,5 | **3,98** | No limite |
+| Post 3 (lojista, recrutamento) | 4 | 4,5 | 4,5 | 3,5 | 4 | 3,5 | 3,5 | **3,98** | No limite |
+| Vídeo do lojista | 4 | 4,5 | 4,5 | 3,5 | 4 | 4 | 3,5 | **4,03** | Passa |
+| Vídeo do cliente | 4 | 4,5 | 4 | 3,5 | 4 | 4 | 3,5 | **3,95** | No limite |
+| Perfil | n/a | 4 | 3,5 | n/a | 5 | n/a | 4 | 4,0 (parecer) | Foto igual |
 
-## 3. Checagem das regras de `direcao-criativa.md` §2
+Por que **nenhuma passa de 4,1** e por que **prova nunca passa de 3,5**: toda tela de app aqui é cartão desenhado (rotulado "Tela ilustrativa."), porque não existe captura nem clipe sem seed (pendência I6). Prova de produto "real em uso" só existe com captura nova do `mobile-dev` ou com a gravação do fundador. Por que **CTA 3,5 nos posts**: o caminho do lojista ainda não tem usuário nem link (IF1); a arte diz "Chame no direct" mas não mostra para quem.
+O que sobe a nota (cada item é `[HIPÓTESE]` do efeito): usuário e link preenchidos +0,1 a +0,15 em todos; clipe ou captura limpa no lugar do cartão (prova 3,5 para 4,5) +0,15 nos vídeos e nos posts 2 e 3; foto real do fundador (mão com sacola) no lugar da ilustração do post 0 (autenticidade e prova) +0,2.
+Travas: nenhuma peça tem pagamento, prazo, superlativo, regional como mensagem, emoji, degradê, mascote, imagem de IA, dado de seed ou código de pedido. **Trava 6**: `[J8]` está marcado em `pendencias.md` IJ1 e em `instagram-legendas.md` (posts 0 e 2, vídeo do cliente, cena 6 do vídeo do lojista). Os posts 1 e 3 e as cenas 1 a 5 e 7 do vídeo do lojista **não prometem entrega**.
 
-| Regra | Post 0 | Post 1 | Post 2 | Post 3 | Vídeo |
-|---|---|---|---|---|---|
-| 1 Sem pagamento como argumento | ok | ok | ok ("Pago no app" só no cartão real) | ok | ok (barra de pagamento da sacola fora do quadro) |
-| 2 Uma ideia em 1 frase | A loja agora entrega | A loja passa aí | Venda além da sua rua | Receba o aviso | Um pedido, dois lados |
-| 3 Título >= 110 px e <= 10 palavras | 160 px, 7 palavras | 116 px, 6 palavras | 132 px, 6 palavras | 220 px, 3 palavras | 128 a 340 px |
-| 4 Tela >= 40% da área e UI >= 24 px | banner 936x524 = 34% (**desvio consciente**: a frase de 589 px de altura é a outra metade e a tela a completa; esticar a tela tiraria o título do tamanho gigante) | duas telas, 900x793 = 49% | 860x678 = 40% | n/a (o aviso é desenho nosso, 936x310 = 20%) | cenas 1 a 7 em tela cheia |
-| 5 Voz humana | ok | ok | ok | ok | ok |
-| 6 Sem emoji, degradê, mascote, IA | ok | ok | ok | ok | ok |
-| 7 Pré-lançamento sem data/prazo/superlativo | "Em breve" | "Em breve"; "19h40" é a hora da pessoa, não prazo | "Cadastro em breve" | "Em breve" | "Em breve." |
+## 3. Reescrita das peças abaixo de 4,0
 
-## 4. Por que não parece IA
+| Peça | Primeira leitura | O que reescrevi | Nota depois |
+|---|---|---|---|
+| Post 2 | 3,8 | Voltou a cena concreta ("Voltando do trabalho.", 56 px, sem hora): identificação 4 para 4,5, ideia 4 para 4,5. Subtítulo "Peça sem sair do lugar." fecha a ideia | 3,98 |
+| Post 3 | 3,9 | Chip do cartão "Agora" para "Outro bairro": o cartão passa a provar a promessa do título ("além da sua rua"); identificação 4 para 4,5. Adesivo retirado (era a colisão com o título) | 3,98 |
+| Post 0 | 3,95 | **Sem reescrita que eu consiga justificar**: as duas alavancas que sobram são ativos que não tenho (foto real; usuário). Testei trocar as ilustrações por um cartão de loja do app (40% da área, regra 4): custaria o título de 148 px para 112 px e o cartão não leria em miniatura; a nota fica igual (gancho cai, prova sobe). Mantive o título grande | 3,95 |
+| Vídeo do cliente | 3,95 | Nada a reescrever no roteiro: o limitante é prova real (clipes) e a dependência do J8 | 3,95 |
 
-| Sinal | O que a peça faz |
-|---|---|
-| Imagem gerada | Nenhuma. Todo pixel é captura real do app (recortada) ou geometria do símbolo (sino, barras, sacola) |
-| Rosto, mão, estoque | Nenhum |
-| Degradê, brilho, vidro, sombra difusa | Nenhum: cor chapada e **sombra dura** deslocada (10 a 12 px) |
-| Texto "bonito e vazio" | Frases específicas de quem fala ("Não deu pra passar na loja?", "Tem loja?", "Pedido novo."), com hora e verbo |
-| Simetria e centralização de template | Alinhamento à esquerda, cortes diagonais, adesivo torto (-6 graus), marca-texto inclinado (-8 graus), tela cortada no meio do componente |
-| Ícone genérico | O sino usa a mesma gramática do símbolo (trapézio/alça de curva, pílulas); o aviso usa o ícone real do app |
-| Movimento suave demais | Vídeo com cortes secos, vibração do aparelho, punch-in curto; nada flutua |
-| O que **ainda trai** | Tela de app com dados de seed ("Banana prata", "Mercadinho"); o que denuncia produto de demonstração é isso, não o estilo. A solução é regerar as capturas (pendência C1/C3) e **foto real do fundador** (mão com sacola, fachada) quando existir |
+Se a estrategista medir 3,9 em post 0 e vídeo do cliente, a ação certa é ativo real (foto/clipe), não mais texto.
 
-## 5. O que verificar no primeiro render (não consegui medir)
+## 4. O que verificar no primeiro render (não consegui medir)
 
 | # | Item | Peça | Risco |
 |---|---|---|---|
-| 1 | Larguras: calculei com 0,50 em/caractere. Linhas mais largas: "você gosta" (800 px de 936), "passar na loja?" (870 de 936), "sininho." (880 de 936), "Saiu para" e "escolheu." no vídeo | 0, 1, 3, vídeo | Estourar a margem; reduzir o `font-size` da linha |
-| 2 | Recortes: coordenadas tiradas de capturas em 390x844 a olho (±2 px). Faixa de papel nas bordas do recorte do post 0 é proposital; no post 1 confirmar se o "00:51" ficou coberto | 0, 1, 2 | Fio da captura aparecendo na borda do recorte |
-| 3 | Nitidez: capturas em 1x (390 px) ampliadas 2,3 a 2,5x ficam macias. Regerar `docs/telas/` com `deviceScaleFactor: 2` (os recortes são proporcionais; não mudam os HTML) | 0, 1, 2 | Texto da UI "mole" |
-| 4 | Adesivo do post 1 sobre a linha do tempo e adesivo do post 2 ao lado do título ("Tem loja?" termina em x~666 e "Venda além" em x~732; o adesivo começa em 736 e fica a ~64 px da borda direita) | 1, 2 | Sobreposição |
-| 5 | Faixas do vídeo: posição assume clipe 390x844 em `cover` (escala 2,77). Faixa da cena 7 (770 px) cobre o horário previsto do cartão | vídeo | Cobrir o botão certo; ajustar altura e `object-position` |
-| 6 | Fonte Bricolage em `design/recursos/fontes/`; Figtree em `design/fonts/`; o servidor do render só serve `src/` (pendência I2) | todas | 404 de fonte |
-| 7 | O pipeline mede `scrollHeight` da raiz: o aparelho não sai mais pela base (sem moldura), então não há overflow esperado | posts | n/a |
+| 1 | Larguras: 0,53 em/caractere (Bricolage 800, tracking -0,045 em). Linhas de maior risco: "passar na loja?" (890 de 936, 112 px), "Aquela loja" (863, 148 px), "Só retirando," (772 + padding, balão lima 108 px) | posts 0, 1, 2 | Estourar a margem; reduzir o `font-size` da linha |
+| 2 | Vídeo: "Só retirando," a 112 px ancorado à direita (875 de 912); "cada etapa." a 150 px (874); "na loja." a 190 px (805); "sua rua." a 210 px (890) | vídeos | Linha passa de 912 px (margem de 84 px) |
+| 3 | Altura dos cartões (calculada em "em"): post 2 ~620 px, post 3 ~580 px, vídeos 650 a 690 px. Folga ao CTA: 30 a 50 px | posts 2 e 3 | Cartão encostando no CTA; reduzir `font-size` do cartão (1 linha) |
+| 4 | Marcadores da linha do tempo: o "check" é uma borda girada dentro de um círculo; posição calculada, pode ficar 1 a 2 px fora do centro | posts 2, vídeo cliente | Cosmético |
+| 5 | `.mk` (marca-texto inclinado) e `.strike` (risco inclinado) sobre texto: o risco passa a 52% da altura da palavra "Não" | post 0, vídeo cliente | Risco cobrir pouco ou demais; ajustar `top` em `.strike` |
+| 6 | O render serve `docs/` inteira (confirmado em `scripts/marketing-render.mjs`): fontes e SVG resolvem. Nenhum PNG de captura é usado mais; `assets-social/` não é mais referenciado | todas | n/a |
+| 7 | O pipeline só renderiza `video-story` (agora um stub de 1 s). Ajustar para os dois nomes antes de renderizar | vídeos | Render de 1 s por engano |
+| 8 | Vídeo: `setTime(0)` no quadro 0 mostra só o 1º balão (lojista) e as 3 primeiras linhas (cliente): é intencional; conferir que a capa `--capa 3` (lojista) e `--capa 3` (cliente) é a promessa | vídeos | Capa sem a promessa |
+
+## 5. Checagem das regras de `direcao-criativa.md` §2
+
+| Regra | Post 0 | Post 1 | Post 2 | Post 3 | Vídeos |
+|---|---|---|---|---|---|
+| 1 Sem pagamento como argumento | ok | ok | ok | ok | ok |
+| 2 Uma ideia | A loja agora entrega | A conversa que custou vendas | Pedir sem sair do lugar | Venda além da sua rua | Uma por vídeo |
+| 3 Título >= 110 px e <= 10 palavras | 148 px, 7 palavras | 110 px (pergunta) e 108 px (resposta), 5 palavras | 112 px, 6 palavras | 140 px, 6 palavras | 150 a 230 px |
+| 4 Tela >= 40% e UI >= 24 px | **Desvio consciente**: sem tela; par de ilustrações | **Desvio consciente**: a peça é a conversa, não o produto | Cartão 936x~620 = 40%; UI 44 px | Cartão 936x~580 = 37%; UI 42 px | Cartões 912x~650; UI 46 a 50 px |
+| 5 Voz humana | ok | frase literal do lojista (reencenada) | ok | ok | ok |
+| 6 Sem emoji, degradê, mascote, IA | ok | ok | ok | ok | ok (nenhum rosto, nenhuma foto) |
+| 7 Pré-lançamento | "Em breve" | "Em breve" | "Em breve"; sem hora | "Cadastro em breve" | "Em breve", sem data |
 
 ## 6. Riscos para o CEO e o fundador
 
-1. **Parecer jurídico (J1/DEC-039)**: "a loja passa aí", "agora entrega", "O motoboy leva." e "Saiu para entrega" são promessas de entrega pelo Webag. Nenhuma peça sai antes do parecer e do G5.
-2. **Post 2 sem custo**: não afirma "sem mensalidade" nem comissão. O fundador decide o que dizer (`direcao-criativa.md` §3) e o que fazer com o contato do lojista que mandar mensagem (LGPD, finalidade, consentimento).
-3. **Post 3**: o caminho "Seguindo > notificações" e a existência do "sininho" dependem da versão do Instagram `[HIPÓTESE]`. O aviso "Abrimos." é desenho nosso: o texto final do push é decisão do PO.
-4. **Vídeo**: depende dos clipes (`src/clips/`, ainda inexistente) e do codec (WebM de reserva). Sem clipes, sai com posters estáticos (nota 3).
-5. O "em breve" sem data por 3 semanas desgasta (pendência IP3 da v1): decidir se há data ao fim do post 3.
+1. **Parecer J8** segura posts 0 e 2 e o vídeo do cliente. O lojista (posts 1 e 3, vídeo sem a cena 6) pode sair antes: decisão do CEO.
+2. **Reencenação, não print**: a conversa do post 1 é escrita por nós. Se o fundador tiver a frase literal de uma visita, trocar: é mais forte e mais honesto.
+3. **"Casa Lar"** (cartão do cliente) e os produtos são fictícios; conferir que não há loja real da região com esse nome.
+4. **Post 3 e custo**: a peça não diz "sem mensalidade" nem comissão (IF5). O fundador decide.
+5. O "em breve" sem data por 3 semanas desgasta (IP3 em `pendencias.md`).

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 3, convite "Ativa o sininho." (1080 x 1350), v2</title>
+<title>Webag: post 3 (lojista) "Tem loja? Venda além da sua rua." (1080 x 1350), v2.1</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,64 +11,38 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
+
+/* Título a 140 px (0,53 em/car.): "da sua rua." 11 car = 816; "Venda além" 10 car = 742 (<= 936). 3 linhas = 387 px, de y=124 a ~511.
+   Nenhum adesivo: nada encosta no título. Cartão a 42 px: ~13,8 em = ~580 px, de y=540 a ~1120 (sombra até ~1130). CTA de 2 linhas a 52 px em y=1172. */
+.p3 .emb { color: var(--noite); }
+.p3 h1 { position: absolute; left: 72px; top: 124px; font-size: 140px; }
+.p3 .ui { left: 72px; top: 540px; width: 936px; font-size: 42px; }
+.p3 .cta { top: 1172px; }
 </style>
 </head>
 <body>
-<main class="post noite p3" role="img" aria-label="Ativa o sininho. Assim vai chegar quando abrir: aviso no celular do Webag com o texto Abrimos. Aquela loja que você gosta agora entrega. Ilustração de um sino tocando. A gente avisa quando abrir. Francisco Morato e região. Webag, em breve.">
+<main class="post lima p3" role="img" aria-label="Tem loja? Venda além da sua rua. Tela ilustrativa do painel da loja: pedido novo de outro bairro, camiseta básica M R$ 60,00, boné preto R$ 40,00, total R$ 100,00, com os botões Aceitar pedido e Recusar. Chame no direct para entrar na lista. Webag, cadastro em breve.">
 
-  <!-- Ideia: urgência sem data = mostrar O AVISO que a pessoa vai receber. Uma ação de 1 toque (o sininho), uma prova de que vale a pena (o aviso).
-       O aviso é desenho nosso (rotulado "Assim vai chegar quando abrir"), não captura. O sino usa a gramática do símbolo: curvas chapadas + marcas de "ding" em pílula roxa, giradas -8 graus.
-       Título 220 px: "sininho." = 8 x 0,5 x 220 = 880 px (cabe em 936). -->
-  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
-  <div class="emb">Em breve</div>
+  <!-- Ideia: para o lojista, a prova é o pedido chegando. Fundo lima (diferente do feed), título que chama pelo nome ("Tem loja?"), cartão de pedido DESENHADO:
+       loja de moda, valores redondos, sem código de pedido, sem "Pago no app", sem horário, sem dado de seed.
+       Sem o adesivo "O motoboy leva.": a peça não depende do parecer J8 (nada promete entrega). Substitui o post "Ativa o sininho." (descartado). -->
+  <img class="logo" src="../assets/webag-logo.svg" alt="Webag">
+  <div class="emb">Cadastro em breve</div>
 
-  <h1 class="d"><span>Ativa o</span><span class="l">sininho.</span></h1>
+  <h1 class="d"><span>Tem loja?</span><span>Venda além</span><span>da sua rua.</span></h1>
 
-  <p class="rot">Assim vai chegar quando abrir:</p>
-  <div class="aviso" aria-hidden="true">
-    <div class="ic">
-      <svg viewBox="0 0 160 104" fill="#FFFFFF">
-        <defs>
-          <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-            <rect width="160" height="104" fill="#FFFFFF"/>
-            <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-            <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-          </mask>
-        </defs>
-        <rect x="24" y="34" width="23" height="14" rx="7"/>
-        <rect x="0" y="62" width="49" height="14" rx="7"/>
-        <rect x="18" y="90" width="34" height="14" rx="7"/>
-        <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
-        </g>
-      </svg>
-    </div>
-    <div class="nm">Webag</div>
-    <div class="ag">agora</div>
-    <div class="tt">Abrimos.</div>
-    <div class="cp">Aquela loja que você gosta<br>agora entrega.</div>
+  <div class="ui dark pedido" style="--sh:var(--roxo)" aria-hidden="true">
+    <div class="ph"><b>Pedido novo</b><span class="chip">Outro bairro</span></div>
+    <ul>
+      <li><span>Camiseta básica M</span><span>R$ 60,00</span></li>
+      <li><span>Boné preto</span><span>R$ 40,00</span></li>
+    </ul>
+    <div class="tot"><span>Total</span><b>R$ 100,00</b></div>
+    <div class="bt"><span class="ok">Aceitar pedido</span><span class="nao">Recusar</span></div>
+    <p class="cp">Tela ilustrativa.</p>
   </div>
 
-  <p class="sub">A gente avisa<br>quando abrir.</p>
-
-  <svg class="sino" viewBox="-30 0 460 400" aria-hidden="true">
-    <g fill="#D6FF4A">
-      <path d="M200 44 C140 44 108 92 108 158 L108 232 C108 258 98 274 72 294 L72 312 L328 312 L328 294 C302 274 292 258 292 232 L292 158 C292 92 260 44 200 44 Z"/>
-      <circle cx="200" cy="32" r="18"/>
-      <path d="M154 326 L246 326 A46 46 0 0 1 154 326 Z"/>
-    </g>
-    <g stroke="#C02EF0" stroke-width="18" stroke-linecap="round" fill="none">
-      <line x1="52.8" y1="95" x2="13.8" y2="72.5"/>
-      <line x1="30" y1="180" x2="-15" y2="180"/>
-      <line x1="52.8" y1="265" x2="13.8" y2="287.5"/>
-      <line x1="347.2" y1="95" x2="386.2" y2="72.5"/>
-      <line x1="370" y1="180" x2="415" y2="180"/>
-      <line x1="347.2" y1="265" x2="386.2" y2="287.5"/>
-    </g>
-  </svg>
-
-  <p class="escopo">Francisco Morato e região.</p>
+  <p class="cta">Chame no direct<br>para entrar na lista.</p>
 
 </main>
 </body>

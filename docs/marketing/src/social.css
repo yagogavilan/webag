@@ -1,10 +1,15 @@
-/* Webag: kit social v2 (perfil, 4 posts, vídeo Stories). Autor: product-designer. 2026-11-22.
-   Substitui a v1 (reprovada). Uma folha para os 6 HTML. Marca: docs/design/kit-marca-v3.md; regras: docs/marketing/direcao-criativa.md §2.
+/* Webag: kit social v2.1 (perfil, 4 posts, 2 vídeos). Autor: product-designer. 2026-11-22.
+   Substitui a v2 (nota < 4,0 no parecer da estrategista). Uma folha para os HTML de instagram/ e dos vídeos.
+   Marca: docs/design/kit-marca-v3.md; regras: docs/marketing/direcao-criativa.md §2.
    Regras: cor sólida, sem gradiente, sem sombra com desfoque (só sombra dura), sem emoji, sem PIX/cartão como argumento.
    Texto nunca inclinado (inclinação só em bloco de cor). Bricolage só em tamanho de título (>= 110 px).
    Contraste: branco sobre roxo #C02EF0 = 4,29:1 (só texto >= 24 px em negrito); noite sobre lima 15,3:1; lima sobre noite 15,3:1;
-   branco sobre noite 17,6:1. As @font-face ficam em cada HTML (o caminho relativo muda por pasta).
-   Larguras de linha estimadas com 0,50 em por caractere (Bricolage 800, tracking -0,045 em); ver comentários por peça. */
+   branco sobre noite 17,6:1; lima sobre roxo ~3,9:1 (só texto >= 44 px em negrito). As @font-face ficam em cada HTML.
+   Larguras de linha estimadas com 0,53 em por caractere (Bricolage 800, tracking -0,045 em); ver comentário de cada peça.
+
+   Telas do app aparecem como CARTÕES DESENHADOS (classe .ui): cor chapada, valores redondos, loja de moda/casa, nenhum dado de seed,
+   nenhum código de pedido, nenhum horário, nenhum "Pago no app". Todo cartão é rotulado "Tela ilustrativa." na peça.
+   Os cartões são em "em": o tamanho vem do font-size inline de cada uso (post 44 px, vídeo 46 a 50 px). */
 
 :root {
   --roxo: #C02EF0;
@@ -43,19 +48,9 @@ svg, img { display: block; }
 .logo { position: absolute; left: 72px; top: 54px; width: 176px; height: 48px; }
 .emb { position: absolute; right: 72px; top: 58px; font: 800 38px/48px var(--texto); }
 
-/* adesivo: lima com texto noite e sombra dura, rotação -6 graus. No máximo 1 por peça */
-.sticker {
-  position: absolute;
-  background: var(--lima);
-  color: var(--noite);
-  border-radius: 10px;
-  padding: 14px 26px 18px;
-  font: 800 52px/1.04 var(--texto);
-  letter-spacing: -0.01em;
-  transform: rotate(-6deg);
-  box-shadow: 8px 8px 0 var(--noite);
-}
-.sticker.s-roxo { background: var(--roxo); color: var(--branco); box-shadow: 8px 8px 0 var(--noite); }
+/* CTA da arte: sempre >= 44 px, negrito, texto direto sobre o fundo (não imita botão) */
+.cta { position: absolute; left: 72px; font: 800 52px/1.16 var(--texto); }
+.cap { position: absolute; font: 700 32px/1.1 var(--texto); }
 
 /* marca-texto: bloco inclinado atrás da palavra; o texto fica reto */
 .mk {
@@ -70,47 +65,91 @@ svg, img { display: block; }
 .mk > span { display: inline-block; transform: skewX(8deg); }
 .mk.inv { background: var(--noite); color: var(--lima); }
 
-/* recorte de tela real: caixa com overflow oculto, a imagem (captura 390 x 844) vai posicionada em linha (largura, esquerda, topo) */
-.shot { position: absolute; overflow: hidden; background: var(--papel); }
-.shot img { position: absolute; max-width: none; height: auto; }
-.shot .tapa { position: absolute; }
+/* palavra riscada ("Não") e a que vira ("Agora"). O risco é um bloco lima inclinado; o texto não gira.
+   Estrutura: <span class="no">Não<i class="strike"><b></b></i></span>. O <b> pode ser animado (escala em x) sem perder a inclinação do <i>. */
+.no { position: relative; display: inline-block; }
+.strike { position: absolute; left: -0.06em; right: -0.06em; top: 52%; height: 0.14em; margin-top: -0.07em; transform: rotate(-7deg); }
+.strike b { display: block; width: 100%; height: 100%; background: var(--lima); border-radius: 0.05em; transform-origin: 0 50%; }
+.ag { display: inline-block; color: var(--lima); }
+
+/* ---------- conversa (post 1 e vídeo do lojista): em "em", tamanho no font-size inline ---------- */
+.bub { position: absolute; white-space: nowrap; }
+.bub.in {
+  background: #443C4C;
+  color: var(--branco);
+  font: 600 1em/1.12 var(--texto);
+  padding: 0.38em 0.7em 0.44em;
+  border-radius: 0.72em;
+  border-bottom-left-radius: 0.18em;
+}
+.bub.out {
+  background: var(--lima);
+  color: var(--noite);
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  padding: 0.34em 0.46em 0.42em;
+  border-radius: 0.4em;
+  border-bottom-right-radius: 0.12em;
+}
+
+/* ---------- cartões de tela desenhados (.ui) ---------- */
+.ui {
+  position: absolute;
+  padding: 0.9em;
+  border-radius: 0.9em;
+  font: 600 1em/1.2 var(--texto);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0.24em 0.24em 0 var(--sh, var(--noite));
+}
+.ui.dark { background: var(--noite); color: var(--branco); --fi: #4A4252; }
+.ui.light { background: var(--papel); color: var(--noite); --fi: #DDD6E2; }
+.ui b { font-weight: 800; }
+.ui .ph { display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 1.12em; line-height: 1.2; }
+.ui .chip { font: 800 0.72em/1 var(--texto); padding: 0.5em 0.85em 0.55em; border-radius: 999px; background: var(--lima); color: var(--noite); white-space: nowrap; }
+.ui .cp { margin-top: 0.7em; font: 600 0.7em/1.2 var(--texto); color: #6B6273; }
+.ui.dark .cp { color: #B9B0C0; }
+
+/* pedido novo (painel da loja) */
+.pedido ul { list-style: none; margin-top: 0.6em; }
+.pedido li { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.9em; padding: 0.42em 0; border-top: 0.05em solid var(--fi); }
+.pedido .tot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.2em; padding-top: 0.5em; border-top: 0.1em solid currentColor; font-weight: 800; }
+.pedido .tot b { font-size: 1.15em; }
+.pedido .bt { position: relative; display: flex; gap: 0.5em; margin-top: 0.8em; }
+.pedido .bt span { display: flex; align-items: center; justify-content: center; height: 2.4em; border-radius: 0.6em; font-weight: 800; font-size: 0.92em; white-space: nowrap; }
+.pedido .bt .ok { flex: 1.7; background: var(--lima); color: var(--noite); }
+.pedido .bt .nao { flex: 1; border: 0.09em solid currentColor; }
+.pedido .bt .acc { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--lima); color: var(--noite); border-radius: 0.55em; font-weight: 800; font-size: 0.92em; box-shadow: inset 0 0 0 0.09em var(--noite); }
+
+/* loja no app (cliente) */
+.loja .lh { display: flex; align-items: center; gap: 0.6em; }
+.loja .av { flex: none; width: 2.1em; height: 2.1em; border-radius: 0.5em; background: var(--noite); color: var(--lima); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1em; }
+.loja .lh b { display: block; font-size: 1.1em; line-height: 1.15; }
+.loja .lh small { display: block; font: 600 0.72em/1.2 var(--texto); color: #5B5262; }
+.loja .pr { display: flex; gap: 0.6em; margin-top: 0.8em; }
+.loja .p { flex: 1; min-width: 0; }
+.loja .p .im { display: block; width: 100%; height: 5.2em; border-radius: 0.5em; overflow: hidden; }
+.loja .p .im svg { display: block; width: 100%; height: 100%; }
+.loja .p b { display: block; margin-top: 0.4em; font-size: 0.82em; line-height: 1.2; }
+.loja .p .pc { display: block; font-size: 0.82em; font-weight: 600; }
+.loja .fz { position: relative; margin-top: 0.8em; height: 2.3em; display: flex; align-items: center; justify-content: center; border-radius: 0.6em; background: var(--lima); color: var(--noite); font-weight: 800; font-size: 0.95em; box-shadow: inset 0 0 0 0.09em var(--noite); }
+
+/* acompanhar o pedido (linha do tempo). Cada linha tem 2,3 em de altura (passo do destaque .hl).
+   Estrutura da linha: <li class="done|todo"><i><u class="ud|un"></u></i>Rótulo</li>. <u> é o marcador cheio por cima do anel (pode ser animado). */
+.track .rows { position: relative; margin-top: 0.5em; }
+.track .rows::before { content: ""; position: absolute; left: 0.6em; top: 1.15em; bottom: 1.15em; width: 0.1em; background: #CFC6D6; }
+.track ol { list-style: none; position: relative; z-index: 1; }
+.track .hl { position: absolute; left: -0.35em; right: -0.35em; height: 2.3em; border-radius: 0.55em; background: var(--lima); }
+.track li { position: relative; z-index: 1; display: flex; align-items: center; gap: 0.7em; height: 2.3em; font-weight: 800; }
+.track li.todo { color: #6B6273; }
+.track.allk li.todo { color: var(--noite); }
+.track li i { position: relative; flex: none; width: 1.05em; height: 1.05em; margin-left: 0.12em; border-radius: 50%; border: 0.14em solid #A99FB1; background: var(--papel); }
+.track li i u { position: absolute; left: -0.14em; top: -0.14em; width: 1.05em; height: 1.05em; border-radius: 50%; }
+.track li i u.ud { background: var(--noite); }
+.track li i u.ud::after { content: ""; position: absolute; left: 0.39em; top: 0.17em; width: 0.26em; height: 0.46em; border: solid var(--lima); border-width: 0 0.1em 0.1em 0; transform: rotate(40deg); }
+.track li i u.un { background: var(--lima); border: 0.14em solid var(--noite); }
 
 /* ---------- perfil (1080 x 1080) ---------- */
 .avatar { position: relative; display: block; width: 1080px; height: 1080px; overflow: hidden; background: var(--roxo); }
 .avatar svg { position: absolute; left: 0; top: 0; width: 1080px; height: 1080px; }
-
-/* ---------- post 0: "Aquela loja que você gosta agora entrega." (a frase termina na tela real) ----------
-   Linhas de 160 px: "você gosta" = 10 x 0,5 x 160 = 800 px (cabe em 936). */
-.p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 160px; }
-.p0 .shot { left: 72px; top: 756px; width: 936px; height: 524px; border-radius: 34px; background: var(--lima); box-shadow: 12px 12px 0 var(--noite); }
-
-/* ---------- post 1: momento do dia (tela real grande, duas peças empilhadas) ---------- */
-.p1 .eyebrow { position: absolute; left: 72px; top: 144px; font: 800 44px/52px var(--texto); color: var(--lima); }
-.p1 h1 { position: absolute; left: 72px; top: 200px; font-size: 116px; }
-.p1 .shot { left: 72px; width: 900px; }
-.p1 .shot.a { top: 452px; height: 317px; border-radius: 34px; background: var(--noite); box-shadow: 10px 10px 0 var(--lima); }
-.p1 .shot.b { top: 789px; height: 476px; border-radius: 34px; box-shadow: 10px 10px 0 var(--noite); }
-.p1 .sticker { left: 650px; top: 900px; }
-
-/* ---------- post 2: lojista recruta (pedido chegando no painel) ---------- */
-.p2 .emb { color: var(--noite); }
-.p2 h1 { position: absolute; left: 72px; top: 124px; font-size: 132px; }
-.p2 .shot { left: 72px; top: 520px; width: 860px; height: 678px; border-radius: 34px; background: var(--noite); box-shadow: 12px 12px 0 var(--roxo); }
-.p2 .sticker { left: 736px; top: 140px; font-size: 46px; padding: 12px 22px 16px; }
-.p2 .cta { position: absolute; left: 72px; top: 1236px; font: 800 42px/50px var(--texto); }
-
-/* ---------- post 3: o sininho (convite) ---------- */
-.p3 h1 { position: absolute; left: 72px; top: 132px; font-size: 220px; }
-.p3 h1 .l { color: var(--lima); }
-.p3 .rot { position: absolute; left: 72px; top: 566px; font: 800 40px/48px var(--texto); color: var(--lima); }
-/* aviso do celular desenhado pelo Webag (não é captura): mostra o que a pessoa vai receber. Rotulado no texto da peça */
-.p3 .aviso { position: absolute; left: 72px; top: 630px; width: 936px; height: 310px; border-radius: 44px; background: var(--papel); color: var(--noite); box-shadow: 10px 10px 0 var(--lima); }
-.p3 .aviso .ic { position: absolute; left: 36px; top: 36px; width: 120px; height: 120px; border-radius: 28px; background: var(--roxo); }
-.p3 .aviso .ic svg { position: absolute; left: 18px; top: 28px; width: 84px; height: 55px; }
-.p3 .aviso .nm { position: absolute; left: 184px; top: 34px; font: 800 40px/48px var(--texto); }
-.p3 .aviso .ag { position: absolute; right: 36px; top: 38px; font: 600 36px/44px var(--texto); color: #5B5262; }
-.p3 .aviso .tt { position: absolute; left: 184px; top: 88px; font: 800 52px/60px var(--texto); letter-spacing: -0.01em; }
-.p3 .aviso .cp { position: absolute; left: 184px; top: 152px; font: 700 46px/58px var(--texto); }
-.p3 .sino { position: absolute; left: 660px; top: 985px; width: 320px; height: 278px; transform: rotate(-8deg); }
-.p3 .sub { position: absolute; left: 72px; top: 1010px; font: 800 60px/64px var(--texto); }
-.p3 .escopo { position: absolute; left: 72px; top: 1210px; font: 600 36px/40px var(--texto); color: rgba(255, 255, 255, 0.82); }
