@@ -1,0 +1,1 @@
+CREATE INDEX "reviews_store_published_idx" ON "reviews" USING btree ("store_id","rating") WHERE "reviews"."product_id" is null and "reviews"."status" = 'published';
