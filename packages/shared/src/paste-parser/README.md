@@ -38,7 +38,7 @@ Linhas vazias ou só com símbolo são ignoradas.
 
 ## Saída
 
-`PasteDraft` por linha: `name`, `baseName` (nome sem cor, chave do agrupamento), `sizes`, `colors`, `priceCents`, `quantity`, cada um com
+`PasteDraft` por linha: `name`, `baseName` (nome sem cor; com a cor, é a chave do agrupamento: `suggestGroups` só junta linhas da MESMA cor, DEC-128), `sizes`, `colors`, `priceCents`, `quantity`, cada um com
 `value`, `confidence` (`high` | `medium` | `low` | `none`) e `assumed`; mais `issues[]` e `status`:
 
 | `status` | Quando | O app |
@@ -48,7 +48,8 @@ Linhas vazias ou só com símbolo são ignoradas.
 | `incomplete` | `missing_name`, `missing_price`, `invalid_price` ou `invalid_quantity` | "Falta o preço", fora do "Publicar os válidos" |
 
 Limites: 100 linhas com conteúdo por colagem (`overLimit` + `totalLines` para "Cole até 100 linhas por vez"; `drafts` traz as 100 primeiras
-= "Usar as 100 primeiras") e 200 caracteres por linha (o resto é cortado, `line_truncated`).
+= "Usar as 100 primeiras") e 200 caracteres por linha (o resto é cortado, `line_truncated`: o item nunca é `ready` e o preço lido ganha
+`check_field` com `reason: 'line_truncated'` e confiança `low`, porque "R$ 1.299,90" cortado vira R$ 1,00; DEC-128 #3).
 
 ## Segurança (C-CAD-04)
 

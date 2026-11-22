@@ -35,7 +35,7 @@ export type PasteIssue =
   | { code: 'multiple_sizes'; severity: 'confirm'; sizes: string[] }
   /** Campo lido com confiança baixa: o app marca "Confira". */
   | { code: 'check_field'; severity: 'confirm'; field: PasteFieldName; reason: PasteCheckReason }
-  /** Linha com mais de 200 caracteres: cortada. */
+  /** Linha com mais de 200 caracteres: cortada. Nunca "pronta"; o preço lido ganha `check_field` com `line_truncated`. */
   | { code: 'line_truncated'; severity: 'confirm' }
   /** Nome com mais de 80 caracteres: cortado. */
   | { code: 'name_truncated'; severity: 'confirm' };
@@ -45,7 +45,9 @@ export type PasteCheckReason =
   | 'thousands_price'
   | 'numeric_size'
   | 'bare_quantity'
-  | 'lowercase_size';
+  | 'lowercase_size'
+  /** Linha cortada em 200 caracteres: o preço lido pode ser só um pedaço ("R$ 1" de "R$ 1.299,90"). */
+  | 'line_truncated';
 
 /**
  * `ready`: nome e preço lidos sem dúvida. `confirm`: lido, mas o app deve pedir confirmação.
@@ -59,7 +61,7 @@ export interface PasteDraft {
   /** Linha limpa (sem controle/emoji, no máximo 200 caracteres). Só para exibir. */
   source: string;
   name: PasteField<string | null>;
-  /** Nome sem cor implícita: chave para sugerir "Juntar linhas". */
+  /** Nome sem cor implícita: com a cor, é a chave para sugerir "Juntar linhas" (só a mesma cor, DEC-128). */
   baseName: string | null;
   sizes: PasteField<string[]>;
   colors: PasteField<string[]>;

@@ -20,10 +20,33 @@ describe('suggestGroups (WB-376 C10)', () => {
     expect(result[0]?.priceMode).toBe('per_variant');
   });
 
-  it('agrupa por nome-base: cor no nome não separa os grupos', () => {
+  it('cores diferentes NÃO juntam (DEC-128: foto por cor está fora da v1.1; WB-376 C10)', () => {
+    expect(groups('Camiseta básica preta P 49,90\nCamiseta básica branca P 49,90')).toEqual([]);
+    expect(groups('Camiseta básica preta P 49,90\nCamiseta básica branca M 49,90')).toEqual([]);
+  });
+
+  it('mesma cor junta, com a cor no nome do produto', () => {
+    const result = groups('Camiseta básica preta P 49,90\nCamiseta básica preta M 49,90');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ name: 'Camiseta básica preta', lines: [1, 2] });
+    expect(result[0]?.variants.map((v) => v.sizes)).toEqual([['P'], ['M']]);
+  });
+
+  it('com 3 linhas e uma cor diferente, só as da mesma cor entram no grupo', () => {
     const result = groups('Camiseta básica preta P 49,90\nCamiseta básica branca P 49,90\nCamiseta básica preta M 49,90');
     expect(result).toHaveLength(1);
-    expect(result[0]?.lines).toEqual([1, 2, 3]);
+    expect(result[0]?.lines).toEqual([1, 3]);
+  });
+
+  it('cor com marcador ("cor azul") junta pela cor e mantém o nome sem ela', () => {
+    const result = groups('Camiseta cor azul P 49,90\nCamiseta cor azul M 49,90\nCamiseta cor verde G 49,90');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.lines).toEqual([1, 2]);
+    expect(result[0]?.name).toBe('Camiseta');
+  });
+
+  it('linha com cor e linha sem cor não juntam', () => {
+    expect(groups('Camiseta preta P 49,90\nCamiseta M 49,90')).toEqual([]);
   });
 
   it('ignora acento e caixa no nome', () => {

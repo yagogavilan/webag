@@ -533,6 +533,11 @@ function parseLine(line: string, lineNumber: number, lineTruncated: boolean, opt
         } else if (shape === 'decimal' && fractionDigits === 1) {
           confidence = 'medium';
         }
+        // Linha cortada (DEC-128 #3): "R$ 1.299,90" cortado em "R$ 1" lê R$ 1,00. O preço dessa linha nunca é confiável.
+        if (lineTruncated) {
+          confidence = 'low';
+          issues.push({ code: 'check_field', severity: 'confirm', field: 'price', reason: 'line_truncated' });
+        }
         priceField = field<number | null>(cents, confidence);
       }
     }

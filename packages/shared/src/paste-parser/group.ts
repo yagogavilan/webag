@@ -1,13 +1,19 @@
 import { stripAccents } from './vocab.js';
 import type { PasteDraft, PasteGroupSuggestion } from './types.js';
 
-function groupKey(name: string): string {
-  return stripAccents(name).toLowerCase().replace(/\s+/g, ' ').trim();
+function norm(value: string): string {
+  return stripAccents(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Nome-base e cor (DEC-128 #1): cor diferente é produto diferente, porque foto por cor está fora da v1.1 (WB-372 C7). */
+function groupKey(draft: PasteDraft, name: string): string {
+  const color = draft.colors.value.map(norm).sort().join('/');
+  return `${norm(name)}|${color}`;
 }
 
 /**
  * Sugere "Juntar N linhas em 1 produto com variações" (WB-376 C10). Só sugere: o app decide com 1 toque e nunca junta sozinho.
- * Entram linhas com o mesmo nome-base e exatamente 1 tamanho e/ou 1 cor. Não sugere quando a mesma combinação aparece duas
+ * Entram linhas com o mesmo nome-base E a mesma cor (ou nenhuma) e exatamente 1 tamanho e/ou 1 cor. Não sugere quando a mesma combinação aparece duas
  * vezes (a grade recusa combinação repetida, WB-374 C4). Preços diferentes viram preço por variação (`per_variant`).
  */
 export function suggestGroups(drafts: readonly PasteDraft[]): PasteGroupSuggestion[] {
@@ -18,7 +24,7 @@ export function suggestGroups(drafts: readonly PasteDraft[]): PasteGroupSuggesti
     const sizes = draft.sizes.value.length;
     const colors = draft.colors.value.length;
     if (sizes > 1 || colors > 1 || sizes + colors === 0) continue;
-    const key = groupKey(name);
+    const key = groupKey(draft, name);
     const list = byKey.get(key);
     if (list) list.push(draft);
     else byKey.set(key, [draft]);
@@ -33,7 +39,8 @@ export function suggestGroups(drafts: readonly PasteDraft[]): PasteGroupSuggesti
     const prices = members.map((d) => d.priceCents.value);
     const samePrice = prices[0] !== null && prices.every((p) => p === prices[0]);
     suggestions.push({
-      name: first.baseName,
+      // Cor implícita fica no nome ("Camiseta básica preta"); cor com marcador já saiu do nome.
+      name: first.name.value ?? first.baseName,
       lines: members.map((d) => d.line),
       variants: members.map((d) => ({
         line: d.line,

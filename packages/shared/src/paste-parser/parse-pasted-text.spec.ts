@@ -123,6 +123,77 @@ describe('critérios do PRD (WB-376)', () => {
     });
   });
 
+  describe('C12 e C13 (DEC-128): linha cortada e marcador de tamanho', () => {
+    // 196 caracteres antes do preço: o corte em 200 deixa só "R$ 1" de "R$ 1.299,90".
+    const head = `${'Camiseta '.repeat(20)}abcdefg hijklmn `;
+
+    it('preço cortado no meio de "R$ 1.299,90" nunca sai "Pronta" nem confiável como R$ 1,00', () => {
+      const draft = one(`${head}R$ 1.299,90`);
+      expect(draft.source.endsWith('R$ 1')).toBe(true);
+      expect(draft.priceCents.value).toBe(100);
+      expect(draft.priceCents.confidence).toBe('low');
+      expect(draft.status).toBe('confirm');
+      expect(codes(draft)).toContain('line_truncated');
+      expect(draft.issues).toContainEqual({ code: 'check_field', severity: 'confirm', field: 'price', reason: 'line_truncated' });
+    });
+
+    it('preço cortado em "R$ 1.2" também fica marcado, e a linha com preço no corte seguinte não vira "Pronta"', () => {
+      for (const cut of ['R$ 1.', 'R$ 1.2', 'R$ 1.29', 'R$ 1.299', 'R$ 1.299,9']) {
+        const draft = one(`${head.slice(0, 196 - (cut.length - 4))}${cut} 99999`);
+        expect(draft.status, cut).not.toBe('ready');
+      }
+    });
+
+    it('linha cortada que perde o preço fica "Falta o preço" (bloqueia)', () => {
+      const draft = one(`${'Camiseta '.repeat(30)} 49,90`);
+      expect(codes(draft)).toContain('missing_price');
+      expect(draft.status).toBe('incomplete');
+    });
+
+    it('só a linha longa é afetada: as outras continuam "Pronta"', () => {
+      const result = parsePastedText(`${head}R$ 1.299,90\nBermuda jeans M 79,90 4 un`);
+      expect(result.drafts[0]?.status).toBe('confirm');
+      expect(result.drafts[1]?.status).toBe('ready');
+      const second = result.drafts[1];
+      expect(second?.issues.some((i) => i.code === 'line_truncated')).toBe(false);
+      expect(second?.priceCents.confidence).not.toBe('low');
+    });
+
+    it('linha de até 200 caracteres não ganha a marca de corte', () => {
+      const draft = one(`${'Camiseta '.repeat(5)}R$ 49,90`);
+      expect(codes(draft)).not.toContain('line_truncated');
+      expect(draft.status).toBe('ready');
+    });
+
+    it('"Camisa Brasil nº 10 129,90" lê 10 como tamanho e cai em "Confira" (nunca "Pronta")', () => {
+      const draft = one('Camisa Brasil nº 10 129,90');
+      expect(draft.sizes.value).toEqual(['10']);
+      expect(draft.status).toBe('confirm');
+      expect(draft.issues).toContainEqual({ code: 'check_field', severity: 'confirm', field: 'sizes', reason: 'numeric_size' });
+      expect(draft.priceCents.value).toBe(12990);
+    });
+
+    it('"Camisa nº 10" sem preço também lê o tamanho e fica incompleta por falta do preço', () => {
+      const draft = one('Camisa nº 10');
+      expect(draft.sizes.value).toEqual(['10']);
+      expect(draft.status).toBe('incomplete');
+    });
+
+    it('"tam 52" lê 52; "tam 61" e "tam 0" não leem tamanho e o número fica no nome', () => {
+      expect(one('Calça jeans tam 52 99,90').sizes.value).toEqual(['52']);
+      const sixtyOne = one('Calça jeans tam 61 99,90');
+      expect(sixtyOne.sizes.value).toEqual([]);
+      expect(sixtyOne.name.value).toContain('61');
+      const zero = one('Calça jeans tam 0 99,90');
+      expect(zero.sizes.value).toEqual([]);
+      expect(zero.name.value).toContain('0');
+    });
+
+    it('"Calça jeans 52 99,90" (sem marcador, fora de calçado) não lê 52 como tamanho', () => {
+      expect(one('Calça jeans 52 99,90').sizes.value).toEqual([]);
+    });
+  });
+
   it('C10/C11 do WB-376: tênis em categoria de calçado lê o tamanho e marca "Confira"', () => {
     const draft = one('Tênis 42 199,90 2 un', { footwearCategory: true });
     expect(summary(draft)).toEqual({ name: 'Tênis', sizes: ['42'], price: 19990, qty: 2, status: 'confirm' });
