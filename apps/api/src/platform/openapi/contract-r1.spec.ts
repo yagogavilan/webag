@@ -23,7 +23,7 @@ const all: Op[] = Object.entries(contract.paths as Json).flatMap(([path, item]) 
   METHODS.filter((m) => item[m]).map((m) => ({ key: `${m.toUpperCase()} ${path}`, path, method: m, op: item[m] as Json })),
 );
 /** Operações da R1 já IMPLEMENTADAS (a marca `x-planned` saiu e o `contract.e2e-spec` as compara com a rota real); as regras deste arquivo continuam valendo para elas. */
-const R1_IMPLEMENTED = new Set(['openViewAs', 'endViewAs', 'editAdminStoreProfile', 'editAdminStoreConfig', 'pauseStoreAsAdmin', 'resumeStoreAsAdmin', 'getAdminStoreOverview', 'listAdminStoreHistory', 'listStoreAdminChanges', 'getCatalogQuickStart', 'listProductDrafts', 'createProductDraft', 'createProductDraftsBatch', 'duplicateProduct', 'listProductTable', 'quickPublishProduct', 'getProductCreationMetrics', 'listCategoryTemplates', 'setCategoryTemplate']);
+const R1_IMPLEMENTED = new Set(['openViewAs', 'endViewAs', 'editAdminStoreProfile', 'editAdminStoreConfig', 'pauseStoreAsAdmin', 'resumeStoreAsAdmin', 'getAdminStoreOverview', 'listAdminStoreHistory', 'listStoreAdminChanges', 'getCatalogQuickStart', 'listProductDrafts', 'createProductDraft', 'createProductDraftsBatch', 'duplicateProduct', 'listProductTable', 'undoBulkBatch', 'listBulkBatches', 'bulkAdminStoreProducts', 'quickPublishProduct', 'getProductCreationMetrics', 'listCategoryTemplates', 'setCategoryTemplate']);
 const r1 = all.filter((o) => o.op['x-planned'] === 'v1.1 R1' || R1_IMPLEMENTED.has(o.op.operationId as string));
 const adminR1 = r1.filter((o) => o.path.startsWith('/v1/admin/'));
 const schemas = contract.components.schemas as Json;
