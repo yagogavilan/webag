@@ -66,6 +66,7 @@ docs/
 | QA | `qa-engineer` | Estratégia de testes, qualidade, aprovação de release |
 | Designer | `product-designer` | UX, UI, design system, specs de tela |
 | Cyber Security | `security-engineer` | Ameaças, revisão de segurança, LGPD, aprovação de release |
+| Estrategista de Conteúdo | `social-media-strategist` | Avaliar posts/vídeos/apresentações (atenção e ação), ganchos, calendário, recrutamento de lojistas pelas redes |
 
 ### Fluxo de uma funcionalidade
 1. **PO** escreve o PRD e as histórias com critérios de aceite.
