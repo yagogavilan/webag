@@ -13,6 +13,7 @@ import { AuditService, ParametersService } from '../admin/index.js';
 import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { StoresService, StoreSettingsService, type Store } from '../stores/index.js';
+import { BulkBatchesService, type BulkBatchView } from './bulk-batches.service.js';
 import { moderationTerms, productCreationMetrics, productImages, productModerationEvents, products, productVariants, storeSections, type ModerationStatus, type ProductStatus, type ProductVia } from './db/schema.js';
 import { IMPORT_TEMPLATE, planImport, type ImportedProduct } from './domain/import.js';
 import { matchesSuspectWord, normalizeWord } from './domain/moderation.js';
@@ -54,6 +55,7 @@ export const CATALOG_AUDIT = {
   publish: 'product.publish',
   quickPublish: 'product.quick_publish',
   bulk: 'product.bulk',
+  bulkUndo: 'product.bulk_undo',
   duplicate: 'product.duplicate',
 } as const;
 
@@ -102,6 +104,7 @@ export class CatalogService {
     private readonly orders: ProductOrdersPort,
     private readonly storefront: StorefrontCacheService,
     private readonly audit: AuditService,
+    private readonly batches: BulkBatchesService,
   ) {}
 
   // ----------------------------------------------------------------- helpers
@@ -673,7 +676,9 @@ export class CatalogService {
     const edited = await this.editProduct(tx, productId, {}); // ajuste MANUAL é edição de catálogo: a versão sobe (a venda e a reserva não passam por aqui)
     await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.stock_adjust', { productId, variantId, from: variant.stock, to: next.stock });
     await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.stock, variantId, { productId, stock: variant.stock, reserved: variant.reserved, version: product.version }, { productId, stock: next.stock, reserved: variant.reserved, version: edited.version }, 'product');
-    const view = (await this.present(store, edited, tx, context)).variants.find((v) => v.id === variantId);
+    const found = (await this.present(store, edited, tx, context)).variants.find((v) => v.id === variantId);
+    // DEC-132: a versão NOVA do produto vai junto (a tela a usa como `If-Match` da próxima edição, sem um GET a mais) e fica na resposta guardada da `Idempotency-Key`.
+    const view = found ? { ...found, productVersion: edited.version } : undefined;
     return { view, changed: { variant, available: available(next.stock, variant.reserved) } };
   }
 
@@ -904,7 +909,7 @@ export class CatalogService {
       // Produto de outra loja (ou inexistente) é 404 para o pedido inteiro: não revela quais ids existem (SEC-020).
       if (rows.length !== ids.length) throw errors.notFound('Produto não encontrado.');
       const blocked: { productId: string; name: string; reason: string }[] = [];
-      const changes: { product: Product; patch: Partial<typeof products.$inferInsert>; variantPrices?: { id: string; priceCents: number }[] }[] = [];
+      const changes: { product: Product; patch: Partial<typeof products.$inferInsert>; variantPrices?: { id: string; priceCents: number }[]; previousVariantPrices?: { id: string; priceCents: number }[] }[] = [];
       const preview: BulkPreviewItem[] = [];
       for (const product of rows) {
         if (action.type === 'pause') {
@@ -943,15 +948,14 @@ export class CatalogService {
           if (!blocked.some((b) => b.productId === product.id)) {
             // BUG-039: arredondou para o mesmo valor (ex.: +10% sobre R$ 0,01) e nenhuma variação mudou: não é alteração (sem versão +1 nem linha "de X para X").
             const unchanged = next === product.basePriceCents && variantPrices.every((v) => variants.find((x) => x.id === v.id)?.priceCents === v.priceCents);
-            if (!unchanged) changes.push({ product, patch: { basePriceCents: next }, variantPrices });
+            if (!unchanged) changes.push({ product, patch: { basePriceCents: next }, variantPrices, previousVariantPrices: variants.filter((v) => v.priceCents !== null).map((v) => ({ id: v.id, priceCents: v.priceCents as number })) });
             const pct = changePct(product.basePriceCents, next);
             preview.push({ productId: product.id, name: product.name, version: product.version, fromCents: product.basePriceCents, toCents: next, changePct: pct, youReceiveCents: estimate ? estimate(next, product.categoryId) : null, exceedsLimit: Math.abs(pct) > limitPct });
           }
         }
       }
       const requiresConfirmation = preview.some((item) => item.exceedsLimit);
-      const priceResult = action.type === 'price_adjust' ? { preview, requiresConfirmation, batchId: null, undoUntil: null } : {};
-      if (input.dryRun) return { dryRun: true, willChange: changes.length, changed: 0, blocked, ...priceResult, ...(action.type === 'price_adjust' ? { limitPct } : {}) };
+      if (input.dryRun) return { dryRun: true, willChange: changes.length, changed: 0, blocked, ...(action.type === 'price_adjust' ? { preview, requiresConfirmation, limitPct } : {}), batchId: null, undoUntil: null };
 
       // Versão da prévia (D17): qualquer item mudado depois dela cancela o lote inteiro. Antes de `blocked`: uma prévia velha não pode mascarar o conflito.
       if (expected.size > 0) {
@@ -973,6 +977,7 @@ export class CatalogService {
           errors: over.map((item) => ({ field: item.productId, message: `${item.name}: de ${item.fromCents} para ${item.toCents} centavos (${item.changePct}%).` })),
         });
       }
+      const appliedVersions = new Map<string, number>();
       for (const change of changes) {
         // `WHERE version = :v` além do lock: 0 linhas = alguém passou na frente (não deveria, com `FOR UPDATE`; é a segunda barreira da D18).
         const wanted = expected.get(change.product.id);
@@ -982,6 +987,7 @@ export class CatalogService {
           .where(and(eq(products.id, change.product.id), eq(products.version, wanted ?? change.product.version)))
           .returning();
         if (!updated) throw new AppError(409, 'BULK_VERSION_CONFLICT', 'Produtos alterados depois da prévia', { extensions: { conflicts: [{ productId: change.product.id, name: change.product.name, currentVersion: change.product.version }] } });
+        appliedVersions.set(change.product.id, updated.version);
         for (const variant of change.variantPrices ?? []) await tx.update(productVariants).set({ priceCents: variant.priceCents, updatedAt: new Date() }).where(eq(productVariants.id, variant.id));
         if (action.type === 'price_adjust') {
           await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.price, change.product.id, { basePriceCents: change.product.basePriceCents, version: change.product.version }, { basePriceCents: updated.basePriceCents, version: updated.version });
@@ -989,7 +995,12 @@ export class CatalogService {
       }
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.bulk', { action: action.type, productIds: changes.map((c) => c.product.id), requested: ids.length });
       await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.bulk, store.id, null, { action: action.type, ...(adjust ? { mode: adjust.mode, value: action.type === 'price_adjust' ? action.value : null } : {}), requested: ids.length, changed: changes.length }, 'store');
-      return { dryRun: false, willChange: changes.length, changed: changes.length, blocked, ...priceResult };
+      // WB-377 C7 (D17/D18): o lote nasce na MESMA transação do efeito (e da resposta guardada da chave): sem lote órfão e sem efeito sem lote. Ação que não mudou nada não grava lote.
+      let batch: { id: string; undoUntil: Date | null } | null = null;
+      if (changes.length > 0) {
+        batch = await this.recordBulkBatch(tx, store.id, actor.userId, action, changes.length, adjust ? changes.map((c) => ({ ...c, appliedVersion: appliedVersions.get(c.product.id) as number })) : []);
+      }
+      return { dryRun: false, willChange: changes.length, changed: changes.length, blocked, ...(action.type === 'price_adjust' ? { preview, requiresConfirmation } : {}), batchId: batch?.id ?? null, undoUntil: batch?.undoUntil ? batch.undoUntil.toISOString() : null };
     };
     const result = outer ? await run(outer) : await this.db.transaction(run);
     if (!outer && result.changed > 0) await this.afterBulk(store, ids);
@@ -999,6 +1010,69 @@ export class CatalogService {
   /** Depois do commit da ação em massa: a vitrine reflete o preço e o status novos em até 5 s (DEC-113). */
   async afterBulk(store: Store, productIds: string[]): Promise<void> {
     await this.storefront.productsChanged(store.id, productIds);
+  }
+
+  /** Lote do lojista (WB-377 C7). Público só para o teste de falha injetada (SEC-208: falhar aqui desfaz o efeito). */
+  async recordBulkBatch(
+    tx: Tx,
+    storeId: string,
+    userId: string,
+    action: { type: 'pause' } | { type: 'resume' } | { type: 'move_section'; sectionId: string | null } | { type: 'price_adjust'; mode: 'percent' | 'amount'; value: number },
+    itemsCount: number,
+    priced: { product: Product; patch: Partial<typeof products.$inferInsert>; variantPrices?: { id: string; priceCents: number }[]; previousVariantPrices?: { id: string; priceCents: number }[]; appliedVersion: number }[],
+  ): Promise<{ id: string; undoUntil: Date | null }> {
+    const params: Record<string, unknown> = action.type === 'price_adjust' ? { mode: action.mode, value: action.value } : action.type === 'move_section' ? { sectionId: action.sectionId } : {};
+    const items = priced.map((c) => ({
+      productId: c.product.id,
+      previousVersion: c.product.version,
+      appliedVersion: c.appliedVersion,
+      previousPriceCents: c.product.basePriceCents as number,
+      appliedPriceCents: c.patch.basePriceCents as number,
+      variants: (c.previousVariantPrices ?? []).map((previous) => ({ id: previous.id, previousPriceCents: previous.priceCents, appliedPriceCents: c.variantPrices?.find((v) => v.id === previous.id)?.priceCents ?? previous.priceCents })),
+    }));
+    return this.batches.record(tx, { storeId, kind: action.type, source: 'merchant', actorUserId: userId, itemsCount, params, items });
+  }
+
+  listBulkBatches(storeId: string, query: { cursor?: string | undefined; limit?: unknown }): Promise<Page<BulkBatchView>> {
+    return this.batches.list(storeId, query);
+  }
+
+  /**
+   * WB-377 C4 / BK-08: desfaz o reajuste de preço por até 10 minutos. NUNCA sobrescreve edição posterior: item cuja `version` não é a que o reajuste deixou volta em
+   * `skipped` (`CHANGED_AFTER`) e os demais são revertidos (parcial, numa transação). Ordem das checagens: 404, já desfeito (200 `alreadyUndone`, mesmo depois da janela:
+   * a resposta pode ter se perdido em 3G), janela (410), tipo do lote (409). O lote é travado (`FOR UPDATE`): dois desfazer simultâneos revertem UMA vez.
+   */
+  async undoBulkBatch(store: Store, actor: CatalogActor, batchId: string) {
+    this.assertWritable(store);
+    const outcome = await this.db.transaction(async (tx) => {
+      const batch = await this.batches.lockForUndo(tx, store.id, batchId);
+      if (batch.undoneAt !== null && batch.undoResult) return { alreadyUndone: true as const, result: batch.undoResult, revertedIds: [] as string[] };
+      if (batch.kind !== 'price_adjust') throw errors.conflict('BATCH_NOT_UNDOABLE', 'Este lote não pode ser desfeito', 'Só o reajuste de preço se desfaz.');
+      if (!batch.undoUntil || batch.undoUntil.getTime() < Date.now()) throw new AppError(410, 'UNDO_WINDOW_EXPIRED', 'O prazo para desfazer acabou', { detail: 'O reajuste só pode ser desfeito por 10 minutos depois de aplicado.' });
+      const items = await this.batches.itemsOf(tx, batch.id);
+      const rows = items.length > 0 ? await tx.select().from(products).where(and(inArray(products.id, items.map((i) => i.productId)), eq(products.storeId, store.id))).orderBy(asc(products.id)).for('update') : [];
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const skipped: { productId: string; name: string; reason: string }[] = [];
+      const revertedIds: string[] = [];
+      for (const item of items) {
+        const product = byId.get(item.productId);
+        if (!product) continue; // produto apagado depois (cascata do rascunho): nada a reverter
+        if (product.version !== item.appliedVersion) {
+          skipped.push({ productId: product.id, name: product.name, reason: 'CHANGED_AFTER' });
+          continue;
+        }
+        const edited = await this.editProduct(tx, product.id, { basePriceCents: item.previousPriceCents });
+        for (const variant of item.variants) await tx.update(productVariants).set({ priceCents: variant.previousPriceCents, updatedAt: new Date() }).where(eq(productVariants.id, variant.id));
+        await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.price, product.id, { basePriceCents: product.basePriceCents, version: product.version }, { basePriceCents: edited.basePriceCents, version: edited.version });
+        revertedIds.push(product.id);
+      }
+      const result = { reverted: revertedIds.length, skipped };
+      await this.batches.markUndone(tx, batch.id, actor.userId, result);
+      await this.auditProduct(tx, actor, store.id, CATALOG_AUDIT.bulkUndo, store.id, { batchId: batch.id, kind: batch.kind }, { reverted: result.reverted, skipped: skipped.length }, 'store');
+      return { alreadyUndone: false as const, result, revertedIds };
+    });
+    if (outcome.revertedIds.length > 0) await this.afterBulk(store, outcome.revertedIds);
+    return { batchId, alreadyUndone: outcome.alreadyUndone, reverted: outcome.result.reverted, skipped: outcome.result.skipped };
   }
 
   // ----------------------------------------------------------------- planilha

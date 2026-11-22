@@ -157,6 +157,8 @@ export const quickPublishSchema = z.strictObject({
 
 export const draftsQuerySchema = z.strictObject({ cursor: z.string().max(200).optional(), limit: limitQuery });
 
+export const bulkBatchesQuerySchema = draftsQuerySchema;
+
 export const tableQuerySchema = z.strictObject({
   q: z.string().trim().max(80).optional(),
   status: z.enum(['active', 'paused']).optional(),
