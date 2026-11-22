@@ -1,6 +1,7 @@
 'use client';
 
 import { Clock, Eye } from '@phosphor-icons/react';
+import { useEffect, useRef } from 'react';
 import { cx, ui } from '@/components/ui';
 import { tid } from '@/lib/testid';
 import { clockLabel, clockText, phaseOf } from './clock';
@@ -18,9 +19,21 @@ export function ViewAsBanner({ storeName, expiresAt, exiting, onExit }: { storeN
   const remaining = useRemaining(expiresAt);
   const phase = phaseOf(remaining);
   const warning = useWarnings(remaining, true);
+  const bar = useRef<HTMLDivElement>(null);
+  // O banner é fixo no topo: a rolagem para o campo focado deixa o espaço dele (WCAG 2.4.11, foco não obscurecido).
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty('scroll-padding-top', `${(bar.current?.offsetHeight ?? 0) + 8}px`);
+    apply();
+    window.addEventListener('resize', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      root.style.removeProperty('scroll-padding-top');
+    };
+  }, []);
   return (
     <>
-      <div className={s.banner} role="region" aria-label="Visualização do admin" data-testid={T('banner')}>
+      <div ref={bar} className={s.banner} role="region" aria-label="Visualização do admin" data-testid={T('banner')}>
         <p className={cx('wb-text-body-strong', s.bannerTitle)}>
           <Eye size={20} weight="fill" aria-hidden="true" />
           <span>Visualizando como {storeName} (somente leitura)</span>

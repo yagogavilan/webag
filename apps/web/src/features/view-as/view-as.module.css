@@ -16,8 +16,8 @@
 .exit:focus-visible { outline: var(--wb-border-width-strong) solid #fff; outline-offset: 2px; }
 .exit:disabled { opacity: 0.6; cursor: default; }
 
-/* A visão não pode deixar o campo focado atrás do banner (WCAG 2.4.11). */
-.scope { scroll-padding-top: 96px; display: flex; flex-direction: column; gap: var(--wb-space-4); }
+/* O espaço do banner na rolagem é definido no banner (scroll-padding-top do documento, WCAG 2.4.11). */
+.scope { display: flex; flex-direction: column; gap: var(--wb-space-4); }
 
 .nav { display: flex; flex-wrap: wrap; gap: var(--wb-space-2); }
 .navItem, .navOff {

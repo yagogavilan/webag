@@ -81,6 +81,13 @@ describe('banner permanente', () => {
     expect(screen.getByRole('timer')).not.toHaveAttribute('aria-live', 'polite');
   });
 
+  it('reserva o espaço do banner na rolagem enquanto existe e devolve ao sair (foco não obscurecido)', () => {
+    const { unmount } = render(<ViewAsBanner storeName="Loja" expiresAt={inMinutes(20)} exiting={false} onExit={() => undefined} />);
+    expect(document.documentElement.style.getPropertyValue('scroll-padding-top')).toMatch(/px$/);
+    unmount();
+    expect(document.documentElement.style.getPropertyValue('scroll-padding-top')).toBe('');
+  });
+
   it('"Sair da visualização" chama o callback e trava enquanto sai', async () => {
     const onExit = vi.fn();
     const { rerender } = render(<ViewAsBanner storeName="Loja" expiresAt={inMinutes(20)} exiting={false} onExit={onExit} />);
