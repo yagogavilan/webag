@@ -4,3 +4,5 @@
 // Se o app passar a precisar de `schemas`, importe `@webag/shared/schemas` (ou remova este arquivo).
 export * from './generated/client.js';
 export { apiFetch, configureApiClient, type ApiClientConfig } from './http/api-fetch.js';
+/** Leitor local do texto colado do cadastro rápido (WB-376, ADR-018 D3). Função pura, sem rede, sem dependência. */
+export * from './paste-parser/index.js';
