@@ -71,3 +71,16 @@ Status: **corrigido** (feito nos documentos e no contrato), **justificado** (div
 | I1 a I12 | corrigidos | I7 e I4 conforme a DEC-122 (D12 e D20); `getAdminAnalyticsCoverage` segue fora da R1 |
 | SEC-208 | especificado (código no início da R1.3, R1 do tech-lead) | D18: `expectedVersions`, lote e resposta da chave na mesma transação; mudanças no `idempotency.service` descritas |
 | D-06 (§14.10) | boot (item 1) implementado na R1.1; REVOKE por migração com `IF EXISTS pg_roles` descrito; prova só com Docker | D19: boot recusa superusuário em produção, `REVOKE` na migração de tabela append-only nova, teste no CI |
+
+## Estado da implementação da R1.1 (backend-dev, 2026-11-22, branch `claude/admiring-lamport-62tq1a`)
+Sem Docker: PostgreSQL 16 e Redis locais (o e2e inteiro roda; ver contagens no retorno ao CEO). **Nada abaixo vira "pronto" antes da sessão R1.0 com Docker** (compose de produção, `40-roles-grants.sql`, `TEST_DB_AS_APP=1` na suíte inteira, `db:seed` como `webag_app`, restauração 8.4).
+
+| Item | Estado |
+|---|---|
+| Ajustes finais do contrato (SEC-209, códigos do cabeçalho, D18 fora da R1.1, `UPLOAD_NOT_READY`, HMAC do IP da coleta, vida do `sessionId`) | feito no YAML e no ADR; teste recursivo do "estrito" em `contract-r1.spec.ts` |
+| I12: rotas legadas `editAdminStore` e `editAdminStoreSettings` | removidas do contrato e do código; 404 nos dois verbos (`stores-onboarding`, `admin-store-360`) |
+| WB-355 | `x-admin-permission` nas 142 rotas `/v1/admin/*` (+4 permissões novas na tabela única); `@AdminSelf()` para o TOTP; matriz 4 perfis + lojista + cliente x todas as rotas por HTTP (`admin-permission-matrix.e2e-spec.ts`) |
+| WB-352 | credencial `vas_`, `ViewAsService` (6 passos + limite), ramificação mínima no passo de loja do `AuthGuard`, `ViewAsGuard`, `@ViewAs(operationId)` com verificação de boot, apresentadores `view_as` (loja, configuração, pedido, troca), auditoria `view_as.open/close/denied`, sweep de 10 min, redact no pino e no Sentry; VA-01 a VA-26 e AO-01 a AO-05 |
+| WB-350 e WB-351 | ficha 360 (`backoffice`), histórico por loja, edição de dados/configuração/pausa/reabertura com motivo, versão (`FOR UPDATE` + conferência), auditoria com `store_id` e feed do lojista; flag `admin_edita_catalogo_sem_pedido` desligada |
+| D-06 (item 1: boot) | `db-role-guard.ts`; produção ou `NODE_ENV` ausente recusa superusuário, dono do `audit_log` e membro de `webag_migrator` |
+| Fica para a R1.2/R1.3 | `listProductTable` (`@ViewAs` e `youReceiveCents` nulo), D18 (`runInTransaction`), I4 das 5 escritas do lojista no `audit_log`, `store_change_digest` (e-mail-resumo de preço/estoque), restaurar e CSV do histórico (`restorable` hoje sempre `false`) |

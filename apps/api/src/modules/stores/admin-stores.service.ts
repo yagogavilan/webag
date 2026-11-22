@@ -115,7 +115,7 @@ export class AdminStoresService {
       const extra = await work(tx, before);
       const [after] = await tx
         .update(stores)
-        .set({ status: to, decidedAt: new Date(), decidedBy: admin.userId, decisionReason: reason ?? null, updatedAt: new Date(), ...extra })
+        .set({ status: to, decidedAt: new Date(), decidedBy: admin.userId, decisionReason: reason ?? null, version: sql`${stores.version} + 1`, updatedAt: new Date(), ...extra })
         .where(eq(stores.id, storeId))
         .returning();
       if (!after) throw new Error('Falha ao atualizar a loja');

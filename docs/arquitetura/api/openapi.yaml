@@ -9378,7 +9378,6 @@ paths:
     get:
       tags: [stores]
       operationId: listStoreAdminChanges
-      x-planned: v1.1 R1
       summary: O que a Webag alterou na minha loja (WB-353 C1, C11)
       description: "O lojista vê no próprio painel uma linha por alteração feita pelo admin em preço, estoque, catálogo, status, horário e pausa, com antes/depois e o motivo em texto; o autor é sempre \"Webag\" (nunca o nome da pessoa, J27). Ação em massa aparece como UMA linha agregada. Mais recentes primeiro; cursor. Permissão da loja: dono, ou funcionário com `catalog`; os demais 404 (SEC-020). Não traz dado de cliente."
       parameters:
@@ -9425,7 +9424,6 @@ paths:
     get:
       tags: [admin-stores]
       operationId: getAdminStoreOverview
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:read'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Ficha 360 da loja (WB-350 C1, C3)
@@ -9445,7 +9443,6 @@ paths:
     get:
       tags: [admin-stores]
       operationId: listAdminStoreHistory
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:read'
       x-admin-profiles: [super_admin, operations, finance, support]
       summary: Histórico de alterações da loja (WB-350 C4, WB-354)
@@ -9528,7 +9525,6 @@ paths:
     patch:
       tags: [admin-stores]
       operationId: editAdminStoreProfile
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar dados não fiscais da loja (WB-351 C2, C4, C6, C7)
@@ -9556,7 +9552,6 @@ paths:
     put:
       tags: [admin-stores]
       operationId: editAdminStoreConfig
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar horário, feriados, entrega, retirada ou política de trocas (WB-351 C1, C6)
@@ -9585,7 +9580,6 @@ paths:
     post:
       tags: [admin-stores]
       operationId: pauseStoreAsAdmin
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Pausar a loja pelo admin (WB-351 C1)
@@ -9613,7 +9607,6 @@ paths:
     post:
       tags: [admin-stores]
       operationId: resumeStoreAsAdmin
-      x-planned: v1.1 R1
       x-admin-permission: 'stores:write'
       x-admin-profiles: [super_admin, operations]
       summary: Reabrir a loja pausada pelo admin ("Reabrir agora")

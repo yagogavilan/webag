@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
-import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
+import { DRIZZLE, type Db, type DbOrTx, type Tx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
-import { AuditService, LegalService, ParametersService } from '../admin/index.js';
+import { AuditService, LegalService, ParametersService, sanitizeForAudit } from '../admin/index.js';
 import { isUniqueViolation } from '../admin/util.js';
 import { categories, cities } from '../admin/db/schema.js';
 import { storeMembers, users } from '../identity/db/schema.js';
@@ -268,7 +268,7 @@ export class StoresService {
       if (actor.kind === 'merchant') this.assertProfileEditable(before); // I6: status relido sob lock
       const [row] = await tx
         .update(stores)
-        .set({ ...patch, ...(Object.keys(pending).length > 0 ? { pendingChanges: { ...(before.pendingChanges ?? {}), ...pending } } : {}), updatedAt: new Date() })
+        .set({ ...patch, ...(Object.keys(pending).length > 0 ? { pendingChanges: { ...(before.pendingChanges ?? {}), ...pending } } : {}), version: sql`${stores.version} + 1`, updatedAt: new Date() })
         .where(eq(stores.id, store.id))
         .returning();
       if (!row) throw new Error('Falha ao atualizar a loja');
@@ -289,6 +289,34 @@ export class StoresService {
       return row;
     });
     return { store: updated, pendingReview: Object.keys(pending).length > 0 };
+  }
+
+  /** D2: sobe a versão otimista da loja (alteração do lojista em horário, feriados, entrega, retirada, trocas, pausa). O primeiro comando da transação: loja, depois configuração. */
+  async bumpVersion(tx: DbOrTx, storeId: string): Promise<void> {
+    await tx.update(stores).set({ version: sql`${stores.version} + 1` }).where(eq(stores.id, storeId));
+  }
+
+  /**
+   * WB-351: o admin altera os campos da lista fechada (nome, descrição, telefone, WhatsApp) DENTRO da transação do chamador, que já travou a loja e
+   * conferiu a versão. Direto, sem fila de análise do nome (a análise é para o lojista, R-23). Grava a auditoria com antes/depois (só do que mudou, que é
+   * também o que o lojista lê no feed), o motivo e o `store_id`.
+   */
+  async updateProfileAsAdmin(
+    store: Store,
+    changes: { name?: string | undefined; description?: string | undefined; phone?: string | undefined; whatsapp?: string | undefined },
+    actor: { userId: string; reason?: string | undefined },
+    ctx: RequestContext,
+    tx: Tx,
+  ): Promise<{ id: number; before: Record<string, unknown> | null; after: Record<string, unknown> | null }> {
+    const keys = (['name', 'description', 'phone', 'whatsapp'] as const).filter((k) => changes[k] !== undefined);
+    const [before] = await tx.select().from(stores).where(eq(stores.id, store.id));
+    if (!before) throw errors.notFound('Loja não encontrada.');
+    const patch = Object.fromEntries(keys.map((k) => [k, changes[k]]));
+    const [row] = await tx.update(stores).set({ ...patch, updatedAt: new Date() }).where(eq(stores.id, store.id)).returning();
+    if (!row) throw new Error('Falha ao atualizar a loja');
+    const pick = (s: Store): Record<string, unknown> => Object.fromEntries(keys.map((k) => [k, s[k]]));
+    const id = await this.audit.record(tx, ctx, { action: 'store.update', targetType: 'store', targetId: store.id, storeId: store.id, before: pick(before), after: pick(row), ...(actor.reason ? { reason: actor.reason } : {}) });
+    return { id, before: sanitizeForAudit(pick(before)), after: sanitizeForAudit(pick(row)) };
   }
 
   /** O que vai à auditoria: sem dado sensível além do necessário (documento mascarado). */
@@ -379,7 +407,7 @@ export class StoresService {
       const slaStartedAt = locked.status === 'correction_requested' ? new Date(now.getTime() - (locked.slaElapsedMs ?? 0)) : now;
       const [row] = await tx
         .update(stores)
-        .set({ status: 'in_review', submittedAt: locked.submittedAt ?? now, slaStartedAt, updatedAt: now })
+        .set({ status: 'in_review', submittedAt: locked.submittedAt ?? now, slaStartedAt, version: sql`${stores.version} + 1`, updatedAt: now })
         .where(eq(stores.id, store.id))
         .returning();
       if (!row) throw new Error('Falha ao enviar a loja');

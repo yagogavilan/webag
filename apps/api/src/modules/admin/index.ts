@@ -1,6 +1,7 @@
 // API pública do módulo admin (ADR-007 §2): outros módulos só importam daqui.
 export { AdminModule } from './admin.module.js';
-export { AuditService, type AuditEntry } from './audit.service.js';
+export { AuditService, sanitizeForAudit, type AuditEntry, type AuditRow } from './audit.service.js';
+export { asHistoryObject, actorKindOf, decodeReason, encodeReason, historyTypeOf, STORE_HISTORY_TYPES, summaryOf, targetTypeOf, type StoreHistoryType } from './store-history.js';
 export { ParametersService } from './parameters.service.js';
 export { FeatureFlagsService } from './feature-flags.service.js';
 export { LegalService, type LegalDocument } from './legal.service.js';

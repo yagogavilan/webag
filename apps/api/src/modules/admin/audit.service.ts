@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, lt, lte, max } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, like, lt, lte, max, not, or, type SQL } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
 import { users } from '../identity/db/schema.js';
 import { auditLog } from './db/schema.js';
+import { actionsOfType, STORE_HISTORY_TYPES, type StoreHistoryType } from './store-history.js';
 
 export interface AuditEntry {
   action: string;
@@ -31,6 +32,7 @@ export interface AuditFilters {
   limit?: unknown;
 }
 
+const STORE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SENSITIVE_KEY = /pass|secret|token|code|hash|totp|recovery|authorization|cookie/i;
 
 /** Remove segredos antes de gravar (SEC-074: "antes/depois sem segredos"). */
@@ -57,12 +59,14 @@ export function sanitizeForAudit(value: unknown): Record<string, unknown> | null
 export class AuditService {
   constructor(@Inject(DRIZZLE) private readonly db: Db) {}
 
-  async record(executor: DbOrTx, ctx: RequestContext, entry: AuditEntry): Promise<void> {
+  /** Grava a linha e devolve o id (para ligar o feed do lojista e o `auditEntryId` das respostas). `store_id` vem do chamador ou, se o alvo é uma loja, do `targetId`. */
+  async record(executor: DbOrTx, ctx: RequestContext, entry: AuditEntry): Promise<number> {
     const actorRole = entry.actorRole !== undefined ? entry.actorRole : (ctx.principal?.adminProfile ?? ctx.principal?.roles.join(',') ?? null);
     // SEC-159: ação do PRÓPRIO cliente não grava IP nem aparelho aqui (o `access_log` já guarda por 6 meses, Marco Civil art. 15); a trilha
     // de admin, lojista e equipe mantém (SEC-074, prova de quem opera).
     const ownCustomerAction = actorRole === 'customer';
-    await executor.insert(auditLog).values({
+    const storeId = entry.storeId !== undefined ? entry.storeId : entry.targetType === 'store' && entry.targetId && STORE_UUID.test(entry.targetId) ? entry.targetId : null;
+    const [inserted] = await executor.insert(auditLog).values({
       actorId: entry.actorId !== undefined ? entry.actorId : (ctx.principal?.userId ?? null),
       actorRole,
       action: entry.action,
@@ -74,8 +78,9 @@ export class AuditService {
       userAgent: ownCustomerAction ? null : ctx.userAgent,
       requestId: ctx.requestId,
       reason: entry.reason ?? null,
-      storeId: entry.storeId ?? null,
-    });
+      storeId,
+    }).returning({ id: auditLog.id });
+    return inserted?.id ?? 0;
   }
 
   /**
@@ -95,8 +100,45 @@ export class AuditService {
   }
 
   /** Registro fora de transação (ex.: acesso negado, onde não há mudança a desfazer). */
-  recordStandalone(ctx: RequestContext, entry: AuditEntry): Promise<void> {
-    return this.record(this.db, ctx, entry);
+  async recordStandalone(ctx: RequestContext, entry: AuditEntry): Promise<void> {
+    await this.record(this.db, ctx, entry);
+  }
+
+  /**
+   * Histórico por loja (WB-350 C4): linhas com `store_id` da loja, mais as anteriores à R1 que apontam a loja como alvo (sem backfill: o gatilho
+   * append-only o impede). Filtros por tipo (as ações do tipo), autor e período; mais recentes primeiro, cursor por id (id e hora crescem juntos).
+   */
+  async storeHistory(storeId: string, filters: { type?: StoreHistoryType; actorId?: string; from?: Date; to?: Date; cursor?: string; limit?: unknown }): Promise<Page<AuditRow>> {
+    const limit = parseLimit(filters.limit);
+    const cursor = decodeCursor<{ id: number }>(filters.cursor);
+    const typeFilter = filters.type ? this.typeCondition(filters.type) : undefined;
+    const rows = await this.select()
+      .where(
+        and(
+          or(eq(auditLog.storeId, storeId), and(eq(auditLog.targetType, 'store'), eq(auditLog.targetId, storeId))),
+          filters.actorId ? eq(auditLog.actorId, filters.actorId) : undefined,
+          filters.from ? gte(auditLog.at, filters.from) : undefined,
+          filters.to ? lte(auditLog.at, filters.to) : undefined,
+          cursor ? lt(auditLog.id, Number(cursor.id)) : undefined,
+          typeFilter,
+        ),
+      )
+      .orderBy(desc(auditLog.id))
+      .limit(limit + 1);
+    const page = rows.slice(0, limit).map(toRow);
+    const last = page.at(-1);
+    return { data: page, nextCursor: rows.length > limit && last ? encodeCursor({ id: last.id }) : null };
+  }
+
+  private typeCondition(type: StoreHistoryType): SQL | undefined {
+    const matching = (t: StoreHistoryType): SQL | undefined => {
+      const { exact, prefixes } = actionsOfType(t);
+      return or(exact.length > 0 ? inArray(auditLog.action, exact) : undefined, ...prefixes.map((p) => like(auditLog.action, `${p}%`)));
+    };
+    if (type !== 'other') return matching(type);
+    // `other` = tudo que nenhum dos outros tipos reconhece
+    const known = STORE_HISTORY_TYPES.filter((t) => t !== 'other').map(matching).filter((c): c is SQL => c !== undefined);
+    return not(or(...known) as SQL);
   }
 
   private where(filters: AuditFilters) {

@@ -16,6 +16,8 @@ export const FEATURE_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   { key: 'push_marketing', default: true, description: 'Push de marketing (com opt-in)' },
   { key: 'confirmacao_email_bloqueia_compra', default: false, description: 'Exige e-mail confirmado já na 1ª compra (variante B do HIP-D07; DEC-014 permite 1 pedido antes)' },
   { key: 'codigo_entrega', default: true, description: 'Código de entrega de 4 dígitos (SEC-067)' },
+  /** v1.1 R1 (J27, C-GEN-01): nasce DESLIGADA. Desligada, o admin só altera dados da loja com o motivo "solicitado pelo lojista". Liga só depois do parecer do jurídico e da cláusula nos Termos do Lojista. */
+  { key: 'admin_edita_catalogo_sem_pedido', default: false, description: 'Admin altera dados da loja sem pedido do lojista (J27: depende da cláusula nos Termos do Lojista)' },
 ];
 
 export const FLAG_KEYS: ReadonlySet<string> = new Set(FEATURE_FLAG_DEFINITIONS.map((flag) => flag.key));
