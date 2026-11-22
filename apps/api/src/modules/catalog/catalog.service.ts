@@ -120,6 +120,12 @@ export class CatalogService {
     return product;
   }
 
+  /** DT-088: produtos `active` da loja (indicador da ficha 360). API pública do catálogo; quem consome não lê a tabela de produtos. */
+  async countActive(storeId: string): Promise<number> {
+    const [row] = await this.db.select({ n: sql<number>`count(*)::int` }).from(products).where(and(eq(products.storeId, storeId), eq(products.status, 'active')));
+    return Number(row?.n ?? 0);
+  }
+
   async variantsOf(productId: string, executor: DbOrTx = this.db, activeOnly = true): Promise<Variant[]> {
     return executor
       .select()

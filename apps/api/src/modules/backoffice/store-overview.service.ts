@@ -1,12 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { actorKindOf, asHistoryObject, AuditService, decodeReason, historyTypeOf, summaryOf, targetTypeOf } from '../admin/index.js';
 import { ADMIN_REASON_CODES, AdminStoreEditService, StoreSettingsService, StoresService } from '../stores/index.js';
-import { orders } from '../orders/db/schema.js';
-import { CANCELLATION_STATUSES, NON_GMV_STATUSES } from '../orders/index.js';
-import { products } from '../catalog/db/schema.js';
+import { StoreIndicatorsService } from '../orders/index.js';
+import { CatalogService } from '../catalog/index.js';
 import { users } from '../identity/db/schema.js';
 
 const DAY_MS = 86_400_000;
@@ -22,8 +21,9 @@ function localClock(now: Date): { weekday: number; minute: number } {
 }
 
 /**
- * Ficha 360 e histórico por loja no admin (WB-350). Vive em `backoffice` (o módulo das telas de operação que cruzam módulos) e lê pedidos e produtos
- * por consultas agregadas próprias, sem JOIN com a loja. NÃO traz documento, razão social, conta de recebimento nem dado de cliente (C4).
+ * Ficha 360 e histórico por loja no admin (WB-350). Vive em `backoffice` (o módulo das telas de operação que cruzam módulos) e pega indicadores de pedidos e de
+ * produtos pelas APIS PÚBLICAS de `orders` (`StoreIndicatorsService`) e `catalog` (`countActive`), nunca pela tabela alheia (DT-088, ADR-018 D15). NÃO traz
+ * documento, razão social, conta de recebimento nem dado de cliente (C4).
  */
 @Injectable()
 export class StoreOverviewService {
@@ -33,6 +33,8 @@ export class StoreOverviewService {
     private readonly settings: StoreSettingsService,
     private readonly edits: AdminStoreEditService,
     private readonly audit: AuditService,
+    private readonly indicators: StoreIndicatorsService,
+    private readonly catalog: CatalogService,
   ) {}
 
   async operatorSettings(storeId: string) {
@@ -42,28 +44,16 @@ export class StoreOverviewService {
   async overview(storeId: string, now = new Date()) {
     const store = await this.stores.getStore(storeId);
     const since = new Date(now.getTime() - 30 * DAY_MS);
-    const [settings, open, hours, commission, live, [owner], [activeProducts], [agg], recent] = await Promise.all([
+    const [settings, open, hours, commission, live, [owner], activeProducts, agg, recent] = await Promise.all([
       this.stores.getSettings(storeId),
       this.settings.isOpenNow(storeId, now),
       this.settings.weeklyHours(storeId),
       this.stores.commissionView(storeId),
       this.stores.isLive(store),
       this.db.select({ name: users.name }).from(users).where(eq(users.id, store.ownerUserId)),
-      this.db.select({ n: count() }).from(products).where(and(eq(products.storeId, storeId), eq(products.status, 'active'))),
-      this.db
-        .select({
-          orders: count(),
-          gmv: sql<number>`coalesce(sum(${orders.totalCents}) filter (where ${notInArray(orders.status, [...NON_GMV_STATUSES])}), 0)::bigint`,
-          cancelled: sql<number>`count(*) filter (where ${inArray(orders.status, [...CANCELLATION_STATUSES])})::int`,
-        })
-        .from(orders)
-        .where(and(eq(orders.storeId, storeId), gte(orders.paidAt, since))),
-      this.db
-        .select({ id: orders.id, status: orders.status, total: orders.totalCents, createdAt: orders.createdAt })
-        .from(orders)
-        .where(and(eq(orders.storeId, storeId), isNotNull(orders.paidAt)))
-        .orderBy(desc(orders.createdAt), desc(orders.id))
-        .limit(5),
+      this.catalog.countActive(storeId),
+      this.indicators.indicators(storeId, since),
+      this.indicators.recentPaid(storeId, 5),
     ]);
 
     // "Fecha às": fim do intervalo em que a loja está agora (hora local); nulo fechada ou sem intervalo.
@@ -82,8 +72,8 @@ export class StoreOverviewService {
       : commission.source === 'store'
         ? { pct: commission.pct, source: 'store' as const, sourceLabel: `Taxa própria da loja: ${commission.pct}%` }
         : { pct: commission.pct, source: 'default' as const, sourceLabel: `Padrão da Webag: ${commission.pct}%` };
-    const total = Number(agg?.orders ?? 0);
-    const cancelled = Number(agg?.cancelled ?? 0);
+    const total = agg.orders;
+    const cancelled = agg.cancelled;
 
     return {
       store: {
@@ -106,12 +96,12 @@ export class StoreOverviewService {
       commission: effective,
       indicators: {
         empty: total === 0,
-        activeProducts: activeProducts?.n ?? 0,
+        activeProducts,
         orders: total,
-        gmv: money(Number(agg?.gmv ?? 0)),
+        gmv: money(agg.gmvCents),
         cancellations: { count: cancelled, pct: total >= MIN_ORDERS_FOR_PCT ? Math.round((cancelled / total) * 1000) / 10 : null },
       },
-      recentOrders: recent.map((o) => ({ id: o.id, status: o.status, total: money(o.total), createdAt: o.createdAt.toISOString() })),
+      recentOrders: recent.map((o) => ({ id: o.id, status: o.status, total: money(o.totalCents), createdAt: o.createdAt.toISOString() })),
     };
   }
 
