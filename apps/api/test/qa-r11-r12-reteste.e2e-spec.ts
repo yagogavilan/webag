@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
 import { ProductDraftsService } from '../src/modules/catalog/drafts.service.js';
 import { adminViewSessions, auditLog, productCreationMetrics, productImages, productModerationEvents, productVariants, products, storeAdminChanges, storeMembers, stores } from '../src/platform/database/schema.js';
@@ -11,7 +13,13 @@ import { createAdmin, createCustomer, createMerchant, ensureCategory, ensureCity
  * (agora sem `it.fails`). Aqui ficam as VIZINHAS de cada correção: o que a correção podia ter quebrado ou deixado de fora. Evidência em QA_EVIDENCE
  * (padrão /dev/shm/qa-final-evidence.log).
  */
-const evidence = (line: string): void => appendFileSync(process.env.QA_EVIDENCE ?? '/dev/shm/qa-final-evidence.log', `${line}\n`);
+const evidence = (line: string): void => {
+  try {
+    appendFileSync(process.env.QA_EVIDENCE ?? join(tmpdir(), 'webag-qa-evidence.log'), `${line}\n`);
+  } catch {
+    /* evidência é só um registro: nunca derruba o teste (Windows, macOS, disco cheio) */
+  }
+};
 
 describe('QA reteste final R1.1 + R1.2: vizinhas das correções BUG-036 a 040', () => {
   let ctx: TestContext;
