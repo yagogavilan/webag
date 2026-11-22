@@ -110,7 +110,10 @@ export default function RootLayout() {
   const ready = (fontsLoaded || fontError !== null || timedOut) && session.status !== 'loading' && addresses.status !== 'loading' && localReady;
 
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
+    if (!ready) return;
+    void SplashScreen.hideAsync();
+    // Navegador: tira a camada de abertura de public/index.html (no app nativo não existe `document`).
+    if (typeof document !== 'undefined') document.getElementById('webag-splash')?.remove();
   }, [ready]);
 
   if (!ready) return null;

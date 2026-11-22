@@ -295,6 +295,7 @@ async function runOnce({ browser, appUrl, api, net, cpu, profileStep, tap }) {
   await page.goto(appUrl, { waitUntil: 'commit' });
   const tCold = await page.evaluate((e) => window.__until(e, 120000), vis('location.choose-city'));
   if (tCold < 0) throw new Error('a tela de cidade não apareceu');
+  await page.waitForTimeout(400); // o navegador entrega FCP/LCP um instante depois da pintura
   await snapshot('cold', 'Abertura a frio (1ª visita) até a escolha da cidade', 0, tCold, { cold: true });
 
   // 2. cidade > início
